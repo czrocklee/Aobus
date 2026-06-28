@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include <ao/Type.h>
+#include <ao/audio/Types.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -26,6 +28,7 @@ namespace ao::uimodel::playback::test
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playback = PlaybackService{executor, viewService, testLib.library()};
+    addReadyAudioProvider(playback);
 
     auto log = RenderLog<SeekViewState>{};
     auto viewModel = SeekViewModel{playback, [&log](auto const& state) { log.render(state); }};
@@ -49,8 +52,34 @@ namespace ao::uimodel::playback::test
 
     SECTION("seekPreview/Final")
     {
+      auto const trackId = testLib.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
+      auto const desc = PlaybackService::PlaybackRequest{
+        .trackId = trackId,
+        .input = audio::PlaybackInput{.duration = std::chrono::seconds{5}},
+        .title = "Seek Test",
+        .artist = "Artist",
+      };
+      REQUIRE(playback.play(desc, kInvalidListId));
+
+      log.clear();
       viewModel.seekPreview(std::chrono::seconds{1});
+
+      REQUIRE(!log.empty());
+      CHECK(log.last().duration == std::chrono::seconds{5});
+      CHECK(log.last().elapsed == std::chrono::seconds{1});
+      CHECK(log.last().isPlaying == false);
+      CHECK(log.last().enabled == true);
+      CHECK(log.last().immediateUpdate == false);
+      CHECK(playback.state().elapsed == std::chrono::milliseconds{0});
+
       viewModel.seekFinal(std::chrono::seconds{2});
+
+      CHECK(log.last().duration == std::chrono::seconds{5});
+      CHECK(log.last().elapsed == std::chrono::seconds{2});
+      CHECK(log.last().isPlaying == false);
+      CHECK(log.last().enabled == true);
+      CHECK(log.last().immediateUpdate == true);
+      CHECK(playback.state().duration == std::chrono::seconds{5});
     }
   }
 } // namespace ao::uimodel::playback::test

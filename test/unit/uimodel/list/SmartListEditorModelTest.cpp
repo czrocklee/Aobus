@@ -15,7 +15,7 @@ using namespace ao;
 
 namespace ao::uimodel::list::test
 {
-  TEST_CASE("SmartListEditorModel - effective expression", "[unit][uimodel][list]")
+  TEST_CASE("SmartListEditorModel composes visible filter expressions", "[unit][uimodel][list]")
   {
     SECTION("Display expression")
     {
@@ -40,7 +40,7 @@ namespace ao::uimodel::list::test
     }
   }
 
-  TEST_CASE("SmartListEditorModel - preview view state", "[unit][uimodel][list]")
+  TEST_CASE("SmartListEditorModel projects preview state from source and query validity", "[unit][uimodel][list]")
   {
     SECTION("Preview source unavailable")
     {
@@ -55,7 +55,14 @@ namespace ao::uimodel::list::test
       });
 
       CHECK(state.status == SmartListStatus::InvalidExpression);
+      CHECK(state.name == "Library Picks");
+      CHECK(state.localExpression == "$artist = 'Queen'");
+      CHECK(state.matchCount == 0);
+      CHECK(state.isAllTracks == false);
+      CHECK(state.previewStatusText.empty());
+      CHECK(state.errorText.empty());
       CHECK(state.expressionValid == false);
+      CHECK(state.queryInvalid == false);
       CHECK(state.previewVisible == false);
       CHECK(state.errorVisible == false);
       CHECK(state.canSubmit == false);
@@ -74,10 +81,16 @@ namespace ao::uimodel::list::test
       });
 
       CHECK(state.status == SmartListStatus::Valid);
+      CHECK(state.name == "Source Tracks");
+      CHECK(state.localExpression.empty());
+      CHECK(state.matchCount == 4);
+      CHECK(state.isAllTracks == false);
       CHECK(state.previewStatusText == "Showing all 4 source tracks");
       CHECK(state.expressionValid == true);
+      CHECK(state.queryInvalid == false);
       CHECK(state.previewVisible == true);
       CHECK(state.errorVisible == false);
+      CHECK(state.errorText.empty());
       CHECK(state.canSubmit == true);
     }
 
@@ -131,6 +144,10 @@ namespace ao::uimodel::list::test
       });
 
       CHECK(state.status == SmartListStatus::InvalidExpression);
+      CHECK(state.name == "Broken Filter");
+      CHECK(state.localExpression == "$artist =");
+      CHECK(state.matchCount == 0);
+      CHECK(state.isAllTracks == true);
       CHECK(state.previewStatusText == "Invalid filter");
       CHECK(state.queryInvalid == true);
       CHECK(state.errorVisible == true);
@@ -156,11 +173,25 @@ namespace ao::uimodel::list::test
       CHECK(state.errorVisible == false);
       CHECK(state.previewVisible == true);
       CHECK(state.expressionValid == true);
+      CHECK(state.errorText.empty());
+      CHECK(state.previewStatusText == "Showing all 5 tracks");
       CHECK(state.canSubmit == true);
     }
   }
 
-  TEST_CASE("SmartListEditorModel - presentation selection", "[unit][uimodel][list]")
+  TEST_CASE("SmartListEditorModel formats smart-list preview track labels", "[unit][uimodel][list]")
+  {
+    CHECK(SmartListEditorModel::previewTrackLabel("Blue in Green", "Miles Davis", "Kind of Blue") ==
+          "Blue in Green - Miles Davis (Kind of Blue)");
+    CHECK(SmartListEditorModel::previewTrackLabel("Blue in Green", "", "Kind of Blue") ==
+          "Blue in Green (Kind of Blue)");
+    CHECK(SmartListEditorModel::previewTrackLabel("", "Miles Davis", "Kind of Blue") == "Miles Davis (Kind of Blue)");
+    CHECK(SmartListEditorModel::previewTrackLabel("", "Miles Davis", "") == "Miles Davis");
+    CHECK(SmartListEditorModel::previewTrackLabel("", "", "Kind of Blue") == "(untitled)");
+    CHECK(SmartListEditorModel::previewTrackLabel("", "", "") == "(untitled)");
+  }
+
+  TEST_CASE("SmartListEditorModel resolves presentation selection from dropdown state", "[unit][uimodel][list]")
   {
     auto const presets = rt::builtinTrackPresentationPresets();
     REQUIRE(presets.size() >= 2);
@@ -198,12 +229,14 @@ namespace ao::uimodel::list::test
     }
   }
 
-  TEST_CASE("SmartListEditorModel - SmartListStatus enum values", "[unit][uimodel][list]")
+  TEST_CASE("SmartListEditorModel - SmartListStatus enum values", "[uimodel][regression][list]")
   {
+    CHECK(static_cast<int>(SmartListStatus::EmptySource) == 0);
     CHECK(static_cast<int>(SmartListStatus::Valid) == 1);
+    CHECK(static_cast<int>(SmartListStatus::InvalidExpression) == 2);
   }
 
-  TEST_CASE("SmartListEditorModel - canSubmit", "[unit][uimodel][list]")
+  TEST_CASE("SmartListEditorModel allows submit only for named non-invalid drafts", "[unit][uimodel][list]")
   {
     SECTION("Valid name and status")
     {
@@ -231,7 +264,7 @@ namespace ao::uimodel::list::test
     }
   }
 
-  TEST_CASE("SmartListEditorModel - createDraft", "[unit][uimodel][list]")
+  TEST_CASE("SmartListEditorModel createDraft preserves parent edit id and filter fields", "[unit][uimodel][list]")
   {
     auto const parentListId = ListId{10};
     auto const editListId = ListId{42};

@@ -26,9 +26,10 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/track/TrackFieldEditPolicy.h>
 #include <ao/uimodel/track/TrackFieldFormatter.h>
 #include <ao/uimodel/track/TrackInlineEditWorkflow.h>
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <gdkmm/rectangle.h>
 #include <glib/gtypes.h>
@@ -292,7 +293,7 @@ namespace ao::gtk
 
   TrackViewPage::TrackViewPage(ListId listId,
                                Glib::RefPtr<TrackListModel> modelPtr,
-                               uimodel::track::TrackPresentationViewModel& presentationStore,
+                               uimodel::track::TrackColumnLayoutStore& layoutStore,
                                rt::AppRuntime& runtime,
                                ThumbnailLoader& thumbnailLoader,
                                rt::ViewId viewId)
@@ -301,14 +302,14 @@ namespace ao::gtk
     , _viewId{viewId}
     , _modelPtr{std::move(modelPtr)}
 
-    , _presentationStore{presentationStore}
+    , _layoutStore{layoutStore}
     , _runtime{runtime}
     , _thumbnailLoader{thumbnailLoader}
     , _groupModelPtr{Gtk::SortListModel::create(_modelPtr, Glib::RefPtr<Gtk::Sorter>{})}
     , _selectionModelPtr{Gtk::MultiSelection::create(_groupModelPtr)}
-    , _viewHostPtr{std::make_unique<TrackColumnViewHost>(_modelPtr, _presentationStore, _selectionModelPtr, listId)}
+    , _viewHostPtr{std::make_unique<TrackColumnViewHost>(_modelPtr, _layoutStore, _selectionModelPtr, listId)}
   {
-    _presentationStore.setActiveListId(_listId);
+    _layoutStore.setActiveListId(_listId);
     _viewHostPtr->setupSelectionActivation();
 
     _themeRefreshConnection = GtkStyleRuntime::instance().signalRefreshed().connect(
@@ -361,7 +362,7 @@ namespace ao::gtk
   void TrackViewPage::on_map()
   {
     Gtk::Box::on_map();
-    _presentationStore.setActiveListId(_listId);
+    _layoutStore.setActiveListId(_listId);
   }
 
   void TrackViewPage::setupHeaderFactory()
@@ -455,7 +456,6 @@ namespace ao::gtk
 
   void TrackViewPage::applyPresentation(rt::TrackPresentationSpec const& presentation)
   {
-    _presentationStore.setActivePresentationId(presentation.id);
     rebuildColumnView(presentation.visibleFields);
   }
 
@@ -476,7 +476,7 @@ namespace ao::gtk
     _contextPopover.unparent();
 
     // 2. Create a new generation off-tree.
-    auto& newView = _viewHostPtr->rebuild(_modelPtr, _presentationStore, _selectionModelPtr, factoryProvider, _listId);
+    auto& newView = _viewHostPtr->rebuild(_modelPtr, _layoutStore, _selectionModelPtr, factoryProvider, _listId);
 
     // 3. Configure structural properties before attaching model (Safe)
     setupColumnViewStyles(newView);
@@ -571,12 +571,8 @@ namespace ao::gtk
         { return uiDef->readRowEditValue(*row, field); },
         .applyValue = [row, field, uiDef](uimodel::track::TrackFieldEditValue const& value)
         { uiDef->applyRowEditValue(*row, value, field); },
-        .writePatch =
-          [uiDef](rt::MetadataPatch& patch, uimodel::track::TrackFieldEditValue const& value)
-        {
-          auto const ctx = TrackFieldEditContext{.patch = patch, .value = value};
-          uiDef->writePatch(ctx);
-        },
+        .writePatch = [field](rt::MetadataPatch& patch, uimodel::track::TrackFieldEditValue const& value)
+        { uimodel::track::writeTrackFieldPatch(patch, field, value); },
         .commitPatch = [this, row](rt::MetadataPatch const& patch) -> rt::UpdateTrackMetadataReply
         {
           auto const trackIds = std::array{row->trackId()};

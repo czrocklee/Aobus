@@ -75,7 +75,7 @@ namespace ao::gtk::test
 
         auto* const label = findWidgetByClass<Gtk::Label>(*child, "ao-tag-chip-label");
 
-        if (label != nullptr && label->get_text() == std::string{text})
+        if (label != nullptr && label->get_text().raw() == text)
         {
           return child;
         }

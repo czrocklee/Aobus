@@ -18,7 +18,7 @@ namespace ao::uimodel::layout::test
 {
   namespace yaml = ao::yaml;
 
-  TEST_CASE("LayoutValue serialization", "[layout][unit][model]")
+  TEST_CASE("LayoutValue serializes scalar variants without type loss", "[uimodel][unit][layout][model]")
   {
     SECTION("string value")
     {
@@ -56,7 +56,7 @@ namespace ao::uimodel::layout::test
     }
   }
 
-  TEST_CASE("LayoutNode round-trip", "[layout][unit][model]")
+  TEST_CASE("LayoutNode round-trips identity and properties", "[uimodel][unit][layout][model]")
   {
     auto node = LayoutNode{};
     node.type = "box";
@@ -80,7 +80,7 @@ namespace ao::uimodel::layout::test
     CHECK(decoded.children[0].type == "spacer");
   }
 
-  TEST_CASE("LayoutDocument round-trip preserves layout props and child order", "[layout][unit][model]")
+  TEST_CASE("LayoutDocument round-trip preserves layout props and child order", "[uimodel][unit][layout][model]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "box";
@@ -115,7 +115,7 @@ namespace ao::uimodel::layout::test
     CHECK(decoded.root.children[1].props.at("hscrollPolicy").asString() == "never");
   }
 
-  TEST_CASE("LayoutDocument round-trip preserves action-id props", "[layout][unit][model]")
+  TEST_CASE("LayoutDocument round-trip preserves action-id props", "[uimodel][unit][layout][model]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "playback.qualityIndicator";
@@ -133,7 +133,7 @@ namespace ao::uimodel::layout::test
     CHECK(decoded.root.props.at("secondaryAction").asString() == "shell.showSystemMenu");
   }
 
-  TEST_CASE("LayoutDocument round-trip preserves tooltip", "[layout][unit][model]")
+  TEST_CASE("LayoutDocument round-trip preserves tooltip", "[uimodel][unit][layout][model]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "playback.qualityIndicator";
@@ -157,7 +157,7 @@ namespace ao::uimodel::layout::test
     CHECK(decoded.root.optTooltip->nodePtr->props.at("variant").asString() == "tooltip");
   }
 
-  TEST_CASE("YAML decode tolerates missing optional fields", "[layout][unit][model]")
+  TEST_CASE("YAML decode tolerates missing optional fields", "[uimodel][unit][layout][model]")
   {
     auto const* yaml = R"(
       version: 1
@@ -176,7 +176,7 @@ namespace ao::uimodel::layout::test
     CHECK(decoded.root.props.empty());
   }
 
-  TEST_CASE("YAML decode tolerates fields set to empty string", "[layout][unit][model]")
+  TEST_CASE("YAML decode tolerates fields set to empty string", "[uimodel][unit][layout][model]")
   {
     auto const* yaml = R"(
       version: 1
@@ -193,7 +193,7 @@ namespace ao::uimodel::layout::test
     CHECK(decoded.root.id.empty());
   }
 
-  TEST_CASE("LayoutValue serializes and decodes double", "[layout][unit][model]")
+  TEST_CASE("LayoutValue serializes and decodes double", "[uimodel][unit][layout][model]")
   {
     auto const v = LayoutValue{3.14};
     auto tree = ryml::Tree{};
@@ -204,7 +204,7 @@ namespace ao::uimodel::layout::test
     CHECK(decoded.asDouble() == 3.14);
   }
 
-  TEST_CASE("LayoutValue coercion", "[layout][unit][model]")
+  TEST_CASE("LayoutValue coercion returns typed optional values", "[uimodel][unit][layout][model]")
   {
     SECTION("asString coerces bool")
     {
@@ -314,7 +314,7 @@ namespace ao::uimodel::layout::test
     }
   }
 
-  TEST_CASE("LayoutNode getProp/getLayout", "[layout][unit][model]")
+  TEST_CASE("LayoutNode property lookups distinguish props from layout props", "[uimodel][unit][layout][model]")
   {
     auto node = LayoutNode{};
     node.props["label"] = LayoutValue{std::string{"hello"}};
@@ -350,7 +350,7 @@ namespace ao::uimodel::layout::test
     }
   }
 
-  TEST_CASE("Layout stateful node ids reject ambiguous runtime keys", "[layout][unit][model]")
+  TEST_CASE("Layout stateful node ids reject ambiguous runtime keys", "[uimodel][regression][layout][model]")
   {
     SECTION("duplicate stateful ids are errors")
     {
@@ -440,7 +440,7 @@ namespace ao::uimodel::layout::test
     }
   }
 
-  TEST_CASE("Layout stateful node id generation avoids existing document ids", "[layout][unit][model]")
+  TEST_CASE("Layout stateful node id generation avoids existing document ids", "[uimodel][unit][layout][model]")
   {
     SECTION("new stateful ids are stable and unique across root and templates")
     {

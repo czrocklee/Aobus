@@ -6,6 +6,7 @@
 #include "gtkmm/enums.h"
 #include "track/TrackFieldUi.h"
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/track/TrackFieldEditPolicy.h>
 
 #include <pangomm/layout.h>
 
@@ -21,7 +22,7 @@ namespace ao::gtk::layout::track_field_grid
     bool isFieldEditable(rt::TrackField field)
     {
       auto const* uiDef = trackFieldUiDefinition(field);
-      return uiDef != nullptr && uiDef->parseInlineEdit != nullptr && uiDef->writePatch != nullptr;
+      return uiDef != nullptr && uiDef->parseInlineEdit != nullptr && uimodel::track::trackFieldCanWritePatch(field);
     }
 
     bool isFieldTechnical(rt::TrackField field)

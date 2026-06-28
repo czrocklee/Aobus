@@ -5,7 +5,8 @@
 
 #include "test/unit/TestUtils.h"
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
+#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/track/TrackPresentationPreferenceStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 

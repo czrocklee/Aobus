@@ -11,7 +11,7 @@
 
 namespace ao::uimodel::track::test
 {
-  TEST_CASE("TrackPresentationRecommender - heuristics", "[uimodel][track]")
+  TEST_CASE("TrackPresentationRecommender - heuristics", "[uimodel][unit][track][presentation]")
   {
     auto const builtins = rt::builtinTrackPresentationPresets();
     auto customs = std::vector<rt::CustomTrackPresentationPreset>{};

@@ -3,31 +3,31 @@
 
 #pragma once
 
-namespace ao::gtk::layout::track_field_grid
+namespace ao::uimodel::layout
 {
-  struct SectionAvailability final
+  struct TrackFieldGridSectionAvailability final
   {
     bool hasMetadataFields = false;
     bool hasSelectedTracks = false;
     bool hasTechnicalFields = false;
   };
 
-  constexpr bool shouldRenderMetadataSection(SectionAvailability const availability)
+  constexpr bool shouldRenderTrackFieldGridMetadataSection(TrackFieldGridSectionAvailability const availability)
   {
     return availability.hasMetadataFields;
   }
 
-  constexpr bool shouldRenderCustomSection(SectionAvailability const availability)
+  constexpr bool shouldRenderTrackFieldGridCustomSection(TrackFieldGridSectionAvailability const availability)
   {
     return availability.hasSelectedTracks;
   }
 
-  constexpr bool shouldRenderTechnicalSection(SectionAvailability const availability)
+  constexpr bool shouldRenderTrackFieldGridTechnicalSection(TrackFieldGridSectionAvailability const availability)
   {
     return availability.hasTechnicalFields;
   }
 
-  struct MetadataFieldVisibility final
+  struct TrackFieldGridMetadataFieldVisibility final
   {
     bool metadataExpanded = false;
     bool showEmptyMetadata = false;
@@ -35,13 +35,13 @@ namespace ao::gtk::layout::track_field_grid
     bool hasDisplayText = false;
   };
 
-  constexpr bool shouldShowMetadataFieldRow(MetadataFieldVisibility const visibility)
+  constexpr bool shouldShowTrackFieldGridMetadataFieldRow(TrackFieldGridMetadataFieldVisibility const visibility)
   {
     return visibility.metadataExpanded &&
            (visibility.showEmptyMetadata || visibility.editorEditing || visibility.hasDisplayText);
   }
 
-  struct CompositeMetadataFieldVisibility final
+  struct TrackFieldGridCompositeMetadataFieldVisibility final
   {
     bool metadataExpanded = false;
     bool showEmptyMetadata = false;
@@ -51,10 +51,11 @@ namespace ao::gtk::layout::track_field_grid
     bool hasSecondaryDisplayText = false;
   };
 
-  constexpr bool shouldShowCompositeMetadataRow(CompositeMetadataFieldVisibility const visibility)
+  constexpr bool shouldShowTrackFieldGridCompositeMetadataRow(
+    TrackFieldGridCompositeMetadataFieldVisibility const visibility)
   {
     return visibility.metadataExpanded &&
            (visibility.showEmptyMetadata || visibility.primaryEditorEditing || visibility.secondaryEditorEditing ||
             visibility.hasPrimaryDisplayText || visibility.hasSecondaryDisplayText);
   }
-} // namespace ao::gtk::layout::track_field_grid
+} // namespace ao::uimodel::layout

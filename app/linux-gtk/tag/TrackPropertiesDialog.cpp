@@ -17,6 +17,10 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/uimodel/tag/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/tag/TrackPropertiesFormWorkflow.h>
+#include <ao/uimodel/track/TrackFieldEditPolicy.h>
+#include <ao/uimodel/track/TrackFieldFormatter.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -55,17 +59,6 @@ namespace ao::gtk
     constexpr int kMinScrollContentWidth = 480;
     constexpr int kMaxScrollContentWidth = 640;
     constexpr int kMaxScrollContentHeight = 520;
-
-    bool shouldShowEditableMetadataRow(rt::TrackFieldDefinition const& rtDef, TrackFieldUiDefinition const& uiDef)
-    {
-      return rtDef.category == rt::TrackFieldCategory::Metadata && rtDef.editable &&
-             rtDef.field != rt::TrackField::Tags && uiDef.writePatch != nullptr;
-    }
-
-    bool shouldShowReadonlyPropertyRow(rt::TrackFieldDefinition const& rtDef, TrackFieldUiDefinition const& uiDef)
-    {
-      return rtDef.category == rt::TrackFieldCategory::Technical && !rtDef.synthetic && uiDef.formatValue != nullptr;
-    }
   } // namespace
 
   TrackPropertiesDialog::TrackPropertiesDialog(Gtk::Window& parent,
@@ -128,19 +121,14 @@ namespace ao::gtk
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
 
-    for (auto const& def : trackFieldUiDefinitions())
+    auto const spec = uimodel::tag::buildTrackPropertiesFormSpec();
+
+    for (auto const& row : spec.metadataRows)
     {
-      auto const* const rtDef = rt::trackFieldDefinition(def.field);
+      auto* const widget = createEditorWidget(row.field, row.editorKind);
+      list->addRow(std::string{row.label}, *widget);
 
-      if (rtDef == nullptr || !shouldShowEditableMetadataRow(*rtDef, def))
-      {
-        continue;
-      }
-
-      auto* const widget = createEditorWidget(def.field);
-      list->addRow(std::string{rtDef->label}, *widget);
-
-      _editors.push_back(FieldEditor{.field = def.field, .widget = widget});
+      _editors.push_back(FieldEditor{.state = {.field = row.field}, .widget = widget});
     }
 
     _metadataBox.append(*list);
@@ -164,29 +152,24 @@ namespace ao::gtk
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
 
-    for (auto const& def : trackFieldUiDefinitions())
+    auto const spec = uimodel::tag::buildTrackPropertiesFormSpec();
+
+    for (auto const& row : spec.propertyRows)
     {
-      auto const* const rtDef = rt::trackFieldDefinition(def.field);
+      auto* const widget = createReadonlyWidget(row.field);
+      list->addRow(std::string{row.label}, *widget);
 
-      if (rtDef == nullptr || !shouldShowReadonlyPropertyRow(*rtDef, def))
-      {
-        continue;
-      }
-
-      auto* const widget = createReadonlyWidget(def.field);
-      list->addRow(std::string{rtDef->label}, *widget);
-
-      _readonlyRows.push_back(FieldEditor{.field = def.field, .widget = widget});
+      _readonlyRows.push_back(FieldEditor{.state = {.field = row.field}, .widget = widget});
     }
 
     _propertiesBox.append(*list);
     _notebook.append_page(_propertiesScroll, "Properties");
   }
 
-  Gtk::Widget* TrackPropertiesDialog::createEditorWidget(rt::TrackField field)
+  Gtk::Widget* TrackPropertiesDialog::createEditorWidget(rt::TrackField field,
+                                                         uimodel::tag::TrackPropertiesFormEditorKind editorKind)
   {
-    if (auto const* const fieldDef = trackFieldDefinition(field);
-        fieldDef != nullptr && fieldDef->valueKind == rt::TrackFieldValueKind::Number)
+    if (editorKind == uimodel::tag::TrackPropertiesFormEditorKind::Number)
     {
       auto* const spin = Gtk::make_managed<Gtk::SpinButton>();
       spin->set_range(kSpinMin, kSpinMax);
@@ -257,30 +240,17 @@ namespace ao::gtk
   {
     for (auto& editor : _editors)
     {
-      auto const* const def = trackFieldUiDefinition(editor.field);
-
-      if (def == nullptr || def->formatValue == nullptr)
-      {
-        continue;
-      }
-
-      auto const rawValue = scope.trackField(trackId, editor.field);
-      editor.originalRawValue = rawValue;
-      setWidgetValue(editor.field, editor.widget, def->formatValue(rawValue));
+      auto const rawValue = scope.trackField(trackId, editor.state.field);
+      editor.state = uimodel::tag::makeTrackPropertiesFormFieldState(editor.state.field, rawValue);
+      setWidgetValue(
+        editor.state.field, editor.widget, uimodel::track::formatTrackFieldRawValue(editor.state.field, rawValue));
     }
 
     for (auto& row : _readonlyRows)
     {
-      auto const* const def = trackFieldUiDefinition(row.field);
-
-      if (def == nullptr || def->formatValue == nullptr)
-      {
-        continue;
-      }
-
-      auto const rawValue = scope.trackField(trackId, row.field);
-      row.originalRawValue = rawValue;
-      setWidgetValue(row.field, row.widget, def->formatValue(rawValue));
+      auto const rawValue = scope.trackField(trackId, row.state.field);
+      row.state = uimodel::tag::makeTrackPropertiesFormFieldState(row.state.field, rawValue);
+      setWidgetValue(row.state.field, row.widget, uimodel::track::formatTrackFieldRawValue(row.state.field, rawValue));
     }
   }
 
@@ -288,39 +258,19 @@ namespace ao::gtk
   {
     for (auto& editor : _editors)
     {
-      if (editor.mixed)
+      if (auto const rawValue = scope.trackField(trackId, editor.state.field);
+          uimodel::tag::mergeTrackPropertiesFormFieldState(editor.state, rawValue))
       {
-        continue;
-      }
-
-      if (auto const* const def = trackFieldUiDefinition(editor.field); def == nullptr || def->formatValue == nullptr)
-      {
-        continue;
-      }
-
-      if (auto const rawValue = scope.trackField(trackId, editor.field); rawValue != editor.originalRawValue)
-      {
-        editor.mixed = true;
-        setEditorMixed(editor.field, editor.widget);
+        setEditorMixed(editor.state.field, editor.widget);
       }
     }
 
     for (auto& row : _readonlyRows)
     {
-      if (row.mixed)
+      if (auto const rawValue = scope.trackField(trackId, row.state.field);
+          uimodel::tag::mergeTrackPropertiesFormFieldState(row.state, rawValue))
       {
-        continue;
-      }
-
-      if (auto const* const def = trackFieldUiDefinition(row.field); def == nullptr || def->formatValue == nullptr)
-      {
-        continue;
-      }
-
-      if (auto const rawValue = scope.trackField(trackId, row.field); rawValue != row.originalRawValue)
-      {
-        row.mixed = true;
-        setEditorMixed(row.field, row.widget);
+        setEditorMixed(row.state.field, row.widget);
       }
     }
   }
@@ -336,31 +286,23 @@ namespace ao::gtk
 
     for (auto const& editor : _editors)
     {
-      if (editor.mixed)
+      auto const* const def = trackFieldUiDefinition(editor.state.field);
+
+      if (def == nullptr || !uimodel::track::trackFieldCanWritePatch(editor.state.field))
       {
         continue;
       }
 
-      auto const* const def = trackFieldUiDefinition(editor.field);
-
-      if (def == nullptr || def->writePatch == nullptr)
-      {
-        continue;
-      }
-
-      auto rawValue = TrackFieldRawValue{};
       auto editValue = TrackFieldEditValue{};
 
       if (auto* const entry = dynamic_cast<Gtk::Entry*>(editor.widget); entry != nullptr)
       {
         auto const text = entry->get_text().raw();
-        rawValue = TrackFieldRawValue{std::in_place_type<std::string>, text};
         editValue = TrackFieldEditValue{std::in_place_type<std::string>, std::move(text)};
       }
       else if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(editor.widget); spin != nullptr)
       {
         auto const value = static_cast<std::uint16_t>(spin->get_value_as_int());
-        rawValue = TrackFieldRawValue{std::in_place_type<std::uint16_t>, value};
         editValue = TrackFieldEditValue{std::in_place_type<std::uint16_t>, value};
       }
       else
@@ -368,13 +310,7 @@ namespace ao::gtk
         continue;
       }
 
-      if (rawValue == editor.originalRawValue)
-      {
-        continue;
-      }
-
-      auto const ctx = TrackFieldEditContext{.patch = patch, .value = editValue};
-      def->writePatch(ctx);
+      std::ignore = uimodel::tag::writeTrackPropertiesFormEdit(patch, editor.state, editValue);
     }
 
     auto const reply = _writer.updateMetadata(_trackIds, patch);

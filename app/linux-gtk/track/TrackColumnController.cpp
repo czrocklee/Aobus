@@ -3,10 +3,11 @@
 
 #include "track/TrackColumnController.h"
 
-#include "track/TrackFieldUi.h"
 #include <ao/Type.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
+#include <ao/uimodel/track/TrackColumnLayoutPolicy.h>
+#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/track/TrackFieldPresentationPolicy.h>
 
 #include <giomm/listmodel.h>
 #include <glib.h>
@@ -31,19 +32,15 @@
 
 namespace ao::gtk
 {
-  namespace
-  {
-  }
-
   TrackColumnController::TrackColumnController(Gtk::ColumnView& columnView,
-                                               uimodel::track::TrackPresentationViewModel& presentationStore,
+                                               uimodel::track::TrackColumnLayoutStore& layoutStore,
                                                ao::ListId listId)
-    : _listId{listId}, _columnView{columnView}, _presentationStore{presentationStore}
+    : _listId{listId}, _columnView{columnView}, _layoutStore{layoutStore}
   {
     _dynamicCssProviderPtr = Gtk::CssProvider::create();
 
-    _layoutChangedSubscription = _presentationStore.signalChanged().connect(
-      [this](ao::ListId listId, uimodel::track::TrackPresentationChangeType type)
+    _layoutChangedSubscription = _layoutStore.signalChanged().connect(
+      [this](ao::ListId listId)
       {
         if (_capturingColumnLayout || _syncingColumnLayout)
         {
@@ -55,12 +52,7 @@ namespace ao::gtk
           return;
         }
 
-        if (type == uimodel::track::TrackPresentationChangeType::FullRebuild)
-        {
-          // FullRebuild might change field order/visibility handled by TrackViewPage,
-          // but we still want to ensure our columns match the store's state if we're active.
-          queueSharedColumnLayoutUpdate();
-        }
+        queueSharedColumnLayoutUpdate();
       });
 
     _columnView.signal_map().connect(sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
@@ -110,7 +102,7 @@ namespace ao::gtk
 
       columnPtr->set_resizable(true);
 
-      columnPtr->set_fixed_width(defaultWidthForField(rtDef.field));
+      columnPtr->set_fixed_width(uimodel::track::defaultTrackFieldColumnWidth(rtDef.field));
 
       _columnNotifyConnections.emplace_back(columnPtr->property_fixed_width().signal_changed().connect(
         [this]
@@ -128,33 +120,9 @@ namespace ao::gtk
 
       _columnView.append_column(columnPtr);
 
-      _columns.push_back(
-        {.field = rtDef.field, .columnPtr = columnPtr, .defaultWidth = defaultWidthForField(rtDef.field)});
+      _columns.push_back({.field = rtDef.field, .columnPtr = columnPtr});
     }
   }
-
-  namespace
-  {
-    rt::TrackField chooseExpandingColumn(std::span<rt::TrackField const> visibleFields)
-    {
-      if (std::ranges::contains(visibleFields, rt::TrackField::Title))
-      {
-        return rt::TrackField::Title;
-      }
-
-      if (std::ranges::contains(visibleFields, rt::TrackField::Tags))
-      {
-        return rt::TrackField::Tags;
-      }
-
-      if (!visibleFields.empty())
-      {
-        return visibleFields.front();
-      }
-
-      return rt::TrackField::Title;
-    }
-  } // namespace
 
   void TrackColumnController::applyColumnLayout(std::span<rt::TrackField const> visibleFields)
   {
@@ -162,7 +130,7 @@ namespace ao::gtk
 
     if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
     {
-      auto const& storedLayout = _presentationStore.layoutForList(_listId);
+      auto const& storedLayout = _layoutStore.layoutForList(_listId);
 
       // Reorder columns to match visibleFields order
       for (auto const& [idx, field] : std::views::enumerate(visibleFields))
@@ -185,7 +153,7 @@ namespace ao::gtk
           width = it->width;
         }
 
-        auto const effectiveWidth = (width <= 0 ? binding->defaultWidth : width);
+        auto const effectiveWidth = uimodel::track::effectiveTrackFieldColumnWidth(field, width);
 
         if (binding->columnPtr->get_fixed_width() != effectiveWidth)
         {
@@ -240,7 +208,7 @@ namespace ao::gtk
 
   void TrackColumnController::updateColumnExpansion(std::span<rt::TrackField const> visibleFields)
   {
-    auto const expanding = chooseExpandingColumn(visibleFields);
+    auto const expanding = uimodel::track::expandingTrackColumn(visibleFields);
 
     for (auto& data : _columns)
     {
@@ -302,7 +270,7 @@ namespace ao::gtk
       }
     }
 
-    _presentationStore.updateLayout(_listId, layout);
+    _layoutStore.updateLayout(_listId, layout);
     _capturingColumnLayout = false;
   }
 
@@ -340,30 +308,8 @@ namespace ao::gtk
   std::vector<rt::TrackField> TrackColumnController::visibleFieldsInStoredOrder(
     std::span<rt::TrackField const> visibleFields) const
   {
-    auto ordered = std::vector<rt::TrackField>{};
-    ordered.reserve(visibleFields.size());
-
-    auto const appendIfVisible = [&ordered, visibleFields](rt::TrackField field)
-    {
-      if (!std::ranges::contains(visibleFields, field) || std::ranges::contains(ordered, field))
-      {
-        return;
-      }
-
-      ordered.push_back(field);
-    };
-
-    for (auto const field : _presentationStore.activeFieldOrder())
-    {
-      appendIfVisible(field);
-    }
-
-    for (auto const field : visibleFields)
-    {
-      appendIfVisible(field);
-    }
-
-    return ordered;
+    auto const activeOrder = _layoutStore.activeFieldOrder();
+    return uimodel::track::visibleTrackFieldsInStoredOrder(visibleFields, activeOrder);
   }
 
   void TrackColumnController::updateColumnVisibility(std::span<rt::TrackField const> visibleFields)

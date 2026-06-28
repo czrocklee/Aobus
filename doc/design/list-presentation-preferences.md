@@ -84,7 +84,7 @@ Reasons:
 
 - Built-in presentation definitions can evolve with the application.
 - Custom presentation ids can still be resolved through
-  `TrackPresentationViewModel`.
+  `TrackPresentationCatalog` and `TrackPresentationPreferenceStore`.
 - The config remains small and clearly user-owned.
 - Navigation history already stores full specs where exact restore is required.
 
@@ -349,7 +349,7 @@ opening or creating."
 
 ## Service Responsibilities
 
-### TrackPresentationViewModel
+### TrackPresentationPreferenceStore
 
 Own the list presentation preference map in the UI model layer:
 
@@ -357,17 +357,25 @@ Own the list presentation preference map in the UI model layer:
 std::optional<std::string_view> presentationIdForList(ListId listId) const;
 void setPresentationIdForList(ListId listId, std::string_view presentationId);
 void clearPresentationForList(ListId listId);
-rt::TrackPresentationSpec presentationForList(ListId listId) const;
+rt::TrackPresentationSpec presentationForList(ListId listId, std::string_view smartListFilter) const;
 ```
 
-The view model should continue resolving ids through built-in and custom
-presentation collections. It should also call the recommender for smart lists
-when no saved preference exists.
+The store resolves saved ids through `TrackPresentationCatalog`. It calls the
+recommender for smart lists when no saved preference exists, and tolerates stale
+saved ids by logging a debug message and falling back to the recommendation.
 
-`TrackPresentationViewModel` is the preferred home for preference resolution
-because it already bridges presentation catalog state, active list state, and
-GTK persistence. `WorkspaceService` should not gain a direct dependency on GTK
-config.
+### TrackPresentationCatalog
+
+Own presentation lookup and menu projection in the UI model layer. It resolves
+built-in presets from runtime presentation definitions and custom presets from
+`WorkspaceService`, without making GTK widgets know where those definitions
+live.
+
+### TrackPresentationWorkflow
+
+Coordinate active-list presentation changes. It is the UI workflow seam that
+updates the selected list presentation preference, applies the active runtime
+view presentation, and reacts to catalog/preference changes.
 
 ### WorkspaceService
 
@@ -377,7 +385,7 @@ preference map.
 
 Preferred direction:
 
-- `TrackPresentationViewModel` resolves `presentationForList(listId)`.
+- `TrackPresentationPreferenceStore` resolves `presentationForList(listId, smartListFilter)`.
 - UI/workspace integration passes that spec when opening the list.
 - `WorkspaceService` continues to own navigation/history, not preference
   storage.
@@ -438,7 +446,7 @@ Add tests for the recommendation helper:
 - technical fields recommend the album-oriented player presentation
 - invalid expression falls back without throwing through the public helper
 
-Add `TrackPresentationViewModel` tests:
+Add `TrackPresentationPreferenceStore` tests:
 
 - stores per-list presentation id
 - updates existing id
@@ -446,6 +454,14 @@ Add `TrackPresentationViewModel` tests:
 - ignores invalid list ids
 - emits layout/presentation preference change signal
 - resolves `kAllTracksListId` preferences
+- resolves custom preferences and falls back for stale ids
+
+Add `TrackPresentationCatalog` and `TrackPresentationWorkflow` tests:
+
+- catalog resolves built-in and custom presentation ids
+- catalog emits when custom presets change
+- workflow applies selection changes and records the active list preference
+- workflow refreshes active presentation when preference or catalog state changes
 
 Add config tests:
 
@@ -479,10 +495,11 @@ Add dialog tests:
 3. Rename or split persistent track-view state before adding presentation
    preferences.
 4. Extend `GtkLayoutConfig` load/save tests for the new state shape.
-5. Add list preference APIs to `TrackPresentationViewModel`.
+5. Add list preference APIs to `TrackPresentationPreferenceStore`.
 6. Route list opening through list presentation preference lookup, guarded so
    lists without preferences keep current behavior until the fallback is wired.
-7. Update presentation selection handling to save the active list preference.
+7. Route presentation selection through `TrackPresentationWorkflow` so it saves
+   the active list preference and applies the runtime presentation.
 8. Make quick filter presentation-neutral and test the behavior.
 9. Add smart-list dialog selector and creation/edit persistence.
 10. Wire stale preference cleanup into list deletion handling.

@@ -495,7 +495,9 @@ lexy uses highly granular headers. Map core entry points and common DSL componen
 | `ao::uimodel::playback::AobusSoulViewModel" | `<ao/uimodel/playback/AobusSoulViewModel.h>` | `ao::uimodel::playback` |
 | `ao::uimodel::playback::VolumeViewModel" | `<ao/uimodel/playback/VolumeViewModel.h>` | `ao::uimodel::playback` |
 | `ao::uimodel::track::TrackFilterViewModel" | `<ao/uimodel/track/TrackFilterViewModel.h>` | `ao::uimodel::track` |
-| `ao::uimodel::track::TrackPresentationViewModel" | `<ao/uimodel/track/TrackPresentationViewModel.h>` | `ao::uimodel::track` |
+| `ao::uimodel::track::TrackPresentationCatalog" | `<ao/uimodel/track/TrackPresentationCatalog.h>` | `ao::uimodel::track` |
+| `ao::uimodel::track::TrackPresentationPreferenceStore" | `<ao/uimodel/track/TrackPresentationPreferenceStore.h>` | `ao::uimodel::track` |
+| `ao::uimodel::track::TrackPresentationWorkflow" | `<ao/uimodel/track/TrackPresentationWorkflow.h>` | `ao::uimodel::track` |
 | `ao::uimodel::list::SmartListEditorModel" | `<ao/uimodel/list/SmartListEditorModel.h>` | `ao::uimodel::list` |
 
 ### Testing (`ao::test::`)

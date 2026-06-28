@@ -450,4 +450,43 @@ namespace ao::gtk::layout::test
       CHECK(titleValueSlot->get_width() == valueWidthBeforeCollapse);
     }
   }
+
+  TEST_CASE("TrackFieldGrid shows custom section when an empty custom selection appears",
+            "[gtk][unit][layout][components][track][regression]")
+  {
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.custom_section_regression_test"};
+    auto& scope = fixture.attachTrackDetailScope();
+
+    auto const node = LayoutNode{.type = "track.fieldGrid"};
+    auto const compPtr = fixture.create(node);
+    REQUIRE(compPtr != nullptr);
+    auto& root = compPtr->widget();
+    auto* const grid = findWidget<Gtk::Grid>(root);
+    REQUIRE(grid != nullptr);
+
+    auto findCustomHeader = [&] -> Gtk::Button*
+    {
+      Gtk::Button* found = nullptr;
+      walkWidgets(*grid,
+                  [&](Gtk::Widget& widget)
+                  {
+                    if (auto* const button = dynamic_cast<Gtk::Button*>(&widget);
+                        button != nullptr && button->has_css_class("ao-track-detail-section-custom"))
+                    {
+                      found = button;
+                    }
+                  });
+      return found;
+    };
+
+    CHECK(findCustomHeader() == nullptr);
+
+    auto snap = rt::TrackDetailSnapshot{};
+    snap.trackIds = {TrackId{1}};
+    scope.setSnapshot(snap);
+
+    auto* const customHeader = findCustomHeader();
+    REQUIRE(customHeader != nullptr);
+    CHECK(customHeader->get_visible());
+  }
 } // namespace ao::gtk::layout::test

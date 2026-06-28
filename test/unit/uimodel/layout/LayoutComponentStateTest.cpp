@@ -42,7 +42,7 @@ namespace ao::uimodel::layout::test
     }
   } // namespace
 
-  TEST_CASE("Layout component state file round-trip", "[layout][unit][state]")
+  TEST_CASE("Layout component state file round-trips entries", "[uimodel][unit][layout][state]")
   {
     auto const node = splitNode();
     auto original = stateDocFor(node);
@@ -60,7 +60,7 @@ namespace ao::uimodel::layout::test
     CHECK(decoded.components.at("main-paned").state.at("positionPercent").asDouble() == 0.42);
   }
 
-  TEST_CASE("Layout component state resolver validates versions type and baseline", "[layout][unit][state]")
+  TEST_CASE("Layout component state resolver validates versions type and baseline", "[uimodel][unit][layout][state]")
   {
     auto node = splitNode();
     auto stateDoc = stateDocFor(node);
@@ -103,7 +103,7 @@ namespace ao::uimodel::layout::test
     }
   }
 
-  TEST_CASE("Layout component baseline hash is semantic", "[layout][unit][state]")
+  TEST_CASE("Layout component baseline hash ignores non-semantic document changes", "[uimodel][unit][layout][state]")
   {
     SECTION("equivalent numeric spellings hash the same")
     {
@@ -135,7 +135,7 @@ namespace ao::uimodel::layout::test
     }
   }
 
-  TEST_CASE("Layout component state YAML decode handles corrupt files", "[layout][unit][state]")
+  TEST_CASE("Layout component state YAML decode handles corrupt files", "[uimodel][unit][layout][state]")
   {
     SECTION("malformed state root is rejected")
     {
@@ -174,7 +174,7 @@ namespace ao::uimodel::layout::test
     }
   }
 
-  TEST_CASE("Layout component state pruning removes invalid entries", "[layout][unit][state]")
+  TEST_CASE("Layout component state pruning removes invalid entries", "[uimodel][unit][layout][state]")
   {
     auto liveNode = splitNode("live-split");
     auto doc = LayoutDocument{};

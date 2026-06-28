@@ -7,7 +7,7 @@
 #include "track/TrackListModel.h"
 #include "track/TrackSelectionController.h"
 #include <ao/Type.h>
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
+#include <ao/uimodel/track/TrackColumnLayoutStore.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>
@@ -22,11 +22,11 @@
 namespace ao::gtk
 {
   TrackColumnViewHost::TrackColumnViewHost(Glib::RefPtr<TrackListModel> modelPtr,
-                                           uimodel::track::TrackPresentationViewModel& presentationStore,
+                                           uimodel::track::TrackColumnLayoutStore& layoutStore,
                                            Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                                            ao::ListId listId)
     : _columnViewPtr{std::make_unique<Gtk::ColumnView>()}
-    , _columnControllerPtr{std::make_unique<TrackColumnController>(*_columnViewPtr, presentationStore, listId)}
+    , _columnControllerPtr{std::make_unique<TrackColumnController>(*_columnViewPtr, layoutStore, listId)}
     , _selectionControllerPtr{std::make_unique<TrackSelectionController>(*_columnViewPtr, modelPtr, selectionModel)}
   {
     connectSelectionSignals();
@@ -62,14 +62,14 @@ namespace ao::gtk
   }
 
   Gtk::ColumnView& TrackColumnViewHost::rebuild(Glib::RefPtr<TrackListModel> modelPtr,
-                                                uimodel::track::TrackPresentationViewModel& presentationStore,
+                                                uimodel::track::TrackColumnLayoutStore& layoutStore,
                                                 Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                                                 FactoryProvider const& factoryProvider,
                                                 ao::ListId listId)
   {
     auto newViewPtr = std::make_unique<Gtk::ColumnView>();
     auto newSelectionPtr = std::make_unique<TrackSelectionController>(*newViewPtr, modelPtr, selectionModel);
-    auto newColumnPtr = std::make_unique<TrackColumnController>(*newViewPtr, presentationStore, listId);
+    auto newColumnPtr = std::make_unique<TrackColumnController>(*newViewPtr, layoutStore, listId);
 
     // Retire old generation
     _columnControllerPtr = std::move(newColumnPtr);

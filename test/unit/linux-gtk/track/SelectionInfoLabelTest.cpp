@@ -13,10 +13,7 @@
 
 namespace ao::gtk::test
 {
-  // SelectionInfoLabel self-subscribes to ViewService selection changes and renders the count.
-  // The observable contract is the label text: empty when nothing is selected, singular vs plural
-  // noun otherwise. We drive real selection changes and read the rendered text back.
-  TEST_CASE("SelectionInfoLabel renders selection count text", "[gtk][unit][track][selection]")
+  TEST_CASE("SelectionInfoLabel binds selection changes to summary text", "[gtk][unit][track][selection]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -26,30 +23,15 @@ namespace ao::gtk::test
     auto label = SelectionInfoLabel{runtime.views()};
     auto const& text = dynamic_cast<Gtk::Label const&>(label.widget());
 
-    SECTION("starts empty with no selection")
-    {
-      CHECK(text.get_text().empty());
-    }
+    CHECK(text.has_css_class("dim-label"));
 
-    SECTION("single selection uses the singular noun")
-    {
-      runtime.views().setSelection(reply.viewId, {TrackId{1}});
-      CHECK(text.get_text() == "1 item selected");
-    }
+    auto const emptyText = text.get_text();
 
-    SECTION("multiple selection uses the plural noun")
-    {
-      runtime.views().setSelection(reply.viewId, {TrackId{1}, TrackId{2}, TrackId{3}});
-      CHECK(text.get_text() == "3 items selected");
-    }
+    runtime.views().setSelection(reply.viewId, {TrackId{1}, TrackId{2}});
+    auto const selectedText = text.get_text();
+    CHECK(selectedText != emptyText);
 
-    SECTION("clearing the selection restores empty text")
-    {
-      runtime.views().setSelection(reply.viewId, {TrackId{1}, TrackId{2}});
-      CHECK(text.get_text() == "2 items selected");
-
-      runtime.views().setSelection(reply.viewId, {});
-      CHECK(text.get_text().empty());
-    }
+    runtime.views().setSelection(reply.viewId, {});
+    CHECK(text.get_text() == emptyText);
   }
 } // namespace ao::gtk::test

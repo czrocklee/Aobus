@@ -9,16 +9,13 @@
 #include "layout/runtime/DecoratedLayoutComponent.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/rt/Log.h>
 #include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/ComponentActionPolicy.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
-#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -30,74 +27,6 @@ namespace ao::gtk::layout
 {
   namespace
   {
-    void injectActionDescriptors(uimodel::layout::ComponentDescriptor& descriptor)
-    {
-      auto const& descriptorPolicy = descriptor.actionPolicy;
-
-      auto const inject = [&descriptor, &descriptorPolicy](
-                            std::string_view name, std::string_view label, uimodel::layout::ActionSlot slot)
-      {
-        if (auto it = std::ranges::find_if(
-              descriptor.props, [name](uimodel::layout::PropertyDescriptor const& prop) { return prop.name == name; });
-            it != descriptor.props.end())
-        {
-          // Existing property found — validate it matches expected semantics
-          if (it->kind != uimodel::layout::PropertyKind::Enum || !it->optActionBinding ||
-              it->optActionBinding->slot != slot)
-          {
-            APP_LOG_ERROR("component",
-                          "Incompatible manual property declaration '{}' in component '{}'. "
-                          "Action system features may not function correctly for this slot.",
-                          name,
-                          descriptor.type);
-          }
-
-          return;
-        }
-
-        auto optDefaultId = std::optional<std::string>{};
-
-        if (auto const id = descriptorPolicy.getDefault(slot); !id.empty())
-        {
-          optDefaultId = std::string{id};
-        }
-
-        descriptor.props.push_back({.name = std::string{name},
-                                    .kind = uimodel::layout::PropertyKind::Enum,
-                                    .label = std::string{label},
-                                    .defaultValue = uimodel::layout::LayoutValue{""},
-                                    .enumValues = {},
-                                    .optActionBinding = uimodel::layout::ActionBindingProperty{.slot = slot},
-                                    .optDefaultActionId = std::move(optDefaultId)});
-      };
-
-      auto const policy = descriptor.actionPolicy;
-
-      if (policy.allows(uimodel::layout::ActionSlot::PrimaryClick))
-      {
-        inject(uimodel::layout::kPrimaryActionProp, "Primary Action", uimodel::layout::ActionSlot::PrimaryClick);
-      }
-
-      if (policy.allows(uimodel::layout::ActionSlot::PrimaryLongPress))
-      {
-        inject(uimodel::layout::kPrimaryLongPressActionProp,
-               "Primary Long Press",
-               uimodel::layout::ActionSlot::PrimaryLongPress);
-      }
-
-      if (policy.allows(uimodel::layout::ActionSlot::SecondaryClick))
-      {
-        inject(uimodel::layout::kSecondaryActionProp, "Secondary Action", uimodel::layout::ActionSlot::SecondaryClick);
-      }
-
-      if (policy.allows(uimodel::layout::ActionSlot::SecondaryLongPress))
-      {
-        inject(uimodel::layout::kSecondaryLongPressActionProp,
-               "Secondary Long Press",
-               uimodel::layout::ActionSlot::SecondaryLongPress);
-      }
-    }
-
     class ErrorComponent final : public ILayoutComponent
     {
     public:
@@ -118,7 +47,7 @@ namespace ao::gtk::layout
 
   void ComponentRegistry::registerComponent(uimodel::layout::ComponentDescriptor descriptor, ComponentFactory factory)
   {
-    injectActionDescriptors(descriptor);
+    descriptor = uimodel::layout::componentDescriptorWithActionProperties(std::move(descriptor));
     auto const type = std::string{descriptor.type};
     _factories[type] = factory;
     _catalog.registerComponentDescriptor(std::move(descriptor));

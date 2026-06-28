@@ -2,12 +2,11 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/linux-gtk/app/GtkLayoutConfig.h"
-#include "app/linux-gtk/track/TrackFieldUi.h"
 #include "test/unit/TestUtils.h"
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
+#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/track/TrackPresentationPreferenceStore.h>
 
-#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
@@ -15,71 +14,6 @@
 
 namespace ao::gtk::test
 {
-  namespace
-  {
-  }
-
-  TEST_CASE("TrackPresentation exposes field UI definitions for all presentable fields",
-            "[gtk][unit][track][presentation]")
-  {
-    for (auto const& rtDef : rt::trackFieldDefinitions())
-    {
-      if (rtDef.presentable)
-      {
-        INFO("Field " << rtDef.id << " must have a UI definition");
-        CHECK(trackFieldUiDefinition(rtDef.field) != nullptr);
-      }
-    }
-  }
-
-  TEST_CASE("TrackPresentation returns default widths for visible fields", "[gtk][unit][track][presentation]")
-  {
-    CHECK(defaultWidthForField(rt::TrackField::Artist) == 150);
-    CHECK(defaultWidthForField(rt::TrackField::Album) == 200);
-    CHECK(defaultWidthForField(rt::TrackField::TrackNumber) == 72);
-    CHECK(defaultWidthForField(rt::TrackField::Duration) == 84);
-    CHECK(defaultWidthForField(rt::TrackField::Year) == 80);
-    CHECK(defaultWidthForField(rt::TrackField::AlbumArtist) == 180);
-  }
-
-  TEST_CASE("TrackPresentation marks runtime fields visible by default", "[gtk][unit][track][presentation]")
-  {
-    CHECK(fieldIsVisibleByDefault(rt::TrackField::Title));
-    CHECK(fieldIsVisibleByDefault(rt::TrackField::Artist));
-    CHECK(fieldIsVisibleByDefault(rt::TrackField::Album));
-    CHECK(fieldIsVisibleByDefault(rt::TrackField::Year));
-    CHECK(fieldIsVisibleByDefault(rt::TrackField::Duration));
-    CHECK(fieldIsVisibleByDefault(rt::TrackField::Tags));
-    CHECK(fieldIsVisibleByDefault(rt::TrackField::DisplayTrackNumber));
-
-    CHECK_FALSE(fieldIsVisibleByDefault(rt::TrackField::AlbumArtist));
-    CHECK_FALSE(fieldIsVisibleByDefault(rt::TrackField::Genre));
-    CHECK_FALSE(fieldIsVisibleByDefault(rt::TrackField::TrackNumber));
-  }
-
-  TEST_CASE("TrackPresentation maps runtime fields to column titles", "[gtk][unit][track][presentation]")
-  {
-    CHECK(fieldColumnTitle(rt::TrackField::Title) == "Title");
-    CHECK(fieldColumnTitle(rt::TrackField::Artist) == "Artist");
-    CHECK(fieldColumnTitle(rt::TrackField::Duration) == "Duration");
-  }
-
-  TEST_CASE("TrackPresentation maps sort fields to track columns", "[gtk][unit][track][presentation]")
-  {
-    CHECK(redundantFieldToColumn(rt::TrackSortField::Artist) == rt::TrackField::Artist);
-    CHECK(redundantFieldToColumn(rt::TrackSortField::Album) == rt::TrackField::Album);
-    CHECK(redundantFieldToColumn(rt::TrackSortField::AlbumArtist) == rt::TrackField::AlbumArtist);
-    CHECK(redundantFieldToColumn(rt::TrackSortField::Genre) == rt::TrackField::Genre);
-    CHECK(redundantFieldToColumn(rt::TrackSortField::Composer) == rt::TrackField::Composer);
-    CHECK(redundantFieldToColumn(rt::TrackSortField::Work) == rt::TrackField::Work);
-    CHECK(redundantFieldToColumn(rt::TrackSortField::Year) == rt::TrackField::Year);
-
-    CHECK_FALSE(redundantFieldToColumn(rt::TrackSortField::Title).has_value());
-    CHECK_FALSE(redundantFieldToColumn(rt::TrackSortField::Duration).has_value());
-    CHECK_FALSE(redundantFieldToColumn(rt::TrackSortField::DiscNumber).has_value());
-    CHECK_FALSE(redundantFieldToColumn(rt::TrackSortField::TrackNumber).has_value());
-  }
-
   TEST_CASE("GtkLayoutConfig persists track column layouts to gtk_layout.yaml", "[gtk][unit][track][presentation]")
   {
     auto const tempDir = ao::test::TempDir{};

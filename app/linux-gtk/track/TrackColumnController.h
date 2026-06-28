@@ -6,7 +6,7 @@
 #include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
+#include <ao/uimodel/track/TrackColumnLayoutStore.h>
 
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
@@ -16,7 +16,6 @@
 #include <sigc++/scoped_connection.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <span>
 #include <string>
@@ -35,7 +34,7 @@ namespace ao::gtk
     using FactoryProvider = std::function<Glib::RefPtr<Gtk::ListItemFactory>(rt::TrackField)>;
 
     TrackColumnController(Gtk::ColumnView& columnView,
-                          uimodel::track::TrackPresentationViewModel& presentationStore,
+                          uimodel::track::TrackColumnLayoutStore& layoutStore,
                           ListId listId);
     ~TrackColumnController();
 
@@ -67,7 +66,6 @@ namespace ao::gtk
     {
       rt::TrackField field = rt::TrackField::Title;
       Glib::RefPtr<Gtk::ColumnViewColumn> columnPtr;
-      std::int32_t defaultWidth = -1;
     };
 
     void updateColumnExpansion(std::span<rt::TrackField const> visibleFields);
@@ -85,7 +83,7 @@ namespace ao::gtk
 
     ListId _listId;
     Gtk::ColumnView& _columnView;
-    uimodel::track::TrackPresentationViewModel& _presentationStore;
+    uimodel::track::TrackColumnLayoutStore& _layoutStore;
 
     std::vector<ColumnBinding> _columns;
     sigc::scoped_connection _queuedColumnLayoutUpdateConnection;

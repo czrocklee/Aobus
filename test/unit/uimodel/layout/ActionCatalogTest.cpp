@@ -8,7 +8,8 @@
 
 namespace ao::uimodel::layout::test
 {
-  TEST_CASE("ActionCatalog descriptor registration", "[layout][unit][catalog]")
+  TEST_CASE("ActionCatalog duplicate registration preserves the original descriptor",
+            "[uimodel][unit][layout][catalog]")
   {
     auto catalog = ActionCatalog{};
 
@@ -30,8 +31,23 @@ namespace ao::uimodel::layout::test
 
     SECTION("rejects duplicate id")
     {
-      CHECK(catalog.registerActionDescriptor(ActionDescriptor{.id = "test", .label = "A", .category = "X"}));
-      CHECK(catalog.registerActionDescriptor(ActionDescriptor{.id = "test", .label = "B", .category = "Y"}) == false);
+      CHECK(catalog.registerActionDescriptor(ActionDescriptor{
+        .id = "test", .label = "A", .category = "X", .capabilities = ActionCapability::RequiresAnchor}));
+      CHECK(catalog.registerActionDescriptor(ActionDescriptor{
+              .id = "test", .label = "B", .category = "Y", .capabilities = ActionCapability::RequiresFocusedView}) ==
+            false);
+
+      auto const optDesc = catalog.descriptor("test");
+      REQUIRE(optDesc.has_value());
+      CHECK(optDesc->id == "test");
+      CHECK(optDesc->label == "A");
+      CHECK(optDesc->category == "X");
+      CHECK(optDesc->capabilities.has(ActionCapability::RequiresAnchor));
+      CHECK(optDesc->capabilities.has(ActionCapability::RequiresFocusedView) == false);
+
+      auto const all = catalog.descriptors();
+      REQUIRE(all.size() == 1);
+      CHECK(all.front().label == "A");
     }
 
     SECTION("returns nullopt for unknown id")
@@ -52,7 +68,7 @@ namespace ao::uimodel::layout::test
     }
   }
 
-  TEST_CASE("ActionCatalog canBind", "[layout][unit][catalog]")
+  TEST_CASE("ActionCatalog canBind rejects actions missing required context", "[uimodel][unit][layout][catalog]")
   {
     auto catalog = ActionCatalog{};
 
@@ -108,7 +124,7 @@ namespace ao::uimodel::layout::test
     }
   }
 
-  TEST_CASE("ActionCatalog tryBind", "[layout][unit][catalog]")
+  TEST_CASE("ActionCatalog tryBind returns a bound action when context is valid", "[uimodel][unit][layout][catalog]")
   {
     auto catalog = ActionCatalog{};
 

@@ -22,7 +22,8 @@ namespace ao::gtk
 } // namespace ao::gtk
 namespace ao::uimodel::track
 {
-  class TrackPresentationViewModel;
+  class TrackPresentationCatalog;
+  class TrackPresentationPreferenceStore;
 }
 namespace ao::gtk
 {
@@ -38,7 +39,8 @@ namespace ao::gtk
     TagEditController* tagEditController = nullptr;
     portal::ImportExportActions* importExportCoordinator = nullptr;
     TrackPageHost* trackPageHost = nullptr;
-    uimodel::track::TrackPresentationViewModel* trackPresentationStore = nullptr;
+    uimodel::track::TrackPresentationCatalog* trackPresentationCatalog = nullptr;
+    uimodel::track::TrackPresentationPreferenceStore* trackPresentationPreferences = nullptr;
     ListNavigationController* listNavigationController = nullptr;
     ThemeCoordinator* themeController = nullptr;
   };

@@ -33,7 +33,7 @@ namespace ao::uimodel::input::test
     }
   } // namespace
 
-  TEST_CASE("loadKeymap returns defaults when the config group is absent", "[input][unit][keymapstore]")
+  TEST_CASE("loadKeymap returns defaults when the config group is absent", "[uimodel][unit][input][keymapstore]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto store = rt::ConfigStore{tempDir.path() / "config.yaml"};
@@ -42,7 +42,7 @@ namespace ao::uimodel::input::test
     CHECK(keymap.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+P")});
   }
 
-  TEST_CASE("saveKeymap then loadKeymap round-trips a customization", "[input][unit][keymapstore]")
+  TEST_CASE("saveKeymap then loadKeymap round-trips a customization", "[uimodel][unit][input][keymapstore]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -62,7 +62,7 @@ namespace ao::uimodel::input::test
     CHECK(reloaded.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+P")});
   }
 
-  TEST_CASE("saveKeymap only persists deltas from defaults", "[input][unit][keymapstore]")
+  TEST_CASE("saveKeymap only persists deltas from defaults", "[uimodel][unit][input][keymapstore]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";

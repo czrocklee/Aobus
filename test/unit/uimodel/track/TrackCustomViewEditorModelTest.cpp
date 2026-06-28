@@ -11,7 +11,7 @@
 
 namespace ao::uimodel::track::test
 {
-  TEST_CASE("TrackCustomViewEditorModel - edits custom presentation draft", "[uimodel][track][presentation]")
+  TEST_CASE("TrackCustomViewEditorModel - edits custom presentation draft", "[uimodel][unit][track][presentation]")
   {
     auto spec = rt::TrackPresentationSpec{};
     spec.groupBy = rt::TrackGroupKey::Album;
@@ -107,6 +107,15 @@ namespace ao::uimodel::track::test
 
     SECTION("rejects out-of-range row operations")
     {
+      auto const originalLabel = model.label();
+      auto const originalGroupKey = model.groupKey();
+      auto const originalSortTermsSpan = model.sortTerms();
+      auto const originalVisibleFieldsSpan = model.visibleFields();
+      auto const originalSortTerms =
+        std::vector<rt::TrackSortTerm>{originalSortTermsSpan.begin(), originalSortTermsSpan.end()};
+      auto const originalVisibleFields =
+        std::vector<rt::TrackField>{originalVisibleFieldsSpan.begin(), originalVisibleFieldsSpan.end()};
+
       CHECK_FALSE(model.setGroupKeyByOptionIndex(model.groupOptions().size()));
       CHECK_FALSE(model.setSortFieldByOptionIndex(99, 0));
       CHECK_FALSE(model.setSortFieldByOptionIndex(0, model.sortFieldOptions().size()));
@@ -119,6 +128,12 @@ namespace ao::uimodel::track::test
       CHECK_FALSE(model.moveVisibleFieldUp(0));
       CHECK_FALSE(model.moveVisibleFieldDown(model.visibleFields().size()));
       CHECK_FALSE(model.removeVisibleField(model.visibleFields().size()));
+
+      CHECK(model.label() == originalLabel);
+      CHECK(model.groupKey() == originalGroupKey);
+      CHECK(std::vector<rt::TrackSortTerm>{model.sortTerms().begin(), model.sortTerms().end()} == originalSortTerms);
+      CHECK(std::vector<rt::TrackField>{model.visibleFields().begin(), model.visibleFields().end()} ==
+            originalVisibleFields);
     }
 
     SECTION("collects a presentation preset")

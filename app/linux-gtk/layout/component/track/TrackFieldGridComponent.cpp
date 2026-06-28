@@ -4,7 +4,6 @@
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
-#include "layout/component/track/TrackFieldGridPolicy.h"
 #include "layout/component/track/TrackFieldGridRows.h"
 #include "layout/component/track/TrackFieldGridTextUtils.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
@@ -23,6 +22,12 @@
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/TrackFieldGridPolicy.h>
+#include <ao/uimodel/track/TrackCustomPropertyWorkflow.h>
+#include <ao/uimodel/track/TrackFieldEditPolicy.h>
+#include <ao/uimodel/track/TrackFieldFormatter.h>
+#include <ao/uimodel/track/TrackFieldGridProjection.h>
+#include <ao/uimodel/track/TrackInlineEditWorkflow.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -37,10 +42,10 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::gtk::layout
@@ -178,56 +183,33 @@ namespace ao::gtk::layout
 
         auto const requestedCategories =
           node.getProp<std::vector<std::string>>("categories", {"metadata", "technical"});
-
-        for (auto const& def : rt::trackFieldDefinitions())
+        auto const includesCategory = [&requestedCategories](std::string_view const category)
         {
-          if (def.synthetic || def.category == rt::TrackFieldCategory::Tag || !def.presentable)
-          {
-            continue;
-          }
+          return std::ranges::any_of(
+            requestedCategories, [category](std::string const& item) { return item == category; });
+        };
 
-          auto const isMeta = (def.category == rt::TrackFieldCategory::Metadata);
+        auto const projection = uimodel::track::projectTrackFieldGrid(uimodel::track::TrackFieldGridProjectionRequest{
+          .includeMetadata = includesCategory("metadata"),
+          .includeTechnical = includesCategory("technical"),
+        });
 
-          if (auto const* const catStr = isMeta ? "metadata" : "technical";
-              !std::ranges::contains(requestedCategories, catStr))
-          {
-            continue;
-          }
+        for (auto const field : projection.metadataFields)
+        {
+          _metadataRows.emplace_back(field);
+          setupBuiltInRow(_metadataRows.back());
+        }
 
-          if (def.field == rt::TrackField::DiscTotal || def.field == rt::TrackField::TrackTotal ||
-              def.field == rt::TrackField::MovementTotal)
-          {
-            continue; // Handled by composite rows
-          }
+        for (auto const fields : projection.compositeMetadataFields)
+        {
+          _compositeRows.emplace_back(fields.primaryField, fields.secondaryField);
+          setupCompositeRow(_compositeRows.back());
+        }
 
-          if (isMeta)
-          {
-            if (def.field == rt::TrackField::DiscNumber)
-            {
-              _compositeRows.emplace_back(rt::TrackField::DiscNumber, rt::TrackField::DiscTotal);
-              setupCompositeRow(_compositeRows.back());
-            }
-            else if (def.field == rt::TrackField::TrackNumber)
-            {
-              _compositeRows.emplace_back(rt::TrackField::TrackNumber, rt::TrackField::TrackTotal);
-              setupCompositeRow(_compositeRows.back());
-            }
-            else if (def.field == rt::TrackField::MovementNumber)
-            {
-              _compositeRows.emplace_back(rt::TrackField::MovementNumber, rt::TrackField::MovementTotal);
-              setupCompositeRow(_compositeRows.back());
-            }
-            else
-            {
-              _metadataRows.emplace_back(def.field);
-              setupBuiltInRow(_metadataRows.back());
-            }
-          }
-          else
-          {
-            _technicalRows.emplace_back(def.field);
-            setupBuiltInRow(_technicalRows.back(), true);
-          }
+        for (auto const field : projection.technicalFields)
+        {
+          _technicalRows.emplace_back(field);
+          setupBuiltInRow(_technicalRows.back(), true);
         }
 
         setupAddPropertyUi();
@@ -258,20 +240,47 @@ namespace ao::gtk::layout
       static constexpr std::int32_t kGridViewportHeight =
         (kVisibleFieldRows * kFieldRowHeight) + ((kVisibleFieldRows - 1) * kGridRowSpacing);
 
+      static uimodel::track::TrackFieldEditValue editValueFromSnapshot(rt::TrackField field,
+                                                                       rt::TrackDetailSnapshot const& snap)
+      {
+        auto const& aggregate = rt::trackFieldArrayAt(snap.fields, field);
+
+        if (!aggregate.optValue)
+        {
+          return uimodel::track::TrackFieldEditValue{};
+        }
+
+        if (auto const* text = std::get_if<std::string>(&*aggregate.optValue); text != nullptr)
+        {
+          return uimodel::track::TrackFieldEditValue{std::in_place_type<std::string>, *text};
+        }
+
+        if (auto const* number = std::get_if<std::uint16_t>(&*aggregate.optValue); number != nullptr)
+        {
+          return uimodel::track::TrackFieldEditValue{std::in_place_type<std::uint16_t>, *number};
+        }
+
+        return uimodel::track::TrackFieldEditValue{};
+      }
+
       bool shouldShowRow(BuiltInRow const& row, rt::TrackDetailSnapshot const& snap) const
       {
-        auto const text = displayTextForField(row.field, snap, kMultipleValuesText, true);
-        return shouldShowMetadataFieldRow(MetadataFieldVisibility{.metadataExpanded = _metadataExpanded,
-                                                                  .showEmptyMetadata = _showEmptyMetadata,
-                                                                  .editorEditing = row.valueEditor.getEditing(),
-                                                                  .hasDisplayText = !text.empty()});
+        auto const text =
+          uimodel::track::displayTextForTrackField(row.field, snap, uimodel::track::kMultipleTrackValuesText, true);
+        return shouldShowTrackFieldGridMetadataFieldRow(
+          TrackFieldGridMetadataFieldVisibility{.metadataExpanded = _metadataExpanded,
+                                                .showEmptyMetadata = _showEmptyMetadata,
+                                                .editorEditing = row.valueEditor.getEditing(),
+                                                .hasDisplayText = !text.empty()});
       }
 
       bool shouldShowCompositeRow(CompositeBuiltInRow const& row, rt::TrackDetailSnapshot const& snap) const
       {
-        auto const primText = displayTextForField(row.primaryField, snap, kCompositeMixedText, false);
-        auto const secText = displayTextForField(row.secondaryField, snap, kCompositeMixedText, false);
-        return shouldShowCompositeMetadataRow(CompositeMetadataFieldVisibility{
+        auto const primText = uimodel::track::displayTextForTrackField(
+          row.primaryField, snap, uimodel::track::kCompositeMixedTrackText, false);
+        auto const secText = uimodel::track::displayTextForTrackField(
+          row.secondaryField, snap, uimodel::track::kCompositeMixedTrackText, false);
+        return shouldShowTrackFieldGridCompositeMetadataRow(TrackFieldGridCompositeMetadataFieldVisibility{
           .metadataExpanded = _metadataExpanded,
           .showEmptyMetadata = _showEmptyMetadata,
           .primaryEditorEditing = row.primaryEditor.getEditing(),
@@ -289,36 +298,12 @@ namespace ao::gtk::layout
         }
         else
         {
-          auto const titleText =
-            validUtf8Text(displayTextForField(rt::TrackField::Title, snap, kMultipleValuesText, true));
-          auto const artistText =
-            validUtf8Text(displayTextForField(rt::TrackField::Artist, snap, kMultipleValuesText, true));
+          auto const titleText = validUtf8Text(uimodel::track::displayTextForTrackField(
+            rt::TrackField::Title, snap, uimodel::track::kMultipleTrackValuesText, true));
+          auto const artistText = validUtf8Text(uimodel::track::displayTextForTrackField(
+            rt::TrackField::Artist, snap, uimodel::track::kMultipleTrackValuesText, true));
 
-          auto summary = std::string{};
-
-          if (!titleText.empty())
-          {
-            summary += titleText;
-          }
-
-          if (!artistText.empty())
-          {
-            if (!summary.empty())
-            {
-              summary += " — ";
-            }
-
-            summary += artistText;
-          }
-
-          if (!summary.empty())
-          {
-            _metadataHeader.label.set_text(summary);
-          }
-          else
-          {
-            _metadataHeader.label.set_text("Metadata");
-          }
+          _metadataHeader.label.set_text(uimodel::track::formatTrackFieldGridMetadataHeader(titleText, artistText));
         }
 
         if (_technicalExpanded)
@@ -327,36 +312,15 @@ namespace ao::gtk::layout
         }
         else
         {
-          auto const codec = validUtf8Text(displayTextForField(rt::TrackField::Codec, snap, "", false));
-          auto const sampleRate = validUtf8Text(displayTextForField(rt::TrackField::SampleRate, snap, "", false));
-          auto const bitDepth = validUtf8Text(displayTextForField(rt::TrackField::BitDepth, snap, "", false));
+          auto const codec =
+            validUtf8Text(uimodel::track::displayTextForTrackField(rt::TrackField::Codec, snap, "", false));
+          auto const sampleRate =
+            validUtf8Text(uimodel::track::displayTextForTrackField(rt::TrackField::SampleRate, snap, "", false));
+          auto const bitDepth =
+            validUtf8Text(uimodel::track::displayTextForTrackField(rt::TrackField::BitDepth, snap, "", false));
 
-          auto summary = std::string{};
-          auto addPart = [&summary](std::string const& val)
-          {
-            if (!val.empty())
-            {
-              if (!summary.empty())
-              {
-                summary += " · ";
-              }
-
-              summary += val;
-            }
-          };
-
-          addPart(codec);
-          addPart(sampleRate);
-          addPart(bitDepth);
-
-          if (!summary.empty())
-          {
-            _technicalHeader.label.set_text(summary);
-          }
-          else
-          {
-            _technicalHeader.label.set_text("Audio Properties");
-          }
+          _technicalHeader.label.set_text(
+            uimodel::track::formatTrackFieldGridTechnicalHeader(codec, sampleRate, bitDepth));
         }
       }
 
@@ -626,7 +590,8 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const displayText = validUtf8Text(displayTextForField(row.field, snap, kMultipleValuesText, true));
+        auto const displayText = validUtf8Text(
+          uimodel::track::displayTextForTrackField(row.field, snap, uimodel::track::kMultipleTrackValuesText, true));
         row.valueEditor.setText(displayText);
         row.valueEditor.set_tooltip_text(displayText);
       }
@@ -640,7 +605,8 @@ namespace ao::gtk::layout
             return;
           }
 
-          auto const displayText = validUtf8Text(displayTextForField(field, snap, kCompositeMixedText, false));
+          auto const displayText = validUtf8Text(
+            uimodel::track::displayTextForTrackField(field, snap, uimodel::track::kCompositeMixedTrackText, false));
           editor.setText(displayText);
           editor.set_tooltip_text(displayText);
         };
@@ -649,32 +615,55 @@ namespace ao::gtk::layout
         updateField(row.secondaryEditor, row.secondaryField, snap);
       }
 
-      bool applyFieldEdit(rt::TrackField field, std::string_view newValue, rt::TrackDetailSnapshot const& snap)
+      bool applyFieldEdit(rt::TrackField field,
+                          DetailFieldEditor& editor,
+                          std::string_view newValue,
+                          rt::TrackDetailSnapshot const& snap,
+                          std::string_view mixedText,
+                          bool showTechnicalUnknown)
       {
         auto const* uiDef = trackFieldUiDefinition(field);
 
-        if (uiDef == nullptr || uiDef->parseInlineEdit == nullptr || uiDef->writePatch == nullptr)
+        if (uiDef == nullptr || uiDef->parseInlineEdit == nullptr || !uimodel::track::trackFieldCanWritePatch(field))
         {
           return false;
         }
 
-        auto const editValResult = uiDef->parseInlineEdit(newValue);
+        auto const oldText =
+          validUtf8Text(uimodel::track::displayTextForTrackField(field, snap, mixedText, showTechnicalUnknown));
+        auto const newText = std::string{newValue};
+        bool firstApply = true;
+        auto const result = uimodel::track::TrackInlineEditWorkflow::apply(
+          uimodel::track::TrackInlineEditRequest{.field = field, .oldText = oldText, .newText = newText},
+          uimodel::track::TrackInlineEditHooks{
+            .parse = [uiDef](std::string_view text) { return uiDef->parseInlineEdit(text); },
+            .readCurrentValue = [&snap, field] { return editValueFromSnapshot(field, snap); },
+            .applyValue =
+              [&editor, &firstApply, &newText, &oldText](uimodel::track::TrackFieldEditValue const&)
+            {
+              editor.setText(firstApply ? newText : oldText);
+              firstApply = false;
+            },
+            .writePatch = [field](rt::MetadataPatch& patch, uimodel::track::TrackFieldEditValue const& value)
+            { std::ignore = uimodel::track::writeTrackFieldPatch(patch, field, value); },
+            .commitPatch = [this, &snap](rt::MetadataPatch const& patch) -> rt::UpdateTrackMetadataReply
+            { return _writer.updateMetadata(snap.trackIds, patch); },
+          });
 
-        if (!editValResult)
+        switch (result.outcome)
         {
-          APP_LOG_ERROR(
-            "Failed to parse edit value for {}: {}", rt::trackFieldId(field), editValResult.error().message);
-          return false;
+          case uimodel::track::TrackInlineEditOutcome::NoChange:
+          case uimodel::track::TrackInlineEditOutcome::Applied: return true;
+          case uimodel::track::TrackInlineEditOutcome::NotEditable: return false;
+          case uimodel::track::TrackInlineEditOutcome::ParseRejected:
+            APP_LOG_ERROR("Failed to parse edit value for {}: {}", rt::trackFieldId(field), result.statusMessage);
+            return false;
+          case uimodel::track::TrackInlineEditOutcome::MutationRejected:
+            APP_LOG_ERROR("Metadata update failed: {}", result.statusMessage);
+            return false;
         }
 
-        auto patch = rt::MetadataPatch{};
-        uiDef->writePatch({.patch = patch, .value = *editValResult});
-
-        auto const reply = _writer.updateMetadata(snap.trackIds, patch);
-
-        // Empty mutatedIds means the edit did not land (e.g. the row was removed
-        // concurrently); report it so the caller reverts the optimistic UI value.
-        return !reply.mutatedIds.empty();
+        return false;
       }
 
       void onBuiltInEdited(rt::TrackField field)
@@ -700,7 +689,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (!applyFieldEdit(field, newValue, snap))
+        if (!applyFieldEdit(field, row->valueEditor, newValue, snap, uimodel::track::kMultipleTrackValuesText, true))
         {
           updateBuiltInRow(*row, snap);
         }
@@ -732,7 +721,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (!applyFieldEdit(field, newValue, snap))
+        if (!applyFieldEdit(field, editor, newValue, snap, uimodel::track::kCompositeMixedTrackText, false))
         {
           updateCompositeRow(*row, snap);
         }
@@ -740,6 +729,7 @@ namespace ao::gtk::layout
 
       void updateCustomRows(rt::TrackDetailSnapshot const& snap)
       {
+        bool const selectedTracksChanged = _customSectionHasSelectedTracks != !snap.trackIds.empty();
         bool keysChanged = (snap.customMetadata.size() != _customRows.size());
 
         if (!keysChanged)
@@ -754,7 +744,7 @@ namespace ao::gtk::layout
           }
         }
 
-        if (keysChanged)
+        if (keysChanged || selectedTracksChanged)
         {
           for (auto& row : _customRows)
           {
@@ -827,18 +817,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto text = std::string{};
-
-        if (item.value.mixed)
-        {
-          text = kMultipleValuesText;
-        }
-        else
-        {
-          text = item.value.optValue.value_or("");
-        }
-
-        auto const displayText = validUtf8Text(text);
+        auto const displayText = validUtf8Text(uimodel::track::displayTextForTrackCustomProperty(item));
         row.editor.setText(displayText);
         row.editor.set_tooltip_text(displayText);
         row.partialIcon.set_visible(!item.presentOnAll);
@@ -856,15 +835,12 @@ namespace ao::gtk::layout
         auto const snap = _scope->snapshot();
         auto const newValue = row->editor.getText().raw();
 
-        if (newValue == kMultipleValuesText)
+        if (uimodel::track::isProtectedTrackCustomPropertyEditText(newValue))
         {
           return;
         }
 
-        auto patch = rt::MetadataPatch{};
-        patch.customUpdates[key] = newValue;
-
-        _writer.updateMetadata(snap.trackIds, patch);
+        _writer.updateMetadata(snap.trackIds, uimodel::track::makeTrackCustomPropertyUpdatePatch(key, newValue));
       }
 
       void onCustomDeleted(std::string const& key)
@@ -876,21 +852,9 @@ namespace ao::gtk::layout
 
         auto const snap = _scope->snapshot();
 
-        auto optPrevValue = std::optional<std::string>{};
-
-        for (auto const& item : snap.customMetadata)
-        {
-          if (item.key == key && item.presentOnAll && !item.value.mixed)
-          {
-            optPrevValue = item.value.optValue.value_or("");
-            break;
-          }
-        }
-
-        auto patch = rt::MetadataPatch{};
-        patch.customUpdates[key] = std::nullopt;
-
-        auto const reply = _writer.updateMetadata(snap.trackIds, patch);
+        auto const optPrevValue = uimodel::track::undoValueForDeletedTrackCustomProperty(snap, key);
+        auto const reply =
+          _writer.updateMetadata(snap.trackIds, uimodel::track::makeTrackCustomPropertyDeletePatch(key));
 
         if (!reply.mutatedIds.empty() && optPrevValue)
         {
@@ -907,24 +871,14 @@ namespace ao::gtk::layout
 
         auto const& snap = _scope->snapshot();
 
-        for (auto const& item : snap.customMetadata)
-        {
-          if (item.key == key)
-          {
-            _addPropertyRow.markKeyError();
-            return;
-          }
-        }
-
-        if (auto const optField = rt::trackFieldFromId(key); optField)
+        if (uimodel::track::validateTrackCustomPropertyAddition(snap, key) !=
+            uimodel::track::TrackCustomPropertyAddValidation::Accepted)
         {
           _addPropertyRow.markKeyError();
           return;
         }
 
-        auto patch = rt::MetadataPatch{};
-        patch.customUpdates[key] = value;
-        _writer.updateMetadata(snap.trackIds, patch);
+        _writer.updateMetadata(snap.trackIds, uimodel::track::makeTrackCustomPropertyUpdatePatch(key, value));
 
         _addPropertyRow.clearInputs();
       }
@@ -938,13 +892,14 @@ namespace ao::gtk::layout
         _grid.attach(_keyColumnWidthAnchor, 0, 0, 1, 1);
         _grid.attach(_valueColumnWidthAnchor, 1, 0, kValueColWidth, 1);
 
-        auto const sectionAvailability = SectionAvailability{
+        auto const sectionAvailability = TrackFieldGridSectionAvailability{
           .hasMetadataFields = !_metadataRows.empty() || !_compositeRows.empty(),
           .hasSelectedTracks = (_scope != nullptr && !_scope->snapshot().trackIds.empty()),
           .hasTechnicalFields = !_technicalRows.empty(),
         };
+        _customSectionHasSelectedTracks = sectionAvailability.hasSelectedTracks;
 
-        if (shouldRenderMetadataSection(sectionAvailability))
+        if (shouldRenderTrackFieldGridMetadataSection(sectionAvailability))
         {
           _metadataHeader.setExpanded(_metadataExpanded);
           _grid.attach(_metadataHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
@@ -962,7 +917,7 @@ namespace ao::gtk::layout
           _showAllFieldsButtonSlot.set_visible(_metadataExpanded);
         }
 
-        if (shouldRenderCustomSection(sectionAvailability))
+        if (shouldRenderTrackFieldGridCustomSection(sectionAvailability))
         {
           _customHeader.setExpanded(_customExpanded);
           _grid.attach(_customHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
@@ -981,7 +936,7 @@ namespace ao::gtk::layout
           _addPropertyRow.valueSlot().set_visible(_customExpanded);
         }
 
-        if (shouldRenderTechnicalSection(sectionAvailability))
+        if (shouldRenderTrackFieldGridTechnicalSection(sectionAvailability))
         {
           _technicalHeader.setExpanded(_technicalExpanded);
           _grid.attach(_technicalHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
@@ -1157,6 +1112,7 @@ namespace ao::gtk::layout
       bool _metadataExpanded = true;
       bool _customExpanded = true;
       bool _technicalExpanded = false;
+      bool _customSectionHasSelectedTracks = false;
 
       SectionHeaderRow _metadataHeader{"Metadata"};
       SectionHeaderRow _customHeader{"Custom Properties"};

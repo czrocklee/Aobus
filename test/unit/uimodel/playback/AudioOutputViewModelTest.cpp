@@ -135,10 +135,13 @@ namespace ao::uimodel::playback::test
       CHECK(log.last().rows.empty());
     }
 
-    SECTION("selectOutput delegates to playback without crash")
+    SECTION("selectOutput without registered outputs keeps the view state empty")
     {
       viewModel.selectOutput(audio::BackendId{"t"}, audio::DeviceId{"d"}, audio::kProfileShared);
-      SUCCEED("selectOutput called without crash");
+      viewModel.refresh();
+
+      REQUIRE(!log.empty());
+      CHECK(log.last().rows.empty());
     }
   }
 
@@ -177,8 +180,12 @@ namespace ao::uimodel::playback::test
       }
 
       CHECK(rows[1].profileId == audio::kProfileShared);
+      CHECK(rows[1].title == "Built-in Audio");
+      CHECK(rows[1].description == "Built-in analog stereo");
       CHECK(rows[1].isExclusive == false);
       CHECK(rows[2].profileId == audio::kProfileExclusive);
+      CHECK(rows[2].title == "Built-in Audio");
+      CHECK(rows[2].description == "Built-in analog stereo");
       CHECK(rows[2].isExclusive == true);
     }
 

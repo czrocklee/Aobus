@@ -182,6 +182,7 @@ namespace ao::uimodel::playback::test
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playback = PlaybackService{executor, viewService, testLib.library()};
+    addReadyAudioProvider(playback);
 
     bool playSelectionCalled = false;
     auto onPlaySelection = [&playSelectionCalled] { playSelectionCalled = true; };
@@ -227,9 +228,13 @@ namespace ao::uimodel::playback::test
       auto log = RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Shuffle, {}, false, [&log](auto const& v) { log.render(v); }};
+      auto const initialCount = log.states.size();
 
       vm.handleClick();
-      SUCCEED("no crash with null queue");
+
+      CHECK(playback.state().shuffleMode == rt::ShuffleMode::Off);
+      CHECK(log.states.size() == initialCount);
+      CHECK(log.last().engaged == false);
     }
 
     SECTION("Repeat click with null queue is no-op")
@@ -237,9 +242,14 @@ namespace ao::uimodel::playback::test
       auto log = RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Repeat, {}, false, [&log](auto const& v) { log.render(v); }};
+      auto const initialCount = log.states.size();
 
       vm.handleClick();
-      SUCCEED("no crash with null queue");
+
+      CHECK(playback.state().repeatMode == rt::RepeatMode::Off);
+      CHECK(log.states.size() == initialCount);
+      CHECK(log.last().engaged == false);
+      CHECK(log.last().icon == TransportIcon::Repeat);
     }
 
     SECTION("Next/Previous with null queue is no-op")
@@ -247,35 +257,54 @@ namespace ao::uimodel::playback::test
       auto log = RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Next, {}, false, [&log](auto const& v) { log.render(v); }};
+      auto const initialCount = log.states.size();
 
       vm.handleClick();
-      SUCCEED("no crash with null queue");
+
+      CHECK(playback.state().transport == audio::Transport::Idle);
+      CHECK(playback.state().trackId == kInvalidTrackId);
+      CHECK(log.states.size() == initialCount);
     }
 
     SECTION("Next/Previous/Shuffle/CycleRepeat with queue")
     {
-      auto const trackId = testLib.addTrack({.title = "Q Test", .artist = "Artist", .album = "Album"});
+      auto const firstTrackId = testLib.addTrack({.title = "Q Test 1", .artist = "Artist", .album = "Album"});
+      auto const secondTrackId = testLib.addTrack({.title = "Q Test 2", .artist = "Artist", .album = "Album"});
+      auto const thirdTrackId = testLib.addTrack({.title = "Q Test 3", .artist = "Artist", .album = "Album"});
       auto queueModel = PlaybackQueueModel{playback};
 
-      auto const trackIds = std::vector{trackId, TrackId{999}, TrackId{1000}};
-      queueModel.playQueue(trackIds, trackId, kInvalidListId);
+      auto const trackIds = std::vector{firstTrackId, secondTrackId, thirdTrackId};
+      REQUIRE(queueModel.playQueue(trackIds, firstTrackId, kInvalidListId));
+      REQUIRE(queueModel.nowPlayingTrackId());
+      CHECK(*queueModel.nowPlayingTrackId() == firstTrackId);
 
       SECTION("Next with queue")
       {
         auto log = RenderLog<TransportViewState>{};
         auto vm = TransportViewModel{
           playback, &queueModel, TransportAction::Next, {}, false, [&log](auto const& v) { log.render(v); }};
+
         vm.handleClick();
-        SUCCEED("next with queue");
+
+        REQUIRE(queueModel.nowPlayingTrackId());
+        CHECK(*queueModel.nowPlayingTrackId() == secondTrackId);
+        CHECK(playback.state().trackId == secondTrackId);
+        CHECK(log.last().enabled == true);
       }
 
       SECTION("Previous with queue")
       {
+        REQUIRE(queueModel.playQueue(trackIds, secondTrackId, kInvalidListId));
         auto log = RenderLog<TransportViewState>{};
         auto vm = TransportViewModel{
           playback, &queueModel, TransportAction::Previous, {}, false, [&log](auto const& v) { log.render(v); }};
+
         vm.handleClick();
-        SUCCEED("previous with queue");
+
+        REQUIRE(queueModel.nowPlayingTrackId());
+        CHECK(*queueModel.nowPlayingTrackId() == firstTrackId);
+        CHECK(playback.state().trackId == firstTrackId);
+        CHECK(log.last().enabled == true);
       }
 
       SECTION("Shuffle click with queue toggles mode")
@@ -284,7 +313,10 @@ namespace ao::uimodel::playback::test
         auto vm = TransportViewModel{
           playback, &queueModel, TransportAction::Shuffle, {}, false, [&log](auto const& v) { log.render(v); }};
         vm.handleClick();
-        SUCCEED("shuffle with queue");
+
+        CHECK(playback.state().shuffleMode == rt::ShuffleMode::On);
+        CHECK(log.last().engaged == true);
+        CHECK(log.last().enabled == true);
       }
 
       SECTION("Repeat click with queue cycles modes")
@@ -293,7 +325,22 @@ namespace ao::uimodel::playback::test
         auto vm = TransportViewModel{
           playback, &queueModel, TransportAction::Repeat, {}, false, [&log](auto const& v) { log.render(v); }};
         vm.handleClick();
-        SUCCEED("repeat with queue");
+
+        CHECK(playback.state().repeatMode == rt::RepeatMode::All);
+        CHECK(log.last().engaged == true);
+        CHECK(log.last().icon == TransportIcon::Repeat);
+
+        vm.handleClick();
+
+        CHECK(playback.state().repeatMode == rt::RepeatMode::One);
+        CHECK(log.last().engaged == true);
+        CHECK(log.last().icon == TransportIcon::RepeatOne);
+
+        vm.handleClick();
+
+        CHECK(playback.state().repeatMode == rt::RepeatMode::Off);
+        CHECK(log.last().engaged == false);
+        CHECK(log.last().icon == TransportIcon::Repeat);
       }
     }
   }
@@ -306,6 +353,7 @@ namespace ao::uimodel::playback::test
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playback = PlaybackService{executor, viewService, testLib.library()};
+    addReadyAudioProvider(playback);
 
     auto const trackId = testLib.addTrack({.title = "Sub Test", .artist = "Sub Artist", .album = "Sub Album"});
 
@@ -319,13 +367,19 @@ namespace ao::uimodel::playback::test
     {
       auto desc = PlaybackService::PlaybackRequest{
         .trackId = trackId,
-        .input = audio::PlaybackInput{.filePath = "test.flac", .duration = std::chrono::seconds{5}},
+        .input = audio::PlaybackInput{.duration = std::chrono::seconds{5}},
         .title = "Sub Test",
         .artist = "Sub Artist",
       };
-      playback.play(desc, kInvalidListId);
+      REQUIRE(playback.play(desc, kInvalidListId));
 
       CHECK(log.states.size() > initialCount);
+      CHECK(log.last().enabled == true);
+      CHECK(log.last().icon == TransportIcon::Play);
+      CHECK(log.last().tooltip == "Play");
+      CHECK(log.last().playing == false);
+      CHECK(playback.state().ready == true);
+      CHECK(playback.state().trackId == trackId);
     }
   }
 
@@ -337,6 +391,7 @@ namespace ao::uimodel::playback::test
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playback = PlaybackService{executor, viewService, testLib.library()};
+    addReadyAudioProvider(playback);
 
     auto log = RenderLog<TransportViewState>{};
     auto viewModelPtr = std::make_unique<TransportViewModel>(playback,

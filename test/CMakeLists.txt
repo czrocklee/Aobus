@@ -135,7 +135,10 @@ add_executable(ao_core_test
     unit/uimodel/layout/LayoutStatePromoterTest.cpp
     unit/uimodel/layout/ShellLayoutSessionModelTest.cpp
     unit/uimodel/layout/LayoutTemplateExpanderTest.cpp
+    unit/uimodel/layout/TrackFieldGridPolicyTest.cpp
+    unit/uimodel/layout/TrackSelectionRegionPolicyTest.cpp
     unit/uimodel/list/ListActionPolicyTest.cpp
+    unit/uimodel/list/ListTreeProjectionTest.cpp
     unit/uimodel/list/SmartListEditorModelTest.cpp
     unit/uimodel/playback/AobusSoulViewModelTest.cpp
     unit/uimodel/playback/AudioOutputViewModelTest.cpp
@@ -153,15 +156,25 @@ add_executable(ao_core_test
     unit/uimodel/status/ActivityStatusModelNotificationTest.cpp
     unit/uimodel/status/ActivityStatusModelPresentationTest.cpp
     unit/uimodel/tag/TagEditWorkflowTest.cpp
+    unit/uimodel/tag/TrackPropertiesFormSpecTest.cpp
+    unit/uimodel/tag/TrackPropertiesFormWorkflowTest.cpp
+    unit/uimodel/track/TrackCustomPropertyWorkflowTest.cpp
     unit/uimodel/track/TrackFilterViewModelTest.cpp
     unit/uimodel/track/TrackFilterResolverTest.cpp
     unit/uimodel/track/TrackPageRouteTest.cpp
     unit/uimodel/track/TrackCustomViewEditorModelTest.cpp
+    unit/uimodel/track/TrackFieldEditPolicyTest.cpp
     unit/uimodel/track/TrackFieldFormatterTest.cpp
+    unit/uimodel/track/TrackFieldGridProjectionTest.cpp
+    unit/uimodel/track/TrackFieldPresentationPolicyTest.cpp
     unit/uimodel/track/TrackInlineEditWorkflowTest.cpp
     unit/uimodel/track/SelectionSummaryTest.cpp
-    unit/uimodel/track/TrackPresentationViewModelTest.cpp
+    unit/uimodel/track/TrackColumnLayoutPolicyTest.cpp
+    unit/uimodel/track/TrackColumnLayoutStoreTest.cpp
+    unit/uimodel/track/TrackPresentationCatalogTest.cpp
+    unit/uimodel/track/TrackPresentationPreferenceStoreTest.cpp
     unit/uimodel/track/TrackPresentationRecommenderTest.cpp
+    unit/uimodel/track/TrackPresentationWorkflowTest.cpp
 
     # app unit tests (no platform deps)
     unit/runtime/AsyncRuntimeTest.cpp
@@ -301,8 +314,6 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
       unit/linux-gtk/layout/components/TrackFieldGridCollapsibleTest.cpp
       unit/linux-gtk/layout/components/TrackDetailConstrainedLayoutTest.cpp
-      unit/linux-gtk/layout/components/TrackFieldGridPolicyTest.cpp
-      unit/linux-gtk/layout/components/TrackSelectionRegionPolicyTest.cpp
       unit/linux-gtk/layout/components/TrackFieldGridTextUtilsTest.cpp
       unit/linux-gtk/layout/components/PlaybackImageTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorTest.cpp

@@ -106,6 +106,8 @@ namespace ao::uimodel::layout
     return descriptor.minChildren > 0 || !descriptor.optMaxChildren || *descriptor.optMaxChildren > 0;
   }
 
+  ComponentDescriptor componentDescriptorWithActionProperties(ComponentDescriptor descriptor);
+
   class ComponentCatalog final
   {
   public:

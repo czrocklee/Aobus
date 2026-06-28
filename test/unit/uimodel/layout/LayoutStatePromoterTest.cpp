@@ -41,7 +41,7 @@ namespace ao::uimodel::layout::test
     }
   } // namespace
 
-  TEST_CASE("LayoutStatePromoter promotes runtime panel sizes", "[layout][unit][state]")
+  TEST_CASE("LayoutStatePromoter promotes runtime panel sizes", "[uimodel][unit][layout][state]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "box";
@@ -83,7 +83,7 @@ namespace ao::uimodel::layout::test
     CHECK(stateDoc.components.at("detail-split").baselineHash == layoutComponentBaselineHash(doc.root.children[1]));
   }
 
-  TEST_CASE("LayoutStatePromoter no-op when no matching state", "[layout][unit][state]")
+  TEST_CASE("LayoutStatePromoter ignores documents with no matching state", "[uimodel][unit][layout][state]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "box";
@@ -98,7 +98,7 @@ namespace ao::uimodel::layout::test
     CHECK(result.residualCount == 0);
   }
 
-  TEST_CASE("LayoutStatePromoter promotes deep layout trees", "[layout][unit][state]")
+  TEST_CASE("LayoutStatePromoter promotes deep layout trees", "[uimodel][unit][layout][state]")
   {
     auto doc = LayoutDocument{};
     auto deepNode = collapsibleSplitNode("deep-split");
@@ -127,7 +127,7 @@ namespace ao::uimodel::layout::test
     CHECK(result.promotedCount == 1);
   }
 
-  TEST_CASE("LayoutStatePromoter rejects mismatched baseline hash", "[layout][unit][state]")
+  TEST_CASE("LayoutStatePromoter rejects mismatched baseline hash", "[uimodel][unit][layout][state]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "box";
@@ -146,7 +146,7 @@ namespace ao::uimodel::layout::test
     CHECK(result.promotedCount == 0);
   }
 
-  TEST_CASE("LayoutStatePromoter gracefully ignores malformed state types", "[layout][unit][state]")
+  TEST_CASE("LayoutStatePromoter ignores malformed state types", "[uimodel][unit][layout][state]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "box";

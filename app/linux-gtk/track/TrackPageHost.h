@@ -11,7 +11,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
+#include <ao/uimodel/track/TrackColumnLayoutStore.h>
 
 #include <map>
 #include <memory>
@@ -59,7 +59,7 @@ namespace ao::gtk
                   uimodel::playback::PlaybackQueueModel* queueModel,
                   TagEditController& tagEditController,
                   ListNavigationController& listNavigation,
-                  uimodel::track::TrackPresentationViewModel& presentationStore);
+                  uimodel::track::TrackColumnLayoutStore& layoutStore);
     ~TrackPageHost();
 
     // Not copyable or movable
@@ -71,7 +71,7 @@ namespace ao::gtk
     void setPlaybackQueueModel(uimodel::playback::PlaybackQueueModel& controller) { _playbackQueueModel = &controller; }
 
     Gtk::Stack& stack() { return _stack; }
-    uimodel::track::TrackPresentationViewModel& presentationStore() { return _presentationStore; }
+    uimodel::track::TrackColumnLayoutStore& layoutStore() { return _layoutStore; }
 
     void clear();
     void rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn);
@@ -101,7 +101,7 @@ namespace ao::gtk
     uimodel::playback::PlaybackQueueModel* _playbackQueueModel;
     TagEditController& _tagEditController;
     ListNavigationController& _listNavigation;
-    uimodel::track::TrackPresentationViewModel& _presentationStore;
+    uimodel::track::TrackColumnLayoutStore& _layoutStore;
     rt::Subscription _revealSub;
     rt::Subscription _nowPlayingSub;
     rt::Subscription _focusSub;

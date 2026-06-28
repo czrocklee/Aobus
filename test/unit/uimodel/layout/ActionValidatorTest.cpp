@@ -57,7 +57,7 @@ namespace ao::uimodel::layout::test
     };
   } // namespace
 
-  TEST_CASE("ActionValidator", "[layout][unit][validator]")
+  TEST_CASE("ActionValidator reports invalid action bindings", "[uimodel][unit][layout][validator]")
   {
     auto const actions = makeTestCatalog();
     auto const components = makeCompCatalog();
@@ -76,12 +76,15 @@ namespace ao::uimodel::layout::test
     {
       auto doc = LayoutDocument{};
       doc.root.type = "test.button";
+      doc.root.id = "unknown-button";
       doc.root.props["primaryAction"] = LayoutValue{std::string{"unknown.action"}};
 
       auto const diagnostics = validateActions(doc, components, actions, permissiveResolver);
       REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].componentId == "unknown-button");
       CHECK(diagnostics[0].actionId == "unknown.action");
       CHECK(diagnostics[0].propertyName == "primaryAction");
+      CHECK(diagnostics[0].message == "Unknown or incompatible action ID: unknown.action");
     }
 
     SECTION("none action id produces no diagnostic")
@@ -117,17 +120,22 @@ namespace ao::uimodel::layout::test
     {
       auto doc = LayoutDocument{};
       doc.root.type = "test.button";
+      doc.root.id = "non-string-button";
       doc.root.props["primaryAction"] = LayoutValue{static_cast<std::int64_t>(42)};
 
       auto const diagnostics = validateActions(doc, components, actions, permissiveResolver);
       REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].componentId == "non-string-button");
+      CHECK(diagnostics[0].propertyName == "primaryAction");
       CHECK(diagnostics[0].actionId == "(invalid type)");
+      CHECK(diagnostics[0].message == "Action ID must be a string");
     }
 
     SECTION("incompatible anchor requirement produces diagnostic")
     {
       auto doc = LayoutDocument{};
       doc.root.type = "test.button";
+      doc.root.id = "anchorless-button";
       doc.root.props["primaryAction"] = LayoutValue{std::string{"needsAnchor"}};
 
       auto const noAnchorResolver = [](LayoutNode const&,
@@ -146,7 +154,10 @@ namespace ao::uimodel::layout::test
 
       auto const diagnostics = validateActions(doc, components, actions, noAnchorResolver);
       REQUIRE(diagnostics.size() == 1);
+      CHECK(diagnostics[0].componentId == "anchorless-button");
+      CHECK(diagnostics[0].propertyName == "primaryAction");
       CHECK(diagnostics[0].actionId == "needsAnchor");
+      CHECK(diagnostics[0].message == "Unknown or incompatible action ID: needsAnchor");
     }
 
     SECTION("missing resolver returns no diagnostic (conservative)")
@@ -176,6 +187,7 @@ namespace ao::uimodel::layout::test
       REQUIRE(diagnostics.size() == 1);
       CHECK(diagnostics[0].componentId == "my-btn");
       CHECK(diagnostics[0].propertyName == "secondaryAction");
+      CHECK(diagnostics[0].actionId.empty());
       CHECK(diagnostics[0].message == "Action slot is not supported by this component policy");
     }
   }

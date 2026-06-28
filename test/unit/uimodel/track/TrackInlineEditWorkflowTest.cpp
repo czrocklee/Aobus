@@ -4,6 +4,7 @@
 #include <ao/Error.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/track/TrackFieldFormatter.h>
 #include <ao/uimodel/track/TrackInlineEditWorkflow.h>
 
@@ -34,7 +35,7 @@ namespace ao::uimodel::track::test
     }
   } // namespace
 
-  TEST_CASE("TrackInlineEditWorkflow - applies inline metadata edits", "[uimodel][track][inline-edit]")
+  TEST_CASE("TrackInlineEditWorkflow - applies inline metadata edits", "[uimodel][workflow][track][inline-edit]")
   {
     auto currentValue = textValue("Old Title");
     auto appliedValue = std::string{};
@@ -120,5 +121,27 @@ namespace ao::uimodel::track::test
       CHECK(result.statusMessage == "Change could not be applied.");
       CHECK(textFrom(currentValue) == "Old Title");
     }
+  }
+
+  TEST_CASE("isProtectedInlineEditText protects aggregate sentinel values", "[uimodel][unit][track][inline-edit]")
+  {
+    auto snap = rt::TrackDetailSnapshot{};
+
+    CHECK(isProtectedInlineEditText(rt::TrackField::Title, snap, kMultipleTrackValuesText, false));
+
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).optValue = std::string{"single"};
+    CHECK(isProtectedInlineEditText(rt::TrackField::Title, snap, kMultipleTrackValuesText, false));
+
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).optValue.reset();
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).mixed = true;
+    CHECK(isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, true));
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, false));
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "anything else", true));
+
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).mixed = false;
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).optValue = std::string{"single"};
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, true));
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "edit", true));
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "", true));
   }
 } // namespace ao::uimodel::track::test

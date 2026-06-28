@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
+#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/track/TrackPresentationPreferenceStore.h>
 
 #include <filesystem>
 #include <memory>

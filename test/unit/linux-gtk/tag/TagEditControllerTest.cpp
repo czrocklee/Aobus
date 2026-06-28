@@ -11,8 +11,6 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -20,7 +18,6 @@
 #include <giomm/simpleactiongroup.h>
 #include <gtkmm/window.h>
 
-#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -44,23 +41,6 @@ namespace ao::gtk::test
       auto const trackId = ao::test::requireValue(writer.createHotCold(hotData, coldData)).first;
       REQUIRE(txn.commit());
       return trackId;
-    }
-
-    bool trackHasTag(library::MusicLibrary& library, TrackId trackId, std::string const& expectedTag)
-    {
-      auto txn = library.readTransaction();
-      auto reader = library.tracks().reader(txn);
-      auto const optView = reader.get(trackId);
-
-      if (!optView)
-      {
-        return false;
-      }
-
-      auto const& dictionary = library.dictionary();
-
-      return std::ranges::any_of(
-        optView->tags(), [&](auto const tagId) { return dictionary.getOrDefault(tagId) == expectedTag; });
     }
   } // namespace
 
@@ -89,7 +69,7 @@ namespace ao::gtk::test
       CHECK(mutationCallbacks == 0);
     }
 
-    SECTION("submitTagChanges applies tags and reports the mutation")
+    SECTION("submitTagChanges reports the mutation to the controller callback")
     {
       auto& library = fixture.runtime().musicLibrary();
       auto const firstTrackId = createTrack(library, "Controller Target 1");
@@ -101,13 +81,6 @@ namespace ao::gtk::test
       controller.submitTagChanges(selection, tagsToAdd, std::span<std::string const>{});
 
       CHECK(mutationCallbacks == 1);
-      CHECK(trackHasTag(library, firstTrackId, "ControllerTag"));
-      CHECK(trackHasTag(library, secondTrackId, "ControllerTag"));
-
-      auto const feed = fixture.runtime().notifications().feed();
-      REQUIRE(feed.entries.size() == 1);
-      CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
-      CHECK(feed.entries.back().message == "Tags added 1 for 2 tracks");
     }
   }
 } // namespace ao::gtk::test

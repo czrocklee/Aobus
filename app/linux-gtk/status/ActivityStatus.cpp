@@ -342,30 +342,19 @@ namespace ao::gtk
     if (_resolveNotificationAction && _onNotificationAction && !item.actions.empty())
     {
       Gtk::Box* actions = nullptr;
-      std::size_t appendedActions = 0;
+      auto const resolvedActions = uimodel::status::resolveActivityActionViews(
+        item.actions, _resolveNotificationAction, kMaxNotificationDetailActions);
 
-      for (auto const& action : item.actions)
+      for (auto const& action : resolvedActions)
       {
-        if (appendedActions >= kMaxNotificationDetailActions)
-        {
-          break;
-        }
-
-        auto actionState = _resolveNotificationAction(action.id, action.label);
-
-        if (!actionState.visible || actionState.label.empty())
-        {
-          continue;
-        }
-
-        auto* const actionButton = Gtk::make_managed<Gtk::Button>(actionState.label);
+        auto* const actionButton = Gtk::make_managed<Gtk::Button>(action.label);
         actionButton->add_css_class("flat");
         actionButton->add_css_class("ao-activity-detail-action");
-        actionButton->set_sensitive(actionState.enabled);
+        actionButton->set_sensitive(action.enabled);
 
-        if (!actionState.enabled && !actionState.disabledReason.empty())
+        if (!action.enabled && !action.disabledReason.empty())
         {
-          actionButton->set_tooltip_text(actionState.disabledReason);
+          actionButton->set_tooltip_text(action.disabledReason);
         }
 
         actionButton->signal_clicked().connect([this, id = item.id, actionId = action.id, actionButton]
@@ -379,7 +368,6 @@ namespace ao::gtk
         }
 
         actions->append(*actionButton);
-        ++appendedActions;
       }
 
       if (actions != nullptr)

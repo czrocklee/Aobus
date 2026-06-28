@@ -17,7 +17,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
+#include <ao/uimodel/track/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/enums.h>
@@ -57,9 +57,9 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
 
     auto modelPtr = TrackListModel::create(cache);
-    auto presentationStore = uimodel::track::TrackPresentationViewModel{runtime.workspace()};
+    auto layoutStore = uimodel::track::TrackColumnLayoutStore{};
 
-    auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, presentationStore, runtime, thumbnailLoader};
+    auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, layoutStore, runtime, thumbnailLoader};
     window.set_child(page);
 
     SECTION("initial state")

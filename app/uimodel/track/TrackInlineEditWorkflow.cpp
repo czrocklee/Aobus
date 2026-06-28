@@ -3,7 +3,12 @@
 
 #include <ao/Error.h>
 #include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/uimodel/track/TrackFieldFormatter.h>
 #include <ao/uimodel/track/TrackInlineEditWorkflow.h>
+
+#include <string_view>
 
 namespace ao::uimodel::track
 {
@@ -45,5 +50,19 @@ namespace ao::uimodel::track
     }
 
     return TrackInlineEditResult{.outcome = TrackInlineEditOutcome::Applied, .statusMessage = ""};
+  }
+
+  bool isProtectedInlineEditText(rt::TrackField field,
+                                 rt::TrackDetailSnapshot const& snap,
+                                 std::string_view newText,
+                                 bool protectCompositeMixedText)
+  {
+    if (newText == kMultipleTrackValuesText)
+    {
+      return true;
+    }
+
+    auto const& agg = rt::trackFieldArrayAt(snap.fields, field);
+    return protectCompositeMixedText && agg.mixed && newText == kCompositeMixedTrackText;
   }
 } // namespace ao::uimodel::track

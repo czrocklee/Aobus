@@ -1,17 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "../../../TestUtils.h"
 #include "../../GtkTestSupport.h"
 #include "layout/component/track/TrackDetailSizing.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
-#include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/Type.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/LayoutNode.h>
@@ -22,7 +16,6 @@
 #include <gtkmm/button.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
-#include <gtkmm/gestureclick.h>
 #include <gtkmm/grid.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
@@ -42,11 +35,9 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel::layout;
-  using ao::gtk::test::emitActivate;
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::emitGesturePressed;
   using ao::gtk::test::findWidget;
-  using ao::gtk::test::hasController;
   using ao::gtk::test::walkWidgets;
 
   namespace
@@ -78,88 +69,6 @@ namespace ao::gtk::layout::test
       return text;
     }
 
-    TrackId addTrackWithNumber(rt::AppRuntime& runtime, std::string_view const title, std::uint16_t const trackNumber)
-    {
-      auto txn = runtime.musicLibrary().writeTransaction();
-      auto writer = runtime.musicLibrary().tracks().writer(txn);
-
-      auto builder = library::TrackBuilder::createNew();
-      builder.metadata().title(title);
-      builder.metadata().trackNumber(trackNumber);
-      builder.metadata().trackTotal(12);
-      auto serializeResult =
-        builder.serialize(txn, runtime.musicLibrary().dictionary(), runtime.musicLibrary().resources());
-      REQUIRE(serializeResult);
-      auto const [hot, cold] = *serializeResult;
-      auto const trackId = ao::test::requireValue(writer.createHotCold(hot, cold)).first;
-
-      REQUIRE(txn.commit());
-      return trackId;
-    }
-
-    std::optional<std::uint16_t> trackNumberFor(rt::AppRuntime& runtime, TrackId const trackId)
-    {
-      auto const txn = runtime.musicLibrary().readTransaction();
-      auto const reader = runtime.musicLibrary().tracks().reader(txn);
-      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
-
-      if (!optView)
-      {
-        return std::nullopt;
-      }
-
-      return optView->metadata().trackNumber();
-    }
-
-    Gtk::Widget* findEditableWithDisplayText(Gtk::Widget& root, std::string_view const text)
-    {
-      Gtk::Widget* result = nullptr;
-
-      walkWidgets(root,
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (result != nullptr)
-                    {
-                      return;
-                    }
-
-                    auto* const label = dynamic_cast<Gtk::Label*>(&widget);
-
-                    if (label == nullptr)
-                    {
-                      return;
-                    }
-
-                    auto const labelText = label->get_text();
-
-                    if (auto const& rawText = labelText.raw(); std::string_view{rawText.data(), rawText.size()} != text)
-                    {
-                      return;
-                    }
-
-                    for (auto* editor = label->get_parent(); editor != nullptr; editor = editor->get_parent())
-                    {
-                      if (editor->has_css_class("ao-property-editable"))
-                      {
-                        result = editor;
-                        break;
-                      }
-                    }
-                  });
-
-      return result;
-    }
-
-    bool hasClickGesture(Gtk::Widget& widget)
-    {
-      return hasController<Gtk::GestureClick>(widget);
-    }
-
-    bool emitClickGesture(Gtk::Widget& widget, double const x = 1.0, double const y = 1.0)
-    {
-      return emitGesturePressed(widget, 1, x, y);
-    }
-
     Gtk::Button* findEditButton(Gtk::Widget& editor)
     {
       Gtk::Button* result = nullptr;
@@ -173,28 +82,6 @@ namespace ao::gtk::layout::test
                     }
                   });
       return result;
-    }
-
-    bool trackHasCustomKey(rt::AppRuntime& runtime, TrackId const trackId, std::string_view const key)
-    {
-      auto const txn = runtime.musicLibrary().readTransaction();
-      auto const reader = runtime.musicLibrary().tracks().reader(txn);
-      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
-
-      if (!optView)
-      {
-        return false;
-      }
-
-      for (auto const& [dictId, /*value*/ _] : optView->customMetadata())
-      {
-        if (runtime.musicLibrary().dictionary().get(dictId) == key)
-        {
-          return true;
-        }
-      }
-
-      return false;
     }
   } // namespace
 
@@ -248,7 +135,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(firstEntry->get_child_visible());
     CHECK(secondEntry->get_child_visible());
 
-    REQUIRE(emitClickGesture(window));
+    REQUIRE(emitGesturePressed(window, 1, 1.0, 1.0));
     CHECK_FALSE(second.getEditing());
     CHECK_FALSE(secondEntry->get_child_visible());
   }
@@ -257,7 +144,6 @@ namespace ao::gtk::layout::test
             "[gtk][unit][layout][components][constrained][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
-    auto& runtime = fixture.runtime();
     auto& registry = fixture.components();
     auto& window = fixture.window();
     auto& ctx = fixture.context();
@@ -611,26 +497,6 @@ namespace ao::gtk::layout::test
       CHECK(sawValueEditable);
     }
 
-    SECTION("Composite disc and track rows replace total rows")
-    {
-      auto labels = std::vector<std::string>{};
-
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (auto* const label = dynamic_cast<Gtk::Label*>(&widget);
-                        label != nullptr && label->has_css_class("ao-property-label"))
-                    {
-                      labels.push_back(label->get_text().raw());
-                    }
-                  });
-
-      CHECK(std::ranges::contains(labels, std::string{"Disc"}));
-      CHECK(std::ranges::contains(labels, std::string{"Track"}));
-      CHECK(!std::ranges::contains(labels, std::string{"Total Discs"}));
-      CHECK(!std::ranges::contains(labels, std::string{"Total Tracks"}));
-    }
-
     SECTION("Key column does not expand with the value column")
     {
       Gtk::Widget const* keySlot = nullptr;
@@ -835,174 +701,9 @@ namespace ao::gtk::layout::test
       CHECK(entry->get_width() <= builtInValueEditor->get_width());
       CHECK(entry->get_height() <= builtInValueEditor->get_height());
 
-      REQUIRE(emitClickGesture(window));
+      REQUIRE(emitGesturePressed(window, 1, 1.0, 1.0));
       CHECK_FALSE(entry->get_child_visible());
       CHECK(editButton->get_visible());
-    }
-
-    SECTION("Partial custom metadata delete does not offer single-value undo")
-    {
-      auto trackId1 = TrackId{kInvalidTrackId};
-      auto trackId2 = TrackId{kInvalidTrackId};
-
-      {
-        auto txn = runtime.musicLibrary().writeTransaction();
-        auto writer = runtime.musicLibrary().tracks().writer(txn);
-
-        auto builder1 = library::TrackBuilder::createNew();
-        builder1.metadata().title("Track With Partial Custom");
-        builder1.customMetadata().add("partial", "value");
-        auto serializeResult1 =
-          builder1.serialize(txn, runtime.musicLibrary().dictionary(), runtime.musicLibrary().resources());
-        REQUIRE(serializeResult1);
-        auto const [hot1, cold1] = *serializeResult1;
-        trackId1 = ao::test::requireValue(writer.createHotCold(hot1, cold1)).first;
-
-        auto builder2 = library::TrackBuilder::createNew();
-        builder2.metadata().title("Track Without Partial Custom");
-        auto serializeResult2 =
-          builder2.serialize(txn, runtime.musicLibrary().dictionary(), runtime.musicLibrary().resources());
-        REQUIRE(serializeResult2);
-        auto const [hot2, cold2] = *serializeResult2;
-        trackId2 = ao::test::requireValue(writer.createHotCold(hot2, cold2)).first;
-
-        REQUIRE(txn.commit());
-      }
-
-      REQUIRE(trackId1 != kInvalidTrackId);
-      REQUIRE(trackId2 != kInvalidTrackId);
-
-      auto snap = rt::TrackDetailSnapshot{};
-      snap.selectionKind = rt::SelectionKind::Multiple;
-      snap.trackIds = {trackId1, trackId2};
-      snap.customMetadata.push_back(rt::CustomMetadataItem{
-        .key = "partial",
-        .value = {.optValue = std::string{"value"}, .mixed = false},
-        .presentOnAll = false,
-        .presentOnAny = true,
-      });
-
-      fixture.attachTrackDetailScope(std::move(snap));
-      auto const scopedCompPtr = registry.create(ctx, node);
-
-      REQUIRE(scopedCompPtr != nullptr);
-
-      Gtk::Button* deleteButton = nullptr;
-      Gtk::Widget* undoBar = nullptr;
-
-      walkWidgets(scopedCompPtr->widget(),
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (auto* button = dynamic_cast<Gtk::Button*>(&widget);
-                        button != nullptr && button->get_tooltip_text() == "Delete Property")
-                    {
-                      deleteButton = button;
-                    }
-
-                    if (widget.has_css_class("ao-undo-bar"))
-                    {
-                      undoBar = &widget;
-                    }
-                  });
-
-      REQUIRE(deleteButton != nullptr);
-      REQUIRE(undoBar != nullptr);
-      REQUIRE(trackHasCustomKey(runtime, trackId1, "partial"));
-
-      emitClicked(*deleteButton);
-      ao::gtk::test::drainGtkEvents();
-
-      CHECK_FALSE(trackHasCustomKey(runtime, trackId1, "partial"));
-      CHECK_FALSE(trackHasCustomKey(runtime, trackId2, "partial"));
-      CHECK_FALSE(undoBar->get_visible());
-    }
-
-    SECTION("Editable metadata rows are field-editable without a global lock")
-    {
-      auto snap = rt::TrackDetailSnapshot{};
-      snap.selectionKind = rt::SelectionKind::Single;
-      snap.trackIds = {TrackId{1}};
-      rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).optValue =
-        rt::TrackFieldRawValue{std::in_place_type<std::string>, "editable title"};
-      snap.customMetadata.push_back(rt::CustomMetadataItem{
-        .key = "editable custom",
-        .value = {.optValue = std::string{"editable value"}, .mixed = false},
-        .presentOnAll = true,
-        .presentOnAny = true,
-      });
-
-      fixture.attachTrackDetailScope(std::move(snap));
-      auto const scopedCompPtr = registry.create(ctx, node);
-
-      REQUIRE(scopedCompPtr != nullptr);
-
-      auto editors = std::vector<Gtk::Widget*>{};
-      walkWidgets(scopedCompPtr->widget(),
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (widget.has_css_class("ao-property-editable"))
-                    {
-                      editors.push_back(&widget);
-                    }
-                  });
-
-      CHECK(editors.size() >= 2);
-
-      for (auto* const editor : editors)
-      {
-        CHECK(editor->has_css_class("ao-property-value"));
-      }
-
-      // Verify technical fields are NOT editable
-      auto technicalEditors = std::vector<Gtk::Widget*>{};
-      walkWidgets(scopedCompPtr->widget(),
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (!widget.has_css_class("ao-property-editable") && widget.has_css_class("ao-property-value"))
-                    {
-                      technicalEditors.push_back(&widget);
-                    }
-                  });
-
-      CHECK_FALSE(technicalEditors.empty());
-
-      for (auto* const editor : technicalEditors)
-      {
-        CHECK_FALSE(editor->has_css_class("ao-property-editable"));
-      }
-    }
-
-    SECTION("Composite mixed numeric fields stay compact and ignore unchanged sentinel commits")
-    {
-      auto const trackId1 = addTrackWithNumber(runtime, "Mixed Track 1", 1);
-      auto const trackId2 = addTrackWithNumber(runtime, "Mixed Track 2", 2);
-      auto snap = rt::TrackDetailSnapshot{};
-      snap.selectionKind = rt::SelectionKind::Multiple;
-      snap.trackIds = {trackId1, trackId2};
-      rt::trackFieldArrayAt(snap.fields, rt::TrackField::TrackNumber).mixed = true;
-      rt::trackFieldArrayAt(snap.fields, rt::TrackField::TrackTotal).optValue =
-        rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, 12};
-
-      fixture.attachTrackDetailScope(std::move(snap));
-      auto const scopedCompPtr = registry.create(ctx, node);
-
-      REQUIRE(scopedCompPtr != nullptr);
-
-      auto* const mixedEditor = findEditableWithDisplayText(scopedCompPtr->widget(), "-");
-      REQUIRE(mixedEditor != nullptr);
-      auto* const entry = findWidget<Gtk::Entry>(*mixedEditor);
-      REQUIRE(entry != nullptr);
-      CHECK_FALSE(hasClickGesture(*mixedEditor));
-
-      auto* const editButton = findEditButton(*mixedEditor);
-      REQUIRE(editButton != nullptr);
-      emitClicked(*editButton);
-      CHECK(entry->get_child_visible());
-      emitActivate(*entry);
-      ao::gtk::test::drainGtkEvents();
-
-      CHECK(trackNumberFor(runtime, trackId1) == std::optional<std::uint16_t>{1});
-      CHECK(trackNumberFor(runtime, trackId2) == std::optional<std::uint16_t>{2});
     }
 
     SECTION("Invalid UTF-8 metadata is made valid before display")

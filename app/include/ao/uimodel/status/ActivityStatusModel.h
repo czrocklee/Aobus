@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,6 +32,25 @@ namespace ao::uimodel::status
     std::string id{};
     std::string label{};
   };
+
+  struct ActivityActionAvailability final
+  {
+    bool visible = false;
+    bool enabled = false;
+    std::string label{};
+    std::string disabledReason{};
+  };
+
+  struct ActivityResolvedActionView final
+  {
+    std::string id{};
+    bool enabled = false;
+    std::string label{};
+    std::string disabledReason{};
+  };
+
+  using ActivityActionAvailabilityResolver =
+    std::function<ActivityActionAvailability(std::string_view, std::string_view)>;
 
   struct ActivityCompactState final
   {
@@ -83,6 +103,10 @@ namespace ao::uimodel::status
 
   std::string_view activityStatusKindCssClass(ActivityStatusKind kind);
   bool hasDetailContent(ActivityDetailState const& detail) noexcept;
+  std::vector<ActivityResolvedActionView> resolveActivityActionViews(
+    std::vector<ActivityActionView> const& actions,
+    ActivityActionAvailabilityResolver const& resolveAction,
+    std::size_t maxVisibleActions);
 
   class ActivityStatusModel final
   {

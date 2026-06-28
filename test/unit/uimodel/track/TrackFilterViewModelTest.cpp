@@ -6,6 +6,7 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -46,13 +47,27 @@ namespace ao::uimodel::track::test
     SECTION("updateFilter with empty text")
     {
       viewModel.updateFilter("");
-      SUCCEED("updateFilter handles empty text");
+
+      CHECK(renderLog.last().enabled == false);
+      CHECK(renderLog.last().entryText.empty());
+      CHECK(renderLog.last().resolvedExpression.empty());
+      CHECK(renderLog.last().pending == false);
+      CHECK(renderLog.last().canCreateSmartList == false);
     }
 
     SECTION("updateFilter with expression syntax")
     {
+      auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
+      workspaceService.setFocusedView(reply.viewId);
+
       viewModel.updateFilter("$artist ~ 'Beatles'");
-      SUCCEED("updateFilter handles expression syntax");
+
+      CHECK(renderLog.last().enabled == true);
+      CHECK(renderLog.last().entryText == "$artist ~ 'Beatles'");
+      CHECK(renderLog.last().resolvedExpression == "$artist ~ 'Beatles'");
+      CHECK(renderLog.last().pending == false);
+      CHECK(renderLog.last().hasError == false);
+      CHECK(renderLog.last().canCreateSmartList == true);
     }
 
     SECTION("updateFilter with plain text uses Quick search resolver")
@@ -61,8 +76,10 @@ namespace ao::uimodel::track::test
       workspaceService.setFocusedView(reply.viewId);
 
       viewModel.updateFilter("Beatles");
+      CHECK(renderLog.last().entryText == "Beatles");
       CHECK(renderLog.last().resolvedExpression.contains("$title ~ \"Beatles\""));
       CHECK(renderLog.last().resolvedExpression.contains("$artist ~ \"Beatles\""));
+      CHECK(renderLog.last().canCreateSmartList == true);
     }
 
     SECTION("updateFilter with multiple terms creates AND expression")
@@ -71,7 +88,9 @@ namespace ao::uimodel::track::test
       workspaceService.setFocusedView(reply.viewId);
 
       viewModel.updateFilter("Beatles help");
+      CHECK(renderLog.last().entryText == "Beatles help");
       CHECK(renderLog.last().resolvedExpression.contains(") and ("));
+      CHECK(renderLog.last().canCreateSmartList == true);
     }
 
     SECTION("Focus on a view enables filter")
@@ -91,8 +110,28 @@ namespace ao::uimodel::track::test
       workspaceService.setFocusedView(reply.viewId);
 
       viewModel.updateFilter("$artist ~ 'Beatles'");
+      CHECK(renderLog.last().entryText == "$artist ~ 'Beatles'");
       CHECK(renderLog.last().resolvedExpression == "$artist ~ 'Beatles'");
+      CHECK(renderLog.last().pending == false);
+      CHECK(renderLog.last().hasError == false);
       CHECK(renderLog.last().canCreateSmartList == true);
+    }
+
+    SECTION("updateFilter preserves the focused view presentation")
+    {
+      auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId};
+      config.optPresentation = rt::defaultTrackPresentationSpec();
+      config.optPresentation->id = "custom";
+      auto reply = viewService.createView(config);
+      workspaceService.setFocusedView(reply.viewId);
+
+      viewModel.updateFilter("artist == 'Muse'");
+
+      auto const state = viewService.trackListState(reply.viewId);
+      CHECK(state.filterExpression == "artist == 'Muse'");
+      CHECK(state.presentation.id == "custom");
+      CHECK(renderLog.last().entryText == "artist == 'Muse'");
+      CHECK(renderLog.last().resolvedExpression == "artist == 'Muse'");
     }
 
     SECTION("updateFilter with quotes handles escaping")
@@ -101,8 +140,9 @@ namespace ao::uimodel::track::test
       workspaceService.setFocusedView(reply.viewId);
 
       viewModel.updateFilter("\"A Song Name\"");
-      // It should use the TrackFilterResolver which handles quoting
+      CHECK(renderLog.last().entryText == "\"A Song Name\"");
       CHECK(renderLog.last().resolvedExpression.contains("\"A Song Name\""));
+      CHECK(renderLog.last().canCreateSmartList == true);
     }
 
     SECTION("Focus lost clears filter state")

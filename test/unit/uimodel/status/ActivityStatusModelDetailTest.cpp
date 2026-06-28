@@ -7,6 +7,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
 namespace ao::uimodel::status::test
 {
   TEST_CASE("ActivityStatusModel projects detail feed items and helpers", "[uimodel][unit][status][activity]")
@@ -120,6 +125,60 @@ namespace ao::uimodel::status::test
       CHECK(activityStatusKindCssClass(ActivityStatusKind::Info) == "ao-activity-status-info");
       CHECK(activityStatusKindCssClass(ActivityStatusKind::Warning) == "ao-activity-status-warning");
       CHECK(activityStatusKindCssClass(ActivityStatusKind::Error) == "ao-activity-status-error");
+    }
+
+    SECTION("action render policy filters hidden actions and keeps disabled reasons")
+    {
+      auto const actions = std::vector<ActivityActionView>{
+        {.id = "library.retry", .label = "Retry"}, {.id = "library.ignore", .label = "Ignore"}};
+
+      auto const resolved = resolveActivityActionViews(
+        actions,
+        [](std::string_view actionId, std::string_view label)
+        {
+          if (actionId == "library.retry")
+          {
+            return ActivityActionAvailability{
+              .visible = true, .enabled = false, .label = std::string{label}, .disabledReason = "Library busy"};
+          }
+
+          return ActivityActionAvailability{};
+        },
+        2);
+
+      REQUIRE(resolved.size() == 1);
+      CHECK(resolved[0].id == "library.retry");
+      CHECK(resolved[0].label == "Retry");
+      CHECK(resolved[0].enabled == false);
+      CHECK(resolved[0].disabledReason == "Library busy");
+    }
+
+    SECTION("action render policy skips empty labels and caps visible actions")
+    {
+      auto const actions = std::vector<ActivityActionView>{{.id = "library.retry", .label = ""},
+                                                           {.id = "library.ignore", .label = "Ignore"},
+                                                           {.id = "library.details", .label = "Details"}};
+
+      auto const resolved = resolveActivityActionViews(
+        actions,
+        [](std::string_view actionId, std::string_view label)
+        {
+          auto resolvedLabel = std::string{label};
+
+          if (actionId == "library.retry")
+          {
+            resolvedLabel = "Retry";
+          }
+
+          return ActivityActionAvailability{.visible = true, .enabled = true, .label = std::move(resolvedLabel)};
+        },
+        2);
+
+      REQUIRE(resolved.size() == 2);
+      CHECK(resolved[0].id == "library.retry");
+      CHECK(resolved[0].label == "Retry");
+      CHECK(resolved[1].id == "library.ignore");
+      CHECK(resolved[1].label == "Ignore");
     }
   }
 } // namespace ao::uimodel::status::test

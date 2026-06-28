@@ -5,6 +5,7 @@
 
 #include <ao/audio/Backend.h>
 #include <ao/audio/QualityAnalyzer.h>
+#include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
@@ -47,13 +48,16 @@ namespace ao::uimodel::playback
     {
       None,
       Reveal,
-      PlayPause,
+      Pause,
+      Resume,
       Navigate
     };
 
     Type type = Type::None;
     std::string navigateQuery;
   };
+
+  NowPlayingActionCommand::Type resolveNowPlayingPlayPauseCommand(audio::Transport transport) noexcept;
 
   struct AudioPipelineView final
   {

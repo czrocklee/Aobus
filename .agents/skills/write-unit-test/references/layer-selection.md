@@ -54,7 +54,7 @@ Good `uimodel` tests usually:
 Appropriate contracts:
 
 - ActivityStatusModel compact/detail state priority.
-- TrackPresentationViewModel menu ordering and fallback.
+- TrackPresentationCatalog menu ordering and preference fallback.
 - LayoutTemplateExpander prop merge and recursive template protection.
 - KeymapModel conflict detection and override behavior.
 
@@ -90,6 +90,6 @@ Use `[regression]` when the test protects a known bug or fragile invariant. Add 
 Useful existing samples:
 
 - Runtime service contract style: `test/unit/runtime/NotificationServiceTest.cpp`.
-- UI policy style: `test/unit/uimodel/status/ActivityStatusModel*Test.cpp` and `test/unit/uimodel/track/TrackPresentationViewModelTest.cpp`.
+- UI policy style: `test/unit/uimodel/status/ActivityStatusModel*Test.cpp` and `test/unit/uimodel/track/TrackPresentationWorkflowTest.cpp`.
 - Pure helper style: `test/unit/linux-gtk/layout/components/TrackFieldGridTextUtilsTest.cpp`.
 - Thin GTK adapter style: `test/unit/linux-gtk/track/TrackPresentationButtonTest.cpp`.

@@ -3,13 +3,15 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
+#include <ao/uimodel/track/TrackPresentationWorkflow.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/menubutton.h>
 #include <gtkmm/popover.h>
+#include <sigc++/scoped_connection.h>
 
+#include <memory>
 #include <string_view>
 
 namespace ao::rt
@@ -18,7 +20,8 @@ namespace ao::rt
 }
 namespace ao::uimodel::track
 {
-  class TrackPresentationViewModel;
+  class TrackPresentationCatalog;
+  class TrackPresentationPreferenceStore;
 }
 
 namespace ao::gtk
@@ -39,23 +42,26 @@ namespace ao::gtk
     TrackPresentationButton(TrackPresentationButton&&) = delete;
     TrackPresentationButton& operator=(TrackPresentationButton&&) = delete;
 
-    void setPresentationStore(uimodel::track::TrackPresentationViewModel* store, ThemeCoordinator* themeController);
+    void setPresentationServices(uimodel::track::TrackPresentationCatalog* catalog,
+                                 uimodel::track::TrackPresentationPreferenceStore* preferences,
+                                 ThemeCoordinator* themeController);
 
   private:
-    void onFocusedViewChanged(rt::ViewId viewId);
-    void populatePresentationOptions();
+    void render(uimodel::track::TrackPresentationPickerState const& state);
+    void populatePresentationOptions(uimodel::track::TrackPresentationPickerState const& state);
     void onPresentationSelected(std::string_view presentationId);
     void onCreateCustomViewClicked();
+    void applyCommand(uimodel::track::TrackPresentationApplyCommand const& command);
 
     rt::AppRuntime& _runtime;
-    uimodel::track::TrackPresentationViewModel* _presentationStore = nullptr;
+    uimodel::track::TrackPresentationCatalog* _catalog = nullptr;
+    std::unique_ptr<uimodel::track::TrackPresentationWorkflow> _workflowPtr;
     ThemeCoordinator* _themeController = nullptr;
-    rt::ViewId _activeViewId = rt::kInvalidViewId;
+    uimodel::track::TrackPresentationPickerState _state;
 
     Gtk::MenuButton _button;
     Gtk::Popover _popover;
     Gtk::Box _menuBox{Gtk::Orientation::VERTICAL};
-
-    rt::Subscription _focusSub;
+    sigc::scoped_connection _applyPresentationConn;
   };
 } // namespace ao::gtk

@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/track/TrackFieldFormatter.h>
 
 #include <cstdint>
@@ -51,4 +52,9 @@ namespace ao::uimodel::track
   public:
     static TrackInlineEditResult apply(TrackInlineEditRequest const& request, TrackInlineEditHooks const& hooks);
   };
+
+  bool isProtectedInlineEditText(rt::TrackField field,
+                                 rt::TrackDetailSnapshot const& snap,
+                                 std::string_view newText,
+                                 bool protectCompositeMixedText);
 } // namespace ao::uimodel::track

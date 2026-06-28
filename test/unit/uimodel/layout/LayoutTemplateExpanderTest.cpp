@@ -13,7 +13,7 @@
 
 namespace ao::uimodel::layout::test
 {
-  TEST_CASE("LayoutTemplateExpander normal expansion", "[layout][unit][template]")
+  TEST_CASE("LayoutTemplateExpander expands registered templates", "[uimodel][unit][layout][template]")
   {
     auto doc = LayoutDocument{};
     doc.templates["playback.transportGroup"] = LayoutNode{
@@ -32,7 +32,7 @@ namespace ao::uimodel::layout::test
     CHECK(expanded.children[1].type == "playback.stopButton");
   }
 
-  TEST_CASE("LayoutTemplateExpander overrides node id", "[layout][unit][template]")
+  TEST_CASE("LayoutTemplateExpander lets use sites override node id", "[uimodel][unit][layout][template]")
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] = LayoutNode{.type = "spacer"};
@@ -47,7 +47,7 @@ namespace ao::uimodel::layout::test
     CHECK(expanded.id == "my-override-id");
   }
 
-  TEST_CASE("LayoutTemplateExpander merges layout property overrides", "[layout][unit][template]")
+  TEST_CASE("LayoutTemplateExpander merges layout property overrides", "[uimodel][unit][layout][template]")
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] = LayoutNode{.type = "box", .layout = {{"hexpand", LayoutValue{true}}}};
@@ -63,7 +63,7 @@ namespace ao::uimodel::layout::test
     CHECK(expanded.layout.at("vexpand").asBool() == true);
   }
 
-  TEST_CASE("LayoutTemplateExpander merges prop overrides except templateId", "[layout][unit][template]")
+  TEST_CASE("LayoutTemplateExpander merges prop overrides except templateId", "[uimodel][unit][layout][template]")
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] =
@@ -81,7 +81,8 @@ namespace ao::uimodel::layout::test
     CHECK(expanded.props.find("templateId") == expanded.props.end());
   }
 
-  TEST_CASE("LayoutTemplateExpander appends use-site children after expanded children", "[layout][unit][template]")
+  TEST_CASE("LayoutTemplateExpander appends use-site children after expanded children",
+            "[uimodel][unit][layout][template]")
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] = LayoutNode{.type = "box", .children = {LayoutNode{.type = "spacer"}}};
@@ -97,7 +98,7 @@ namespace ao::uimodel::layout::test
     CHECK(expanded.children[1].type == "playback.playPauseButton");
   }
 
-  TEST_CASE("LayoutTemplateExpander recurses into non-template children", "[layout][unit][template]")
+  TEST_CASE("LayoutTemplateExpander recurses into non-template children", "[uimodel][unit][layout][template]")
   {
     auto doc = LayoutDocument{};
     doc.templates["inner.template"] = LayoutNode{.type = "spacer"};
@@ -112,7 +113,7 @@ namespace ao::uimodel::layout::test
     CHECK(expanded.children[0].type == "spacer");
   }
 
-  TEST_CASE("LayoutTemplateExpander integrates tooltip overrides", "[layout][unit][template]")
+  TEST_CASE("LayoutTemplateExpander integrates tooltip overrides", "[uimodel][unit][layout][template]")
   {
     auto doc = LayoutDocument{};
     auto templateTooltip = LayoutNode{.type = "my.templateTooltip"};
@@ -133,7 +134,7 @@ namespace ao::uimodel::layout::test
     CHECK(expanded.optTooltip->nodePtr->type == "my.useSiteTooltip");
   }
 
-  TEST_CASE("LayoutTemplateExpander recurses into non-template tooltip", "[layout][unit][template]")
+  TEST_CASE("LayoutTemplateExpander recurses into non-template tooltip", "[uimodel][unit][layout][template]")
   {
     auto doc = LayoutDocument{};
     doc.templates["inner.template"] = LayoutNode{.type = "spacer"};
@@ -151,7 +152,7 @@ namespace ao::uimodel::layout::test
     CHECK(expanded.optTooltip->nodePtr->type == "spacer");
   }
 
-  TEST_CASE("LayoutTemplateExpander error on missing templateId", "[layout][unit][template]")
+  TEST_CASE("LayoutTemplateExpander returns an error node for missing templateId", "[uimodel][unit][layout][template]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "template";
@@ -159,11 +160,10 @@ namespace ao::uimodel::layout::test
 
     auto const expanded = LayoutTemplateExpander::expand(doc);
 
-    CHECK(expanded.type.find("[TemplateError]") != std::string::npos);
-    CHECK(expanded.type.find("Missing templateId") != std::string::npos);
+    CHECK(expanded.type == "[TemplateError] Missing templateId");
   }
 
-  TEST_CASE("LayoutTemplateExpander error on unknown template id", "[layout][unit][template]")
+  TEST_CASE("LayoutTemplateExpander returns an error node for unknown template id", "[uimodel][unit][layout][template]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "template";
@@ -171,11 +171,11 @@ namespace ao::uimodel::layout::test
 
     auto const expanded = LayoutTemplateExpander::expand(doc);
 
-    CHECK(expanded.type.find("[TemplateError]") != std::string::npos);
-    CHECK(expanded.type.find("Unknown template") != std::string::npos);
+    CHECK(expanded.type == "[TemplateError] Unknown template: nonexistent");
   }
 
-  TEST_CASE("LayoutTemplateExpander error on recursive template loop", "[layout][unit][template]")
+  TEST_CASE("LayoutTemplateExpander returns an error node for recursive template loops",
+            "[uimodel][unit][layout][template]")
   {
     auto doc = LayoutDocument{};
     doc.templates["selfRef"] =
@@ -186,7 +186,6 @@ namespace ao::uimodel::layout::test
 
     auto const expanded = LayoutTemplateExpander::expand(doc);
 
-    CHECK(expanded.type.find("[TemplateError]") != std::string::npos);
-    CHECK(expanded.type.find("Recursive template loop") != std::string::npos);
+    CHECK(expanded.type == "[TemplateError] Recursive template loop: selfRef -> selfRef");
   }
 } // namespace ao::uimodel::layout::test

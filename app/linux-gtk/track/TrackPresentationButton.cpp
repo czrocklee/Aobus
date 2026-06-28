@@ -5,14 +5,15 @@
 
 #include "app/ThemeCoordinator.h"
 #include "track/TrackCustomViewDialog.h"
-#include <ao/Type.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
+#include <ao/uimodel/track/TrackPresentationCatalog.h>
+#include <ao/uimodel/track/TrackPresentationPreferenceStore.h>
+#include <ao/uimodel/track/TrackPresentationWorkflow.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/button.h>
@@ -21,6 +22,7 @@
 #include <gtkmm/separator.h>
 #include <gtkmm/window.h>
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -45,44 +47,43 @@ namespace ao::gtk
     _menuBox.add_css_class("ao-presentation-menu-box");
 
     append(_button);
-
-    _focusSub = _runtime.workspace().onFocusedViewChanged([this](rt::ViewId viewId) { onFocusedViewChanged(viewId); });
-
-    onFocusedViewChanged(_runtime.workspace().layoutState().activeViewId);
+    render(_state);
   }
 
   TrackPresentationButton::~TrackPresentationButton() = default;
 
-  void TrackPresentationButton::setPresentationStore(uimodel::track::TrackPresentationViewModel* store,
-                                                     ThemeCoordinator* themeController)
+  void TrackPresentationButton::setPresentationServices(uimodel::track::TrackPresentationCatalog* catalog,
+                                                        uimodel::track::TrackPresentationPreferenceStore* preferences,
+                                                        ThemeCoordinator* themeController)
   {
-    _presentationStore = store;
+    _catalog = catalog;
     _themeController = themeController;
-    populatePresentationOptions();
-  }
 
-  void TrackPresentationButton::onFocusedViewChanged(rt::ViewId viewId)
-  {
-    _activeViewId = viewId;
-
-    if (_activeViewId == rt::kInvalidViewId)
+    if (_catalog == nullptr || preferences == nullptr)
     {
-      _button.set_sensitive(false);
-      _button.set_label("Presentation");
+      _workflowPtr.reset();
+      render({});
       return;
     }
 
-    _button.set_sensitive(true);
-    auto const state = _runtime.views().trackListState(_activeViewId);
-    auto const& pres = state.presentation;
-
-    auto label = _presentationStore != nullptr ? _presentationStore->labelForId(pres.id) : std::string{pres.id};
-
-    _button.set_label(label);
-    populatePresentationOptions();
+    _workflowPtr = std::make_unique<uimodel::track::TrackPresentationWorkflow>(
+      _runtime.views(),
+      _runtime.workspace(),
+      *_catalog,
+      *preferences,
+      [this](uimodel::track::TrackPresentationPickerState const& state) { render(state); });
+    _workflowPtr->refresh();
   }
 
-  void TrackPresentationButton::populatePresentationOptions()
+  void TrackPresentationButton::render(uimodel::track::TrackPresentationPickerState const& state)
+  {
+    _state = state;
+    _button.set_sensitive(_state.enabled);
+    _button.set_label(_state.label);
+    populatePresentationOptions(_state);
+  }
+
+  void TrackPresentationButton::populatePresentationOptions(uimodel::track::TrackPresentationPickerState const& state)
   {
     auto* child = _menuBox.get_first_child();
 
@@ -93,12 +94,7 @@ namespace ao::gtk
       child = next;
     }
 
-    if (_presentationStore == nullptr)
-    {
-      return;
-    }
-
-    for (auto const& item : _presentationStore->menuItems())
+    for (auto const& item : state.menuItems)
     {
       if (item.type == uimodel::track::TrackPresentationMenuItemType::Separator)
       {
@@ -131,38 +127,36 @@ namespace ao::gtk
   {
     _popover.popdown();
 
-    if (_activeViewId == rt::kInvalidViewId || _presentationStore == nullptr)
+    if (_workflowPtr == nullptr)
     {
       return;
     }
 
-    auto const optSpec = _presentationStore->specForId(presentationId);
+    applyCommand(_workflowPtr->selectPresentation(presentationId));
+  }
 
-    if (!optSpec)
+  void TrackPresentationButton::applyCommand(uimodel::track::TrackPresentationApplyCommand const& command)
+  {
+    if (!command.shouldApply)
     {
       return;
     }
 
-    _button.set_label(_presentationStore->labelForId(presentationId));
-
-    auto spec = rt::TrackPresentationSpec{*optSpec};
-
-    auto const state = _runtime.views().trackListState(_activeViewId);
-
-    if (state.listId != ao::kInvalidListId)
-    {
-      _presentationStore->setPresentationIdForList(state.listId, spec.id);
-    }
-
-    Glib::signal_idle().connect_once([this, spec = std::move(spec)]
-                                     { _runtime.workspace().setActivePresentation(spec); });
+    auto spec = command.spec;
+    _applyPresentationConn.disconnect();
+    _applyPresentationConn = Glib::signal_idle().connect(
+      [this, spec = std::move(spec)]
+      {
+        _runtime.workspace().setActivePresentation(spec);
+        return false;
+      });
   }
 
   void TrackPresentationButton::onCreateCustomViewClicked()
   {
     _popover.popdown();
 
-    if (_activeViewId == rt::kInvalidViewId || _presentationStore == nullptr)
+    if (!_state.enabled || _catalog == nullptr || _workflowPtr == nullptr)
     {
       return;
     }
@@ -174,7 +168,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const state = _runtime.views().trackListState(_activeViewId);
+    auto const state = _runtime.views().trackListState(_state.activeViewId);
     auto const& spec = state.presentation;
 
     auto const label = std::string{_button.get_label()} + " Copy";
@@ -191,20 +185,18 @@ namespace ao::gtk
     {
       if (optResult->deleted)
       {
-        _presentationStore->removeCustomPresentation(optResult->state.spec.id);
+        _catalog->removeCustomPresentation(optResult->state.spec.id);
 
         if (spec.id == optResult->state.spec.id)
         {
-          onPresentationSelected(rt::kDefaultTrackPresentationId);
+          applyCommand(_workflowPtr->selectPresentation(rt::kDefaultTrackPresentationId));
         }
       }
       else
       {
-        _presentationStore->addCustomPresentation(optResult->state);
-        onPresentationSelected(optResult->state.spec.id);
+        _catalog->addCustomPresentation(optResult->state);
+        applyCommand(_workflowPtr->selectPresentation(optResult->state.spec.id));
       }
-
-      populatePresentationOptions();
     }
   }
 } // namespace ao::gtk

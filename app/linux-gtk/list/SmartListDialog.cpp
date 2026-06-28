@@ -275,33 +275,11 @@ namespace ao::gtk
           auto const* title = rowPtr->stringField(rt::TrackField::Title);
           auto const* artist = rowPtr->stringField(rt::TrackField::Artist);
           auto const* album = rowPtr->stringField(rt::TrackField::Album);
-          auto formatted = std::string{"(untitled)"};
+          auto const titleText = title != nullptr ? std::string_view{title->raw()} : std::string_view{};
+          auto const artistText = artist != nullptr ? std::string_view{artist->raw()} : std::string_view{};
+          auto const albumText = album != nullptr ? std::string_view{album->raw()} : std::string_view{};
 
-          if (title != nullptr && !title->empty())
-          {
-            formatted = title->raw();
-
-            if (artist != nullptr && !artist->empty())
-            {
-              formatted = std::format("{} - {}", formatted, artist->raw());
-            }
-
-            if (album != nullptr && !album->empty())
-            {
-              formatted = std::format("{} ({})", formatted, album->raw());
-            }
-          }
-          else if (artist != nullptr && !artist->empty())
-          {
-            formatted = artist->raw();
-
-            if (album != nullptr && !album->empty())
-            {
-              formatted = std::format("{} ({})", formatted, album->raw());
-            }
-          }
-
-          label->set_text(formatted);
+          label->set_text(uimodel::list::SmartListEditorModel::previewTrackLabel(titleText, artistText, albumText));
         }
       });
 

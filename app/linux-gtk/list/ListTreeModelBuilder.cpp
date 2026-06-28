@@ -6,10 +6,9 @@
 #include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
 #include <ao/Type.h>
-#include <ao/rt/CorePrimitives.h>
-#include <ao/rt/ListNode.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/uimodel/list/ListTreeProjection.h>
 
 #include <giomm/listmodel.h>
 #include <giomm/liststore.h>
@@ -18,25 +17,10 @@
 #include <gtkmm/singleselection.h>
 #include <gtkmm/treelistmodel.h>
 
-#include <map>
 #include <memory>
-#include <string>
-#include <vector>
 
 namespace ao::gtk
 {
-  namespace
-  {
-    struct StoredListNode final
-    {
-      ListId id = kInvalidListId;
-      ListId parentId = kInvalidListId;
-      std::string name;
-      bool isSmart = false;
-      std::string localExpression;
-    };
-  } // namespace
-
   ListTreeModelBuilder::Result ListTreeModelBuilder::build(rt::Library const& reads)
   {
     auto result = Result{};
@@ -44,57 +28,41 @@ namespace ao::gtk
 
     auto scope = reads.reader();
     auto const snapshot = scope.lists();
-    auto nodes = std::map<ListId, StoredListNode>{};
+    auto const projection = uimodel::list::buildListTreeProjection(snapshot);
 
-    for (auto const& node : snapshot)
+    for (auto const& [id, row] : projection.rowsById)
     {
-      nodes.emplace(node.id,
-                    StoredListNode{.id = node.id,
-                                   .parentId = node.parentId,
-                                   .name = node.name,
-                                   .isSmart = node.kind == rt::ListNodeKind::Smart,
-                                   .localExpression = node.smartExpression});
-    }
-
-    auto children = std::map<ListId, std::vector<ListId>>{};
-
-    for (auto const& [id, node] : nodes)
-    {
-      if (node.parentId != kInvalidListId && node.parentId != id && nodes.contains(node.parentId))
-      {
-        children[node.parentId].push_back(id);
-      }
-    }
-
-    for (auto const& [id, node] : nodes)
-    {
-      auto listRowPtr = ListRowObject::create(id, node.parentId, 0, node.isSmart, node.name, node.localExpression);
+      auto listRowPtr = ListRowObject::create(id, row.parentId, 0, row.isSmart, row.name, row.localExpression);
       auto treeNodePtr = ListTreeItem::create(listRowPtr);
       result.nodesById[id] = treeNodePtr;
     }
 
-    auto allRowPtr = ListRowObject::create(rt::kAllTracksListId, kInvalidListId, 0, false, "All Tracks");
-    auto allTracksNodePtr = ListTreeItem::create(allRowPtr);
-    result.nodesById[rt::kAllTracksListId] = allTracksNodePtr;
-
-    for (auto const& [id, node] : nodes)
+    for (auto const& [parentId, row] : projection.rowsById)
     {
-      auto childNodePtr = result.nodesById[id];
-      auto parentId = node.parentId;
+      auto const parentIt = result.nodesById.find(parentId);
 
-      if (auto parentIt = result.nodesById.find(parentId); parentIt != result.nodesById.end())
+      if (parentIt == result.nodesById.end())
       {
-        parentIt->second->children()->append(childNodePtr);
-        childNodePtr->setParent(parentIt->second.get());
+        continue;
       }
-      else
+
+      for (auto const childId : row.childIds)
       {
-        allTracksNodePtr->children()->append(childNodePtr);
-        childNodePtr->setParent(allTracksNodePtr.get());
+        if (auto const childIt = result.nodesById.find(childId); childIt != result.nodesById.end())
+        {
+          parentIt->second->children()->append(childIt->second);
+          childIt->second->setParent(parentIt->second.get());
+        }
       }
     }
 
-    result.storePtr->append(allTracksNodePtr);
+    for (auto const rootId : projection.rootIds)
+    {
+      if (auto const rootIt = result.nodesById.find(rootId); rootIt != result.nodesById.end())
+      {
+        result.storePtr->append(rootIt->second);
+      }
+    }
 
     result.treeModelPtr = Gtk::TreeListModel::create(
       result.storePtr,

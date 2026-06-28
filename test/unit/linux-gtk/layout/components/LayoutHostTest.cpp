@@ -15,6 +15,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
+#include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -71,7 +72,7 @@ namespace ao::gtk::layout::test
       CHECK(second != first);
     }
 
-    SECTION("Semantic components registration")
+    SECTION("setLayout renders registered semantic components")
     {
       auto registry2 = ComponentRegistry{};
       LayoutRuntime::registerStandardComponents(registry2);
@@ -83,8 +84,15 @@ namespace ao::gtk::layout::test
       auto ctx2 = LayoutContext{
         .registry = registry2, .actionRegistry = actionRegistry2, .runtime = runtime2, .parentWindow = window2};
 
-      auto const node = LayoutNode{};
-      REQUIRE_NOTHROW(registry2.create(ctx2, node));
+      auto doc = LayoutDocument{};
+      doc.root.type = "status.messageLabel";
+
+      auto host2 = LayoutHost{registry2};
+      host2.setLayout(ctx2, doc);
+
+      auto* const label = dynamic_cast<Gtk::Label*>(host2.get_first_child());
+      REQUIRE(label != nullptr);
+      CHECK(label->get_text() == "Aobus Ready");
     }
   }
 } // namespace ao::gtk::layout::test

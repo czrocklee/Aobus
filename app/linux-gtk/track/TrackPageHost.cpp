@@ -21,8 +21,8 @@
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
+#include <ao/uimodel/track/TrackColumnLayoutStore.h>
 #include <ao/uimodel/track/TrackPageRoute.h>
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
 
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
@@ -44,13 +44,13 @@ namespace ao::gtk
                                ao::uimodel::playback::PlaybackQueueModel* queueModel,
                                TagEditController& tagEditController,
                                ListNavigationController& listNavigation,
-                               uimodel::track::TrackPresentationViewModel& presentationStore)
+                               uimodel::track::TrackColumnLayoutStore& layoutStore)
     : _stack{stack}
     , _runtime{runtime}
     , _playbackQueueModel{queueModel}
     , _tagEditController{tagEditController}
     , _listNavigation{listNavigation}
-    , _presentationStore{presentationStore}
+    , _layoutStore{layoutStore}
   {
     _revealSub = _runtime.playback().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));
 
@@ -315,7 +315,7 @@ namespace ao::gtk
     modelPtr->bindProjection(projPtr);
 
     auto trackPagePtr =
-      std::make_unique<TrackViewPage>(listId, modelPtr, _presentationStore, _runtime, _thumbnailLoader, viewId);
+      std::make_unique<TrackViewPage>(listId, modelPtr, _layoutStore, _runtime, _thumbnailLoader, viewId);
     auto const pageId = std::format("view-{}", viewId.raw());
 
     auto listName = std::string{"List"};

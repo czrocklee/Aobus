@@ -11,7 +11,7 @@
 
 namespace ao::uimodel::playback
 {
-  TEST_CASE("AudioQualityFormat - audioNodeTypeLabel", "[uimodel][playback]")
+  TEST_CASE("AudioQualityFormat - audioNodeTypeLabel", "[uimodel][unit][playback]")
   {
     CHECK(audioNodeTypeLabel(audio::flow::NodeType::Source) == "[Source]");
     CHECK(audioNodeTypeLabel(audio::flow::NodeType::Decoder) == "[Decoder]");
@@ -22,7 +22,7 @@ namespace ao::uimodel::playback
     CHECK(audioNodeTypeLabel(audio::flow::NodeType::ExternalSource) == "[Other Source]");
   }
 
-  TEST_CASE("AudioQualityFormat - audioFormatLabel", "[uimodel][playback]")
+  TEST_CASE("AudioQualityFormat - audioFormatLabel", "[uimodel][unit][playback]")
   {
     auto format = audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16};
     CHECK(audioFormatLabel(format) == "44.1 kHz · 16-bit · Stereo");
@@ -53,7 +53,7 @@ namespace ao::uimodel::playback
     CHECK(audioFormatLabel(format, true) == "44.1 kHz · 32-bit · Stereo");
   }
 
-  TEST_CASE("AudioQualityFormat - qualityForFinding", "[uimodel][playback]")
+  TEST_CASE("AudioQualityFormat - qualityForFinding", "[uimodel][unit][playback]")
   {
     CHECK(qualityForFinding(audio::QualityFinding{.kind = audio::QualityFindingKind::BitPerfect}) ==
           audio::Quality::BitwisePerfect);
@@ -73,7 +73,7 @@ namespace ao::uimodel::playback
           audio::Quality::LosslessFloat);
   }
 
-  TEST_CASE("AudioQualityFormat - playbackPath", "[uimodel][playback]")
+  TEST_CASE("AudioQualityFormat - playbackPath", "[uimodel][unit][playback]")
   {
     auto graph = audio::flow::Graph{};
 

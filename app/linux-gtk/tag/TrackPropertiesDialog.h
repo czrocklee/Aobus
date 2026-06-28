@@ -7,6 +7,8 @@
 #include "track/TrackFieldUi.h"
 #include <ao/Type.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/tag/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/tag/TrackPropertiesFormWorkflow.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>
@@ -51,10 +53,8 @@ namespace ao::gtk
   private:
     struct FieldEditor final
     {
-      rt::TrackField field;
+      uimodel::tag::TrackPropertiesFormFieldState state;
       Gtk::Widget* widget = nullptr;
-      bool mixed = false;
-      TrackFieldRawValue originalRawValue{};
     };
 
     struct CompletionControllerBinding final
@@ -71,7 +71,7 @@ namespace ao::gtk
     void loadSubsequentTrack(rt::LibraryReader const& scope, TrackId trackId);
     void onSave();
 
-    Gtk::Widget* createEditorWidget(rt::TrackField field);
+    Gtk::Widget* createEditorWidget(rt::TrackField field, uimodel::tag::TrackPropertiesFormEditorKind editorKind);
     Gtk::Widget* createReadonlyWidget(rt::TrackField field);
     void setWidgetValue(rt::TrackField field, Gtk::Widget* widget, std::string_view value);
     void setEditorMixed(rt::TrackField field, Gtk::Widget* widget);

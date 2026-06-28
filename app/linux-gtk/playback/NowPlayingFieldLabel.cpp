@@ -3,7 +3,6 @@
 
 #include "playback/NowPlayingFieldLabel.h"
 
-#include <ao/audio/Types.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
@@ -80,17 +79,9 @@ namespace ao::gtk
     {
       case Type::Reveal: _runtime.playback().revealPlayingTrack(); break;
 
-      case Type::PlayPause:
-        if (_runtime.playback().state().transport == audio::Transport::Playing)
-        {
-          _runtime.playback().pause();
-        }
-        else
-        {
-          _runtime.playback().resume();
-        }
+      case Type::Pause: _runtime.playback().pause(); break;
 
-        break;
+      case Type::Resume: _runtime.playback().resume(); break;
 
       case Type::Navigate:
         APP_LOG_DEBUG("[PID {}] NowPlayingFieldLabel: Navigating to query: {}", getpid(), cmd.navigateQuery);

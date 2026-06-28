@@ -7,7 +7,7 @@
 
 namespace ao::uimodel::input::test
 {
-  TEST_CASE("KeyChord parse modifiers and key", "[input][unit][keychord]")
+  TEST_CASE("KeyChord parse returns modifiers and key", "[uimodel][unit][input][keychord]")
   {
     SECTION("plain key")
     {
@@ -64,7 +64,7 @@ namespace ao::uimodel::input::test
     }
   }
 
-  TEST_CASE("KeyChord parse rejects malformed input", "[input][unit][keychord]")
+  TEST_CASE("KeyChord parse rejects malformed input", "[uimodel][unit][input][keychord]")
   {
     CHECK(KeyChord::parse("").has_value() == false);
     CHECK(KeyChord::parse("   ").has_value() == false);
@@ -72,7 +72,7 @@ namespace ao::uimodel::input::test
     CHECK(KeyChord::parse("Bogus+P").has_value() == false);
   }
 
-  TEST_CASE("KeyChord toString is canonical", "[input][unit][keychord]")
+  TEST_CASE("KeyChord toString returns canonical text", "[uimodel][unit][input][keychord]")
   {
     SECTION("modifier order is Ctrl, Shift, Alt, Super")
     {
@@ -86,7 +86,7 @@ namespace ao::uimodel::input::test
     }
   }
 
-  TEST_CASE("KeyChord round-trips through parse/toString", "[input][unit][keychord]")
+  TEST_CASE("KeyChord round-trips through parse and toString", "[uimodel][unit][input][keychord]")
   {
     for (auto const* text :
          {"Ctrl+P", "Ctrl+Shift+Right", "Media:Next", "F5", "Super+Q", "+", "Ctrl++", "Ctrl+Shift++"})
@@ -97,7 +97,7 @@ namespace ao::uimodel::input::test
     }
   }
 
-  TEST_CASE("KeyChord parses the '+' key despite the separator collision", "[input][unit][keychord]")
+  TEST_CASE("KeyChord parses the '+' key despite the separator collision", "[uimodel][unit][input][keychord]")
   {
     SECTION("bare plus")
     {
@@ -123,7 +123,7 @@ namespace ao::uimodel::input::test
     }
   }
 
-  TEST_CASE("KeyChord equality compares modifiers and key", "[input][unit][keychord]")
+  TEST_CASE("KeyChord equality compares modifiers and key", "[uimodel][unit][input][keychord]")
   {
     CHECK(KeyChord::parse("Ctrl+P") == KeyChord::parse("primary+p"));
     CHECK_FALSE(KeyChord::parse("Ctrl+P") == KeyChord::parse("Ctrl+Shift+P"));

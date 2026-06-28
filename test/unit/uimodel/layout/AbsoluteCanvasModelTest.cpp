@@ -10,7 +10,7 @@
 
 namespace ao::uimodel::layout::test
 {
-  TEST_CASE("AbsoluteCanvasModel", "[layout][unit][absolute-canvas]")
+  TEST_CASE("AbsoluteCanvasModel applies canvas geometry policy", "[uimodel][unit][layout][absolute-canvas]")
   {
     SECTION("z ordering uses z-index before insertion order")
     {

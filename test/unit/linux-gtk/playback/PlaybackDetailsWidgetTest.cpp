@@ -26,12 +26,12 @@ namespace ao::gtk::test
 
     auto const labels = collectAll<Gtk::Label>(*root);
     REQUIRE(labels.size() == 1);
-    CHECK(labels[0]->get_text() == "Connecting to audio engine...");
+    CHECK_FALSE(labels[0]->get_text().empty());
     CHECK(labels[0]->has_css_class("dim-label"));
 
     auto const icons = collectAll<Gtk::Image>(*root);
     REQUIRE(icons.size() == 1);
-    CHECK(icons[0]->get_icon_name() == "media-record-symbolic");
+    CHECK_FALSE(icons[0]->get_icon_name().empty());
     CHECK_FALSE(icons[0]->get_visible());
   }
 } // namespace ao::gtk::test

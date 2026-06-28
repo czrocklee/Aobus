@@ -7,17 +7,17 @@
 
 #include <string_view>
 
-namespace ao::gtk::layout::track_selection_region
+namespace ao::uimodel::layout
 {
-  struct SelectionRegionPresentation final
+  struct TrackSelectionRegionPresentation final
   {
     bool visible = false;
     bool sensitive = false;
   };
 
-  constexpr SelectionRegionPresentation presentationForSelection(rt::SelectionKind const selectionKind,
-                                                                 std::string_view const showWhen,
-                                                                 bool const showPlaceholder)
+  constexpr TrackSelectionRegionPresentation presentationForTrackSelectionRegion(rt::SelectionKind const selectionKind,
+                                                                                 std::string_view const showWhen,
+                                                                                 bool const showPlaceholder)
   {
     bool const hasSelection = selectionKind != rt::SelectionKind::None;
     bool visible = false;
@@ -39,6 +39,6 @@ namespace ao::gtk::layout::track_selection_region
       visible = hasSelection || showPlaceholder;
     }
 
-    return SelectionRegionPresentation{.visible = visible, .sensitive = hasSelection || !showPlaceholder};
+    return TrackSelectionRegionPresentation{.visible = visible, .sensitive = hasSelection || !showPlaceholder};
   }
-} // namespace ao::gtk::layout::track_selection_region
+} // namespace ao::uimodel::layout

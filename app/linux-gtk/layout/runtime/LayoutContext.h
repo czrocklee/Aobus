@@ -50,7 +50,8 @@ namespace ao::uimodel::playback
 
 namespace ao::uimodel::track
 {
-  class TrackPresentationViewModel;
+  class TrackPresentationCatalog;
+  class TrackPresentationPreferenceStore;
 }
 
 namespace ao::gtk
@@ -67,7 +68,8 @@ namespace ao::gtk::layout
   struct TrackUiContext final
   {
     TrackPageHost* pageHost = nullptr;
-    uimodel::track::TrackPresentationViewModel* presentationStore = nullptr;
+    uimodel::track::TrackPresentationCatalog* presentationCatalog = nullptr;
+    uimodel::track::TrackPresentationPreferenceStore* presentationPreferences = nullptr;
     TrackRowCache* trackRowCache = nullptr;
     ITrackDetailScope* detailScope = nullptr;
   };
@@ -124,7 +126,8 @@ namespace ao::gtk::layout
                            GtkUiServices const& services)
   {
     track.pageHost = services.trackPageHost;
-    track.presentationStore = services.trackPresentationStore;
+    track.presentationCatalog = services.trackPresentationCatalog;
+    track.presentationPreferences = services.trackPresentationPreferences;
     track.trackRowCache = services.trackRowCache;
     list.navigationController = services.listNavigationController;
     playback.queueModel = services.playbackQueueModel;

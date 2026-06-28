@@ -17,9 +17,9 @@ namespace ao::uimodel::tag
 {
   struct TagEditRequest final
   {
-    std::vector<TrackId> selectedIds;
-    std::vector<std::string> tagsToAdd;
-    std::vector<std::string> tagsToRemove;
+    std::vector<TrackId> selectedIds = {};
+    std::vector<std::string> tagsToAdd = {};
+    std::vector<std::string> tagsToRemove = {};
   };
 
   struct TagEditResult final

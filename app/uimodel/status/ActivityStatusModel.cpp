@@ -178,6 +178,43 @@ namespace ao::uimodel::status
     return !detail.items.empty() || detail.optLibraryTask;
   }
 
+  std::vector<ActivityResolvedActionView> resolveActivityActionViews(
+    std::vector<ActivityActionView> const& actions,
+    ActivityActionAvailabilityResolver const& resolveAction,
+    std::size_t const maxVisibleActions)
+  {
+    auto result = std::vector<ActivityResolvedActionView>{};
+
+    if (!resolveAction || maxVisibleActions == 0)
+    {
+      return result;
+    }
+
+    result.reserve(std::min(actions.size(), maxVisibleActions));
+
+    for (auto const& action : actions)
+    {
+      if (result.size() >= maxVisibleActions)
+      {
+        break;
+      }
+
+      auto state = resolveAction(action.id, action.label);
+
+      if (!state.visible || state.label.empty())
+      {
+        continue;
+      }
+
+      result.push_back(ActivityResolvedActionView{.id = action.id,
+                                                  .enabled = state.enabled,
+                                                  .label = std::move(state.label),
+                                                  .disabledReason = std::move(state.disabledReason)});
+    }
+
+    return result;
+  }
+
   void ActivityStatusModel::initialize(rt::NotificationFeedState const& feed)
   {
     projectDetail(feed);

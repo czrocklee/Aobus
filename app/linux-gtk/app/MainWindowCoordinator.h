@@ -22,7 +22,8 @@ namespace ao::uimodel::playback
 }
 namespace ao::uimodel::track
 {
-  class TrackPresentationViewModel;
+  class TrackPresentationCatalog;
+  class TrackPresentationPreferenceStore;
 }
 namespace ao::gtk
 {
@@ -69,7 +70,8 @@ namespace ao::gtk
     portal::ImportExportCoordinator* importExportCoordinator();
     TrackPageHost* trackPageHost();
     ListNavigationController* listNavigationController();
-    uimodel::track::TrackPresentationViewModel* trackPresentationStore();
+    uimodel::track::TrackPresentationCatalog* trackPresentationCatalog();
+    uimodel::track::TrackPresentationPreferenceStore* trackPresentationPreferences();
     ThemeCoordinator* themeController();
 
     portal::ImportExportCoordinator& importExport();
@@ -89,5 +91,6 @@ namespace ao::gtk
     rt::Subscription _libraryTaskCompletedSubscription;
     rt::Subscription _listsMutatedSubscription;
     rt::Subscription _trackPresentationChangedSubscription;
+    rt::Subscription _trackColumnLayoutChangedSubscription;
   };
 } // namespace ao::gtk

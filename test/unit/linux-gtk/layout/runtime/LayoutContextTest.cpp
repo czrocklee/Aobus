@@ -39,7 +39,8 @@ namespace ao::gtk::layout::test
       .tagEditController = sentinelPtr<TagEditController>(0x4000),
       .importExportCoordinator = sentinelPtr<portal::ImportExportActions>(0x5000),
       .trackPageHost = sentinelPtr<TrackPageHost>(0x6000),
-      .trackPresentationStore = sentinelPtr<uimodel::track::TrackPresentationViewModel>(0x7000),
+      .trackPresentationCatalog = sentinelPtr<uimodel::track::TrackPresentationCatalog>(0x7000),
+      .trackPresentationPreferences = sentinelPtr<uimodel::track::TrackPresentationPreferenceStore>(0x7100),
       .listNavigationController = sentinelPtr<ListNavigationController>(0x8000),
       .themeController = sentinelPtr<ThemeCoordinator>(0x9000),
     };
@@ -47,7 +48,8 @@ namespace ao::gtk::layout::test
     bindServices(track, list, playback, detail, tag, portal, theme, services);
 
     CHECK(track.pageHost == sentinelPtr<TrackPageHost>(0x6000));
-    CHECK(track.presentationStore == sentinelPtr<uimodel::track::TrackPresentationViewModel>(0x7000));
+    CHECK(track.presentationCatalog == sentinelPtr<uimodel::track::TrackPresentationCatalog>(0x7000));
+    CHECK(track.presentationPreferences == sentinelPtr<uimodel::track::TrackPresentationPreferenceStore>(0x7100));
     CHECK(track.trackRowCache == sentinelPtr<TrackRowCache>(0x1000));
     CHECK(list.navigationController == sentinelPtr<ListNavigationController>(0x8000));
     CHECK(playback.queueModel == sentinelPtr<uimodel::playback::PlaybackQueueModel>(0x3000));

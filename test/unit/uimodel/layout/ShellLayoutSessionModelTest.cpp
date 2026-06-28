@@ -52,7 +52,7 @@ namespace ao::uimodel::layout::test
     }
   } // namespace
 
-  TEST_CASE("ShellLayoutSessionModel manages reusable layout session policy", "[layout][unit][shell-session]")
+  TEST_CASE("ShellLayoutSessionModel manages reusable layout session policy", "[uimodel][unit][layout][shell-session]")
   {
     SECTION("preset selection accepts supported ids and falls back for unknown non-empty ids")
     {

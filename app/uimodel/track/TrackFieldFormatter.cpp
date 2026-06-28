@@ -3,6 +3,9 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackFieldValue.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/track/TrackFieldFormatter.h>
 
 #include <charconv>
@@ -15,11 +18,62 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <variant>
 
 namespace ao::uimodel::track
 {
   namespace
   {
+    std::string readRawText(rt::TrackFieldRawValue const& rawValue)
+    {
+      if (auto const* text = std::get_if<std::string>(&rawValue); text != nullptr)
+      {
+        return *text;
+      }
+
+      return {};
+    }
+
+    std::string readRawUint16(rt::TrackFieldRawValue const& rawValue)
+    {
+      if (auto const* value = std::get_if<std::uint16_t>(&rawValue); value != nullptr)
+      {
+        return formatUint16(*value);
+      }
+
+      return {};
+    }
+
+    std::string readRawUint32(rt::TrackFieldRawValue const& rawValue, std::string (*formatter)(std::uint32_t))
+    {
+      if (auto const* value = std::get_if<std::uint32_t>(&rawValue); value != nullptr)
+      {
+        return formatter(*value);
+      }
+
+      return {};
+    }
+
+    std::string readRawUint64(rt::TrackFieldRawValue const& rawValue, std::string (*formatter)(std::uint64_t))
+    {
+      if (auto const* value = std::get_if<std::uint64_t>(&rawValue); value != nullptr)
+      {
+        return formatter(*value);
+      }
+
+      return {};
+    }
+
+    std::string readRawUint32AsUint8(rt::TrackFieldRawValue const& rawValue, std::string (*formatter)(std::uint8_t))
+    {
+      if (auto const* value = std::get_if<std::uint32_t>(&rawValue); value != nullptr)
+      {
+        return formatter(static_cast<std::uint8_t>(*value));
+      }
+
+      return {};
+    }
+
     std::string_view trimAsciiWhitespace(std::string_view value)
     {
       auto const first = value.find_first_not_of(" \t\n\r\f\v");
@@ -168,6 +222,135 @@ namespace ao::uimodel::track
     }
 
     return std::string{audioCodecName(codec)};
+  }
+
+  std::string formatDisplayTrackNumber(std::uint16_t discNumber, std::uint16_t discTotal, std::uint16_t trackNumber)
+  {
+    if (trackNumber == 0)
+    {
+      return {};
+    }
+
+    if (discTotal > 1 && discNumber != 0)
+    {
+      return std::format("{}-{}", discNumber, trackNumber);
+    }
+
+    return std::format("{}", trackNumber);
+  }
+
+  std::string formatTechnicalSummary(AudioCodec codec, std::uint32_t sampleRate, std::uint16_t bitDepth)
+  {
+    auto codecText = formatCodec(codec);
+    auto rateText = formatSampleRateCompact(sampleRate);
+    auto depthText = bitDepth == 0 ? std::string{} : std::format("{}-bit", bitDepth);
+
+    if (!codecText.empty() && rateText.empty() && depthText.empty())
+    {
+      return codecText;
+    }
+
+    if (!codecText.empty() && rateText.empty())
+    {
+      return std::format("{} · {}", codecText, depthText);
+    }
+
+    if (!codecText.empty() && depthText.empty())
+    {
+      return std::format("{} · {}", codecText, rateText);
+    }
+
+    if (codecText.empty())
+    {
+      if (rateText.empty())
+      {
+        return depthText;
+      }
+
+      if (depthText.empty())
+      {
+        return rateText;
+      }
+
+      return std::format("{} \u00b7 {}", rateText, depthText);
+    }
+
+    return std::format("{} \u00b7 {} \u00b7 {}", codecText, rateText, depthText);
+  }
+
+  std::string formatTrackFieldRawValue(rt::TrackField field, rt::TrackFieldRawValue const& rawValue)
+  {
+    using F = rt::TrackField;
+
+    switch (field)
+    {
+      case F::Title:
+      case F::Artist:
+      case F::Album:
+      case F::AlbumArtist:
+      case F::Genre:
+      case F::Composer:
+      case F::Work:
+      case F::Movement:
+      case F::Tags:
+      case F::FilePath:
+      case F::Codec:
+      case F::DisplayTrackNumber:
+      case F::TechnicalSummary: return readRawText(rawValue);
+
+      case F::Year:
+      case F::DiscNumber:
+      case F::DiscTotal:
+      case F::TrackNumber:
+      case F::TrackTotal:
+      case F::MovementNumber:
+      case F::MovementTotal: return readRawUint16(rawValue);
+
+      case F::Duration:
+        if (auto const* duration = std::get_if<rt::TrackFieldDuration>(&rawValue); duration != nullptr)
+        {
+          return formatDuration(*duration);
+        }
+
+        return {};
+
+      case F::SampleRate: return readRawUint32(rawValue, formatSampleRate);
+      case F::Channels: return readRawUint32AsUint8(rawValue, formatChannels);
+      case F::BitDepth: return readRawUint32AsUint8(rawValue, formatBitDepth);
+      case F::Bitrate: return readRawUint32(rawValue, formatBitrate);
+      case F::FileSize: return readRawUint64(rawValue, formatFileSize);
+      case F::ModifiedTime: return readRawUint64(rawValue, formatTime);
+
+      case F::Quality: return {};
+    }
+
+    return {};
+  }
+
+  std::string displayTextForTrackField(rt::TrackField field,
+                                       rt::TrackDetailSnapshot const& snap,
+                                       std::string_view mixedText,
+                                       bool showTechnicalUnknown)
+  {
+    auto const& agg = rt::trackFieldArrayAt(snap.fields, field);
+    auto const* def = rt::trackFieldDefinition(field);
+
+    if (agg.mixed)
+    {
+      return std::string{mixedText};
+    }
+
+    if (!agg.optValue)
+    {
+      if (showTechnicalUnknown && def != nullptr && def->category == rt::TrackFieldCategory::Technical)
+      {
+        return "Unknown";
+      }
+
+      return {};
+    }
+
+    return formatTrackFieldRawValue(field, *agg.optValue);
   }
 
   TrackFieldEditValue makeTextEditValue(std::string_view value)

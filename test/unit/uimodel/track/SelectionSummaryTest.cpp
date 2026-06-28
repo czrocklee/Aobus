@@ -10,7 +10,7 @@
 
 namespace ao::uimodel::track::test
 {
-  TEST_CASE("selectionSummaryText - count text", "[uimodel][track][selection]")
+  TEST_CASE("selectionSummaryText returns count text", "[uimodel][unit][track][selection]")
   {
     CHECK(selectionSummaryText(0).empty());
     CHECK(selectionSummaryText(1) == "1 item selected");
@@ -18,20 +18,20 @@ namespace ao::uimodel::track::test
     CHECK(selectionSummaryText(42) == "42 items selected");
   }
 
-  TEST_CASE("selectionSummaryText - appends positive duration", "[uimodel][track][selection]")
+  TEST_CASE("selectionSummaryText appends positive duration", "[uimodel][unit][track][selection]")
   {
     // formatDuration: 200s -> "3:20", 300s -> "5:00".
     CHECK(selectionSummaryText(1, std::chrono::seconds{200}) == "1 item selected (3:20)");
     CHECK(selectionSummaryText(2, std::chrono::seconds{300}) == "2 items selected (5:00)");
   }
 
-  TEST_CASE("selectionSummaryText - non-positive duration adds nothing", "[uimodel][track][selection]")
+  TEST_CASE("selectionSummaryText ignores non-positive duration", "[uimodel][unit][track][selection]")
   {
     CHECK(selectionSummaryText(2, std::chrono::milliseconds{0}) == "2 items selected");
     CHECK(selectionSummaryText(2, std::nullopt) == "2 items selected");
   }
 
-  TEST_CASE("selectionSummaryText - empty selection ignores duration", "[uimodel][track][selection]")
+  TEST_CASE("selectionSummaryText ignores duration for empty selection", "[uimodel][unit][track][selection]")
   {
     CHECK(selectionSummaryText(0, std::chrono::seconds{200}).empty());
   }

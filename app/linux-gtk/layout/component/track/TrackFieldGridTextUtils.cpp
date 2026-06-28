@@ -3,9 +3,9 @@
 
 #include "layout/component/track/TrackFieldGridTextUtils.h"
 
-#include "track/TrackFieldUi.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/uimodel/track/TrackInlineEditWorkflow.h>
 
 #include <glib.h>
 #include <glibmm/miscutils.h>
@@ -37,49 +37,11 @@ namespace ao::gtk::layout::track_field_grid
     return std::string{validPtr.get()};
   }
 
-  std::string displayTextForField(rt::TrackField field,
-                                  rt::TrackDetailSnapshot const& snap,
-                                  std::string_view mixedText,
-                                  bool showTechnicalUnknown)
-  {
-    auto const& agg = rt::trackFieldArrayAt(snap.fields, field);
-    auto const* uiDef = trackFieldUiDefinition(field);
-    auto const* def = rt::trackFieldDefinition(field);
-
-    if (agg.mixed)
-    {
-      return std::string{mixedText};
-    }
-
-    if (!agg.optValue)
-    {
-      if (showTechnicalUnknown && def != nullptr && def->category == rt::TrackFieldCategory::Technical)
-      {
-        return "Unknown";
-      }
-
-      return {};
-    }
-
-    if (uiDef != nullptr && uiDef->formatValue != nullptr)
-    {
-      return uiDef->formatValue(*agg.optValue);
-    }
-
-    return {};
-  }
-
   bool isProtectedFieldEditValue(rt::TrackField field,
                                  rt::TrackDetailSnapshot const& snap,
                                  std::string_view newValue,
                                  bool protectCompositeMixedText)
   {
-    if (newValue == kMultipleValuesText)
-    {
-      return true;
-    }
-
-    auto const& agg = rt::trackFieldArrayAt(snap.fields, field);
-    return protectCompositeMixedText && agg.mixed && newValue == kCompositeMixedText;
+    return uimodel::track::isProtectedInlineEditText(field, snap, newValue, protectCompositeMixedText);
   }
 } // namespace ao::gtk::layout::track_field_grid

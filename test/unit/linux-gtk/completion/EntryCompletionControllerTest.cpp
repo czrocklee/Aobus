@@ -26,7 +26,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -71,7 +70,7 @@ namespace ao::gtk::test
       {
         providerCalled = true;
         CHECK(text == std::string_view{"你 $al"});
-        CHECK(cursor == std::string{"你 $al"}.size());
+        CHECK(cursor == std::string_view{"你 $al"}.size());
 
         auto items = std::vector<rt::CompletionItem>{};
         items.push_back(rt::CompletionItem{
@@ -81,8 +80,8 @@ namespace ao::gtk::test
           .rank = 0,
         });
         return rt::CompletionResult{
-          .replaceBegin = std::string{"你 "}.size(),
-          .replaceEnd = std::string{"你 $al"}.size(),
+          .replaceBegin = std::string_view{"你 "}.size(),
+          .replaceEnd = std::string_view{"你 $al"}.size(),
           .items = std::move(items),
         };
       }};
@@ -120,7 +119,7 @@ namespace ao::gtk::test
           .rank = 0,
         });
         return rt::CompletionResult{
-          .replaceBegin = 0, .replaceEnd = std::string{"$al"}.size(), .items = std::move(items)};
+          .replaceBegin = 0, .replaceEnd = std::string_view{"$al"}.size(), .items = std::move(items)};
       }};
 
     controller.update();
@@ -143,20 +142,20 @@ namespace ao::gtk::test
     entry.set_text("$al");
     entry.set_position(charCount("$al"));
 
-    auto controller = EntryCompletionController{entry,
-                                                [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
-                                                {
-                                                  auto items = std::vector<rt::CompletionItem>{};
-                                                  items.push_back(rt::CompletionItem{
-                                                    .displayText = "$album",
-                                                    .insertText = "$album",
-                                                    .detail = "",
-                                                    .rank = 0,
-                                                  });
-                                                  return rt::CompletionResult{.replaceBegin = 0,
-                                                                              .replaceEnd = std::string{"$al"}.size(),
-                                                                              .items = std::move(items)};
-                                                }};
+    auto controller = EntryCompletionController{
+      entry,
+      [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
+      {
+        auto items = std::vector<rt::CompletionItem>{};
+        items.push_back(rt::CompletionItem{
+          .displayText = "$album",
+          .insertText = "$album",
+          .detail = "",
+          .rank = 0,
+        });
+        return rt::CompletionResult{
+          .replaceBegin = 0, .replaceEnd = std::string_view{"$al"}.size(), .items = std::move(items)};
+      }};
 
     auto* const popover = findCompletionPopover(entry);
     REQUIRE(popover != nullptr);
@@ -186,20 +185,20 @@ namespace ao::gtk::test
     entry.set_text("$al");
     entry.set_position(charCount("$al"));
 
-    auto controller = EntryCompletionController{entry,
-                                                [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
-                                                {
-                                                  auto items = std::vector<rt::CompletionItem>{};
-                                                  items.push_back(rt::CompletionItem{
-                                                    .displayText = "$album",
-                                                    .insertText = "$album",
-                                                    .detail = "field",
-                                                    .rank = 0,
-                                                  });
-                                                  return rt::CompletionResult{.replaceBegin = 0,
-                                                                              .replaceEnd = std::string{"$al"}.size(),
-                                                                              .items = std::move(items)};
-                                                }};
+    auto controller = EntryCompletionController{
+      entry,
+      [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
+      {
+        auto items = std::vector<rt::CompletionItem>{};
+        items.push_back(rt::CompletionItem{
+          .displayText = "$album",
+          .insertText = "$album",
+          .detail = "field",
+          .rank = 0,
+        });
+        return rt::CompletionResult{
+          .replaceBegin = 0, .replaceEnd = std::string_view{"$al"}.size(), .items = std::move(items)};
+      }};
 
     auto* const popover = findCompletionPopover(entry);
     REQUIRE(popover != nullptr);
@@ -248,7 +247,7 @@ namespace ao::gtk::test
         }
 
         return rt::CompletionResult{
-          .replaceBegin = 0, .replaceEnd = std::string{"$"}.size(), .items = std::move(items)};
+          .replaceBegin = 0, .replaceEnd = std::string_view{"$"}.size(), .items = std::move(items)};
       }};
 
     controller.update();
@@ -271,20 +270,20 @@ namespace ao::gtk::test
     entry.set_text("$al");
     entry.set_position(charCount("$al"));
 
-    auto controller = EntryCompletionController{entry,
-                                                [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
-                                                {
-                                                  auto items = std::vector<rt::CompletionItem>{};
-                                                  items.push_back(rt::CompletionItem{
-                                                    .displayText = "$album",
-                                                    .insertText = "$album",
-                                                    .detail = "",
-                                                    .rank = 0,
-                                                  });
-                                                  return rt::CompletionResult{.replaceBegin = 0,
-                                                                              .replaceEnd = std::string{"$al"}.size(),
-                                                                              .items = std::move(items)};
-                                                }};
+    auto controller = EntryCompletionController{
+      entry,
+      [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
+      {
+        auto items = std::vector<rt::CompletionItem>{};
+        items.push_back(rt::CompletionItem{
+          .displayText = "$album",
+          .insertText = "$album",
+          .detail = "",
+          .rank = 0,
+        });
+        return rt::CompletionResult{
+          .replaceBegin = 0, .replaceEnd = std::string_view{"$al"}.size(), .items = std::move(items)};
+      }};
 
     controller.update();
     REQUIRE(emitFocusLeave(entry));
@@ -304,20 +303,20 @@ namespace ao::gtk::test
     entry.set_text("$al");
     entry.set_position(charCount("$al"));
 
-    auto controller = EntryCompletionController{entry,
-                                                [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
-                                                {
-                                                  auto items = std::vector<rt::CompletionItem>{};
-                                                  items.push_back(rt::CompletionItem{
-                                                    .displayText = "$album",
-                                                    .insertText = "$album",
-                                                    .detail = "",
-                                                    .rank = 0,
-                                                  });
-                                                  return rt::CompletionResult{.replaceBegin = 0,
-                                                                              .replaceEnd = std::string{"$al"}.size(),
-                                                                              .items = std::move(items)};
-                                                }};
+    auto controller = EntryCompletionController{
+      entry,
+      [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
+      {
+        auto items = std::vector<rt::CompletionItem>{};
+        items.push_back(rt::CompletionItem{
+          .displayText = "$album",
+          .insertText = "$album",
+          .detail = "",
+          .rank = 0,
+        });
+        return rt::CompletionResult{
+          .replaceBegin = 0, .replaceEnd = std::string_view{"$al"}.size(), .items = std::move(items)};
+      }};
 
     auto* const popover = findCompletionPopover(entry);
     REQUIRE(popover != nullptr);
@@ -343,20 +342,20 @@ namespace ao::gtk::test
     entry.set_text("$al");
     entry.set_position(charCount("$al"));
 
-    auto controller = EntryCompletionController{entry,
-                                                [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
-                                                {
-                                                  auto items = std::vector<rt::CompletionItem>{};
-                                                  items.push_back(rt::CompletionItem{
-                                                    .displayText = "$album",
-                                                    .insertText = "$album",
-                                                    .detail = "",
-                                                    .rank = 0,
-                                                  });
-                                                  return rt::CompletionResult{.replaceBegin = 0,
-                                                                              .replaceEnd = std::string{"$al"}.size(),
-                                                                              .items = std::move(items)};
-                                                }};
+    auto controller = EntryCompletionController{
+      entry,
+      [](std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
+      {
+        auto items = std::vector<rt::CompletionItem>{};
+        items.push_back(rt::CompletionItem{
+          .displayText = "$album",
+          .insertText = "$album",
+          .detail = "",
+          .rank = 0,
+        });
+        return rt::CompletionResult{
+          .replaceBegin = 0, .replaceEnd = std::string_view{"$al"}.size(), .items = std::move(items)};
+      }};
 
     auto* const popover = findCompletionPopover(entry);
     REQUIRE(popover != nullptr);

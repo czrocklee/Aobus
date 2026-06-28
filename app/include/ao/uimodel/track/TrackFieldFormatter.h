@@ -5,6 +5,9 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackFieldValue.h>
+#include <ao/rt/projection/ProjectionTypes.h>
 
 #include <chrono>
 #include <cstdint>
@@ -19,6 +22,9 @@ namespace ao::library
 
 namespace ao::uimodel::track
 {
+  inline constexpr std::string_view kMultipleTrackValuesText = "<Multiple Values>";
+  inline constexpr std::string_view kCompositeMixedTrackText = "-";
+
   using TrackFieldEditValue = std::variant<std::monostate, std::string, std::uint16_t>;
 
   std::string formatDuration(std::chrono::milliseconds duration);
@@ -31,6 +37,13 @@ namespace ao::uimodel::track
   std::string formatChannels(std::uint8_t channels);
   std::string formatBitDepth(std::uint8_t bitDepth);
   std::string formatCodec(AudioCodec codec);
+  std::string formatDisplayTrackNumber(std::uint16_t discNumber, std::uint16_t discTotal, std::uint16_t trackNumber);
+  std::string formatTechnicalSummary(AudioCodec codec, std::uint32_t sampleRate, std::uint16_t bitDepth);
+  std::string formatTrackFieldRawValue(rt::TrackField field, rt::TrackFieldRawValue const& rawValue);
+  std::string displayTextForTrackField(rt::TrackField field,
+                                       rt::TrackDetailSnapshot const& snap,
+                                       std::string_view mixedText,
+                                       bool showTechnicalUnknown);
 
   TrackFieldEditValue makeTextEditValue(std::string_view value);
   Result<TrackFieldEditValue> parseTextEditValue(std::string_view value);

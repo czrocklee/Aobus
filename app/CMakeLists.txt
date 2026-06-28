@@ -53,6 +53,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/input/KeymapModel.cpp
     uimodel/input/KeymapStore.cpp
     uimodel/list/ListActionPolicy.cpp
+    uimodel/list/ListTreeProjection.cpp
     uimodel/list/SmartListEditorModel.cpp
     uimodel/playback/AobusSoulViewModel.cpp
     uimodel/playback/AudioOutputViewModel.cpp
@@ -66,16 +67,26 @@ add_library(ao_app_uimodel STATIC
     uimodel/playback/TransportViewModel.cpp
     uimodel/playback/VolumeViewModel.cpp
     uimodel/status/ActivityStatusModel.cpp
+    uimodel/track/TrackCustomPropertyWorkflow.cpp
     uimodel/track/TrackCustomViewEditorModel.cpp
     uimodel/track/TrackPageRoute.cpp
     uimodel/track/TrackFilterViewModel.cpp
     uimodel/track/TrackFilterResolver.cpp
     uimodel/track/TrackInlineEditWorkflow.cpp
-    uimodel/track/TrackPresentationViewModel.cpp
+    uimodel/track/TrackFieldEditPolicy.cpp
+    uimodel/track/TrackFieldGridProjection.cpp
+    uimodel/track/TrackFieldPresentationPolicy.cpp
+    uimodel/track/TrackColumnLayoutPolicy.cpp
+    uimodel/track/TrackColumnLayoutStore.cpp
+    uimodel/track/TrackPresentationCatalog.cpp
+    uimodel/track/TrackPresentationPreferenceStore.cpp
     uimodel/track/TrackPresentationRecommender.cpp
+    uimodel/track/TrackPresentationWorkflow.cpp
     uimodel/track/TrackFieldFormatter.cpp
     uimodel/track/SelectionSummary.cpp
     uimodel/tag/TagEditWorkflow.cpp
+    uimodel/tag/TrackPropertiesFormSpec.cpp
+    uimodel/tag/TrackPropertiesFormWorkflow.cpp
 )
 target_include_directories(ao_app_uimodel PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(ao_app_uimodel PRIVATE "${CMAKE_SOURCE_DIR}/app")

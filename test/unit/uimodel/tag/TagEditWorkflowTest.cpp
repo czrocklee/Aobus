@@ -35,9 +35,28 @@ namespace ao::uimodel::tag::test
       return std::ranges::any_of(
         optView->tags(), [&](auto const tagId) { return dictionary.getOrDefault(tagId) == expectedTag; });
     }
+
+    std::vector<std::string> trackTagNames(TestMusicLibrary& testLib, TrackId trackId)
+    {
+      auto txn = testLib.library().readTransaction();
+      auto reader = testLib.library().tracks().reader(txn);
+      auto const optView = reader.get(trackId);
+      REQUIRE(optView);
+
+      auto result = std::vector<std::string>{};
+      auto const& dictionary = testLib.library().dictionary();
+
+      for (auto const tagId : optView->tags())
+      {
+        result.emplace_back(dictionary.getOrDefault(tagId));
+      }
+
+      std::ranges::sort(result);
+      return result;
+    }
   } // namespace
 
-  TEST_CASE("TagEditWorkflow - logic and messages", "[unit][uimodel][tag]")
+  TEST_CASE("TagEditWorkflow - mutations report messages and final tag state", "[uimodel][workflow][tag]")
   {
     auto testLib = TestMusicLibrary{};
     auto changes = rt::LibraryChanges{};
@@ -47,93 +66,66 @@ namespace ao::uimodel::tag::test
     auto trackId = testLib.addTrack("Target 1");
     auto trackId2 = testLib.addTrack("Target 2");
 
-    SECTION("empty request does nothing")
+    SECTION("no selected tracks does not mutate the library")
     {
-      auto const req = TagEditRequest{};
+      auto const req = TagEditRequest{.tagsToAdd = {"Tag1"}};
       auto result = workflow.apply(req);
       CHECK_FALSE(result.applied);
       CHECK(result.notificationText.empty());
+      CHECK(trackTagNames(testLib, trackId).empty());
+      CHECK(trackTagNames(testLib, trackId2).empty());
     }
 
-    SECTION("empty tags does nothing")
+    SECTION("empty tag changes do not mutate selected tracks")
     {
-      auto req = TagEditRequest{};
-      req.selectedIds = {trackId};
+      auto const req = TagEditRequest{.selectedIds = {trackId}};
       auto result = workflow.apply(req);
       CHECK_FALSE(result.applied);
       CHECK(result.notificationText.empty());
+      CHECK(trackTagNames(testLib, trackId).empty());
     }
 
-    SECTION("add single tag generates correct message")
+    SECTION("adding a single tag mutates the selected track and reports the count")
     {
-      auto req = TagEditRequest{};
-      req.selectedIds = {trackId};
-      req.tagsToAdd = {"Tag1"};
+      auto const req = TagEditRequest{.selectedIds = {trackId}, .tagsToAdd = {"Tag1"}};
       auto result = workflow.apply(req);
       CHECK(result.applied);
       CHECK(result.notificationText == "Tags added 1 for 1 track");
+      CHECK(trackTagNames(testLib, trackId) == std::vector<std::string>{"Tag1"});
+      CHECK(trackTagNames(testLib, trackId2).empty());
     }
 
-    SECTION("remove single tag generates correct message")
+    SECTION("removing a single tag mutates every selected track and reports the count")
     {
       auto const initialTags = std::vector<std::string>{"Tag1"};
       writer.editTags(std::vector{trackId, trackId2}, initialTags, {});
+      REQUIRE(trackTagNames(testLib, trackId) == std::vector<std::string>{"Tag1"});
+      REQUIRE(trackTagNames(testLib, trackId2) == std::vector<std::string>{"Tag1"});
 
-      auto req = TagEditRequest{};
-      req.selectedIds = {trackId, trackId2};
-      req.tagsToRemove = {"Tag1"};
+      auto const req = TagEditRequest{.selectedIds = {trackId, trackId2}, .tagsToRemove = {"Tag1"}};
       auto result = workflow.apply(req);
       CHECK(result.applied);
       CHECK(result.notificationText == "Tags removed 1 for 2 tracks");
+      CHECK(trackTagNames(testLib, trackId).empty());
+      CHECK(trackTagNames(testLib, trackId2).empty());
     }
 
-    SECTION("add and remove tags generates correct message")
+    SECTION("adding and removing tags reports requested counts and final tag sets")
     {
-      auto req = TagEditRequest{};
-      req.selectedIds = {trackId, trackId2};
-      req.tagsToAdd = {"Tag1", "Tag2"};
-      req.tagsToRemove = {"Tag3"};
+      auto const req =
+        TagEditRequest{.selectedIds = {trackId, trackId2}, .tagsToAdd = {"Tag1", "Tag2"}, .tagsToRemove = {"Tag3"}};
       auto result = workflow.apply(req);
       CHECK(result.applied);
       CHECK(result.notificationText == "Tags added 2 and removed 1 for 2 tracks");
-    }
-
-    SECTION("adding tags actually mutates the library")
-    {
-      auto req = TagEditRequest{};
-      req.selectedIds = {trackId};
-      req.tagsToAdd = {"ActualTag"};
-      auto result = workflow.apply(req);
-      CHECK(result.applied);
-
-      auto txn = testLib.library().readTransaction();
-      auto reader = testLib.library().tracks().reader(txn);
-      auto const optView = reader.get(trackId);
-      REQUIRE(optView);
-
-      auto const& dictionary = testLib.library().dictionary();
-      bool hasTag = false;
-
-      for (auto const tagId : optView->tags())
-      {
-        if (dictionary.getOrDefault(tagId) == "ActualTag")
-        {
-          hasTag = true;
-          break;
-        }
-      }
-
-      CHECK(hasTag);
+      CHECK(trackTagNames(testLib, trackId) == std::vector<std::string>{"Tag1", "Tag2"});
+      CHECK(trackTagNames(testLib, trackId2) == std::vector<std::string>{"Tag1", "Tag2"});
     }
 
     SECTION("adding and removing tags mutates the library in one request")
     {
       writer.editTags(std::vector{trackId}, std::vector<std::string>{"OldTag"}, {});
 
-      auto req = TagEditRequest{};
-      req.selectedIds = {trackId};
-      req.tagsToAdd = {"NewTag"};
-      req.tagsToRemove = {"OldTag"};
+      auto const req = TagEditRequest{.selectedIds = {trackId}, .tagsToAdd = {"NewTag"}, .tagsToRemove = {"OldTag"}};
 
       auto result = workflow.apply(req);
 

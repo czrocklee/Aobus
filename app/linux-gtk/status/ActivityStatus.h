@@ -56,16 +56,8 @@ namespace ao::gtk
     std::int32_t maxTextChars = kDefaultMaxTextChars;
   };
 
-  struct ActivityStatusActionRenderState final
-  {
-    bool visible = false;
-    bool enabled = false;
-    std::string label{};
-    std::string disabledReason{};
-  };
-
-  using ActivityStatusActionResolver =
-    std::function<ActivityStatusActionRenderState(std::string_view, std::string_view)>;
+  using ActivityStatusActionRenderState = uimodel::status::ActivityActionAvailability;
+  using ActivityStatusActionResolver = uimodel::status::ActivityActionAvailabilityResolver;
   using ActivityStatusActionHandler = std::function<void(rt::NotificationId, std::string_view, Gtk::Widget&)>;
 
   struct ActivityStatusDependencies final

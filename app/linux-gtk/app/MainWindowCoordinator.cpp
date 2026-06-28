@@ -36,7 +36,9 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/ListSourceStore.h>
 #include <ao/uimodel/playback/PlaybackQueueModel.h>
-#include <ao/uimodel/track/TrackPresentationViewModel.h>
+#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/track/TrackPresentationCatalog.h>
+#include <ao/uimodel/track/TrackPresentationPreferenceStore.h>
 
 #include <gtkmm/stack.h>
 
@@ -56,6 +58,8 @@ namespace ao::gtk
       , trackRowCache{runtime.library()}
       , imageCache{100}
       , playbackQueueModel{runtime.playback()}
+      , trackPresentationCatalog{runtime.workspace()}
+      , trackPresentationPreferences{trackPresentationCatalog}
       , tagEditController{window, runtime, TagEditController::Callbacks{.onTagsMutated = [] {}}, themeController}
       , listNavigationController{window,
                                  runtime,
@@ -69,10 +73,11 @@ namespace ao::gtk
                                    .getListMembership = [&runtime](ListId listId)
                                    { return &runtime.sources().sourceFor(listId); },
                                    .onListPresentationSaved = [this](ListId listId, std::string const& presentationId)
-                                   { trackPresentationStore.setPresentationIdForList(listId, presentationId); },
+                                   { trackPresentationPreferences.setPresentationIdForList(listId, presentationId); },
                                    .getListPresentation = [this](ListId listId) -> std::optional<std::string>
                                    {
-                                     if (auto const optPres = trackPresentationStore.presentationIdForList(listId);
+                                     if (auto const optPres =
+                                           trackPresentationPreferences.presentationIdForList(listId);
                                          optPres)
                                      {
                                        return std::string{*optPres};
@@ -81,13 +86,12 @@ namespace ao::gtk
                                      return std::nullopt;
                                    }},
                                  themeController}
-      , trackPresentationStore{runtime.workspace()}
       , trackPageHost{stack,
                       runtime,
                       &playbackQueueModel,
                       tagEditController,
                       listNavigationController,
-                      trackPresentationStore}
+                      trackColumnLayouts}
       , importExportCoordinator{window,
                                 runtime,
                                 portal::ImportExportCallbacks{
@@ -128,7 +132,7 @@ namespace ao::gtk
 
     rt::TrackPresentationSpec presentationForList(ListId listId, rt::AppRuntime& runtime) const
     {
-      return trackPresentationStore.presentationForList(listId, smartListFilter(listId, runtime));
+      return trackPresentationPreferences.presentationForList(listId, smartListFilter(listId, runtime));
     }
 
     void applyPresentationPreferencesToOpenViews(rt::AppRuntime& runtime) const
@@ -151,9 +155,11 @@ namespace ao::gtk
     TrackRowCache trackRowCache;
     ImageCache imageCache;
     uimodel::playback::PlaybackQueueModel playbackQueueModel;
+    ao::uimodel::track::TrackPresentationCatalog trackPresentationCatalog;
+    ao::uimodel::track::TrackPresentationPreferenceStore trackPresentationPreferences;
+    ao::uimodel::track::TrackColumnLayoutStore trackColumnLayouts;
     TagEditController tagEditController;
     ListNavigationController listNavigationController;
-    ao::uimodel::track::TrackPresentationViewModel trackPresentationStore;
     Gtk::Stack stack;
     TrackPageHost trackPageHost;
     portal::ImportExportCoordinator importExportCoordinator;
@@ -166,8 +172,10 @@ namespace ao::gtk
   {
     _implPtr = std::make_unique<Impl>(this, window, runtime);
 
-    _trackPresentationChangedSubscription = _implPtr->trackPresentationStore.signalChanged().connect(
-      [this](ao::ListId /*listId*/, ao::uimodel::track::TrackPresentationChangeType /*type*/) { saveColumnLayout(); });
+    _trackPresentationChangedSubscription = _implPtr->trackPresentationPreferences.signalChanged().connect(
+      [this](ao::ListId /*listId*/) { saveColumnLayout(); });
+    _trackColumnLayoutChangedSubscription =
+      _implPtr->trackColumnLayouts.signalChanged().connect([this](ao::ListId /*listId*/) { saveColumnLayout(); });
   }
 
   MainWindowCoordinator::~MainWindowCoordinator()
@@ -176,6 +184,7 @@ namespace ao::gtk
     _libraryTaskCompletedSubscription.reset();
     _listsMutatedSubscription.reset();
     _trackPresentationChangedSubscription.reset();
+    _trackColumnLayoutChangedSubscription.reset();
   }
 
   void MainWindowCoordinator::initializeSession()
@@ -207,7 +216,7 @@ namespace ao::gtk
       {
         for (auto const deletedId : mutation.deleted)
         {
-          _implPtr->trackPresentationStore.clearPresentationForList(deletedId);
+          _implPtr->trackPresentationPreferences.clearPresentationForList(deletedId);
         }
 
         auto const txn = _runtime.musicLibrary().readTransaction();
@@ -286,8 +295,8 @@ namespace ao::gtk
     auto columnState = ao::uimodel::track::TrackColumnLayoutState{};
     auto prefState = ao::uimodel::track::ListPresentationPreferenceState{};
     _implPtr->layoutConfig.load(columnState, prefState);
-    _implPtr->trackPresentationStore.setListLayouts(columnState.listLayouts);
-    _implPtr->trackPresentationStore.setListPresentations(prefState.presentations);
+    _implPtr->trackColumnLayouts.setListLayouts(columnState.listLayouts);
+    _implPtr->trackPresentationPreferences.setListPresentations(prefState.presentations);
 
     // App prefs (playback restoration)
     auto prefs = rt::AppPrefsState{};
@@ -312,7 +321,8 @@ namespace ao::gtk
                          .tagEditController = &_implPtr->tagEditController,
                          .importExportCoordinator = &_implPtr->importExportCoordinator,
                          .trackPageHost = &_implPtr->trackPageHost,
-                         .trackPresentationStore = &_implPtr->trackPresentationStore,
+                         .trackPresentationCatalog = &_implPtr->trackPresentationCatalog,
+                         .trackPresentationPreferences = &_implPtr->trackPresentationPreferences,
                          .listNavigationController = &_implPtr->listNavigationController,
                          .themeController = &_implPtr->themeController};
   }
@@ -328,10 +338,10 @@ namespace ao::gtk
   void MainWindowCoordinator::saveColumnLayout()
   {
     auto columnState = ao::uimodel::track::TrackColumnLayoutState{};
-    columnState.listLayouts = _implPtr->trackPresentationStore.listLayouts();
+    columnState.listLayouts = _implPtr->trackColumnLayouts.listLayouts();
 
     auto prefState = ao::uimodel::track::ListPresentationPreferenceState{};
-    prefState.presentations = _implPtr->trackPresentationStore.listPresentations();
+    prefState.presentations = _implPtr->trackPresentationPreferences.listPresentations();
 
     _implPtr->layoutConfig.save(columnState, prefState);
   }
@@ -364,9 +374,13 @@ namespace ao::gtk
   {
     return &_implPtr->listNavigationController;
   }
-  uimodel::track::TrackPresentationViewModel* MainWindowCoordinator::trackPresentationStore()
+  uimodel::track::TrackPresentationCatalog* MainWindowCoordinator::trackPresentationCatalog()
   {
-    return &_implPtr->trackPresentationStore;
+    return &_implPtr->trackPresentationCatalog;
+  }
+  uimodel::track::TrackPresentationPreferenceStore* MainWindowCoordinator::trackPresentationPreferences()
+  {
+    return &_implPtr->trackPresentationPreferences;
   }
   ThemeCoordinator* MainWindowCoordinator::themeController()
   {

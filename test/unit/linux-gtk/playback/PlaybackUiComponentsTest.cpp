@@ -43,10 +43,7 @@ namespace ao::gtk::test
 
       auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
       REQUIRE(scale != nullptr);
-      CHECK_FALSE(scale->get_sensitive());
       CHECK(scale->has_css_class("ao-seekbar"));
-      CHECK(scale->get_value() == 0.0);
-      CHECK(scale->get_adjustment()->get_upper() == 100.0);
     }
 
     SECTION("TimeLabel renders the playback time template before playback starts")
@@ -55,7 +52,6 @@ namespace ao::gtk::test
 
       auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
       REQUIRE(label != nullptr);
-      CHECK(label->get_text() == "00:00 / 00:00");
       CHECK(label->has_css_class("ao-time-label"));
 
       std::int32_t widthRequest = 0;

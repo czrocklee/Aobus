@@ -2,7 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/Backend.h>
+#include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/query/Expression.h>
+#include <ao/query/Serializer.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
@@ -24,19 +27,7 @@ namespace ao::uimodel::playback
   {
     std::string quoteExpressionString(std::string_view value)
     {
-      if (!value.contains('"'))
-      {
-        return std::format("\"{}\"", value);
-      }
-
-      if (!value.contains('\''))
-      {
-        return std::format("'{}'", value);
-      }
-
-      auto sanitized = std::string{value};
-      std::ranges::replace(sanitized, '"', '\'');
-      return std::format("\"{}\"", sanitized);
+      return query::serialize(query::ConstantExpression{std::string{value}});
     }
   } // namespace
 
@@ -77,6 +68,12 @@ namespace ao::uimodel::playback
     _nowPlayingSub = _playback.onNowPlayingChanged(refreshCallbackWithArg);
 
     refresh();
+  }
+
+  NowPlayingActionCommand::Type resolveNowPlayingPlayPauseCommand(audio::Transport const transport) noexcept
+  {
+    return transport == audio::Transport::Playing ? NowPlayingActionCommand::Type::Pause
+                                                  : NowPlayingActionCommand::Type::Resume;
   }
 
   void NowPlayingViewModel::refresh()
@@ -168,7 +165,7 @@ namespace ao::uimodel::playback
     {
       case NowPlayingFieldAction::Reveal: cmd.type = NowPlayingActionCommand::Type::Reveal; break;
 
-      case NowPlayingFieldAction::PlayPause: cmd.type = NowPlayingActionCommand::Type::PlayPause; break;
+      case NowPlayingFieldAction::PlayPause: cmd.type = resolveNowPlayingPlayPauseCommand(state.transport); break;
 
       case NowPlayingFieldAction::FilterByField:
       {

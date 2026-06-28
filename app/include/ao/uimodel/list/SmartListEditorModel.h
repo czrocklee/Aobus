@@ -68,6 +68,8 @@ namespace ao::uimodel::list
 
     static std::string previewStatusText(SmartListStatus status, std::size_t count, bool isAllTracks, bool localEmpty);
 
+    static std::string previewTrackLabel(std::string_view title, std::string_view artist, std::string_view album);
+
     static SmartListEditorViewState previewState(SmartListPreviewInput const& input);
 
     static std::size_t presentationIndexForId(std::optional<std::string> const& optPresentationId,

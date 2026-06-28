@@ -98,6 +98,42 @@ namespace ao::uimodel::list
     return "";
   }
 
+  std::string SmartListEditorModel::previewTrackLabel(std::string_view title,
+                                                      std::string_view artist,
+                                                      std::string_view album)
+  {
+    if (!title.empty())
+    {
+      auto formatted = std::string{title};
+
+      if (!artist.empty())
+      {
+        formatted = std::format("{} - {}", formatted, artist);
+      }
+
+      if (!album.empty())
+      {
+        formatted = std::format("{} ({})", formatted, album);
+      }
+
+      return formatted;
+    }
+
+    if (!artist.empty())
+    {
+      auto formatted = std::string{artist};
+
+      if (!album.empty())
+      {
+        formatted = std::format("{} ({})", formatted, album);
+      }
+
+      return formatted;
+    }
+
+    return "(untitled)";
+  }
+
   SmartListEditorViewState SmartListEditorModel::previewState(SmartListPreviewInput const& input)
   {
     auto state = SmartListEditorViewState{};

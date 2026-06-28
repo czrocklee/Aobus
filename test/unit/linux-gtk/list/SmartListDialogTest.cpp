@@ -28,9 +28,7 @@ namespace ao::gtk::test
     drainGtkEvents();
     drainGtkEvents();
 
-    auto const draft = dialog.draft();
     CHECK(dialog.editListId() == kInvalidListId);
-    CHECK(draft.parentId == rt::kAllTracksListId);
-    CHECK(draft.kind == rt::LibraryWriter::ListKind::Smart);
+    CHECK(dialog.draft().kind == rt::LibraryWriter::ListKind::Smart);
   }
 } // namespace ao::gtk::test

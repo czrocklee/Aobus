@@ -3,13 +3,13 @@
 
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
-#include "layout/component/track/TrackSelectionRegionPolicy.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/ComponentCatalog.h>
 #include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/TrackSelectionRegionPolicy.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -53,8 +53,7 @@ namespace ao::gtk::layout
     private:
       void updateVisibility(rt::TrackDetailSnapshot const& snap)
       {
-        auto const presentation =
-          track_selection_region::presentationForSelection(snap.selectionKind, _showWhen, _showPlaceholder);
+        auto const presentation = presentationForTrackSelectionRegion(snap.selectionKind, _showWhen, _showPlaceholder);
         _box.set_visible(presentation.visible);
         _box.set_sensitive(presentation.sensitive);
       }

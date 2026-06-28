@@ -43,6 +43,26 @@ namespace ao::uimodel::playback::test
       CHECK(log.last().isHardwareAssisted == false); // Initially false in mock
     }
 
+    SECTION("volume and mute changes render button icon and tooltip state")
+    {
+      addReadyAudioProvider(playback);
+      viewModel.handleVolumeChanged(0.5F);
+
+      CHECK(log.last().visible == true);
+      CHECK(log.last().volume == 0.5F);
+      CHECK(log.last().muted == false);
+      CHECK(log.last().iconName == "audio-volume-medium-symbolic");
+      CHECK(log.last().tooltip == "Volume: 50%");
+
+      viewModel.handleMutedChanged(true);
+
+      CHECK(log.last().visible == true);
+      CHECK(log.last().volume == 0.5F);
+      CHECK(log.last().muted == true);
+      CHECK(log.last().iconName == "audio-volume-muted-symbolic");
+      CHECK(log.last().tooltip == "Volume: 50% (Muted)");
+    }
+
     SECTION("Mute controls")
     {
       viewModel.handleMutedChanged(true);
