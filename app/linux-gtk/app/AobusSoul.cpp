@@ -14,6 +14,7 @@
 #include <gtk/gtk.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/snapshot.h>
+#include <gtkmm/widget.h>
 
 #include <algorithm>
 #include <array>
@@ -70,6 +71,7 @@ namespace ao::gtk
 
     std::optional<uimodel::FrameClock::TimePoint> optFirstFrameTime;
     std::uint32_t tickId = 0;
+    bool isMapped = false;
     bool isBreathing = false;
 
     std::unique_ptr<::GskPath, PathDeleter> pathSigilPtr{};
@@ -138,44 +140,55 @@ namespace ao::gtk
     ::gsk_path_builder_move_to(sealBuilder, barX, -barY);
     ::gsk_path_builder_line_to(sealBuilder, barX, barY);
     _implPtr->pathSealPtr.reset(::gsk_path_builder_free_to_path(sealBuilder));
+  }
+
+  AobusSoul::~AobusSoul()
+  {
+    stopTick();
+  }
+
+  void AobusSoul::startTickIfNeeded()
+  {
+    if (!_implPtr->isMapped || !_implPtr->isBreathing || _implPtr->tickId != 0)
+    {
+      return;
+    }
 
     _implPtr->tickId = add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
       {
-        if (_implPtr->isBreathing)
-        {
-          auto const frameTime = uimodel::FrameClock::fromMicros(clock->get_frame_time());
+        auto const frameTime = uimodel::FrameClock::fromMicros(clock->get_frame_time());
 
-          if (!_implPtr->optFirstFrameTime)
-          {
-            _implPtr->optFirstFrameTime = frameTime;
-          }
-
-          _implPtr->time = frameTime - *_implPtr->optFirstFrameTime;
-          _implPtr->isStopped = false;
-        }
-        else
+        if (!_implPtr->optFirstFrameTime)
         {
-          _implPtr->time = std::chrono::duration<double>::zero();
-          _implPtr->isStopped = true;
+          _implPtr->optFirstFrameTime = frameTime;
         }
+
+        _implPtr->time = frameTime - *_implPtr->optFirstFrameTime;
+        _implPtr->isStopped = false;
 
         queue_draw();
         return true;
       });
   }
 
-  AobusSoul::~AobusSoul()
+  void AobusSoul::stopTick()
   {
-    if (_implPtr && _implPtr->tickId != 0)
+    if (_implPtr->tickId != 0)
     {
       remove_tick_callback(_implPtr->tickId);
+      _implPtr->tickId = 0;
     }
   }
 
   bool AobusSoul::isBreathing() const
   {
     return _implPtr->isBreathing;
+  }
+
+  bool AobusSoul::isTickActiveForTest() const
+  {
+    return _implPtr->tickId != 0;
   }
 
   bool AobusSoul::showFullLogo() const
@@ -197,12 +210,33 @@ namespace ao::gtk
 
     _implPtr->isBreathing = breathing;
 
-    if (!breathing)
+    if (breathing)
     {
+      startTickIfNeeded();
+    }
+    else
+    {
+      stopTick();
       _implPtr->optFirstFrameTime.reset();
+      _implPtr->time = std::chrono::duration<double>::zero();
+      _implPtr->isStopped = true;
     }
 
     queue_draw();
+  }
+
+  void AobusSoul::on_map()
+  {
+    Gtk::Widget::on_map();
+    _implPtr->isMapped = true;
+    startTickIfNeeded();
+  }
+
+  void AobusSoul::on_unmap()
+  {
+    stopTick();
+    _implPtr->isMapped = false;
+    Gtk::Widget::on_unmap();
   }
 
   void AobusSoul::setInnerGlyph(InnerGlyph const glyph)

@@ -11,8 +11,10 @@
 #include <gtkmm/scale.h>
 #include <gtkmm/widget.h>
 #include <sigc++/connection.h>
+#include <sigc++/scoped_connection.h>
 
 #include <chrono>
+#include <cstdint>
 
 namespace ao::gtk::test
 {
@@ -36,9 +38,13 @@ namespace ao::gtk
     SeekControl& operator=(SeekControl&&) = delete;
 
     Gtk::Widget& widget() { return _scale; }
+    bool isTickActiveForTest() const noexcept;
 
   private:
     void applyState(uimodel::SeekViewState const& view);
+    void startTickIfNeeded();
+    void stopTick();
+    void updateTickState();
 
     void handleScaleValueChanged();
     void beginUserInteraction();
@@ -56,7 +62,11 @@ namespace ao::gtk
     uimodel::SeekSliderInteractionModel _interaction;
 
     bool _updatingScale = false;
+    bool _isMapped = false;
+    std::uint32_t _tickId = 0;
     sigc::connection _debounceConnection;
+    sigc::scoped_connection _mapConnection;
+    sigc::scoped_connection _unmapConnection;
     uimodel::SeekViewModel _controller;
 
     friend class test::SeekControlTestPeer;

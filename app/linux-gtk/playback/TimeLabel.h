@@ -8,8 +8,10 @@
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
+#include <sigc++/scoped_connection.h>
 
 #include <chrono>
+#include <cstdint>
 
 namespace ao::rt
 {
@@ -33,10 +35,14 @@ namespace ao::gtk
     ~TimeLabel();
 
     Gtk::Widget& widget() { return _label; }
+    bool isTickActiveForTest() const noexcept;
 
   private:
     void applyState(uimodel::PlaybackTimeViewState const& view);
     void reset();
+    void startTickIfNeeded();
+    void stopTick();
+    void updateTickState();
 
     void updateLabel(std::chrono::milliseconds elapsed, std::chrono::milliseconds duration);
 
@@ -46,8 +52,12 @@ namespace ao::gtk
     uimodel::PlaybackPositionInterpolator _interpolator;
 
     bool _isPreviewing = false;
+    bool _isMapped = false;
     bool _dirty = true;
+    std::uint32_t _tickId = 0;
     std::chrono::seconds _lastElapsed{0};
     std::chrono::seconds _lastDuration{0};
+    sigc::scoped_connection _mapConnection;
+    sigc::scoped_connection _unmapConnection;
   };
 } // namespace ao::gtk

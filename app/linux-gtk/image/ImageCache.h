@@ -10,15 +10,32 @@
 #include <glibmm/refptr.h>
 
 #include <cstddef>
-#include <functional>
+#include <cstdint>
 #include <list>
 
 namespace ao::gtk
 {
   /**
    * @brief ImageCache provides an LRU cache for track cover art Pixbufs.
-   * Keyed by ResourceId (the ID of the image blob in the database).
+   * Keyed by resource plus usage/size so thumbnails and full-size images cannot collide.
    */
+  struct ImageCacheKey final
+  {
+    ResourceId resourceId{kInvalidResourceId};
+    std::int32_t physicalPixelSize{};
+    bool fullSize = false;
+
+    static ImageCacheKey thumbnail(ResourceId resourceId, std::int32_t physicalPixelSize) noexcept;
+    static ImageCacheKey full(ResourceId resourceId) noexcept;
+
+    bool operator==(ImageCacheKey const&) const = default;
+  };
+
+  struct ImageCacheKeyHash final
+  {
+    std::size_t operator()(ImageCacheKey const& key) const noexcept;
+  };
+
   class ImageCache final
   {
   public:
@@ -35,17 +52,17 @@ namespace ao::gtk
 
     /**
      * @brief Try to get a Pixbuf from the cache.
-     * @param resourceId The ID of the cover art resource.
+     * @param key The resource and usage/size bucket.
      * @return The cached Pixbuf or an empty RefPtr if not found.
      */
-    Glib::RefPtr<Gdk::Pixbuf> get(ResourceId resourceId);
+    Glib::RefPtr<Gdk::Pixbuf> get(ImageCacheKey key);
 
     /**
      * @brief Add a Pixbuf to the cache.
-     * @param resourceId The ID of the cover art resource.
+     * @param key The resource and usage/size bucket.
      * @param pixbuf The Pixbuf to cache.
      */
-    void put(ResourceId resourceId, Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
+    void put(ImageCacheKey key, Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
 
     /**
      * @brief Clear all cached entries.
@@ -55,12 +72,12 @@ namespace ao::gtk
   private:
     struct CacheEntry final
     {
-      ResourceId resourceId;
+      ImageCacheKey key;
       Glib::RefPtr<Gdk::Pixbuf> pixbufPtr;
     };
 
     std::size_t _maxSize;
     std::list<CacheEntry> _entries;
-    boost::unordered_flat_map<ResourceId, std::list<CacheEntry>::iterator, std::hash<ResourceId>> _cacheMap;
+    boost::unordered_flat_map<ImageCacheKey, std::list<CacheEntry>::iterator, ImageCacheKeyHash> _cacheMap;
   };
 } // namespace ao::gtk

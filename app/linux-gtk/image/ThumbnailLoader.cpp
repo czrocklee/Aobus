@@ -57,7 +57,7 @@ namespace ao::gtk
       return {};
     }
 
-    auto cachedPtr = _cache.get(id);
+    auto cachedPtr = _cache.get(ImageCacheKey::thumbnail(id, std::max(1, physicalPixelSize)));
 
     if (!cachedPtr)
     {
@@ -204,7 +204,7 @@ namespace ao::gtk
         // requester has since moved on.
         if (decodedPtr && !self->get(requestKey.id, requestKey.physicalPixelSize))
         {
-          self->_cache.put(requestKey.id, decodedPtr);
+          self->_cache.put(ImageCacheKey::thumbnail(requestKey.id, requestKey.physicalPixelSize), decodedPtr);
         }
 
         auto waiters = std::vector<RequestWaiter>{};

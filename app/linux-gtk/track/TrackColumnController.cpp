@@ -60,9 +60,9 @@ namespace ao::gtk
     if (auto const adjPtr = _columnView.get_hadjustment(); adjPtr)
     {
       adjPtr->property_page_size().signal_changed().connect(
-        sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
+        sigc::mem_fun(*this, &TrackColumnController::queueTitlePositionVariableUpdate));
       adjPtr->property_upper().signal_changed().connect(
-        sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
+        sigc::mem_fun(*this, &TrackColumnController::queueTitlePositionVariableUpdate));
     }
 
     if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
@@ -70,7 +70,7 @@ namespace ao::gtk
       _columnNotifyConnections.emplace_back(columnsPtr->signal_items_changed().connect(
         [this](::guint, ::guint, ::guint)
         {
-          updateTitlePositionVariable();
+          queueTitlePositionVariableUpdate();
 
           if (!_syncingColumnLayout)
           {
@@ -116,7 +116,7 @@ namespace ao::gtk
         }));
 
       _columnNotifyConnections.emplace_back(columnPtr->property_fixed_width().signal_changed().connect(
-        sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable)));
+        sigc::mem_fun(*this, &TrackColumnController::queueTitlePositionVariableUpdate)));
 
       _columnView.append_column(columnPtr);
 
@@ -238,6 +238,24 @@ namespace ao::gtk
 
     updateSharedColumnLayout();
 
+    return false;
+  }
+
+  void TrackColumnController::queueTitlePositionVariableUpdate()
+  {
+    if (_queuedTitlePositionUpdateConnection.connected())
+    {
+      return;
+    }
+
+    _queuedTitlePositionUpdateConnection =
+      Glib::signal_idle().connect(sigc::mem_fun(*this, &TrackColumnController::flushTitlePositionVariableUpdate));
+  }
+
+  bool TrackColumnController::flushTitlePositionVariableUpdate()
+  {
+    _queuedTitlePositionUpdateConnection.disconnect();
+    updateTitlePositionVariable();
     return false;
   }
 
@@ -397,6 +415,11 @@ namespace ao::gtk
         _dynamicCssProviderPtr->load_from_data(_lastTitleCss);
       }
     }
+  }
+
+  bool TrackColumnController::isTitlePositionUpdateQueuedForTest() const noexcept
+  {
+    return _queuedTitlePositionUpdateConnection.connected();
   }
 
   TrackColumnController::ColumnBinding* TrackColumnController::findColumnBinding(rt::TrackField field)

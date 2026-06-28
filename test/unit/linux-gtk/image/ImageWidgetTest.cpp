@@ -18,6 +18,7 @@
 #include <gtkmm/widget.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -330,7 +331,7 @@ namespace ao::gtk::test
     SECTION("loads a cached resource into the widget")
     {
       auto const resourceId = ResourceId{42};
-      imageCache.put(resourceId, makePixbuf(80, 80));
+      imageCache.put(ImageCacheKey::full(resourceId), makePixbuf(80, 80));
 
       auto widget = ImageWidget{};
       auto controller = ResourceImageController{widget, runtime.library(), imageCache};
@@ -391,9 +392,11 @@ namespace ao::gtk::test
       auto const scaleFactor = widget.get_scale_factor();
       auto const expectedSide = kLogicalSize * scaleFactor;
 
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(thumbnailCache.get(resourceId)); }));
+      auto const physicalSize =
+        std::max(1, static_cast<std::int32_t>(std::ceil(static_cast<double>(kLogicalSize) * widget.displayScale())));
+      REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.get(resourceId, physicalSize)); }));
 
-      auto const cachedPtr = thumbnailCache.get(resourceId);
+      auto const cachedPtr = loader.get(resourceId, physicalSize);
       REQUIRE(cachedPtr);
       // Decode-at-scale: the stored thumbnail is bounded by the logical size
       // times the display scale, never the full 256px source.
@@ -410,7 +413,7 @@ namespace ao::gtk::test
       // Resource id that does not exist in the database; a synchronous hit must
       // not require any decode, proving the fast path bypasses the worker.
       auto const resourceId = ResourceId{9001};
-      thumbnailCache.put(resourceId, makePixbuf(kLogicalSize, kLogicalSize));
+      thumbnailCache.put(ImageCacheKey::thumbnail(resourceId, kLogicalSize), makePixbuf(kLogicalSize, kLogicalSize));
 
       auto widget = ImageWidget{};
       auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
@@ -449,7 +452,7 @@ namespace ao::gtk::test
 
       // The shared loader still salvages the decode into the cache, while the
       // controller's destroyed request handle prevents the callback from touching it.
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(thumbnailCache.get(resourceId)); }));
+      REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.get(resourceId, kLogicalSize)); }));
 
       // The runtime remains usable afterwards.
       auto widget = ImageWidget{};

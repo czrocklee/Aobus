@@ -22,9 +22,9 @@ namespace ao::gtk::test
       auto cache = ImageCache{2};
       auto pix1Ptr = Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, 1, 1);
 
-      cache.put(kResource1, pix1Ptr);
-      CHECK(cache.get(kResource1) == pix1Ptr);
-      CHECK(cache.get(kResource2) == nullptr);
+      cache.put(ImageCacheKey::full(kResource1), pix1Ptr);
+      CHECK(cache.get(ImageCacheKey::full(kResource1)) == pix1Ptr);
+      CHECK(cache.get(ImageCacheKey::full(kResource2)) == nullptr);
     }
 
     SECTION("LRU eviction")
@@ -34,27 +34,44 @@ namespace ao::gtk::test
       auto pix2Ptr = Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, 1, 1);
       auto pix3Ptr = Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, 1, 1);
 
-      cache.put(kResource1, pix1Ptr);
-      cache.put(kResource2, pix2Ptr);
+      cache.put(ImageCacheKey::full(kResource1), pix1Ptr);
+      cache.put(ImageCacheKey::full(kResource2), pix2Ptr);
 
       // Access 1 to make it MRU
-      cache.get(kResource1);
+      cache.get(ImageCacheKey::full(kResource1));
 
       // Put 3, should evict 2
-      cache.put(kResource3, pix3Ptr);
+      cache.put(ImageCacheKey::full(kResource3), pix3Ptr);
 
-      CHECK(cache.get(kResource1) == pix1Ptr);
-      CHECK(cache.get(kResource3) == pix3Ptr);
-      CHECK(cache.get(kResource2) == nullptr);
+      CHECK(cache.get(ImageCacheKey::full(kResource1)) == pix1Ptr);
+      CHECK(cache.get(ImageCacheKey::full(kResource3)) == pix3Ptr);
+      CHECK(cache.get(ImageCacheKey::full(kResource2)) == nullptr);
+    }
+
+    SECTION("same resource keeps full-size and thumbnail entries distinct")
+    {
+      auto cache = ImageCache{3};
+      auto fullPtr = Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, 16, 16);
+      auto thumbnailPtr = Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, 4, 4);
+      auto largerThumbnailPtr = Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, 8, 8);
+
+      cache.put(ImageCacheKey::full(kResource1), fullPtr);
+      cache.put(ImageCacheKey::thumbnail(kResource1, 4), thumbnailPtr);
+      cache.put(ImageCacheKey::thumbnail(kResource1, 8), largerThumbnailPtr);
+
+      CHECK(cache.get(ImageCacheKey::full(kResource1)) == fullPtr);
+      CHECK(cache.get(ImageCacheKey::thumbnail(kResource1, 4)) == thumbnailPtr);
+      CHECK(cache.get(ImageCacheKey::thumbnail(kResource1, 8)) == largerThumbnailPtr);
+      CHECK(cache.get(ImageCacheKey::thumbnail(kResource1, 16)) == nullptr);
     }
 
     SECTION("clear")
     {
       auto cache = ImageCache{10};
       auto pix1Ptr = Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, 1, 1);
-      cache.put(kResource1, pix1Ptr);
+      cache.put(ImageCacheKey::full(kResource1), pix1Ptr);
       cache.clear();
-      CHECK(cache.get(kResource1) == nullptr);
+      CHECK(cache.get(ImageCacheKey::full(kResource1)) == nullptr);
     }
   }
 } // namespace ao::gtk::test

@@ -52,12 +52,15 @@ namespace ao::gtk
 
     // Title position CSS variable for the playing-track beam
     void updateTitlePositionVariable();
+    void queueTitlePositionVariableUpdate();
 
     // Synchronize visibility, layout, and CSS variables
     void syncLayout(std::span<rt::TrackField const> visibleFields);
 
     // Exposed for TrackViewPage to connect / manage
     Glib::RefPtr<Gtk::CssProvider> const& cssProvider() const noexcept { return _dynamicCssProviderPtr; }
+    bool isTitlePositionUpdateQueuedForTest() const noexcept;
+    std::string const& titlePositionCssForTest() const noexcept { return _lastTitleCss; }
 
   private:
     struct ColumnBinding final
@@ -68,6 +71,7 @@ namespace ao::gtk
 
     void updateColumnExpansion(std::span<rt::TrackField const> visibleFields);
     bool flushSharedColumnLayoutUpdate();
+    bool flushTitlePositionVariableUpdate();
     void updateSharedColumnLayout();
     std::vector<rt::TrackField> captureCurrentFieldOrder() const;
     std::vector<rt::TrackField> visibleFieldsInStoredOrder(std::span<rt::TrackField const> visibleFields) const;
@@ -85,6 +89,7 @@ namespace ao::gtk
 
     std::vector<ColumnBinding> _columns;
     sigc::scoped_connection _queuedColumnLayoutUpdateConnection;
+    sigc::scoped_connection _queuedTitlePositionUpdateConnection;
     rt::Subscription _layoutChangedSubscription;
     bool _syncingColumnLayout = false;
     bool _capturingColumnLayout = false;

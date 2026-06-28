@@ -39,23 +39,69 @@ namespace ao::gtk
 
     _label.set_text(templateText);
 
-    _label.add_tick_callback(
-      [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
+    _mapConnection = _label.signal_map().connect(
+      [this]
       {
-        if (_interpolator.isPlaying() && !_isPreviewing)
-        {
-          auto const displayElapsed =
-            _interpolator.interpolateElapsed(uimodel::FrameClock::fromMicros(clock->get_frame_time()));
-          updateLabel(displayElapsed, _interpolator.lastDuration());
-        }
-
-        return true;
+        _isMapped = true;
+        updateTickState();
+      });
+    _unmapConnection = _label.signal_unmap().connect(
+      [this]
+      {
+        stopTick();
+        _isMapped = false;
       });
 
     reset();
   }
 
-  TimeLabel::~TimeLabel() = default;
+  TimeLabel::~TimeLabel()
+  {
+    stopTick();
+  }
+
+  void TimeLabel::startTickIfNeeded()
+  {
+    if (!_isMapped || !_interpolator.isPlaying() || _isPreviewing || _tickId != 0)
+    {
+      return;
+    }
+
+    _tickId = _label.add_tick_callback(
+      [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
+      {
+        auto const displayElapsed =
+          _interpolator.interpolateElapsed(uimodel::FrameClock::fromMicros(clock->get_frame_time()));
+        updateLabel(displayElapsed, _interpolator.lastDuration());
+
+        return true;
+      });
+  }
+
+  void TimeLabel::stopTick()
+  {
+    if (_tickId != 0)
+    {
+      _label.remove_tick_callback(_tickId);
+      _tickId = 0;
+    }
+  }
+
+  void TimeLabel::updateTickState()
+  {
+    if (_isMapped && _interpolator.isPlaying() && !_isPreviewing)
+    {
+      startTickIfNeeded();
+      return;
+    }
+
+    stopTick();
+  }
+
+  bool TimeLabel::isTickActiveForTest() const noexcept
+  {
+    return _tickId != 0;
+  }
 
   void TimeLabel::applyState(ao::uimodel::PlaybackTimeViewState const& view)
   {
@@ -76,6 +122,8 @@ namespace ao::gtk
     {
       updateLabel(view.elapsed, _interpolator.lastDuration());
     }
+
+    updateTickState();
   }
 
   void TimeLabel::reset()
@@ -84,6 +132,7 @@ namespace ao::gtk
 
     _interpolator.reset();
     _isPreviewing = false;
+    updateTickState();
     _dirty = true;
     _lastElapsed = std::chrono::seconds{0};
     _lastDuration = std::chrono::seconds{0};

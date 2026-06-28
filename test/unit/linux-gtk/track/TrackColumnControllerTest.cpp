@@ -89,5 +89,28 @@ namespace ao::gtk::test
       CHECK(artistColumnPtr->get_visible());
       CHECK_FALSE(albumColumnPtr->get_visible());
     }
+
+    SECTION("title position CSS updates are coalesced through idle")
+    {
+      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+
+      auto visible = std::vector{rt::TrackField::Artist, rt::TrackField::Title};
+      controller.syncLayout(visible);
+      auto const initialCss = controller.titlePositionCssForTest();
+      REQUIRE_FALSE(initialCss.empty());
+
+      auto const artistColumnPtr = columnForField(columnView, rt::TrackField::Artist);
+      REQUIRE(artistColumnPtr);
+
+      artistColumnPtr->set_fixed_width(320);
+      artistColumnPtr->set_fixed_width(420);
+
+      CHECK(controller.isTitlePositionUpdateQueuedForTest());
+
+      drainGtkEvents();
+
+      CHECK_FALSE(controller.isTitlePositionUpdateQueuedForTest());
+      CHECK(controller.titlePositionCssForTest() != initialCss);
+    }
   }
 } // namespace ao::gtk::test

@@ -22,15 +22,14 @@
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/gesturelongpress.h>
 #include <gtkmm/multiselection.h>
+#include <gtkmm/selectionmodel.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 #include <sigc++/functors/mem_fun.h>
 
-#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -70,6 +69,27 @@ namespace ao::gtk
       }
 
       return nullptr;
+    }
+
+    std::vector<std::uint32_t> selectedPositions(Gtk::SelectionModel const& selectionModel)
+    {
+      auto const bitsetPtr = selectionModel.get_selection();
+
+      if (!bitsetPtr)
+      {
+        return {};
+      }
+
+      auto const selectedCount = bitsetPtr->get_size();
+      auto positions = std::vector<std::uint32_t>{};
+      positions.reserve(selectedCount);
+
+      for (std::uint32_t idx = 0U; idx < selectedCount; ++idx)
+      {
+        positions.push_back(static_cast<std::uint32_t>(bitsetPtr->get_nth(idx)));
+      }
+
+      return positions;
     }
   } // namespace
 
@@ -268,17 +288,22 @@ namespace ao::gtk
 
   std::vector<TrackId> TrackSelectionController::selectedTrackIds() const noexcept
   {
-    auto const modelPtr = _selectionModelPtr->get_model();
-
-    if (!modelPtr)
+    if (!_selectionModelPtr->get_model())
     {
       return {};
     }
 
-    return std::views::iota(0U, modelPtr->get_n_items()) |
-           std::views::filter([this](auto idx) { return _selectionModelPtr->is_selected(idx); }) |
-           std::views::transform([this](auto idx) { return trackIdAtPosition(idx); }) |
-           std::views::filter([](auto const& id) { return id != kInvalidTrackId; }) | std::ranges::to<std::vector>();
+    auto ids = std::vector<TrackId>{};
+
+    for (auto const position : selectedPositions(*_selectionModelPtr))
+    {
+      if (auto const trackId = trackIdAtPosition(position); trackId != kInvalidTrackId)
+      {
+        ids.push_back(trackId);
+      }
+    }
+
+    return ids;
   }
 
   std::vector<Glib::RefPtr<TrackRowObject>> TrackSelectionController::selectedRows() const noexcept
@@ -290,11 +315,17 @@ namespace ao::gtk
       return {};
     }
 
-    return std::views::iota(0U, modelPtr->get_n_items()) |
-           std::views::filter([this](auto idx) { return _selectionModelPtr->is_selected(idx); }) |
-           std::views::transform([modelPtr](auto idx)
-                                 { return std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(idx)); }) |
-           std::views::filter([](auto const& row) { return static_cast<bool>(row); }) | std::ranges::to<std::vector>();
+    auto rows = std::vector<Glib::RefPtr<TrackRowObject>>{};
+
+    for (auto const position : selectedPositions(*_selectionModelPtr))
+    {
+      if (auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(position)); rowPtr)
+      {
+        rows.push_back(rowPtr);
+      }
+    }
+
+    return rows;
   }
 
   std::chrono::milliseconds TrackSelectionController::selectedTracksDuration() const noexcept
@@ -306,15 +337,17 @@ namespace ao::gtk
       return std::chrono::milliseconds{0};
     }
 
-    return std::ranges::fold_left(
-      std::views::iota(0U, modelPtr->get_n_items()) |
-        std::views::filter([this](auto idx) { return _selectionModelPtr->is_selected(idx); }) |
-        std::views::transform([modelPtr](auto idx)
-                              { return std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(idx)); }) |
-        std::views::filter([](auto const& row) { return static_cast<bool>(row); }) |
-        std::views::transform([](auto const& row) { return row->duration(); }),
-      std::chrono::milliseconds{0},
-      std::plus<>{});
+    auto totalDuration = std::chrono::milliseconds{0};
+
+    for (auto const position : selectedPositions(*_selectionModelPtr))
+    {
+      if (auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(position)); rowPtr)
+      {
+        totalDuration += rowPtr->duration();
+      }
+    }
+
+    return totalDuration;
   }
 
   TrackId TrackSelectionController::primarySelectedTrackId() const noexcept

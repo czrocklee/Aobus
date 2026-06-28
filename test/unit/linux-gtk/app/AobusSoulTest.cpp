@@ -32,9 +32,32 @@ namespace ao::gtk::test
     {
       soul.breathe(true);
       CHECK(soul.isBreathing());
+      CHECK_FALSE(soul.isTickActiveForTest());
 
       soul.breathe(false);
       CHECK_FALSE(soul.isBreathing());
+      CHECK_FALSE(soul.isTickActiveForTest());
+    }
+
+    SECTION("tick lifecycle follows mapped breathing state")
+    {
+      auto windowFixture = GtkWindowFixture{};
+      windowFixture.mount(soul);
+
+      soul.breathe(true);
+      CHECK_FALSE(soul.isTickActiveForTest());
+
+      windowFixture.present();
+      CHECK(soul.isTickActiveForTest());
+
+      soul.breathe(false);
+      CHECK_FALSE(soul.isTickActiveForTest());
+
+      soul.breathe(true);
+      CHECK(soul.isTickActiveForTest());
+
+      windowFixture.unmount();
+      CHECK_FALSE(soul.isTickActiveForTest());
     }
 
     SECTION("setAura updates color")

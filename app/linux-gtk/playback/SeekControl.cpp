@@ -49,17 +49,17 @@ namespace ao::gtk
     clickControllerPtr->signal_stopped().connect(sigc::mem_fun(*this, &SeekControl::endUserInteraction));
     _scale.add_controller(clickControllerPtr);
 
-    _scale.add_tick_callback(
-      [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
+    _mapConnection = _scale.signal_map().connect(
+      [this]
       {
-        if (_interpolator.isPlaying() && !_interaction.isPointerActive())
-        {
-          auto const displayElapsed =
-            _interpolator.interpolateElapsed(uimodel::FrameClock::fromMicros(clock->get_frame_time()));
-          setScaleValue(displayElapsed);
-        }
-
-        return true;
+        _isMapped = true;
+        updateTickState();
+      });
+    _unmapConnection = _scale.signal_unmap().connect(
+      [this]
+      {
+        stopTick();
+        _isMapped = false;
       });
 
     reset();
@@ -67,7 +67,51 @@ namespace ao::gtk
 
   SeekControl::~SeekControl()
   {
+    stopTick();
     _debounceConnection.disconnect();
+  }
+
+  void SeekControl::startTickIfNeeded()
+  {
+    if (!_isMapped || !_interpolator.isPlaying() || _interaction.isPointerActive() || _tickId != 0)
+    {
+      return;
+    }
+
+    _tickId = _scale.add_tick_callback(
+      [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
+      {
+        auto const displayElapsed =
+          _interpolator.interpolateElapsed(uimodel::FrameClock::fromMicros(clock->get_frame_time()));
+        setScaleValue(displayElapsed);
+
+        return true;
+      });
+  }
+
+  void SeekControl::stopTick()
+  {
+    if (_tickId != 0)
+    {
+      _scale.remove_tick_callback(_tickId);
+      _tickId = 0;
+    }
+  }
+
+  void SeekControl::updateTickState()
+  {
+    if (_isMapped && _interpolator.isPlaying() && !_interaction.isPointerActive())
+    {
+      startTickIfNeeded();
+      return;
+    }
+
+    stopTick();
+  }
+
+  bool SeekControl::isTickActiveForTest() const noexcept
+  {
+    return _tickId != 0;
   }
 
   void SeekControl::applyState(ao::uimodel::SeekViewState const& view)
@@ -78,6 +122,8 @@ namespace ao::gtk
       setScaleRange(std::chrono::milliseconds{0});
       setScaleValue(std::chrono::milliseconds{0});
       _scale.set_sensitive(false);
+      _interpolator.reset();
+      updateTickState();
       return;
     }
 
@@ -85,6 +131,7 @@ namespace ao::gtk
     _interaction.applyViewState(view.duration, view.enabled);
     _scale.set_sensitive(view.enabled);
     _interpolator.updateState(view.elapsed, view.duration, view.isPlaying);
+    updateTickState();
 
     if (view.immediateUpdate && !_interaction.isPointerActive())
     {
@@ -105,11 +152,13 @@ namespace ao::gtk
   void SeekControl::beginUserInteraction()
   {
     std::ignore = _interaction.beginPointerInteraction();
+    updateTickState();
   }
 
   void SeekControl::endUserInteraction()
   {
     applySeekDecision(_interaction.endPointerInteraction(scaleElapsed()));
+    updateTickState();
   }
 
   void SeekControl::applySeekDecision(uimodel::SeekSliderDecision const& decision)
@@ -190,6 +239,7 @@ namespace ao::gtk
     setScaleValue(std::chrono::milliseconds{0});
     _scale.set_sensitive(false);
     _interpolator.reset();
+    updateTickState();
     _debounceConnection.disconnect();
   }
 } // namespace ao::gtk

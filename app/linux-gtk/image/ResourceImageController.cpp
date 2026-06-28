@@ -84,7 +84,7 @@ namespace ao::gtk
       return;
     }
 
-    auto cachedPtr = _cache.get(resourceId);
+    auto cachedPtr = _cache.get(ImageCacheKey::full(resourceId));
 
     if (!cachedPtr)
     {
@@ -102,7 +102,7 @@ namespace ao::gtk
         auto const memStreamPtr = Gio::MemoryInputStream::create();
         memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
         cachedPtr = Gdk::Pixbuf::create_from_stream(memStreamPtr);
-        _cache.put(resourceId, cachedPtr);
+        _cache.put(ImageCacheKey::full(resourceId), cachedPtr);
       }
       catch (Glib::Error const&)
       {

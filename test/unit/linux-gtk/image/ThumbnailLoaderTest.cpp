@@ -163,7 +163,7 @@ namespace ao::gtk::test
     SECTION("a cache hit invokes the callback synchronously")
     {
       auto const resourceId = ResourceId{4242};
-      cache.put(resourceId, makePixbuf(kPixelSize));
+      cache.put(ImageCacheKey::thumbnail(resourceId, kPixelSize), makePixbuf(kPixelSize));
 
       bool invokedSynchronously = false;
       auto request = loader.request(resourceId,

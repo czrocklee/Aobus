@@ -4,7 +4,13 @@
 #include "../GtkTestSupport.h"
 #include "playback/SeekControl.h"
 #include "playback/TimeLabel.h"
+#include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
+#include <ao/Type.h>
+#include <ao/audio/Types.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -13,6 +19,7 @@
 #include <gtkmm/label.h>
 #include <gtkmm/scale.h>
 
+#include <chrono>
 #include <cstdint>
 
 namespace ao::gtk::test
@@ -29,6 +36,23 @@ namespace ao::gtk::test
       {
       }
     };
+
+    void startPlayback(rt::PlaybackService& playback, library::MusicLibrary& library)
+    {
+      auto const trackId = library::test::addTrack(
+        library, library::test::TrackSpec{.title = "Tick Test", .duration = std::chrono::seconds{5}});
+
+      auto const request = rt::PlaybackService::PlaybackRequest{
+        .trackId = trackId,
+        .input = audio::PlaybackInput{.filePath = audio::test::requireAudioFixture("basic_metadata.flac"),
+                                      .duration = std::chrono::seconds{5}},
+        .title = "Tick Test",
+        .artist = "Artist",
+      };
+
+      REQUIRE(playback.play(request, kInvalidListId));
+      drainGtkEvents();
+    }
   } // namespace
 
   TEST_CASE("Playback UI components render initial GTK bindings", "[gtk][unit][playback]")
@@ -36,6 +60,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = TestEnvironment{};
     auto& playback = env.runtime.playback();
+    rt::test::addReadyAudioProvider(playback);
+    drainGtkEvents();
 
     SECTION("SeekControl renders a disabled seek scale before playback starts")
     {
@@ -58,6 +84,42 @@ namespace ao::gtk::test
       std::int32_t heightRequest = 0;
       label->get_size_request(widthRequest, heightRequest);
       CHECK(widthRequest > 0);
+    }
+
+    SECTION("TimeLabel tick follows mapped playing state")
+    {
+      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Default};
+      CHECK_FALSE(timeLabel.isTickActiveForTest());
+
+      startPlayback(playback, env.runtime.musicLibrary());
+      CHECK_FALSE(timeLabel.isTickActiveForTest());
+
+      auto windowFixture = GtkWindowFixture{};
+      windowFixture.mount(timeLabel.widget());
+      windowFixture.present();
+      CHECK(timeLabel.isTickActiveForTest());
+
+      playback.pause();
+      drainGtkEvents();
+      CHECK_FALSE(timeLabel.isTickActiveForTest());
+    }
+
+    SECTION("SeekControl tick follows mapped playing state")
+    {
+      auto seekControl = SeekControl{playback};
+      CHECK_FALSE(seekControl.isTickActiveForTest());
+
+      startPlayback(playback, env.runtime.musicLibrary());
+      CHECK_FALSE(seekControl.isTickActiveForTest());
+
+      auto windowFixture = GtkWindowFixture{};
+      windowFixture.mount(seekControl.widget());
+      windowFixture.present();
+      CHECK(seekControl.isTickActiveForTest());
+
+      playback.pause();
+      drainGtkEvents();
+      CHECK_FALSE(seekControl.isTickActiveForTest());
     }
   }
 } // namespace ao::gtk::test

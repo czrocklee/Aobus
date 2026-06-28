@@ -47,6 +47,7 @@ namespace ao::gtk
     void setShowFullLogo(bool show);
 
     bool isBreathing() const;
+    bool isTickActiveForTest() const;
     bool showFullLogo() const;
     Gdk::RGBA aura() const;
 
@@ -55,6 +56,8 @@ namespace ao::gtk
     static constexpr double kGoldenRatio = std::numbers::phi;
 
   protected:
+    void on_map() override;
+    void on_unmap() override;
     void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override;
     Gtk::SizeRequestMode get_request_mode_vfunc() const override;
     void measure_vfunc(Gtk::Orientation orientation,
@@ -68,6 +71,8 @@ namespace ao::gtk
     struct Impl;
 
     static Gdk::RGBA shiftColor(Gdk::RGBA const& color, float shift) noexcept;
+    void startTickIfNeeded();
+    void stopTick();
 
     std::unique_ptr<Impl> _implPtr;
   };

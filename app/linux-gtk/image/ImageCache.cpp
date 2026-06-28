@@ -9,9 +9,34 @@
 #include <glibmm/refptr.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <functional>
 
 namespace ao::gtk
 {
+  ImageCacheKey ImageCacheKey::thumbnail(ResourceId resourceId, std::int32_t physicalPixelSize) noexcept
+  {
+    return {.resourceId = resourceId, .physicalPixelSize = physicalPixelSize, .fullSize = false};
+  }
+
+  ImageCacheKey ImageCacheKey::full(ResourceId resourceId) noexcept
+  {
+    return {.resourceId = resourceId, .physicalPixelSize = 0, .fullSize = true};
+  }
+
+  std::size_t ImageCacheKeyHash::operator()(ImageCacheKey const& key) const noexcept
+  {
+    auto const idHash = std::hash<ResourceId>{}(key.resourceId);
+    auto const sizeHash = std::hash<std::int32_t>{}(key.physicalPixelSize);
+    auto const bucketHash = std::hash<bool>{}(key.fullSize);
+    constexpr std::uint32_t kGoldenRatio = 0x9e3779b9U;
+    constexpr std::uint32_t kHashShiftLeft = 6U;
+    constexpr std::uint32_t kHashShiftRight = 2U;
+    auto const sizeMixed = sizeHash + kGoldenRatio + (idHash << kHashShiftLeft) + (idHash >> kHashShiftRight);
+    return idHash ^ sizeMixed ^
+           (bucketHash + kGoldenRatio + (sizeHash << kHashShiftLeft) + (sizeHash >> kHashShiftRight));
+  }
+
   ImageCache::ImageCache(std::size_t maxSize)
     : _maxSize{maxSize}
   {
@@ -19,9 +44,9 @@ namespace ao::gtk
 
   ImageCache::~ImageCache() = default;
 
-  Glib::RefPtr<Gdk::Pixbuf> ImageCache::get(ResourceId resourceId)
+  Glib::RefPtr<Gdk::Pixbuf> ImageCache::get(ImageCacheKey key)
   {
-    auto const it = _cacheMap.find(resourceId);
+    auto const it = _cacheMap.find(key);
 
     if (it == _cacheMap.end())
     {
@@ -33,14 +58,14 @@ namespace ao::gtk
     return it->second->pixbufPtr;
   }
 
-  void ImageCache::put(ResourceId resourceId, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
+  void ImageCache::put(ImageCacheKey key, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
   {
     if (!pixbufPtr)
     {
       return;
     }
 
-    if (auto const it = _cacheMap.find(resourceId); it != _cacheMap.end())
+    if (auto const it = _cacheMap.find(key); it != _cacheMap.end())
     {
       // Update existing entry and move to front
       it->second->pixbufPtr = pixbufPtr;
@@ -49,14 +74,14 @@ namespace ao::gtk
     }
 
     // Add new entry to front
-    _entries.push_front({.resourceId = resourceId, .pixbufPtr = pixbufPtr});
-    _cacheMap[resourceId] = _entries.begin();
+    _entries.push_front({.key = key, .pixbufPtr = pixbufPtr});
+    _cacheMap[key] = _entries.begin();
 
     // Evict least recently used if over capacity
     if (_entries.size() > _maxSize)
     {
       auto const last = CacheEntry{_entries.back()};
-      _cacheMap.erase(last.resourceId);
+      _cacheMap.erase(last.key);
       _entries.pop_back();
     }
   }
