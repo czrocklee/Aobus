@@ -10,9 +10,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <format>
-#include <optional>
-#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -151,10 +150,13 @@ namespace ao::uimodel
       return ResolvedTrackFilter{};
     }
 
-    auto const optExpression = std::ranges::fold_left_first(terms | std::views::transform(buildQuickTermExpression),
-                                                            [](auto const& acc, auto const& next)
-                                                            { return std::format("({}) and ({})", acc, next); });
+    auto expression = buildQuickTermExpression(terms.front());
 
-    return ResolvedTrackFilter{.mode = TrackFilterMode::Quick, .expression = optExpression.value_or("")};
+    for (std::size_t idx = 1; idx < terms.size(); ++idx)
+    {
+      expression = std::format("({}) and ({})", expression, buildQuickTermExpression(terms[idx]));
+    }
+
+    return ResolvedTrackFilter{.mode = TrackFilterMode::Quick, .expression = std::move(expression)};
   }
 } // namespace ao::uimodel

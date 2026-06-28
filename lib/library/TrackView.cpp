@@ -102,29 +102,22 @@ namespace ao::library
 
   bool TrackView::TagProxy::has(DictionaryId tagIdToCheck) const noexcept
   {
-    return std::ranges::contains(begin(), end(), tagIdToCheck);
+    return std::ranges::contains(*this, tagIdToCheck);
   }
 
   std::optional<CoverArt> TrackView::CoverArtProxy::primary() const noexcept
   {
-    auto const coverCount = count();
-
-    if (coverCount == 0)
+    if (empty())
     {
       return std::nullopt;
     }
 
-    auto const* entriesData = entries().data();
-
-    for (std::uint16_t i = 0; i < coverCount; ++i)
+    if (auto it = std::ranges::find(*this, PictureType::FrontCover, &CoverArt::type); it != end())
     {
-      if (static_cast<PictureType>(entriesData[i].type) == PictureType::FrontCover)
-      {
-        return at(i);
-      }
+      return *it;
     }
 
-    return at(0);
+    return *begin();
   }
 
   TrackView::CoverArtProxy::Iterator TrackView::CoverArtProxy::begin() const

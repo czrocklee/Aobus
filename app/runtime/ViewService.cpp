@@ -24,7 +24,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <ranges>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -375,19 +374,18 @@ namespace ao::rt
 
   std::vector<ViewRecord> ViewService::listViews() const
   {
-    return _implPtr->views |
-           std::views::filter([](auto const& kv)
-                              { return kv.second.state.lifecycle != ViewLifecycleState::Destroyed; }) |
-           std::views::transform(
-             [](auto const& kv) -> ViewRecord
-             {
-               return ViewRecord{
-                 .id = kv.first,
-                 .kind = ViewKind::TrackList,
-                 .lifecycle = kv.second.state.lifecycle,
-               };
-             }) |
-           std::ranges::to<std::vector>();
+    auto records = std::vector<ViewRecord>{};
+    records.reserve(_implPtr->views.size());
+
+    for (auto const& [viewId, entry] : _implPtr->views)
+    {
+      if (entry.state.lifecycle != ViewLifecycleState::Destroyed)
+      {
+        records.push_back(ViewRecord{.id = viewId, .kind = ViewKind::TrackList, .lifecycle = entry.state.lifecycle});
+      }
+    }
+
+    return records;
   }
 
   TrackListViewState ViewService::trackListState(ViewId viewId) const

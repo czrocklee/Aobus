@@ -25,7 +25,6 @@ extern "C"
 #include <cmath>
 #include <cstdint>
 #include <optional>
-#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -270,7 +269,7 @@ namespace ao::audio::backend::detail
         return false;
       }
 
-      output.assign_range(values | std::views::take(count));
+      output.assign(values.begin(), values.begin() + count);
       return true;
     }
   } // namespace

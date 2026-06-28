@@ -553,7 +553,7 @@ namespace ao::uimodel
   void ActivityStatusModel::pruneDismissedSources(rt::NotificationFeedState const& feed)
   {
     auto const existsInFeed = [&feed](auto const id)
-    { return std::ranges::find(feed.entries, id, &rt::NotificationEntry::id) != feed.entries.end(); };
+    { return std::ranges::contains(feed.entries, id, &rt::NotificationEntry::id); };
 
     auto prune = [&](auto& ids)
     { ids.erase(std::ranges::remove_if(ids, [&](auto const id) { return !existsInFeed(id); }).begin(), ids.end()); };

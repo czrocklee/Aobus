@@ -446,11 +446,7 @@ namespace ao::rt
 
   void WorkspaceService::closeView(ViewId const viewId)
   {
-    if (auto const it = std::ranges::find(_implPtr->layoutState.openViews, viewId);
-        it != _implPtr->layoutState.openViews.end())
-    {
-      _implPtr->layoutState.openViews.erase(it);
-    }
+    std::erase(_implPtr->layoutState.openViews, viewId);
 
     if (_implPtr->layoutState.activeViewId == viewId)
     {

@@ -32,7 +32,6 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -416,7 +415,14 @@ namespace ao::gtk
       return {};
     }
 
-    return std::views::iota(0UZ, proj->size()) |
-           std::views::transform([proj](auto idx) { return proj->trackIdAt(idx); }) | std::ranges::to<std::vector>();
+    auto ids = std::vector<TrackId>{};
+    ids.reserve(proj->size());
+
+    for (std::size_t idx = 0; idx < proj->size(); ++idx)
+    {
+      ids.push_back(proj->trackIdAt(idx));
+    }
+
+    return ids;
   }
 } // namespace ao::gtk

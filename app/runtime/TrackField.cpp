@@ -3,6 +3,7 @@
 
 #include <ao/rt/TrackField.h>
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <span>
@@ -341,28 +342,14 @@ namespace ao::rt
 
   TrackFieldDefinition const* trackFieldDefinition(TrackField field)
   {
-    for (auto const& def : kDefinitions)
-    {
-      if (def.field == field)
-      {
-        return &def;
-      }
-    }
-
-    return nullptr;
+    auto const* const it = std::ranges::find(kDefinitions, field, &TrackFieldDefinition::field);
+    return it != kDefinitions.end() ? &*it : nullptr;
   }
 
   std::optional<TrackField> trackFieldFromId(std::string_view id)
   {
-    for (auto const& def : kDefinitions)
-    {
-      if (def.id == id)
-      {
-        return def.field;
-      }
-    }
-
-    return std::nullopt;
+    auto const* const it = std::ranges::find(kDefinitions, id, &TrackFieldDefinition::id);
+    return it != kDefinitions.end() ? std::optional{it->field} : std::nullopt;
   }
 
   std::string_view trackFieldId(TrackField field)

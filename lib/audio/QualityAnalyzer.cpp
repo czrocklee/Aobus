@@ -71,13 +71,12 @@ namespace ao::audio
 
         auto nextId = std::string_view{};
 
-        for (auto const& link : graph.connections)
+        auto const linkIt = std::ranges::find_if(
+          graph.connections, [currentId](auto const& link) { return link.isActive && link.sourceId == currentId; });
+
+        if (linkIt != graph.connections.end())
         {
-          if (link.isActive && link.sourceId == currentId)
-          {
-            nextId = link.destId;
-            break;
-          }
+          nextId = linkIt->destId;
         }
 
         currentId = nextId;

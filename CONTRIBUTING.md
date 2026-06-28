@@ -61,12 +61,12 @@ Rules are numbered for easy reference in reviews and tooling.
     - 3.1.2. Prefer `std::format` to `printf` and `sprintf`
     - 3.1.3. Use `std::span` for non-owning buffer and container views
     - 3.1.4. Use `std::ranges`
-      - prefer algorithms over iterator-based code when they express the intent clearly
-      - use projections to simplify search and comparison algorithms (e.g., `std::ranges::find(range, value, &Type::member)`)
-      - maintain consistency across algorithm families; if using `std::ranges::sort`, prefer `std::ranges::unique` over iterator-based versions
-      - chain views with pipe syntax
-      - prefer `std::views::` for brevity
-      - `std::span` works directly with ranges algorithms
+      - Use ranges when they make intent clearer, not merely shorter.
+      - Prefer direct algorithms for boilerplate removal: projections with `find`/`contains`, `std::erase`, `std::erase_if`, `append_range`, and `insert_range`.
+      - Simple traversal views (`reverse`, `drop(1)`, `iota`, `enumerate`) are fine when the loop body stays clear.
+      - Be cautious with long pipelines (`filter | transform | to`, folds, temporary-container `join`). Prefer explicit loops for business logic, C API boundaries, side effects, allocation-heavy formatting, locks, I/O, or debugger-worthy branching.
+      - Keep algorithm families consistent: if using `std::ranges::sort`, prefer `std::ranges::unique` over iterator-based versions.
+      - Rule of thumb: ranges should make the intent more prominent than the technique. When in doubt, choose the boring loop.
     - 3.1.5. Use `[[no_unique_address]]` for empty-member optimization
     - 3.1.6. Use `starts_with()` and `ends_with()` for prefix and suffix checks
     - 3.1.7. Use designated initializers for structs

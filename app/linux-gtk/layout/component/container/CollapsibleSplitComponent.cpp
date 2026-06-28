@@ -307,7 +307,7 @@ namespace ao::gtk::layout
       {
         // Initial size from "position" (we treat it as the fixed size of the collapsible panel)
         auto const requestedSize = node.getProp<std::int64_t>("position", -1);
-        auto const hasPosition = node.props.find("position") != node.props.end();
+        auto const hasPosition = node.props.contains("position");
         auto const percentIt = node.props.find("initialPositionPercent");
 
         APP_LOG_INFO("CollapsibleSplit: construct id='{}' requestedSize={} hasPosition={} hasPercent={} revealed={}",
