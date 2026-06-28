@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/playback/AobusSoulViewModel.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <gdkmm/rgba.h>
 #include <glibmm/refptr.h>
@@ -50,7 +50,7 @@ namespace ao::gtk
     bool showFullLogo() const;
     Gdk::RGBA aura() const;
 
-    static Gdk::RGBA mapAuraColor(uimodel::playback::AuraColor color);
+    static Gdk::RGBA mapAuraColor(uimodel::AuraColor color);
 
     static constexpr double kGoldenRatio = std::numbers::phi;
 

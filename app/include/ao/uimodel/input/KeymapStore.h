@@ -10,7 +10,7 @@ namespace ao::rt
   class ConfigStore;
 }
 
-namespace ao::uimodel::input
+namespace ao::uimodel
 {
   /// Config group under which keyboard overrides are persisted.
   inline constexpr char const* kKeymapConfigGroup = "shortcuts";
@@ -28,4 +28,4 @@ namespace ao::uimodel::input
    * @brief Persists the keymap's delta-from-defaults into the "shortcuts" group and flushes.
    */
   void saveKeymap(rt::ConfigStore& store, KeymapModel const& keymap);
-} // namespace ao::uimodel::input
+} // namespace ao::uimodel

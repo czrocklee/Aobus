@@ -19,6 +19,10 @@ When choosing between `uimodel` and GTK, prefer `uimodel` if the behavior can be
 expressed as input state to view state. GTK tests should stay thin and prove only
 adapter behavior.
 
+Runtime tests mirror the production capsules when they exist. Put completion,
+library, projection, and source tests under matching folders below
+`test/unit/runtime/`; keep root runtime service tests at `test/unit/runtime/`.
+
 ## Naming And Tags
 
 Prefer behavior names with layer, type, and component tags:
@@ -81,7 +85,11 @@ for independent observations after the action.
 Helpers should remove repetitive setup, not hide the behavior under test.
 
 - Keep helpers local in an anonymous namespace unless multiple files need them.
+- Before adding a shared helper, search existing `*TestSupport.h` files and layer
+  utilities such as `test/unit/RuntimeTestUtils.h`.
 - Introduce a shared helper only after the same plumbing appears in multiple files.
+- Do not create duplicate helper types and hide the collision with a nested
+  namespace. Prefer reusing or extending the existing helper.
 - Do not create a test DSL that hides the act/assert steps.
 - Prefer explicit expected values over duplicating production algorithms.
 
@@ -127,6 +135,11 @@ contract. See `doc/design/gtk-testing-guidelines.md` for GTK-specific detail.
 ## Large Test Files
 
 Split large files by behavior domain, not by arbitrary line count.
+
+Prefer ordinary `TEST_CASE`s for independent behavior contracts. Use `SECTION`
+only when the cases are variants of one narrow contract and genuinely share the
+same arrange step. If a section can be named as a standalone behavior, it should
+usually be a standalone `TEST_CASE` with focused tags.
 
 Good split boundaries include:
 

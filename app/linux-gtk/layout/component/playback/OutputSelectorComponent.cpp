@@ -7,9 +7,9 @@
 #include "layout/runtime/LayoutContext.h"
 #include "playback/AudioDeviceSelector.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/playback/AudioOutputViewModel.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/playback/output/AudioOutputViewModel.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
@@ -21,7 +21,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -33,7 +33,7 @@ namespace ao::gtk::layout
       OutputSelectorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
         : _playback{ctx.runtime.playback()}
         , _viewModel{_playback,
-                     [this](uimodel::playback::AudioOutputViewState const& view)
+                     [this](uimodel::AudioOutputViewState const& view)
                      {
                        _label.set_text(view.backendSummary);
                        _button.set_tooltip_text(view.outputStatus);
@@ -61,7 +61,7 @@ namespace ao::gtk::layout
       rt::PlaybackService& _playback;
       Gtk::Button _button;
       Gtk::Label _label;
-      uimodel::playback::AudioOutputViewModel _viewModel;
+      uimodel::AudioOutputViewModel _viewModel;
     };
 
     std::unique_ptr<ILayoutComponent> createOutputSelector(LayoutContext& ctx, LayoutNode const& node)
@@ -74,7 +74,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "playback.outputSelector",
                                 .displayName = "Output Selector",
-                                .category = ComponentCategory::Playback,
+                                .category = LayoutComponentCategory::Playback,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

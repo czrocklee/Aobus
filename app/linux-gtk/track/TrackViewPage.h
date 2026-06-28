@@ -12,7 +12,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>
@@ -58,7 +58,7 @@ namespace ao::gtk
 
     explicit TrackViewPage(ListId listId,
                            Glib::RefPtr<TrackListModel> modelPtr,
-                           uimodel::track::TrackColumnLayoutStore& layoutStore,
+                           uimodel::TrackColumnLayoutStore& layoutStore,
                            rt::AppRuntime& runtime,
                            ThumbnailLoader& thumbnailLoader,
                            rt::ViewId viewId = rt::kInvalidViewId);
@@ -115,7 +115,7 @@ namespace ao::gtk
     ListId _listId;
     rt::ViewId _viewId{};
     Glib::RefPtr<TrackListModel> _modelPtr;
-    uimodel::track::TrackColumnLayoutStore& _layoutStore;
+    uimodel::TrackColumnLayoutStore& _layoutStore;
     rt::AppRuntime& _runtime;
     ThumbnailLoader& _thumbnailLoader;
     Glib::RefPtr<Gtk::SortListModel> _groupModelPtr;

@@ -109,7 +109,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("ConfigStore - simple aggregate round-trip", "[app][unit][runtime][config]")
+  TEST_CASE("ConfigStore - persists aggregate values and defaults", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -180,7 +180,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - enum types", "[app][unit][runtime][config]")
+  TEST_CASE("ConfigStore - round-trips enum values", "[runtime][unit][config]")
   {
     auto tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -216,7 +216,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - optional fields", "[app][unit][runtime][config]")
+  TEST_CASE("ConfigStore - round-trips optional values and empty states", "[runtime][unit][config]")
   {
     auto tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -280,7 +280,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - HasValueMethod types", "[app][unit][runtime][config]")
+  TEST_CASE("ConfigStore - round-trips strong value types", "[runtime][unit][config]")
   {
     auto tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -344,7 +344,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - container types", "[app][unit][runtime][config]")
+  TEST_CASE("ConfigStore - round-trips containers and nested aggregates", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -395,7 +395,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - edge cases", "[app][unit][runtime][config]")
+  TEST_CASE("ConfigStore - handles missing keys, overwrites, and scalar edge cases", "[runtime][unit][config]")
   {
     auto tempDir = ao::test::TempDir{};
     auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
@@ -551,7 +551,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - string lifetime (save-before-flush)", "[app][unit][runtime][config]")
+  TEST_CASE("ConfigStore - flush uses saved string copies", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
@@ -573,7 +573,7 @@ namespace ao::rt::test
     CHECK(loaded.name == "temporary string that will go out of scope");
   }
 
-  TEST_CASE("ConfigStore - ReadOnly mode", "[app][unit][runtime][config]")
+  TEST_CASE("ConfigStore - read-only mode rejects writes and reports missing files", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto configStore =

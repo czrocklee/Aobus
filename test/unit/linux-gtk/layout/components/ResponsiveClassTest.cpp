@@ -3,8 +3,8 @@
 
 #include "ContainerTestHelpers.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -12,7 +12,7 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
 
   TEST_CASE("ResponsiveClass component updates CSS classes from allocation breakpoints",
             "[gtk][unit][layout][containers]")

@@ -7,8 +7,8 @@
 #include "layout/runtime/LayoutContext.h"
 #include "playback/NowPlayingFieldLabel.h"
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
 
@@ -17,7 +17,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -72,9 +72,9 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "playback.currentTitleLabel",
                                 .displayName = "Current Title Label",
-                                .category = ComponentCategory::Playback,
+                                .category = LayoutComponentCategory::Playback,
                                 .props = {{.name = "action",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "Action",
                                            .defaultValue = LayoutValue{"none"},
                                            .enumValues = {"none", "reveal", "playPause", "filterByField"}}},
@@ -85,9 +85,9 @@ namespace ao::gtk::layout
 
     registry.registerComponent({.type = "playback.currentArtistLabel",
                                 .displayName = "Current Artist Label",
-                                .category = ComponentCategory::Playback,
+                                .category = LayoutComponentCategory::Playback,
                                 .props = {{.name = "action",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "Action",
                                            .defaultValue = LayoutValue{"none"},
                                            .enumValues = {"none", "reveal", "playPause", "filterByField"}}},

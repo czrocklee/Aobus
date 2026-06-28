@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "layout/document/GtkLayoutPresets.h"
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include "GtkLayoutPresets.h"
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <functional>
 #include <map>
@@ -15,17 +15,17 @@ namespace ao::gtk::layout
 {
   using LayoutPresetId = GtkLayoutPresetId;
 
-  inline uimodel::layout::LayoutDocument createDefaultLayout()
+  inline uimodel::LayoutDocument createDefaultLayout()
   {
     return createDefaultGtkLayout();
   }
 
-  inline uimodel::layout::LayoutDocument createBuiltInLayout(LayoutPresetId presetId)
+  inline uimodel::LayoutDocument createBuiltInLayout(LayoutPresetId presetId)
   {
     return createBuiltInGtkLayout(presetId);
   }
 
-  inline std::map<std::string, uimodel::layout::LayoutNode, std::less<>> getBuiltInTemplates()
+  inline std::map<std::string, uimodel::LayoutNode, std::less<>> getBuiltInTemplates()
   {
     return getBuiltInGtkTemplates();
   }

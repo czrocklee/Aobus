@@ -12,12 +12,12 @@
 #include <string_view>
 #include <vector>
 
-namespace ao::uimodel::layout
+namespace ao::uimodel
 {
-  class ActionCatalog;
+  class LayoutActionCatalog;
 }
 
-namespace ao::uimodel::input
+namespace ao::uimodel
 {
   /// Effective bindings: stable action id -> ordered list of chords.
   using KeymapBindings = std::map<std::string, std::vector<KeyChord>, std::less<>>;
@@ -74,7 +74,7 @@ namespace ao::uimodel::input
     std::vector<KeymapConflict> conflicts() const;
 
     /// Effective action ids that are not registered in @p catalog.
-    std::vector<std::string> unknownActionIds(layout::ActionCatalog const& catalog) const;
+    std::vector<std::string> unknownActionIds(LayoutActionCatalog const& catalog) const;
 
     /// Adds @p chord to @p actionId. Returns false if the chord is invalid or already bound there.
     bool bind(std::string actionId, KeyChord chord);
@@ -95,4 +95,4 @@ namespace ao::uimodel::input
 
   /// Canonical application default keymap (neutral tokens).
   KeymapBindings defaultKeymap();
-} // namespace ao::uimodel::input
+} // namespace ao::uimodel

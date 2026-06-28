@@ -76,12 +76,12 @@ Move:
 Recommended target files:
 
 ```text
-app/include/ao/uimodel/layout/LayoutNode.h
-app/include/ao/uimodel/layout/LayoutDocument.h
-app/include/ao/uimodel/layout/LayoutYaml.h
+app/include/ao/uimodel/layout/document/LayoutNode.h
+app/include/ao/uimodel/layout/document/LayoutDocument.h
+app/include/ao/uimodel/layout/document/LayoutYaml.h
 
-app/uimodel/layout/LayoutNode.cpp
-app/uimodel/layout/LayoutDocument.cpp
+app/uimodel/layout/document/LayoutNode.cpp
+app/uimodel/layout/document/LayoutDocument.cpp
 ```
 
 The following model pieces are reusable:
@@ -184,8 +184,8 @@ Do not move the current `ComponentRegistry` wholesale. It mixes portable metadat
 Move the descriptor half into a new shared catalog:
 
 ```text
-app/include/ao/uimodel/layout/ComponentCatalog.h
-app/uimodel/layout/ComponentCatalog.cpp
+app/include/ao/uimodel/layout/component/LayoutComponentCatalog.h
+app/uimodel/layout/component/LayoutComponentCatalog.cpp
 ```
 
 Shared types:
@@ -222,8 +222,8 @@ Move `ActionValidator.h` and `ActionValidator.cpp` after the `ComponentCatalog` 
 Recommended target files:
 
 ```text
-app/include/ao/uimodel/layout/ActionValidator.h
-app/uimodel/layout/ActionValidator.cpp
+app/include/ao/uimodel/layout/action/LayoutActionValidator.h
+app/uimodel/layout/action/LayoutActionValidator.cpp
 ```
 
 The shared validator should depend on:
@@ -270,8 +270,8 @@ Do not move `LayoutRuntime` as-is, because it builds GTK widgets. Extract the pu
 Recommended target files:
 
 ```text
-app/include/ao/uimodel/layout/LayoutTemplateExpander.h
-app/uimodel/layout/LayoutTemplateExpander.cpp
+app/include/ao/uimodel/layout/document/LayoutTemplateExpander.h
+app/uimodel/layout/document/LayoutTemplateExpander.cpp
 ```
 
 Suggested API:

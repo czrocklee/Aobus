@@ -7,7 +7,7 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleactiongroup.h>
@@ -22,7 +22,7 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   using ao::gtk::test::makeRuntime;
 
   namespace
@@ -43,7 +43,7 @@ namespace ao::gtk::layout::test
                                        .componentId = std::string{componentId}};
       }
 
-      bool canProvideSafeAnchor(ActionDescriptor const& /*desc*/) const override { return _canProvideSafeAnchor; }
+      bool canProvideSafeAnchor(LayoutActionDescriptor const& /*desc*/) const override { return _canProvideSafeAnchor; }
 
       void setCanProvideSafeAnchor(bool val) { _canProvideSafeAnchor = val; }
 
@@ -72,8 +72,8 @@ namespace ao::gtk::layout::test
     {
       std::int32_t action1Fired = 0;
       registry.registerAction(
-        ActionDescriptor{
-          .id = "test.action1", .label = "Action 1", .category = "Test", .capabilities = ActionCapability::None},
+        LayoutActionDescriptor{
+          .id = "test.action1", .label = "Action 1", .category = "Test", .capabilities = LayoutActionCapability::None},
         [&](ActionActivationContext&) { action1Fired++; });
 
       GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
@@ -88,10 +88,10 @@ namespace ao::gtk::layout::test
 
     SECTION("Does not export anchored actions if no safe anchor")
     {
-      registry.registerAction(ActionDescriptor{.id = "test.action2",
-                                               .label = "Action 2",
-                                               .category = "Test",
-                                               .capabilities = ActionCapability::RequiresAnchor},
+      registry.registerAction(LayoutActionDescriptor{.id = "test.action2",
+                                                     .label = "Action 2",
+                                                     .category = "Test",
+                                                     .capabilities = LayoutActionCapability::RequiresAnchor},
                               [&](ActionActivationContext&) {});
 
       GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
@@ -102,10 +102,10 @@ namespace ao::gtk::layout::test
 
     SECTION("Does not export menu-presenting actions if no safe anchor")
     {
-      registry.registerAction(ActionDescriptor{.id = "test.action3",
-                                               .label = "Action 3",
-                                               .category = "Test",
-                                               .capabilities = ActionCapability::PresentsMenu},
+      registry.registerAction(LayoutActionDescriptor{.id = "test.action3",
+                                                     .label = "Action 3",
+                                                     .category = "Test",
+                                                     .capabilities = LayoutActionCapability::PresentsMenu},
                               [&](ActionActivationContext&) {});
 
       GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
@@ -118,10 +118,10 @@ namespace ao::gtk::layout::test
     {
       contextProvider.setCanProvideSafeAnchor(true);
 
-      registry.registerAction(ActionDescriptor{.id = "test.action_anchored",
-                                               .label = "Anchored Action",
-                                               .category = "Test",
-                                               .capabilities = ActionCapability::RequiresAnchor},
+      registry.registerAction(LayoutActionDescriptor{.id = "test.action_anchored",
+                                                     .label = "Anchored Action",
+                                                     .category = "Test",
+                                                     .capabilities = LayoutActionCapability::RequiresAnchor},
                               [&](ActionActivationContext&) {});
 
       GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
@@ -134,12 +134,12 @@ namespace ao::gtk::layout::test
     {
       bool isEnabled = true;
       registry.registerAction(
-        ActionDescriptor{.id = "test.action_refresh",
-                         .label = "Refresh Action",
-                         .category = "Test",
-                         .capabilities = ActionCapability::None},
+        LayoutActionDescriptor{.id = "test.action_refresh",
+                               .label = "Refresh Action",
+                               .category = "Test",
+                               .capabilities = LayoutActionCapability::None},
         [&](ActionActivationContext&) {},
-        [&](ActionActivationContext const&) { return ActionState{.enabled = isEnabled, .disabledReason = ""}; });
+        [&](ActionActivationContext const&) { return LayoutActionState{.enabled = isEnabled, .disabledReason = ""}; });
 
       auto sessionPtr = GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
       REQUIRE(sessionPtr != nullptr);

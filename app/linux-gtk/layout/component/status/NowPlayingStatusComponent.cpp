@@ -7,8 +7,8 @@
 #include "layout/runtime/LayoutContext.h"
 #include "playback/NowPlayingStatusLabel.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
 
@@ -16,7 +16,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     class NowPlayingStatusComponent final : public ILayoutComponent
@@ -42,7 +42,7 @@ namespace ao::gtk::layout
   void registerNowPlayingStatusComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "status.nowPlaying", .displayName = "Now Playing Status", .category = ComponentCategory::Status},
+      {.type = "status.nowPlaying", .displayName = "Now Playing Status", .category = LayoutComponentCategory::Status},
       createNowPlayingStatus);
   }
 } // namespace ao::gtk::layout

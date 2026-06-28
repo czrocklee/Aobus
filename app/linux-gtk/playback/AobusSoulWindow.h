@@ -4,7 +4,7 @@
 #pragma once
 
 #include "app/AobusSoul.h"
-#include <ao/uimodel/playback/AobusSoulViewModel.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <gtkmm/window.h>
 
@@ -37,6 +37,6 @@ namespace ao::gtk
   private:
     rt::PlaybackService* _playback = nullptr;
     AobusSoul _bigSoul{};
-    std::unique_ptr<uimodel::playback::AobusSoulViewModel> _controllerPtr;
+    std::unique_ptr<uimodel::AobusSoulViewModel> _controllerPtr;
   };
 } // namespace ao::gtk

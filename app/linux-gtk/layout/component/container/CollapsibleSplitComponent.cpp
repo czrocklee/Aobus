@@ -8,9 +8,9 @@
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/StatefulComponentState.h"
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/layout/StatefulLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/box.h>
@@ -37,7 +37,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     constexpr std::int32_t kMinCollapsibleSplitSize = 50;
@@ -711,27 +711,27 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = std::string{kCollapsibleSplitComponentType},
                                 .displayName = "Collapsible Split",
-                                .category = ComponentCategory::Container,
+                                .category = LayoutComponentCategory::Container,
                                 .props = {{.name = "orientation",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "Orientation",
                                            .defaultValue = LayoutValue{"vertical"},
                                            .enumValues = {"vertical", "horizontal"}},
                                           {.name = "position",
-                                           .kind = PropertyKind::Int,
+                                           .kind = LayoutPropertyKind::Int,
                                            .label = "Position",
                                            .defaultValue = LayoutValue{static_cast<std::int64_t>(0)}},
                                           {.name = "initialPositionPercent",
-                                           .kind = PropertyKind::Double,
+                                           .kind = LayoutPropertyKind::Double,
                                            .label = "Initial Position (%)",
                                            .defaultValue = LayoutValue{0.0}},
                                           {.name = "collapseSide",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "Collapse Side",
                                            .defaultValue = LayoutValue{"end"},
                                            .enumValues = {"start", "end"}},
                                           {.name = "revealed",
-                                           .kind = PropertyKind::Bool,
+                                           .kind = LayoutPropertyKind::Bool,
                                            .label = "Initially Revealed",
                                            .defaultValue = LayoutValue{true}}},
                                 .layoutProps = {},

@@ -6,8 +6,8 @@
 #include "app/GtkAccelTranslator.h"
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/ActionCatalog.h>
-#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -34,7 +34,7 @@ namespace ao::gtk
 {
   namespace
   {
-    using uimodel::layout::ActionCapability;
+    using uimodel::LayoutActionCapability;
 
     constexpr auto kDefaultWindowWidth = 560;
     constexpr auto kDefaultWindowHeight = 640;
@@ -42,12 +42,12 @@ namespace ao::gtk
     constexpr auto kWarningMarginBottom = 6;
     constexpr auto kCategoryMarginTop = 12;
 
-    bool isShortcutEligible(uimodel::layout::ActionDescriptor const& desc)
+    bool isShortcutEligible(uimodel::LayoutActionDescriptor const& desc)
     {
       // A global accelerator fires with no widget anchor and no surface to host a popover, so
       // actions that require an anchor or present a menu cannot be driven by one.
-      return !desc.capabilities.has(ActionCapability::RequiresAnchor) &&
-             !desc.capabilities.has(ActionCapability::PresentsMenu);
+      return !desc.capabilities.has(LayoutActionCapability::RequiresAnchor) &&
+             !desc.capabilities.has(LayoutActionCapability::PresentsMenu);
     }
 
     Gdk::ModifierType accelMods(Gdk::ModifierType state)
@@ -57,8 +57,8 @@ namespace ao::gtk
     }
   } // namespace
 
-  KeyboardShortcutsWindow::KeyboardShortcutsWindow(uimodel::layout::ActionCatalog const& catalog,
-                                                   uimodel::input::KeymapModel keymap,
+  KeyboardShortcutsWindow::KeyboardShortcutsWindow(uimodel::LayoutActionCatalog const& catalog,
+                                                   uimodel::KeymapModel keymap,
                                                    ChangedCallback onChanged)
     : _keymap{std::move(keymap)}, _onChanged{std::move(onChanged)}
   {
@@ -144,7 +144,7 @@ namespace ao::gtk
     _captureCloseConn.disconnect();
   }
 
-  bool KeyboardShortcutsWindow::bindChord(std::string const& actionId, uimodel::input::KeyChord const& chord)
+  bool KeyboardShortcutsWindow::bindChord(std::string const& actionId, uimodel::KeyChord const& chord)
   {
     if (!chord.valid())
     {
@@ -182,7 +182,7 @@ namespace ao::gtk
   }
 
   std::optional<std::string> KeyboardShortcutsWindow::conflictingOwner(std::string const& actionId,
-                                                                       uimodel::input::KeyChord const& chord) const
+                                                                       uimodel::KeyChord const& chord) const
   {
     if (auto optOwner = _keymap.actionFor(chord); optOwner && *optOwner != actionId)
     {
@@ -192,7 +192,7 @@ namespace ao::gtk
     return std::nullopt;
   }
 
-  void KeyboardShortcutsWindow::requestBind(std::string const& actionId, uimodel::input::KeyChord const& chord)
+  void KeyboardShortcutsWindow::requestBind(std::string const& actionId, uimodel::KeyChord const& chord)
   {
     auto const optOwner = conflictingOwner(actionId, chord);
 
@@ -226,7 +226,7 @@ namespace ao::gtk
     return actionId;
   }
 
-  bool KeyboardShortcutsWindow::unbindChord(std::string const& actionId, uimodel::input::KeyChord const& chord)
+  bool KeyboardShortcutsWindow::unbindChord(std::string const& actionId, uimodel::KeyChord const& chord)
   {
     if (!_keymap.unbind(actionId, chord))
     {

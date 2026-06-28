@@ -8,7 +8,7 @@
 #include "layout/LayoutConstants.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include "test/unit/runtime/TrackSourceTestSupport.h"
+#include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include <ao/Type.h>
@@ -17,7 +17,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/enums.h>
@@ -46,7 +46,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackViewPage initializes list controls and geometry", "[gtk][unit][track][page][geometry]")
+  TEST_CASE("TrackViewPage initializes list controls and geometry", "[gtk][unit][geometry]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -57,7 +57,7 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
 
     auto modelPtr = TrackListModel::create(cache);
-    auto layoutStore = uimodel::track::TrackColumnLayoutStore{};
+    auto layoutStore = uimodel::TrackColumnLayoutStore{};
 
     auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, layoutStore, runtime, thumbnailLoader};
     window.set_child(page);

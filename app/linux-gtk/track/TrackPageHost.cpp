@@ -20,9 +20,9 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/uimodel/playback/PlaybackQueueModel.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
-#include <ao/uimodel/track/TrackPageRoute.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/track/TrackPageRoute.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
@@ -41,10 +41,10 @@ namespace ao::gtk
 {
   TrackPageHost::TrackPageHost(Gtk::Stack& stack,
                                rt::AppRuntime& runtime,
-                               ao::uimodel::playback::PlaybackQueueModel* queueModel,
+                               ao::uimodel::PlaybackQueueModel* queueModel,
                                TagEditController& tagEditController,
                                ListNavigationController& listNavigation,
-                               uimodel::track::TrackColumnLayoutStore& layoutStore)
+                               uimodel::TrackColumnLayoutStore& layoutStore)
     : _stack{stack}
     , _runtime{runtime}
     , _playbackQueueModel{queueModel}
@@ -350,8 +350,7 @@ namespace ao::gtk
     page->signalSelectionChanged().connect(
       [this, page, viewId]
       {
-        auto const route =
-          ao::uimodel::track::describeSelectionRoute(viewId, page->selectionController().selectedTrackIds());
+        auto const route = ao::uimodel::describeSelectionRoute(viewId, page->selectionController().selectedTrackIds());
 
         if (route.shouldUpdateRuntimeSelection)
         {
@@ -392,7 +391,7 @@ namespace ao::gtk
     page->signalCreateSmartListRequested().connect(
       [this, page](std::string const& expression)
       {
-        auto const parentId = ao::uimodel::track::smartListParentIdFromPage(page->listId());
+        auto const parentId = ao::uimodel::smartListParentIdFromPage(page->listId());
         _listNavigation.createSmartListFromExpression(parentId, expression);
       });
 

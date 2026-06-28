@@ -5,7 +5,7 @@
 
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
-#include <ao/uimodel/track/SelectionSummary.h>
+#include <ao/uimodel/library/track/TrackSelectionSummary.h>
 
 #include <gtkmm/enums.h>
 
@@ -31,6 +31,6 @@ namespace ao::gtk
 
   void SelectionInfoLabel::updateState(std::size_t count, std::optional<std::chrono::milliseconds> optTotalDuration)
   {
-    _label.set_text(uimodel::track::selectionSummaryText(count, optTotalDuration));
+    _label.set_text(uimodel::trackSelectionSummaryText(count, optTotalDuration));
   }
 } // namespace ao::gtk

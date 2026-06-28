@@ -9,8 +9,8 @@
 #include "status/ActivityStatus.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/library/Library.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
 
@@ -23,7 +23,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     ActivityStatusVariant parseVariant(std::string const& value)
@@ -138,19 +138,19 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "status.activityStatus",
                                 .displayName = "Activity Status",
-                                .category = ComponentCategory::Status,
+                                .category = LayoutComponentCategory::Status,
                                 .props = {{.name = "variant",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "Variant",
                                            .defaultValue = LayoutValue{"ambient"},
                                            .enumValues = {"ambient", "classicInline"}},
                                           {.name = "idleBehavior",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "Idle Behavior",
                                            .defaultValue = LayoutValue{""},
                                            .enumValues = {"", "hidden", "reserve"}},
                                           {.name = "maxTextChars",
-                                           .kind = PropertyKind::Int,
+                                           .kind = LayoutPropertyKind::Int,
                                            .label = "Max Text Chars",
                                            .defaultValue = LayoutValue{kDefaultMaxTextChars}}},
                                 .layoutProps = {},

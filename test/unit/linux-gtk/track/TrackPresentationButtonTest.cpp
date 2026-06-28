@@ -10,8 +10,8 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/uimodel/track/TrackPresentationCatalog.h>
-#include <ao/uimodel/track/TrackPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/enums.h>
@@ -31,8 +31,8 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto themeController = ThemeCoordinator{};
-    auto catalog = uimodel::track::TrackPresentationCatalog{runtime.workspace()};
-    auto preferences = uimodel::track::TrackPresentationPreferenceStore{catalog};
+    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace()};
+    auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
 
     auto window = Gtk::Window{};
     auto button = TrackPresentationButton{runtime};
@@ -62,15 +62,14 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("TrackPresentationButton cancels pending presentation apply when destroyed",
-            "[gtk][unit][track][presentation][regression]")
+  TEST_CASE("TrackPresentationButton cancels pending presentation apply when destroyed", "[gtk][unit][regression]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto themeController = ThemeCoordinator{};
-    auto catalog = uimodel::track::TrackPresentationCatalog{runtime.workspace()};
-    auto preferences = uimodel::track::TrackPresentationPreferenceStore{catalog};
+    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace()};
+    auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
     auto window = Gtk::Window{};
 
     runtime.workspace().navigateTo(rt::kAllTracksListId);

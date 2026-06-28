@@ -12,7 +12,7 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/library/Library.h>
-#include <ao/uimodel/tag/TagEditWorkflow.h>
+#include <ao/uimodel/library/property/TagEditWorkflow.h>
 
 #include <giomm/actionmap.h>
 #include <giomm/menu.h>
@@ -255,12 +255,12 @@ namespace ao::gtk
                                            std::span<std::string const> tagsToAdd,
                                            std::span<std::string const> tagsToRemove)
   {
-    auto request = ao::uimodel::tag::TagEditRequest{};
+    auto request = ao::uimodel::TagEditRequest{};
     request.selectedIds = selection.selectedIds;
     request.tagsToAdd.assign(tagsToAdd.begin(), tagsToAdd.end());
     request.tagsToRemove.assign(tagsToRemove.begin(), tagsToRemove.end());
 
-    auto workflow = ao::uimodel::tag::TagEditWorkflow{_runtime.library().writer()};
+    auto workflow = ao::uimodel::TagEditWorkflow{_runtime.library().writer()};
     auto const result = workflow.apply(request);
 
     if (!result.applied)

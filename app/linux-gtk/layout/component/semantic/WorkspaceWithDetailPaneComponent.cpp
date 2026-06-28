@@ -6,8 +6,8 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "track/TrackPageHost.h"
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -22,7 +22,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -101,7 +101,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "workspace.withDetailPane",
                                 .displayName = "Workspace with Detail",
-                                .category = ComponentCategory::Layout,
+                                .category = LayoutComponentCategory::Layout,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

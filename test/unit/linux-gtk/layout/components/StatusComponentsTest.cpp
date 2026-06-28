@@ -8,8 +8,8 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -18,7 +18,7 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   using ao::gtk::test::drainGtkEvents;
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::findWidgetByClass;
@@ -42,8 +42,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(registry.descriptor("status.notificationCenter").has_value());
   }
 
-  TEST_CASE("status.activityStatus routes notification actions through ActionRegistry",
-            "[gtk][unit][layout][status][activity]")
+  TEST_CASE("status.activityStatus routes notification actions through ActionRegistry", "[gtk][unit][status]")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
@@ -56,15 +55,16 @@ namespace ao::gtk::layout::test
     bool activated = false;
     bool sawComponentId = false;
     bool sawActionAnchor = false;
-    actionRegistry.registerAction(
-      ActionDescriptor{
-        .id = "library.retry", .label = "Retry Import", .category = "Library", .capabilities = ActionCapability::None},
-      [&](ActionActivationContext& ctx)
-      {
-        activated = true;
-        sawComponentId = ctx.componentId == "activity-slot";
-        sawActionAnchor = ctx.anchorWidget.has_css_class("ao-activity-detail-action");
-      });
+    actionRegistry.registerAction(LayoutActionDescriptor{.id = "library.retry",
+                                                         .label = "Retry Import",
+                                                         .category = "Library",
+                                                         .capabilities = LayoutActionCapability::None},
+                                  [&](ActionActivationContext& ctx)
+                                  {
+                                    activated = true;
+                                    sawComponentId = ctx.componentId == "activity-slot";
+                                    sawActionAnchor = ctx.anchorWidget.has_css_class("ao-activity-detail-action");
+                                  });
 
     auto ctx =
       LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
@@ -100,8 +100,7 @@ namespace ao::gtk::layout::test
     window.unset_child();
   }
 
-  TEST_CASE("status.activityStatus validates notification actions before rendering",
-            "[gtk][unit][layout][status][activity]")
+  TEST_CASE("status.activityStatus validates notification actions before rendering", "[gtk][unit][status]")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
@@ -113,13 +112,15 @@ namespace ao::gtk::layout::test
     auto actionRegistry = ActionRegistry{};
     bool sawFallbackComponentId = false;
     actionRegistry.registerAction(
-      ActionDescriptor{
-        .id = "library.retry", .label = "Retry Import", .category = "Library", .capabilities = ActionCapability::None},
+      LayoutActionDescriptor{.id = "library.retry",
+                             .label = "Retry Import",
+                             .category = "Library",
+                             .capabilities = LayoutActionCapability::None},
       [](ActionActivationContext&) {},
       [&sawFallbackComponentId](ActionActivationContext const& stateCtx)
       {
         sawFallbackComponentId = stateCtx.componentId == "status.activityStatus";
-        return ActionState{.enabled = false, .disabledReason = "Library busy"};
+        return LayoutActionState{.enabled = false, .disabledReason = "Library busy"};
       });
 
     auto ctx =

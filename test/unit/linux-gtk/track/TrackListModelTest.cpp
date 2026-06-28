@@ -5,7 +5,7 @@
 
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include "test/unit/runtime/TrackSourceTestSupport.h"
+#include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/Type.h>

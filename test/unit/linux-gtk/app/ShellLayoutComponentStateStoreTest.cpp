@@ -5,9 +5,9 @@
 
 #include "test/unit/TestUtils.h"
 #include <ao/Exception.h>
-#include <ao/uimodel/layout/LayoutComponentState.h>
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -18,30 +18,30 @@
 
 namespace ao::gtk::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
 
   namespace
   {
-    uimodel::layout::LayoutNode splitNode(std::string id = "main-paned")
+    uimodel::LayoutNode splitNode(std::string id = "main-paned")
     {
-      auto node = uimodel::layout::LayoutNode{};
+      auto node = uimodel::LayoutNode{};
       node.id = std::move(id);
       node.type = "split";
-      node.props["orientation"] = uimodel::layout::LayoutValue{std::string{"horizontal"}};
-      node.props["initialPositionPercent"] = uimodel::layout::LayoutValue{0.2};
-      node.children = {uimodel::layout::LayoutNode{.type = "spacer"}, uimodel::layout::LayoutNode{.type = "spacer"}};
+      node.props["orientation"] = uimodel::LayoutValue{std::string{"horizontal"}};
+      node.props["initialPositionPercent"] = uimodel::LayoutValue{0.2};
+      node.children = {uimodel::LayoutNode{.type = "spacer"}, uimodel::LayoutNode{.type = "spacer"}};
       return node;
     }
 
-    uimodel::layout::LayoutComponentStateDocument stateDocFor(uimodel::layout::LayoutNode const& node)
+    uimodel::LayoutComponentStateDocument stateDocFor(uimodel::LayoutNode const& node)
     {
-      auto doc = uimodel::layout::LayoutComponentStateDocument{};
+      auto doc = uimodel::LayoutComponentStateDocument{};
       doc.preset = "classic";
-      doc.components[node.id] = uimodel::layout::LayoutComponentStateEntry{
+      doc.components[node.id] = uimodel::LayoutComponentStateEntry{
         .type = node.type,
-        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
-        .baselineHash = uimodel::layout::layoutComponentBaselineHash(node),
-        .state = {{"positionPercent", uimodel::layout::LayoutValue{0.35}}},
+        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
+        .baselineHash = uimodel::layoutComponentBaselineHash(node),
+        .state = {{"positionPercent", uimodel::LayoutValue{0.35}}},
       };
       return doc;
     }
@@ -96,29 +96,29 @@ namespace ao::gtk::test
       auto liveNode = splitNode("live-split");
       auto staleNode = splitNode("stale-split");
       auto doc = stateDocFor(liveNode);
-      doc.components["orphan-split"] = uimodel::layout::LayoutComponentStateEntry{
+      doc.components["orphan-split"] = uimodel::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
+        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
         .baselineHash = "orphan",
-        .state = {{"positionPercent", uimodel::layout::LayoutValue{0.10}}},
+        .state = {{"positionPercent", uimodel::LayoutValue{0.10}}},
       };
-      doc.components["wrong-type"] = uimodel::layout::LayoutComponentStateEntry{
+      doc.components["wrong-type"] = uimodel::LayoutComponentStateEntry{
         .type = "collapsibleSplit",
-        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
-        .baselineHash = uimodel::layout::layoutComponentBaselineHash(liveNode),
-        .state = {{"positionPercent", uimodel::layout::LayoutValue{0.20}}},
+        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
+        .baselineHash = uimodel::layoutComponentBaselineHash(liveNode),
+        .state = {{"positionPercent", uimodel::LayoutValue{0.20}}},
       };
-      doc.components["stale-split"] = uimodel::layout::LayoutComponentStateEntry{
+      doc.components["stale-split"] = uimodel::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
+        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
         .baselineHash = "stale",
-        .state = {{"positionPercent", uimodel::layout::LayoutValue{0.30}}},
+        .state = {{"positionPercent", uimodel::LayoutValue{0.30}}},
       };
       store.save("classic", doc);
 
-      auto layoutDoc = uimodel::layout::LayoutDocument{};
+      auto layoutDoc = uimodel::LayoutDocument{};
       layoutDoc.root.type = "box";
-      layoutDoc.root.children = {liveNode, uimodel::layout::LayoutNode{.id = "wrong-type", .type = "split"}, staleNode};
+      layoutDoc.root.children = {liveNode, uimodel::LayoutNode{.id = "wrong-type", .type = "split"}, staleNode};
 
       store.prune("classic", layoutDoc);
 
@@ -147,7 +147,7 @@ namespace ao::gtk::test
       auto doc = stateDocFor(node);
       store.save("classic", doc);
 
-      auto layoutDoc = uimodel::layout::LayoutDocument{};
+      auto layoutDoc = uimodel::LayoutDocument{};
       layoutDoc.root.type = "box";
       layoutDoc.root.children = {node};
 

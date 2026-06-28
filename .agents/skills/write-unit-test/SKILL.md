@@ -15,6 +15,8 @@ Test the public behavior contract, not the current implementation. A good test p
 
 Mutation tests must assert a postcondition. Avoid tests that only prove a branch executed, a function returned truthy, or a callback was merely called.
 
+When reviewing rather than writing, work from the smell list and final checklist in `references/files-regression-validation.md`.
+
 ## On-demand references
 
 Read only the reference that matches the task. Do not load every reference by default.
@@ -34,8 +36,9 @@ Read only the reference that matches the task. Do not load every reference by de
 4. Arrange only necessary state.
 5. Act once unless the contract is about repeated calls, ordering, or idempotence.
 6. Assert observable outcomes and postconditions.
-7. Add new test files to `test/CMakeLists.txt`.
-8. Run the narrowest useful test filter first when practical.
+7. Before adding shared helpers, search existing `*TestSupport.h` files and layer utilities such as `test/unit/RuntimeTestUtils.h`.
+8. Add new test files to `test/CMakeLists.txt`.
+9. Run the narrowest useful test filter first when practical.
 
 ## Layer quick map
 
@@ -98,6 +101,8 @@ For callbacks, assert payloads, ordering, and non-emission when relevant. `calle
 - Add matcher/generator headers only when used.
 - Match the namespace style of neighboring tests, commonly `namespace ao::<module>::test` or `namespace ao::gtk::test`.
 - Keep helpers in an anonymous namespace unless shared across files.
+- Do not introduce duplicate shared helper types and avoid collisions by putting them in a nested namespace; reuse or extend existing support helpers instead.
+- Choose `SECTION` vs `TEST_CASE` by failure isolation, not scenario count: separate `TEST_CASE`s for independent contracts, `SECTION` for variants sharing one arrange. Over-splitting duplicates the arrange and pushes plumbing into `*TestSupport.h` — see `references/naming-and-assertions.md`.
 - Use `REQUIRE` for preconditions that make later checks meaningless; use `CHECK` for independent observations after the action.
 - Prefer explicit expected values over duplicating production algorithms.
 - For `ao::Result<T>` failures, assert the result is false before reading `error()`.

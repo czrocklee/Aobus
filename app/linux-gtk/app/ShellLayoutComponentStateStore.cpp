@@ -5,8 +5,8 @@
 
 #include <ao/Exception.h>
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/LayoutComponentState.h>
-#include <ao/uimodel/layout/LayoutComponentStateYaml.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
 #include <ao/utility/AtomicFile.h>
 #include <ao/yaml/Utils.h>
 
@@ -45,14 +45,14 @@ namespace ao::gtk
     return _stateDir / std::format("{}.yaml", presetId);
   }
 
-  std::optional<uimodel::layout::LayoutComponentStateDocument> ShellLayoutComponentStateStore::load(
+  std::optional<uimodel::LayoutComponentStateDocument> ShellLayoutComponentStateStore::load(
     std::string_view presetId) const
   {
     auto const lock = std::scoped_lock{_mutex};
     return loadUnlocked(presetId);
   }
 
-  std::optional<uimodel::layout::LayoutComponentStateDocument> ShellLayoutComponentStateStore::loadUnlocked(
+  std::optional<uimodel::LayoutComponentStateDocument> ShellLayoutComponentStateStore::loadUnlocked(
     std::string_view presetId) const
   {
     auto const path = filePath(presetId);
@@ -64,7 +64,7 @@ namespace ao::gtk
       auto tree = ryml::Tree{yaml::callbacks(fileName.c_str())};
       ryml::parse_in_place(yaml::toSubstr(buffer), &tree);
 
-      auto doc = uimodel::layout::LayoutComponentStateDocument{};
+      auto doc = uimodel::LayoutComponentStateDocument{};
 
       if (!yaml::read(tree.rootref(), doc))
       {
@@ -94,15 +94,14 @@ namespace ao::gtk
     }
   }
 
-  void ShellLayoutComponentStateStore::save(std::string_view presetId,
-                                            uimodel::layout::LayoutComponentStateDocument const& doc)
+  void ShellLayoutComponentStateStore::save(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc)
   {
     auto const lock = std::scoped_lock{_mutex};
     saveUnlocked(presetId, doc);
   }
 
   bool ShellLayoutComponentStateStore::saveUnlocked(std::string_view presetId,
-                                                    uimodel::layout::LayoutComponentStateDocument const& doc)
+                                                    uimodel::LayoutComponentStateDocument const& doc)
   {
     auto const path = filePath(presetId);
     auto stored = doc;
@@ -131,15 +130,13 @@ namespace ao::gtk
     }
   }
 
-  bool ShellLayoutComponentStateStore::prune(std::string_view presetId,
-                                             uimodel::layout::LayoutDocument const& effectiveDoc)
+  bool ShellLayoutComponentStateStore::prune(std::string_view presetId, uimodel::LayoutDocument const& effectiveDoc)
   {
     auto const lock = std::scoped_lock{_mutex};
 
-    auto doc =
-      loadUnlocked(presetId).value_or(uimodel::layout::LayoutComponentStateDocument{.preset = std::string{presetId}});
+    auto doc = loadUnlocked(presetId).value_or(uimodel::LayoutComponentStateDocument{.preset = std::string{presetId}});
     auto const beforeCount = doc.components.size();
-    uimodel::layout::pruneLayoutComponentState(doc, effectiveDoc);
+    uimodel::pruneLayoutComponentState(doc, effectiveDoc);
     auto const changed =
       doc.components.size() != beforeCount || (doc.components.empty() && std::filesystem::exists(filePath(presetId)));
 

@@ -5,8 +5,8 @@
 
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
-#include <ao/uimodel/playback/SeekSliderInteractionModel.h>
-#include <ao/uimodel/playback/SeekViewModel.h>
+#include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
+#include <ao/uimodel/playback/seek/SeekViewModel.h>
 
 #include <gdkmm/frameclock.h>
 #include <glibmm/main.h>
@@ -30,7 +30,7 @@ namespace ao::gtk
   } // namespace
 
   SeekControl::SeekControl(rt::PlaybackService& playbackService)
-    : _controller{playbackService, [this](ao::uimodel::playback::SeekViewState const& view) { applyState(view); }}
+    : _controller{playbackService, [this](ao::uimodel::SeekViewState const& view) { applyState(view); }}
   {
     _scale.set_halign(Gtk::Align::FILL);
     _scale.set_hexpand(true);
@@ -70,7 +70,7 @@ namespace ao::gtk
     _debounceConnection.disconnect();
   }
 
-  void SeekControl::applyState(ao::uimodel::playback::SeekViewState const& view)
+  void SeekControl::applyState(ao::uimodel::SeekViewState const& view)
   {
     if (view.duration == std::chrono::milliseconds{0})
     {
@@ -112,16 +112,16 @@ namespace ao::gtk
     applySeekDecision(_interaction.endPointerInteraction(scaleElapsed()));
   }
 
-  void SeekControl::applySeekDecision(uimodel::playback::SeekSliderDecision const& decision)
+  void SeekControl::applySeekDecision(uimodel::SeekSliderDecision const& decision)
   {
     switch (decision.action)
     {
-      case uimodel::playback::SeekSliderAction::Preview:
+      case uimodel::SeekSliderAction::Preview:
         _interpolator.updateState(decision.elapsed, _interaction.duration(), false);
         _controller.seekPreview(decision.elapsed);
         break;
-      case uimodel::playback::SeekSliderAction::Commit: commitSeekFromScale(); break;
-      case uimodel::playback::SeekSliderAction::None: break;
+      case uimodel::SeekSliderAction::Commit: commitSeekFromScale(); break;
+      case uimodel::SeekSliderAction::None: break;
     }
   }
 

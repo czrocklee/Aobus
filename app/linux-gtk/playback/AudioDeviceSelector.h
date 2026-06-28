@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/playback/AudioOutputViewModel.h>
+#include <ao/uimodel/playback/output/AudioOutputViewModel.h>
 
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
@@ -43,6 +43,6 @@ namespace ao::gtk
 
     Gtk::ListBox _listBox;
     Glib::RefPtr<Gio::ListStore<Glib::Object>> _storePtr{};
-    uimodel::playback::AudioOutputViewModel _outputController;
+    uimodel::AudioOutputViewModel _outputController;
   };
 } // namespace ao::gtk

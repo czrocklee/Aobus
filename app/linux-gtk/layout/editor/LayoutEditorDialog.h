@@ -4,9 +4,9 @@
 #pragma once
 
 #include "app/AppDialog.h"
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <giomm/simpleactiongroup.h>
 #include <glibmm/refptr.h>
@@ -45,13 +45,13 @@ namespace ao::gtk::layout::editor
 {
   struct LayoutSaveResult final
   {
-    std::map<std::string, uimodel::layout::LayoutDocument, std::less<>> modified;
+    std::map<std::string, uimodel::LayoutDocument, std::less<>> modified;
     std::vector<std::string> resets;
     std::string activePresetId;
-    uimodel::layout::LayoutDocument activeDocument;
+    uimodel::LayoutDocument activeDocument;
   };
 
-  using LayoutLoaderFn = std::function<uimodel::layout::LayoutDocument(std::string_view presetId)>;
+  using LayoutLoaderFn = std::function<uimodel::LayoutDocument(std::string_view presetId)>;
 
   class LayoutEditorDialog final : public AppDialog
   {
@@ -59,7 +59,7 @@ namespace ao::gtk::layout::editor
     LayoutEditorDialog(Gtk::Window& parent,
                        ComponentRegistry const& registry,
                        ActionRegistry const& actionRegistry,
-                       uimodel::layout::LayoutDocument initialLayout,
+                       uimodel::LayoutDocument initialLayout,
                        std::string initialPresetId,
                        std::string initialThemeId,
                        LayoutLoaderFn layoutLoader);
@@ -70,11 +70,11 @@ namespace ao::gtk::layout::editor
     LayoutEditorDialog(LayoutEditorDialog&&) = delete;
     LayoutEditorDialog& operator=(LayoutEditorDialog&&) = delete;
 
-    uimodel::layout::LayoutDocument const& document() const { return _document; }
+    uimodel::LayoutDocument const& document() const { return _document; }
     std::string selectedPresetId() const { return _comboPresets.get_active_id(); }
     std::string selectedThemeId() const { return _comboThemePresets.get_active_id(); }
 
-    sigc::signal<void(uimodel::layout::LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
+    sigc::signal<void(uimodel::LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
     sigc::signal<void(std::string_view)>& signalThemePreview() { return _signalThemePreview; }
     sigc::signal<void(LayoutSaveResult const&)>& signalSaveRequest() { return _signalSaveRequest; }
 
@@ -93,44 +93,44 @@ namespace ao::gtk::layout::editor
 
       Gtk::TreeModelColumn<Glib::ustring> displayName;
       Gtk::TreeModelColumn<Glib::ustring> type;
-      Gtk::TreeModelColumn<uimodel::layout::LayoutNode*> nodePtr;
+      Gtk::TreeModelColumn<uimodel::LayoutNode*> nodePtr;
     };
 
     void setupUi();
     void populateTree();
-    void appendNodeToTree(Gtk::TreeModel::Row parentRow, uimodel::layout::LayoutNode* node);
+    void appendNodeToTree(Gtk::TreeModel::Row parentRow, uimodel::LayoutNode* node);
     void onSelectionChanged();
-    void updatePropertiesPanel(uimodel::layout::LayoutNode* node);
-    void applyPropertyChange(uimodel::layout::LayoutNode* node,
+    void updatePropertiesPanel(uimodel::LayoutNode* node);
+    void applyPropertyChange(uimodel::LayoutNode* node,
                              std::string_view propName,
-                             uimodel::layout::LayoutValue const& value,
+                             uimodel::LayoutValue const& value,
                              bool isLayoutProp);
     void notifyPreview();
     void scheduleDebouncedPreview();
 
-    Gtk::Widget* renderIdSection(uimodel::layout::LayoutNode* node);
+    Gtk::Widget* renderIdSection(uimodel::LayoutNode* node);
     void addSectionTitle(std::string_view text);
-    Gtk::Widget* renderBoolEditor(uimodel::layout::LayoutNode* node,
-                                  uimodel::layout::PropertyDescriptor const& prop,
-                                  uimodel::layout::LayoutValue const& currentVal,
+    Gtk::Widget* renderBoolEditor(uimodel::LayoutNode* node,
+                                  uimodel::LayoutPropertyDescriptor const& prop,
+                                  uimodel::LayoutValue const& currentVal,
                                   bool isLayoutProp);
-    Gtk::Widget* renderIntEditor(uimodel::layout::LayoutNode* node,
-                                 uimodel::layout::PropertyDescriptor const& prop,
-                                 uimodel::layout::LayoutValue const& currentVal,
+    Gtk::Widget* renderIntEditor(uimodel::LayoutNode* node,
+                                 uimodel::LayoutPropertyDescriptor const& prop,
+                                 uimodel::LayoutValue const& currentVal,
                                  bool isLayoutProp);
-    Gtk::Widget* renderEnumEditor(uimodel::layout::LayoutNode* node,
-                                  uimodel::layout::PropertyDescriptor const& prop,
-                                  uimodel::layout::LayoutValue const& currentVal,
+    Gtk::Widget* renderEnumEditor(uimodel::LayoutNode* node,
+                                  uimodel::LayoutPropertyDescriptor const& prop,
+                                  uimodel::LayoutValue const& currentVal,
                                   bool isLayoutProp);
     void populateActionComboBox(Gtk::ComboBoxText* combo,
-                                uimodel::layout::LayoutNode* node,
-                                uimodel::layout::PropertyDescriptor const& prop);
-    Gtk::Widget* renderStringEditor(uimodel::layout::LayoutNode* node,
-                                    uimodel::layout::PropertyDescriptor const& prop,
-                                    uimodel::layout::LayoutValue const& currentVal,
+                                uimodel::LayoutNode* node,
+                                uimodel::LayoutPropertyDescriptor const& prop);
+    Gtk::Widget* renderStringEditor(uimodel::LayoutNode* node,
+                                    uimodel::LayoutPropertyDescriptor const& prop,
+                                    uimodel::LayoutValue const& currentVal,
                                     bool isLayoutProp);
-    Gtk::Widget* dispatchEditor(uimodel::layout::LayoutNode* node,
-                                uimodel::layout::PropertyDescriptor const& prop,
+    Gtk::Widget* dispatchEditor(uimodel::LayoutNode* node,
+                                uimodel::LayoutPropertyDescriptor const& prop,
                                 bool isLayoutProp);
 
     void addComponent(std::string type);
@@ -145,15 +145,15 @@ namespace ao::gtk::layout::editor
     bool validateAllDirtyDocuments();
     void presentErrorDialog(std::string const& title, std::string const& message);
 
-    uimodel::layout::LayoutNode* findParentOf(uimodel::layout::LayoutNode* root, uimodel::layout::LayoutNode* target);
-    uimodel::layout::LayoutNode* selectedNonRootNode() const;
+    uimodel::LayoutNode* findParentOf(uimodel::LayoutNode* root, uimodel::LayoutNode* target);
+    uimodel::LayoutNode* selectedNonRootNode() const;
 
     void markEdited();
     void stashCurrentDocument();
 
     struct SessionEntry final
     {
-      uimodel::layout::LayoutDocument doc;
+      uimodel::LayoutDocument doc;
       bool dirty = false;
       bool resetPending = false;
     };
@@ -161,8 +161,8 @@ namespace ao::gtk::layout::editor
     ComponentRegistry const& _registry;
     ActionRegistry const& _actionRegistry;
 
-    // Forward declaration of resolver (defined in ActionValidator.h already included)
-    uimodel::layout::LayoutDocument _document;
+    // Forward declaration of resolver (defined in LayoutActionValidator.h already included)
+    uimodel::LayoutDocument _document;
 
     ModelColumns _columns;
     Glib::RefPtr<Gtk::TreeStore> _treeStorePtr;
@@ -195,7 +195,7 @@ namespace ao::gtk::layout::editor
     std::string _currentPresetId;
     sigc::connection _previewDebounceConn;
 
-    sigc::signal<void(uimodel::layout::LayoutDocument const&)> _signalApplyPreview;
+    sigc::signal<void(uimodel::LayoutDocument const&)> _signalApplyPreview;
     sigc::signal<void(std::string_view)> _signalThemePreview;
     sigc::signal<void(LayoutSaveResult const&)> _signalSaveRequest;
   };

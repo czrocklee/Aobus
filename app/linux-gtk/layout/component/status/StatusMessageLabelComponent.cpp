@@ -5,8 +5,8 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
@@ -17,7 +17,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -47,8 +47,9 @@ namespace ao::gtk::layout
 
   void registerStatusMessageLabelComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent(
-      {.type = "status.messageLabel", .displayName = "Status Message (Basic)", .category = ComponentCategory::Status},
-      createStatusMessageLabel);
+    registry.registerComponent({.type = "status.messageLabel",
+                                .displayName = "Status Message (Basic)",
+                                .category = LayoutComponentCategory::Status},
+                               createStatusMessageLabel);
   }
 } // namespace ao::gtk::layout

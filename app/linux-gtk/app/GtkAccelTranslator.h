@@ -20,14 +20,14 @@ namespace ao::gtk
    * std::nullopt if the chord's key token cannot be mapped to a GDK keysym. This
    * is the sole place that knows GDK keysyms and the `<Primary>p` accel syntax.
    */
-  std::optional<std::string> toGtkAccel(uimodel::input::KeyChord const& chord);
+  std::optional<std::string> toGtkAccel(uimodel::KeyChord const& chord);
 
   /**
    * @brief Parses a GTK accelerator string back into a neutral KeyChord.
    *
    * Returns std::nullopt if the string does not parse to a usable key.
    */
-  std::optional<uimodel::input::KeyChord> fromGtkAccel(std::string const& accel);
+  std::optional<uimodel::KeyChord> fromGtkAccel(std::string const& accel);
 
   /**
    * @brief Converts a live GDK key press (keyval + modifier state) into a neutral KeyChord.
@@ -37,5 +37,5 @@ namespace ao::gtk
    * when the key cannot be mapped to a neutral token. Only the accelerator-relevant
    * modifier bits (Ctrl/Shift/Alt/Super) are retained from @p state.
    */
-  std::optional<uimodel::input::KeyChord> fromGtkKeyval(guint keyval, Gdk::ModifierType state);
+  std::optional<uimodel::KeyChord> fromGtkKeyval(guint keyval, Gdk::ModifierType state);
 } // namespace ao::gtk

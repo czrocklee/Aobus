@@ -4,15 +4,15 @@
 #include "playback/AudioQualityCss.h"
 
 #include <ao/audio/Backend.h>
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gtkmm/widget.h>
 
 namespace ao::gtk
 {
-  char const* qualityCssClass(uimodel::playback::AudioQualityCategory category) noexcept
+  char const* qualityCssClass(uimodel::AudioQualityCategory category) noexcept
   {
-    using Category = uimodel::playback::AudioQualityCategory;
+    using Category = uimodel::AudioQualityCategory;
 
     switch (category)
     {

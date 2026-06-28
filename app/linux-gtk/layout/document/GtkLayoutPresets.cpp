@@ -5,9 +5,9 @@
 
 #include <ao/Exception.h>
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/layout/LayoutYaml.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutYaml.h>
 #include <ao/yaml/Utils.h>
 
 #include <giomm/resource.h>
@@ -23,7 +23,7 @@ namespace ao::gtk::layout
 {
   namespace
   {
-    uimodel::layout::LayoutDocument loadBuiltInLayout(std::string_view path)
+    uimodel::LayoutDocument loadBuiltInLayout(std::string_view path)
     {
       try
       {
@@ -34,7 +34,7 @@ namespace ao::gtk::layout
         auto tree = ryml::Tree{yaml::callbacks(std::string{path}.c_str())};
         ryml::parse_in_arena(yaml::toCsubstr(std::string_view{data, size}), &tree);
 
-        auto doc = uimodel::layout::LayoutDocument{};
+        auto doc = uimodel::LayoutDocument{};
 
         if (!yaml::read(tree.rootref(), doc))
         {
@@ -61,12 +61,12 @@ namespace ao::gtk::layout
     return GtkLayoutPresetId::Classic;
   }
 
-  uimodel::layout::LayoutDocument createDefaultGtkLayout()
+  uimodel::LayoutDocument createDefaultGtkLayout()
   {
     return createBuiltInGtkLayout(GtkLayoutPresetId::Classic);
   }
 
-  uimodel::layout::LayoutDocument createBuiltInGtkLayout(GtkLayoutPresetId presetId)
+  uimodel::LayoutDocument createBuiltInGtkLayout(GtkLayoutPresetId presetId)
   {
     switch (presetId)
     {
@@ -88,7 +88,7 @@ namespace ao::gtk::layout
     return loadBuiltInLayout("/org/aobus/layout/default_layout.yaml");
   }
 
-  std::map<std::string, uimodel::layout::LayoutNode, std::less<>> getBuiltInGtkTemplates()
+  std::map<std::string, uimodel::LayoutNode, std::less<>> getBuiltInGtkTemplates()
   {
     return createDefaultGtkLayout().templates;
   }

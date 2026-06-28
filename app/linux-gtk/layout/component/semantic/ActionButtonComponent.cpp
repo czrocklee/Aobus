@@ -5,9 +5,9 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/ComponentActionPolicy.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/widget.h>
@@ -17,7 +17,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -83,25 +83,26 @@ namespace ao::gtk::layout
 
   void registerActionButtonComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "app.actionButton",
-                                .displayName = "Action Button",
-                                .category = ComponentCategory::Generic,
-                                .props = {{.name = "label", .kind = PropertyKind::String, .label = "Text"},
-                                          {.name = "icon", .kind = PropertyKind::String, .label = "Icon (Symbolic)"},
-                                          {.name = "size",
-                                           .kind = PropertyKind::Enum,
-                                           .label = "Size",
-                                           .defaultValue = LayoutValue{"normal"},
-                                           .enumValues = {"small", "normal", "large"}},
-                                          {.name = "style",
-                                           .kind = PropertyKind::Enum,
-                                           .label = "Style",
-                                           .defaultValue = LayoutValue{"flat"},
-                                           .enumValues = {"flat", "raised", "circular", "suggested", "destructive"}}},
-                                .layoutProps = {},
-                                .minChildren = 0,
-                                .optMaxChildren = 0,
-                                .actionPolicy = uimodel::layout::kExternalPrimaryActions},
-                               createActionButton);
+    registry.registerComponent(
+      {.type = "app.actionButton",
+       .displayName = "Action Button",
+       .category = LayoutComponentCategory::Generic,
+       .props = {{.name = "label", .kind = LayoutPropertyKind::String, .label = "Text"},
+                 {.name = "icon", .kind = LayoutPropertyKind::String, .label = "Icon (Symbolic)"},
+                 {.name = "size",
+                  .kind = LayoutPropertyKind::Enum,
+                  .label = "Size",
+                  .defaultValue = LayoutValue{"normal"},
+                  .enumValues = {"small", "normal", "large"}},
+                 {.name = "style",
+                  .kind = LayoutPropertyKind::Enum,
+                  .label = "Style",
+                  .defaultValue = LayoutValue{"flat"},
+                  .enumValues = {"flat", "raised", "circular", "suggested", "destructive"}}},
+       .layoutProps = {},
+       .minChildren = 0,
+       .optMaxChildren = 0,
+       .actionPolicy = uimodel::kExternalPrimaryActions},
+      createActionButton);
   }
 } // namespace ao::gtk::layout

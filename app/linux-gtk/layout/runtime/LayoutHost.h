@@ -10,7 +10,7 @@
 
 #include <memory>
 
-namespace ao::uimodel::layout
+namespace ao::uimodel
 {
   struct LayoutDocument;
 }
@@ -33,7 +33,7 @@ namespace ao::gtk::layout
      *
      * This will rebuild the entire layout tree.
      */
-    void setLayout(LayoutContext& ctx, uimodel::layout::LayoutDocument const& doc);
+    void setLayout(LayoutContext& ctx, uimodel::LayoutDocument const& doc);
 
   private:
     LayoutRuntime _runtime;

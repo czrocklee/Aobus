@@ -14,7 +14,7 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/uimodel/track/TrackFieldFormatter.h>
+#include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/entry.h>
@@ -101,6 +101,18 @@ namespace ao::gtk::test
 
       auto const entries = collectAll<Gtk::Entry>(dialog);
       CHECK_FALSE(entries.empty());
+
+      auto* const saveButton = findButtonByLabel(dialog, "Save");
+      REQUIRE(saveButton != nullptr);
+      CHECK_FALSE(saveButton->get_sensitive());
+
+      auto const titleEntryIter =
+        std::ranges::find_if(entries, [](Gtk::Entry const* entry) { return entry->get_text().raw() == "Track 1"; });
+      REQUIRE(titleEntryIter != entries.end());
+
+      (*titleEntryIter)->set_text("Renamed Track");
+      drainGtkEvents();
+      CHECK(saveButton->get_sensitive());
     }
 
     SECTION("multi-track selection marks differing fields as mixed")
@@ -109,15 +121,13 @@ namespace ao::gtk::test
         window, runtime.library(), runtime.library().writer(), runtime.completion(), cache, {trackId1, trackId2}};
       drainGtkEvents();
 
-      // Title and artist differ across the two tracks, so their editors surface the mixed-value
-      // placeholder, while album/albumArtist/genre/year are shared and stay plain. The field-merge
-      // logic itself belongs to the dialog's data path; here we assert the mixed marker reaches a
-      // widget so the multi-track branch is observably exercised, not just constructed.
+      // Title and artist differ across the two tracks. UIModel owns the mixed-state decision; this
+      // adapter test only asserts that the dialog reflects that row view in GTK widgets.
       auto const entries = collectAll<Gtk::Entry>(dialog);
-      auto const mixedCount = std::ranges::count_if(
-        entries,
-        [](Gtk::Entry const* entry)
-        { return entry->get_placeholder_text().raw() == uimodel::track::kMultipleTrackValuesText; });
+      auto const mixedCount =
+        std::ranges::count_if(entries,
+                              [](Gtk::Entry const* entry)
+                              { return entry->get_placeholder_text().raw() == uimodel::kMultipleTrackValuesText; });
       CHECK(mixedCount >= 1);
     }
   }

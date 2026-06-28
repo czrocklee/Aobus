@@ -74,8 +74,8 @@ which subscribes to `rt::ViewService::onSelectionChanged`.
 ## Displayed text
 
 The text comes from the pure formatter
-`ao::uimodel::track::selectionSummaryText(count, totalDuration)`
-(`app/include/ao/uimodel/track/SelectionSummary.h`):
+`ao::uimodel::selectionSummaryText(count, totalDuration)`
+(`app/include/ao/uimodel/library/track/TrackSelectionSummary.h`):
 
 | Selection            | Text                          |
 |----------------------|-------------------------------|

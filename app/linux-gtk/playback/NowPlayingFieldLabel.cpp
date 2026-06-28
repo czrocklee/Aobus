@@ -9,7 +9,7 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/eventcontroller.h>
@@ -39,8 +39,7 @@ namespace ao::gtk
     : _runtime{runtime}
     , _field{field}
     , _action{action}
-    , _controller{_runtime.playback(),
-                  [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); }}
+    , _controller{_runtime.playback(), [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
   {
     _label.set_ellipsize(Pango::EllipsizeMode::END);
 
@@ -73,7 +72,7 @@ namespace ao::gtk
 
     auto const cmd = _controller.resolveAction(_action, _field);
 
-    using Type = uimodel::playback::NowPlayingActionCommand::Type;
+    using Type = uimodel::NowPlayingActionCommand::Type;
 
     switch (cmd.type)
     {
@@ -94,8 +93,8 @@ namespace ao::gtk
     }
   }
 
-  void NowPlayingFieldLabel::applyState(ao::uimodel::playback::NowPlayingViewState const& view)
+  void NowPlayingFieldLabel::applyState(ao::uimodel::NowPlayingViewState const& view)
   {
-    _label.set_text(uimodel::playback::NowPlayingViewModel::fieldText(view, _field));
+    _label.set_text(uimodel::NowPlayingViewModel::fieldText(view, _field));
   }
 } // namespace ao::gtk

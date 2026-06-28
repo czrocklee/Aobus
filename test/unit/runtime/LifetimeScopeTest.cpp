@@ -84,7 +84,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LifetimeScope - Completion without cancellation", "[async][unit][runtime]")
+  TEST_CASE("LifetimeScope - task completes while scope remains alive", "[runtime][unit][async][lifetime]")
   {
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
@@ -116,7 +116,8 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("LifetimeScope - Automatic cancellation", "[async][unit][runtime]")
+  TEST_CASE("LifetimeScope - destruction cancels blocked task before callback resume",
+            "[runtime][unit][async][lifetime]")
   {
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
@@ -144,7 +145,8 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("LifetimeScope - Cancellation before queued control resume", "[async][unit][runtime]")
+  TEST_CASE("LifetimeScope - cancellation before queued callback resume prevents completion",
+            "[runtime][unit][async][lifetime]")
   {
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
@@ -163,7 +165,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("Runtime - Cancellation checkpoint throws OperationCancelled", "[async][unit][runtime]")
+  TEST_CASE("Runtime - cancellation checkpoint reports OperationCancelled", "[runtime][unit][async][cancellation]")
   {
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
@@ -199,7 +201,8 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("OperationCancelled - current exception guard recognizes cancellation", "[async][unit][runtime]")
+  TEST_CASE("OperationCancelled - current exception guard recognizes cancellation",
+            "[runtime][unit][async][cancellation]")
   {
     CHECK_THROWS_AS(
       []
@@ -244,7 +247,7 @@ namespace ao::rt::test
       }());
   }
 
-  TEST_CASE("LifetimeScope - Member task lifecycle", "[async][unit][runtime]")
+  TEST_CASE("LifetimeScope - member task can complete while owner remains alive", "[runtime][unit][async][lifetime]")
   {
     auto executor = ImmediateExecutor{};
     auto runtime = Runtime{executor};

@@ -7,10 +7,10 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutContext.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/ComponentActionPolicy.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -20,7 +20,7 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   using namespace ao::gtk::test;
 
   TEST_CASE("ComponentInteractionController routes configured gestures to layout actions",
@@ -52,12 +52,11 @@ namespace ao::gtk::layout::test
     SECTION("attaches primary click to Gtk::Button")
     {
       auto button = Gtk::Button{};
-      auto node = uimodel::layout::LayoutNode{.type = "btn"};
-      node.props[std::string{uimodel::layout::kPrimaryActionProp}] =
-        uimodel::layout::LayoutValue{std::string{"primary"}};
+      auto node = uimodel::LayoutNode{.type = "btn"};
+      node.props[std::string{uimodel::kPrimaryActionProp}] = uimodel::LayoutValue{std::string{"primary"}};
 
       auto controller = ComponentInteractionController{};
-      controller.attach(ctx, node, button, uimodel::layout::kAllExternalActions);
+      controller.attach(ctx, node, button, uimodel::kAllExternalActions);
 
       emitClicked(button);
       CHECK(primaryClicked);
@@ -66,10 +65,10 @@ namespace ao::gtk::layout::test
     SECTION("attaches and triggers default actions when node props are missing")
     {
       auto button = Gtk::Button{};
-      auto node = uimodel::layout::LayoutNode{.type = "btn"}; // No props
+      auto node = uimodel::LayoutNode{.type = "btn"}; // No props
 
-      auto policy = uimodel::layout::kExternalPrimaryActions;
-      policy.defaultActionIds[ActionSlot::PrimaryClick] = "primary";
+      auto policy = uimodel::kExternalPrimaryActions;
+      policy.defaultActionIds[LayoutActionSlot::PrimaryClick] = "primary";
 
       auto controller = ComponentInteractionController{};
       controller.attach(ctx, node, button, policy);
@@ -81,14 +80,12 @@ namespace ao::gtk::layout::test
     SECTION("secondary and long-press gestures dispatch configured actions")
     {
       auto box = Gtk::Box{};
-      auto node = uimodel::layout::LayoutNode{.type = "box"};
-      node.props[std::string{uimodel::layout::kSecondaryActionProp}] =
-        uimodel::layout::LayoutValue{std::string{"secondary"}};
-      node.props[std::string{uimodel::layout::kPrimaryLongPressActionProp}] =
-        uimodel::layout::LayoutValue{std::string{"primaryLong"}};
+      auto node = uimodel::LayoutNode{.type = "box"};
+      node.props[std::string{uimodel::kSecondaryActionProp}] = uimodel::LayoutValue{std::string{"secondary"}};
+      node.props[std::string{uimodel::kPrimaryLongPressActionProp}] = uimodel::LayoutValue{std::string{"primaryLong"}};
 
       auto controller = ComponentInteractionController{};
-      controller.attach(ctx, node, box, uimodel::layout::kAllExternalActions);
+      controller.attach(ctx, node, box, uimodel::kAllExternalActions);
 
       REQUIRE(emitGestureReleased(box));
       CHECK(secondaryClicked);
@@ -103,15 +100,13 @@ namespace ao::gtk::layout::test
     SECTION("respects policy and ignores disallowed slots")
     {
       auto button = Gtk::Button{};
-      auto node = uimodel::layout::LayoutNode{.type = "btn"};
-      node.props[std::string{uimodel::layout::kPrimaryActionProp}] =
-        uimodel::layout::LayoutValue{std::string{"primary"}};
-      node.props[std::string{uimodel::layout::kSecondaryActionProp}] =
-        uimodel::layout::LayoutValue{std::string{"secondary"}};
+      auto node = uimodel::LayoutNode{.type = "btn"};
+      node.props[std::string{uimodel::kPrimaryActionProp}] = uimodel::LayoutValue{std::string{"primary"}};
+      node.props[std::string{uimodel::kSecondaryActionProp}] = uimodel::LayoutValue{std::string{"secondary"}};
 
       auto controller = ComponentInteractionController{};
       // Only allow secondary
-      controller.attach(ctx, node, button, uimodel::layout::kExternalSecondaryActions);
+      controller.attach(ctx, node, button, uimodel::kExternalSecondaryActions);
 
       emitClicked(button);
       CHECK_FALSE(primaryClicked);

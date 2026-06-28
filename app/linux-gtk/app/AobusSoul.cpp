@@ -4,7 +4,7 @@
 #include "app/AobusSoul.h"
 
 #include <ao/uimodel/FrameClock.h>
-#include <ao/uimodel/playback/AobusSoulViewModel.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <gdkmm/frameclock.h>
 #include <gdkmm/graphene_point.h>
@@ -265,9 +265,9 @@ namespace ao::gtk
     queue_draw();
   }
 
-  Gdk::RGBA AobusSoul::mapAuraColor(ao::uimodel::playback::AuraColor color)
+  Gdk::RGBA AobusSoul::mapAuraColor(ao::uimodel::AuraColor color)
   {
-    using Color = ao::uimodel::playback::AuraColor;
+    using Color = ao::uimodel::AuraColor;
 
     switch (color)
     {

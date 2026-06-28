@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -17,10 +17,9 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
 
-  TEST_CASE("Scroll, separator, and tabs components render container geometry",
-            "[gtk][unit][layout][containers][geometry]")
+  TEST_CASE("Scroll, separator, and tabs components render container geometry", "[gtk][unit][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

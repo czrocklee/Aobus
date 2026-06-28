@@ -5,9 +5,9 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/AbsoluteCanvasModel.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/AbsoluteCanvasModel.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gdk/gdk.h>
 #include <gdk/gdkkeysyms.h>
@@ -129,7 +129,7 @@ namespace ao::gtk::layout
         std::ranges::stable_sort(_children,
                                  [](ChildData const& childA, ChildData const& childB)
                                  {
-                                   return uimodel::layout::absoluteCanvasZOrderLess(
+                                   return uimodel::absoluteCanvasZOrderLess(
                                      childA.zIndex, childA.insertOrder, childB.zIndex, childB.insertOrder);
                                  });
       }
@@ -285,23 +285,23 @@ namespace ao::gtk::layout
           return false;
         }
 
-        auto optDirection = std::optional<uimodel::layout::AbsoluteCanvasNudgeDirection>{};
+        auto optDirection = std::optional<uimodel::AbsoluteCanvasNudgeDirection>{};
 
         if (keyval == GDK_KEY_Up)
         {
-          optDirection = uimodel::layout::AbsoluteCanvasNudgeDirection::Up;
+          optDirection = uimodel::AbsoluteCanvasNudgeDirection::Up;
         }
         else if (keyval == GDK_KEY_Down)
         {
-          optDirection = uimodel::layout::AbsoluteCanvasNudgeDirection::Down;
+          optDirection = uimodel::AbsoluteCanvasNudgeDirection::Down;
         }
         else if (keyval == GDK_KEY_Left)
         {
-          optDirection = uimodel::layout::AbsoluteCanvasNudgeDirection::Left;
+          optDirection = uimodel::AbsoluteCanvasNudgeDirection::Left;
         }
         else if (keyval == GDK_KEY_Right)
         {
-          optDirection = uimodel::layout::AbsoluteCanvasNudgeDirection::Right;
+          optDirection = uimodel::AbsoluteCanvasNudgeDirection::Right;
         }
 
         if (!optDirection)
@@ -316,7 +316,7 @@ namespace ao::gtk::layout
             continue;
           }
 
-          auto const rect = uimodel::layout::nudgeAbsoluteCanvasRect(
+          auto const rect = uimodel::nudgeAbsoluteCanvasRect(
             {.x = child.posX, .y = child.posY, .width = child.reqWidth, .height = child.reqHeight},
             *optDirection,
             _snapToGrid,
@@ -338,9 +338,9 @@ namespace ao::gtk::layout
       void onDragBegin(double posX, double posY)
       {
         _dragChild = nullptr;
-        _resizeCorner = uimodel::layout::AbsoluteCanvasResizeCorner::None;
+        _resizeCorner = uimodel::AbsoluteCanvasResizeCorner::None;
 
-        auto hitItems = std::vector<uimodel::layout::AbsoluteCanvasItem>{};
+        auto hitItems = std::vector<uimodel::AbsoluteCanvasItem>{};
         hitItems.reserve(_children.size());
 
         for (auto const& child : _children)
@@ -364,8 +364,8 @@ namespace ao::gtk::layout
                               .insertOrder = child.insertOrder});
         }
 
-        auto const optHit = uimodel::layout::hitTestAbsoluteCanvas(
-          hitItems, static_cast<std::int32_t>(posX), static_cast<std::int32_t>(posY));
+        auto const optHit =
+          uimodel::hitTestAbsoluteCanvas(hitItems, static_cast<std::int32_t>(posX), static_cast<std::int32_t>(posY));
 
         if (!optHit)
         {
@@ -384,8 +384,8 @@ namespace ao::gtk::layout
         _selectedId = child.id;
         queue_draw();
 
-        _resizeCorner = uimodel::layout::detectAbsoluteCanvasResizeCorner(
-          rect.width, rect.height, posX - child.posX, posY - child.posY);
+        _resizeCorner =
+          uimodel::detectAbsoluteCanvasResizeCorner(rect.width, rect.height, posX - child.posX, posY - child.posY);
       }
 
       void onDragUpdate(double offsetX, double offsetY)
@@ -396,7 +396,7 @@ namespace ao::gtk::layout
         }
 
         if (int const offX = static_cast<std::int32_t>(offsetX), offY = static_cast<std::int32_t>(offsetY);
-            _resizeCorner != uimodel::layout::AbsoluteCanvasResizeCorner::None)
+            _resizeCorner != uimodel::AbsoluteCanvasResizeCorner::None)
         {
           std::int32_t childNaturalWidth = 0;
           std::int32_t childNaturalHeight = 0;
@@ -416,17 +416,17 @@ namespace ao::gtk::layout
                                       childMinBaseline,
                                       childNaturalBaseline);
 
-          auto const rect = uimodel::layout::updateAbsoluteCanvasResizeDrag({.x = _dragChild->startX,
-                                                                             .y = _dragChild->startY,
-                                                                             .width = _dragChild->startReqWidth,
-                                                                             .height = _dragChild->startReqHeight},
-                                                                            _resizeCorner,
-                                                                            offX,
-                                                                            offY,
-                                                                            childNaturalWidth,
-                                                                            childNaturalHeight,
-                                                                            _snapToGrid,
-                                                                            _gridSize);
+          auto const rect = uimodel::updateAbsoluteCanvasResizeDrag({.x = _dragChild->startX,
+                                                                     .y = _dragChild->startY,
+                                                                     .width = _dragChild->startReqWidth,
+                                                                     .height = _dragChild->startReqHeight},
+                                                                    _resizeCorner,
+                                                                    offX,
+                                                                    offY,
+                                                                    childNaturalWidth,
+                                                                    childNaturalHeight,
+                                                                    _snapToGrid,
+                                                                    _gridSize);
           _dragChild->posX = rect.x;
           _dragChild->posY = rect.y;
           _dragChild->reqWidth = rect.width;
@@ -434,12 +434,12 @@ namespace ao::gtk::layout
         }
         else
         {
-          auto const rect = uimodel::layout::updateAbsoluteCanvasMoveDrag({.x = _dragChild->startX,
-                                                                           .y = _dragChild->startY,
-                                                                           .width = _dragChild->startReqWidth,
-                                                                           .height = _dragChild->startReqHeight},
-                                                                          offX,
-                                                                          offY);
+          auto const rect = uimodel::updateAbsoluteCanvasMoveDrag({.x = _dragChild->startX,
+                                                                   .y = _dragChild->startY,
+                                                                   .width = _dragChild->startReqWidth,
+                                                                   .height = _dragChild->startReqHeight},
+                                                                  offX,
+                                                                  offY);
           _dragChild->posX = rect.x;
           _dragChild->posY = rect.y;
         }
@@ -456,27 +456,27 @@ namespace ao::gtk::layout
         }
 
         if (int const offX = static_cast<std::int32_t>(offsetX), offY = static_cast<std::int32_t>(offsetY);
-            _resizeCorner == uimodel::layout::AbsoluteCanvasResizeCorner::None)
+            _resizeCorner == uimodel::AbsoluteCanvasResizeCorner::None)
         {
-          auto const rect = uimodel::layout::commitAbsoluteCanvasMoveDrag({.x = _dragChild->startX,
-                                                                           .y = _dragChild->startY,
-                                                                           .width = _dragChild->startReqWidth,
-                                                                           .height = _dragChild->startReqHeight},
-                                                                          offX,
-                                                                          offY,
-                                                                          _snapToGrid,
-                                                                          _gridSize);
+          auto const rect = uimodel::commitAbsoluteCanvasMoveDrag({.x = _dragChild->startX,
+                                                                   .y = _dragChild->startY,
+                                                                   .width = _dragChild->startReqWidth,
+                                                                   .height = _dragChild->startReqHeight},
+                                                                  offX,
+                                                                  offY,
+                                                                  _snapToGrid,
+                                                                  _gridSize);
           _dragChild->posX = rect.x;
           _dragChild->posY = rect.y;
         }
         else
         {
-          auto const rect = uimodel::layout::commitAbsoluteCanvasResizeDrag({.x = _dragChild->posX,
-                                                                             .y = _dragChild->posY,
-                                                                             .width = _dragChild->reqWidth,
-                                                                             .height = _dragChild->reqHeight},
-                                                                            _snapToGrid,
-                                                                            _gridSize);
+          auto const rect = uimodel::commitAbsoluteCanvasResizeDrag({.x = _dragChild->posX,
+                                                                     .y = _dragChild->posY,
+                                                                     .width = _dragChild->reqWidth,
+                                                                     .height = _dragChild->reqHeight},
+                                                                    _snapToGrid,
+                                                                    _gridSize);
           _dragChild->posX = rect.x;
           _dragChild->posY = rect.y;
           _dragChild->reqWidth = rect.width;
@@ -492,7 +492,7 @@ namespace ao::gtk::layout
         }
 
         _dragChild = nullptr;
-        _resizeCorner = uimodel::layout::AbsoluteCanvasResizeCorner::None;
+        _resizeCorner = uimodel::AbsoluteCanvasResizeCorner::None;
       }
 
       struct ChildData final
@@ -518,7 +518,7 @@ namespace ao::gtk::layout
       bool _editMode = false;
       bool _snapToGrid = true;
       std::int32_t _gridSize = 8;
-      uimodel::layout::AbsoluteCanvasResizeCorner _resizeCorner = uimodel::layout::AbsoluteCanvasResizeCorner::None;
+      uimodel::AbsoluteCanvasResizeCorner _resizeCorner = uimodel::AbsoluteCanvasResizeCorner::None;
       std::function<void(std::string const&, std::int32_t, std::int32_t)> _onMoved;
       Glib::RefPtr<Gtk::GestureDrag> _dragPtr;
       ChildData* _dragChild = nullptr;
@@ -527,7 +527,7 @@ namespace ao::gtk::layout
     class AbsoluteCanvasComponent final : public ILayoutComponent
     {
     public:
-      AbsoluteCanvasComponent(LayoutContext& ctx, uimodel::layout::LayoutNode const& node)
+      AbsoluteCanvasComponent(LayoutContext& ctx, uimodel::LayoutNode const& node)
         : _canvas{ctx.editMode,
                   ctx.onNodeMoved,
                   node.getProp<bool>("snapToGrid", true),
@@ -564,7 +564,7 @@ namespace ao::gtk::layout
       std::vector<std::unique_ptr<ILayoutComponent>> _children;
     };
 
-    std::unique_ptr<ILayoutComponent> createAbsoluteCanvas(LayoutContext& ctx, uimodel::layout::LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createAbsoluteCanvas(LayoutContext& ctx, uimodel::LayoutNode const& node)
     {
       return std::make_unique<AbsoluteCanvasComponent>(ctx, node);
     }
@@ -574,15 +574,15 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "absoluteCanvas",
                                 .displayName = "Absolute Canvas",
-                                .category = uimodel::layout::ComponentCategory::Container,
+                                .category = uimodel::LayoutComponentCategory::Container,
                                 .props = {{.name = "snapToGrid",
-                                           .kind = uimodel::layout::PropertyKind::Bool,
+                                           .kind = uimodel::LayoutPropertyKind::Bool,
                                            .label = "Snap To Grid",
-                                           .defaultValue = uimodel::layout::LayoutValue{true}},
+                                           .defaultValue = uimodel::LayoutValue{true}},
                                           {.name = "gridSize",
-                                           .kind = uimodel::layout::PropertyKind::Int,
+                                           .kind = uimodel::LayoutPropertyKind::Int,
                                            .label = "Grid Size",
-                                           .defaultValue = uimodel::layout::LayoutValue{static_cast<std::int64_t>(8)}}},
+                                           .defaultValue = uimodel::LayoutValue{static_cast<std::int64_t>(8)}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = std::nullopt},

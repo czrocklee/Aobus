@@ -15,9 +15,9 @@ namespace ao::gtk::test
 {
   namespace
   {
-    uimodel::input::KeyChord chord(std::string const& text)
+    uimodel::KeyChord chord(std::string const& text)
     {
-      auto const optChord = uimodel::input::KeyChord::parse(text);
+      auto const optChord = uimodel::KeyChord::parse(text);
       REQUIRE(optChord.has_value());
       return *optChord;
     }
@@ -27,7 +27,7 @@ namespace ao::gtk::test
   {
     auto const appPtr = ensureGtkApplication();
 
-    auto model = uimodel::input::KeymapModel{uimodel::input::KeymapBindings{{"applicator.install", {chord("Ctrl+P")}}}};
+    auto model = uimodel::KeymapModel{uimodel::KeymapBindings{{"applicator.install", {chord("Ctrl+P")}}}};
     applyKeymapAccelerators(*appPtr, model);
 
     CHECK_FALSE(appPtr->get_accels_for_action("win.applicator.install").empty());
@@ -40,11 +40,11 @@ namespace ao::gtk::test
     // Bind an action whose id is absent from the default keymap, then re-apply a keymap that no
     // longer mentions it (mirrors resetToDefault on a binding with no shipped default, which erases
     // the entry). The stale accelerator must not survive the re-apply.
-    auto bound = uimodel::input::KeymapModel{uimodel::input::KeymapBindings{{"applicator.drop", {chord("Ctrl+J")}}}};
+    auto bound = uimodel::KeymapModel{uimodel::KeymapBindings{{"applicator.drop", {chord("Ctrl+J")}}}};
     applyKeymapAccelerators(*appPtr, bound);
     REQUIRE_FALSE(appPtr->get_accels_for_action("win.applicator.drop").empty());
 
-    auto dropped = uimodel::input::KeymapModel{uimodel::input::KeymapBindings{}};
+    auto dropped = uimodel::KeymapModel{uimodel::KeymapBindings{}};
     applyKeymapAccelerators(*appPtr, dropped);
 
     CHECK(appPtr->get_accels_for_action("win.applicator.drop").empty());
@@ -54,12 +54,12 @@ namespace ao::gtk::test
   {
     auto const appPtr = ensureGtkApplication();
 
-    auto bound = uimodel::input::KeymapModel{uimodel::input::KeymapBindings{{"applicator.unbind", {chord("Ctrl+K")}}}};
+    auto bound = uimodel::KeymapModel{uimodel::KeymapBindings{{"applicator.unbind", {chord("Ctrl+K")}}}};
     applyKeymapAccelerators(*appPtr, bound);
     REQUIRE_FALSE(appPtr->get_accels_for_action("win.applicator.unbind").empty());
 
     // An empty chord list (still present in the keymap) means "explicitly unbound".
-    auto unbound = uimodel::input::KeymapModel{uimodel::input::KeymapBindings{{"applicator.unbind", {}}}};
+    auto unbound = uimodel::KeymapModel{uimodel::KeymapBindings{{"applicator.unbind", {}}}};
     applyKeymapAccelerators(*appPtr, unbound);
 
     CHECK(appPtr->get_accels_for_action("win.applicator.unbind").empty());

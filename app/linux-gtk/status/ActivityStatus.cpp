@@ -8,7 +8,7 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/uimodel/status/ActivityStatusModel.h>
+#include <ao/uimodel/status/activity/ActivityStatusModel.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/enums.h>
@@ -54,7 +54,7 @@ namespace ao::gtk
       return "ao-activity-detail-info";
     }
 
-    std::string detailTitle(uimodel::status::ActivityDetailItem const& item)
+    std::string detailTitle(uimodel::ActivityDetailItem const& item)
     {
       return item.title.empty() ? item.message : item.title;
     }
@@ -161,7 +161,7 @@ namespace ao::gtk
     _box.append(_dismissButton);
   }
 
-  uimodel::status::ActivityStatusViewState const& ActivityStatus::viewStateForTest() const
+  uimodel::ActivityStatusViewState const& ActivityStatus::viewStateForTest() const
   {
     return _model.viewState();
   }
@@ -174,11 +174,11 @@ namespace ao::gtk
     }
 
     auto const& compact = _model.viewState().compact;
-    bool const idle = compact.kind == uimodel::status::ActivityStatusKind::Idle;
+    bool const idle = compact.kind == uimodel::ActivityStatusKind::Idle;
     bool const reserveIdle = idle && _options.idleBehavior == ActivityStatusIdleBehavior::Reserve;
 
     clearKindClasses();
-    _box.add_css_class(std::string{uimodel::status::activityStatusKindCssClass(compact.kind)});
+    _box.add_css_class(std::string{uimodel::activityStatusKindCssClass(compact.kind)});
 
     _box.set_visible(!idle || reserveIdle);
 
@@ -187,9 +187,9 @@ namespace ao::gtk
       _detailPopover.popdown();
     }
 
-    _spinner.set_visible(compact.kind == uimodel::status::ActivityStatusKind::Processing);
+    _spinner.set_visible(compact.kind == uimodel::ActivityStatusKind::Processing);
 
-    if (compact.kind == uimodel::status::ActivityStatusKind::Processing)
+    if (compact.kind == uimodel::ActivityStatusKind::Processing)
     {
       _spinner.start();
     }
@@ -213,7 +213,7 @@ namespace ao::gtk
 
     _dismissButton.set_visible(compact.dismissible && !idle);
     setCssClass(_box, "ao-activity-status-has-details", compact.hasDetails);
-    bool const openable = uimodel::status::hasDetailContent(_model.viewState().detail) && !idle;
+    bool const openable = uimodel::hasDetailContent(_model.viewState().detail) && !idle;
     _detailButton.set_sensitive(openable);
     setCssClass(_box, "ao-activity-status-openable", openable);
     renderDetail();
@@ -233,7 +233,7 @@ namespace ao::gtk
 
     auto const& detail = _model.viewState().detail;
 
-    if (!uimodel::status::hasDetailContent(detail))
+    if (!uimodel::hasDetailContent(detail))
     {
       _detailPopover.popdown();
       return;
@@ -258,7 +258,7 @@ namespace ao::gtk
     }
   }
 
-  void ActivityStatus::appendTaskDetail(uimodel::status::ActivityTaskDetail const& task)
+  void ActivityStatus::appendTaskDetail(uimodel::ActivityTaskDetail const& task)
   {
     auto* const row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
     row->add_css_class("ao-activity-detail-row");
@@ -283,7 +283,7 @@ namespace ao::gtk
     _detailBox.append(*row);
   }
 
-  void ActivityStatus::appendNotificationDetail(uimodel::status::ActivityDetailItem const& item)
+  void ActivityStatus::appendNotificationDetail(uimodel::ActivityDetailItem const& item)
   {
     auto* const row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
     row->add_css_class("ao-activity-detail-row");
@@ -342,8 +342,8 @@ namespace ao::gtk
     if (_resolveNotificationAction && _onNotificationAction && !item.actions.empty())
     {
       Gtk::Box* actions = nullptr;
-      auto const resolvedActions = uimodel::status::resolveActivityActionViews(
-        item.actions, _resolveNotificationAction, kMaxNotificationDetailActions);
+      auto const resolvedActions =
+        uimodel::resolveActivityActionViews(item.actions, _resolveNotificationAction, kMaxNotificationDetailActions);
 
       for (auto const& action : resolvedActions)
       {

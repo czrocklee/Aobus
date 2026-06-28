@@ -489,16 +489,15 @@ lexy uses highly granular headers. Map core entry points and common DSL componen
 
 | Type | Header | Namespace |
 | :--- | :--- | :--- |
-| `ao::uimodel::layout::LayoutDocument` | `<ao/uimodel/layout/LayoutDocument.h>` | `ao::uimodel::layout` |
-| `ao::uimodel::layout::LayoutNode` | `<ao/uimodel/layout/LayoutNode.h>` | `ao::uimodel::layout` |
-| `ao::uimodel::layout::LayoutYaml` | `<ao/uimodel/layout/LayoutYaml.h>` | `ao::uimodel::layout` |
-| `ao::uimodel::playback::AobusSoulViewModel" | `<ao/uimodel/playback/AobusSoulViewModel.h>` | `ao::uimodel::playback` |
-| `ao::uimodel::playback::VolumeViewModel" | `<ao/uimodel/playback/VolumeViewModel.h>` | `ao::uimodel::playback` |
-| `ao::uimodel::track::TrackFilterViewModel" | `<ao/uimodel/track/TrackFilterViewModel.h>` | `ao::uimodel::track` |
-| `ao::uimodel::track::TrackPresentationCatalog" | `<ao/uimodel/track/TrackPresentationCatalog.h>` | `ao::uimodel::track` |
-| `ao::uimodel::track::TrackPresentationPreferenceStore" | `<ao/uimodel/track/TrackPresentationPreferenceStore.h>` | `ao::uimodel::track` |
-| `ao::uimodel::track::TrackPresentationWorkflow" | `<ao/uimodel/track/TrackPresentationWorkflow.h>` | `ao::uimodel::track` |
-| `ao::uimodel::list::SmartListEditorModel" | `<ao/uimodel/list/SmartListEditorModel.h>` | `ao::uimodel::list` |
+| `ao::uimodel::LayoutDocument` | `<ao/uimodel/layout/document/LayoutDocument.h>` | `ao::uimodel` |
+| `ao::uimodel::LayoutNode` | `<ao/uimodel/layout/document/LayoutNode.h>` | `ao::uimodel` |
+| `ao::uimodel::AobusSoulViewModel` | `<ao/uimodel/playback/soul/AobusSoulViewModel.h>` | `ao::uimodel` |
+| `ao::uimodel::VolumeViewModel` | `<ao/uimodel/playback/output/VolumeViewModel.h>` | `ao::uimodel` |
+| `ao::uimodel::TrackFilterViewModel` | `<ao/uimodel/library/track/TrackFilterViewModel.h>` | `ao::uimodel` |
+| `ao::uimodel::TrackPresentationCatalog` | `<ao/uimodel/library/presentation/TrackPresentationCatalog.h>` | `ao::uimodel` |
+| `ao::uimodel::ListPresentationPreferenceStore` | `<ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>` | `ao::uimodel` |
+| `ao::uimodel::TrackPresentationPickerViewModel` | `<ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>` | `ao::uimodel` |
+| `ao::uimodel::SmartListEditorModel` | `<ao/uimodel/library/list/SmartListEditorModel.h>` | `ao::uimodel` |
 
 ### Testing (`ao::test::`)
 

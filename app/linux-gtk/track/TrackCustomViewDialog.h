@@ -5,7 +5,7 @@
 
 #include "app/AppDialog.h"
 #include <ao/rt/TrackPresentation.h>
-#include <ao/uimodel/track/TrackCustomViewEditorModel.h>
+#include <ao/uimodel/library/presentation/CustomPresentationEditorModel.h>
 
 #include <gtkmm/dropdown.h>
 #include <gtkmm/entry.h>
@@ -45,6 +45,6 @@ namespace ao::gtk
     Gtk::ListBox _sortTermsList;
     Gtk::ListBox _visibleFieldsList;
 
-    uimodel::track::TrackCustomViewEditorModel _model;
+    uimodel::CustomPresentationEditorModel _model;
   };
 } // namespace ao::gtk

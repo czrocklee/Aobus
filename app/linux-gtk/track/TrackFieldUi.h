@@ -5,7 +5,7 @@
 
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackFieldFormatter.h>
+#include <ao/uimodel/field/TrackFieldEditCodec.h>
 
 #include <span>
 #include <string>
@@ -16,7 +16,7 @@ namespace ao::gtk
   class TrackRowObject;
   class TrackRowCache;
 
-  using TrackFieldEditValue = uimodel::track::TrackFieldEditValue;
+  using TrackFieldEditValue = uimodel::TrackFieldEditValue;
 
   constexpr auto kTagsCellCssClass = "ao-track-tags-cell";
 

@@ -5,9 +5,9 @@
 
 #include <ao/Type.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackColumnLayoutPolicy.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
-#include <ao/uimodel/track/TrackFieldPresentationPolicy.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutPolicy.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 
 #include <giomm/listmodel.h>
 #include <glib.h>
@@ -33,7 +33,7 @@
 namespace ao::gtk
 {
   TrackColumnController::TrackColumnController(Gtk::ColumnView& columnView,
-                                               uimodel::track::TrackColumnLayoutStore& layoutStore,
+                                               uimodel::TrackColumnLayoutStore& layoutStore,
                                                ao::ListId listId)
     : _listId{listId}, _columnView{columnView}, _layoutStore{layoutStore}
   {
@@ -102,7 +102,7 @@ namespace ao::gtk
 
       columnPtr->set_resizable(true);
 
-      columnPtr->set_fixed_width(uimodel::track::defaultTrackFieldColumnWidth(rtDef.field));
+      columnPtr->set_fixed_width(uimodel::defaultTrackFieldColumnWidth(rtDef.field));
 
       _columnNotifyConnections.emplace_back(columnPtr->property_fixed_width().signal_changed().connect(
         [this]
@@ -146,14 +146,14 @@ namespace ao::gtk
 
         // Find width in stored layout if it exists
         std::int32_t width = 0;
-        auto const it = std::ranges::find(storedLayout, field, &uimodel::track::ColumnState::field);
+        auto const it = std::ranges::find(storedLayout, field, &uimodel::TrackColumnState::field);
 
         if (it != storedLayout.end())
         {
           width = it->width;
         }
 
-        auto const effectiveWidth = uimodel::track::effectiveTrackFieldColumnWidth(field, width);
+        auto const effectiveWidth = uimodel::effectiveTrackFieldColumnWidth(field, width);
 
         if (binding->columnPtr->get_fixed_width() != effectiveWidth)
         {
@@ -208,7 +208,7 @@ namespace ao::gtk
 
   void TrackColumnController::updateColumnExpansion(std::span<rt::TrackField const> visibleFields)
   {
-    auto const expanding = uimodel::track::expandingTrackColumn(visibleFields);
+    auto const expanding = uimodel::expandingTrackColumn(visibleFields);
 
     for (auto& data : _columns)
     {
@@ -245,7 +245,7 @@ namespace ao::gtk
   {
     _capturingColumnLayout = true;
 
-    auto layout = std::vector<uimodel::track::ColumnState>{};
+    auto layout = std::vector<uimodel::TrackColumnState>{};
 
     if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
     {
@@ -309,7 +309,7 @@ namespace ao::gtk
     std::span<rt::TrackField const> visibleFields) const
   {
     auto const activeOrder = _layoutStore.activeFieldOrder();
-    return uimodel::track::visibleTrackFieldsInStoredOrder(visibleFields, activeOrder);
+    return uimodel::visibleTrackFieldsInStoredOrder(visibleFields, activeOrder);
   }
 
   void TrackColumnController::updateColumnVisibility(std::span<rt::TrackField const> visibleFields)

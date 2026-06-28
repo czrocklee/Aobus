@@ -7,9 +7,9 @@
 #include "layout/runtime/LayoutContext.h"
 #include "playback/AudioPipelinePanel.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gtkmm/widget.h>
 
@@ -18,7 +18,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -58,7 +58,7 @@ namespace ao::gtk::layout
 
     private:
       AudioPipelinePanel _panel;
-      uimodel::playback::NowPlayingViewModel _viewModel;
+      uimodel::NowPlayingViewModel _viewModel;
     };
 
     std::unique_ptr<ILayoutComponent> createAudioPipelinePanel(LayoutContext& ctx, LayoutNode const& node)
@@ -72,17 +72,17 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.audioPipelinePanel",
        .displayName = "Audio Pipeline Panel",
-       .category = ComponentCategory::Playback,
+       .category = LayoutComponentCategory::Playback,
        .props = {{.name = "variant",
-                  .kind = PropertyKind::Enum,
+                  .kind = LayoutPropertyKind::Enum,
                   .label = "Variant",
                   .defaultValue = LayoutValue{""},
                   .enumValues = {"inline", "compact", "tooltip"}}},
        .layoutProps = {},
        .minChildren = 0,
        .optMaxChildren = 0,
-       .surfaces = static_cast<uimodel::layout::SurfaceCapabilityMask>(uimodel::layout::SurfaceCapability::Main) |
-                   static_cast<uimodel::layout::SurfaceCapabilityMask>(uimodel::layout::SurfaceCapability::Tooltip)},
+       .surfaces = static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Main) |
+                   static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Tooltip)},
       createAudioPipelinePanel);
   }
 } // namespace ao::gtk::layout

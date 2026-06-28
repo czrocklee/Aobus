@@ -17,7 +17,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/uimodel/list/ListActionPolicy.h>
+#include <ao/uimodel/library/list/ListActionPolicy.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>
@@ -120,7 +120,7 @@ namespace ao::gtk
 
   void ListNavigationController::onSelectionChanged(ListId listId)
   {
-    auto const state = ao::uimodel::list::ListActionPolicy::describeActions(listId, _panelPtr->listHasChildren(listId));
+    auto const state = ao::uimodel::ListActionPolicy::describeActions(listId, _panelPtr->listHasChildren(listId));
 
     _newListActionPtr->set_enabled(state.canCreate);
     _deleteListActionPtr->set_enabled(state.canDelete);
@@ -134,7 +134,7 @@ namespace ao::gtk
 
   void ListNavigationController::onContextMenuRequested(ListId listId, Gdk::Rectangle const& rect)
   {
-    auto const state = ao::uimodel::list::ListActionPolicy::describeActions(listId, _panelPtr->listHasChildren(listId));
+    auto const state = ao::uimodel::ListActionPolicy::describeActions(listId, _panelPtr->listHasChildren(listId));
 
     if (_newListActionPtr)
     {
@@ -156,7 +156,7 @@ namespace ao::gtk
 
   void ListNavigationController::openNewSmartListDialog()
   {
-    auto const parentListId = ao::uimodel::list::ListActionPolicy::parentForNewSmartList(_panelPtr->selectedListId());
+    auto const parentListId = ao::uimodel::ListActionPolicy::parentForNewSmartList(_panelPtr->selectedListId());
     openNewListDialog(parentListId);
   }
 

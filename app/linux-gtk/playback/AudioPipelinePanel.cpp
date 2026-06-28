@@ -6,8 +6,8 @@
 #include "playback/AudioQualityCss.h"
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
-#include <ao/uimodel/playback/AudioQualityFormat.h>
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -51,7 +51,7 @@ namespace ao::gtk
     }
   }
 
-  void AudioPipelinePanel::apply(uimodel::playback::AudioPipelineView const& view)
+  void AudioPipelinePanel::apply(uimodel::AudioPipelineView const& view)
   {
     // Remove all existing children
     while (auto* child = get_first_child())
@@ -99,7 +99,7 @@ namespace ao::gtk
     topSeparator->set_margin_bottom(2);
     append(*topSeparator);
 
-    auto const path = uimodel::playback::playbackPath(view.flow);
+    auto const path = uimodel::playbackPath(view.flow);
 
     for (auto const* node : path)
     {
@@ -110,7 +110,7 @@ namespace ao::gtk
       auto* headerBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
       headerBox->set_spacing(4);
 
-      auto const typeLabel = uimodel::playback::audioNodeTypeLabel(node->type);
+      auto const typeLabel = uimodel::audioNodeTypeLabel(node->type);
       auto* typeWidget = Gtk::make_managed<Gtk::Label>(typeLabel);
       typeWidget->add_css_class("dim-label");
       headerBox->append(*typeWidget);
@@ -124,8 +124,7 @@ namespace ao::gtk
         // The source node reports the track's true resolution (valid bits);
         // downstream nodes report the transport container width.
         auto const preferValidBits = node->type == audio::flow::NodeType::Source;
-        auto const formatStr =
-          std::string{"("} + uimodel::playback::audioFormatLabel(*node->optFormat, preferValidBits) + ")";
+        auto const formatStr = std::string{"("} + uimodel::audioFormatLabel(*node->optFormat, preferValidBits) + ")";
         auto* formatLabel = Gtk::make_managed<Gtk::Label>(formatStr);
         formatLabel->add_css_class("dim-label");
         headerBox->append(*formatLabel);
@@ -140,7 +139,7 @@ namespace ao::gtk
       {
         for (auto const& finding : it->findings)
         {
-          auto const findingText = uimodel::playback::audioFindingLabel(finding);
+          auto const findingText = uimodel::audioFindingLabel(finding);
 
           if (findingText.empty())
           {
@@ -158,7 +157,7 @@ namespace ao::gtk
           constexpr int kDotPixelSize = 10;
           dot->set_pixel_size(kDotPixelSize);
 
-          auto const findingQuality = uimodel::playback::qualityForFinding(finding);
+          auto const findingQuality = uimodel::qualityForFinding(finding);
 
           if (auto const* const cssClass = qualityCssClass(findingQuality); cssClass[0] != '\0')
           {
@@ -179,7 +178,7 @@ namespace ao::gtk
     }
 
     // Conclusion separator
-    auto const conclusionText = uimodel::playback::audioQualityConclusion(view.quality);
+    auto const conclusionText = uimodel::audioQualityConclusion(view.quality);
 
     if (!conclusionText.empty())
     {

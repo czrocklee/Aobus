@@ -5,8 +5,8 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -15,7 +15,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -48,8 +48,8 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "label",
                                 .displayName = "Text Label",
-                                .category = ComponentCategory::Generic,
-                                .props = {{.name = "label", .kind = PropertyKind::String, .label = "Text"}},
+                                .category = LayoutComponentCategory::Generic,
+                                .props = {{.name = "label", .kind = LayoutPropertyKind::String, .label = "Text"}},
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},

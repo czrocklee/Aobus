@@ -4,7 +4,7 @@
 #include "app/linux-gtk/track/TrackFieldUi.h"
 
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackFieldEditPolicy.h>
+#include <ao/uimodel/field/TrackFieldEditPolicy.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -39,7 +39,7 @@ namespace ao::gtk::test
       INFO("Field: " << rtDef.id);
       REQUIRE(def != nullptr);
 
-      auto const canWritePatch = uimodel::track::trackFieldCanWritePatch(rtDef.field);
+      auto const canWritePatch = uimodel::trackFieldCanWritePatch(rtDef.field);
       CHECK(canInlineEdit(*def) == canWritePatch);
 
       if (canWritePatch)

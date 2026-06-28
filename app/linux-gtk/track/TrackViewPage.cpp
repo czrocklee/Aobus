@@ -26,10 +26,10 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
-#include <ao/uimodel/track/TrackFieldEditPolicy.h>
-#include <ao/uimodel/track/TrackFieldFormatter.h>
-#include <ao/uimodel/track/TrackInlineEditWorkflow.h>
+#include <ao/uimodel/field/TrackFieldEditCodec.h>
+#include <ao/uimodel/field/TrackFieldEditPolicy.h>
+#include <ao/uimodel/field/TrackInlineEditWorkflow.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <gdkmm/rectangle.h>
 #include <glib/gtypes.h>
@@ -293,7 +293,7 @@ namespace ao::gtk
 
   TrackViewPage::TrackViewPage(ListId listId,
                                Glib::RefPtr<TrackListModel> modelPtr,
-                               uimodel::track::TrackColumnLayoutStore& layoutStore,
+                               uimodel::TrackColumnLayoutStore& layoutStore,
                                rt::AppRuntime& runtime,
                                ThumbnailLoader& thumbnailLoader,
                                rt::ViewId viewId)
@@ -561,18 +561,18 @@ namespace ao::gtk
       return;
     }
 
-    auto const result = uimodel::track::TrackInlineEditWorkflow::apply(
-      uimodel::track::TrackInlineEditRequest{
+    auto const result = uimodel::TrackInlineEditWorkflow::apply(
+      uimodel::TrackInlineEditRequest{
         .field = field, .oldText = row->fieldText(field).raw(), .newText = std::move(newValue)},
-      uimodel::track::TrackInlineEditHooks{
-        .parse = [uiDef](std::string_view text) -> Result<uimodel::track::TrackFieldEditValue>
+      uimodel::TrackInlineEditHooks{
+        .parse = [uiDef](std::string_view text) -> Result<uimodel::TrackFieldEditValue>
         { return uiDef->parseInlineEdit(text); },
-        .readCurrentValue = [row, field, uiDef] -> uimodel::track::TrackFieldEditValue
+        .readCurrentValue = [row, field, uiDef] -> uimodel::TrackFieldEditValue
         { return uiDef->readRowEditValue(*row, field); },
-        .applyValue = [row, field, uiDef](uimodel::track::TrackFieldEditValue const& value)
+        .applyValue = [row, field, uiDef](uimodel::TrackFieldEditValue const& value)
         { uiDef->applyRowEditValue(*row, value, field); },
-        .writePatch = [field](rt::MetadataPatch& patch, uimodel::track::TrackFieldEditValue const& value)
-        { uimodel::track::writeTrackFieldPatch(patch, field, value); },
+        .writePatch = [field](rt::MetadataPatch& patch, uimodel::TrackFieldEditValue const& value)
+        { uimodel::writeTrackFieldPatch(patch, field, value); },
         .commitPatch = [this, row](rt::MetadataPatch const& patch) -> rt::UpdateTrackMetadataReply
         {
           auto const trackIds = std::array{row->trackId()};
@@ -582,13 +582,13 @@ namespace ao::gtk
 
     switch (result.outcome)
     {
-      case uimodel::track::TrackInlineEditOutcome::NoChange:
-      case uimodel::track::TrackInlineEditOutcome::NotEditable: return;
-      case uimodel::track::TrackInlineEditOutcome::ParseRejected: setStatusMessage(result.statusMessage); return;
-      case uimodel::track::TrackInlineEditOutcome::MutationRejected:
+      case uimodel::TrackInlineEditOutcome::NoChange:
+      case uimodel::TrackInlineEditOutcome::NotEditable: return;
+      case uimodel::TrackInlineEditOutcome::ParseRejected: setStatusMessage(result.statusMessage); return;
+      case uimodel::TrackInlineEditOutcome::MutationRejected:
         APP_LOG_ERROR("Metadata update failed: {}", result.statusMessage);
         return;
-      case uimodel::track::TrackInlineEditOutcome::Applied: break;
+      case uimodel::TrackInlineEditOutcome::Applied: break;
     }
 
     clearStatusMessage();

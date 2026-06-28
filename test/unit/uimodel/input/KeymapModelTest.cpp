@@ -3,15 +3,15 @@
 
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/ActionCatalog.h>
-#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <string>
 #include <vector>
 
-namespace ao::uimodel::input::test
+namespace ao::uimodel::test
 {
   namespace
   {
@@ -103,10 +103,9 @@ namespace ao::uimodel::input::test
 
   TEST_CASE("KeymapModel validates action ids against a catalog", "[uimodel][unit][input][keymap]")
   {
-    auto catalog = layout::ActionCatalog{};
-    catalog.registerActionDescriptor(
-      layout::ActionDescriptor{.id = "playback.playPause", .label = "P", .category = "X"});
-    catalog.registerActionDescriptor(layout::ActionDescriptor{.id = "playback.next", .label = "N", .category = "X"});
+    auto catalog = LayoutActionCatalog{};
+    catalog.registerActionDescriptor(LayoutActionDescriptor{.id = "playback.playPause", .label = "P", .category = "X"});
+    catalog.registerActionDescriptor(LayoutActionDescriptor{.id = "playback.next", .label = "N", .category = "X"});
 
     auto model = KeymapModel{sampleDefaults()};
     CHECK(model.unknownActionIds(catalog).empty());
@@ -165,4 +164,4 @@ namespace ao::uimodel::input::test
     CHECK(defaults.at("playback.playPause").front() == chord("Ctrl+P"));
     CHECK(defaults.count("workspace.revealCurrentTrack") == 1);
   }
-} // namespace ao::uimodel::input::test
+} // namespace ao::uimodel::test

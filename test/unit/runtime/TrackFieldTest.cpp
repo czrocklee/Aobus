@@ -107,7 +107,7 @@ namespace ao::rt::test
     CHECK_FALSE(trackFieldFromId("Track").has_value());
   }
 
-  TEST_CASE("TrackField category counts are correct", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField registry exposes expected category counts", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
 
@@ -124,7 +124,7 @@ namespace ao::rt::test
     CHECK(syntheticCount == 3);
   }
 
-  TEST_CASE("TrackField presentable fields are correct", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField registry marks all fields presentable", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
 
@@ -215,7 +215,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackField known sort fields", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField definitions map fields to sort keys", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldDefinition(TrackField::Title)->optSortField == TrackSortField::Title);
     CHECK(trackFieldDefinition(TrackField::Artist)->optSortField == TrackSortField::Artist);
@@ -232,7 +232,7 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::Duration)->optSortField == TrackSortField::Duration);
   }
 
-  TEST_CASE("TrackField known group keys", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField definitions map fields to group keys", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldDefinition(TrackField::Artist)->optGroupKey == TrackGroupKey::Artist);
     CHECK(trackFieldDefinition(TrackField::Album)->optGroupKey == TrackGroupKey::Album);
@@ -243,7 +243,7 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::Year)->optGroupKey == TrackGroupKey::Year);
   }
 
-  TEST_CASE("TrackField known labels", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField definitions expose stable labels", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldDefinition(TrackField::Title)->label == "Title");
     CHECK(trackFieldDefinition(TrackField::Artist)->label == "Artist");
@@ -275,7 +275,7 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::Quality)->label == "Quality");
   }
 
-  TEST_CASE("TrackField filter expression variables are correct", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField definitions expose filter expression variables", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldFilterExpressionVariable(TrackField::Title) == "$title");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Artist) == "$artist");
@@ -296,7 +296,7 @@ namespace ao::rt::test
     CHECK(trackFieldFilterExpressionVariable(TrackField::Bitrate) == "@bitrate");
   }
 
-  TEST_CASE("TrackField supports filter expression helper works", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField helpers report filter expression support", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldSupportsFilterExpression(TrackField::Artist));
     CHECK(trackFieldSupportsFilterExpression(TrackField::AlbumArtist));
@@ -307,7 +307,7 @@ namespace ao::rt::test
     CHECK_FALSE(trackFieldSupportsFilterExpression(TrackField::Quality));
   }
 
-  TEST_CASE("TrackField supports value completion helper works", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField helpers report value completion support", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldSupportsValueCompletion(TrackField::Artist));
     CHECK(trackFieldSupportsValueCompletion(TrackField::Album));
@@ -322,7 +322,7 @@ namespace ao::rt::test
     CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Tags));
   }
 
-  TEST_CASE("TrackField properties - Invalid Field", "[field][unit]")
+  TEST_CASE("TrackField helpers return empty values for invalid fields", "[runtime][unit][trackfield]")
   {
     auto const invalidField = static_cast<TrackField>(255);
     CHECK(trackFieldId(invalidField).empty());

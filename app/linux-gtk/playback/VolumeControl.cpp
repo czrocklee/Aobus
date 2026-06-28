@@ -4,7 +4,7 @@
 #include "playback/VolumeControl.h"
 
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/playback/VolumeViewModel.h>
+#include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <gdk/gdk.h>
 #include <glibmm/main.h>
@@ -22,7 +22,7 @@
 namespace ao::gtk
 {
   VolumeControl::VolumeControl(rt::PlaybackService& playbackService)
-    : _controller{playbackService, [this](ao::uimodel::playback::VolumeViewState const& state) { applyState(state); }}
+    : _controller{playbackService, [this](ao::uimodel::VolumeViewState const& state) { applyState(state); }}
   {
     _button.set_child(_icon);
     _button.set_valign(Gtk::Align::CENTER);
@@ -154,7 +154,7 @@ namespace ao::gtk
     _scrollBubble.unparent();
   }
 
-  void VolumeControl::applyState(uimodel::playback::VolumeViewState const& view)
+  void VolumeControl::applyState(uimodel::VolumeViewState const& view)
   {
     _button.set_visible(view.visible);
 

@@ -62,13 +62,13 @@ namespace ao::gtk
     }
   }
 
-  uimodel::input::KeymapModel AppConfig::loadKeymap(uimodel::input::KeymapBindings defaults) const
+  uimodel::KeymapModel AppConfig::loadKeymap(uimodel::KeymapBindings defaults) const
   {
-    return uimodel::input::loadKeymap(*_storePtr, std::move(defaults));
+    return uimodel::loadKeymap(*_storePtr, std::move(defaults));
   }
 
-  void AppConfig::saveKeymap(uimodel::input::KeymapModel const& keymap)
+  void AppConfig::saveKeymap(uimodel::KeymapModel const& keymap)
   {
-    uimodel::input::saveKeymap(*_storePtr, keymap);
+    uimodel::saveKeymap(*_storePtr, keymap);
   }
 } // namespace ao::gtk

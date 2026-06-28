@@ -10,8 +10,8 @@
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -21,7 +21,7 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   using ao::gtk::test::makeRuntime;
 
   TEST_CASE("LayoutHost rebuilds widget trees after layout updates", "[gtk][unit][layout][containers]")

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gtkmm/box.h>
 
@@ -30,7 +30,7 @@ namespace ao::gtk
     AudioPipelinePanel& operator=(AudioPipelinePanel&&) = delete;
 
     void setVariant(AudioPipelinePanelVariant variant);
-    void apply(uimodel::playback::AudioPipelineView const& view);
+    void apply(uimodel::AudioPipelineView const& view);
 
   private:
     AudioPipelinePanelVariant _variant;

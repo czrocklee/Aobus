@@ -9,7 +9,7 @@
 
 #include <utility>
 
-namespace ao::uimodel::input
+namespace ao::uimodel
 {
   KeymapModel loadKeymap(rt::ConfigStore& store, KeymapBindings defaults)
   {
@@ -46,4 +46,4 @@ namespace ao::uimodel::input
       APP_LOG_ERROR("KeymapStore: failed to flush keymap overrides: {}", res.error().message);
     }
   }
-} // namespace ao::uimodel::input
+} // namespace ao::uimodel

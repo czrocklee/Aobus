@@ -277,8 +277,8 @@ The recommender belongs in the shared application UI model layer, not GTK and
 not `WorkspaceService`. Proposed location:
 
 ```text
-app/include/ao/uimodel/track/TrackPresentationRecommender.h
-app/uimodel/track/TrackPresentationRecommender.cpp
+app/include/ao/uimodel/library/presentation/TrackPresentationRecommender.h
+app/uimodel/library/presentation/TrackPresentationRecommender.cpp
 ```
 
 The public helper should return a presentation id or spec using only query AST

@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <functional>
 #include <string_view>
@@ -40,10 +40,10 @@ namespace ao::gtk::layout
      *                     NOTE: The caller must ensure 'anchorWidget' outlives the returned function.
      * @return A function that activates the action.
      */
-    std::function<void()> bind(uimodel::layout::LayoutNode const& node,
+    std::function<void()> bind(uimodel::LayoutNode const& node,
                                std::string_view propName,
                                std::string_view defaultActionId,
-                               uimodel::layout::ActionSlot slot,
+                               uimodel::LayoutActionSlot slot,
                                Gtk::Widget& anchorWidget) const;
 
   private:

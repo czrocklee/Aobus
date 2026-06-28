@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -39,12 +39,12 @@ namespace ao::gtk
   private:
     friend class PlaybackDetailsWidgetTestPeer;
 
-    void applyState(uimodel::playback::NowPlayingViewState const& view);
+    void applyState(uimodel::NowPlayingViewState const& view);
 
     Gtk::Box _container{Gtk::Orientation::HORIZONTAL};
     Gtk::Label _streamInfoLabel;
     Gtk::Image _sinkStatusIcon;
 
-    uimodel::playback::NowPlayingViewModel _controller;
+    uimodel::NowPlayingViewModel _controller;
   };
 } // namespace ao::gtk

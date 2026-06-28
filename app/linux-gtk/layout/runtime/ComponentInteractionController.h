@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/ComponentActionPolicy.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/gestureclick.h>
@@ -37,26 +37,26 @@ namespace ao::gtk::layout
      * @brief Attaches action controllers to the target widget based on the layout node properties.
      */
     void attach(LayoutContext& ctx,
-                uimodel::layout::LayoutNode const& node,
+                uimodel::LayoutNode const& node,
                 Gtk::Widget& target,
-                uimodel::layout::ComponentActionPolicy policy);
+                uimodel::LayoutComponentActionPolicy policy);
 
   private:
-    void attachPrimaryClick(uimodel::layout::LayoutNode const& node,
+    void attachPrimaryClick(uimodel::LayoutNode const& node,
                             Gtk::Widget& target,
-                            uimodel::layout::ComponentActionPolicy const& policy,
+                            uimodel::LayoutComponentActionPolicy const& policy,
                             ActionBinder const& binder);
-    void attachSecondaryClick(uimodel::layout::LayoutNode const& node,
+    void attachSecondaryClick(uimodel::LayoutNode const& node,
                               Gtk::Widget& target,
-                              uimodel::layout::ComponentActionPolicy const& policy,
+                              uimodel::LayoutComponentActionPolicy const& policy,
                               ActionBinder const& binder);
-    void attachPrimaryLongPress(uimodel::layout::LayoutNode const& node,
+    void attachPrimaryLongPress(uimodel::LayoutNode const& node,
                                 Gtk::Widget& target,
-                                uimodel::layout::ComponentActionPolicy const& policy,
+                                uimodel::LayoutComponentActionPolicy const& policy,
                                 ActionBinder const& binder);
-    void attachSecondaryLongPress(uimodel::layout::LayoutNode const& node,
+    void attachSecondaryLongPress(uimodel::LayoutNode const& node,
                                   Gtk::Widget& target,
-                                  uimodel::layout::ComponentActionPolicy const& policy,
+                                  uimodel::LayoutComponentActionPolicy const& policy,
                                   ActionBinder const& binder);
 
     std::function<void()> _primaryClick;

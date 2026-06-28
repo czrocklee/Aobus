@@ -74,7 +74,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("Async runtime - Basic spawn and wait", "[async][unit][runtime]")
+  TEST_CASE("AsyncRuntime - spawn switches to worker and returns through callback executor", "[runtime][unit][async]")
   {
     auto executor = ImmediateExecutor{};
     auto runtime = Runtime{executor};
@@ -90,7 +90,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("Async runtime - Exception handling", "[async][unit][runtime]")
+  TEST_CASE("AsyncRuntime - spawn reports task failures through logging and futures", "[runtime][unit][async]")
   {
     auto executor = ImmediateExecutor{};
     auto runtime = Runtime{executor};
@@ -112,7 +112,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Immediate executor - defer is FIFO and never reenters the current task", "[async][unit][runtime]")
+  TEST_CASE("ImmediateExecutor - defer is FIFO and never reenters the current task", "[runtime][unit][async]")
   {
     auto executor = ImmediateExecutor{};
     auto order = std::vector<int>{};
@@ -137,7 +137,7 @@ namespace ao::rt::test
     CHECK(order.back() == 6);
   }
 
-  TEST_CASE("Immediate executor - a throwing task does not wedge the queue", "[async][unit][runtime]")
+  TEST_CASE("ImmediateExecutor - a throwing task does not wedge the queue", "[runtime][unit][async]")
   {
     auto executor = ImmediateExecutor{};
     auto order = std::vector<int>{};
@@ -156,7 +156,8 @@ namespace ao::rt::test
     CHECK(order == std::vector<int>{1, 2});
   }
 
-  TEST_CASE("Signal - re-posting during a posted emission runs after the current emission", "[async][unit][runtime]")
+  TEST_CASE("Signal - re-posting during a posted emission runs after the current emission",
+            "[runtime][unit][async][signal]")
   {
     auto executor = ImmediateExecutor{};
     auto signal = Signal<std::int32_t>{};
@@ -180,7 +181,7 @@ namespace ao::rt::test
     CHECK(order == std::vector<std::int32_t>{1, -1, 2});
   }
 
-  TEST_CASE("Signal - handlers connected during emission join the next emission", "[async][unit][runtime]")
+  TEST_CASE("Signal - handlers connected during emission join the next emission", "[runtime][unit][async][signal]")
   {
     auto signal = Signal<std::int32_t>{};
     auto order = std::vector<std::int32_t>{};

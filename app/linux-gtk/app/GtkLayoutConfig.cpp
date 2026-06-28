@@ -5,8 +5,8 @@
 
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
-#include <ao/uimodel/track/TrackPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <filesystem>
 #include <memory>
@@ -24,8 +24,8 @@ namespace ao::gtk
   GtkLayoutConfig::GtkLayoutConfig(GtkLayoutConfig&&) noexcept = default;
   GtkLayoutConfig& GtkLayoutConfig::operator=(GtkLayoutConfig&&) noexcept = default;
 
-  void GtkLayoutConfig::load(uimodel::track::TrackColumnLayoutState& layoutState,
-                             uimodel::track::ListPresentationPreferenceState& prefState) const
+  void GtkLayoutConfig::load(uimodel::TrackColumnLayoutState& layoutState,
+                             uimodel::ListPresentationPreferenceState& prefState) const
   {
     if (auto const res = _storePtr->load("trackView.columnLayouts", layoutState);
         !res && res.error().code != Error::Code::NotFound)
@@ -40,8 +40,8 @@ namespace ao::gtk
     }
   }
 
-  void GtkLayoutConfig::save(uimodel::track::TrackColumnLayoutState const& layoutState,
-                             uimodel::track::ListPresentationPreferenceState const& prefState)
+  void GtkLayoutConfig::save(uimodel::TrackColumnLayoutState const& layoutState,
+                             uimodel::ListPresentationPreferenceState const& prefState)
   {
     _storePtr->save("trackView.columnLayouts", layoutState);
     _storePtr->save("trackView.presentations", prefState);

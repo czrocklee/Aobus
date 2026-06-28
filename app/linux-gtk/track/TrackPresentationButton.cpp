@@ -11,9 +11,9 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/uimodel/track/TrackPresentationCatalog.h>
-#include <ao/uimodel/track/TrackPresentationPreferenceStore.h>
-#include <ao/uimodel/track/TrackPresentationWorkflow.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/button.h>
@@ -52,8 +52,8 @@ namespace ao::gtk
 
   TrackPresentationButton::~TrackPresentationButton() = default;
 
-  void TrackPresentationButton::setPresentationServices(uimodel::track::TrackPresentationCatalog* catalog,
-                                                        uimodel::track::TrackPresentationPreferenceStore* preferences,
+  void TrackPresentationButton::setPresentationServices(uimodel::TrackPresentationCatalog* catalog,
+                                                        uimodel::ListPresentationPreferenceStore* preferences,
                                                         ThemeCoordinator* themeController)
   {
     _catalog = catalog;
@@ -66,16 +66,16 @@ namespace ao::gtk
       return;
     }
 
-    _workflowPtr = std::make_unique<uimodel::track::TrackPresentationWorkflow>(
+    _workflowPtr = std::make_unique<uimodel::TrackPresentationPickerViewModel>(
       _runtime.views(),
       _runtime.workspace(),
       *_catalog,
       *preferences,
-      [this](uimodel::track::TrackPresentationPickerState const& state) { render(state); });
+      [this](uimodel::TrackPresentationPickerState const& state) { render(state); });
     _workflowPtr->refresh();
   }
 
-  void TrackPresentationButton::render(uimodel::track::TrackPresentationPickerState const& state)
+  void TrackPresentationButton::render(uimodel::TrackPresentationPickerState const& state)
   {
     _state = state;
     _button.set_sensitive(_state.enabled);
@@ -83,7 +83,7 @@ namespace ao::gtk
     populatePresentationOptions(_state);
   }
 
-  void TrackPresentationButton::populatePresentationOptions(uimodel::track::TrackPresentationPickerState const& state)
+  void TrackPresentationButton::populatePresentationOptions(uimodel::TrackPresentationPickerState const& state)
   {
     auto* child = _menuBox.get_first_child();
 
@@ -96,7 +96,7 @@ namespace ao::gtk
 
     for (auto const& item : state.menuItems)
     {
-      if (item.type == uimodel::track::TrackPresentationMenuItemType::Separator)
+      if (item.type == uimodel::TrackPresentationMenuItemType::Separator)
       {
         auto* const sep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
         sep->add_css_class("ao-presentation-menu-separator");
@@ -109,7 +109,7 @@ namespace ao::gtk
       btn->set_has_frame(false);
       btn->add_css_class("ao-presentation-menu-item");
 
-      if (item.type == uimodel::track::TrackPresentationMenuItemType::CreateCustomView)
+      if (item.type == uimodel::TrackPresentationMenuItemType::CreateCustomView)
       {
         btn->signal_clicked().connect([this] { onCreateCustomViewClicked(); });
       }
@@ -135,7 +135,7 @@ namespace ao::gtk
     applyCommand(_workflowPtr->selectPresentation(presentationId));
   }
 
-  void TrackPresentationButton::applyCommand(uimodel::track::TrackPresentationApplyCommand const& command)
+  void TrackPresentationButton::applyCommand(uimodel::TrackPresentationApplyCommand const& command)
   {
     if (!command.shouldApply)
     {

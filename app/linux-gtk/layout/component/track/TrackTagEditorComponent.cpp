@@ -15,8 +15,8 @@
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
 #include <sigc++/scoped_connection.h>
@@ -26,7 +26,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     class TrackTagEditorComponent final : public ILayoutComponent
@@ -94,7 +94,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "track.tagEditor",
                                 .displayName = "Tag Editor",
-                                .category = ComponentCategory::Track,
+                                .category = LayoutComponentCategory::Track,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

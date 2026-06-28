@@ -9,11 +9,11 @@
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ActionValidator.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/ActionValidator.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/layout/LayoutNodeId.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionValidator.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutNodeId.h>
 
 #include <giomm/menu.h>
 #include <giomm/simpleactiongroup.h>
@@ -59,7 +59,7 @@
 
 namespace ao::gtk::layout::editor
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     constexpr int kTreeMinContentWidth = 220;
@@ -209,7 +209,7 @@ namespace ao::gtk::layout::editor
 
     for (auto const& descriptor : _registry.descriptors())
     {
-      auto const categoryLabel = std::string{uimodel::layout::toString(descriptor.category)};
+      auto const categoryLabel = std::string{uimodel::toString(descriptor.category)};
 
       if (!categoryMenus.contains(categoryLabel))
       {
@@ -224,7 +224,7 @@ namespace ao::gtk::layout::editor
 
       _actionGroupPtr->add_action(actionName, [this, type = descriptor.type] { addComponent(type); });
 
-      if (uimodel::layout::isContainer(descriptor))
+      if (uimodel::isContainer(descriptor))
       {
         auto wrapActionName = "wrap_" + descriptor.type;
         std::ranges::replace(wrapActionName, '.', '_');
@@ -429,7 +429,7 @@ namespace ao::gtk::layout::editor
 
     auto newNode = LayoutNode{};
     newNode.type = std::move(type);
-    newNode.id = uimodel::layout::makeUniqueLayoutNodeId(_document, newNode.type, "new");
+    newNode.id = uimodel::makeUniqueLayoutNodeId(_document, newNode.type, "new");
 
     markEdited();
     parentNode->children.push_back(std::move(newNode));
@@ -465,7 +465,7 @@ namespace ao::gtk::layout::editor
       {
         auto containerNode = LayoutNode{};
         containerNode.type = std::move(containerType);
-        containerNode.id = uimodel::layout::makeUniqueLayoutNodeId(_document, containerNode.type, "wrap");
+        containerNode.id = uimodel::makeUniqueLayoutNodeId(_document, containerNode.type, "wrap");
 
         markEdited();
         // Move the target node into the new container
@@ -654,14 +654,14 @@ namespace ao::gtk::layout::editor
     {
       if (entry.dirty || presetId == _currentPresetId)
       {
-        auto const idDiagnostics = uimodel::layout::validateStatefulLayoutNodeIds(entry.doc);
+        auto const idDiagnostics = uimodel::validateStatefulLayoutNodeIds(entry.doc);
 
-        if (uimodel::layout::hasLayoutNodeIdErrors(idDiagnostics))
+        if (uimodel::hasLayoutNodeIdErrors(idDiagnostics))
         {
-          auto const firstErrorIt = std::ranges::find_if(
-            idDiagnostics,
-            [](uimodel::layout::LayoutNodeIdDiagnostic const& diagnostic)
-            { return diagnostic.severity == uimodel::layout::LayoutNodeIdDiagnosticSeverity::Error; });
+          auto const firstErrorIt =
+            std::ranges::find_if(idDiagnostics,
+                                 [](uimodel::LayoutNodeIdDiagnostic const& diagnostic)
+                                 { return diagnostic.severity == uimodel::LayoutNodeIdDiagnosticSeverity::Error; });
           auto const& firstError = *firstErrorIt;
           presentErrorDialog("Invalid Layout Component IDs",
                              std::format("Validation failed on preset '{}' component '{}' type '{}':\n\n{}",
@@ -672,7 +672,7 @@ namespace ao::gtk::layout::editor
           return false;
         }
 
-        auto const diagnostics = uimodel::layout::validateActions(
+        auto const diagnostics = uimodel::validateLayoutActions(
           entry.doc, _registry.catalog(), _actionRegistry.catalog(), resolveGtkLayoutActionBindingContext);
 
         if (!diagnostics.empty())
@@ -837,7 +837,7 @@ namespace ao::gtk::layout::editor
   }
 
   Gtk::Widget* LayoutEditorDialog::renderBoolEditor(LayoutNode* node,
-                                                    PropertyDescriptor const& prop,
+                                                    LayoutPropertyDescriptor const& prop,
                                                     LayoutValue const& currentVal,
                                                     bool isLayoutProp)
   {
@@ -852,7 +852,7 @@ namespace ao::gtk::layout::editor
   }
 
   Gtk::Widget* LayoutEditorDialog::renderIntEditor(LayoutNode* node,
-                                                   PropertyDescriptor const& prop,
+                                                   LayoutPropertyDescriptor const& prop,
                                                    LayoutValue const& currentVal,
                                                    bool isLayoutProp)
   {
@@ -871,17 +871,17 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::populateActionComboBox(Gtk::ComboBoxText* combo,
                                                   LayoutNode* node,
-                                                  PropertyDescriptor const& prop)
+                                                  LayoutPropertyDescriptor const& prop)
   {
     if (!prop.optActionBinding)
     {
       return;
     }
 
-    auto const bindCtx = ActionBindingContext{.slot = prop.optActionBinding->slot,
-                                              .hasAnchor = true,      // We assume standard UI buttons have anchors
-                                              .hasFocusedView = true, // And we assume focus is valid during edit
-                                              .componentType = node->type};
+    auto const bindCtx = LayoutActionBindingContext{.slot = prop.optActionBinding->slot,
+                                                    .hasAnchor = true, // We assume standard UI buttons have anchors
+                                                    .hasFocusedView = true, // And we assume focus is valid during edit
+                                                    .componentType = node->type};
 
     combo->append("none", "none");
 
@@ -895,22 +895,22 @@ namespace ao::gtk::layout::editor
       auto label = std::string{desc.id};
       auto caps = std::vector<std::string>{};
 
-      if (desc.capabilities.has(ActionCapability::RequiresAnchor))
+      if (desc.capabilities.has(LayoutActionCapability::RequiresAnchor))
       {
         caps.emplace_back("Anchor");
       }
 
-      if (desc.capabilities.has(ActionCapability::PresentsMenu))
+      if (desc.capabilities.has(LayoutActionCapability::PresentsMenu))
       {
         caps.emplace_back("Menu");
       }
 
-      if (desc.capabilities.has(ActionCapability::RequiresActiveTrack))
+      if (desc.capabilities.has(LayoutActionCapability::RequiresActiveTrack))
       {
         caps.emplace_back("Track");
       }
 
-      if (desc.capabilities.has(ActionCapability::RequiresFocusedView))
+      if (desc.capabilities.has(LayoutActionCapability::RequiresFocusedView))
       {
         caps.emplace_back("Focus");
       }
@@ -937,7 +937,7 @@ namespace ao::gtk::layout::editor
   }
 
   Gtk::Widget* LayoutEditorDialog::renderEnumEditor(LayoutNode* node,
-                                                    PropertyDescriptor const& prop,
+                                                    LayoutPropertyDescriptor const& prop,
                                                     LayoutValue const& currentVal,
                                                     bool isLayoutProp)
   {
@@ -982,7 +982,7 @@ namespace ao::gtk::layout::editor
   }
 
   Gtk::Widget* LayoutEditorDialog::renderStringEditor(LayoutNode* node,
-                                                      PropertyDescriptor const& prop,
+                                                      LayoutPropertyDescriptor const& prop,
                                                       LayoutValue const& currentVal,
                                                       bool isLayoutProp)
   {
@@ -998,7 +998,9 @@ namespace ao::gtk::layout::editor
     return createPropertyRow(prop.label, *entry);
   }
 
-  Gtk::Widget* LayoutEditorDialog::dispatchEditor(LayoutNode* node, PropertyDescriptor const& prop, bool isLayoutProp)
+  Gtk::Widget* LayoutEditorDialog::dispatchEditor(LayoutNode* node,
+                                                  LayoutPropertyDescriptor const& prop,
+                                                  bool isLayoutProp)
   {
     auto currentVal = LayoutValue{prop.defaultValue};
     auto const& propertyMap = isLayoutProp ? node->layout : node->props;
@@ -1010,10 +1012,10 @@ namespace ao::gtk::layout::editor
 
     switch (prop.kind)
     {
-      case PropertyKind::Bool: return renderBoolEditor(node, prop, currentVal, isLayoutProp);
-      case PropertyKind::Int: return renderIntEditor(node, prop, currentVal, isLayoutProp);
-      case PropertyKind::Enum: return renderEnumEditor(node, prop, currentVal, isLayoutProp);
-      case PropertyKind::String: return renderStringEditor(node, prop, currentVal, isLayoutProp);
+      case LayoutPropertyKind::Bool: return renderBoolEditor(node, prop, currentVal, isLayoutProp);
+      case LayoutPropertyKind::Int: return renderIntEditor(node, prop, currentVal, isLayoutProp);
+      case LayoutPropertyKind::Enum: return renderEnumEditor(node, prop, currentVal, isLayoutProp);
+      case LayoutPropertyKind::String: return renderStringEditor(node, prop, currentVal, isLayoutProp);
       default:
       {
         auto* const placeholder = Gtk::make_managed<Gtk::Label>("(Unsupported editor)");
@@ -1084,59 +1086,60 @@ namespace ao::gtk::layout::editor
 
     // 2. Layout properties (component-specific + common)
     {
-      auto layoutProps = optDescriptorOption ? optDescriptorOption->layoutProps : std::vector<PropertyDescriptor>{};
-      auto const addCommon = [&](PropertyDescriptor prop)
+      auto layoutProps =
+        optDescriptorOption ? optDescriptorOption->layoutProps : std::vector<LayoutPropertyDescriptor>{};
+      auto const addCommon = [&](LayoutPropertyDescriptor prop)
       {
-        if (!std::ranges::contains(layoutProps, prop.name, &PropertyDescriptor::name))
+        if (!std::ranges::contains(layoutProps, prop.name, &LayoutPropertyDescriptor::name))
         {
           layoutProps.push_back(prop);
         }
       };
 
       addCommon({.name = "hexpand",
-                 .kind = PropertyKind::Bool,
+                 .kind = LayoutPropertyKind::Bool,
                  .label = "Expand Horizontal",
                  .defaultValue = LayoutValue{false}});
       addCommon({.name = "vexpand",
-                 .kind = PropertyKind::Bool,
+                 .kind = LayoutPropertyKind::Bool,
                  .label = "Expand Vertical",
                  .defaultValue = LayoutValue{false}});
       addCommon({.name = "halign",
-                 .kind = PropertyKind::Enum,
+                 .kind = LayoutPropertyKind::Enum,
                  .label = "Horizontal Align",
                  .defaultValue = LayoutValue{std::string{"fill"}},
                  .enumValues = {"fill", "start", "end", "center"}});
       addCommon({.name = "valign",
-                 .kind = PropertyKind::Enum,
+                 .kind = LayoutPropertyKind::Enum,
                  .label = "Vertical Align",
                  .defaultValue = LayoutValue{std::string{"fill"}},
                  .enumValues = {"fill", "start", "end", "center"}});
       addCommon({.name = "widthRequest",
-                 .kind = PropertyKind::Int,
+                 .kind = LayoutPropertyKind::Int,
                  .label = "Width Request",
                  .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}});
       addCommon({.name = "heightRequest",
-                 .kind = PropertyKind::Int,
+                 .kind = LayoutPropertyKind::Int,
                  .label = "Height Request",
                  .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}});
       addCommon({.name = "x",
-                 .kind = PropertyKind::Int,
+                 .kind = LayoutPropertyKind::Int,
                  .label = "X",
                  .defaultValue = LayoutValue{static_cast<std::int64_t>(0)}});
       addCommon({.name = "y",
-                 .kind = PropertyKind::Int,
+                 .kind = LayoutPropertyKind::Int,
                  .label = "Y",
                  .defaultValue = LayoutValue{static_cast<std::int64_t>(0)}});
       addCommon({.name = "width",
-                 .kind = PropertyKind::Int,
+                 .kind = LayoutPropertyKind::Int,
                  .label = "Width",
                  .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}});
       addCommon({.name = "height",
-                 .kind = PropertyKind::Int,
+                 .kind = LayoutPropertyKind::Int,
                  .label = "Height",
                  .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}});
       addCommon({.name = "zIndex",
-                 .kind = PropertyKind::Int,
+                 .kind = LayoutPropertyKind::Int,
                  .label = "Z-Index",
                  .defaultValue = LayoutValue{static_cast<std::int64_t>(0)}});
 

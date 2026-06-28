@@ -3,15 +3,15 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <optional>
 
 namespace ao::gtk::layout
 {
-  std::optional<uimodel::layout::ActionBindingContext> resolveGtkLayoutActionBindingContext(
-    uimodel::layout::LayoutNode const& node,
-    uimodel::layout::PropertyDescriptor const& property);
+  std::optional<uimodel::LayoutActionBindingContext> resolveGtkLayoutActionBindingContext(
+    uimodel::LayoutNode const& node,
+    uimodel::LayoutPropertyDescriptor const& property);
 }

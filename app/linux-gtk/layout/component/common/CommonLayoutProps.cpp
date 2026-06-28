@@ -3,7 +3,7 @@
 
 #include "CommonLayoutProps.h"
 
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
@@ -16,7 +16,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     std::optional<Gtk::Align> parseAlign(std::string_view alignment)

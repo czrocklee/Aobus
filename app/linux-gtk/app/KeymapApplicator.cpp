@@ -15,7 +15,7 @@
 
 namespace ao::gtk
 {
-  void applyKeymapAccelerators(Gtk::Application& app, uimodel::input::KeymapModel const& keymap)
+  void applyKeymapAccelerators(Gtk::Application& app, uimodel::KeymapModel const& keymap)
   {
     // set_accels_for_action accumulates state on the application, so reconcile before applying:
     // clear any "win.*" accelerator the current keymap no longer mentions. This matters when an

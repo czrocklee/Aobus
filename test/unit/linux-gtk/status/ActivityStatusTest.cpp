@@ -8,7 +8,7 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/uimodel/status/ActivityStatusModel.h>
+#include <ao/uimodel/status/activity/ActivityStatusModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -112,7 +112,7 @@ namespace ao::gtk::test
     SECTION("ambient idle is hidden")
     {
       CHECK_FALSE(status.widget().get_visible());
-      CHECK(status.viewStateForTest().compact.kind == uimodel::status::ActivityStatusKind::Idle);
+      CHECK(status.viewStateForTest().compact.kind == uimodel::ActivityStatusKind::Idle);
       CHECK(hasCssClass(status.widget(), "ao-activity-status-ambient"));
       CHECK_FALSE(hasCssClass(status.widget(), "ao-activity-status-classic-inline"));
     }

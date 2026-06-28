@@ -11,8 +11,8 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/uimodel/playback/PlaybackQueueModel.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/stack.h>
@@ -39,8 +39,8 @@ namespace ao::gtk::test
     auto navCallbacks = ListNavigationController::Callbacks{};
     auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
 
-    auto layoutStore = uimodel::track::TrackColumnLayoutStore{};
-    auto queueModel = uimodel::playback::PlaybackQueueModel{runtime.playback()};
+    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto queueModel = uimodel::PlaybackQueueModel{runtime.playback()};
 
     auto host = TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, layoutStore};
 

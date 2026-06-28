@@ -6,8 +6,9 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackFieldEditPolicy.h>
-#include <ao/uimodel/track/TrackFieldFormatter.h>
+#include <ao/uimodel/field/TrackFieldEditCodec.h>
+#include <ao/uimodel/field/TrackFieldEditPolicy.h>
+#include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <array>
 #include <cstddef>
@@ -63,12 +64,12 @@ namespace ao::gtk
 
     std::string readDisplayTrackNumber(TrackRowObject const& row, TrackRowCache const& /*cache*/)
     {
-      return uimodel::track::formatDisplayTrackNumber(row.discNumber(), row.discTotal(), row.trackNumber());
+      return uimodel::formatDisplayTrackNumber(row.discNumber(), row.discTotal(), row.trackNumber());
     }
 
     std::string readTechnicalSummary(TrackRowObject const& row, TrackRowCache const& /*cache*/)
     {
-      return uimodel::track::formatTechnicalSummary(row.codec(), row.sampleRate(), row.bitDepth());
+      return uimodel::formatTechnicalSummary(row.codec(), row.sampleRate(), row.bitDepth());
     }
 
     std::string readFilePathRowText(TrackRowObject const& row, TrackRowCache const& cache)
@@ -85,7 +86,7 @@ namespace ao::gtk
   bool canInlineEdit(TrackFieldUiDefinition const& def)
   {
     return def.parseInlineEdit != nullptr && def.readRowEditValue != nullptr && def.applyRowEditValue != nullptr &&
-           uimodel::track::trackFieldCanWritePatch(def.field);
+           uimodel::trackFieldCanWritePatch(def.field);
   }
 
   namespace
@@ -100,7 +101,7 @@ namespace ao::gtk
           .field = F::Title,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Title)->raw()}; },
-          .parseInlineEdit = uimodel::track::parseTextEditValue,
+          .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
           .applyRowEditValue = applyStringEditValue,
         },
@@ -108,7 +109,7 @@ namespace ao::gtk
           .field = F::Artist,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Artist)->raw()}; },
-          .parseInlineEdit = uimodel::track::parseTextEditValue,
+          .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
           .applyRowEditValue = applyStringEditValue,
         },
@@ -116,7 +117,7 @@ namespace ao::gtk
           .field = F::Album,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Album)->raw()}; },
-          .parseInlineEdit = uimodel::track::parseTextEditValue,
+          .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
           .applyRowEditValue = applyStringEditValue,
         },
@@ -124,7 +125,7 @@ namespace ao::gtk
           .field = F::AlbumArtist,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::AlbumArtist)->raw()}; },
-          .parseInlineEdit = uimodel::track::parseTextEditValue,
+          .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
           .applyRowEditValue = applyStringEditValue,
         },
@@ -132,7 +133,7 @@ namespace ao::gtk
           .field = F::Genre,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Genre)->raw()}; },
-          .parseInlineEdit = uimodel::track::parseTextEditValue,
+          .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
           .applyRowEditValue = applyStringEditValue,
         },
@@ -140,7 +141,7 @@ namespace ao::gtk
           .field = F::Composer,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Composer)->raw()}; },
-          .parseInlineEdit = uimodel::track::parseTextEditValue,
+          .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
           .applyRowEditValue = applyStringEditValue,
         },
@@ -148,7 +149,7 @@ namespace ao::gtk
           .field = F::Work,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Work)->raw()}; },
-          .parseInlineEdit = uimodel::track::parseTextEditValue,
+          .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
           .applyRowEditValue = applyStringEditValue,
         },
@@ -156,7 +157,7 @@ namespace ao::gtk
           .field = F::Movement,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Movement)->raw()}; },
-          .parseInlineEdit = uimodel::track::parseTextEditValue,
+          .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
           .applyRowEditValue = applyStringEditValue,
         },
@@ -164,56 +165,56 @@ namespace ao::gtk
         {
           .field = F::Year,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatUint16(row.year()); },
-          .parseInlineEdit = uimodel::track::parseUint16EditValue,
+          { return uimodel::formatUint16(row.year()); },
+          .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::year>,
           .applyRowEditValue = applyUint16Field<&TrackRowObject::setYear>,
         },
         {
           .field = F::DiscNumber,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatUint16(row.discNumber()); },
-          .parseInlineEdit = uimodel::track::parseUint16EditValue,
+          { return uimodel::formatUint16(row.discNumber()); },
+          .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::discNumber>,
           .applyRowEditValue = applyUint16Field<&TrackRowObject::setDiscNumber>,
         },
         {
           .field = F::DiscTotal,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatUint16(row.discTotal()); },
-          .parseInlineEdit = uimodel::track::parseUint16EditValue,
+          { return uimodel::formatUint16(row.discTotal()); },
+          .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::discTotal>,
           .applyRowEditValue = applyUint16Field<&TrackRowObject::setDiscTotal>,
         },
         {
           .field = F::TrackNumber,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatUint16(row.trackNumber()); },
-          .parseInlineEdit = uimodel::track::parseUint16EditValue,
+          { return uimodel::formatUint16(row.trackNumber()); },
+          .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::trackNumber>,
           .applyRowEditValue = applyUint16Field<&TrackRowObject::setTrackNumber>,
         },
         {
           .field = F::TrackTotal,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatUint16(row.trackTotal()); },
-          .parseInlineEdit = uimodel::track::parseUint16EditValue,
+          { return uimodel::formatUint16(row.trackTotal()); },
+          .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::trackTotal>,
           .applyRowEditValue = applyUint16Field<&TrackRowObject::setTrackTotal>,
         },
         {
           .field = F::MovementNumber,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatUint16(row.movementNumber()); },
-          .parseInlineEdit = uimodel::track::parseUint16EditValue,
+          { return uimodel::formatUint16(row.movementNumber()); },
+          .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::movementNumber>,
           .applyRowEditValue = applyUint16Field<&TrackRowObject::setMovementNumber>,
         },
         {
           .field = F::MovementTotal,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatUint16(row.movementTotal()); },
-          .parseInlineEdit = uimodel::track::parseUint16EditValue,
+          { return uimodel::formatUint16(row.movementTotal()); },
+          .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::movementTotal>,
           .applyRowEditValue = applyUint16Field<&TrackRowObject::setMovementTotal>,
         },
@@ -221,7 +222,7 @@ namespace ao::gtk
         {
           .field = F::Duration,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatDuration(row.duration()); },
+          { return uimodel::formatDuration(row.duration()); },
         },
         // ---- Tags ----
         {
@@ -237,37 +238,37 @@ namespace ao::gtk
         {
           .field = F::Codec,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const& /*cache*/) -> std::string
-          { return uimodel::track::formatCodec(row.codec()); },
+          { return uimodel::formatCodec(row.codec()); },
         },
         {
           .field = F::SampleRate,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatSampleRate(row.sampleRate()); },
+          { return uimodel::formatSampleRate(row.sampleRate()); },
         },
         {
           .field = F::Channels,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatChannels(row.channels()); },
+          { return uimodel::formatChannels(row.channels()); },
         },
         {
           .field = F::BitDepth,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatBitDepth(row.bitDepth()); },
+          { return uimodel::formatBitDepth(row.bitDepth()); },
         },
         {
           .field = F::Bitrate,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatBitrate(row.bitrate()); },
+          { return uimodel::formatBitrate(row.bitrate()); },
         },
         {
           .field = F::FileSize,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatFileSize(row.fileSize()); },
+          { return uimodel::formatFileSize(row.fileSize()); },
         },
         {
           .field = F::ModifiedTime,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
-          { return uimodel::track::formatTime(row.modifiedTime()); },
+          { return uimodel::formatTime(row.modifiedTime()); },
         },
         // ---- Synthetic ----
         {

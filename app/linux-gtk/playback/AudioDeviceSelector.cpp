@@ -7,7 +7,7 @@
 #include "layout/LayoutConstants.h"
 #include <ao/audio/Backend.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/playback/AudioOutputViewModel.h>
+#include <ao/uimodel/playback/output/AudioOutputViewModel.h>
 
 #include <giomm/liststore.h>
 #include <glibmm/ustring.h>
@@ -30,17 +30,17 @@ namespace ao::gtk
   AudioDeviceSelector::AudioDeviceSelector(rt::PlaybackService& playback, Gtk::PositionType position)
     : _playback{playback}
     , _outputController{_playback,
-                        [this](ao::uimodel::playback::AudioOutputViewState const& view)
+                        [this](ao::uimodel::AudioOutputViewState const& view)
                         {
                           _storePtr->remove_all();
 
                           for (auto const& row : view.rows)
                           {
-                            if (row.kind == ao::uimodel::playback::AudioOutputRow::Kind::BackendHeader)
+                            if (row.kind == ao::uimodel::AudioOutputRow::Kind::BackendHeader)
                             {
                               _storePtr->append(BackendItem::create(row.backendId, row.title));
                             }
-                            else if (row.kind == ao::uimodel::playback::AudioOutputRow::Kind::DeviceProfile)
+                            else if (row.kind == ao::uimodel::AudioOutputRow::Kind::DeviceProfile)
                             {
                               auto audioDevice = audio::Device{
                                 .id = row.deviceId,

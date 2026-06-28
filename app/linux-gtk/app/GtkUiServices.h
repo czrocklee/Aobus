@@ -3,7 +3,7 @@
 
 #pragma once
 
-namespace ao::uimodel::playback
+namespace ao::uimodel
 {
   class PlaybackQueueModel;
 }
@@ -20,10 +20,10 @@ namespace ao::gtk
   class ListNavigationController;
   class ThemeCoordinator;
 } // namespace ao::gtk
-namespace ao::uimodel::track
+namespace ao::uimodel
 {
   class TrackPresentationCatalog;
-  class TrackPresentationPreferenceStore;
+  class ListPresentationPreferenceStore;
 }
 namespace ao::gtk
 {
@@ -35,12 +35,12 @@ namespace ao::gtk
   {
     TrackRowCache* trackRowCache = nullptr;
     ImageCache* imageCache = nullptr;
-    uimodel::playback::PlaybackQueueModel* playbackQueueModel = nullptr;
+    uimodel::PlaybackQueueModel* playbackQueueModel = nullptr;
     TagEditController* tagEditController = nullptr;
     portal::ImportExportActions* importExportCoordinator = nullptr;
     TrackPageHost* trackPageHost = nullptr;
-    uimodel::track::TrackPresentationCatalog* trackPresentationCatalog = nullptr;
-    uimodel::track::TrackPresentationPreferenceStore* trackPresentationPreferences = nullptr;
+    uimodel::TrackPresentationCatalog* trackPresentationCatalog = nullptr;
+    uimodel::ListPresentationPreferenceStore* trackPresentationPreferences = nullptr;
     ListNavigationController* listNavigationController = nullptr;
     ThemeCoordinator* themeController = nullptr;
   };

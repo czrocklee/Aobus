@@ -35,12 +35,12 @@ namespace ao::gtk::layout::test
     auto const services = GtkUiServices{
       .trackRowCache = sentinelPtr<TrackRowCache>(0x1000),
       .imageCache = sentinelPtr<ImageCache>(0x2000),
-      .playbackQueueModel = sentinelPtr<uimodel::playback::PlaybackQueueModel>(0x3000),
+      .playbackQueueModel = sentinelPtr<uimodel::PlaybackQueueModel>(0x3000),
       .tagEditController = sentinelPtr<TagEditController>(0x4000),
       .importExportCoordinator = sentinelPtr<portal::ImportExportActions>(0x5000),
       .trackPageHost = sentinelPtr<TrackPageHost>(0x6000),
-      .trackPresentationCatalog = sentinelPtr<uimodel::track::TrackPresentationCatalog>(0x7000),
-      .trackPresentationPreferences = sentinelPtr<uimodel::track::TrackPresentationPreferenceStore>(0x7100),
+      .trackPresentationCatalog = sentinelPtr<uimodel::TrackPresentationCatalog>(0x7000),
+      .trackPresentationPreferences = sentinelPtr<uimodel::ListPresentationPreferenceStore>(0x7100),
       .listNavigationController = sentinelPtr<ListNavigationController>(0x8000),
       .themeController = sentinelPtr<ThemeCoordinator>(0x9000),
     };
@@ -48,11 +48,11 @@ namespace ao::gtk::layout::test
     bindServices(track, list, playback, detail, tag, portal, theme, services);
 
     CHECK(track.pageHost == sentinelPtr<TrackPageHost>(0x6000));
-    CHECK(track.presentationCatalog == sentinelPtr<uimodel::track::TrackPresentationCatalog>(0x7000));
-    CHECK(track.presentationPreferences == sentinelPtr<uimodel::track::TrackPresentationPreferenceStore>(0x7100));
+    CHECK(track.presentationCatalog == sentinelPtr<uimodel::TrackPresentationCatalog>(0x7000));
+    CHECK(track.presentationPreferences == sentinelPtr<uimodel::ListPresentationPreferenceStore>(0x7100));
     CHECK(track.trackRowCache == sentinelPtr<TrackRowCache>(0x1000));
     CHECK(list.navigationController == sentinelPtr<ListNavigationController>(0x8000));
-    CHECK(playback.queueModel == sentinelPtr<uimodel::playback::PlaybackQueueModel>(0x3000));
+    CHECK(playback.queueModel == sentinelPtr<uimodel::PlaybackQueueModel>(0x3000));
     CHECK(detail.imageCache == sentinelPtr<ImageCache>(0x2000));
     CHECK(tag.editController == sentinelPtr<TagEditController>(0x4000));
     CHECK(portal.coordinator == sentinelPtr<portal::ImportExportActions>(0x5000));

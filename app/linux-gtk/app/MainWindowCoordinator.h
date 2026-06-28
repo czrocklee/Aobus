@@ -16,14 +16,14 @@ namespace ao::lmdb
   class ReadTransaction;
 }
 
-namespace ao::uimodel::playback
+namespace ao::uimodel
 {
   class PlaybackQueueModel;
 }
-namespace ao::uimodel::track
+namespace ao::uimodel
 {
   class TrackPresentationCatalog;
-  class TrackPresentationPreferenceStore;
+  class ListPresentationPreferenceStore;
 }
 namespace ao::gtk
 {
@@ -65,13 +65,13 @@ namespace ao::gtk
 
     TrackRowCache* trackRowCache();
     ImageCache* imageCache();
-    uimodel::playback::PlaybackQueueModel* playbackQueueModel();
+    uimodel::PlaybackQueueModel* playbackQueueModel();
     TagEditController* tagEditController();
     portal::ImportExportCoordinator* importExportCoordinator();
     TrackPageHost* trackPageHost();
     ListNavigationController* listNavigationController();
-    uimodel::track::TrackPresentationCatalog* trackPresentationCatalog();
-    uimodel::track::TrackPresentationPreferenceStore* trackPresentationPreferences();
+    uimodel::TrackPresentationCatalog* trackPresentationCatalog();
+    uimodel::ListPresentationPreferenceStore* trackPresentationPreferences();
     ThemeCoordinator* themeController();
 
     portal::ImportExportCoordinator& importExport();

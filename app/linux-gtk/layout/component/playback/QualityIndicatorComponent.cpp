@@ -7,11 +7,11 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/ComponentActionPolicy.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/playback/AobusSoulViewModel.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <gtkmm/widget.h>
 
@@ -19,11 +19,11 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
-    using uimodel::layout::ComponentActionPolicy;
-    using uimodel::layout::slotBit;
+    using uimodel::LayoutComponentActionPolicy;
+    using uimodel::slotBit;
 
     /**
      * @brief playback.qualityIndicator
@@ -34,7 +34,7 @@ namespace ao::gtk::layout
       QualityIndicatorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
         : _runtime{ctx.runtime}
         , _soulController{_runtime.playback(),
-                          [this](uimodel::playback::AobusSoulViewState const& view)
+                          [this](uimodel::AobusSoulViewState const& view)
                           {
                             _soul.breathe(view.isBreathing);
                             _soul.setAura(AobusSoul::mapAuraColor(view.auraColor));
@@ -47,7 +47,7 @@ namespace ao::gtk::layout
     private:
       rt::AppRuntime& _runtime;
       AobusSoul _soul{};
-      uimodel::playback::AobusSoulViewModel _soulController;
+      uimodel::AobusSoulViewModel _soulController;
     };
 
     std::unique_ptr<ILayoutComponent> createQualityIndicator(LayoutContext& ctx, LayoutNode const& node)
@@ -61,14 +61,15 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.qualityIndicator",
        .displayName = "Quality Indicator",
-       .category = ComponentCategory::Playback,
+       .category = LayoutComponentCategory::Playback,
        .props = {},
        .layoutProps = {},
        .minChildren = 0,
        .optMaxChildren = 0,
-       .actionPolicy = ComponentActionPolicy{.slotMask = slotBit(ActionSlot::SecondaryClick) |
-                                                         slotBit(ActionSlot::SecondaryLongPress),
-                                             .defaultActionIds = {{ActionSlot::SecondaryLongPress, "shell.showSoul"}}}},
+       .actionPolicy =
+         LayoutComponentActionPolicy{
+           .slotMask = slotBit(LayoutActionSlot::SecondaryClick) | slotBit(LayoutActionSlot::SecondaryLongPress),
+           .defaultActionIds = {{LayoutActionSlot::SecondaryLongPress, "shell.showSoul"}}}},
       createQualityIndicator);
   }
 } // namespace ao::gtk::layout

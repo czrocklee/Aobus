@@ -19,9 +19,9 @@
 #include <utility>
 #include <vector>
 
-namespace ao::uimodel::layout
+namespace ao::uimodel
 {
-  class ActionCatalog;
+  class LayoutActionCatalog;
 }
 
 namespace ao::gtk
@@ -29,7 +29,7 @@ namespace ao::gtk
   /**
    * @brief Standalone editor window for customizing keyboard shortcuts.
    *
-   * Lists the shortcut-eligible actions from the @c ActionCatalog and lets the user add,
+   * Lists the shortcut-eligible actions from the @c LayoutActionCatalog and lets the user add,
    * remove, or reset the key chords bound to each. The model held here is the single source
    * of truth for the edit session; every mutation re-renders the list and invokes the
    * supplied changed-callback so the caller can persist the delta and re-apply accelerators.
@@ -38,13 +38,13 @@ namespace ao::gtk
    * the user to confirm the reassignment before it is taken, so the effective keymap stays
    * unambiguous and no binding is removed silently.
    *
-   * This is the GTK *view*; all reusable keymap logic lives in @c uimodel::input::KeymapModel,
+   * This is the GTK *view*; all reusable keymap logic lives in @c uimodel::KeymapModel,
    * and GDK keysym translation is confined to @c GtkAccelTranslator.
    */
   class KeyboardShortcutsWindow final : public Gtk::Window
   {
   public:
-    using ChangedCallback = std::function<void(uimodel::input::KeymapModel const&)>;
+    using ChangedCallback = std::function<void(uimodel::KeymapModel const&)>;
 
     /// Asks the user whether to reassign a chord already bound elsewhere. Invoked with the current
     /// owner's label and the chord text; @p respond must be called with true to proceed with the
@@ -53,8 +53,8 @@ namespace ao::gtk
     using ConflictConfirmer = std::function<
       void(std::string const& ownerLabel, std::string const& chordText, std::function<void(bool)> respond)>;
 
-    KeyboardShortcutsWindow(uimodel::layout::ActionCatalog const& catalog,
-                            uimodel::input::KeymapModel keymap,
+    KeyboardShortcutsWindow(uimodel::LayoutActionCatalog const& catalog,
+                            uimodel::KeymapModel keymap,
                             ChangedCallback onChanged);
     ~KeyboardShortcutsWindow() override;
 
@@ -70,26 +70,25 @@ namespace ao::gtk
     /// model-level primitive (the user has already confirmed any reassignment); the interactive
     /// capture flow goes through requestBind() instead. Returns true when the effective keymap
     /// changed.
-    bool bindChord(std::string const& actionId, uimodel::input::KeyChord const& chord);
+    bool bindChord(std::string const& actionId, uimodel::KeyChord const& chord);
 
     /// Binds @p chord to @p actionId, but when the chord is already held by a different action the
     /// reassignment is confirmed with the user first (see ConflictConfirmer) rather than taken
     /// silently. This is what the capture popup invokes.
-    void requestBind(std::string const& actionId, uimodel::input::KeyChord const& chord);
+    void requestBind(std::string const& actionId, uimodel::KeyChord const& chord);
 
     /// The action currently bound to @p chord other than @p actionId, if any. Drives the
     /// reassignment prompt.
-    std::optional<std::string> conflictingOwner(std::string const& actionId,
-                                                uimodel::input::KeyChord const& chord) const;
+    std::optional<std::string> conflictingOwner(std::string const& actionId, uimodel::KeyChord const& chord) const;
 
     /// Replaces the prompt shown when a captured chord collides with another action's binding.
     void setConflictConfirmer(ConflictConfirmer confirmer) { _conflictConfirmer = std::move(confirmer); }
     /// Removes @p chord from @p actionId. Returns true when it was bound.
-    bool unbindChord(std::string const& actionId, uimodel::input::KeyChord const& chord);
+    bool unbindChord(std::string const& actionId, uimodel::KeyChord const& chord);
     void resetAction(std::string const& actionId);
     void resetAll();
 
-    uimodel::input::KeymapModel const& keymap() const { return _keymap; }
+    uimodel::KeymapModel const& keymap() const { return _keymap; }
     std::vector<std::string> const& editableActionIds() const { return _editableActionIds; }
 
   private:
@@ -107,7 +106,7 @@ namespace ao::gtk
     void closeCapture();
     std::string labelFor(std::string const& actionId) const;
 
-    uimodel::input::KeymapModel _keymap;
+    uimodel::KeymapModel _keymap;
     ChangedCallback _onChanged;
     ConflictConfirmer _conflictConfirmer;
     std::vector<EditableAction> _actions;

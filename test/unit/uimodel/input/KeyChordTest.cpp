@@ -5,7 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-namespace ao::uimodel::input::test
+namespace ao::uimodel::test
 {
   TEST_CASE("KeyChord parse returns modifiers and key", "[uimodel][unit][input][keychord]")
   {
@@ -129,4 +129,4 @@ namespace ao::uimodel::input::test
     CHECK_FALSE(KeyChord::parse("Ctrl+P") == KeyChord::parse("Ctrl+Shift+P"));
     CHECK_FALSE(KeyChord::parse("Ctrl+P") == KeyChord::parse("Ctrl+Q"));
   }
-} // namespace ao::uimodel::input::test
+} // namespace ao::uimodel::test

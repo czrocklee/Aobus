@@ -12,7 +12,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/application.h>
 #include <gtkmm/window.h>
@@ -77,10 +77,7 @@ namespace ao::gtk::layout::test
       return *_trackDetailScopePtr;
     }
 
-    std::unique_ptr<ILayoutComponent> create(uimodel::layout::LayoutNode const& node)
-    {
-      return _components.create(_ctx, node);
-    }
+    std::unique_ptr<ILayoutComponent> create(uimodel::LayoutNode const& node) { return _components.create(_ctx, node); }
 
   private:
     Glib::RefPtr<Gtk::Application> _appPtr;

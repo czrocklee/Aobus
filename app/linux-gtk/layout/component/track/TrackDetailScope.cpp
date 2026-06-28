@@ -11,8 +11,8 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
@@ -28,7 +28,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     // Helper to walk widget tree and reset scrolled windows
@@ -144,9 +144,9 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "track.detailScope",
        .displayName = "Detail Scope",
-       .category = ComponentCategory::Track,
+       .category = LayoutComponentCategory::Track,
        .props = {},
-       .layoutProps = {{.name = "cssClasses", .kind = PropertyKind::String, .label = "CSS Classes"}},
+       .layoutProps = {{.name = "cssClasses", .kind = LayoutPropertyKind::String, .label = "CSS Classes"}},
        .minChildren = 1,
        .optMaxChildren = 0},
       createTrackDetailScope);

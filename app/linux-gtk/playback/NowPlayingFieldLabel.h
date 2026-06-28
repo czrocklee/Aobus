@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -19,14 +19,14 @@ namespace ao::gtk
   class NowPlayingFieldLabel final
   {
   public:
-    using Action = uimodel::playback::NowPlayingFieldAction;
+    using Action = uimodel::NowPlayingFieldAction;
 
     NowPlayingFieldLabel(rt::AppRuntime& runtime, rt::TrackField field, Action action = Action::None);
 
     Gtk::Widget& widget() { return _label; }
 
   private:
-    void applyState(uimodel::playback::NowPlayingViewState const& view);
+    void applyState(uimodel::NowPlayingViewState const& view);
     void onLabelClicked();
 
     rt::AppRuntime& _runtime;
@@ -34,6 +34,6 @@ namespace ao::gtk
     Action _action;
     Gtk::Label _label;
 
-    uimodel::playback::NowPlayingViewModel _controller;
+    uimodel::NowPlayingViewModel _controller;
   };
 } // namespace ao::gtk

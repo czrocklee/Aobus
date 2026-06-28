@@ -7,8 +7,8 @@
 #include "layout/runtime/LayoutContext.h"
 #include "playback/VolumeControl.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
@@ -18,7 +18,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -54,7 +54,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "playback.volumeControl",
                                 .displayName = "Volume Control",
-                                .category = ComponentCategory::Playback,
+                                .category = LayoutComponentCategory::Playback,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

@@ -6,7 +6,7 @@
 #include "completion/EntryCompletionController.h"
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/QueryExpressionCompleter.h>
-#include <ao/uimodel/track/TrackFilterViewModel.h>
+#include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
 #include <glibmm/ustring.h>
 #include <gtkmm/box.h>
@@ -67,7 +67,7 @@ namespace ao::gtk
     void onFilterTextChanged();
     void onClearClicked();
     void onCreateSmartListClicked();
-    void applyState(uimodel::track::TrackFilterViewState const& view);
+    void applyState(uimodel::TrackFilterViewState const& view);
     void updateClearButton();
     void setActive(bool active);
 
@@ -85,6 +85,6 @@ namespace ao::gtk
     sigc::scoped_connection _debounceTimer;
 
     CreateSmartListSignal _signalCreateSmartListRequested;
-    uimodel::track::TrackFilterViewModel _controller;
+    uimodel::TrackFilterViewModel _controller;
   };
 } // namespace ao::gtk

@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-namespace ao::uimodel::input
+namespace ao::uimodel
 {
   /**
    * @brief Platform-neutral keyboard modifier flags.
@@ -106,4 +106,4 @@ namespace ao::uimodel::input
      */
     std::string toString() const;
   };
-} // namespace ao::uimodel::input
+} // namespace ao::uimodel

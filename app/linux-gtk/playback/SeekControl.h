@@ -4,9 +4,9 @@
 #pragma once
 
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/playback/PlaybackPositionInterpolator.h>
-#include <ao/uimodel/playback/SeekSliderInteractionModel.h>
-#include <ao/uimodel/playback/SeekViewModel.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
+#include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
+#include <ao/uimodel/playback/seek/SeekViewModel.h>
 
 #include <gtkmm/scale.h>
 #include <gtkmm/widget.h>
@@ -38,12 +38,12 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _scale; }
 
   private:
-    void applyState(uimodel::playback::SeekViewState const& view);
+    void applyState(uimodel::SeekViewState const& view);
 
     void handleScaleValueChanged();
     void beginUserInteraction();
     void endUserInteraction();
-    void applySeekDecision(uimodel::playback::SeekSliderDecision const& decision);
+    void applySeekDecision(uimodel::SeekSliderDecision const& decision);
     void commitSeekFromScale();
     void executeDebouncedFinalSeek();
     void setScaleRange(std::chrono::milliseconds duration);
@@ -52,12 +52,12 @@ namespace ao::gtk
     void reset();
 
     Gtk::Scale _scale;
-    uimodel::playback::PlaybackPositionInterpolator _interpolator;
-    uimodel::playback::SeekSliderInteractionModel _interaction;
+    uimodel::PlaybackPositionInterpolator _interpolator;
+    uimodel::SeekSliderInteractionModel _interaction;
 
     bool _updatingScale = false;
     sigc::connection _debounceConnection;
-    uimodel::playback::SeekViewModel _controller;
+    uimodel::SeekViewModel _controller;
 
     friend class test::SeekControlTestPeer;
   };

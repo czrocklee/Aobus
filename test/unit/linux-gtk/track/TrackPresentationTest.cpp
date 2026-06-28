@@ -4,8 +4,8 @@
 #include "app/linux-gtk/app/GtkLayoutConfig.h"
 #include "test/unit/TestUtils.h"
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
-#include <ao/uimodel/track/TrackPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -20,10 +20,10 @@ namespace ao::gtk::test
     auto const configDir = std::filesystem::path{tempDir.path()} / ".aobus";
     auto const configPath = configDir / "gtk_layout.yaml";
 
-    auto state = uimodel::track::TrackColumnLayoutState{};
-    auto prefState = uimodel::track::ListPresentationPreferenceState{};
-    auto layout = std::vector{uimodel::track::ColumnState{.field = rt::TrackField::Title, .width = 321},
-                              uimodel::track::ColumnState{.field = rt::TrackField::Artist, .width = 222}};
+    auto state = uimodel::TrackColumnLayoutState{};
+    auto prefState = uimodel::ListPresentationPreferenceState{};
+    auto layout = std::vector{uimodel::TrackColumnState{.field = rt::TrackField::Title, .width = 321},
+                              uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 222}};
     state.listLayouts.emplace(ListId{42}, layout);
 
     {
@@ -33,8 +33,8 @@ namespace ao::gtk::test
 
     REQUIRE(std::filesystem::exists(configPath));
 
-    auto loaded = uimodel::track::TrackColumnLayoutState{};
-    auto loadedPref = uimodel::track::ListPresentationPreferenceState{};
+    auto loaded = uimodel::TrackColumnLayoutState{};
+    auto loadedPref = uimodel::ListPresentationPreferenceState{};
     auto config = GtkLayoutConfig{configDir};
     config.load(loaded, loadedPref);
 

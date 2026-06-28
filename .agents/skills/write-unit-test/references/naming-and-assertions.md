@@ -70,10 +70,26 @@ Recommended component/domain tags:
 1. Arrange only the state needed by the behavior.
 2. Act once, unless the contract is specifically about repeated calls, ordering, or idempotence.
 3. Assert observable outcomes and postconditions.
-4. Use `SECTION` when the setup genuinely belongs to every section.
-5. Keep one clear scenario per section.
-6. Prefer local helpers over hidden global state.
+4. Split independent contracts into separate `TEST_CASE`s; reserve `SECTION` for variants of one contract that share an arrange (see *SECTION vs TEST_CASE* below).
+5. Prefer local helpers over hidden global state.
+6. Reuse existing `*TestSupport.h` helpers before introducing new shared test plumbing.
 7. Delete commented-out assertions and stale notes.
+
+## SECTION vs TEST_CASE
+
+`SECTION` shares one arrange and re-runs it fresh per section; a `TEST_CASE` isolates a
+failure domain, so a crash or hard `REQUIRE` failure stops only that case. Decide by
+failure isolation and setup divergence, not by scenario count:
+
+- Separate `TEST_CASE`s when behaviors are independent contracts, when arrange steps
+  have diverged, or when one failure would obscure the others.
+- Keep `SECTION`s when variants share one arrange — typically the same constructed
+  object under different inputs.
+
+The two are coupled: promoting every section to a `TEST_CASE` duplicates the arrange,
+which is what pushes setup into `*TestSupport.h`. Treat a sudden need for heavy new
+support plumbing as a signal the split may not be warranted — split for failure domains,
+not to hit a case count.
 
 ## Assertion quality
 
@@ -127,3 +143,22 @@ CHECK(entry.sticky);
 ## Expected values
 
 Prefer explicit known examples over recomputing expected values with production-like algorithms. A test that duplicates the production algorithm can pass even when both are wrong.
+
+Weak — recomputes the expectation with the same logic under test:
+
+```cpp
+// Both sides run trackPresentationComparator, so a wrong comparator still passes.
+auto expected = tracks;
+std::ranges::sort(expected, trackPresentationComparator(spec));
+CHECK(projection.orderedTrackIds() == idsOf(expected));
+```
+
+Better — pin the literal contract, so a logic change is forced to update the test:
+
+```cpp
+auto const ids = projection.orderedTrackIds();
+REQUIRE(ids.size() == 3);
+CHECK(ids[0] == bachId);    // spec sorts: composer asc, then album, then track number
+CHECK(ids[1] == mozartId);
+CHECK(ids[2] == satieId);
+```

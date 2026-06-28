@@ -7,8 +7,8 @@
 #include "layout/runtime/LayoutContext.h"
 #include "playback/PlaybackDetailsWidget.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
 
@@ -16,7 +16,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     class PlaybackDetailsComponent final : public ILayoutComponent
@@ -41,8 +41,9 @@ namespace ao::gtk::layout
 
   void registerPlaybackDetailsComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent(
-      {.type = "status.playbackDetails", .displayName = "Playback Details", .category = ComponentCategory::Status},
-      createPlaybackDetails);
+    registry.registerComponent({.type = "status.playbackDetails",
+                                .displayName = "Playback Details",
+                                .category = LayoutComponentCategory::Status},
+                               createPlaybackDetails);
   }
 } // namespace ao::gtk::layout

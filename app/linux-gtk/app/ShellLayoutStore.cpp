@@ -6,8 +6,8 @@
 #include <ao/Exception.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutYaml.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutYaml.h>
 
 #include <filesystem>
 #include <format>
@@ -38,7 +38,7 @@ namespace ao::gtk
     return _layoutsDir / std::format("{}.yaml", presetId);
   }
 
-  std::optional<uimodel::layout::LayoutDocument> ShellLayoutStore::load(std::string_view presetId) const
+  std::optional<uimodel::LayoutDocument> ShellLayoutStore::load(std::string_view presetId) const
   {
     auto const path = filePath(presetId);
 
@@ -48,9 +48,9 @@ namespace ao::gtk
     }
 
     auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadOnly};
-    auto doc = uimodel::layout::LayoutDocument{};
+    auto doc = uimodel::LayoutDocument{};
 
-    if (auto const res = uimodel::layout::loadLayout(store, "layout", doc); !res)
+    if (auto const res = uimodel::loadLayout(store, "layout", doc); !res)
     {
       APP_LOG_WARN("ShellLayoutStore: Failed to load layout ({}): {}", path.string(), res.error().message);
       return std::nullopt;
@@ -59,12 +59,12 @@ namespace ao::gtk
     return doc;
   }
 
-  void ShellLayoutStore::save(uimodel::layout::LayoutDocument const& doc, std::string_view presetId)
+  void ShellLayoutStore::save(uimodel::LayoutDocument const& doc, std::string_view presetId)
   {
     auto const path = filePath(presetId);
 
     auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadWrite};
-    uimodel::layout::saveLayout(store, "layout", doc);
+    uimodel::saveLayout(store, "layout", doc);
 
     if (auto const res = store.flush(); !res)
     {

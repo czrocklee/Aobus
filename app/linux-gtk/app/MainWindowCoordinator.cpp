@@ -35,10 +35,10 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/ListSourceStore.h>
-#include <ao/uimodel/playback/PlaybackQueueModel.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
-#include <ao/uimodel/track/TrackPresentationCatalog.h>
-#include <ao/uimodel/track/TrackPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 
 #include <gtkmm/stack.h>
 
@@ -154,10 +154,10 @@ namespace ao::gtk
     ThemeCoordinator themeController;
     TrackRowCache trackRowCache;
     ImageCache imageCache;
-    uimodel::playback::PlaybackQueueModel playbackQueueModel;
-    ao::uimodel::track::TrackPresentationCatalog trackPresentationCatalog;
-    ao::uimodel::track::TrackPresentationPreferenceStore trackPresentationPreferences;
-    ao::uimodel::track::TrackColumnLayoutStore trackColumnLayouts;
+    uimodel::PlaybackQueueModel playbackQueueModel;
+    ao::uimodel::TrackPresentationCatalog trackPresentationCatalog;
+    ao::uimodel::ListPresentationPreferenceStore trackPresentationPreferences;
+    ao::uimodel::TrackColumnLayoutStore trackColumnLayouts;
     TagEditController tagEditController;
     ListNavigationController listNavigationController;
     Gtk::Stack stack;
@@ -292,8 +292,8 @@ namespace ao::gtk
     }
 
     // Column layouts (widths and order)
-    auto columnState = ao::uimodel::track::TrackColumnLayoutState{};
-    auto prefState = ao::uimodel::track::ListPresentationPreferenceState{};
+    auto columnState = ao::uimodel::TrackColumnLayoutState{};
+    auto prefState = ao::uimodel::ListPresentationPreferenceState{};
     _implPtr->layoutConfig.load(columnState, prefState);
     _implPtr->trackColumnLayouts.setListLayouts(columnState.listLayouts);
     _implPtr->trackPresentationPreferences.setListPresentations(prefState.presentations);
@@ -337,10 +337,10 @@ namespace ao::gtk
 
   void MainWindowCoordinator::saveColumnLayout()
   {
-    auto columnState = ao::uimodel::track::TrackColumnLayoutState{};
+    auto columnState = ao::uimodel::TrackColumnLayoutState{};
     columnState.listLayouts = _implPtr->trackColumnLayouts.listLayouts();
 
-    auto prefState = ao::uimodel::track::ListPresentationPreferenceState{};
+    auto prefState = ao::uimodel::ListPresentationPreferenceState{};
     prefState.presentations = _implPtr->trackPresentationPreferences.listPresentations();
 
     _implPtr->layoutConfig.save(columnState, prefState);
@@ -354,7 +354,7 @@ namespace ao::gtk
   {
     return &_implPtr->imageCache;
   }
-  uimodel::playback::PlaybackQueueModel* MainWindowCoordinator::playbackQueueModel()
+  uimodel::PlaybackQueueModel* MainWindowCoordinator::playbackQueueModel()
   {
     return &_implPtr->playbackQueueModel;
   }
@@ -374,11 +374,11 @@ namespace ao::gtk
   {
     return &_implPtr->listNavigationController;
   }
-  uimodel::track::TrackPresentationCatalog* MainWindowCoordinator::trackPresentationCatalog()
+  uimodel::TrackPresentationCatalog* MainWindowCoordinator::trackPresentationCatalog()
   {
     return &_implPtr->trackPresentationCatalog;
   }
-  uimodel::track::TrackPresentationPreferenceStore* MainWindowCoordinator::trackPresentationPreferences()
+  uimodel::ListPresentationPreferenceStore* MainWindowCoordinator::trackPresentationPreferences()
   {
     return &_implPtr->trackPresentationPreferences;
   }

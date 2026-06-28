@@ -5,7 +5,7 @@
 
 #include "app/GtkUiServices.h"
 #include <ao/Type.h>
-#include <ao/uimodel/layout/LayoutComponentState.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
 
 #include <giomm/menumodel.h>
 #include <glibmm/refptr.h>
@@ -38,20 +38,20 @@ namespace ao::gtk
   class ListNavigationController;
 } // namespace ao::gtk
 
-namespace ao::uimodel::layout
+namespace ao::uimodel
 {
   class ILayoutComponentStateStore;
 }
 
-namespace ao::uimodel::playback
+namespace ao::uimodel
 {
   class PlaybackQueueModel;
 }
 
-namespace ao::uimodel::track
+namespace ao::uimodel
 {
   class TrackPresentationCatalog;
-  class TrackPresentationPreferenceStore;
+  class ListPresentationPreferenceStore;
 }
 
 namespace ao::gtk
@@ -68,8 +68,8 @@ namespace ao::gtk::layout
   struct TrackUiContext final
   {
     TrackPageHost* pageHost = nullptr;
-    uimodel::track::TrackPresentationCatalog* presentationCatalog = nullptr;
-    uimodel::track::TrackPresentationPreferenceStore* presentationPreferences = nullptr;
+    uimodel::TrackPresentationCatalog* presentationCatalog = nullptr;
+    uimodel::ListPresentationPreferenceStore* presentationPreferences = nullptr;
     TrackRowCache* trackRowCache = nullptr;
     ITrackDetailScope* detailScope = nullptr;
   };
@@ -82,7 +82,7 @@ namespace ao::gtk::layout
 
   struct PlaybackUiContext final
   {
-    uimodel::playback::PlaybackQueueModel* queueModel = nullptr;
+    uimodel::PlaybackQueueModel* queueModel = nullptr;
   };
 
   struct DetailUiContext final
@@ -151,8 +151,8 @@ namespace ao::gtk::layout
     rt::AppRuntime& runtime;
     Gtk::Window& parentWindow;
     std::string activePresetId{};
-    uimodel::layout::LayoutComponentStateDocument componentState{};
-    uimodel::layout::ILayoutComponentStateStore* componentStateStore = nullptr;
+    uimodel::LayoutComponentStateDocument componentState{};
+    uimodel::ILayoutComponentStateStore* componentStateStore = nullptr;
 
     /**
      * @brief Monotonically incremented when the active component state document is replaced.

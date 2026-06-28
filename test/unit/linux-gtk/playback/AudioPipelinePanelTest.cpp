@@ -5,7 +5,7 @@
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/Backend.h>
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/widget.h>
@@ -54,7 +54,7 @@ namespace ao::gtk::test
     auto widget = AudioPipelinePanel{};
     auto peer = AudioPipelinePanelTestPeer{widget};
 
-    auto view = uimodel::playback::AudioPipelineView{};
+    auto view = uimodel::AudioPipelineView{};
     widget.apply(view);
 
     CHECK(peer.getChildCount() == 0);
@@ -66,7 +66,7 @@ namespace ao::gtk::test
     auto widget = AudioPipelinePanel{};
     auto peer = AudioPipelinePanelTestPeer{widget};
 
-    auto view = uimodel::playback::AudioPipelineView{};
+    auto view = uimodel::AudioPipelineView{};
     view.flow.nodes.push_back({.id = "ao-source", .name = "Source"});
     view.quality = audio::Quality::BitwisePerfect;
 

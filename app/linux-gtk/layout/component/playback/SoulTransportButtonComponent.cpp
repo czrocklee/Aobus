@@ -7,12 +7,12 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/TransportButton.h"
-#include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/ComponentActionPolicy.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/playback/AobusSoulViewModel.h>
-#include <ao/uimodel/playback/TransportViewModel.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
+#include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
@@ -22,11 +22,11 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
-    using uimodel::layout::ComponentActionPolicy;
-    using uimodel::layout::slotBit;
+    using uimodel::LayoutComponentActionPolicy;
+    using uimodel::slotBit;
 
     constexpr double kDefaultStrokeWidth = 9.0;
 
@@ -42,10 +42,9 @@ namespace ao::gtk::layout
                                TransportButton::Action::PlayPause,
                                getTransportCallback(ctx, TransportButton::Action::PlayPause),
                                false,
-                               [this](uimodel::playback::TransportViewState const& state)
-                               { applyTransportState(state); }}
+                               [this](uimodel::TransportViewState const& state) { applyTransportState(state); }}
         , _soulController{ctx.runtime.playback(),
-                          [this](uimodel::playback::AobusSoulViewState const& state) { applySoulState(state); }}
+                          [this](uimodel::AobusSoulViewState const& state) { applySoulState(state); }}
         , _hasComplexTooltip{static_cast<bool>(node.optTooltip)}
       {
         _button.set_child(_soul);
@@ -73,9 +72,9 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _button; }
 
     private:
-      void applyTransportState(uimodel::playback::TransportViewState const& view)
+      void applyTransportState(uimodel::TransportViewState const& view)
       {
-        using Icon = uimodel::playback::TransportIcon;
+        using Icon = uimodel::TransportIcon;
 
         if (view.icon == Icon::Pause)
         {
@@ -98,7 +97,7 @@ namespace ao::gtk::layout
         }
       }
 
-      void applySoulState(uimodel::playback::AobusSoulViewState const& view)
+      void applySoulState(uimodel::AobusSoulViewState const& view)
       {
         _soul.breathe(view.isBreathing);
         _soul.setAura(AobusSoul::mapAuraColor(view.auraColor));
@@ -106,8 +105,8 @@ namespace ao::gtk::layout
 
       Gtk::Button _button;
       AobusSoul _soul;
-      uimodel::playback::TransportViewModel _transportController;
-      uimodel::playback::AobusSoulViewModel _soulController;
+      uimodel::TransportViewModel _transportController;
+      uimodel::AobusSoulViewModel _soulController;
       bool _hasComplexTooltip = false;
     };
 
@@ -122,21 +121,22 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "playback.soulPlayPauseButton",
        .displayName = "Soul Play/Pause Button",
-       .category = ComponentCategory::Playback,
+       .category = LayoutComponentCategory::Playback,
        .props = {{.name = "strokeWidth",
-                  .kind = PropertyKind::Double,
+                  .kind = LayoutPropertyKind::Double,
                   .label = "Stroke Width",
                   .defaultValue = LayoutValue{kDefaultStrokeWidth}},
                  {.name = "glyphScale",
-                  .kind = PropertyKind::Double,
+                  .kind = LayoutPropertyKind::Double,
                   .label = "Glyph Scale",
                   .defaultValue = LayoutValue{1.0}}},
        .layoutProps = {},
        .minChildren = 0,
        .optMaxChildren = 0,
-       .actionPolicy = ComponentActionPolicy{.slotMask = slotBit(ActionSlot::SecondaryClick) |
-                                                         slotBit(ActionSlot::SecondaryLongPress),
-                                             .defaultActionIds = {{ActionSlot::SecondaryLongPress, "shell.showSoul"}}}},
+       .actionPolicy =
+         LayoutComponentActionPolicy{
+           .slotMask = slotBit(LayoutActionSlot::SecondaryClick) | slotBit(LayoutActionSlot::SecondaryLongPress),
+           .defaultActionIds = {{LayoutActionSlot::SecondaryLongPress, "shell.showSoul"}}}},
       createSoulPlayPauseButton);
   }
 } // namespace ao::gtk::layout

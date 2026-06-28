@@ -21,7 +21,7 @@
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/uimodel/list/SmartListEditorModel.h>
+#include <ao/uimodel/library/list/SmartListEditorModel.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
@@ -91,8 +91,8 @@ namespace ao::gtk
     set_title("Edit List");
     _okButton->set_label("Save");
 
-    auto const presentationIndex = uimodel::list::SmartListEditorModel::presentationIndexForId(
-      optPresentationId, rt::builtinTrackPresentationPresets());
+    auto const presentationIndex =
+      uimodel::SmartListEditorModel::presentationIndexForId(optPresentationId, rt::builtinTrackPresentationPresets());
     _presentationDropDown.set_selected(static_cast<std::uint32_t>(presentationIndex));
 
     updateDialogState();
@@ -108,7 +108,7 @@ namespace ao::gtk
     auto const selected = _presentationDropDown.get_selected();
     auto const localExpr = std::string{_exprBox.entry().get_text()};
 
-    return uimodel::list::SmartListEditorModel::resolvePresentationId(
+    return uimodel::SmartListEditorModel::resolvePresentationId(
       selected, selected != GTK_INVALID_LIST_POSITION, localExpr, rt::builtinTrackPresentationPresets(), {});
   }
 
@@ -279,7 +279,7 @@ namespace ao::gtk
           auto const artistText = artist != nullptr ? std::string_view{artist->raw()} : std::string_view{};
           auto const albumText = album != nullptr ? std::string_view{album->raw()} : std::string_view{};
 
-          label->set_text(uimodel::list::SmartListEditorModel::previewTrackLabel(titleText, artistText, albumText));
+          label->set_text(uimodel::SmartListEditorModel::previewTrackLabel(titleText, artistText, albumText));
         }
       });
 
@@ -343,20 +343,20 @@ namespace ao::gtk
       }
     }
 
-    _inheritedExprLabel.set_text(uimodel::list::SmartListEditorModel::displayExpression(inheritedExpr));
+    _inheritedExprLabel.set_text(uimodel::SmartListEditorModel::displayExpression(inheritedExpr));
 
     auto const localExpr = std::string{_exprBox.entry().get_text()};
     auto const effectiveExpression =
-      ao::uimodel::list::SmartListEditorModel::composeEffectiveExpression(inheritedExpr, localExpr);
-    _effectiveExprLabel.set_text(uimodel::list::SmartListEditorModel::displayExpression(effectiveExpression));
+      ao::uimodel::SmartListEditorModel::composeEffectiveExpression(inheritedExpr, localExpr);
+    _effectiveExprLabel.set_text(uimodel::SmartListEditorModel::displayExpression(effectiveExpression));
   }
 
   void SmartListDialog::updateDialogState()
   {
     auto const status =
-      ao::uimodel::list::SmartListEditorModel::dialogStatus(_expressionValid, _previewFilteredListPtr != nullptr);
+      ao::uimodel::SmartListEditorModel::dialogStatus(_expressionValid, _previewFilteredListPtr != nullptr);
 
-    _okButton->set_sensitive(ao::uimodel::list::SmartListEditorModel::canSubmit(_nameEntry.get_text().raw(), status));
+    _okButton->set_sensitive(ao::uimodel::SmartListEditorModel::canSubmit(_nameEntry.get_text().raw(), status));
   }
 
   void SmartListDialog::updatePreview()
@@ -365,7 +365,7 @@ namespace ao::gtk
 
     if (!_previewFilteredListPtr)
     {
-      auto const state = ao::uimodel::list::SmartListEditorModel::previewState(ao::uimodel::list::SmartListPreviewInput{
+      auto const state = ao::uimodel::SmartListEditorModel::previewState(ao::uimodel::SmartListPreviewInput{
         .name = _nameEntry.get_text().raw(),
         .localExpression = _exprBox.entry().get_text().raw(),
         .hasPreviewSource = false,
@@ -391,7 +391,7 @@ namespace ao::gtk
     auto const errorMessage = optError ? optError->message : std::string{};
     auto const matchCount = _previewFilteredListPtr->size();
 
-    auto const state = ao::uimodel::list::SmartListEditorModel::previewState(ao::uimodel::list::SmartListPreviewInput{
+    auto const state = ao::uimodel::SmartListEditorModel::previewState(ao::uimodel::SmartListPreviewInput{
       .name = _nameEntry.get_text().raw(),
       .localExpression = expr,
       .hasPreviewSource = true,
@@ -422,7 +422,7 @@ namespace ao::gtk
 
   rt::LibraryWriter::ListDraft SmartListDialog::draft() const
   {
-    return ao::uimodel::list::SmartListEditorModel::createDraft(
+    return ao::uimodel::SmartListEditorModel::createDraft(
       _parentListId, _editListId, _nameEntry.get_text(), _descEntry.get_text(), _exprBox.entry().get_text());
   }
 } // namespace ao::gtk

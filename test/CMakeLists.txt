@@ -122,88 +122,109 @@ add_executable(ao_core_test
     unit/audio/backend/detail/PipeWireMonitorHelpersTest.cpp
     unit/audio/backend/detail/AlsaProviderHelpersTest.cpp
 
-    # ui model tests (no platform deps)
+     # ui model tests (no platform deps)
+    unit/uimodel/field/TrackFieldEditCodecTest.cpp
+     unit/uimodel/field/TrackFieldEditPolicyTest.cpp
+     unit/uimodel/field/TrackFieldFormatterTest.cpp
+    unit/uimodel/field/TrackInlineEditWorkflowTest.cpp
     unit/uimodel/input/KeyChordTest.cpp
     unit/uimodel/input/KeymapModelTest.cpp
     unit/uimodel/input/KeymapStoreTest.cpp
-    unit/uimodel/layout/AbsoluteCanvasModelTest.cpp
-    unit/uimodel/layout/ActionCatalogTest.cpp
-    unit/uimodel/layout/ActionValidatorTest.cpp
-    unit/uimodel/layout/ComponentCatalogTest.cpp
-    unit/uimodel/layout/LayoutModelTest.cpp
-    unit/uimodel/layout/LayoutComponentStateTest.cpp
-    unit/uimodel/layout/LayoutStatePromoterTest.cpp
-    unit/uimodel/layout/ShellLayoutSessionModelTest.cpp
-    unit/uimodel/layout/LayoutTemplateExpanderTest.cpp
-    unit/uimodel/layout/TrackFieldGridPolicyTest.cpp
-    unit/uimodel/layout/TrackSelectionRegionPolicyTest.cpp
-    unit/uimodel/list/ListActionPolicyTest.cpp
-    unit/uimodel/list/ListTreeProjectionTest.cpp
-    unit/uimodel/list/SmartListEditorModelTest.cpp
-    unit/uimodel/playback/AobusSoulViewModelTest.cpp
-    unit/uimodel/playback/AudioOutputViewModelTest.cpp
-    unit/uimodel/playback/AudioQualityFormatTest.cpp
-    unit/uimodel/playback/NowPlayingViewModelTest.cpp
-    unit/uimodel/playback/PlaybackQueueModelTest.cpp
-    unit/uimodel/playback/PlaybackPositionInterpolatorTest.cpp
-    unit/uimodel/playback/PlaybackTimeViewModelTest.cpp
-    unit/uimodel/playback/SeekSliderInteractionModelTest.cpp
-    unit/uimodel/playback/SeekViewModelTest.cpp
-    unit/uimodel/playback/TransportViewModelTest.cpp
-    unit/uimodel/playback/VolumeViewModelTest.cpp
-    unit/uimodel/status/ActivityStatusModelCompactTest.cpp
-    unit/uimodel/status/ActivityStatusModelDetailTest.cpp
-    unit/uimodel/status/ActivityStatusModelNotificationTest.cpp
-    unit/uimodel/status/ActivityStatusModelPresentationTest.cpp
-    unit/uimodel/tag/TagEditWorkflowTest.cpp
-    unit/uimodel/tag/TrackPropertiesFormSpecTest.cpp
-    unit/uimodel/tag/TrackPropertiesFormWorkflowTest.cpp
-    unit/uimodel/track/TrackCustomPropertyWorkflowTest.cpp
-    unit/uimodel/track/TrackFilterViewModelTest.cpp
-    unit/uimodel/track/TrackFilterResolverTest.cpp
-    unit/uimodel/track/TrackPageRouteTest.cpp
-    unit/uimodel/track/TrackCustomViewEditorModelTest.cpp
-    unit/uimodel/track/TrackFieldEditPolicyTest.cpp
-    unit/uimodel/track/TrackFieldFormatterTest.cpp
-    unit/uimodel/track/TrackFieldGridProjectionTest.cpp
-    unit/uimodel/track/TrackFieldPresentationPolicyTest.cpp
-    unit/uimodel/track/TrackInlineEditWorkflowTest.cpp
-    unit/uimodel/track/SelectionSummaryTest.cpp
-    unit/uimodel/track/TrackColumnLayoutPolicyTest.cpp
-    unit/uimodel/track/TrackColumnLayoutStoreTest.cpp
-    unit/uimodel/track/TrackPresentationCatalogTest.cpp
-    unit/uimodel/track/TrackPresentationPreferenceStoreTest.cpp
-    unit/uimodel/track/TrackPresentationRecommenderTest.cpp
-    unit/uimodel/track/TrackPresentationWorkflowTest.cpp
+    unit/uimodel/layout/action/LayoutActionCatalogTest.cpp
+    unit/uimodel/layout/action/LayoutActionValidatorTest.cpp
+    unit/uimodel/layout/component/AbsoluteCanvasModelTest.cpp
+    unit/uimodel/layout/component/LayoutComponentCatalogTest.cpp
+    unit/uimodel/layout/component/LayoutComponentStateTest.cpp
+    unit/uimodel/layout/component/LayoutStatePromoterTest.cpp
+    unit/uimodel/layout/document/LayoutModelTest.cpp
+    unit/uimodel/layout/document/LayoutTemplateExpanderTest.cpp
+    unit/uimodel/layout/shell/ShellLayoutSessionModelTest.cpp
+    unit/uimodel/library/detail/TrackCustomPropertyWorkflowTest.cpp
+    unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp
+    unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp
+    unit/uimodel/library/list/ListActionPolicyTest.cpp
+    unit/uimodel/library/list/ListTreeProjectionTest.cpp
+    unit/uimodel/library/list/SmartListEditorModelTest.cpp
+    unit/uimodel/library/presentation/CustomPresentationEditorModelTest.cpp
+    unit/uimodel/library/presentation/ListPresentationPreferenceStoreTest.cpp
+    unit/uimodel/library/presentation/TrackColumnLayoutPolicyTest.cpp
+    unit/uimodel/library/presentation/TrackColumnLayoutStoreTest.cpp
+    unit/uimodel/library/presentation/TrackFieldPresentationPolicyTest.cpp
+    unit/uimodel/library/presentation/TrackPresentationCatalogTest.cpp
+    unit/uimodel/library/presentation/TrackPresentationPickerViewModelTest.cpp
+    unit/uimodel/library/presentation/TrackPresentationRecommenderTest.cpp
+    unit/uimodel/library/property/TagEditWorkflowTest.cpp
+    unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
+    unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
+    unit/uimodel/library/track/TrackFilterResolverTest.cpp
+    unit/uimodel/library/track/TrackFilterViewModelTest.cpp
+    unit/uimodel/library/track/TrackPageRouteTest.cpp
+    unit/uimodel/library/track/TrackSelectionRegionPolicyTest.cpp
+    unit/uimodel/library/track/TrackSelectionSummaryTest.cpp
+    unit/uimodel/playback/now-playing/NowPlayingViewModelTest.cpp
+    unit/uimodel/playback/output/AudioOutputViewModelTest.cpp
+    unit/uimodel/playback/output/VolumeViewModelTest.cpp
+    unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp
+    unit/uimodel/playback/queue/PlaybackQueueModelTest.cpp
+    unit/uimodel/playback/seek/PlaybackPositionInterpolatorTest.cpp
+    unit/uimodel/playback/seek/PlaybackTimeViewModelTest.cpp
+    unit/uimodel/playback/seek/SeekSliderInteractionModelTest.cpp
+    unit/uimodel/playback/seek/SeekViewModelTest.cpp
+    unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp
+    unit/uimodel/playback/transport/TransportViewModelTest.cpp
+    unit/uimodel/status/activity/ActivityStatusModelCompactTest.cpp
+    unit/uimodel/status/activity/ActivityStatusModelDetailTest.cpp
+    unit/uimodel/status/activity/ActivityStatusModelNotificationTest.cpp
+    unit/uimodel/status/activity/ActivityStatusModelPresentationTest.cpp
 
     # app unit tests (no platform deps)
     unit/runtime/AsyncRuntimeTest.cpp
-    unit/runtime/LibraryReaderTest.cpp
+    unit/runtime/library/LibraryReaderTest.cpp
     unit/runtime/StorageResultTest.cpp
-    unit/runtime/CompletionServiceTest.cpp
+    unit/runtime/completion/CompletionServiceTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
-    unit/runtime/SmartListEvaluatorTest.cpp
+    unit/runtime/source/SmartListEvaluatorBatchTest.cpp
+    unit/runtime/source/SmartListEvaluatorExpressionTest.cpp
+    unit/runtime/source/SmartListEvaluatorIncrementalTest.cpp
+    unit/runtime/source/SmartListEvaluatorLoadModeTest.cpp
+    unit/runtime/source/SmartListEvaluatorTest.cpp
     unit/runtime/TrackPresentationTest.cpp
-    unit/runtime/LibraryWriterTrackCommandTest.cpp
+    unit/runtime/library/LibraryWriterTagCommandTest.cpp
+    unit/runtime/library/LibraryWriterTrackCreateCommandTest.cpp
+    unit/runtime/library/LibraryWriterTrackDeleteCommandTest.cpp
     unit/runtime/TrackFieldTest.cpp
-    unit/runtime/TrackListProjectionTest.cpp
-    unit/runtime/TrackListProjectionScaleTest.cpp
+    unit/runtime/projection/TrackListProjectionGroupingTest.cpp
+    unit/runtime/projection/TrackListProjectionLifecycleTest.cpp
+    unit/runtime/projection/TrackListProjectionMutationTest.cpp
+    unit/runtime/projection/TrackListProjectionSortingTest.cpp
+    unit/runtime/projection/TrackListProjectionScaleTest.cpp
+    unit/runtime/PlaybackServiceControlTest.cpp
+    unit/runtime/PlaybackServiceOutputTest.cpp
+    unit/runtime/PlaybackServiceSelectionTest.cpp
     unit/runtime/PlaybackServiceTest.cpp
-  unit/runtime/AllTracksSourceTest.cpp
-  unit/runtime/ListSourceStoreTest.cpp
-    unit/runtime/TrackDetailProjectionTest.cpp
-    unit/runtime/LibraryWriterTest.cpp
-    unit/runtime/MetadataValueCompleterTest.cpp
+    unit/runtime/source/AllTracksSourceTest.cpp
+    unit/runtime/source/ListSourceStoreTest.cpp
+    unit/runtime/projection/TrackDetailProjectionTest.cpp
+    unit/runtime/library/LibraryTasksTest.cpp
+    unit/runtime/library/LibraryWriterTest.cpp
+    unit/runtime/completion/MetadataValueCompleterTest.cpp
     unit/runtime/NotificationServiceTest.cpp
-    unit/runtime/QueryExpressionCompleterTest.cpp
-    unit/runtime/ViewServiceTest.cpp
+    unit/runtime/completion/QueryExpressionCompleterTest.cpp
+    unit/runtime/ViewServiceLifecycleTest.cpp
+    unit/runtime/ViewServiceListFilterTest.cpp
+    unit/runtime/ViewServicePresentationTest.cpp
+    unit/runtime/ViewServiceSelectionTest.cpp
     unit/runtime/ConfigStoreTest.cpp
-    unit/runtime/ManualListSourceTest.cpp
+    unit/runtime/source/ManualListSourceObserverTest.cpp
+    unit/runtime/source/ManualListSourceTest.cpp
     unit/runtime/NavigationHistoryTest.cpp
+    unit/runtime/WorkspaceHistoryTest.cpp
     unit/runtime/WorkspaceNavigationTest.cpp
+    unit/runtime/WorkspacePresentationTest.cpp
+    unit/runtime/WorkspaceSessionTest.cpp
     unit/runtime/AppRuntimeTest.cpp
     unit/runtime/HeadlessShellTest.cpp
-    unit/runtime/LibraryExportImportTest.cpp
+    unit/runtime/library/LibraryExportImportTest.cpp
 )
 
 target_link_libraries(ao_core_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
@@ -338,7 +359,7 @@ add_test(NAME ao_gtk_test COMMAND ao_gtk_test)
 
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
 add_executable(ao_perf_baseline
-    unit/runtime/PerformanceBaselineTest.cpp
+    perf/PerformanceBaselineTest.cpp
 )
 
 target_link_libraries(ao_perf_baseline PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)

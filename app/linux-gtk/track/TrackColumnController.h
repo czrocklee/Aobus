@@ -6,7 +6,7 @@
 #include <ao/Type.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
@@ -33,9 +33,7 @@ namespace ao::gtk
   public:
     using FactoryProvider = std::function<Glib::RefPtr<Gtk::ListItemFactory>(rt::TrackField)>;
 
-    TrackColumnController(Gtk::ColumnView& columnView,
-                          uimodel::track::TrackColumnLayoutStore& layoutStore,
-                          ListId listId);
+    TrackColumnController(Gtk::ColumnView& columnView, uimodel::TrackColumnLayoutStore& layoutStore, ListId listId);
     ~TrackColumnController();
 
     TrackColumnController(TrackColumnController const&) = delete;
@@ -83,7 +81,7 @@ namespace ao::gtk
 
     ListId _listId;
     Gtk::ColumnView& _columnView;
-    uimodel::track::TrackColumnLayoutStore& _layoutStore;
+    uimodel::TrackColumnLayoutStore& _layoutStore;
 
     std::vector<ColumnBinding> _columns;
     sigc::scoped_connection _queuedColumnLayoutUpdateConnection;

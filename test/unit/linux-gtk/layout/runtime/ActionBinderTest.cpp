@@ -5,8 +5,8 @@
 
 #include "layout/runtime/ActionRegistry.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -16,7 +16,7 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   using namespace ao::gtk::test;
 
   TEST_CASE("ActionBinder binds layout action properties to activation callbacks", "[gtk][unit][layout][runtime]")
@@ -33,10 +33,10 @@ namespace ao::gtk::layout::test
     auto lastComponentId = std::string{};
     Gtk::Widget* lastAnchor = nullptr;
 
-    registry.registerAction(ActionDescriptor{.id = "test.action",
-                                             .label = "Test Action",
-                                             .category = "Test",
-                                             .capabilities = ActionCapability::RequiresAnchor},
+    registry.registerAction(LayoutActionDescriptor{.id = "test.action",
+                                                   .label = "Test Action",
+                                                   .category = "Test",
+                                                   .capabilities = LayoutActionCapability::RequiresAnchor},
                             [&](ActionActivationContext& ctx)
                             {
                               lastFiredId = "test.action";
@@ -50,7 +50,7 @@ namespace ao::gtk::layout::test
     SECTION("bind returns empty function for 'none'")
     {
       auto const node = LayoutNode{.type = "test.node"};
-      auto const cb = binder.bind(node, "action", "none", ActionSlot::PrimaryClick, anchor);
+      auto const cb = binder.bind(node, "action", "none", LayoutActionSlot::PrimaryClick, anchor);
       CHECK_FALSE(cb);
     }
 
@@ -58,7 +58,7 @@ namespace ao::gtk::layout::test
     {
       auto node = LayoutNode{.type = "test.node"};
       node.props["action"] = LayoutValue{std::string{"unknown.action"}};
-      auto const cb = binder.bind(node, "action", "none", ActionSlot::PrimaryClick, anchor);
+      auto const cb = binder.bind(node, "action", "none", LayoutActionSlot::PrimaryClick, anchor);
       CHECK_FALSE(cb);
     }
 
@@ -67,7 +67,7 @@ namespace ao::gtk::layout::test
       auto node = LayoutNode{.id = "my-component", .type = "test.node"};
       node.props["action"] = LayoutValue{std::string{"test.action"}};
 
-      auto const cb = binder.bind(node, "action", "none", ActionSlot::PrimaryClick, anchor);
+      auto const cb = binder.bind(node, "action", "none", LayoutActionSlot::PrimaryClick, anchor);
       REQUIRE(cb);
 
       cb();
@@ -81,7 +81,7 @@ namespace ao::gtk::layout::test
     {
       auto const node = LayoutNode{.id = "default-comp", .type = "test.node"};
 
-      auto const cb = binder.bind(node, "missing", "test.action", ActionSlot::PrimaryClick, anchor);
+      auto const cb = binder.bind(node, "missing", "test.action", LayoutActionSlot::PrimaryClick, anchor);
       REQUIRE(cb);
 
       cb();

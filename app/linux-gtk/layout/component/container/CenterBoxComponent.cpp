@@ -5,8 +5,8 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/centerbox.h>
 #include <gtkmm/enums.h>
@@ -20,7 +20,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -89,14 +89,14 @@ namespace ao::gtk::layout
     constexpr std::size_t kCenterBoxMaxChildren = 3;
     registry.registerComponent({.type = "centerBox",
                                 .displayName = "Center Box",
-                                .category = ComponentCategory::Container,
+                                .category = LayoutComponentCategory::Container,
                                 .props = {{.name = "orientation",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "Orientation",
                                            .defaultValue = LayoutValue{"horizontal"},
                                            .enumValues = {"horizontal", "vertical"}}},
                                 .layoutProps = {{.name = "slot",
-                                                 .kind = PropertyKind::Enum,
+                                                 .kind = LayoutPropertyKind::Enum,
                                                  .label = "Slot",
                                                  .defaultValue = LayoutValue{""},
                                                  .enumValues = {"", "start", "center", "end"}}},

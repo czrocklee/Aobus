@@ -8,7 +8,9 @@ When creating a new test file:
 2. Add it to the correct target in `test/CMakeLists.txt`.
 3. Match namespace and include style of neighboring tests.
 4. Include only headers that are used.
-5. Keep file-scope helpers local unless multiple files need them.
+5. Check existing `*TestSupport.h` files and layer utilities such as `test/unit/RuntimeTestUtils.h` before creating a new shared helper.
+6. Keep file-scope helpers local unless multiple files need them.
+7. Do not create duplicate helper types and hide the conflict in a nested namespace; reuse or extend the existing helper instead.
 
 ## Regression tests
 
@@ -33,6 +35,12 @@ Add a short comment if the assertion is non-obvious or protects a fragile UI/lay
 ## Large test files
 
 When adding to an already large test file, prefer a new focused file if the behavior belongs to a separable contract area. Split by behavior domain, not by arbitrary line count.
+
+Prefer standalone `TEST_CASE`s for independent behavior contracts; keep `SECTION` for
+variants of one contract that share an arrange (see *SECTION vs TEST_CASE* in
+`naming-and-assertions.md`). Splitting duplicates the arrange, so route genuinely shared
+setup into an existing `*TestSupport.h` rather than copying it — and do not hide a
+duplicate helper behind a nested namespace to dodge a collision.
 
 Good split boundaries include:
 

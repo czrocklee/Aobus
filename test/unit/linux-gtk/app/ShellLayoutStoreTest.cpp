@@ -5,7 +5,7 @@
 
 #include "test/unit/TestUtils.h"
 #include <ao/Exception.h>
-#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -31,7 +31,7 @@ namespace ao::gtk::test
     SECTION("save creates directory and layout file, and load retrieves it")
     {
       auto store = ShellLayoutStore{layoutsDir};
-      auto doc = uimodel::layout::LayoutDocument{};
+      auto doc = uimodel::LayoutDocument{};
       doc.version = 42;
       doc.root.type = "box";
       doc.root.id = "my-root";
@@ -65,7 +65,7 @@ namespace ao::gtk::test
     SECTION("remove deletes the file, remove on a missing file is a no-op")
     {
       auto store = ShellLayoutStore{layoutsDir};
-      auto doc = uimodel::layout::LayoutDocument{};
+      auto doc = uimodel::LayoutDocument{};
       store.save(doc, "classic");
 
       CHECK(std::filesystem::exists(layoutsDir / "classic.yaml"));

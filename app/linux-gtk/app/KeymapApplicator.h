@@ -8,7 +8,7 @@ namespace Gtk
   class Application;
 }
 
-namespace ao::uimodel::input
+namespace ao::uimodel
 {
   class KeymapModel;
 }
@@ -24,5 +24,5 @@ namespace ao::gtk
    * skipped with a warning. Calling this again fully replaces the prior accelerators,
    * so it is safe to re-run after the user edits their shortcuts.
    */
-  void applyKeymapAccelerators(Gtk::Application& app, uimodel::input::KeymapModel const& keymap);
+  void applyKeymapAccelerators(Gtk::Application& app, uimodel::KeymapModel const& keymap);
 } // namespace ao::gtk

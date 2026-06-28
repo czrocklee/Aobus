@@ -4,9 +4,9 @@
 #pragma once
 
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/ILayoutComponentStateStore.h>
-#include <ao/uimodel/layout/LayoutComponentState.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/ILayoutComponentStateStore.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <cstdint>
 #include <functional>
@@ -29,21 +29,21 @@ namespace ao::gtk::layout
   class StatefulComponentState final
   {
   public:
-    StatefulComponentState(LayoutContext& ctx, uimodel::layout::LayoutNode const& node, std::string_view type)
+    StatefulComponentState(LayoutContext& ctx, uimodel::LayoutNode const& node, std::string_view type)
       : _ctx{&ctx}
       , _componentId{node.id}
       , _type{type}
       , _presetId{ctx.activePresetId}
-      , _baselineHash{uimodel::layout::layoutComponentBaselineHash(node)}
+      , _baselineHash{uimodel::layoutComponentBaselineHash(node)}
       , _capturedGeneration{ctx.componentStateGeneration}
       , _persistable{!ctx.editMode && ctx.surface == LayoutSurface::Main && !node.id.empty() &&
                      !ctx.activePresetId.empty() && ctx.componentStateStore != nullptr}
-      , _optRestored{uimodel::layout::resolveLayoutComponentState(ctx.componentState, node)}
+      , _optRestored{uimodel::resolveLayoutComponentState(ctx.componentState, node)}
     {
     }
 
     /// Runtime state that matched this node's id, type and baseline hash, if any.
-    std::optional<uimodel::layout::LayoutComponentStateEntry> const& restored() const noexcept { return _optRestored; }
+    std::optional<uimodel::LayoutComponentStateEntry> const& restored() const noexcept { return _optRestored; }
 
     /**
      * @brief Whether persisting is still valid for this component.
@@ -59,7 +59,7 @@ namespace ao::gtk::layout
     }
 
     /// Stamp @p state into the active document under this component's id and persist it.
-    void write(std::map<std::string, uimodel::layout::LayoutValue, std::less<>> state)
+    void write(std::map<std::string, uimodel::LayoutValue, std::less<>> state)
     {
       if (!canWrite())
       {
@@ -67,9 +67,9 @@ namespace ao::gtk::layout
       }
 
       _ctx->componentState.preset = _presetId;
-      _ctx->componentState.components[_componentId] = uimodel::layout::LayoutComponentStateEntry{
+      _ctx->componentState.components[_componentId] = uimodel::LayoutComponentStateEntry{
         .type = _type,
-        .stateVersion = uimodel::layout::kLayoutComponentStateEntryVersion,
+        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
         .baselineHash = _baselineHash,
         .state = std::move(state),
       };
@@ -84,6 +84,6 @@ namespace ao::gtk::layout
     std::string _baselineHash;
     std::uint64_t _capturedGeneration = 0;
     bool _persistable = false;
-    std::optional<uimodel::layout::LayoutComponentStateEntry> _optRestored;
+    std::optional<uimodel::LayoutComponentStateEntry> _optRestored;
   };
 } // namespace ao::gtk::layout

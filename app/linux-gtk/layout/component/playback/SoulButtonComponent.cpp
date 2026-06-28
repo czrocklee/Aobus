@@ -7,10 +7,10 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/ComponentActionPolicy.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/playback/AobusSoulViewModel.h>
+#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
@@ -21,10 +21,10 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
-    using uimodel::layout::kAllExternalActions;
+    using uimodel::kAllExternalActions;
 
     constexpr double kDefaultStrokeWidth = 9.0;
 
@@ -36,7 +36,7 @@ namespace ao::gtk::layout
     public:
       SoulButtonComponent(LayoutContext& ctx, LayoutNode const& node)
         : _soulController{ctx.runtime.playback(),
-                          [this](uimodel::playback::AobusSoulViewState const& state)
+                          [this](uimodel::AobusSoulViewState const& state)
                           {
                             _soul.breathe(state.isBreathing);
                             _soul.setAura(AobusSoul::mapAuraColor(state.auraColor));
@@ -78,7 +78,7 @@ namespace ao::gtk::layout
     private:
       Gtk::Button _button;
       AobusSoul _soul;
-      uimodel::playback::AobusSoulViewModel _soulController;
+      uimodel::AobusSoulViewModel _soulController;
     };
 
     std::unique_ptr<ILayoutComponent> createSoulButton(LayoutContext& ctx, LayoutNode const& node)
@@ -91,22 +91,22 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "playback.soulButton",
                                 .displayName = "Soul Button",
-                                .category = ComponentCategory::Playback,
+                                .category = LayoutComponentCategory::Playback,
                                 .props = {{.name = "strokeWidth",
-                                           .kind = PropertyKind::Double,
+                                           .kind = LayoutPropertyKind::Double,
                                            .label = "Stroke Width",
                                            .defaultValue = LayoutValue{kDefaultStrokeWidth}},
                                           {.name = "glyph",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "Glyph",
                                            .defaultValue = LayoutValue{"none"},
                                            .enumValues = {"none", "sigil", "seal"}},
                                           {.name = "glyphScale",
-                                           .kind = PropertyKind::Double,
+                                           .kind = LayoutPropertyKind::Double,
                                            .label = "Glyph Scale",
                                            .defaultValue = LayoutValue{1.0}},
                                           {.name = "showFullLogo",
-                                           .kind = PropertyKind::Bool,
+                                           .kind = LayoutPropertyKind::Bool,
                                            .label = "Show Full Logo",
                                            .defaultValue = LayoutValue{false}}},
                                 .layoutProps = {},

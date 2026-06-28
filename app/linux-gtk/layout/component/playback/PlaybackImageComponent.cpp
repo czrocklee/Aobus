@@ -14,9 +14,9 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/uimodel/layout/ComponentActionPolicy.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/button.h>
@@ -33,7 +33,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     constexpr std::int32_t kThumbnailSize = 64;
@@ -272,24 +272,24 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "playback.image",
                                 .displayName = "Playback Cover Art",
-                                .category = ComponentCategory::Playback,
+                                .category = LayoutComponentCategory::Playback,
                                 .props = {{.name = "targetSize",
-                                           .kind = PropertyKind::Int,
+                                           .kind = LayoutPropertyKind::Int,
                                            .label = "Target Size",
                                            .defaultValue = LayoutValue{static_cast<std::int64_t>(kThumbnailSize)}},
                                           {.name = "forceSquare",
-                                           .kind = PropertyKind::Bool,
+                                           .kind = LayoutPropertyKind::Bool,
                                            .label = "Force Square",
                                            .defaultValue = LayoutValue{false}},
                                           {.name = "action",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "Action",
                                            .defaultValue = LayoutValue{"none"},
                                            .enumValues = {"none", "jumpToAlbum"}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0,
-                                .actionPolicy = uimodel::layout::kExternalSecondaryActions},
+                                .actionPolicy = uimodel::kExternalSecondaryActions},
                                createPlaybackImage);
   }
 } // namespace ao::gtk::layout

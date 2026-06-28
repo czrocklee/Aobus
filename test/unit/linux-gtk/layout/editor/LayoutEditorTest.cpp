@@ -9,10 +9,10 @@
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/TestUtils.h"
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/layout/LayoutYaml.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -37,7 +37,7 @@
 
 namespace ao::gtk::layout::editor::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::findButtonByLabel;
   using ao::gtk::test::makeRuntime;
@@ -74,7 +74,7 @@ namespace ao::gtk::layout::editor::test
     {
       for (auto const& desc : descriptors)
       {
-        CHECK(!uimodel::layout::toString(desc.category).empty());
+        CHECK(!uimodel::toString(desc.category).empty());
       }
     }
 
@@ -84,7 +84,7 @@ namespace ao::gtk::layout::editor::test
 
       for (auto const& desc : descriptors)
       {
-        if (auto const isContainer = uimodel::layout::isContainer(desc); expectedContainers.contains(desc.type))
+        if (auto const isContainer = uimodel::isContainer(desc); expectedContainers.contains(desc.type))
         {
           CHECK(isContainer);
         }
@@ -129,7 +129,7 @@ namespace ao::gtk::layout::editor::test
       auto const optDesc = registry.descriptor("box");
 
       REQUIRE(optDesc.has_value());
-      CHECK(uimodel::layout::isContainer(*optDesc));
+      CHECK(uimodel::isContainer(*optDesc));
 
       auto const hasProp = [&](std::string const& name)
       { return std::ranges::any_of(optDesc->props, [&](auto const& prop) { return prop.name == name; }); };
@@ -144,7 +144,7 @@ namespace ao::gtk::layout::editor::test
       auto const optDesc = registry.descriptor("playback.playPauseButton");
 
       REQUIRE(optDesc.has_value());
-      CHECK(optDesc->category == ComponentCategory::Playback);
+      CHECK(optDesc->category == LayoutComponentCategory::Playback);
 
       auto const hasProp = [&](std::string const& name)
       { return std::ranges::any_of(optDesc->props, [&](auto const& prop) { return prop.name == name; }); };
@@ -158,7 +158,7 @@ namespace ao::gtk::layout::editor::test
       auto const optDesc = registry.descriptor("playback.qualityIndicator");
 
       REQUIRE(optDesc.has_value());
-      CHECK(optDesc->category == ComponentCategory::Playback);
+      CHECK(optDesc->category == LayoutComponentCategory::Playback);
 
       auto const hasProp = [&](std::string const& name)
       {
@@ -183,7 +183,7 @@ namespace ao::gtk::layout::editor::test
 
       for (auto const& desc : descriptors)
       {
-        categories.insert(std::string{uimodel::layout::toString(desc.category)});
+        categories.insert(std::string{uimodel::toString(desc.category)});
       }
 
       CHECK(categories.contains("Containers"));
@@ -246,7 +246,7 @@ namespace ao::gtk::layout::editor::test
 
     auto window = Gtk::Window{};
     auto const doc = createDefaultLayout();
-    auto const stubLoader = [](std::string_view) { return uimodel::layout::LayoutDocument{}; };
+    auto const stubLoader = [](std::string_view) { return uimodel::LayoutDocument{}; };
 
     auto const findTreeView = [](auto& self, Gtk::Widget& widget) -> Gtk::TreeView*
     {
@@ -957,7 +957,7 @@ namespace ao::gtk::layout::editor::test
       auto const optDesc = registry.descriptor("absoluteCanvas");
 
       REQUIRE(optDesc.has_value());
-      CHECK(uimodel::layout::isContainer(*optDesc));
+      CHECK(uimodel::isContainer(*optDesc));
       CHECK(optDesc->minChildren == 0);
       CHECK(!optDesc->optMaxChildren.has_value());
     }
@@ -995,8 +995,7 @@ namespace ao::gtk::layout::editor::test
     }
   }
 
-  TEST_CASE("absoluteCanvas geometry allocates children at configured coordinates",
-            "[gtk][unit][layout][editor][geometry]")
+  TEST_CASE("absoluteCanvas geometry allocates children at configured coordinates", "[gtk][unit][geometry]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_geometry_test");
 

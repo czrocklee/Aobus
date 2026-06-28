@@ -21,7 +21,7 @@ namespace ao::rt::test
 {
   using namespace ao::test;
 
-  TEST_CASE("Headless Shell - Navigation and Layout Management", "[app][unit][runtime][headless]")
+  TEST_CASE("HeadlessShell - navigation and session persistence update layout", "[runtime][unit][headless]")
   {
     auto tempDir = ao::test::TempDir{};
     auto const workspaceConfigPath = std::filesystem::path{tempDir.path()} / "workspace.yaml";

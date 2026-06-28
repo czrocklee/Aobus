@@ -5,8 +5,8 @@
 
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/utility/TransparentStringHash.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -19,25 +19,25 @@
 
 namespace ao::gtk::layout
 {
-  using ComponentFactory = std::unique_ptr<ILayoutComponent> (*)(LayoutContext&, uimodel::layout::LayoutNode const&);
+  using ComponentFactory = std::unique_ptr<ILayoutComponent> (*)(LayoutContext&, uimodel::LayoutNode const&);
 
   class ComponentRegistry final
   {
   public:
     ComponentRegistry();
 
-    void registerComponent(uimodel::layout::ComponentDescriptor descriptor, ComponentFactory factory);
+    void registerComponent(uimodel::LayoutComponentDescriptor descriptor, ComponentFactory factory);
 
-    std::unique_ptr<ILayoutComponent> create(LayoutContext& ctx, uimodel::layout::LayoutNode const& node) const;
+    std::unique_ptr<ILayoutComponent> create(LayoutContext& ctx, uimodel::LayoutNode const& node) const;
 
-    std::vector<uimodel::layout::ComponentDescriptor> const& descriptors() const;
+    std::vector<uimodel::LayoutComponentDescriptor> const& descriptors() const;
 
-    std::optional<uimodel::layout::ComponentDescriptor> descriptor(std::string_view type) const;
+    std::optional<uimodel::LayoutComponentDescriptor> descriptor(std::string_view type) const;
 
-    uimodel::layout::ComponentCatalog const& catalog() const noexcept;
+    uimodel::LayoutComponentCatalog const& catalog() const noexcept;
 
   private:
-    uimodel::layout::ComponentCatalog _catalog;
+    uimodel::LayoutComponentCatalog _catalog;
     boost::
       unordered_flat_map<std::string, ComponentFactory, utility::TransparentStringHash, utility::TransparentStringEqual>
         _factories;

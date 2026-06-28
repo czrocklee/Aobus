@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/rt/CorePrimitives.h>
-#include <ao/uimodel/status/ActivityStatusModel.h>
+#include <ao/uimodel/status/activity/ActivityStatusModel.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -56,8 +56,8 @@ namespace ao::gtk
     std::int32_t maxTextChars = kDefaultMaxTextChars;
   };
 
-  using ActivityStatusActionRenderState = uimodel::status::ActivityActionAvailability;
-  using ActivityStatusActionResolver = uimodel::status::ActivityActionAvailabilityResolver;
+  using ActivityStatusActionRenderState = uimodel::ActivityActionAvailability;
+  using ActivityStatusActionResolver = uimodel::ActivityActionAvailabilityResolver;
   using ActivityStatusActionHandler = std::function<void(rt::NotificationId, std::string_view, Gtk::Widget&)>;
 
   struct ActivityStatusDependencies final
@@ -83,7 +83,7 @@ namespace ao::gtk
 
     Gtk::Widget& widget() { return _box; }
 
-    uimodel::status::ActivityStatusViewState const& viewStateForTest() const;
+    uimodel::ActivityStatusViewState const& viewStateForTest() const;
     Gtk::Label& labelForTest() { return _label; }
     Gtk::ProgressBar& progressForTest() { return _progressBar; }
     Gtk::Button& dismissButtonForTest() { return _dismissButton; }
@@ -95,8 +95,8 @@ namespace ao::gtk
     void setupUi();
     void render();
     void renderDetail();
-    void appendTaskDetail(uimodel::status::ActivityTaskDetail const& task);
-    void appendNotificationDetail(uimodel::status::ActivityDetailItem const& item);
+    void appendTaskDetail(uimodel::ActivityTaskDetail const& task);
+    void appendNotificationDetail(uimodel::ActivityDetailItem const& item);
     void startAutoDismissTimer(std::chrono::milliseconds timeout);
     void clearKindClasses();
     void onNotificationPosted(rt::NotificationId id);
@@ -121,7 +121,7 @@ namespace ao::gtk
     Gtk::Box _detailBox;
     Gtk::Popover _detailPopover;
 
-    uimodel::status::ActivityStatusModel _model;
+    uimodel::ActivityStatusModel _model;
 
     rt::Subscription _postedSub;
     rt::Subscription _changedSub;

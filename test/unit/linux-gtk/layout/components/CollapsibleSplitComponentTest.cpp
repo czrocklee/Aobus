@@ -5,9 +5,9 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include "test/unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
-#include <ao/uimodel/layout/LayoutComponentState.h>
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -20,11 +20,10 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   using ao::gtk::test::emitClicked;
 
-  TEST_CASE("CollapsibleSplitComponent applies reveal sizing and persists panel state",
-            "[gtk][unit][layout][containers][geometry]")
+  TEST_CASE("CollapsibleSplitComponent applies reveal sizing and persists panel state", "[gtk][unit][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

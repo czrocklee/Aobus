@@ -21,13 +21,13 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/layout/LayoutYaml.h>
-#include <ao/uimodel/playback/PlaybackQueueModel.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutYaml.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 #include <ao/yaml/Utils.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -59,7 +59,7 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::findWidgetByClass;
@@ -599,8 +599,8 @@ namespace ao::gtk::layout::test
     auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks), themeController};
     auto navCallbacks = ListNavigationController::Callbacks{};
     auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
-    auto layoutStore = uimodel::track::TrackColumnLayoutStore{};
-    auto queueModel = uimodel::playback::PlaybackQueueModel{runtime.playback()};
+    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto queueModel = uimodel::PlaybackQueueModel{runtime.playback()};
     auto pageHost = TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, layoutStore};
 
     runtime.workspace().navigateTo(rt::kAllTracksListId);
@@ -734,16 +734,17 @@ namespace ao::gtk::layout::test
       std::int32_t primaryFired = 0;
       std::int32_t longPressFired = 0;
 
-      actionRegistry.registerAction(ActionDescriptor{.id = "shell.showSystemMenu",
-                                                     .label = "System Menu",
-                                                     .category = "Shell",
-                                                     .capabilities = ActionCapability::None},
+      actionRegistry.registerAction(LayoutActionDescriptor{.id = "shell.showSystemMenu",
+                                                           .label = "System Menu",
+                                                           .category = "Shell",
+                                                           .capabilities = LayoutActionCapability::None},
                                     [&](ActionActivationContext&) { primaryFired++; });
 
-      actionRegistry.registerAction(
-        ActionDescriptor{
-          .id = "shell.showSoul", .label = "Show Soul", .category = "Shell", .capabilities = ActionCapability::None},
-        [&](ActionActivationContext&) { longPressFired++; });
+      actionRegistry.registerAction(LayoutActionDescriptor{.id = "shell.showSoul",
+                                                           .label = "Show Soul",
+                                                           .category = "Shell",
+                                                           .capabilities = LayoutActionCapability::None},
+                                    [&](ActionActivationContext&) { longPressFired++; });
 
       auto const compPtr = registry.create(ctx, layoutNode);
       REQUIRE(compPtr != nullptr);
@@ -767,10 +768,10 @@ namespace ao::gtk::layout::test
       auto const it = std::find_if(
         optDesc->props.begin(), optDesc->props.end(), [](auto const& p) { return p.name == "primaryAction"; });
       REQUIRE(it != optDesc->props.end());
-      CHECK(it->kind == PropertyKind::Enum);
+      CHECK(it->kind == LayoutPropertyKind::Enum);
       CHECK(it->enumValues.empty());
       REQUIRE(it->optActionBinding.has_value());
-      CHECK(it->optActionBinding->slot == ActionSlot::PrimaryClick);
+      CHECK(it->optActionBinding->slot == LayoutActionSlot::PrimaryClick);
     }
 
     SECTION("custom playback row YAML builds without errors")

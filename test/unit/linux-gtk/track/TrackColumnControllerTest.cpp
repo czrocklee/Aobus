@@ -6,7 +6,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/columnview.h>
@@ -58,7 +58,7 @@ namespace ao::gtk::test
   TEST_CASE("TrackColumnController builds and updates visible track columns", "[gtk][unit][track][column]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto layoutStore = uimodel::track::TrackColumnLayoutStore{};
+    auto layoutStore = uimodel::TrackColumnLayoutStore{};
 
     auto columnView = Gtk::ColumnView{};
     auto controller = TrackColumnController{columnView, layoutStore, rt::kAllTracksListId};

@@ -5,7 +5,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -17,20 +17,20 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   using ao::gtk::test::makeRuntime;
 
   TEST_CASE("ActionRegistry binds and dispatches layout actions", "[gtk][unit][layout][action]")
   {
     auto registry = ActionRegistry{};
 
-    auto const descriptor1 = ActionDescriptor{
-      .id = "test.action1", .label = "Test Action 1", .category = "Test", .capabilities = ActionCapability::None};
+    auto const descriptor1 = LayoutActionDescriptor{
+      .id = "test.action1", .label = "Test Action 1", .category = "Test", .capabilities = LayoutActionCapability::None};
 
-    auto const descriptor2 = ActionDescriptor{.id = "test.action2",
-                                              .label = "Test Action 2",
-                                              .category = "Test",
-                                              .capabilities = ActionCapability::RequiresAnchor};
+    auto const descriptor2 = LayoutActionDescriptor{.id = "test.action2",
+                                                    .label = "Test Action 2",
+                                                    .category = "Test",
+                                                    .capabilities = LayoutActionCapability::RequiresAnchor};
 
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -56,7 +56,7 @@ namespace ao::gtk::layout::test
       REQUIRE(all.size() == 1);
       CHECK(all[0].id == "test.action1");
 
-      CHECK(registry.activate("test.action1", ctx).result == ActionActivationResult::Activated);
+      CHECK(registry.activate("test.action1", ctx).result == LayoutActionActivationResult::Activated);
       CHECK(called);
     }
 
@@ -74,25 +74,25 @@ namespace ao::gtk::layout::test
       registry.registerAction({.id = "my.test.action",
                                .label = "Test Action",
                                .category = "Test",
-                               .capabilities = ActionCapability::RequiresAnchor},
+                               .capabilities = LayoutActionCapability::RequiresAnchor},
                               [](auto&) {});
 
       CHECK(!registry.canBind(
         "my.test.action",
-        ActionBindingContext{
-          .slot = ActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
+        LayoutActionBindingContext{
+          .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
       CHECK(registry.canBind(
         "my.test.action",
-        ActionBindingContext{
-          .slot = ActionSlot::PrimaryClick, .hasAnchor = true, .hasFocusedView = false, .componentType = {}}));
+        LayoutActionBindingContext{
+          .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = true, .hasFocusedView = false, .componentType = {}}));
     }
 
     SECTION("canBind returns false for unknown action")
     {
       CHECK(!registry.canBind(
         "unknown.action",
-        ActionBindingContext{
-          .slot = ActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
+        LayoutActionBindingContext{
+          .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
     }
 
     SECTION("Distinguishes canBind() from runtime state()")
@@ -102,12 +102,12 @@ namespace ao::gtk::layout::test
       // Requires anchor, so cannot bind to shortcut
       CHECK_FALSE(registry.canBind(
         "test.action2",
-        ActionBindingContext{
-          .slot = ActionSlot::Shortcut, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
+        LayoutActionBindingContext{
+          .slot = LayoutActionSlot::Shortcut, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
       CHECK(registry.canBind(
         "test.action2",
-        ActionBindingContext{
-          .slot = ActionSlot::PrimaryClick, .hasAnchor = true, .hasFocusedView = false, .componentType = {}}));
+        LayoutActionBindingContext{
+          .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = true, .hasFocusedView = false, .componentType = {}}));
 
       // Default state is enabled
       auto const s = registry.state("test.action2", ctx);
@@ -125,7 +125,7 @@ namespace ao::gtk::layout::test
                               });
 
       auto const outcome = registry.activate("test.action1", ctx);
-      CHECK(outcome.result == ActionActivationResult::Activated);
+      CHECK(outcome.result == LayoutActionActivationResult::Activated);
       CHECK(called);
     }
 
@@ -135,14 +135,14 @@ namespace ao::gtk::layout::test
       registry.registerAction(
         descriptor1,
         [&](auto&) { called = true; },
-        [](auto const&) { return ActionState{.enabled = false, .disabledReason = "Test"}; });
+        [](auto const&) { return LayoutActionState{.enabled = false, .disabledReason = "Test"}; });
 
       auto const s = registry.state("test.action1", ctx);
       CHECK_FALSE(s.enabled);
       CHECK(s.disabledReason == "Test");
 
       auto const outcome = registry.activate("test.action1", ctx);
-      CHECK(outcome.result == ActionActivationResult::Disabled);
+      CHECK(outcome.result == LayoutActionActivationResult::Disabled);
       CHECK_FALSE(called);
     }
 
@@ -152,14 +152,14 @@ namespace ao::gtk::layout::test
       CHECK_FALSE(registry.descriptor("unknown"));
       CHECK_FALSE(registry.canBind(
         "unknown",
-        ActionBindingContext{
-          .slot = ActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
+        LayoutActionBindingContext{
+          .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
     }
 
     SECTION("Activating an unknown action id returns UnknownAction")
     {
       auto const outcome = registry.activate("unknown", ctx);
-      CHECK(outcome.result == ActionActivationResult::UnknownAction);
+      CHECK(outcome.result == LayoutActionActivationResult::UnknownAction);
     }
 
     SECTION("State provider is called during activate() to gate dispatch")
@@ -171,7 +171,7 @@ namespace ao::gtk::layout::test
         [&](auto const&)
         {
           stateCalls++;
-          return ActionState{.enabled = true, .disabledReason = ""};
+          return LayoutActionState{.enabled = true, .disabledReason = ""};
         });
 
       registry.activate("test.action1", ctx);

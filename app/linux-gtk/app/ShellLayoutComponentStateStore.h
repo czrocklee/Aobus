@@ -3,14 +3,14 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/ILayoutComponentStateStore.h>
+#include <ao/uimodel/layout/component/ILayoutComponentStateStore.h>
 
 #include <filesystem>
 #include <mutex>
 #include <optional>
 #include <string_view>
 
-namespace ao::uimodel::layout
+namespace ao::uimodel
 {
   struct LayoutComponentStateDocument;
   struct LayoutDocument;
@@ -18,7 +18,7 @@ namespace ao::uimodel::layout
 
 namespace ao::gtk
 {
-  class ShellLayoutComponentStateStore final : public uimodel::layout::ILayoutComponentStateStore
+  class ShellLayoutComponentStateStore final : public uimodel::ILayoutComponentStateStore
   {
   public:
     explicit ShellLayoutComponentStateStore(std::filesystem::path stateDir);
@@ -29,16 +29,16 @@ namespace ao::gtk
     ShellLayoutComponentStateStore(ShellLayoutComponentStateStore&&) = delete;
     ShellLayoutComponentStateStore& operator=(ShellLayoutComponentStateStore&&) = delete;
 
-    std::optional<uimodel::layout::LayoutComponentStateDocument> load(std::string_view presetId) const override;
-    void save(std::string_view presetId, uimodel::layout::LayoutComponentStateDocument const& doc) override;
-    bool prune(std::string_view presetId, uimodel::layout::LayoutDocument const& effectiveDoc) override;
+    std::optional<uimodel::LayoutComponentStateDocument> load(std::string_view presetId) const override;
+    void save(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc) override;
+    bool prune(std::string_view presetId, uimodel::LayoutDocument const& effectiveDoc) override;
     bool removePreset(std::string_view presetId) override;
 
   private:
     std::filesystem::path filePath(std::string_view presetId) const;
 
-    std::optional<uimodel::layout::LayoutComponentStateDocument> loadUnlocked(std::string_view presetId) const;
-    bool saveUnlocked(std::string_view presetId, uimodel::layout::LayoutComponentStateDocument const& doc);
+    std::optional<uimodel::LayoutComponentStateDocument> loadUnlocked(std::string_view presetId) const;
+    bool saveUnlocked(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc);
     bool removePresetUnlocked(std::string_view presetId);
 
     mutable std::mutex _mutex;

@@ -45,7 +45,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("AppRuntime - Coverage", "[runtime][unit]")
+  TEST_CASE("AppRuntime - dependencies expose services and empty selection is safe", "[runtime][unit][app-runtime]")
   {
     auto tempDir = ao::test::TempDir{};
 

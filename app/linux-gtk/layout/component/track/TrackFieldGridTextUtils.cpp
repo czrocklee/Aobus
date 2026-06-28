@@ -5,7 +5,7 @@
 
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/uimodel/track/TrackInlineEditWorkflow.h>
+#include <ao/uimodel/field/TrackInlineEditWorkflow.h>
 
 #include <glib.h>
 #include <glibmm/miscutils.h>
@@ -42,6 +42,6 @@ namespace ao::gtk::layout::track_field_grid
                                  std::string_view newValue,
                                  bool protectCompositeMixedText)
   {
-    return uimodel::track::isProtectedInlineEditText(field, snap, newValue, protectCompositeMixedText);
+    return uimodel::isProtectedInlineEditText(field, snap, newValue, protectCompositeMixedText);
   }
 } // namespace ao::gtk::layout::track_field_grid

@@ -6,8 +6,8 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "list/ListNavigationController.h"
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
@@ -17,7 +17,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -66,7 +66,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "library.listTree",
                                 .displayName = "Library Tree",
-                                .category = ComponentCategory::Library,
+                                .category = LayoutComponentCategory::Library,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

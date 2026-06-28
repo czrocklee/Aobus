@@ -14,7 +14,8 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("StorageResult - NotFound maps to null optional", "[runtime][unit][storage-result]")
+  TEST_CASE("StorageResult - storageValueOrNullopt maps NotFound to empty optional and throws storage errors",
+            "[runtime][unit][storage-result]")
   {
     SECTION("returns the contained value")
     {

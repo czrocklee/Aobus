@@ -11,7 +11,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <map>
 #include <memory>
@@ -21,7 +21,7 @@ namespace ao::lmdb
   class ReadTransaction;
 }
 
-namespace ao::uimodel::playback
+namespace ao::uimodel
 {
   class PlaybackQueueModel;
 }
@@ -56,10 +56,10 @@ namespace ao::gtk
   public:
     TrackPageHost(Gtk::Stack& stack,
                   rt::AppRuntime& runtime,
-                  uimodel::playback::PlaybackQueueModel* queueModel,
+                  uimodel::PlaybackQueueModel* queueModel,
                   TagEditController& tagEditController,
                   ListNavigationController& listNavigation,
-                  uimodel::track::TrackColumnLayoutStore& layoutStore);
+                  uimodel::TrackColumnLayoutStore& layoutStore);
     ~TrackPageHost();
 
     // Not copyable or movable
@@ -68,10 +68,10 @@ namespace ao::gtk
     TrackPageHost(TrackPageHost&&) = delete;
     TrackPageHost& operator=(TrackPageHost&&) = delete;
 
-    void setPlaybackQueueModel(uimodel::playback::PlaybackQueueModel& controller) { _playbackQueueModel = &controller; }
+    void setPlaybackQueueModel(uimodel::PlaybackQueueModel& controller) { _playbackQueueModel = &controller; }
 
     Gtk::Stack& stack() { return _stack; }
-    uimodel::track::TrackColumnLayoutStore& layoutStore() { return _layoutStore; }
+    uimodel::TrackColumnLayoutStore& layoutStore() { return _layoutStore; }
 
     void clear();
     void rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn);
@@ -98,10 +98,10 @@ namespace ao::gtk
     void tryRevealTrackInView(rt::ViewId viewId, TrackId trackId);
     Gtk::Stack& _stack;
     rt::AppRuntime& _runtime;
-    uimodel::playback::PlaybackQueueModel* _playbackQueueModel;
+    uimodel::PlaybackQueueModel* _playbackQueueModel;
     TagEditController& _tagEditController;
     ListNavigationController& _listNavigation;
-    uimodel::track::TrackColumnLayoutStore& _layoutStore;
+    uimodel::TrackColumnLayoutStore& _layoutStore;
     rt::Subscription _revealSub;
     rt::Subscription _nowPlayingSub;
     rt::Subscription _focusSub;

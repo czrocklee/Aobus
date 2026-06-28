@@ -7,7 +7,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/QueryExpressionCompleter.h>
-#include <ao/uimodel/track/TrackFilterViewModel.h>
+#include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
 #include <gdkmm/enums.h>
 #include <glibmm/main.h>
@@ -53,7 +53,7 @@ namespace ao::gtk
     , _textChangedConn{_entry.signal_changed().connect(sigc::mem_fun(*this, &TrackQuickFilter::onFilterTextChanged))}
     , _controller{_runtime.views(),
                   _runtime.workspace(),
-                  [this](ao::uimodel::track::TrackFilterViewState const& state) { applyState(state); }}
+                  [this](ao::uimodel::TrackFilterViewState const& state) { applyState(state); }}
   {
     add_css_class("ao-quick-filter");
     set_hexpand(true);
@@ -168,7 +168,7 @@ namespace ao::gtk
     }
   }
 
-  void TrackQuickFilter::applyState(ao::uimodel::track::TrackFilterViewState const& view)
+  void TrackQuickFilter::applyState(ao::uimodel::TrackFilterViewState const& view)
   {
     set_sensitive(view.enabled);
     _resolvedExpression = view.resolvedExpression;

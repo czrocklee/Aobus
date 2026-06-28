@@ -17,10 +17,10 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/uimodel/tag/TrackPropertiesFormSpec.h>
-#include <ao/uimodel/tag/TrackPropertiesFormWorkflow.h>
-#include <ao/uimodel/track/TrackFieldEditPolicy.h>
-#include <ao/uimodel/track/TrackFieldFormatter.h>
+#include <ao/uimodel/field/TrackFieldEditCodec.h>
+#include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -93,7 +93,9 @@ namespace ao::gtk
   void TrackPropertiesDialog::setupUi()
   {
     addCancelAction("Close", Gtk::ResponseType::CLOSE);
-    addPrimaryAction("Save", Gtk::ResponseType::OK)->signal_clicked().connect([this] { onSave(); });
+    _saveButton = addPrimaryAction("Save", Gtk::ResponseType::OK);
+    _saveButton->set_sensitive(false);
+    _saveButton->signal_clicked().connect([this] { onSave(); });
 
     _notebook.add_css_class("ao-properties-notebook");
     _notebook.set_vexpand(true);
@@ -121,14 +123,15 @@ namespace ao::gtk
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
 
-    auto const spec = uimodel::tag::buildTrackPropertiesFormSpec();
+    auto const spec = uimodel::buildTrackPropertiesFormSpec();
 
     for (auto const& row : spec.metadataRows)
     {
+      _formModel.addField(row.field, true);
       auto* const widget = createEditorWidget(row.field, row.editorKind);
       list->addRow(std::string{row.label}, *widget);
 
-      _editors.push_back(FieldEditor{.state = {.field = row.field}, .widget = widget});
+      _editors.push_back(FieldEditor{.field = row.field, .widget = widget});
     }
 
     _metadataBox.append(*list);
@@ -152,14 +155,15 @@ namespace ao::gtk
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
 
-    auto const spec = uimodel::tag::buildTrackPropertiesFormSpec();
+    auto const spec = uimodel::buildTrackPropertiesFormSpec();
 
     for (auto const& row : spec.propertyRows)
     {
+      _formModel.addField(row.field, false);
       auto* const widget = createReadonlyWidget(row.field);
       list->addRow(std::string{row.label}, *widget);
 
-      _readonlyRows.push_back(FieldEditor{.state = {.field = row.field}, .widget = widget});
+      _readonlyRows.push_back(FieldEditor{.field = row.field, .widget = widget});
     }
 
     _propertiesBox.append(*list);
@@ -167,9 +171,9 @@ namespace ao::gtk
   }
 
   Gtk::Widget* TrackPropertiesDialog::createEditorWidget(rt::TrackField field,
-                                                         uimodel::tag::TrackPropertiesFormEditorKind editorKind)
+                                                         uimodel::TrackPropertiesFormEditorKind editorKind)
   {
-    if (editorKind == uimodel::tag::TrackPropertiesFormEditorKind::Number)
+    if (editorKind == uimodel::TrackPropertiesFormEditorKind::Number)
     {
       auto* const spin = Gtk::make_managed<Gtk::SpinButton>();
       spin->set_range(kSpinMin, kSpinMax);
@@ -177,11 +181,13 @@ namespace ao::gtk
       spin->set_numeric(true);
       spin->set_digits(kSpinDigits);
       spin->set_hexpand(true);
+      spin->signal_value_changed().connect([this, field, spin] { updateEditorValue(field, spin); });
       return spin;
     }
 
     auto* const entry = Gtk::make_managed<Gtk::Entry>();
     entry->set_hexpand(true);
+    entry->signal_changed().connect([this, field, entry] { updateEditorValue(field, entry); });
 
     if (rt::trackFieldSupportsValueCompletion(field))
     {
@@ -240,39 +246,41 @@ namespace ao::gtk
   {
     for (auto& editor : _editors)
     {
-      auto const rawValue = scope.trackField(trackId, editor.state.field);
-      editor.state = uimodel::tag::makeTrackPropertiesFormFieldState(editor.state.field, rawValue);
-      setWidgetValue(
-        editor.state.field, editor.widget, uimodel::track::formatTrackFieldRawValue(editor.state.field, rawValue));
+      auto const rawValue = scope.trackField(trackId, editor.field);
+      _formModel.loadFirstTrackField(editor.field, rawValue);
+      applyRowView(editor.widget, _formModel.rowView(editor.field));
     }
 
     for (auto& row : _readonlyRows)
     {
-      auto const rawValue = scope.trackField(trackId, row.state.field);
-      row.state = uimodel::tag::makeTrackPropertiesFormFieldState(row.state.field, rawValue);
-      setWidgetValue(row.state.field, row.widget, uimodel::track::formatTrackFieldRawValue(row.state.field, rawValue));
+      auto const rawValue = scope.trackField(trackId, row.field);
+      _formModel.loadFirstTrackField(row.field, rawValue);
+      applyRowView(row.widget, _formModel.rowView(row.field));
     }
+
+    updateSaveEnabled();
   }
 
   void TrackPropertiesDialog::loadSubsequentTrack(rt::LibraryReader const& scope, TrackId trackId)
   {
     for (auto& editor : _editors)
     {
-      if (auto const rawValue = scope.trackField(trackId, editor.state.field);
-          uimodel::tag::mergeTrackPropertiesFormFieldState(editor.state, rawValue))
+      if (auto const rawValue = scope.trackField(trackId, editor.field);
+          _formModel.mergeTrackField(editor.field, rawValue))
       {
-        setEditorMixed(editor.state.field, editor.widget);
+        applyRowView(editor.widget, _formModel.rowView(editor.field));
       }
     }
 
     for (auto& row : _readonlyRows)
     {
-      if (auto const rawValue = scope.trackField(trackId, row.state.field);
-          uimodel::tag::mergeTrackPropertiesFormFieldState(row.state, rawValue))
+      if (auto const rawValue = scope.trackField(trackId, row.field); _formModel.mergeTrackField(row.field, rawValue))
       {
-        setEditorMixed(row.state.field, row.widget);
+        applyRowView(row.widget, _formModel.rowView(row.field));
       }
     }
+
+    updateSaveEnabled();
   }
 
   void TrackPropertiesDialog::onSave()
@@ -282,37 +290,12 @@ namespace ao::gtk
       return;
     }
 
-    auto patch = rt::MetadataPatch{};
-
     for (auto const& editor : _editors)
     {
-      auto const* const def = trackFieldUiDefinition(editor.state.field);
-
-      if (def == nullptr || !uimodel::track::trackFieldCanWritePatch(editor.state.field))
-      {
-        continue;
-      }
-
-      auto editValue = TrackFieldEditValue{};
-
-      if (auto* const entry = dynamic_cast<Gtk::Entry*>(editor.widget); entry != nullptr)
-      {
-        auto const text = entry->get_text().raw();
-        editValue = TrackFieldEditValue{std::in_place_type<std::string>, std::move(text)};
-      }
-      else if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(editor.widget); spin != nullptr)
-      {
-        auto const value = static_cast<std::uint16_t>(spin->get_value_as_int());
-        editValue = TrackFieldEditValue{std::in_place_type<std::uint16_t>, value};
-      }
-      else
-      {
-        continue;
-      }
-
-      std::ignore = uimodel::tag::writeTrackPropertiesFormEdit(patch, editor.state, editValue);
+      updateEditorValue(editor.field, editor.widget);
     }
 
+    auto const patch = _formModel.buildPatch();
     auto const reply = _writer.updateMetadata(_trackIds, patch);
 
     for (auto const trackId : reply.mutatedIds)
@@ -321,7 +304,44 @@ namespace ao::gtk
     }
   }
 
-  void TrackPropertiesDialog::setWidgetValue(rt::TrackField /*field*/, Gtk::Widget* widget, std::string_view value)
+  void TrackPropertiesDialog::updateSaveEnabled()
+  {
+    if (_saveButton != nullptr)
+    {
+      _saveButton->set_sensitive(_formModel.canSave());
+    }
+  }
+
+  void TrackPropertiesDialog::updateEditorValue(rt::TrackField field, Gtk::Widget* widget)
+  {
+    if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
+    {
+      _formModel.setEditValue(field, uimodel::makeTextEditValue(entry->get_text().raw()));
+      updateSaveEnabled();
+      return;
+    }
+
+    if (auto* const spin = dynamic_cast<Gtk::SpinButton*>(widget); spin != nullptr)
+    {
+      _formModel.setEditValue(
+        field,
+        TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(spin->get_value_as_int())});
+      updateSaveEnabled();
+    }
+  }
+
+  void TrackPropertiesDialog::applyRowView(Gtk::Widget* widget, uimodel::TrackPropertiesFormRowView const& view)
+  {
+    if (view.mixed)
+    {
+      setEditorMixed(widget);
+      return;
+    }
+
+    setWidgetValue(widget, view.text);
+  }
+
+  void TrackPropertiesDialog::setWidgetValue(Gtk::Widget* widget, std::string_view value)
   {
     if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
     {
@@ -357,13 +377,13 @@ namespace ao::gtk
     }
   }
 
-  void TrackPropertiesDialog::setEditorMixed(rt::TrackField /*field*/, Gtk::Widget* widget)
+  void TrackPropertiesDialog::setEditorMixed(Gtk::Widget* widget)
   {
     widget->set_sensitive(false);
 
     if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
     {
-      entry->set_placeholder_text("<Multiple Values>");
+      entry->set_placeholder_text(std::string{uimodel::kMultipleTrackValuesText});
       return;
     }
 
@@ -375,7 +395,7 @@ namespace ao::gtk
 
     if (auto* const label = dynamic_cast<Gtk::Label*>(widget); label != nullptr)
     {
-      label->set_text("<Multiple Values>");
+      label->set_text(std::string{uimodel::kMultipleTrackValuesText});
     }
   }
 } // namespace ao::gtk

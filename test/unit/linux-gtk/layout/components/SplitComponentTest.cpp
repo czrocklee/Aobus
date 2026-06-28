@@ -4,9 +4,9 @@
 #include "ContainerTestHelpers.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include "test/unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
-#include <ao/uimodel/layout/LayoutComponentState.h>
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/paned.h>
@@ -16,9 +16,9 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
 
-  TEST_CASE("SplitComponent applies sizing and persists panel state", "[gtk][unit][layout][containers][geometry]")
+  TEST_CASE("SplitComponent applies sizing and persists panel state", "[gtk][unit][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

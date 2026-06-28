@@ -7,8 +7,8 @@
 #include "track/TrackFieldUi.h"
 #include <ao/Type.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/tag/TrackPropertiesFormSpec.h>
-#include <ao/uimodel/tag/TrackPropertiesFormWorkflow.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>
@@ -20,6 +20,11 @@
 #include <memory>
 #include <string_view>
 #include <vector>
+
+namespace Gtk
+{
+  class Button;
+}
 
 namespace ao::rt
 {
@@ -53,7 +58,7 @@ namespace ao::gtk
   private:
     struct FieldEditor final
     {
-      uimodel::tag::TrackPropertiesFormFieldState state;
+      rt::TrackField field = rt::TrackField::Title;
       Gtk::Widget* widget = nullptr;
     };
 
@@ -70,11 +75,14 @@ namespace ao::gtk
     void loadFirstTrack(rt::LibraryReader const& scope, TrackId trackId);
     void loadSubsequentTrack(rt::LibraryReader const& scope, TrackId trackId);
     void onSave();
+    void updateSaveEnabled();
+    void updateEditorValue(rt::TrackField field, Gtk::Widget* widget);
 
-    Gtk::Widget* createEditorWidget(rt::TrackField field, uimodel::tag::TrackPropertiesFormEditorKind editorKind);
+    Gtk::Widget* createEditorWidget(rt::TrackField field, uimodel::TrackPropertiesFormEditorKind editorKind);
     Gtk::Widget* createReadonlyWidget(rt::TrackField field);
-    void setWidgetValue(rt::TrackField field, Gtk::Widget* widget, std::string_view value);
-    void setEditorMixed(rt::TrackField field, Gtk::Widget* widget);
+    void applyRowView(Gtk::Widget* widget, uimodel::TrackPropertiesFormRowView const& view);
+    void setWidgetValue(Gtk::Widget* widget, std::string_view value);
+    void setEditorMixed(Gtk::Widget* widget);
 
     rt::Library const& _reads;
     rt::LibraryWriter& _writer;
@@ -82,6 +90,8 @@ namespace ao::gtk
     TrackRowCache& _rowCache;
     std::vector<TrackId> _trackIds;
     bool _multipleTracks = false;
+    uimodel::TrackPropertiesFormModel _formModel;
+    Gtk::Button* _saveButton = nullptr;
 
     Gtk::Notebook _notebook;
 

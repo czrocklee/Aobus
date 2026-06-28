@@ -6,8 +6,8 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -19,7 +19,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     constexpr std::int32_t kDefaultCompactMax = 820;
@@ -158,22 +158,22 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "responsiveClass",
                                 .displayName = "Responsive Class",
-                                .category = ComponentCategory::Decorator,
+                                .category = LayoutComponentCategory::Decorator,
                                 .props = {{.name = "axis",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "Axis",
                                            .defaultValue = LayoutValue{"width"},
                                            .enumValues = {"width", "height"}},
                                           {.name = "compactMax",
-                                           .kind = PropertyKind::Int,
+                                           .kind = LayoutPropertyKind::Int,
                                            .label = "Compact Max",
                                            .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultCompactMax)}},
                                           {.name = "regularMax",
-                                           .kind = PropertyKind::Int,
+                                           .kind = LayoutPropertyKind::Int,
                                            .label = "Regular Max",
                                            .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultRegularMax)}},
                                           {.name = "classPrefix",
-                                           .kind = PropertyKind::String,
+                                           .kind = LayoutPropertyKind::String,
                                            .label = "Class Prefix",
                                            .defaultValue = LayoutValue{"ao-width"}}},
                                 .layoutProps = {},

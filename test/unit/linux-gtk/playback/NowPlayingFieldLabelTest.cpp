@@ -13,7 +13,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/eventcontroller.h>
@@ -115,7 +115,7 @@ namespace ao::gtk::test
     SECTION("filter action navigates to the now playing field query")
     {
       auto titleLabel =
-        NowPlayingFieldLabel{runtime, rt::TrackField::Title, uimodel::playback::NowPlayingFieldAction::FilterByField};
+        NowPlayingFieldLabel{runtime, rt::TrackField::Title, uimodel::NowPlayingFieldAction::FilterByField};
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
 
@@ -133,8 +133,7 @@ namespace ao::gtk::test
 
     SECTION("reveal action emits a reveal request for the current track")
     {
-      auto titleLabel =
-        NowPlayingFieldLabel{runtime, rt::TrackField::Title, uimodel::playback::NowPlayingFieldAction::Reveal};
+      auto titleLabel = NowPlayingFieldLabel{runtime, rt::TrackField::Title, uimodel::NowPlayingFieldAction::Reveal};
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
 
@@ -154,8 +153,7 @@ namespace ao::gtk::test
 
     SECTION("play-pause action resumes when transport is not playing")
     {
-      auto titleLabel =
-        NowPlayingFieldLabel{runtime, rt::TrackField::Title, uimodel::playback::NowPlayingFieldAction::PlayPause};
+      auto titleLabel = NowPlayingFieldLabel{runtime, rt::TrackField::Title, uimodel::NowPlayingFieldAction::PlayPause};
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
 

@@ -6,7 +6,7 @@
 #include "app/AobusSoul.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/playback/AobusSoulViewModel.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <gdkmm/monitor.h>
 #include <gdkmm/rectangle.h>
@@ -119,13 +119,13 @@ namespace ao::gtk
 
     if (get_visible())
     {
-      _controllerPtr = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
-        *_playback,
-        [this](ao::uimodel::playback::AobusSoulViewState const& view)
-        {
-          _bigSoul.breathe(view.isBreathing);
-          _bigSoul.setAura(AobusSoul::mapAuraColor(view.auraColor));
-        });
+      _controllerPtr =
+        std::make_unique<ao::uimodel::AobusSoulViewModel>(*_playback,
+                                                          [this](ao::uimodel::AobusSoulViewState const& view)
+                                                          {
+                                                            _bigSoul.breathe(view.isBreathing);
+                                                            _bigSoul.setAura(AobusSoul::mapAuraColor(view.auraColor));
+                                                          });
     }
   }
 
@@ -135,13 +135,13 @@ namespace ao::gtk
 
     if (_playback != nullptr)
     {
-      _controllerPtr = std::make_unique<ao::uimodel::playback::AobusSoulViewModel>(
-        *_playback,
-        [this](ao::uimodel::playback::AobusSoulViewState const& view)
-        {
-          _bigSoul.breathe(view.isBreathing);
-          _bigSoul.setAura(AobusSoul::mapAuraColor(view.auraColor));
-        });
+      _controllerPtr =
+        std::make_unique<ao::uimodel::AobusSoulViewModel>(*_playback,
+                                                          [this](ao::uimodel::AobusSoulViewState const& view)
+                                                          {
+                                                            _bigSoul.breathe(view.isBreathing);
+                                                            _bigSoul.setAura(AobusSoul::mapAuraColor(view.auraColor));
+                                                          });
     }
   }
 

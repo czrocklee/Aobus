@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-namespace ao::uimodel::input
+namespace ao::uimodel
 {
   namespace
   {
@@ -148,4 +148,4 @@ namespace ao::uimodel::input
     result.append(key);
     return result;
   }
-} // namespace ao::uimodel::input
+} // namespace ao::uimodel

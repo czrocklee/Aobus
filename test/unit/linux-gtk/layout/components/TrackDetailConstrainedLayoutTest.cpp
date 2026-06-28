@@ -8,7 +8,7 @@
 #include <ao/Type.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <glibmm/ustring.h>
@@ -34,7 +34,7 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::emitGesturePressed;
   using ao::gtk::test::findWidget;
@@ -85,8 +85,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("TrackDetail cover art keeps square sizing under constrained width",
-            "[gtk][unit][layout][components][geometry]")
+  TEST_CASE("TrackDetail cover art keeps square sizing under constrained width", "[gtk][unit][geometry]")
   {
     int const targetSize = 250;
 
@@ -98,7 +97,7 @@ namespace ao::gtk::layout::test
     CHECK(coverArtSideForWidth(180, 0) == 0);
   }
 
-  TEST_CASE("DetailFieldEditor coordinates edit sessions", "[gtk][unit][layout][components][track]")
+  TEST_CASE("DetailFieldEditor coordinates edit sessions", "[gtk][unit][track]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.detail_editor_test");
     auto window = Gtk::Window{};
@@ -140,8 +139,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(secondEntry->get_child_visible());
   }
 
-  TEST_CASE("TrackFieldGrid maintains constrained value-column geometry",
-            "[gtk][unit][layout][components][constrained][geometry]")
+  TEST_CASE("TrackFieldGrid maintains constrained value-column geometry", "[gtk][unit][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& registry = fixture.components();

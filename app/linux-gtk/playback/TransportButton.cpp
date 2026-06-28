@@ -4,8 +4,8 @@
 #include "playback/TransportButton.h"
 
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/playback/PlaybackQueueModel.h>
-#include <ao/uimodel/playback/TransportViewModel.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
@@ -18,9 +18,9 @@ namespace ao::gtk
 {
   namespace
   {
-    char const* mapIconName(uimodel::playback::TransportIcon icon)
+    char const* mapIconName(uimodel::TransportIcon icon)
     {
-      using Icon = uimodel::playback::TransportIcon;
+      using Icon = uimodel::TransportIcon;
 
       switch (icon)
       {
@@ -50,7 +50,7 @@ namespace ao::gtk
   } // namespace
 
   TransportButton::TransportButton(rt::PlaybackService& playbackService,
-                                   ao::uimodel::playback::PlaybackQueueModel* queueModel,
+                                   ao::uimodel::PlaybackQueueModel* queueModel,
                                    Action action,
                                    std::function<void()> onPlaySelection,
                                    bool showLabel,
@@ -60,7 +60,7 @@ namespace ao::gtk
                   action,
                   std::move(onPlaySelection),
                   showLabel,
-                  [this](ao::uimodel::playback::TransportViewState const& state) { applyState(state); }}
+                  [this](ao::uimodel::TransportViewState const& state) { applyState(state); }}
   {
     _button.set_has_frame(false);
     _button.add_css_class("ao-playback-button");
@@ -72,7 +72,7 @@ namespace ao::gtk
 
   TransportButton::~TransportButton() = default;
 
-  void TransportButton::applyState(ao::uimodel::playback::TransportViewState const& view)
+  void TransportButton::applyState(ao::uimodel::TransportViewState const& view)
   {
     _button.set_icon_name(mapIconName(view.icon));
     _button.set_tooltip_text(view.tooltip);

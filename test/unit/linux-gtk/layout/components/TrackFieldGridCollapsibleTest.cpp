@@ -5,7 +5,7 @@
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/button.h>
@@ -20,12 +20,12 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::walkWidgets;
 
-  TEST_CASE("TrackFieldGrid lays out collapsible metadata sections", "[gtk][unit][layout][components][track][geometry]")
+  TEST_CASE("TrackFieldGrid lays out collapsible metadata sections", "[gtk][unit][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.collapsible_test"};
     auto& scope = fixture.attachTrackDetailScope();
@@ -451,8 +451,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("TrackFieldGrid shows custom section when an empty custom selection appears",
-            "[gtk][unit][layout][components][track][regression]")
+  TEST_CASE("TrackFieldGrid shows custom section when an empty custom selection appears", "[gtk][unit][regression]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.custom_section_regression_test"};
     auto& scope = fixture.attachTrackDetailScope();

@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/playback/VolumeViewModel.h>
+#include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
@@ -37,7 +37,7 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _button; }
 
   private:
-    void applyState(uimodel::playback::VolumeViewState const& view);
+    void applyState(uimodel::VolumeViewState const& view);
 
     Gtk::Button _button;
     Gtk::Image _icon;
@@ -51,6 +51,6 @@ namespace ao::gtk
     sigc::connection _scrollBubbleTimeout;
 
     bool _updating = false;
-    uimodel::playback::VolumeViewModel _controller;
+    uimodel::VolumeViewModel _controller;
   };
 } // namespace ao::gtk

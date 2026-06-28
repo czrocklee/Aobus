@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -34,11 +34,11 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _label; }
 
   private:
-    void applyState(uimodel::playback::NowPlayingViewState const& view);
+    void applyState(uimodel::NowPlayingViewState const& view);
 
     rt::PlaybackService& _playbackService;
     Gtk::Label _label;
 
-    uimodel::playback::NowPlayingViewModel _controller;
+    uimodel::NowPlayingViewModel _controller;
   };
 } // namespace ao::gtk

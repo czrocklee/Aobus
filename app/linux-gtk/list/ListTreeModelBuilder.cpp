@@ -8,7 +8,7 @@
 #include <ao/Type.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/uimodel/list/ListTreeProjection.h>
+#include <ao/uimodel/library/list/ListTreeProjection.h>
 
 #include <giomm/listmodel.h>
 #include <giomm/liststore.h>
@@ -28,7 +28,7 @@ namespace ao::gtk
 
     auto scope = reads.reader();
     auto const snapshot = scope.lists();
-    auto const projection = uimodel::list::buildListTreeProjection(snapshot);
+    auto const projection = uimodel::buildListTreeProjection(snapshot);
 
     for (auto const& [id, row] : projection.rowsById)
     {

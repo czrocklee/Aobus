@@ -5,8 +5,8 @@
 
 #include "test/unit/TestUtils.h"
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/track/TrackColumnLayoutStore.h>
-#include <ao/uimodel/track/TrackPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -22,8 +22,8 @@ namespace ao::gtk::test
     SECTION("Load non-existent config returns default")
     {
       auto const config = GtkLayoutConfig{libraryPath};
-      auto newState = uimodel::track::TrackColumnLayoutState{};
-      auto newPrefState = uimodel::track::ListPresentationPreferenceState{};
+      auto newState = uimodel::TrackColumnLayoutState{};
+      auto newPrefState = uimodel::ListPresentationPreferenceState{};
       config.load(newState, newPrefState);
       // Not found should not modify
       CHECK(newState.listLayouts.empty());
@@ -34,18 +34,18 @@ namespace ao::gtk::test
     {
       {
         auto config = GtkLayoutConfig{libraryPath};
-        auto state = uimodel::track::TrackColumnLayoutState{};
-        auto prefState = uimodel::track::ListPresentationPreferenceState{};
-        state.listLayouts[ListId{10}] = {uimodel::track::ColumnState{.field = rt::TrackField::Artist, .width = 150}};
-        state.listLayouts[ListId{20}] = {uimodel::track::ColumnState{.field = rt::TrackField::Album, .width = 200}};
+        auto state = uimodel::TrackColumnLayoutState{};
+        auto prefState = uimodel::ListPresentationPreferenceState{};
+        state.listLayouts[ListId{10}] = {uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 150}};
+        state.listLayouts[ListId{20}] = {uimodel::TrackColumnState{.field = rt::TrackField::Album, .width = 200}};
         prefState.presentations[ListId{10}] = "albums";
         config.save(state, prefState);
       }
 
       {
         auto const config = GtkLayoutConfig{libraryPath};
-        auto state = uimodel::track::TrackColumnLayoutState{};
-        auto prefState = uimodel::track::ListPresentationPreferenceState{};
+        auto state = uimodel::TrackColumnLayoutState{};
+        auto prefState = uimodel::ListPresentationPreferenceState{};
         config.load(state, prefState);
         REQUIRE(state.listLayouts.size() == 2);
         CHECK(state.listLayouts[ListId{10}][0].width == 150);

@@ -17,9 +17,9 @@ namespace ao::gtk::test
 {
   namespace
   {
-    uimodel::input::KeyChord chord(std::string const& text)
+    uimodel::KeyChord chord(std::string const& text)
     {
-      auto const optChord = uimodel::input::KeyChord::parse(text);
+      auto const optChord = uimodel::KeyChord::parse(text);
       REQUIRE(optChord.has_value());
       return *optChord;
     }
@@ -104,7 +104,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    for (auto const& [actionId, chords] : uimodel::input::defaultKeymap())
+    for (auto const& [actionId, chords] : uimodel::defaultKeymap())
     {
       for (auto const& original : chords)
       {

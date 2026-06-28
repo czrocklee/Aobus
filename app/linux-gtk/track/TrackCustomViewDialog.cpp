@@ -7,7 +7,7 @@
 #include "app/FormBuilder.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/uimodel/track/TrackCustomViewEditorModel.h>
+#include <ao/uimodel/library/presentation/CustomPresentationEditorModel.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
@@ -49,7 +49,7 @@ namespace ao::gtk
       return std::format("{:016x}", dis(gen));
     }
 
-    Glib::RefPtr<Gtk::StringList> createGroupKeysModel(std::span<uimodel::track::TrackGroupKeyOption const> options)
+    Glib::RefPtr<Gtk::StringList> createGroupKeysModel(std::span<uimodel::TrackGroupKeyOption const> options)
     {
       auto modelPtr = Gtk::StringList::create({});
 
@@ -61,7 +61,7 @@ namespace ao::gtk
       return modelPtr;
     }
 
-    Glib::RefPtr<Gtk::StringList> createSortFieldsModel(std::span<uimodel::track::TrackSortFieldOption const> options)
+    Glib::RefPtr<Gtk::StringList> createSortFieldsModel(std::span<uimodel::TrackSortFieldOption const> options)
     {
       auto modelPtr = Gtk::StringList::create({});
 
@@ -73,8 +73,7 @@ namespace ao::gtk
       return modelPtr;
     }
 
-    Glib::RefPtr<Gtk::StringList> createVisibleFieldsModel(
-      std::span<uimodel::track::TrackVisibleFieldOption const> options)
+    Glib::RefPtr<Gtk::StringList> createVisibleFieldsModel(std::span<uimodel::TrackVisibleFieldOption const> options)
     {
       auto modelPtr = Gtk::StringList::create({});
 

@@ -33,12 +33,12 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/LayoutComponentState.h>
-#include <ao/uimodel/layout/LayoutNodeId.h>
-#include <ao/uimodel/layout/LayoutStatePromoter.h>
-#include <ao/uimodel/layout/ShellLayoutSessionModel.h>
-#include <ao/uimodel/playback/PlaybackQueueModel.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/component/LayoutStatePromoter.h>
+#include <ao/uimodel/layout/document/LayoutNodeId.h>
+#include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 
 #include <gtkmm/dialog.h>
 #include <gtkmm/object.h>
@@ -61,8 +61,8 @@ namespace ao::gtk
     struct LayoutLoadResult final
     {
       std::string presetId;
-      uimodel::layout::LayoutDocument document;
-      uimodel::layout::LayoutComponentStateDocument componentState;
+      uimodel::LayoutDocument document;
+      uimodel::LayoutComponentStateDocument componentState;
     };
 
     LayoutLoadResult loadLayoutOnWorker(ShellLayoutStore& store,
@@ -74,8 +74,7 @@ namespace ao::gtk
 
       static constexpr auto kSupportedPresets = std::array<std::string_view, 2>{"classic", "modern"};
 
-      auto const selection =
-        uimodel::layout::ShellLayoutSessionModel::selectPreset(prefs.lastLayoutPreset, kSupportedPresets);
+      auto const selection = uimodel::ShellLayoutSessionModel::selectPreset(prefs.lastLayoutPreset, kSupportedPresets);
 
       if (selection.usedFallback)
       {
@@ -86,11 +85,10 @@ namespace ao::gtk
       auto const presetId = layout::presetIdFromString(selection.presetId);
       auto optDoc = store.load(selection.presetId);
       auto doc = optDoc ? std::move(*optDoc) : layout::createBuiltInLayout(presetId);
-      auto stateDoc =
-        componentStateStore == nullptr
-          ? uimodel::layout::ShellLayoutSessionModel::emptyComponentState(selection.presetId)
-          : componentStateStore->load(selection.presetId)
-              .value_or(uimodel::layout::ShellLayoutSessionModel::emptyComponentState(selection.presetId));
+      auto stateDoc = componentStateStore == nullptr
+                        ? uimodel::ShellLayoutSessionModel::emptyComponentState(selection.presetId)
+                        : componentStateStore->load(selection.presetId)
+                            .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(selection.presetId));
 
       return {.presetId = selection.presetId, .document = std::move(doc), .componentState = std::move(stateDoc)};
     }
@@ -133,25 +131,25 @@ namespace ao::gtk
     auto const registerAction = [this](std::string_view id,
                                        std::string_view label,
                                        std::string_view category,
-                                       uimodel::layout::ActionCapabilities caps,
+                                       uimodel::LayoutActionCapabilities caps,
                                        layout::ActionHandler handler,
                                        layout::ActionStateProvider stateProvider = {})
     {
       _actionRegistry.registerAction(
-        uimodel::layout::ActionDescriptor{
+        uimodel::LayoutActionDescriptor{
           .id = std::string{id}, .label = std::string{label}, .category = std::string{category}, .capabilities = caps},
         std::move(handler),
         std::move(stateProvider));
     };
 
-    auto const hasActiveQueue = [this](layout::ActionActivationContext const&) -> uimodel::layout::ActionState
+    auto const hasActiveQueue = [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionState
     {
       if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
       {
-        return uimodel::layout::ActionState{.enabled = queueModel->isActive(), .disabledReason = ""};
+        return uimodel::LayoutActionState{.enabled = queueModel->isActive(), .disabledReason = ""};
       }
 
-      return uimodel::layout::ActionState{.enabled = false, .disabledReason = ""};
+      return uimodel::LayoutActionState{.enabled = false, .disabledReason = ""};
     };
 
     registerPlaybackActions(registerAction, hasActiveQueue);
@@ -166,7 +164,7 @@ namespace ao::gtk
     registerAction("playback.playPause",
                    "Play/Pause",
                    "Playback",
-                   uimodel::layout::ActionCapability::None,
+                   uimodel::LayoutActionCapability::None,
                    [](layout::ActionActivationContext& ctx)
                    {
                      if (auto const& state = ctx.runtime.playback().state();
@@ -189,7 +187,7 @@ namespace ao::gtk
       "playback.stop",
       "Stop",
       "Playback",
-      uimodel::layout::ActionCapability::None,
+      uimodel::LayoutActionCapability::None,
       [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().stop(); },
       hasActiveQueue);
 
@@ -197,7 +195,7 @@ namespace ao::gtk
       "playback.next",
       "Next",
       "Playback",
-      uimodel::layout::ActionCapability::None,
+      uimodel::LayoutActionCapability::None,
       [this](layout::ActionActivationContext&)
       {
         if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
@@ -205,21 +203,21 @@ namespace ao::gtk
           queueModel->next();
         }
       },
-      [this](layout::ActionActivationContext const&) -> uimodel::layout::ActionState
+      [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionState
       {
         if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
         {
-          return uimodel::layout::ActionState{.enabled = queueModel->hasNext(), .disabledReason = ""};
+          return uimodel::LayoutActionState{.enabled = queueModel->hasNext(), .disabledReason = ""};
         }
 
-        return uimodel::layout::ActionState{.enabled = false, .disabledReason = ""};
+        return uimodel::LayoutActionState{.enabled = false, .disabledReason = ""};
       });
 
     registerAction(
       "playback.previous",
       "Previous",
       "Playback",
-      uimodel::layout::ActionCapability::None,
+      uimodel::LayoutActionCapability::None,
       [this](layout::ActionActivationContext&)
       {
         if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
@@ -227,21 +225,21 @@ namespace ao::gtk
           queueModel->previous();
         }
       },
-      [this](layout::ActionActivationContext const&) -> uimodel::layout::ActionState
+      [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionState
       {
         if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
         {
-          return uimodel::layout::ActionState{.enabled = queueModel->hasPrevious(), .disabledReason = ""};
+          return uimodel::LayoutActionState{.enabled = queueModel->hasPrevious(), .disabledReason = ""};
         }
 
-        return uimodel::layout::ActionState{.enabled = false, .disabledReason = ""};
+        return uimodel::LayoutActionState{.enabled = false, .disabledReason = ""};
       });
 
     registerAction(
       "playback.toggleShuffle",
       "Toggle Shuffle",
       "Playback",
-      uimodel::layout::ActionCapability::None,
+      uimodel::LayoutActionCapability::None,
       [this](layout::ActionActivationContext& ctx)
       {
         if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
@@ -257,7 +255,7 @@ namespace ao::gtk
       "playback.cycleRepeat",
       "Cycle Repeat",
       "Playback",
-      uimodel::layout::ActionCapability::None,
+      uimodel::LayoutActionCapability::None,
       [this](layout::ActionActivationContext& ctx)
       {
         if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
@@ -282,7 +280,7 @@ namespace ao::gtk
     registerAction("playback.showAudioDeviceSelector",
                    "Audio Devices",
                    "Playback",
-                   uimodel::layout::ActionCapability::RequiresAnchor | uimodel::layout::ActionCapability::PresentsMenu,
+                   uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [](layout::ActionActivationContext& ctx)
                    {
                      auto* const popover = Gtk::make_managed<AudioDeviceSelector>(ctx.runtime.playback());
@@ -298,7 +296,7 @@ namespace ao::gtk
     registerAction("shell.showSystemMenu",
                    "System Menu",
                    "Shell",
-                   uimodel::layout::ActionCapability::RequiresAnchor | uimodel::layout::ActionCapability::PresentsMenu,
+                   uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
                      if (auto const menuPtr = _context.shell.menuModelPtr; menuPtr)
@@ -319,7 +317,7 @@ namespace ao::gtk
     registerAction("shell.showSoul",
                    "Aobus Soul",
                    "Shell",
-                   uimodel::layout::ActionCapability::None,
+                   uimodel::LayoutActionCapability::None,
                    [](layout::ActionActivationContext& ctx)
                    {
                      auto* const window = new AobusSoulWindow{};
@@ -333,7 +331,7 @@ namespace ao::gtk
     registerAction("shell.editLayout",
                    "Edit Layout",
                    "Shell",
-                   uimodel::layout::ActionCapability::None,
+                   uimodel::LayoutActionCapability::None,
                    [this](layout::ActionActivationContext&)
                    {
                      if (_configPtr)
@@ -351,7 +349,7 @@ namespace ao::gtk
       "workspace.revealCurrentTrack",
       "Reveal Track",
       "Workspace",
-      uimodel::layout::ActionCapability::None,
+      uimodel::LayoutActionCapability::None,
       [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().revealPlayingTrack(); },
       hasActiveQueue);
   }
@@ -362,7 +360,7 @@ namespace ao::gtk
       "track.showProperties",
       "Properties",
       "Tracks",
-      uimodel::layout::ActionCapability::None,
+      uimodel::LayoutActionCapability::None,
       [this](layout::ActionActivationContext& ctx)
       {
         if (auto* tagController = _context.tag.editController; tagController != nullptr)
@@ -378,19 +376,19 @@ namespace ao::gtk
           }
         }
       },
-      [](layout::ActionActivationContext const& ctx) -> uimodel::layout::ActionState
+      [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionState
       {
         auto const target = rt::FocusedViewTarget{};
         auto projPtr =
           ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
-        return uimodel::layout::ActionState{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
+        return uimodel::LayoutActionState{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
 
     registerAction(
       "track.editTags",
       "Edit Tags",
       "Tracks",
-      uimodel::layout::ActionCapability::RequiresAnchor | uimodel::layout::ActionCapability::PresentsMenu,
+      uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
       [this](layout::ActionActivationContext& ctx)
       {
         if (auto* tagController = _context.tag.editController; tagController != nullptr)
@@ -406,12 +404,12 @@ namespace ao::gtk
           }
         }
       },
-      [](layout::ActionActivationContext const& ctx) -> uimodel::layout::ActionState
+      [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionState
       {
         auto const target = rt::FocusedViewTarget{};
         auto projPtr =
           ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
-        return uimodel::layout::ActionState{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
+        return uimodel::LayoutActionState{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
   }
 
@@ -507,10 +505,9 @@ namespace ao::gtk
     }
   }
 
-  void ShellLayoutController::applyLoadedLayoutWithFailureLogging(
-    std::string presetId,
-    uimodel::layout::LayoutDocument document,
-    uimodel::layout::LayoutComponentStateDocument componentState)
+  void ShellLayoutController::applyLoadedLayoutWithFailureLogging(std::string presetId,
+                                                                  uimodel::LayoutDocument document,
+                                                                  uimodel::LayoutComponentStateDocument componentState)
   {
     try
     {
@@ -530,17 +527,17 @@ namespace ao::gtk
   }
 
   void ShellLayoutController::applyLoadedLayout(std::string presetId,
-                                                uimodel::layout::LayoutDocument document,
-                                                uimodel::layout::LayoutComponentStateDocument componentState)
+                                                uimodel::LayoutDocument document,
+                                                uimodel::LayoutComponentStateDocument componentState)
   {
     _session.applyLoadedLayout(std::move(presetId), std::move(document));
     auto const snapshot = _session.snapshot();
     _context.activePresetId = snapshot.presetId;
     _context.componentState = std::move(componentState);
 
-    for (auto const& diagnostic : uimodel::layout::validateStatefulLayoutNodeIds(snapshot.layout))
+    for (auto const& diagnostic : uimodel::validateStatefulLayoutNodeIds(snapshot.layout))
     {
-      if (diagnostic.severity == uimodel::layout::LayoutNodeIdDiagnosticSeverity::Error)
+      if (diagnostic.severity == uimodel::LayoutNodeIdDiagnosticSeverity::Error)
       {
         APP_LOG_ERROR("ShellLayoutController: Layout id error in preset '{}' component '{}' ({}): {}",
                       snapshot.presetId,
@@ -567,10 +564,10 @@ namespace ao::gtk
     config.loadAppPrefs(prefs);
 
     auto const initialPresetId =
-      uimodel::layout::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
+      uimodel::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
     auto const initialThemeId = std::string{themePresetToString(_themeCoordinator.activeTheme())};
 
-    auto loader = [storePtr = _layoutStorePtr](std::string_view id) -> uimodel::layout::LayoutDocument
+    auto loader = [storePtr = _layoutStorePtr](std::string_view id) -> uimodel::LayoutDocument
     {
       if (storePtr)
       {
@@ -607,7 +604,7 @@ namespace ao::gtk
 
     _host.setLayout(_context, _session.snapshot().layout);
 
-    dialogRaw->signalApplyPreview().connect([this](uimodel::layout::LayoutDocument const& doc)
+    dialogRaw->signalApplyPreview().connect([this](uimodel::LayoutDocument const& doc)
                                             { _host.setLayout(_context, doc); });
 
     dialogRaw->signalThemePreview().connect([this](std::string_view themeId)
@@ -676,11 +673,10 @@ namespace ao::gtk
     _session.applyEditorSave(result.activePresetId, result.activeDocument);
     auto const snapshot = _session.snapshot();
     _context.activePresetId = snapshot.presetId;
-    _context.componentState =
-      _componentStateStorePtr == nullptr
-        ? uimodel::layout::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId)
-        : _componentStateStorePtr->load(snapshot.presetId)
-            .value_or(uimodel::layout::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId));
+    _context.componentState = _componentStateStorePtr == nullptr
+                                ? uimodel::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId)
+                                : _componentStateStorePtr->load(snapshot.presetId)
+                                    .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId));
 
     if (_configPtr)
     {
@@ -727,8 +723,7 @@ namespace ao::gtk
 
     if (!optPromotion)
     {
-      auto const presetId =
-        uimodel::layout::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
+      auto const presetId = uimodel::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
       APP_LOG_INFO("ShellLayoutController: No panel sizes to promote for preset '{}'", presetId);
       return;
     }
@@ -756,8 +751,8 @@ namespace ao::gtk
   }
 
   void ShellLayoutController::applyPromotedPanelSizes(std::string const& presetId,
-                                                      uimodel::layout::LayoutDocument promotedLayout,
-                                                      uimodel::layout::LayoutComponentStateDocument promotedState)
+                                                      uimodel::LayoutDocument promotedLayout,
+                                                      uimodel::LayoutComponentStateDocument promotedState)
   {
     if (_layoutStorePtr)
     {
@@ -780,7 +775,7 @@ namespace ao::gtk
       }
     }
 
-    _session.applyPanelSizePromotion(uimodel::layout::ShellLayoutPanelSizePromotion{
+    _session.applyPanelSizePromotion(uimodel::ShellLayoutPanelSizePromotion{
       .presetId = presetId, .layout = std::move(promotedLayout), .componentState = promotedState, .result = {}});
     auto const snapshot = _session.snapshot();
     _context.activePresetId = snapshot.presetId;
@@ -794,7 +789,7 @@ namespace ao::gtk
     _confirmPromotionFn = std::move(fn);
   }
 
-  uimodel::layout::ActionActivationOutcome ShellLayoutController::activateAction(std::string_view id)
+  uimodel::LayoutActionActivationOutcome ShellLayoutController::activateAction(std::string_view id)
   {
     auto ctx = getActionContext(id);
     return _actionRegistry.tryActivate(id, ctx);
@@ -808,7 +803,7 @@ namespace ao::gtk
                                            .componentId = std::string{componentId}};
   }
 
-  bool ShellLayoutController::canProvideSafeAnchor(uimodel::layout::ActionDescriptor const& desc) const
+  bool ShellLayoutController::canProvideSafeAnchor(uimodel::LayoutActionDescriptor const& desc) const
   {
     // The parent window is a safe fallback anchor ONLY for specific shell actions.
     // E.g., shell.showSystemMenu can be safely opened relative to the main window.

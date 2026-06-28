@@ -9,9 +9,9 @@
 #include "layout/runtime/DecoratedLayoutComponent.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/ActionTypes.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -45,16 +45,15 @@ namespace ao::gtk::layout
 
   ComponentRegistry::ComponentRegistry() = default;
 
-  void ComponentRegistry::registerComponent(uimodel::layout::ComponentDescriptor descriptor, ComponentFactory factory)
+  void ComponentRegistry::registerComponent(uimodel::LayoutComponentDescriptor descriptor, ComponentFactory factory)
   {
-    descriptor = uimodel::layout::componentDescriptorWithActionProperties(std::move(descriptor));
+    descriptor = uimodel::componentDescriptorWithActionProperties(std::move(descriptor));
     auto const type = std::string{descriptor.type};
     _factories[type] = factory;
     _catalog.registerComponentDescriptor(std::move(descriptor));
   }
 
-  std::unique_ptr<ILayoutComponent> ComponentRegistry::create(LayoutContext& ctx,
-                                                              uimodel::layout::LayoutNode const& node) const
+  std::unique_ptr<ILayoutComponent> ComponentRegistry::create(LayoutContext& ctx, uimodel::LayoutNode const& node) const
   {
     auto componentPtr = std::unique_ptr<ILayoutComponent>{};
     auto const optCompDesc = descriptor(node.type);
@@ -84,7 +83,7 @@ namespace ao::gtk::layout
 
       bool hasActions = false;
 
-      auto const check = [&](std::string_view propName, uimodel::layout::ActionSlot slot)
+      auto const check = [&](std::string_view propName, uimodel::LayoutActionSlot slot)
       {
         if (!policy.allows(slot))
         {
@@ -99,11 +98,10 @@ namespace ao::gtk::layout
         return !policy.getDefault(slot).empty();
       };
 
-      hasActions =
-        check(uimodel::layout::kPrimaryActionProp, uimodel::layout::ActionSlot::PrimaryClick) ||
-        check(uimodel::layout::kPrimaryLongPressActionProp, uimodel::layout::ActionSlot::PrimaryLongPress) ||
-        check(uimodel::layout::kSecondaryActionProp, uimodel::layout::ActionSlot::SecondaryClick) ||
-        check(uimodel::layout::kSecondaryLongPressActionProp, uimodel::layout::ActionSlot::SecondaryLongPress);
+      hasActions = check(uimodel::kPrimaryActionProp, uimodel::LayoutActionSlot::PrimaryClick) ||
+                   check(uimodel::kPrimaryLongPressActionProp, uimodel::LayoutActionSlot::PrimaryLongPress) ||
+                   check(uimodel::kSecondaryActionProp, uimodel::LayoutActionSlot::SecondaryClick) ||
+                   check(uimodel::kSecondaryLongPressActionProp, uimodel::LayoutActionSlot::SecondaryLongPress);
 
       if (hasActions)
       {
@@ -165,17 +163,17 @@ namespace ao::gtk::layout
     return componentPtr;
   }
 
-  std::vector<uimodel::layout::ComponentDescriptor> const& ComponentRegistry::descriptors() const
+  std::vector<uimodel::LayoutComponentDescriptor> const& ComponentRegistry::descriptors() const
   {
     return _catalog.descriptors();
   }
 
-  std::optional<uimodel::layout::ComponentDescriptor> ComponentRegistry::descriptor(std::string_view type) const
+  std::optional<uimodel::LayoutComponentDescriptor> ComponentRegistry::descriptor(std::string_view type) const
   {
     return _catalog.descriptor(type);
   }
 
-  uimodel::layout::ComponentCatalog const& ComponentRegistry::catalog() const noexcept
+  uimodel::LayoutComponentCatalog const& ComponentRegistry::catalog() const noexcept
   {
     return _catalog;
   }

@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/playback/PlaybackPositionInterpolator.h>
-#include <ao/uimodel/playback/PlaybackTimeViewModel.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
+#include <ao/uimodel/playback/seek/PlaybackTimeViewModel.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -21,7 +21,7 @@ namespace ao::gtk
   class TimeLabel final
   {
   public:
-    using Mode = uimodel::playback::PlaybackTimeMode;
+    using Mode = uimodel::PlaybackTimeMode;
 
     TimeLabel(rt::PlaybackService& playbackService, Mode mode);
 
@@ -35,15 +35,15 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _label; }
 
   private:
-    void applyState(uimodel::playback::PlaybackTimeViewState const& view);
+    void applyState(uimodel::PlaybackTimeViewState const& view);
     void reset();
 
     void updateLabel(std::chrono::milliseconds elapsed, std::chrono::milliseconds duration);
 
     Mode _mode;
     Gtk::Label _label;
-    uimodel::playback::PlaybackTimeViewModel _controller;
-    uimodel::playback::PlaybackPositionInterpolator _interpolator;
+    uimodel::PlaybackTimeViewModel _controller;
+    uimodel::PlaybackPositionInterpolator _interpolator;
 
     bool _isPreviewing = false;
     bool _dirty = true;

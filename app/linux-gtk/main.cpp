@@ -350,7 +350,7 @@ namespace
 
     auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
     auto appConfigPtr = std::make_shared<AppConfig>(globalConfigPath);
-    applyKeymapAccelerators(*app, appConfigPtr->loadKeymap(uimodel::input::defaultKeymap()));
+    applyKeymapAccelerators(*app, appConfigPtr->loadKeymap(uimodel::defaultKeymap()));
     auto const layoutsDir = globalConfigPath.parent_path() / "layouts";
     auto shellLayoutStorePtr = std::make_shared<ShellLayoutStore>(layoutsDir);
     auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(layoutStateDir());

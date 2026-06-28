@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/track/TrackPresentationWorkflow.h>
+#include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -18,10 +18,10 @@ namespace ao::rt
 {
   class AppRuntime;
 }
-namespace ao::uimodel::track
+namespace ao::uimodel
 {
   class TrackPresentationCatalog;
-  class TrackPresentationPreferenceStore;
+  class ListPresentationPreferenceStore;
 }
 
 namespace ao::gtk
@@ -42,22 +42,22 @@ namespace ao::gtk
     TrackPresentationButton(TrackPresentationButton&&) = delete;
     TrackPresentationButton& operator=(TrackPresentationButton&&) = delete;
 
-    void setPresentationServices(uimodel::track::TrackPresentationCatalog* catalog,
-                                 uimodel::track::TrackPresentationPreferenceStore* preferences,
+    void setPresentationServices(uimodel::TrackPresentationCatalog* catalog,
+                                 uimodel::ListPresentationPreferenceStore* preferences,
                                  ThemeCoordinator* themeController);
 
   private:
-    void render(uimodel::track::TrackPresentationPickerState const& state);
-    void populatePresentationOptions(uimodel::track::TrackPresentationPickerState const& state);
+    void render(uimodel::TrackPresentationPickerState const& state);
+    void populatePresentationOptions(uimodel::TrackPresentationPickerState const& state);
     void onPresentationSelected(std::string_view presentationId);
     void onCreateCustomViewClicked();
-    void applyCommand(uimodel::track::TrackPresentationApplyCommand const& command);
+    void applyCommand(uimodel::TrackPresentationApplyCommand const& command);
 
     rt::AppRuntime& _runtime;
-    uimodel::track::TrackPresentationCatalog* _catalog = nullptr;
-    std::unique_ptr<uimodel::track::TrackPresentationWorkflow> _workflowPtr;
+    uimodel::TrackPresentationCatalog* _catalog = nullptr;
+    std::unique_ptr<uimodel::TrackPresentationPickerViewModel> _workflowPtr;
     ThemeCoordinator* _themeController = nullptr;
-    uimodel::track::TrackPresentationPickerState _state;
+    uimodel::TrackPresentationPickerState _state;
 
     Gtk::MenuButton _button;
     Gtk::Popover _popover;

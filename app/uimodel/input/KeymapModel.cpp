@@ -4,7 +4,7 @@
 #include <ao/Exception.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/ActionCatalog.h>
+#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 
 #include <algorithm>
 #include <map>
@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace ao::uimodel::input
+namespace ao::uimodel
 {
   namespace
   {
@@ -113,7 +113,7 @@ namespace ao::uimodel::input
     return result;
   }
 
-  std::vector<std::string> KeymapModel::unknownActionIds(layout::ActionCatalog const& catalog) const
+  std::vector<std::string> KeymapModel::unknownActionIds(LayoutActionCatalog const& catalog) const
   {
     auto result = std::vector<std::string>{};
 
@@ -234,4 +234,4 @@ namespace ao::uimodel::input
       {"workspace.revealCurrentTrack", {chord("Ctrl+L")}},
     };
   }
-} // namespace ao::uimodel::input
+} // namespace ao::uimodel

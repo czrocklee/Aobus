@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace ao::uimodel::input::test
+namespace ao::uimodel::test
 {
   namespace
   {
@@ -78,4 +78,4 @@ namespace ao::uimodel::input::test
     auto const reloaded = loadKeymap(store, newDefaults);
     CHECK(reloaded.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+Shift+P")});
   }
-} // namespace ao::uimodel::input::test
+} // namespace ao::uimodel::test

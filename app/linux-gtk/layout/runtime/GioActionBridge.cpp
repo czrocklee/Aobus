@@ -5,7 +5,7 @@
 
 #include "ActionRegistry.h"
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 
 #include <giomm/simpleaction.h>
 #include <glibmm/variant.h>
@@ -60,8 +60,8 @@ namespace ao::gtk::layout
       // Phase 3c: support anchored or menu-presenting actions only when a context provider can supply the needed
       // parent/anchor safely.
       if (!contextProvider.canProvideSafeAnchor(desc) &&
-          (desc.capabilities.has(uimodel::layout::ActionCapability::RequiresAnchor) ||
-           desc.capabilities.has(uimodel::layout::ActionCapability::PresentsMenu)))
+          (desc.capabilities.has(uimodel::LayoutActionCapability::RequiresAnchor) ||
+           desc.capabilities.has(uimodel::LayoutActionCapability::PresentsMenu)))
       {
         APP_LOG_DEBUG("GioActionBridge: Skipping action {} due to missing context capabilities", desc.id);
         continue;

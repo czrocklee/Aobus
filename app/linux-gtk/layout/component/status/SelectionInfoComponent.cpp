@@ -7,8 +7,8 @@
 #include "layout/runtime/LayoutContext.h"
 #include "track/SelectionInfoLabel.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
 
@@ -16,7 +16,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     class SelectionInfoComponent final : public ILayoutComponent
@@ -43,7 +43,7 @@ namespace ao::gtk::layout
   void registerSelectionInfoComponent(ComponentRegistry& registry)
   {
     registry.registerComponent(
-      {.type = "status.selectionInfo", .displayName = "Selection Info", .category = ComponentCategory::Status},
+      {.type = "status.selectionInfo", .displayName = "Selection Info", .category = LayoutComponentCategory::Status},
       createSelectionInfo);
   }
 } // namespace ao::gtk::layout

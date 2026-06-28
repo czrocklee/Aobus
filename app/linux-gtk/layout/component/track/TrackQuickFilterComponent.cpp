@@ -9,9 +9,9 @@
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
 #include <ao/Type.h>
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/track/TrackPageRoute.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/library/track/TrackPageRoute.h>
 
 #include <gtkmm/widget.h>
 #include <sigc++/scoped_connection.h>
@@ -22,7 +22,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -59,7 +59,7 @@ namespace ao::gtk::layout
           [createSmartListFromExpression = std::move(createSmartListFromExpression),
            pageHost](std::string const& expression) mutable
           {
-            auto const parentListId = uimodel::track::smartListParentIdFromPage(pageHost->activeListId());
+            auto const parentListId = uimodel::smartListParentIdFromPage(pageHost->activeListId());
             createSmartListFromExpression(parentListId, expression);
           });
       }
@@ -81,7 +81,7 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "track.quickFilter",
                                 .displayName = "Quick Filter",
-                                .category = ComponentCategory::Track,
+                                .category = LayoutComponentCategory::Track,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,

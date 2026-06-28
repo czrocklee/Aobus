@@ -4,7 +4,7 @@
 #pragma once
 
 #include "ActionRegistry.h"
-#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 
 #include <giomm/actionmap.h>
 #include <glibmm/refptr.h>
@@ -39,7 +39,7 @@ namespace ao::gtk::layout
      * @param desc The descriptor of the action being checked.
      * @return true if a safe anchor can be guaranteed for the action's semantics.
      */
-    virtual bool canProvideSafeAnchor([[maybe_unused]] uimodel::layout::ActionDescriptor const& desc) const
+    virtual bool canProvideSafeAnchor([[maybe_unused]] uimodel::LayoutActionDescriptor const& desc) const
     {
       return false;
     }

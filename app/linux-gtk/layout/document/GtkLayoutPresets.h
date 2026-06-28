@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <cstdint>
 #include <functional>
@@ -22,9 +22,9 @@ namespace ao::gtk::layout
 
   GtkLayoutPresetId presetIdFromString(std::string_view presetIdStr);
 
-  uimodel::layout::LayoutDocument createDefaultGtkLayout();
+  uimodel::LayoutDocument createDefaultGtkLayout();
 
-  uimodel::layout::LayoutDocument createBuiltInGtkLayout(GtkLayoutPresetId presetId);
+  uimodel::LayoutDocument createBuiltInGtkLayout(GtkLayoutPresetId presetId);
 
-  std::map<std::string, uimodel::layout::LayoutNode, std::less<>> getBuiltInGtkTemplates();
+  std::map<std::string, uimodel::LayoutNode, std::less<>> getBuiltInGtkTemplates();
 } // namespace ao::gtk::layout

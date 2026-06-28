@@ -3,7 +3,7 @@
 
 #include "playback/VolumeBar.h"
 
-#include <ao/uimodel/playback/VolumeViewModel.h>
+#include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <gdkmm/graphene_rect.h>
 #include <gdkmm/rgba.h>
@@ -375,7 +375,7 @@ namespace ao::gtk
 
   void VolumeBar::handleScroll(double /*dx*/, double dy)
   {
-    float const newVol = ao::uimodel::playback::VolumeViewModel::resolveVolumeScroll(_volume, dy);
+    float const newVol = ao::uimodel::VolumeViewModel::resolveVolumeScroll(_volume, dy);
 
     if (std::abs(_volume - newVol) > kVolumeEpsilon)
     {

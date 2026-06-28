@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/ActionCatalog.h>
-#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 
 #include <functional>
 #include <optional>
@@ -34,7 +34,7 @@ namespace ao::gtk::layout
   };
 
   using ActionHandler = std::function<void(ActionActivationContext&)>;
-  using ActionStateProvider = std::function<uimodel::layout::ActionState(ActionActivationContext const&)>;
+  using ActionStateProvider = std::function<uimodel::LayoutActionState(ActionActivationContext const&)>;
 
   class ActionRegistry final
   {
@@ -47,21 +47,21 @@ namespace ao::gtk::layout
     ActionRegistry(ActionRegistry&&) = delete;
     ActionRegistry& operator=(ActionRegistry&&) = delete;
 
-    bool registerAction(uimodel::layout::ActionDescriptor descriptor,
+    bool registerAction(uimodel::LayoutActionDescriptor descriptor,
                         ActionHandler handler,
                         ActionStateProvider stateProvider = {});
 
-    std::optional<uimodel::layout::ActionDescriptor> descriptor(std::string_view id) const;
-    std::vector<uimodel::layout::ActionDescriptor> descriptors() const;
+    std::optional<uimodel::LayoutActionDescriptor> descriptor(std::string_view id) const;
+    std::vector<uimodel::LayoutActionDescriptor> descriptors() const;
 
-    bool canBind(std::string_view id, uimodel::layout::ActionBindingContext const& ctx) const;
-    bool tryBind(std::string_view id, uimodel::layout::ActionBindingContext const& ctx) const;
+    bool canBind(std::string_view id, uimodel::LayoutActionBindingContext const& ctx) const;
+    bool tryBind(std::string_view id, uimodel::LayoutActionBindingContext const& ctx) const;
 
-    uimodel::layout::ActionState state(std::string_view id, ActionActivationContext const& ctx) const;
-    uimodel::layout::ActionActivationOutcome activate(std::string_view id, ActionActivationContext& ctx) const;
-    uimodel::layout::ActionActivationOutcome tryActivate(std::string_view id, ActionActivationContext& ctx) const;
+    uimodel::LayoutActionState state(std::string_view id, ActionActivationContext const& ctx) const;
+    uimodel::LayoutActionActivationOutcome activate(std::string_view id, ActionActivationContext& ctx) const;
+    uimodel::LayoutActionActivationOutcome tryActivate(std::string_view id, ActionActivationContext& ctx) const;
 
-    uimodel::layout::ActionCatalog const& catalog() const noexcept;
+    uimodel::LayoutActionCatalog const& catalog() const noexcept;
 
   private:
     struct Entry final
@@ -71,7 +71,7 @@ namespace ao::gtk::layout
       ActionStateProvider stateProvider;
     };
 
-    uimodel::layout::ActionCatalog _catalog;
+    uimodel::LayoutActionCatalog _catalog;
     std::vector<Entry> _entries;
   };
 } // namespace ao::gtk::layout

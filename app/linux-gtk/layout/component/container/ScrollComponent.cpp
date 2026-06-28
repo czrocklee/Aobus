@@ -5,8 +5,8 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/ComponentCatalog.h>
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
@@ -19,7 +19,7 @@
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace
   {
     /**
@@ -95,31 +95,31 @@ namespace ao::gtk::layout
   {
     registry.registerComponent({.type = "scroll",
                                 .displayName = "Scroll Window",
-                                .category = ComponentCategory::Container,
+                                .category = LayoutComponentCategory::Container,
                                 .props = {{.name = "hscrollPolicy",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "H. Scroll Policy",
                                            .defaultValue = LayoutValue{"automatic"},
                                            .enumValues = {"automatic", "always", "never"}},
                                           {.name = "vscrollPolicy",
-                                           .kind = PropertyKind::Enum,
+                                           .kind = LayoutPropertyKind::Enum,
                                            .label = "V. Scroll Policy",
                                            .defaultValue = LayoutValue{"automatic"},
                                            .enumValues = {"automatic", "always", "never"}},
                                           {.name = "minContentWidth",
-                                           .kind = PropertyKind::Int,
+                                           .kind = LayoutPropertyKind::Int,
                                            .label = "Min Content Width",
                                            .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}},
                                           {.name = "minContentHeight",
-                                           .kind = PropertyKind::Int,
+                                           .kind = LayoutPropertyKind::Int,
                                            .label = "Min Content Height",
                                            .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}},
                                           {.name = "propagateNaturalWidth",
-                                           .kind = PropertyKind::Bool,
+                                           .kind = LayoutPropertyKind::Bool,
                                            .label = "Propagate Nat. Width",
                                            .defaultValue = LayoutValue{false}},
                                           {.name = "propagateNaturalHeight",
-                                           .kind = PropertyKind::Bool,
+                                           .kind = LayoutPropertyKind::Bool,
                                            .label = "Propagate Nat. Height",
                                            .defaultValue = LayoutValue{false}}},
                                 .layoutProps = {},

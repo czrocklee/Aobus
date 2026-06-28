@@ -5,7 +5,7 @@
 
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
-#include <ao/uimodel/playback/PlaybackTimeViewModel.h>
+#include <ao/uimodel/playback/seek/PlaybackTimeViewModel.h>
 
 #include <gdkmm/frameclock.h>
 #include <glibmm/refptr.h>
@@ -18,8 +18,7 @@ namespace ao::gtk
 {
   TimeLabel::TimeLabel(rt::PlaybackService& playbackService, Mode mode)
     : _mode{mode}
-    , _controller{playbackService,
-                  [this](ao::uimodel::playback::PlaybackTimeViewState const& view) { applyState(view); }}
+    , _controller{playbackService, [this](ao::uimodel::PlaybackTimeViewState const& view) { applyState(view); }}
   {
     _label.set_halign(Gtk::Align::CENTER);
     _label.set_valign(Gtk::Align::CENTER);
@@ -28,7 +27,7 @@ namespace ao::gtk
     // Use Pango to measure the exact pixel width of the template string.
     // This ensures a tight fit without layout jitter when time changes.
     // The "tnum" feature in app.css guarantees all digits have the same width.
-    auto const templateText = ao::uimodel::playback::PlaybackTimeViewModel::describeTimeTemplate(_mode);
+    auto const templateText = ao::uimodel::PlaybackTimeViewModel::describeTimeTemplate(_mode);
 
     auto const pangoLayoutPtr = _label.create_pango_layout(templateText);
     std::int32_t textWidth = 0;
@@ -58,7 +57,7 @@ namespace ao::gtk
 
   TimeLabel::~TimeLabel() = default;
 
-  void TimeLabel::applyState(ao::uimodel::playback::PlaybackTimeViewState const& view)
+  void TimeLabel::applyState(ao::uimodel::PlaybackTimeViewState const& view)
   {
     if (view.duration == std::chrono::milliseconds{0})
     {
@@ -81,7 +80,7 @@ namespace ao::gtk
 
   void TimeLabel::reset()
   {
-    _label.set_text(ao::uimodel::playback::PlaybackTimeViewModel::describeTimeTemplate(_mode));
+    _label.set_text(ao::uimodel::PlaybackTimeViewModel::describeTimeTemplate(_mode));
 
     _interpolator.reset();
     _isPreviewing = false;
@@ -125,6 +124,6 @@ namespace ao::gtk
     _lastDuration = coarseDuration;
     _dirty = false;
 
-    _label.set_text(ao::uimodel::playback::PlaybackTimeViewModel::formatPlaybackTime(_mode, elapsed, duration));
+    _label.set_text(ao::uimodel::PlaybackTimeViewModel::formatPlaybackTime(_mode, elapsed, duration));
   }
 } // namespace ao::gtk

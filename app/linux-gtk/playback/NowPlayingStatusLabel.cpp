@@ -4,7 +4,7 @@
 #include "playback/NowPlayingStatusLabel.h"
 
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/playback/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/gestureclick.h>
@@ -16,8 +16,7 @@ namespace ao::gtk
 {
   NowPlayingStatusLabel::NowPlayingStatusLabel(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
-    , _controller{_playbackService,
-                  [this](ao::uimodel::playback::NowPlayingViewState const& view) { applyState(view); }}
+    , _controller{_playbackService, [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
   {
     _label.add_css_class("ao-nowplaying");
     _label.add_css_class("ao-clickable");
@@ -33,7 +32,7 @@ namespace ao::gtk
 
   NowPlayingStatusLabel::~NowPlayingStatusLabel() = default;
 
-  void NowPlayingStatusLabel::applyState(ao::uimodel::playback::NowPlayingViewState const& view)
+  void NowPlayingStatusLabel::applyState(ao::uimodel::NowPlayingViewState const& view)
   {
     _label.set_text(view.combinedStatus);
   }

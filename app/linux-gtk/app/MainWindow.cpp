@@ -188,8 +188,8 @@ namespace ao::gtk
     // from inside its own hide signal or leaving a callback that could outlive MainWindow.
     _keyboardShortcutsWindowPtr =
       std::make_unique<KeyboardShortcutsWindow>(_shellLayout.actionCatalog(),
-                                                _configPtr->loadKeymap(uimodel::input::defaultKeymap()),
-                                                [this](uimodel::input::KeymapModel const& keymap)
+                                                _configPtr->loadKeymap(uimodel::defaultKeymap()),
+                                                [this](uimodel::KeymapModel const& keymap)
                                                 {
                                                   _configPtr->saveKeymap(keymap);
 

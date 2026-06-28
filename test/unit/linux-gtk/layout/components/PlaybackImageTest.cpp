@@ -5,7 +5,7 @@
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
 #include "app/linux-gtk/layout/runtime/ILayoutComponent.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
-#include <ao/uimodel/layout/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -23,7 +23,7 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
 
   namespace
   {
@@ -55,7 +55,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("playback.image applies declarative image properties", "[gtk][unit][layout][components][geometry]")
+  TEST_CASE("playback.image applies declarative image properties", "[gtk][unit][image]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.playback_image_test"};
     auto imageCachePtr = std::make_unique<ImageCache>(10);

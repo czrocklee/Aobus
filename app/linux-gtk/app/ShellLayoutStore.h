@@ -7,7 +7,7 @@
 #include <optional>
 #include <string_view>
 
-namespace ao::uimodel::layout
+namespace ao::uimodel
 {
   struct LayoutDocument;
 }
@@ -32,8 +32,8 @@ namespace ao::gtk
     ShellLayoutStore(ShellLayoutStore&&) noexcept;
     ShellLayoutStore& operator=(ShellLayoutStore&&) noexcept;
 
-    std::optional<uimodel::layout::LayoutDocument> load(std::string_view presetId) const;
-    void save(uimodel::layout::LayoutDocument const& doc, std::string_view presetId);
+    std::optional<uimodel::LayoutDocument> load(std::string_view presetId) const;
+    void save(uimodel::LayoutDocument const& doc, std::string_view presetId);
     void remove(std::string_view presetId);
 
   private:

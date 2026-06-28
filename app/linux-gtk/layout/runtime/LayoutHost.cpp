@@ -5,7 +5,7 @@
 
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
 
 #include <gtkmm/enums.h>
 
@@ -17,7 +17,7 @@ namespace ao::gtk::layout
     set_orientation(Gtk::Orientation::VERTICAL);
   }
 
-  void LayoutHost::setLayout(LayoutContext& ctx, uimodel::layout::LayoutDocument const& doc)
+  void LayoutHost::setLayout(LayoutContext& ctx, uimodel::LayoutDocument const& doc)
   {
     // Invalidate any pending runtime-state writes from components that are about to be
     // destroyed. New components built below will capture the updated generation.

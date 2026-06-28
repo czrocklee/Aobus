@@ -6,8 +6,8 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/ActionCatalog.h>
-#include <ao/uimodel/layout/ActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -22,30 +22,30 @@ namespace ao::gtk::test
 {
   namespace
   {
-    using uimodel::layout::ActionCapability;
+    using uimodel::LayoutActionCapability;
 
-    uimodel::input::KeyChord chord(std::string const& text)
+    uimodel::KeyChord chord(std::string const& text)
     {
-      auto const optChord = uimodel::input::KeyChord::parse(text);
+      auto const optChord = uimodel::KeyChord::parse(text);
       REQUIRE(optChord.has_value());
       return *optChord;
     }
 
-    uimodel::layout::ActionCatalog makeCatalog()
+    uimodel::LayoutActionCatalog makeCatalog()
     {
-      auto catalog = uimodel::layout::ActionCatalog{};
+      auto catalog = uimodel::LayoutActionCatalog{};
       catalog.registerActionDescriptor({.id = "playback.playPause",
                                         .label = "Play/Pause",
                                         .category = "Playback",
-                                        .capabilities = ActionCapability::None});
+                                        .capabilities = LayoutActionCapability::None});
       catalog.registerActionDescriptor(
-        {.id = "playback.next", .label = "Next", .category = "Playback", .capabilities = ActionCapability::None});
+        {.id = "playback.next", .label = "Next", .category = "Playback", .capabilities = LayoutActionCapability::None});
       // Requires a widget anchor and presents a menu: not drivable by a global accelerator.
       catalog.registerActionDescriptor(
         {.id = "track.editTags",
          .label = "Edit Tags",
          .category = "Tracks",
-         .capabilities = ActionCapability::RequiresAnchor | ActionCapability::PresentsMenu});
+         .capabilities = LayoutActionCapability::RequiresAnchor | LayoutActionCapability::PresentsMenu});
       return catalog;
     }
 
@@ -54,7 +54,7 @@ namespace ao::gtk::test
       return std::ranges::contains(ids, id);
     }
 
-    bool hasChord(std::vector<uimodel::input::KeyChord> const& chords, uimodel::input::KeyChord const& c)
+    bool hasChord(std::vector<uimodel::KeyChord> const& chords, uimodel::KeyChord const& c)
     {
       return std::ranges::contains(chords, c);
     }
@@ -64,8 +64,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto window =
-      KeyboardShortcutsWindow{makeCatalog(), uimodel::input::KeymapModel{uimodel::input::defaultKeymap()}, {}};
+    auto window = KeyboardShortcutsWindow{makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}};
     drainGtkEvents();
 
     auto const& ids = window.editableActionIds();
@@ -78,8 +77,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto window =
-      KeyboardShortcutsWindow{makeCatalog(), uimodel::input::KeymapModel{uimodel::input::defaultKeymap()}, {}};
+    auto window = KeyboardShortcutsWindow{makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}};
     drainGtkEvents();
 
     CHECK(findLabelByText(window, "Ctrl+P") != nullptr);
@@ -93,10 +91,10 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     std::int32_t changeCount = 0;
-    auto optLastModel = std::optional<uimodel::input::KeymapModel>{};
+    auto optLastModel = std::optional<uimodel::KeymapModel>{};
     auto window = KeyboardShortcutsWindow{makeCatalog(),
-                                          uimodel::input::KeymapModel{uimodel::input::defaultKeymap()},
-                                          [&](uimodel::input::KeymapModel const& model)
+                                          uimodel::KeymapModel{uimodel::defaultKeymap()},
+                                          [&](uimodel::KeymapModel const& model)
                                           {
                                             ++changeCount;
                                             optLastModel = model;
@@ -160,8 +158,8 @@ namespace ao::gtk::test
 
     std::int32_t changeCount = 0;
     auto window = KeyboardShortcutsWindow{makeCatalog(),
-                                          uimodel::input::KeymapModel{uimodel::input::defaultKeymap()},
-                                          [&](uimodel::input::KeymapModel const&) { ++changeCount; }};
+                                          uimodel::KeymapModel{uimodel::defaultKeymap()},
+                                          [&](uimodel::KeymapModel const&) { ++changeCount; }};
     drainGtkEvents();
 
     SECTION("conflictingOwner reports the other action holding the chord")

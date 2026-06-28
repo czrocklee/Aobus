@@ -22,9 +22,9 @@ namespace ao::gtk
 {
   namespace
   {
-    using uimodel::input::KeyChord;
-    using uimodel::input::KeyModifier;
-    using uimodel::input::KeyModifiers;
+    using uimodel::KeyChord;
+    using uimodel::KeyModifier;
+    using uimodel::KeyModifiers;
 
     // Neutral tokens whose spelling differs from gdk_keyval_name(), plus media keys.
     // Everything else (Right, Home, F5, letters, digits) round-trips through GDK directly.

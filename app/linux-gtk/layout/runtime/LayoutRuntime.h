@@ -9,7 +9,7 @@
 
 #include <memory>
 
-namespace ao::uimodel::layout
+namespace ao::uimodel
 {
   struct LayoutDocument;
 }
@@ -30,7 +30,7 @@ namespace ao::gtk::layout
     /**
      * @brief Build a GTK widget tree from a layout document.
      */
-    std::unique_ptr<ILayoutComponent> build(LayoutContext& ctx, uimodel::layout::LayoutDocument const& doc);
+    std::unique_ptr<ILayoutComponent> build(LayoutContext& ctx, uimodel::LayoutDocument const& doc);
 
     /**
      * @brief Register all built-in components (containers, playback, semantic) to the registry.

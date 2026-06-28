@@ -2,11 +2,11 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/document/LayoutDocument.h"
-#include <ao/uimodel/layout/LayoutDocument.h>
-#include <ao/uimodel/layout/LayoutNode.h>
-#include <ao/uimodel/layout/LayoutNodeId.h>
-#include <ao/uimodel/layout/LayoutYaml.h>
-#include <ao/uimodel/layout/StatefulLayoutComponentType.h>
+#include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutNodeId.h>
+#include <ao/uimodel/layout/document/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -20,7 +20,7 @@
 
 namespace ao::gtk::layout::test
 {
-  using namespace uimodel::layout;
+  using namespace uimodel;
   namespace yaml = ao::yaml;
 
   TEST_CASE("GTK built-in layout documents define stable preset contracts", "[gtk][unit][layout][model]")
