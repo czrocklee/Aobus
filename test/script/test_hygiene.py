@@ -56,6 +56,40 @@ class TidyCommandTest(unittest.TestCase):
         pythoncheck.assert_called_once_with(["script/foo.py"], sink=None)
         prepare_plugin.assert_not_called()
 
+    def test_clang_tidy_warnings_make_tidy_fail_even_when_process_succeeds(self):
+        args = Namespace(
+            files=["lib/Foo.cpp"],
+            all=False,
+            folder=[],
+            commit=None,
+            check=None,
+            debug=False,
+            output=None,
+            jobs=1,
+            path=None,
+            fix=False,
+            no_build=False,
+            tidy_arg=[],
+            header_filter=None,
+        )
+
+        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+            root = Path(temp_dir)
+            log = root / "foo.log"
+            log.write_text("lib/Foo.cpp:12:3: warning: injected diagnostic [aobus-example]\n", encoding="utf-8")
+            result = tidy.tidyengine.BatchResult(failed=False, logs=[log], failed_logs=[])
+
+            with mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=(["lib/Foo.cpp"], True)):
+                with mock.patch.object(tidy, "split_existing", return_value=(["lib/Foo.cpp"], [])):
+                    with mock.patch.object(tidy, "prepare_plugin", return_value=Path("/tmp/libAobusLintPlugin.so")):
+                        with mock.patch.object(tidy.tidyengine, "system_include_args", return_value=[]):
+                            buckets = {"STRICT": [Path("lib/Foo.cpp")], "RELAXED": []}
+                            with mock.patch.object(tidy, "classify_existing", return_value=buckets):
+                                with mock.patch.object(tidy.tidyengine, "make_tmpdir", return_value=root):
+                                    with mock.patch.object(tidy.tidyengine, "run_parallel", return_value=result):
+                                        with contextlib.redirect_stdout(io.StringIO()):
+                                            self.assertEqual(tidy.run_command(args), 1)
+
 
 def _hygiene_args(**overrides):
     defaults = {"files": [], "all": False, "folder": [], "commit": None, "path": None, "jobs": 1}

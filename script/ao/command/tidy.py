@@ -472,6 +472,7 @@ def run_command(args: argparse.Namespace) -> int:
                 if noisy:
                     deduplicate(noisy, out, PROJECT_ROOT)
                     out.flush()
+                    overall_failed = True
                     if args.output:
                         print(f"  Output appended to {args.output}")
                 else:
