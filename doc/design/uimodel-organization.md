@@ -3,9 +3,6 @@
 This is the standing convention for how `ao_app_uimodel` is namespaced, foldered,
 and named. It describes the rules as they are, not how the layer reached them.
 
-For the reasoning behind the flat-namespace choice, see
-`doc/adr/uimodel-namespace-and-organization.md`.
-
 ## Namespace
 
 The public UI model namespace is flat:

@@ -56,8 +56,8 @@ Route statistics affect selection and breaker state only; an oracle pass is not 
 3. Run `./ao hygiene`; resolve any findings in the order given in Hygiene Tools (format first, then
    lint) and re-run until clean, then run scoped validation if code changed.
 4. Stage only intended changes.
-5. Commit with an imperative message describing the primary technical contribution. Do not mention AI,
-   internal plans, or append co-author signatures.
+5. Commit using `doc/dev/commit-messages.md`. The subject must describe the primary technical
+   contribution and must not mention AI, internal plans, or append co-author signatures.
 6. Run `git status` and report any remaining unrelated changes.
 
 Never use destructive checkout, restore, or reset operations without explicit user approval.

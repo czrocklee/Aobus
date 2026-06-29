@@ -8,7 +8,9 @@ page hard to scan.
 
 | Document | Scope |
 |---|---|
+| `doc/README.md` | Documentation tree organization and update expectations |
 | `doc/dev/coding-style.md` | C++ standard, formatting, naming, includes, language idioms, class design, const/threading rules |
+| `doc/dev/commit-messages.md` | Commit message format, scopes, subject/body guidance, and examples |
 | `doc/design/error-model.md` | Error contracts by layer and subsystem |
 | `doc/dev/testing.md` | Testing policy and detailed test-writing references |
 
@@ -24,6 +26,17 @@ page hard to scan.
 - Prefer `ao::Result<T>` for recoverable failures, exceptions for programmer
   errors or impossible states, and `std::optional<T>` for legitimate absence.
 - See `doc/dev/coding-style.md` for the numbered rules used in reviews.
+
+## Commit Message Highlights
+
+- Use Conventional Commits: `type(scope): imperative summary`.
+- Prefer the narrowest useful scope, such as `docs`, `gtk`, `runtime`, `test`,
+  `ao`, or the subsystem being changed.
+- Keep the subject focused on the primary technical contribution.
+- Use the body only when the motivation, tradeoff, or validation is not obvious
+  from the diff.
+- Do not mention AI tools, internal plans, or co-author signatures.
+- See `doc/dev/commit-messages.md` for examples and review rules.
 
 ## Testing Highlights
 

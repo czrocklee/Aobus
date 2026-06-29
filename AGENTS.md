@@ -1,9 +1,22 @@
 # Aobus Agent Guide
 
-Aobus is a C++26 music application: GTK4 (gtkmm) desktop frontend and a CLI tool over a shared core library. CMake build; dependencies come from `nix-shell` (needs `shell.nix` in CWD — always work from the project root).
+Aobus is a C++26 music application: a GTK4 (gtkmm) desktop frontend and a CLI
+tool over a shared core library. CMake builds the project. Dependencies come
+from `nix-shell`, which needs `shell.nix` in the current directory, so always
+work from the project root.
 
 > [!TIP]
 > External library headers live in the Nix store; check build config for paths, or use `nix-shell --run "pkg-config --cflags <lib>"`. `nix-shell -p` for extra tools.
+
+## Human References
+
+Read the human docs for project policy instead of duplicating them here:
+
+- `CONTRIBUTING.md` for contributor rules and review references.
+- `doc/README.md` for where documentation belongs.
+- `doc/dev/coding-style.md` for C++ style.
+- `doc/dev/testing.md` for testing policy.
+- `doc/dev/commit-messages.md` for commit message rules.
 
 ## Working Rules
 
@@ -11,13 +24,15 @@ Aobus is a C++26 music application: GTK4 (gtkmm) desktop frontend and a CLI tool
 2. **Search:** Use `rg`, prefer narrow scopes.
 3. **Assumptions:** State technical assumptions in your response.
 4. **No TACO:** Do not over-promise and under-deliver; no shortcuts when things get difficult.
-5. **Design docs:** Sync `doc/design/` when user-facing behavior changes.
+5. **Docs:** When behavior or architecture changes, use `doc/README.md` to
+   decide whether to update `doc/design/`, `doc/dev/`, or another doc area.
 6. **Tests:** All changes include appropriate test coverage.
-7. **Scratch files:** Throwaway artifacts go to `/tmp`, never into the repo.
-8. **Hygiene:** Never run format/lint tools (`./ao format`/`tidy`, clang-format/-tidy, Ruff, mypy) mid-session — file rewrites disturb in-flight work; validate with builds and targeted tests instead. Commit gate, right before staging: run `./ao format` first (cheap, no compile), then `./ao hygiene` (check-only, never edits files). Order matters — formatting shifts line numbers, so collecting tidy findings before formatting strands them on stale lines and forces an extra, expensive clang-tidy pass. Fix lint findings manually against the post-format lines, then re-run `./ao hygiene` to verify; done in this order clang-tidy runs only twice (discover + verify). Explicit lint requests go through `./ao tidy`, never the raw tools.
+7. **Scratch files:** Agent throwaway artifacts go to `/tmp`, never into the repo.
+8. **Hygiene:** Do not run format or lint tools mid-session unless the user
+   explicitly asks for linting. Use builds and targeted tests while developing.
 
 > [!TIP]
-> Heavy development, no compatibility/migration constraints — propose the best approach without historical baggage.
+> Heavy development, no compatibility/migration constraints. Propose the best approach without historical baggage.
 
 ## Build and Validation
 

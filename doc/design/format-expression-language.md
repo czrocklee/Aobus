@@ -72,7 +72,7 @@ $artist + " - " + $title    # format expression
 As a result, `$artist + " - " + $title` is rejected by `QueryCompiler` and accepted by
 `FormatCompiler`.
 
-## TODO
+## Extension Points
 
 - Add fallback helpers for missing metadata, starting with `coalesce($albumArtist, $artist,
   "Unknown Artist")`.
