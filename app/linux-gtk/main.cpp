@@ -9,6 +9,7 @@
 #include "app/MainWindow.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
+#include "platform/AudioBackendBootstrap.h"
 #include "portal/ImportExportCoordinator.h"
 #include <ao/AppVersion.h>
 #include <ao/Exception.h>
@@ -95,6 +96,8 @@ namespace
                                  .musicRoot = paths.musicRoot,
                                  .databasePath = paths.databasePath,
                                  .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr)});
+
+    registerPlatformAudioBackends(*appRuntimePtr);
 
     auto windowPtr = Glib::make_refptr_for_instance<MainWindow>(
       new MainWindow{*appRuntimePtr, appConfigPtr, shellLayoutStorePtr, componentStateStorePtr});
@@ -285,6 +288,19 @@ namespace
     {
       if (window)
       {
+        try
+        {
+          window->saveSession();
+        }
+        catch (std::exception const& e)
+        {
+          APP_LOG_ERROR("Failed to save runtime during shutdown: {}", e.what());
+        }
+        catch (...)
+        {
+          APP_LOG_ERROR("Failed to save runtime during shutdown: unknown exception");
+        }
+
         app.remove_window(*window);
         window.reset();
       }

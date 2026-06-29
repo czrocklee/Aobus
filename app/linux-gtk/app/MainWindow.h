@@ -41,6 +41,7 @@ namespace ao::gtk
     MainWindow(MainWindow&&) = delete;
     MainWindow& operator=(MainWindow&&) = delete;
 
+    void saveSession();
     void on_hide() override;
 
     portal::ImportExportCoordinator& importExportCoordinator();

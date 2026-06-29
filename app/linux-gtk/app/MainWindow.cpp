@@ -118,7 +118,7 @@ namespace ao::gtk
   {
     try
     {
-      _mainWindowCoordinatorPtr->saveSession();
+      saveSession();
     }
     catch (std::exception const& e)
     {
@@ -130,9 +130,14 @@ namespace ao::gtk
     }
   }
 
-  void MainWindow::on_hide()
+  void MainWindow::saveSession()
   {
     _mainWindowCoordinatorPtr->saveSession();
+  }
+
+  void MainWindow::on_hide()
+  {
+    saveSession();
     Gtk::ApplicationWindow::on_hide();
   }
 

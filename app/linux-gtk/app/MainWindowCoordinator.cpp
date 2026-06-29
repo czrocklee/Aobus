@@ -12,7 +12,6 @@
 #include "app/UIState.h"
 #include "image/ImageCache.h"
 #include "list/ListNavigationController.h"
-#include "platform/AudioBackendBootstrap.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/ImportExportCoordinator.h"
 #include "tag/TagEditController.h"
@@ -190,8 +189,6 @@ namespace ao::gtk
   void MainWindowCoordinator::initializeSession()
   {
     _runtime.reloadAllTracks();
-
-    registerPlatformAudioBackends(_runtime);
 
     _libraryTaskCompletedSubscription = _runtime.library().changes().onLibraryTaskCompleted(
       [this](auto)
