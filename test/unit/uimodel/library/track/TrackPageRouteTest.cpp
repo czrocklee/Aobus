@@ -11,7 +11,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackPageRoute - describeSelectionRoute", "[unit][uimodel][track]")
+  TEST_CASE("TrackPageRoute - describeSelectionRoute", "[uimodel][unit][track]")
   {
     SECTION("valid view")
     {
@@ -30,7 +30,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackPageRoute - smartListParentIdFromPage", "[unit][uimodel][track]")
+  TEST_CASE("TrackPageRoute - smartListParentIdFromPage", "[uimodel][unit][track]")
   {
     CHECK(smartListParentIdFromPage(rt::kAllTracksListId) == kInvalidListId);
     CHECK(smartListParentIdFromPage(kInvalidListId) == kInvalidListId);

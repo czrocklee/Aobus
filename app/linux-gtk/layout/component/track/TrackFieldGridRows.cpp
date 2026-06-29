@@ -4,6 +4,7 @@
 #include "TrackFieldGridRows.h"
 
 #include "gtkmm/enums.h"
+#include "layout/component/track/TrackFieldGridWidgets.h"
 #include "track/TrackFieldUi.h"
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
@@ -30,12 +31,31 @@ namespace ao::gtk::layout::track_field_grid
       auto const* def = rt::trackFieldDefinition(field);
       return def != nullptr && def->category == rt::TrackFieldCategory::Technical;
     }
+
+    std::string fieldSlotCssClass(rt::TrackField const field, std::string_view const slotName)
+    {
+      auto className = std::string{"ao-track-field-grid-field-"};
+      className += std::string{rt::trackFieldId(field)};
+      className += "-";
+      className += std::string{slotName};
+      className += "-slot";
+      return className;
+    }
+
+    void addFieldSlotClasses(FixedHeightWidgetSlot& labelSlot, FixedHeightWidgetSlot& valueSlot, rt::TrackField field)
+    {
+      labelSlot.add_css_class("ao-track-field-grid-label-slot");
+      labelSlot.add_css_class(fieldSlotCssClass(field, "label"));
+      valueSlot.add_css_class("ao-track-field-grid-value-slot");
+      valueSlot.add_css_class(fieldSlotCssClass(field, "value"));
+    }
   } // namespace
 
   BuiltInRow::BuiltInRow(rt::TrackField field)
     : field{field}, labelSlot{label, false}, valueSlot{valueBox, true}, editable{isFieldEditable(field)}
   {
     labelSlot.set_hexpand(false);
+    addFieldSlotClasses(labelSlot, valueSlot, field);
     valueEditor.setEditable(editable);
 
     if (isFieldTechnical(field))
@@ -54,6 +74,8 @@ namespace ao::gtk::layout::track_field_grid
     , primaryEditableFlag{isFieldEditable(primary)}
     , secondaryEditableFlag{isFieldEditable(secondary)}
   {
+    addFieldSlotClasses(labelSlot, valueSlot, primary);
+    valueSlot.add_css_class(fieldSlotCssClass(secondary, "value"));
     primaryEditor.setEditable(primaryEditableFlag);
     secondaryEditor.setEditable(secondaryEditableFlag);
     valueBox.append(primaryEditor);
@@ -65,6 +87,8 @@ namespace ao::gtk::layout::track_field_grid
     : key{std::move(key)}, labelSlot{label, false}, deleteButton{}, valueSlot{valueBox, true}
   {
     labelSlot.set_hexpand(false);
+    labelSlot.add_css_class("ao-track-field-grid-custom-label-slot");
+    valueSlot.add_css_class("ao-track-field-grid-custom-value-slot");
     editor.setEditable(true);
     valueBox.add_css_class("ao-detail-custom-row");
     valueBox.append(editor);

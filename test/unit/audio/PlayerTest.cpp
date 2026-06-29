@@ -204,13 +204,17 @@ namespace ao::audio::test
 
       REQUIRE(onGraphChanged);
 
-      bool qualityChangedFired = false;
-      player.setOnQualityChanged([&](Quality, bool) { qualityChangedFired = true; });
+      auto qualityEvents = std::vector<std::pair<Quality, bool>>{};
+      player.setOnQualityChanged([&](Quality quality, bool ready) { qualityEvents.emplace_back(quality, ready); });
 
       onGraphChanged(flow::Graph{});
 
       auto const snap = player.status();
-      CHECK(qualityChangedFired == true);
+      CHECK(snap.quality == Quality::BitwisePerfect);
+      CHECK(snap.isReady == false);
+      REQUIRE(qualityEvents.size() == 1);
+      CHECK(qualityEvents[0].first == Quality::BitwisePerfect);
+      CHECK(qualityEvents[0].second == false);
     }
 
     SECTION("Merged graph with no system stream node")
@@ -473,8 +477,8 @@ namespace ao::audio::test
     REQUIRE(onGraphChanged);
     executor.drain();
 
-    std::int32_t qualitySignals = 0;
-    player.setOnQualityChanged([&](Quality, bool) { ++qualitySignals; });
+    auto qualityEvents = std::vector<std::pair<Quality, bool>>{};
+    player.setOnQualityChanged([&](Quality quality, bool ready) { qualityEvents.emplace_back(quality, ready); });
 
     auto worker =
       std::jthread{[&]
@@ -486,13 +490,16 @@ namespace ao::audio::test
 
     auto snap = player.status();
     CHECK(std::ranges::find(snap.flow.nodes, std::string_view{"sys-sink"}, &flow::Node::id) == snap.flow.nodes.end());
-    CHECK(qualitySignals == 0);
+    CHECK(qualityEvents.empty());
 
     executor.drain();
 
     snap = player.status();
     CHECK(std::ranges::find(snap.flow.nodes, std::string_view{"sys-sink"}, &flow::Node::id) != snap.flow.nodes.end());
-    CHECK(qualitySignals == 1);
+    CHECK(snap.quality == Quality::BitwisePerfect);
+    REQUIRE(qualityEvents.size() == 1);
+    CHECK(qualityEvents[0].first == Quality::BitwisePerfect);
+    CHECK(qualityEvents[0].second == true);
   }
 
   TEST_CASE("Player - controls update engine-backed status", "[audio][unit][player][control]")

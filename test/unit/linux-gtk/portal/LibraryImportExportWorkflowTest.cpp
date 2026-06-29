@@ -139,38 +139,46 @@ namespace ao::gtk::test
     copyMetadataFixtureToLibrary(fixture);
 
     auto optCompletedCount = std::optional<std::size_t>{};
-    bool progressFired = false;
+    auto progressEvents = std::vector<rt::LibraryChanges::LibraryTaskProgressUpdated>{};
     auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
       [&optCompletedCount](std::size_t count) { optCompletedCount = count; });
-    auto progressSub = fixture.runtime().library().changes().onLibraryTaskProgress([&progressFired](auto const&)
-                                                                                   { progressFired = true; });
+    auto progressSub = fixture.runtime().library().changes().onLibraryTaskProgress(
+      [&progressEvents](auto const& event) { progressEvents.push_back(event); });
 
     workflow.scan();
     REQUIRE(pumpGtkEventsUntil(
-      [&fixture, &mutationCallbackCount, &optCompletedCount]
+      [&fixture, &mutationCallbackCount, &optCompletedCount, &progressEvents]
       {
-        return optCompletedCount.has_value() && mutationCallbackCount == 1 &&
+        return progressEvents.size() == 2 && optCompletedCount.has_value() && mutationCallbackCount == 1 &&
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete");
       }));
     CHECK(optCompletedCount == 1U);
     CHECK(mutationCallbackCount == 1);
+    REQUIRE(progressEvents.size() == 2);
+    CHECK(progressEvents[0].message == "Scanning: song.flac");
+    CHECK(progressEvents[0].fraction == 0.0);
+    CHECK(progressEvents[1].message == "Updating: song.flac");
+    CHECK(progressEvents[1].fraction == 0.0);
     CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
 
     optCompletedCount.reset();
-    progressFired = false;
+    progressEvents.clear();
     fixture.runtime().notifications().dismissAll();
 
     workflow.scan();
 
     REQUIRE(pumpGtkEventsUntil(
-      [&fixture, &optCompletedCount, &progressFired]
+      [&fixture, &optCompletedCount, &progressEvents]
       {
-        return progressFired && optCompletedCount.has_value() &&
+        return progressEvents.size() == 1 && optCompletedCount.has_value() &&
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library is up to date");
       }));
 
     CHECK(optCompletedCount == 0U);
     CHECK(mutationCallbackCount == 1);
+    REQUIRE(progressEvents.size() == 1);
+    CHECK(progressEvents[0].message == "Scanning: song.flac");
+    CHECK(progressEvents[0].fraction == 0.0);
   }
 
   TEST_CASE("LibraryImportExportWorkflow - scan reports error-only plans without up-to-date success",

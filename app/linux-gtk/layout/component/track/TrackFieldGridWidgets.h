@@ -92,6 +92,10 @@ namespace ao::gtk::layout::track_field_grid
     void stopEditing(bool commit);
     void setCompletionProvider(rt::CompletionProvider provider);
 
+    Gtk::Label& displayLabelForTest() { return _displayLabel; }
+    Gtk::Entry& entryForTest() { return _entry; }
+    Gtk::Button& editButtonForTest() { return _editButton; }
+
     sigc::signal<void()>& signalEditStarted();
     sigc::signal<void()>& signalCommitted();
     sigc::signal<void()>& signalCanceled();

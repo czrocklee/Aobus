@@ -24,7 +24,7 @@ namespace ao::gtk::layout::test
   using namespace uimodel;
   using ao::gtk::test::makeRuntime;
 
-  TEST_CASE("LayoutHost rebuilds widget trees after layout updates", "[gtk][unit][layout][containers]")
+  TEST_CASE("LayoutHost rebuilds widget trees after layout updates", "[gtk][unit][layout][container]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 

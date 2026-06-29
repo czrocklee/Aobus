@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -91,22 +92,23 @@ namespace ao::rt::test
     auto changes = LibraryChanges{};
     auto service = LibraryTasks{runtime, testLib.library(), changes};
 
-    bool progressFired = false;
-    auto sub = changes.onLibraryTaskProgress(
-      [&](auto const& ev)
-      {
-        progressFired = true;
-        CHECK(ev.fraction >= 0.0);
-      });
+    auto progressEvents = std::vector<LibraryChanges::LibraryTaskProgressUpdated>{};
+    auto sub = changes.onLibraryTaskProgress([&](auto const& ev) { progressEvents.push_back(ev); });
 
     auto wrapperTask = [](LibraryTasks* s) -> async::Task<Result<library::ScanApplyResult>>
     {
       auto plan = library::ScanPlan{};
-      auto item = library::ScanItem{};
-      item.uri = "file:///fake/path.flac";
-      item.fullPath = "/fake/path.flac";
-      item.classification = library::ScanClassification::New;
-      plan.items.push_back(item);
+      auto firstItem = library::ScanItem{};
+      firstItem.uri = "file:///fake/first.flac";
+      firstItem.fullPath = "/fake/first.flac";
+      firstItem.classification = library::ScanClassification::New;
+      plan.items.push_back(firstItem);
+
+      auto secondItem = library::ScanItem{};
+      secondItem.uri = "file:///fake/second.flac";
+      secondItem.fullPath = "/fake/second.flac";
+      secondItem.classification = library::ScanClassification::New;
+      plan.items.push_back(secondItem);
       co_return co_await s->applyScanPlanAsync(std::move(plan));
     };
 
@@ -115,7 +117,19 @@ namespace ao::rt::test
 
     REQUIRE(result);
     CHECK(result->processedIds.empty());
-    CHECK(result->failureCount == 1);
-    CHECK(progressFired);
+    CHECK(result->failureCount == 2);
+
+    REQUIRE(progressEvents.size() == 2);
+    CHECK(progressEvents[0].message == "Updating: first.flac");
+    CHECK(progressEvents[0].fraction == 0.0);
+    CHECK(progressEvents[1].message == "Updating: second.flac");
+    CHECK(progressEvents[1].fraction == 0.5);
+
+    for (auto const& event : progressEvents)
+    {
+      CHECK(event.fraction >= 0.0);
+      CHECK(event.fraction <= 1.0);
+      CHECK_FALSE(event.message.empty());
+    }
   }
 } // namespace ao::rt::test

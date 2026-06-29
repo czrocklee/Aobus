@@ -10,7 +10,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("PlaybackPositionInterpolator - calculations", "[unit][uimodel][playback]")
+  TEST_CASE("PlaybackPositionInterpolator - calculations", "[uimodel][unit][playback]")
   {
     auto interpolator = PlaybackPositionInterpolator{};
 

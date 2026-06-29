@@ -8,7 +8,6 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/StateTypes.h>
-#include <ao/uimodel/status/activity/ActivityStatusModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -112,7 +111,6 @@ namespace ao::gtk::test
     SECTION("ambient idle is hidden")
     {
       CHECK_FALSE(status.widget().get_visible());
-      CHECK(status.viewStateForTest().compact.kind == uimodel::ActivityStatusKind::Idle);
       CHECK(hasCssClass(status.widget(), "ao-activity-status-ambient"));
       CHECK_FALSE(hasCssClass(status.widget(), "ao-activity-status-classic-inline"));
     }
@@ -138,7 +136,7 @@ namespace ao::gtk::test
       mounted.drain();
 
       CHECK_FALSE(status.widget().get_visible());
-      CHECK(status.viewStateForTest().detail.items.empty());
+      CHECK(findWidgetByClass<Gtk::Label>(status.detailContentForTest(), "ao-activity-detail-title") == nullptr);
     }
   }
 
@@ -157,7 +155,10 @@ namespace ao::gtk::test
 
     CHECK_FALSE(status.widget().get_visible());
     CHECK(runtime.notifications().feed().entries.size() == 1);
-    CHECK(status.viewStateForTest().detail.items.size() == 1);
+    auto* const retainedTitle =
+      findWidgetByClass<Gtk::Label>(status.detailContentForTest(), "ao-activity-detail-title");
+    REQUIRE(retainedTitle != nullptr);
+    CHECK(retainedTitle->get_text() == "Scan failed");
   }
 
   TEST_CASE("ActivityStatus - enables minimal detail popover only when detail exists", "[gtk][unit][status][activity]")
@@ -203,7 +204,9 @@ namespace ao::gtk::test
       CHECK_FALSE(status.widget().get_visible());
       CHECK_FALSE(status.detailButtonForTest().get_sensitive());
       CHECK_FALSE(hasCssClass(status.widget(), "ao-activity-status-openable"));
-      REQUIRE(status.viewStateForTest().detail.items.size() == 1);
+      auto* const title = findWidgetByClass<Gtk::Label>(status.detailContentForTest(), "ao-activity-detail-title");
+      REQUIRE(title != nullptr);
+      CHECK(title->get_text() == "Index diagnostic");
     }
 
     SECTION("open detail closes when compact status becomes hidden")
@@ -249,7 +252,7 @@ namespace ao::gtk::test
     mounted.drain();
 
     CHECK(runtime.notifications().feed().entries.size() == 1);
-    CHECK(status.viewStateForTest().detail.items.empty());
+    CHECK(findWidgetByClass<Gtk::Label>(status.detailContentForTest(), "ao-activity-detail-title") == nullptr);
     CHECK_FALSE(status.widget().get_visible());
     CHECK_FALSE(status.detailButtonForTest().get_sensitive());
   }

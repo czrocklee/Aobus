@@ -7,8 +7,12 @@
 #include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>
+
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -16,15 +20,13 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
 
-    bool revealFired = false;
-    auto sub = fixture.playbackService.onRevealTrackRequested(
-      [&](auto const& ev)
-      {
-        revealFired = true;
-        CHECK(ev.trackId == TrackId{42});
-      });
+    auto revealRequests = std::vector<PlaybackService::RevealTrackRequested>{};
+    auto sub = fixture.playbackService.onRevealTrackRequested([&](auto const& ev) { revealRequests.push_back(ev); });
     fixture.playbackService.revealTrack(TrackId{42});
-    CHECK(revealFired);
+    REQUIRE(revealRequests.size() == 1);
+    CHECK(revealRequests[0].trackId == TrackId{42});
+    CHECK(revealRequests[0].preferredListId == kInvalidListId);
+    CHECK(revealRequests[0].preferredViewId == kInvalidViewId);
   }
 
   TEST_CASE("PlaybackService selection - playSelectionInView fails with empty selection",
@@ -96,10 +98,13 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
 
-    bool revealFired = false;
-    auto sub = fixture.playbackService.onRevealTrackRequested([&](PlaybackService::RevealTrackRequested const& /*ev*/)
-                                                              { revealFired = true; });
+    auto revealRequests = std::vector<PlaybackService::RevealTrackRequested>{};
+    auto sub = fixture.playbackService.onRevealTrackRequested([&](PlaybackService::RevealTrackRequested const& ev)
+                                                              { revealRequests.push_back(ev); });
     fixture.playbackService.revealPlayingTrack();
-    CHECK(revealFired);
+    REQUIRE(revealRequests.size() == 1);
+    CHECK(revealRequests[0].trackId == kInvalidTrackId);
+    CHECK(revealRequests[0].preferredListId == kInvalidListId);
+    CHECK(revealRequests[0].preferredViewId == kInvalidViewId);
   }
 } // namespace ao::rt::test

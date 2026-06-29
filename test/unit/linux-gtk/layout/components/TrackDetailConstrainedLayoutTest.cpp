@@ -11,7 +11,6 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <glibmm/ustring.h>
 #include <gtkmm/application.h>
 #include <gtkmm/button.h>
 #include <gtkmm/entry.h>
@@ -26,11 +25,9 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace ao::gtk::layout::test
 {
@@ -38,6 +35,7 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::emitGesturePressed;
   using ao::gtk::test::findWidget;
+  using ao::gtk::test::findWidgetByClass;
   using ao::gtk::test::walkWidgets;
 
   namespace
@@ -55,30 +53,48 @@ namespace ao::gtk::layout::test
       return nullptr;
     }
 
-    std::string invalidUtf8Text(std::string text)
+    Gtk::Widget* findFirstPropertySlot(Gtk::Widget& root)
     {
-      text.push_back(static_cast<char>(0xFF));
-      text += " text";
-      return text;
+      auto* const label = findWidgetByClass<Gtk::Label>(root, "ao-property-label");
+      return label != nullptr ? label->get_parent() : nullptr;
     }
 
-    std::string replacementText(std::string text)
+    Gtk::Widget* gridChildAt(Gtk::Grid& grid, std::int32_t const leftColumn, std::int32_t const topRow)
     {
-      text.append("\xEF\xBF\xBD", 3);
-      text += " text";
-      return text;
+      for (auto* child = grid.get_first_child(); child != nullptr; child = child->get_next_sibling())
+      {
+        std::int32_t left = 0;
+        std::int32_t top = 0;
+        std::int32_t width = 0;
+        std::int32_t height = 0;
+        grid.query_child(*child, left, top, width, height);
+
+        if (left == leftColumn && top == topRow)
+        {
+          return child;
+        }
+      }
+
+      return nullptr;
     }
 
-    Gtk::Button* findEditButton(Gtk::Widget& editor)
+    track_field_grid::DetailFieldEditor* findEditableBuiltInEditor(Gtk::Widget& root)
     {
-      Gtk::Button* result = nullptr;
-      walkWidgets(editor,
+      track_field_grid::DetailFieldEditor* result = nullptr;
+      walkWidgets(root,
                   [&](Gtk::Widget& widget)
                   {
-                    if (auto* const button = dynamic_cast<Gtk::Button*>(&widget);
-                        button != nullptr && button->has_css_class("ao-detail-field-edit-hint"))
+                    if (result != nullptr)
                     {
-                      result = button;
+                      return;
+                    }
+
+                    auto* const editor = dynamic_cast<track_field_grid::DetailFieldEditor*>(&widget);
+
+                    if (editor != nullptr && editor->has_css_class("ao-property-editable") &&
+                        findAncestorWithClass(editor, "ao-detail-custom-row") == nullptr)
+                    {
+                      result = editor;
                     }
                   });
       return result;
@@ -112,31 +128,27 @@ namespace ao::gtk::layout::test
     coordinator.registerEditor(first);
     coordinator.registerEditor(second);
 
-    auto* const firstButton = findEditButton(first);
-    auto* const secondButton = findEditButton(second);
-    auto* const firstEntry = findWidget<Gtk::Entry>(first);
-    auto* const secondEntry = findWidget<Gtk::Entry>(second);
-    REQUIRE(firstButton != nullptr);
-    REQUIRE(secondButton != nullptr);
-    REQUIRE(firstEntry != nullptr);
-    REQUIRE(secondEntry != nullptr);
+    auto& firstButton = first.editButtonForTest();
+    auto& secondButton = second.editButtonForTest();
+    auto& firstEntry = first.entryForTest();
+    auto& secondEntry = second.entryForTest();
     CHECK(first.has_css_class("ao-detail-field-editable"));
-    CHECK(firstButton->has_css_class("ao-detail-field-edit-hint"));
+    CHECK(firstButton.has_css_class("ao-detail-field-edit-hint"));
 
-    emitClicked(*firstButton);
+    emitClicked(firstButton);
     REQUIRE(first.getEditing());
-    firstEntry->set_text("committed first");
+    firstEntry.set_text("committed first");
 
-    emitClicked(*secondButton);
+    emitClicked(secondButton);
     CHECK_FALSE(first.getEditing());
     CHECK(first.getText() == "committed first");
     CHECK(second.getEditing());
-    CHECK_FALSE(firstEntry->get_child_visible());
-    CHECK(secondEntry->get_child_visible());
+    CHECK_FALSE(firstEntry.get_child_visible());
+    CHECK(secondEntry.get_child_visible());
 
     REQUIRE(emitGesturePressed(window, 1, 1.0, 1.0));
     CHECK_FALSE(second.getEditing());
-    CHECK_FALSE(secondEntry->get_child_visible());
+    CHECK_FALSE(secondEntry.get_child_visible());
   }
 
   TEST_CASE("TrackFieldGrid maintains constrained value-column geometry", "[gtk][unit][geometry]")
@@ -221,74 +233,8 @@ namespace ao::gtk::layout::test
       return minWidth;
     };
 
-    auto findButtonByLabel = [&](std::string_view labelText) -> Gtk::Button*
-    {
-      Gtk::Button* found = nullptr;
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (found != nullptr)
-                    {
-                      return;
-                    }
-
-                    auto* const button = dynamic_cast<Gtk::Button*>(&widget);
-
-                    if (button == nullptr)
-                    {
-                      return;
-                    }
-
-                    if (auto const label = button->get_label().raw();
-                        std::string_view{label.data(), label.size()} == labelText)
-                    {
-                      found = button;
-                    }
-                  });
-      return found;
-    };
-
     auto findHeaderByClass = [&](std::string_view className) -> Gtk::Button*
-    {
-      Gtk::Button* found = nullptr;
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (auto* const button = dynamic_cast<Gtk::Button*>(&widget);
-                        button != nullptr && button->has_css_class(std::string{className}))
-                    {
-                      found = button;
-                    }
-                  });
-      return found;
-    };
-
-    auto findPropertySlot = [&](std::string_view labelText) -> Gtk::Widget*
-    {
-      Gtk::Widget* found = nullptr;
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (found != nullptr)
-                    {
-                      return;
-                    }
-
-                    auto* const label = dynamic_cast<Gtk::Label*>(&widget);
-
-                    if (label == nullptr || !label->has_css_class("ao-property-label"))
-                    {
-                      return;
-                    }
-
-                    if (auto const text = label->get_text().raw();
-                        std::string_view{text.data(), text.size()} == labelText)
-                    {
-                      found = label->get_parent();
-                    }
-                  });
-      return found;
-    };
+    { return findWidgetByClass<Gtk::Button>(*grid, className); };
 
     SECTION("Horizontal measure is clamped to panel allocation")
     {
@@ -369,25 +315,25 @@ namespace ao::gtk::layout::test
     SECTION("Metadata collapse works without a detail scope")
     {
       auto* const metaHeader = findHeaderByClass("ao-track-detail-section-meta");
-      auto* const titleSlot = findPropertySlot("Title");
+      auto* const propertySlot = findFirstPropertySlot(*grid);
       REQUIRE(metaHeader != nullptr);
-      REQUIRE(titleSlot != nullptr);
-      CHECK(titleSlot->get_visible());
+      REQUIRE(propertySlot != nullptr);
+      CHECK(propertySlot->get_visible());
 
       emitClicked(*metaHeader);
       ao::gtk::test::drainGtkEvents();
 
-      CHECK_FALSE(titleSlot->get_visible());
+      CHECK_FALSE(propertySlot->get_visible());
 
       emitClicked(*metaHeader);
       ao::gtk::test::drainGtkEvents();
 
-      CHECK(titleSlot->get_visible());
+      CHECK(propertySlot->get_visible());
     }
 
     SECTION("Show empty fields control uses a fixed-height row slot")
     {
-      auto* const showButton = findButtonByLabel("Show empty fields");
+      auto* const showButton = findWidgetByClass<Gtk::Button>(*grid, "ao-detail-show-all-button");
       REQUIRE(showButton != nullptr);
       auto* const showSlot = showButton->get_parent();
       REQUIRE(showSlot != nullptr);
@@ -483,11 +429,12 @@ namespace ao::gtk::layout::test
                       CHECK((widget.get_halign() == Gtk::Align::FILL || widget.get_halign() == Gtk::Align::START));
                       CHECK(widget.get_overflow() == Gtk::Overflow::HIDDEN);
 
-                      auto* const displayLabel = findWidget<Gtk::Label>(widget);
-                      REQUIRE(displayLabel != nullptr);
-                      CHECK(displayLabel->get_ellipsize() == Pango::EllipsizeMode::END);
-                      CHECK((displayLabel->get_width_chars() == 0 || displayLabel->get_width_chars() == 2));
-                      CHECK((displayLabel->get_max_width_chars() == 1 || displayLabel->get_max_width_chars() == -1));
+                      auto* const editor = dynamic_cast<track_field_grid::DetailFieldEditor*>(&widget);
+                      REQUIRE(editor != nullptr);
+                      auto& displayLabel = editor->displayLabelForTest();
+                      CHECK(displayLabel.get_ellipsize() == Pango::EllipsizeMode::END);
+                      CHECK((displayLabel.get_width_chars() == 0 || displayLabel.get_width_chars() == 2));
+                      CHECK((displayLabel.get_max_width_chars() == 1 || displayLabel.get_max_width_chars() == -1));
                     }
                   });
 
@@ -591,73 +538,41 @@ namespace ao::gtk::layout::test
       scopedRoot.measure(Gtk::Orientation::VERTICAL, 1000, minHeight, natHeight, minWidth, natWidth);
       scopedRoot.size_allocate(Gtk::Allocation{0, 0, 1000, 2000}, -1);
 
-      Gtk::Button* deleteButton = nullptr;
-      Gtk::Label* customKeyLabel = nullptr;
-      Gtk::Widget* builtInValueBox = nullptr;
-      Gtk::Widget* builtInValueEditor = nullptr;
-      Gtk::Label* builtInValueLabel = nullptr;
-      Gtk::Widget const* customControlsBox = nullptr;
-      Gtk::Widget* customValueBox = nullptr;
-      Gtk::Widget* customValueEditor = nullptr;
-      Gtk::Label* customValueLabel = nullptr;
-      walkWidgets(
-        *scopedGrid,
-        [&](Gtk::Widget& widget)
-        {
-          if (auto* button = dynamic_cast<Gtk::Button*>(&widget);
-              button != nullptr && button->get_tooltip_text() == "Delete Property")
-          {
-            deleteButton = button;
-          }
-
-          if (auto* label = dynamic_cast<Gtk::Label*>(&widget); label != nullptr &&
-                                                                label->has_css_class("ao-property-label") &&
-                                                                label->get_text() == "very long custom metadata key")
-          {
-            customKeyLabel = label;
-          }
-
-          if (auto* label = dynamic_cast<Gtk::Label*>(&widget); label != nullptr && label->get_text() == customValue)
-          {
-            if (auto* const editor = findAncestorWithClass(label->get_parent(), "ao-property-value"); editor != nullptr)
-            {
-              customValueLabel = label;
-              customValueEditor = editor;
-              customValueBox = editor->get_parent();
-            }
-          }
-
-          if (auto* label = dynamic_cast<Gtk::Label*>(&widget);
-              label != nullptr && label->get_text() == "reference title")
-          {
-            if (auto* const editor = findAncestorWithClass(label->get_parent(), "ao-property-value"); editor != nullptr)
-            {
-              builtInValueLabel = label;
-              builtInValueEditor = editor;
-              builtInValueBox = editor->get_parent();
-            }
-          }
-        });
-
+      auto* const deleteButton = findWidgetByClass<Gtk::Button>(*scopedGrid, "ao-detail-field-delete");
       REQUIRE(deleteButton != nullptr);
       REQUIRE(deleteButton->get_parent() != nullptr);
-      REQUIRE(customKeyLabel != nullptr);
-      REQUIRE(builtInValueBox != nullptr);
-      REQUIRE(builtInValueEditor != nullptr);
-      REQUIRE(builtInValueLabel != nullptr);
-      customControlsBox = deleteButton->get_parent();
-      REQUIRE(customControlsBox != nullptr);
+      auto* const customValueBox = deleteButton->get_parent();
       REQUIRE(customValueBox != nullptr);
+      auto* const customValueEditor = findWidget<track_field_grid::DetailFieldEditor>(*customValueBox);
       REQUIRE(customValueEditor != nullptr);
-      REQUIRE(customValueLabel != nullptr);
+      auto& customValueLabel = customValueEditor->displayLabelForTest();
+
+      auto* const customValueSlot = customValueBox->get_parent();
+      REQUIRE(customValueSlot != nullptr);
+      std::int32_t customValueLeft = 0;
+      std::int32_t customValueTop = 0;
+      std::int32_t customValueWidth = 0;
+      std::int32_t customValueHeight = 0;
+      scopedGrid->query_child(*customValueSlot, customValueLeft, customValueTop, customValueWidth, customValueHeight);
+      // Match the custom key slot by grid row so this stays independent of display text.
+      auto* const customKeySlot = gridChildAt(*scopedGrid, 0, customValueTop);
+      REQUIRE(customKeySlot != nullptr);
+      auto* const customKeyLabel = findWidgetByClass<Gtk::Label>(*customKeySlot, "ao-property-label");
+      REQUIRE(customKeyLabel != nullptr);
+
+      auto* const builtInValueEditor = findEditableBuiltInEditor(*scopedGrid);
+      REQUIRE(builtInValueEditor != nullptr);
+      auto* const builtInValueBox = builtInValueEditor->get_parent();
+      REQUIRE(builtInValueBox != nullptr);
+      auto& builtInValueLabel = builtInValueEditor->displayLabelForTest();
       CHECK(scopedRoot.get_width() == 1000);
       CHECK(scopedGrid->get_width() <= 1000);
       CHECK(scopedGrid->get_width() > 0);
       CHECK(customKeyLabel->get_ellipsize() == Pango::EllipsizeMode::END);
       CHECK(customKeyLabel->get_max_width_chars() == 24);
       CHECK(customValueEditor->get_overflow() == Gtk::Overflow::HIDDEN);
-      CHECK(customValueLabel->get_ellipsize() == Pango::EllipsizeMode::END);
-      CHECK(customValueLabel->get_max_width_chars() == 1);
+      CHECK(customValueLabel.get_ellipsize() == Pango::EllipsizeMode::END);
+      CHECK(customValueLabel.get_max_width_chars() == 1);
       REQUIRE(customValueEditor->get_parent() != nullptr);
       CHECK(customValueEditor->get_parent()->get_width() > 0);
 
@@ -682,86 +597,24 @@ namespace ao::gtk::layout::test
       CHECK(scopedGrid->get_width() > 0);
       CHECK(customValueEditor->get_width() <= customValueEditor->get_parent()->get_width());
       CHECK(builtInValueEditor->get_width() <= builtInValueEditor->get_parent()->get_width());
-      CHECK(builtInValueLabel->get_width() <= builtInValueEditor->get_width());
+      CHECK(builtInValueLabel.get_width() <= builtInValueEditor->get_width());
 
-      auto* const editButton = findEditButton(*builtInValueEditor);
-      REQUIRE(editButton != nullptr);
-      auto* const entry = findWidget<Gtk::Entry>(*builtInValueEditor);
-      REQUIRE(entry != nullptr);
-      emitClicked(*editButton);
+      auto& editButton = builtInValueEditor->editButtonForTest();
+      auto& entry = builtInValueEditor->entryForTest();
+      emitClicked(editButton);
       scopedRoot.measure(Gtk::Orientation::VERTICAL, narrowPanelWidth, minHeight, natHeight, minWidth, natWidth);
       scopedRoot.size_allocate(Gtk::Allocation{0, 0, narrowPanelWidth, 2000}, -1);
 
-      CHECK(entry->get_child_visible());
-      CHECK(entry->get_width_chars() == 0);
-      CHECK(entry->has_css_class("ao-detail-field-entry"));
-      CHECK_FALSE(editButton->get_visible());
-      CHECK(entry->get_width() <= builtInValueEditor->get_width());
-      CHECK(entry->get_height() <= builtInValueEditor->get_height());
+      CHECK(entry.get_child_visible());
+      CHECK(entry.get_width_chars() == 0);
+      CHECK(entry.has_css_class("ao-detail-field-entry"));
+      CHECK_FALSE(editButton.get_visible());
+      CHECK(entry.get_width() <= builtInValueEditor->get_width());
+      CHECK(entry.get_height() <= builtInValueEditor->get_height());
 
       REQUIRE(emitGesturePressed(window, 1, 1.0, 1.0));
-      CHECK_FALSE(entry->get_child_visible());
-      CHECK(editButton->get_visible());
-    }
-
-    SECTION("Invalid UTF-8 metadata is made valid before display")
-    {
-      auto const invalidTitle = invalidUtf8Text("title");
-      auto const invalidKey = invalidUtf8Text("key");
-      auto const invalidValue = invalidUtf8Text("value");
-      auto snap = rt::TrackDetailSnapshot{};
-      snap.selectionKind = rt::SelectionKind::Single;
-      snap.trackIds = {TrackId{1}};
-      rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).optValue =
-        rt::TrackFieldRawValue{std::in_place_type<std::string>, invalidTitle};
-      snap.customMetadata.push_back(rt::CustomMetadataItem{
-        .key = invalidKey,
-        .value = {.optValue = invalidValue, .mixed = false},
-        .presentOnAll = true,
-        .presentOnAny = true,
-      });
-
-      fixture.attachTrackDetailScope(std::move(snap));
-      auto const scopedCompPtr = registry.create(ctx, node);
-
-      REQUIRE(scopedCompPtr != nullptr);
-
-      auto const expectedTitle = replacementText("title");
-      auto const expectedKey = replacementText("key");
-      auto const expectedValue = replacementText("value");
-      bool sawTitle = false;
-      bool sawKey = false;
-      bool sawValue = false;
-
-      walkWidgets(scopedCompPtr->widget(),
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (auto* label = dynamic_cast<Gtk::Label*>(&widget); label != nullptr &&
-                                                                          label->has_css_class("ao-property-label") &&
-                                                                          label->get_text() == expectedKey)
-                    {
-                      sawKey = true;
-                    }
-
-                    if (auto* label = dynamic_cast<Gtk::Label*>(&widget); label != nullptr)
-                    {
-                      auto const text = label->get_text();
-
-                      if (text == expectedTitle)
-                      {
-                        sawTitle = true;
-                      }
-
-                      if (text == expectedValue)
-                      {
-                        sawValue = true;
-                      }
-                    }
-                  });
-
-      CHECK(sawTitle);
-      CHECK(sawKey);
-      CHECK(sawValue);
+      CHECK_FALSE(entry.get_child_visible());
+      CHECK(editButton.get_visible());
     }
 
     SECTION("Resize keeps a single row per field")

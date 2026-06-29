@@ -20,10 +20,15 @@ extern "C"
 #include <pipewire/thread-loop.h>
 }
 
+#include <algorithm>
 #include <chrono>
-#include <cstdint>
+#include <condition_variable>
+#include <cstddef>
 #include <memory>
-#include <thread>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::backend::test
@@ -109,6 +114,67 @@ namespace ao::audio::backend::test
 
       bool isValid() const { return proxyPtr != nullptr; }
     };
+
+    class DeviceSnapshotObserver final
+    {
+    public:
+      void update(std::vector<Device> devices)
+      {
+        {
+          auto lock = std::scoped_lock{_mutex};
+          _devices = std::move(devices);
+          ++_updateCount;
+        }
+
+        _cv.notify_all();
+      }
+
+      bool waitUntilContains(std::string_view expectedNameOrId, std::chrono::milliseconds timeout)
+      {
+        auto lock = std::unique_lock{_mutex};
+        return _cv.wait_for(lock, timeout, [this, expectedNameOrId] { return containsDeviceLocked(expectedNameOrId); });
+      }
+
+      std::string describeSnapshot() const
+      {
+        auto lock = std::scoped_lock{_mutex};
+        auto description = std::string{"["};
+
+        for (auto const& device : _devices)
+        {
+          if (description.size() > 1)
+          {
+            description += ", ";
+          }
+
+          description += device.id.raw();
+          description += "/";
+          description += device.displayName;
+        }
+
+        description += "]";
+        return description;
+      }
+
+      std::size_t updateCount() const
+      {
+        auto lock = std::scoped_lock{_mutex};
+        return _updateCount;
+      }
+
+    private:
+      bool containsDeviceLocked(std::string_view expectedNameOrId) const
+      {
+        return std::ranges::any_of(_devices,
+                                   [&](auto const& device)
+                                   { return device.displayName == expectedNameOrId || device.id == expectedNameOrId; });
+      }
+
+      mutable std::mutex _mutex;
+      std::condition_variable _cv;
+      std::vector<Device> _devices;
+      std::size_t _updateCount = 0;
+    };
   } // namespace
 
   TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integration][pipewire]")
@@ -138,35 +204,17 @@ namespace ao::audio::backend::test
 
     REQUIRE(sinkGuard.isValid());
 
-    auto currentDevicesPtr = std::make_shared<std::vector<Device>>();
     auto provider = PipeWireProvider{};
-    auto const sub = provider.subscribeDevices([currentDevicesPtr](std::vector<Device> const& devices)
-                                               { *currentDevicesPtr = devices; });
+    auto devicesPtr = std::make_shared<DeviceSnapshotObserver>();
+    auto const sub = provider.subscribeDevices([devicesPtr](std::vector<Device> const& nextDevices)
+                                               { devicesPtr->update(nextDevices); });
 
     SECTION("Enumeration finds the dummy sink")
     {
-      bool found = false;
+      auto const found = devicesPtr->waitUntilContains("rs-test-dummy-sink", std::chrono::seconds{1});
 
-      // Wait a bit for PipeWire to propagate the new node to the provider's registry
-      for (std::int32_t i = 0; i < 20; ++i)
-      {
-        for (auto const& d : *currentDevicesPtr)
-        {
-          if (d.displayName == "rs-test-dummy-sink" || d.id == "rs-test-dummy-sink")
-          {
-            found = true;
-            break;
-          }
-        }
-
-        if (found)
-        {
-          break;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds{50});
-      }
-
+      INFO("Expected PipeWire device 'rs-test-dummy-sink' after 1s; observed "
+           << devicesPtr->updateCount() << " device snapshots: " << devicesPtr->describeSnapshot());
       CHECK(found);
     }
 
@@ -207,27 +255,10 @@ namespace ao::audio::backend::test
 
       if (proxyPtr)
       {
-        bool found = false;
+        auto const found = devicesPtr->waitUntilContains("ao-test-duplex-sink", std::chrono::seconds{1});
 
-        for (std::int32_t i = 0; i < 20; ++i)
-        {
-          for (auto const& d : *currentDevicesPtr)
-          {
-            if (d.displayName == "ao-test-duplex-sink" || d.id == "ao-test-duplex-sink")
-            {
-              found = true;
-              break;
-            }
-          }
-
-          if (found)
-          {
-            break;
-          }
-
-          std::this_thread::sleep_for(std::chrono::milliseconds{50});
-        }
-
+        INFO("Expected PipeWire device 'ao-test-duplex-sink' after 1s; observed "
+             << devicesPtr->updateCount() << " device snapshots: " << devicesPtr->describeSnapshot());
         CHECK(found);
       }
 

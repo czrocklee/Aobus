@@ -18,7 +18,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("AobusSoulViewModel - view state generation", "[unit][uimodel][playback]")
+  TEST_CASE("AobusSoulViewModel - view state generation", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};

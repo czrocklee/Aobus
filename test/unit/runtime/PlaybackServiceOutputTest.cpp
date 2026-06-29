@@ -2,13 +2,16 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/audio/Backend.h>
+#include <ao/audio/IRenderTarget.h>
 #include <ao/rt/StateTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -38,13 +41,8 @@ namespace ao::rt::test
         lastOutput = ev;
       });
 
-    bool qualityChangedFired = false;
-    auto sub3 = fixture.playbackService.onQualityChanged(
-      [&](auto const& ev)
-      {
-        qualityChangedFired = true;
-        CHECK(ev.ready == true);
-      });
+    auto qualityEvents = std::vector<PlaybackService::QualityChanged>{};
+    auto sub3 = fixture.playbackService.onQualityChanged([&](auto const& ev) { qualityEvents.push_back(ev); });
 
     fixture.playbackService.setOutput(
       audio::BackendId{"mock_backend"}, audio::DeviceId{"mock_device"}, audio::ProfileId{audio::kProfileShared});
@@ -57,6 +55,31 @@ namespace ao::rt::test
     CHECK(lastOutput.deviceId == audio::DeviceId{"mock_device"});
     CHECK(lastOutput.profileId == audio::ProfileId{audio::kProfileShared});
     CHECK(lastOutput == fixture.playbackService.state().selectedOutput);
+    CHECK(qualityEvents.empty());
+
+    auto qualityFixture = PlaybackFixture<QueuedExecutor>{};
+    auto routedQualityEvents = std::vector<PlaybackService::QualityChanged>{};
+    auto qualitySub =
+      qualityFixture.playbackService.onQualityChanged([&](auto const& ev) { routedQualityEvents.push_back(ev); });
+
+    qualityFixture.onDevicesChangedCb(qualityFixture.status.devices);
+    qualityFixture.executor.drain();
+    CHECK(routedQualityEvents.empty());
+
+    auto const testFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    auto const desc =
+      playbackRequest(TrackId{1}, testFile.string(), "Fake Track", "Fake Artist", std::chrono::minutes{2});
+    CHECK(qualityFixture.playbackService.play(desc, ListId{1}));
+    REQUIRE(qualityFixture.renderTarget != nullptr);
+
+    qualityFixture.renderTarget->onRouteReady("mock_anchor");
+    REQUIRE(qualityFixture.executor.drainUntil([&] { return !routedQualityEvents.empty(); }));
+
+    REQUIRE(routedQualityEvents.size() == 1);
+    CHECK(routedQualityEvents[0].quality == audio::Quality::BitwisePerfect);
+    CHECK(routedQualityEvents[0].ready == true);
+    CHECK(routedQualityEvents[0].quality == qualityFixture.playbackService.state().quality);
+    CHECK(routedQualityEvents[0].ready == qualityFixture.playbackService.state().ready);
   }
 
   TEST_CASE("PlaybackService output - device notification auto-configures output before first play",

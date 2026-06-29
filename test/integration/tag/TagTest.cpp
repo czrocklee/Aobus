@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/lmdb/TestUtils.h"
+#include <ao/Type.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -12,8 +13,13 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <lmdb.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <span>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace fs = std::filesystem;
@@ -40,9 +46,33 @@ namespace ao::tag::test
       REQUIRE(trackResult);
       return {.filePtr = std::move(*fileResult), .builder = *trackResult};
     }
+
+    bool hasPngSignature(std::span<std::byte const> bytes)
+    {
+      return bytes.size() >= 8 && bytes[0] == std::byte{0x89} && bytes[1] == std::byte{0x50} &&
+             bytes[2] == std::byte{0x4E} && bytes[3] == std::byte{0x47} && bytes[4] == std::byte{0x0D} &&
+             bytes[5] == std::byte{0x0A} && bytes[6] == std::byte{0x1A} && bytes[7] == std::byte{0x0A};
+    }
+
+    std::uint32_t readPngBigEndian32(std::span<std::byte const> bytes, std::size_t offset)
+    {
+      REQUIRE(bytes.size() >= offset + 4);
+
+      return (static_cast<std::uint32_t>(bytes[offset]) << 24U) |
+             (static_cast<std::uint32_t>(bytes[offset + 1]) << 16U) |
+             (static_cast<std::uint32_t>(bytes[offset + 2]) << 8U) | static_cast<std::uint32_t>(bytes[offset + 3]);
+    }
+
+    void checkOnePixelPng(std::span<std::byte const> bytes)
+    {
+      REQUIRE(bytes.size() >= 24);
+      CHECK(hasPngSignature(bytes));
+      CHECK(readPngBigEndian32(bytes, 16) == 1U);
+      CHECK(readPngBigEndian32(bytes, 20) == 1U);
+    }
   } // namespace
 
-  TEST_CASE("Tag reading - basic metadata", "[tag][integration]")
+  TEST_CASE("TagReader - basic fixture exposes metadata", "[tag][integration][metadata]")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
@@ -64,7 +94,7 @@ namespace ao::tag::test
   // ============================================================================
   // Tag Reading Tests - HiRes Metadata
   // ============================================================================
-  TEST_CASE("Tag reading - hires metadata", "[tag][integration]")
+  TEST_CASE("TagReader - hires fixture exposes metadata", "[tag][integration][metadata]")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("hires." + std::string{format});
@@ -86,7 +116,7 @@ namespace ao::tag::test
   // ============================================================================
   // Tag Reading Tests - Audio Properties
   // ============================================================================
-  TEST_CASE("Tag reading - audio properties", "[tag][integration]")
+  TEST_CASE("TagReader - basic fixture exposes audio properties", "[tag][integration][property]")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
@@ -112,7 +142,7 @@ namespace ao::tag::test
     CHECK(prop.bitrate() >= 56000);
   }
 
-  TEST_CASE("Tag reading - hires audio properties", "[tag][integration]")
+  TEST_CASE("TagReader - hires fixture exposes audio properties", "[tag][integration][property]")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("hires." + std::string{format});
@@ -160,7 +190,7 @@ namespace ao::tag::test
   // ============================================================================
   // Cover Art Extraction Tests
   // ============================================================================
-  TEST_CASE("Cover art extraction", "[tag][integration]")
+  TEST_CASE("TagReader - cover art fixture exposes primary artwork", "[tag][integration][cover-art]")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("with_cover." + std::string{format});
@@ -184,17 +214,28 @@ namespace ao::tag::test
 
     // Check cover art is present via TrackView
     auto const view = library::TrackView{hotData, coldData};
-    CHECK(view.coverArt().count() > 0);
+    REQUIRE(view.coverArt().count() == 1);
     auto const expectedType =
       std::string_view{format} == "m4a" ? library::PictureType::FrontCover : library::PictureType::Other;
-    CHECK(view.coverArt().at(0).type == expectedType);
-    CHECK(view.coverArt().primary().has_value());
+    auto const cover = view.coverArt().at(0);
+    CHECK(cover.type == expectedType);
+    CHECK(cover.resourceId != kInvalidResourceId);
+
+    auto const optPrimary = view.coverArt().primary();
+    REQUIRE(optPrimary);
+    CHECK(optPrimary->type == cover.type);
+    CHECK(optPrimary->resourceId == cover.resourceId);
+
+    auto const optStoredBytes = resources.writer(wtxn).get(cover.resourceId);
+    REQUIRE(optStoredBytes);
+    CHECK_FALSE(optStoredBytes->empty());
+    checkOnePixelPng(*optStoredBytes);
   }
 
   // ============================================================================
   // Empty/Missing Metadata Tests
   // ============================================================================
-  TEST_CASE("Tag reading - empty metadata", "[tag][integration]")
+  TEST_CASE("TagReader - empty fixture exposes empty metadata", "[tag][integration][metadata]")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3");
     auto const path = kTestDataDir / ("empty." + std::string{format});

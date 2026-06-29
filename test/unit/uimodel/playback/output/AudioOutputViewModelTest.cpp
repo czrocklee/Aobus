@@ -116,7 +116,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("AudioOutputViewModel - state generation", "[unit][uimodel][playback]")
+  TEST_CASE("AudioOutputViewModel - state generation", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -145,7 +145,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioOutputViewModel - refresh with fake provider", "[unit][uimodel][playback]")
+  TEST_CASE("AudioOutputViewModel - refresh with fake provider", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};

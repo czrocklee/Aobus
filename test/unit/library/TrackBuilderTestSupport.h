@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 Aobus Contributors
+
+#pragma once
+
+#include "test/unit/lmdb/TestUtils.h"
+#include <ao/Error.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
+
+#include <catch2/catch_test_macros.hpp>
+#include <lmdb.h>
+
+#include <cstddef>
+#include <utility>
+#include <vector>
+
+namespace ao::library::test
+{
+  class TrackSerializationContext final
+  {
+  public:
+    TrackSerializationContext()
+      : _env{lmdb::test::openEnvironment(_temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20})}
+      , _txn{lmdb::test::beginWriteTransaction(_env)}
+      , _dict{lmdb::test::openDatabase(_txn, "dict"), _txn}
+      , _resources{lmdb::test::openDatabase(_txn, "resources")}
+    {
+    }
+
+    std::pair<std::vector<std::byte>, std::vector<std::byte>> serialize(TrackBuilder& builder)
+    {
+      auto result = builder.serialize(_txn, _dict, _resources);
+      REQUIRE(result);
+      return *result;
+    }
+
+    Result<std::vector<std::byte>> trySerializeCold(TrackBuilder& builder)
+    {
+      return builder.serializeCold(_txn, _dict, _resources);
+    }
+
+    std::vector<std::byte> serializeCold(TrackBuilder& builder)
+    {
+      auto result = trySerializeCold(builder);
+      REQUIRE(result);
+      return *result;
+    }
+
+    lmdb::WriteTransaction& txn() { return _txn; }
+
+    DictionaryStore& dict() { return _dict; }
+
+    ResourceStore& resources() { return _resources; }
+
+  private:
+    ao::test::TempDir _temp;
+    lmdb::Environment _env;
+    lmdb::WriteTransaction _txn;
+    DictionaryStore _dict;
+    ResourceStore _resources;
+  };
+
+  inline std::pair<std::vector<std::byte>, std::vector<std::byte>> serializeTestTrack(TrackBuilder& builder)
+  {
+    auto context = TrackSerializationContext{};
+    return context.serialize(builder);
+  }
+} // namespace ao::library::test

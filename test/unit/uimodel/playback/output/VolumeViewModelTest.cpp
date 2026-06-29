@@ -19,7 +19,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("VolumeViewModel - view state generation", "[unit][uimodel][playback]")
+  TEST_CASE("VolumeViewModel - view state generation", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -88,7 +88,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("VolumeViewModel - math helpers", "[unit][uimodel][playback]")
+  TEST_CASE("VolumeViewModel - math helpers", "[uimodel][unit][playback]")
   {
     double const kWidth = 100.0;
 

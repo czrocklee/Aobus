@@ -138,7 +138,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("ComponentTooltipController copies only popover shell classes", "[gtk][unit][layout][components]")
+  TEST_CASE("ComponentTooltipController copies only popover shell classes", "[gtk][unit][layout][component]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.tooltip_controller_test");
 

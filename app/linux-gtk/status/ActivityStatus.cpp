@@ -161,11 +161,6 @@ namespace ao::gtk
     _box.append(_dismissButton);
   }
 
-  uimodel::ActivityStatusViewState const& ActivityStatus::viewStateForTest() const
-  {
-    return _model.viewState();
-  }
-
   void ActivityStatus::render()
   {
     if (_autoDismissTimer)

@@ -3,10 +3,12 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/audio/AlacDecoderSession.h>
+#include <ao/audio/DecoderTypes.h>
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/Mp3DecoderSession.h>
+#include <ao/audio/Types.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -22,6 +24,21 @@ namespace ao::audio::test
 {
   namespace
   {
+    /**
+     * @brief Requires an integration audio fixture, or marks the section skipped.
+     */
+    std::filesystem::path requireAudioFixture(char const* fileName)
+    {
+      auto const path = std::filesystem::path{TAG_TEST_DATA_DIR} / fileName;
+
+      if (!std::filesystem::exists(path))
+      {
+        SKIP("Required audio fixture missing: " << path);
+      }
+
+      return path;
+    }
+
     /**
      * @brief Extracts a specific number of samples from a decoder runtime for verification.
      */
@@ -83,18 +100,48 @@ namespace ao::audio::test
 
       return samples;
     }
+
+    std::uint64_t frameIndexAt(DecodedStreamInfo const& info, std::chrono::milliseconds offset)
+    {
+      return durationToSamples(offset, info.sourceFormat.sampleRate);
+    }
+
+    std::uint64_t totalFrames(DecodedStreamInfo const& info)
+    {
+      return durationToSamples(info.duration, info.sourceFormat.sampleRate);
+    }
+
+    void checkPcmBlockLayout(PcmBlock const& block, Format const& outputFormat)
+    {
+      auto const bytesPerFrame = frameBytes(outputFormat);
+
+      REQUIRE(bytesPerFrame > 0);
+      CHECK(block.bitDepth == outputFormat.bitDepth);
+      CHECK(block.bytes.size() == static_cast<std::size_t>(block.frames) * bytesPerFrame);
+    }
+
+    void checkBlockDoesNotRunPastStream(PcmBlock const& block, DecodedStreamInfo const& info)
+    {
+      if (auto const frameCount = totalFrames(info); frameCount > 0 && block.firstFrameIndex <= frameCount)
+      {
+        CHECK(block.frames <= frameCount - block.firstFrameIndex);
+      }
+    }
+
+    void checkNearSeekFrame(PcmBlock const& block, std::uint64_t expectedFrame, std::uint32_t sampleRate)
+    {
+      auto const toleranceFrames = static_cast<std::uint64_t>(sampleRate / 20U);
+
+      CHECK(block.firstFrameIndex + toleranceFrames >= expectedFrame);
+      CHECK(block.firstFrameIndex <= expectedFrame + toleranceFrames);
+    }
   } // namespace
 
-  TEST_CASE("Decoder Bit-Perfect Conversions", "[playback][integration][codec]")
+  TEST_CASE("Decoder - bit-perfect conversions preserve PCM output", "[audio][integration][decoder]")
   {
     SECTION("FLAC: 16-bit to 32-bit padding alignment")
     {
-      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
-
-      if (!std::filesystem::exists(testFile))
-      {
-        SKIP("Test file 'basic_metadata.flac' missing");
-      }
+      auto const testFile = requireAudioFixture("basic_metadata.flac");
 
       // 1. Acquire reference 16-bit samples
       auto samples16 = std::vector<std::int16_t>{};
@@ -121,12 +168,7 @@ namespace ao::audio::test
 
     SECTION("ALAC: 24-bit to 32-bit padding alignment")
     {
-      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.m4a";
-
-      if (!std::filesystem::exists(testFile))
-      {
-        SKIP("Test file 'hires.m4a' missing");
-      }
+      auto const testFile = requireAudioFixture("hires.m4a");
 
       // 1. Acquire reference 24-bit (packed) samples
       auto samples24 = std::vector<std::int32_t>{};
@@ -155,14 +197,9 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FLAC Decoder Integrity", "[playback][integration][flac]")
+  TEST_CASE("FlacDecoder - fixture decodes with expected integrity", "[audio][integration][flac]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      return;
-    }
+    auto const testFile = requireAudioFixture("basic_metadata.flac");
 
     SECTION("Metadata Extraction")
     {
@@ -173,6 +210,9 @@ namespace ao::audio::test
       CHECK(info.sourceFormat.sampleRate == 44100);
       CHECK(info.sourceFormat.channels == 2);
       CHECK(info.sourceFormat.bitDepth == 16);
+      CHECK(info.outputFormat.sampleRate == 44100);
+      CHECK(info.outputFormat.channels == 2);
+      CHECK(info.outputFormat.bitDepth == 16);
     }
 
     SECTION("Seek Consistency")
@@ -180,22 +220,25 @@ namespace ao::audio::test
       auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
       REQUIRE(decoder.open(testFile));
 
-      REQUIRE(decoder.seek(std::chrono::milliseconds{100})); // Seek to 100ms
+      auto const info = decoder.streamInfo();
+      auto const seekOffset = std::chrono::milliseconds{100};
+      auto const expectedFrame = frameIndexAt(info, seekOffset);
+
+      REQUIRE(decoder.seek(seekOffset));
       auto const block = decoder.readNextBlock();
 
       REQUIRE(block);
-      CHECK(block->frames > 0);
+      REQUIRE_FALSE(block->endOfStream);
+      REQUIRE(block->frames > 0);
+      CHECK(block->firstFrameIndex == expectedFrame);
+      checkPcmBlockLayout(*block, info.outputFormat);
+      checkBlockDoesNotRunPastStream(*block, info);
     }
   }
 
-  TEST_CASE("ALAC Decoder Integrity", "[playback][integration][alac]")
+  TEST_CASE("AlacDecoder - fixture decodes with expected integrity", "[audio][integration][alac]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.m4a";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      return;
-    }
+    auto const testFile = requireAudioFixture("hires.m4a");
 
     SECTION("Hires Metadata")
     {
@@ -209,14 +252,9 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("MP3 Decoder Integrity", "[playback][integration][mp3]")
+  TEST_CASE("Mp3Decoder - fixture decodes with expected integrity", "[audio][integration][mp3]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.mp3";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      return;
-    }
+    auto const testFile = requireAudioFixture("hires.mp3");
 
     SECTION("Metadata Extraction")
     {
@@ -230,7 +268,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Decoder Robustness", "[playback][integration][robustness]")
+  TEST_CASE("Decoder - malformed and unsupported inputs fail without crashing", "[audio][integration][decoder]")
   {
     SECTION("Corrupt: Opening a non-FLAC file as FLAC")
     {
@@ -244,43 +282,68 @@ namespace ao::audio::test
 
     SECTION("MP3: Seek near EOF")
     {
-      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "hires.mp3";
+      auto const testFile = requireAudioFixture("hires.mp3");
+      auto decoder = Mp3DecoderSession{Format{.bitDepth = 16}};
+      REQUIRE(decoder.open(testFile));
 
-      if (std::filesystem::exists(testFile))
+      auto const info = decoder.streamInfo();
+
+      if (info.duration <= std::chrono::milliseconds{10})
       {
-        auto decoder = Mp3DecoderSession{Format{.bitDepth = 16}};
-        REQUIRE(decoder.open(testFile));
+        SKIP("MP3 fixture duration is too short for near-EOF seek");
+      }
 
-        if (auto const info = decoder.streamInfo(); info.duration > std::chrono::milliseconds{10})
-        {
-          REQUIRE(decoder.seek(info.duration - std::chrono::milliseconds{10}));
+      auto const seekOffset = info.duration - std::chrono::milliseconds{10};
+      auto const expectedFrame = frameIndexAt(info, seekOffset);
 
-          if (auto const block = decoder.readNextBlock(); block && !block->endOfStream)
-          {
-            CHECK(block->frames > 0);
-          }
-        }
+      REQUIRE(decoder.seek(seekOffset));
+      auto const block = decoder.readNextBlock();
+      REQUIRE(block);
+
+      if (block->endOfStream)
+      {
+        CHECK(block->frames == 0);
+        CHECK(block->bytes.empty());
+      }
+      else
+      {
+        REQUIRE(block->frames > 0);
+        checkNearSeekFrame(*block, expectedFrame, info.sourceFormat.sampleRate);
+        checkPcmBlockLayout(*block, info.outputFormat);
+        checkBlockDoesNotRunPastStream(*block, info);
       }
     }
 
     SECTION("Seek near EOF")
     {
-      auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
+      auto const testFile = requireAudioFixture("basic_metadata.flac");
+      auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
+      REQUIRE(decoder.open(testFile));
 
-      if (std::filesystem::exists(testFile))
+      auto const info = decoder.streamInfo();
+
+      if (info.duration <= std::chrono::milliseconds{10})
       {
-        auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
-        REQUIRE(decoder.open(testFile));
+        SKIP("FLAC fixture duration is too short for near-EOF seek");
+      }
 
-        if (auto const info = decoder.streamInfo(); info.duration > std::chrono::milliseconds{10})
-        {
-          REQUIRE(decoder.seek(info.duration - std::chrono::milliseconds{10}));
-          // Should either get some frames or EOF immediately
-          if (auto const block = decoder.readNextBlock(); block)
-          {
-            CHECK(block->frames > 0);
-          }
-        }
+      auto const seekOffset = info.duration - std::chrono::milliseconds{10};
+      auto const expectedFrame = frameIndexAt(info, seekOffset);
+
+      REQUIRE(decoder.seek(seekOffset));
+      auto const block = decoder.readNextBlock();
+      REQUIRE(block);
+
+      if (block->endOfStream && block->frames == 0)
+      {
+        CHECK(block->bytes.empty());
+      }
+      else
+      {
+        REQUIRE(block->frames > 0);
+        CHECK(block->firstFrameIndex == expectedFrame);
+        checkPcmBlockLayout(*block, info.outputFormat);
+        checkBlockDoesNotRunPastStream(*block, info);
       }
     }
   }

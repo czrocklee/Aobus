@@ -26,6 +26,7 @@ add_executable(ao_core_test
     unit/utility/LogTest.cpp
     unit/utility/ByteViewTest.cpp
     unit/utility/StringArenaTest.cpp
+    unit/utility/StrongTypeTest.cpp
     unit/core/AudioCodecTest.cpp
     unit/core/ExceptionTest.cpp
     unit/core/ErrorTest.cpp
@@ -41,9 +42,12 @@ add_executable(ao_core_test
     unit/query/PredicateTest.cpp
     unit/query/ExecutionPlanAccessProfileTest.cpp
     unit/query/ExecutionPlanCompileTest.cpp
+    unit/query/ExecutionPlanContractTest.cpp
     unit/query/ExecutionPlanDictionaryTest.cpp
+    unit/query/ExecutionPlanFieldCatalogTest.cpp
+    unit/query/ExecutionPlanMembershipTest.cpp
+    unit/query/ExecutionPlanStringExpressionTest.cpp
     unit/query/ExecutionPlanTagBloomTest.cpp
-    unit/query/ExecutionPlanTest.cpp
     unit/query/ExecutionPlanUnitLiteralTest.cpp
     unit/query/FormatExpressionTest.cpp
     unit/query/PlanEvaluatorCollectionTest.cpp
@@ -75,10 +79,17 @@ add_executable(ao_core_test
     # library tests
     unit/library/TrackLayoutTest.cpp
     unit/library/TrackViewTest.cpp
+    unit/library/TrackViewTagTest.cpp
+    unit/library/TrackViewCustomMetadataTest.cpp
+    unit/library/TrackViewValidationTest.cpp
     unit/library/FileManifestViewTest.cpp
     unit/library/FileManifestStoreTest.cpp
     unit/library/FileManifestBuilderTest.cpp
     unit/library/TrackBuilderTest.cpp
+    unit/library/TrackBuilderCoverArtTest.cpp
+    unit/library/TrackBuilderTagTest.cpp
+    unit/library/TrackBuilderSerializationTest.cpp
+    unit/library/TrackBuilderOverflowTest.cpp
     unit/library/LibraryErrorTest.cpp
     unit/library/MetaStoreTest.cpp
     unit/library/ListLayoutTest.cpp
@@ -98,6 +109,10 @@ add_executable(ao_core_test
     unit/lmdb/EnvironmentTest.cpp
     unit/lmdb/TransactionTest.cpp
     unit/lmdb/DatabaseTest.cpp
+    unit/lmdb/DatabaseReaderTest.cpp
+    unit/lmdb/DatabaseMaxKeyTest.cpp
+    unit/lmdb/DatabaseWriterTest.cpp
+    unit/lmdb/DatabaseBlobKeyTest.cpp
     unit/lmdb/ResultErrorTest.cpp
 
     # audio unit tests
@@ -128,6 +143,11 @@ add_executable(ao_core_test
     unit/audio/PcmConverterTest.cpp
     unit/audio/PlayerTest.cpp
     unit/audio/EngineTest.cpp
+    unit/audio/EngineBackendSwapTest.cpp
+    unit/audio/EngineCallbackTest.cpp
+    unit/audio/EngineConcurrencyTest.cpp
+    unit/audio/EnginePropertyTest.cpp
+    unit/audio/EngineTransportTest.cpp
     unit/audio/backend/detail/PipeWireMonitorHelpersTest.cpp
     unit/audio/backend/detail/AlsaProviderHelpersTest.cpp
 
@@ -233,6 +253,10 @@ add_executable(ao_core_test
     unit/runtime/WorkspaceSessionTest.cpp
     unit/runtime/AppRuntimeTest.cpp
     unit/runtime/HeadlessShellTest.cpp
+    unit/runtime/library/LibraryExportImportCoverArtTest.cpp
+    unit/runtime/library/LibraryExportImportDeltaTest.cpp
+    unit/runtime/library/LibraryExportImportErrorTest.cpp
+    unit/runtime/library/LibraryExportImportListTest.cpp
     unit/runtime/library/LibraryExportImportTest.cpp
 )
 
@@ -344,11 +368,18 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/components/ApplyCommonPropsTest.cpp
       unit/linux-gtk/layout/components/LayoutHostTest.cpp
       unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
+      unit/linux-gtk/layout/components/PlaybackLayoutComponentsTest.cpp
+      unit/linux-gtk/layout/components/SemanticLayoutComponentsTest.cpp
+      unit/linux-gtk/layout/components/LayoutComponentYamlTest.cpp
       unit/linux-gtk/layout/components/TrackFieldGridCollapsibleTest.cpp
       unit/linux-gtk/layout/components/TrackDetailConstrainedLayoutTest.cpp
       unit/linux-gtk/layout/components/TrackFieldGridTextUtilsTest.cpp
       unit/linux-gtk/layout/components/PlaybackImageTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
+      unit/linux-gtk/layout/editor/LayoutEditorAbsoluteCanvasTest.cpp
+      unit/linux-gtk/layout/editor/LayoutEditorDescriptorTest.cpp
+      unit/linux-gtk/layout/editor/LayoutEditorDialogSessionTest.cpp
+      unit/linux-gtk/layout/editor/LayoutEditorTemplateTest.cpp
       unit/linux-gtk/layout/components/StatusComponentsTest.cpp
     unit/linux-gtk/playback/AudioPipelinePanelTest.cpp
     unit/linux-gtk/playback/AobusSoulWindowTest.cpp

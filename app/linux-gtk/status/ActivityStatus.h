@@ -83,7 +83,6 @@ namespace ao::gtk
 
     Gtk::Widget& widget() { return _box; }
 
-    uimodel::ActivityStatusViewState const& viewStateForTest() const;
     Gtk::Label& labelForTest() { return _label; }
     Gtk::ProgressBar& progressForTest() { return _progressBar; }
     Gtk::Button& dismissButtonForTest() { return _dismissButton; }

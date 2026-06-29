@@ -21,6 +21,7 @@
 #include <fakeit.hpp>
 
 #include <chrono>
+#include <condition_variable>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -80,8 +81,12 @@ namespace ao::rt::test
 
     void dispatch(std::move_only_function<void()> task) override
     {
-      auto const lock = std::scoped_lock{_mutex};
-      _tasks.push_back(std::move(task));
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        _tasks.push_back(std::move(task));
+      }
+
+      _cv.notify_one();
     }
 
     void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
@@ -110,10 +115,44 @@ namespace ao::rt::test
       }
     }
 
+    bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2})
+    {
+      auto lock = std::unique_lock{_mutex};
+      return _cv.wait_for(lock, timeout, [this] { return !_tasks.empty(); });
+    }
+
+    template<typename Predicate>
+    bool drainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{2})
+    {
+      auto const deadline = std::chrono::steady_clock::now() + timeout;
+
+      while (!predicate())
+      {
+        auto const now = std::chrono::steady_clock::now();
+
+        if (now >= deadline)
+        {
+          return predicate();
+        }
+
+        auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+
+        if (!waitUntilQueued(remaining))
+        {
+          return predicate();
+        }
+
+        drain();
+      }
+
+      return true;
+    }
+
   private:
     std::thread::id _ownerThreadId = std::this_thread::get_id();
     std::deque<std::move_only_function<void()>> _tasks;
     std::mutex _mutex;
+    std::condition_variable _cv;
   };
 
   // Shared wiring for the PlaybackService tests: a music library, a view service,

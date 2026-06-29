@@ -10,7 +10,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("SeekSliderInteractionModel - pointer seek decisions", "[unit][uimodel][playback]")
+  TEST_CASE("SeekSliderInteractionModel - pointer seek decisions", "[uimodel][unit][playback]")
   {
     auto model = SeekSliderInteractionModel{};
 

@@ -17,7 +17,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("applyCommonProps applies GTK widget layout properties", "[gtk][unit][layout][containers]")
+  TEST_CASE("applyCommonProps applies GTK widget layout properties", "[gtk][unit][layout][container]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

@@ -21,7 +21,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("PlaybackQueueModel - basic controls", "[unit][runtime][uimodel][playback]")
+  TEST_CASE("PlaybackQueueModel - basic controls", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};

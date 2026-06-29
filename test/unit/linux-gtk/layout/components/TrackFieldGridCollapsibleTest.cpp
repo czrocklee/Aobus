@@ -11,12 +11,11 @@
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/grid.h>
-#include <gtkmm/label.h>
+#include <gtkmm/widget.h>
 
 #include <cstdint>
+#include <string>
 #include <string_view>
-#include <utility>
-#include <vector>
 
 namespace ao::gtk::layout::test
 {
@@ -24,6 +23,84 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::walkWidgets;
+
+  enum class TrackFieldGridSection : std::uint8_t
+  {
+    Metadata,
+    Custom,
+    Technical
+  };
+
+  struct TrackFieldGridRowSlots final
+  {
+    Gtk::Widget* label = nullptr;
+    Gtk::Widget* value = nullptr;
+  };
+
+  class TrackFieldGridProbe final
+  {
+  public:
+    explicit TrackFieldGridProbe(Gtk::Grid& grid)
+      : _grid{grid}
+    {
+    }
+
+    Gtk::Button* header(TrackFieldGridSection const section) const
+    {
+      switch (section)
+      {
+        case TrackFieldGridSection::Metadata: return findWidgetByClass<Gtk::Button>("ao-track-detail-section-meta");
+        case TrackFieldGridSection::Custom: return findWidgetByClass<Gtk::Button>("ao-track-detail-section-custom");
+        case TrackFieldGridSection::Technical: return findWidgetByClass<Gtk::Button>("ao-track-detail-section-tech");
+      }
+
+      return nullptr;
+    }
+
+    Gtk::Button* showEmptyFieldsButton() const { return findWidgetByClass<Gtk::Button>("ao-detail-show-all-button"); }
+
+    TrackFieldGridRowSlots fieldRow(rt::TrackField const field) const
+    {
+      return {.label = findWidgetByClass<Gtk::Widget>(fieldSlotClass(field, "label")),
+              .value = findWidgetByClass<Gtk::Widget>(fieldSlotClass(field, "value"))};
+    }
+
+    TrackFieldGridRowSlots customRow() const
+    {
+      return {.label = findWidgetByClass<Gtk::Widget>("ao-track-field-grid-custom-label-slot"),
+              .value = findWidgetByClass<Gtk::Widget>("ao-track-field-grid-custom-value-slot")};
+    }
+
+  private:
+    static std::string fieldSlotClass(rt::TrackField const field, std::string_view const slotName)
+    {
+      auto className = std::string{"ao-track-field-grid-field-"};
+      className += std::string{rt::trackFieldId(field)};
+      className += "-";
+      className += std::string{slotName};
+      className += "-slot";
+      return className;
+    }
+
+    template<typename Widget>
+    Widget* findWidgetByClass(std::string_view const className) const
+    {
+      Widget* found = nullptr;
+      walkWidgets(_grid,
+                  [&](Gtk::Widget& widget)
+                  {
+                    if (found != nullptr || !widget.has_css_class(std::string{className}))
+                    {
+                      return;
+                    }
+
+                    found = dynamic_cast<Widget*>(&widget);
+                  });
+      return found;
+    }
+
+    Gtk::Grid& _grid;
+  };
 
   TEST_CASE("TrackFieldGrid lays out collapsible metadata sections", "[gtk][unit][geometry]")
   {
@@ -43,6 +120,7 @@ namespace ao::gtk::layout::test
     auto& root = compPtr->widget();
     auto* const grid = findWidget<Gtk::Grid>(root);
     REQUIRE(grid != nullptr);
+    auto probe = TrackFieldGridProbe{*grid};
 
     auto allocate = [&](std::int32_t const width, std::int32_t const height)
     {
@@ -55,256 +133,94 @@ namespace ao::gtk::layout::test
       root.size_allocate(Gtk::Allocation{0, 0, width, height}, -1);
     };
 
-    auto findHeaderByClass = [&](std::string_view className) -> Gtk::Button*
-    {
-      Gtk::Button* found = nullptr;
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& w)
-                  {
-                    if (auto* btn = dynamic_cast<Gtk::Button*>(&w); btn != nullptr)
-                    {
-                      if (btn->has_css_class(std::string{className}))
-                      {
-                        found = btn;
-                      }
-                    }
-                  });
-      return found;
-    };
-
-    auto findButtonByLabel = [&](std::string_view labelText) -> Gtk::Button*
-    {
-      Gtk::Button* found = nullptr;
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& w)
-                  {
-                    if (found != nullptr)
-                    {
-                      return;
-                    }
-
-                    auto* const button = dynamic_cast<Gtk::Button*>(&w);
-
-                    if (button == nullptr)
-                    {
-                      return;
-                    }
-
-                    if (auto const label = button->get_label().raw();
-                        std::string_view{label.data(), label.size()} == labelText)
-                    {
-                      found = button;
-                    }
-                  });
-      return found;
-    };
-
-    auto findPropertySlot = [&](std::string_view labelText) -> Gtk::Widget*
-    {
-      Gtk::Widget* found = nullptr;
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& w)
-                  {
-                    if (found != nullptr)
-                    {
-                      return;
-                    }
-
-                    auto* const label = dynamic_cast<Gtk::Label*>(&w);
-
-                    if (label == nullptr || !label->has_css_class("ao-property-label"))
-                    {
-                      return;
-                    }
-
-                    if (auto const text = label->get_text().raw();
-                        std::string_view{text.data(), text.size()} == labelText)
-                    {
-                      found = label->get_parent();
-                    }
-                  });
-      return found;
-    };
-
     SECTION("Default states: Metadata expanded, Technical collapsed")
     {
-      auto* metaHeader = findHeaderByClass("ao-track-detail-section-meta");
-      auto* techHeader = findHeaderByClass("ao-track-detail-section-tech");
+      auto* metaHeader = probe.header(TrackFieldGridSection::Metadata);
+      auto* techHeader = probe.header(TrackFieldGridSection::Technical);
       REQUIRE(metaHeader != nullptr);
       REQUIRE(techHeader != nullptr);
 
-      // Verify a metadata row is visible
-      bool foundVisibleMeta = false;
-      bool foundHiddenTech = false;
-
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& w)
-                  {
-                    if (w.has_css_class("ao-property-label"))
-                    {
-                      if (auto* label = dynamic_cast<Gtk::Label*>(&w); label && label->get_text().raw() == "Title")
-                      {
-                        foundVisibleMeta = w.get_parent() && w.get_parent()->get_visible();
-                      }
-
-                      if (auto* label = dynamic_cast<Gtk::Label*>(&w);
-                          label && label->get_text().raw() == "Sample Rate")
-                      {
-                        foundHiddenTech = w.get_parent() && !w.get_parent()->get_visible();
-                      }
-                    }
-                  });
-
-      CHECK(foundVisibleMeta);
-      CHECK(foundHiddenTech);
+      auto const titleRow = probe.fieldRow(rt::TrackField::Title);
+      auto const sampleRateRow = probe.fieldRow(rt::TrackField::SampleRate);
+      REQUIRE(titleRow.label != nullptr);
+      REQUIRE(sampleRateRow.label != nullptr);
+      CHECK(titleRow.label->get_visible());
+      CHECK_FALSE(sampleRateRow.label->get_visible());
     }
 
     SECTION("Empty metadata rows are hidden until requested")
     {
-      auto* const genreSlot = findPropertySlot("Genre");
-      auto* const albumSlot = findPropertySlot("Album");
-      auto* const showButton = findButtonByLabel("Show empty fields");
-      REQUIRE(genreSlot != nullptr);
-      REQUIRE(albumSlot != nullptr);
+      auto const genreRow = probe.fieldRow(rt::TrackField::Genre);
+      auto const albumRow = probe.fieldRow(rt::TrackField::Album);
+      auto* const showButton = probe.showEmptyFieldsButton();
+      REQUIRE(genreRow.label != nullptr);
+      REQUIRE(albumRow.label != nullptr);
       REQUIRE(showButton != nullptr);
       REQUIRE(showButton->get_parent() != nullptr);
 
-      CHECK_FALSE(genreSlot->get_visible());
-      CHECK_FALSE(albumSlot->get_visible());
+      CHECK_FALSE(genreRow.label->get_visible());
+      CHECK_FALSE(albumRow.label->get_visible());
       CHECK(showButton->get_parent()->get_visible());
 
       emitClicked(*showButton);
       ao::gtk::test::drainGtkEvents();
 
-      CHECK(genreSlot->get_visible());
-      CHECK(albumSlot->get_visible());
+      CHECK(genreRow.label->get_visible());
+      CHECK(albumRow.label->get_visible());
       CHECK(showButton->get_label() == "Hide empty fields");
 
       emitClicked(*showButton);
       ao::gtk::test::drainGtkEvents();
 
-      CHECK_FALSE(genreSlot->get_visible());
-      CHECK_FALSE(albumSlot->get_visible());
+      CHECK_FALSE(genreRow.label->get_visible());
+      CHECK_FALSE(albumRow.label->get_visible());
       CHECK(showButton->get_label() == "Show empty fields");
     }
 
     SECTION("Toggling sections changes visibility")
     {
-      auto* techHeader = findHeaderByClass("ao-track-detail-section-tech");
+      auto* techHeader = probe.header(TrackFieldGridSection::Technical);
       REQUIRE(techHeader != nullptr);
+      auto const sampleRateRow = probe.fieldRow(rt::TrackField::SampleRate);
+      REQUIRE(sampleRateRow.label != nullptr);
+      CHECK_FALSE(sampleRateRow.label->get_visible());
 
-      // Expand technical
       emitClicked(*techHeader);
 
-      bool foundVisibleTech = false;
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& w)
-                  {
-                    if (w.has_css_class("ao-property-label"))
-                    {
-                      if (auto* label = dynamic_cast<Gtk::Label*>(&w);
-                          label && label->get_text().raw() == "Sample Rate")
-                      {
-                        foundVisibleTech = w.get_parent() && w.get_parent()->get_visible();
-                      }
-                    }
-                  });
-      CHECK(foundVisibleTech);
+      CHECK(sampleRateRow.label->get_visible());
 
-      // Collapse metadata
-      auto* metaHeader = findHeaderByClass("ao-track-detail-section-meta");
+      auto* metaHeader = probe.header(TrackFieldGridSection::Metadata);
       REQUIRE(metaHeader != nullptr);
+      auto const titleRow = probe.fieldRow(rt::TrackField::Title);
+      REQUIRE(titleRow.label != nullptr);
+      CHECK(titleRow.label->get_visible());
+
       emitClicked(*metaHeader);
 
-      bool foundHiddenMeta = false;
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& w)
-                  {
-                    if (w.has_css_class("ao-property-label"))
-                    {
-                      if (auto* label = dynamic_cast<Gtk::Label*>(&w); label && label->get_text().raw() == "Title")
-                      {
-                        foundHiddenMeta = w.get_parent() && !w.get_parent()->get_visible();
-                      }
-                    }
-                  });
-      CHECK(foundHiddenMeta);
+      CHECK_FALSE(titleRow.label->get_visible());
     }
 
     SECTION("Toggling technical rows keeps the value column stable")
     {
-      auto findValueSlotForLabel = [&](std::string_view text) -> Gtk::Widget*
-      {
-        Gtk::Widget* labelSlot = nullptr;
-
-        walkWidgets(*grid,
-                    [&](Gtk::Widget& w)
-                    {
-                      if (labelSlot != nullptr)
-                      {
-                        return;
-                      }
-
-                      auto* const label = dynamic_cast<Gtk::Label*>(&w);
-
-                      if (label == nullptr || !label->has_css_class("ao-property-label"))
-                      {
-                        return;
-                      }
-
-                      if (auto const labelText = label->get_text().raw();
-                          std::string_view{labelText.data(), labelText.size()} != text)
-                      {
-                        return;
-                      }
-
-                      labelSlot = label->get_parent();
-                    });
-
-        REQUIRE(labelSlot != nullptr);
-
-        std::int32_t keyLeft = 0;
-        std::int32_t keyTop = 0;
-        std::int32_t keyWidth = 0;
-        std::int32_t keyHeight = 0;
-        grid->query_child(*labelSlot, keyLeft, keyTop, keyWidth, keyHeight);
-
-        for (auto* child = grid->get_first_child(); child != nullptr; child = child->get_next_sibling())
-        {
-          std::int32_t left = 0;
-          std::int32_t top = 0;
-          std::int32_t width = 0;
-          std::int32_t height = 0;
-          grid->query_child(*child, left, top, width, height);
-
-          if (left == 1 && top == keyTop)
-          {
-            return child;
-          }
-        }
-
-        return nullptr;
-      };
-
       allocate(320, 1000);
-      auto* const titleValueSlot = findValueSlotForLabel("Title");
-      REQUIRE(titleValueSlot != nullptr);
-      auto const collapsedValueWidth = titleValueSlot->get_width();
+      auto const titleRow = probe.fieldRow(rt::TrackField::Title);
+      REQUIRE(titleRow.value != nullptr);
+      auto const collapsedValueWidth = titleRow.value->get_width();
 
-      auto* const techHeader = findHeaderByClass("ao-track-detail-section-tech");
+      auto* const techHeader = probe.header(TrackFieldGridSection::Technical);
       REQUIRE(techHeader != nullptr);
       emitClicked(*techHeader);
       ao::gtk::test::drainGtkEvents();
 
       allocate(320, 1000);
-      CHECK(titleValueSlot->get_width() == collapsedValueWidth);
+      CHECK(titleRow.value->get_width() == collapsedValueWidth);
     }
 
     SECTION("Section separators keep the panel width when all sections are collapsed")
     {
-      auto* const metaHeader = findHeaderByClass("ao-track-detail-section-meta");
-      auto* const customHeader = findHeaderByClass("ao-track-detail-section-custom");
-      auto* const techHeader = findHeaderByClass("ao-track-detail-section-tech");
+      auto* const metaHeader = probe.header(TrackFieldGridSection::Metadata);
+      auto* const customHeader = probe.header(TrackFieldGridSection::Custom);
+      auto* const techHeader = probe.header(TrackFieldGridSection::Technical);
       REQUIRE(metaHeader != nullptr);
       REQUIRE(customHeader != nullptr);
       REQUIRE(techHeader != nullptr);
@@ -334,52 +250,6 @@ namespace ao::gtk::layout::test
       customSnap.customMetadata.push_back({.key = "A Much Longer Custom Metadata Key", .presentOnAll = true});
       scope.setSnapshot(customSnap);
 
-      auto findSlotsForLabel = [&](std::string_view text) -> std::pair<Gtk::Widget*, Gtk::Widget*>
-      {
-        Gtk::Widget* labelSlot = nullptr;
-
-        walkWidgets(*grid,
-                    [&](Gtk::Widget& w)
-                    {
-                      auto* const label = dynamic_cast<Gtk::Label*>(&w);
-
-                      if (labelSlot != nullptr || label == nullptr || !label->has_css_class("ao-property-label"))
-                      {
-                        return;
-                      }
-
-                      if (auto const labelText = label->get_text().raw();
-                          std::string_view{labelText.data(), labelText.size()} == text)
-                      {
-                        labelSlot = label->get_parent();
-                      }
-                    });
-
-        REQUIRE(labelSlot != nullptr);
-
-        std::int32_t keyLeft = 0;
-        std::int32_t keyTop = 0;
-        std::int32_t keyWidth = 0;
-        std::int32_t keyHeight = 0;
-        grid->query_child(*labelSlot, keyLeft, keyTop, keyWidth, keyHeight);
-
-        for (auto* child = grid->get_first_child(); child != nullptr; child = child->get_next_sibling())
-        {
-          std::int32_t left = 0;
-          std::int32_t top = 0;
-          std::int32_t width = 0;
-          std::int32_t height = 0;
-          grid->query_child(*child, left, top, width, height);
-
-          if (left == 1 && top == keyTop)
-          {
-            return {labelSlot, child};
-          }
-        }
-
-        return {labelSlot, nullptr};
-      };
-
       auto* const wrapper = grid->get_parent();
       REQUIRE(wrapper != nullptr);
 
@@ -395,32 +265,22 @@ namespace ao::gtk::layout::test
 
       allocate(316, 320);
       CHECK(measureMinimumHeight(*wrapper, -1) == 0);
-      auto const [titleKeySlot, titleValueSlot] = findSlotsForLabel("Title");
-      REQUIRE(titleValueSlot != nullptr);
-      auto const keyWidthBeforeCollapse = titleKeySlot->get_width();
+      auto const titleRow = probe.fieldRow(rt::TrackField::Title);
+      REQUIRE(titleRow.label != nullptr);
+      REQUIRE(titleRow.value != nullptr);
+      auto const keyWidthBeforeCollapse = titleRow.label->get_width();
       double valueLeftBeforeCollapse = 0.0;
       double valueTopBeforeCollapse = 0.0;
-      REQUIRE(titleValueSlot->translate_coordinates(*grid, 0.0, 0.0, valueLeftBeforeCollapse, valueTopBeforeCollapse));
-      auto const valueWidthBeforeCollapse = titleValueSlot->get_width();
+      REQUIRE(titleRow.value->translate_coordinates(*grid, 0.0, 0.0, valueLeftBeforeCollapse, valueTopBeforeCollapse));
+      auto const valueWidthBeforeCollapse = titleRow.value->get_width();
 
-      auto* customHeader = findHeaderByClass("ao-track-detail-section-custom");
+      auto* customHeader = probe.header(TrackFieldGridSection::Custom);
       REQUIRE(customHeader != nullptr);
       CHECK(customHeader->get_visible());
 
-      bool foundCustom = false;
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& w)
-                  {
-                    if (w.has_css_class("ao-property-label"))
-                    {
-                      if (auto* label = dynamic_cast<Gtk::Label*>(&w);
-                          label && label->get_text().raw() == "A Much Longer Custom Metadata Key")
-                      {
-                        foundCustom = w.get_parent() && w.get_parent()->get_visible();
-                      }
-                    }
-                  });
-      CHECK(foundCustom);
+      auto const customRow = probe.customRow();
+      REQUIRE(customRow.label != nullptr);
+      CHECK(customRow.label->get_visible());
 
       // Collapse custom
       emitClicked(*customHeader);
@@ -428,26 +288,13 @@ namespace ao::gtk::layout::test
       allocate(316, 320);
       CHECK(measureMinimumHeight(*wrapper, -1) == 0);
 
-      bool foundHiddenCustom = false;
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& w)
-                  {
-                    if (w.has_css_class("ao-property-label"))
-                    {
-                      if (auto* label = dynamic_cast<Gtk::Label*>(&w);
-                          label && label->get_text().raw() == "A Much Longer Custom Metadata Key")
-                      {
-                        foundHiddenCustom = w.get_parent() && !w.get_parent()->get_visible();
-                      }
-                    }
-                  });
-      CHECK(foundHiddenCustom);
-      CHECK(titleKeySlot->get_width() == keyWidthBeforeCollapse);
+      CHECK_FALSE(customRow.label->get_visible());
+      CHECK(titleRow.label->get_width() == keyWidthBeforeCollapse);
       double valueLeftAfterCollapse = 0.0;
       double valueTopAfterCollapse = 0.0;
-      REQUIRE(titleValueSlot->translate_coordinates(*grid, 0.0, 0.0, valueLeftAfterCollapse, valueTopAfterCollapse));
+      REQUIRE(titleRow.value->translate_coordinates(*grid, 0.0, 0.0, valueLeftAfterCollapse, valueTopAfterCollapse));
       CHECK(valueLeftAfterCollapse == valueLeftBeforeCollapse);
-      CHECK(titleValueSlot->get_width() == valueWidthBeforeCollapse);
+      CHECK(titleRow.value->get_width() == valueWidthBeforeCollapse);
     }
   }
 
@@ -462,29 +309,15 @@ namespace ao::gtk::layout::test
     auto& root = compPtr->widget();
     auto* const grid = findWidget<Gtk::Grid>(root);
     REQUIRE(grid != nullptr);
+    auto probe = TrackFieldGridProbe{*grid};
 
-    auto findCustomHeader = [&] -> Gtk::Button*
-    {
-      Gtk::Button* found = nullptr;
-      walkWidgets(*grid,
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (auto* const button = dynamic_cast<Gtk::Button*>(&widget);
-                        button != nullptr && button->has_css_class("ao-track-detail-section-custom"))
-                    {
-                      found = button;
-                    }
-                  });
-      return found;
-    };
-
-    CHECK(findCustomHeader() == nullptr);
+    CHECK(probe.header(TrackFieldGridSection::Custom) == nullptr);
 
     auto snap = rt::TrackDetailSnapshot{};
     snap.trackIds = {TrackId{1}};
     scope.setSnapshot(snap);
 
-    auto* const customHeader = findCustomHeader();
+    auto* const customHeader = probe.header(TrackFieldGridSection::Custom);
     REQUIRE(customHeader != nullptr);
     CHECK(customHeader->get_visible());
   }

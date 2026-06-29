@@ -21,7 +21,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("PlaybackTimeViewModel - view state generation", "[unit][uimodel][playback]")
+  TEST_CASE("PlaybackTimeViewModel - view state generation", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -63,7 +63,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("PlaybackTimeViewModel formats display text for each label mode", "[unit][uimodel][playback]")
+  TEST_CASE("PlaybackTimeViewModel formats display text for each label mode", "[uimodel][unit][playback]")
   {
     SECTION("template text reserves the widest idle label")
     {

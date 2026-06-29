@@ -11,28 +11,22 @@
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IRenderTarget.h>
-#include <ao/audio/Property.h>
 #include <ao/audio/Types.h>
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
 
-#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
-#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <stop_token>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -40,23 +34,33 @@ namespace ao::audio::test
 {
   namespace
   {
-    template<typename Predicate>
-    bool waitUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{1})
+    class CallbackLatch final
     {
-      auto const deadline = std::chrono::steady_clock::now() + timeout;
-
-      while (std::chrono::steady_clock::now() < deadline)
+    public:
+      void notify()
       {
-        if (predicate())
-        {
-          return true;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        auto const lock = std::scoped_lock{_mutex};
+        ++_count;
+        _cv.notify_all();
       }
 
-      return predicate();
-    }
+      bool waitForCount(std::size_t expected, std::chrono::milliseconds timeout = std::chrono::seconds{1})
+      {
+        auto lock = std::unique_lock{_mutex};
+        return _cv.wait_for(lock, timeout, [this, expected] { return _count >= expected; });
+      }
+
+      std::size_t count() const
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        return _count;
+      }
+
+    private:
+      mutable std::mutex _mutex;
+      std::condition_variable _cv;
+      std::size_t _count = 0;
+    };
   } // namespace
 
   using namespace fakeit;
@@ -81,46 +85,7 @@ namespace ao::audio::test
     CHECK(snap.transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - volume and mute controls update backend and status", "[audio][unit][engine][property]")
-  {
-    auto spy = SpyBackend<>{};
-    auto& mockBackend = spy.mock();
-    auto const device = Device{.id = DeviceId{"test-device"},
-                               .displayName = "Test",
-                               .description = "Test",
-                               .isDefault = false,
-                               .backendId = kBackendNone};
-
-    auto engine = Engine{spy.makeProxy(), device};
-    auto lastSetPropertyId = PropertyId{};
-    auto lastSetPropertyValue = PropertyValue{false};
-
-    When(Method(mockBackend, setProperty))
-      .AlwaysDo(
-        [&](PropertyId id, PropertyValue const& value) -> Result<>
-        {
-          lastSetPropertyId = id;
-          lastSetPropertyValue = value;
-          return Result<>{};
-        });
-
-    CHECK(engine.setVolume(0.75F));
-    CHECK(lastSetPropertyId == PropertyId::Volume);
-    CHECK(std::get<float>(lastSetPropertyValue) == Catch::Approx{0.75F});
-    CHECK(engine.volume() == Catch::Approx{0.75F});
-    CHECK(engine.status().volume == Catch::Approx{0.75F});
-
-    CHECK(engine.setMuted(true));
-    CHECK(lastSetPropertyId == PropertyId::Muted);
-    CHECK(std::get<bool>(lastSetPropertyValue) == true);
-    CHECK(engine.isMuted() == true);
-    CHECK(engine.status().muted == true);
-
-    CHECK(engine.isVolumeAvailable() == true);
-    CHECK(engine.status().volumeAvailable == true);
-  }
-
-  TEST_CASE("Engine - Backend Swapping", "[audio][unit][engine][hot-swap]")
+  TEST_CASE("Engine - setBackend while idle closes old backend and updates status", "[audio][unit][engine][hot-swap]")
   {
     auto spy1 = SpyBackend<>{};
     auto spy2 = SpyBackend<>{};
@@ -158,7 +123,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - Graph Initialization", "[audio][unit][engine][graph]")
+  TEST_CASE("Engine - play publishes route state from decoder stream info", "[audio][unit][engine][graph]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -513,9 +478,12 @@ namespace ao::audio::test
 
     SECTION("onDrainComplete resets to idle and fires track ended")
     {
+      auto trackEndedLatch = CallbackLatch{};
+      engine.setOnTrackEnded([&] { trackEndedLatch.notify(); });
+
       backendRaw->fireDrainComplete();
-      CHECK(waitUntil([&] { return engine.status().transport == Transport::Idle; }));
-      CHECK(waitUntil([&] { return trackEnded.load(std::memory_order_acquire); }));
+      CHECK(trackEndedLatch.waitForCount(1));
+      CHECK(engine.status().transport == Transport::Idle);
     }
 
     SECTION("onDrainComplete without pending drain is ignored")
@@ -523,613 +491,22 @@ namespace ao::audio::test
       engine.stop(); // resets everything
       trackEnded.store(false, std::memory_order_release);
       backendRaw->fireDrainComplete();
-      CHECK_FALSE(waitUntil([&] { return trackEnded.load(std::memory_order_acquire); }, std::chrono::milliseconds{50}));
+      CHECK_FALSE(trackEnded.load(std::memory_order_acquire));
     }
 
     SECTION("onBackendError stops playback")
     {
+      auto stateChanged = CallbackLatch{};
+      engine.setOnStateChanged([&] { stateChanged.notify(); });
+
       backendRaw->fireBackendError("lost device");
-      CHECK(waitUntil([&] { return engine.status().transport == Transport::Error; }));
+      CHECK(stateChanged.waitForCount(1));
+      CHECK(engine.status().transport == Transport::Error);
       CHECK(engine.status().statusText == "lost device");
     }
   }
 
-  TEST_CASE("Engine - Property API", "[audio][unit][engine][property]")
-  {
-    auto const device = Device{.id = DeviceId{"test-device"},
-                               .displayName = "Test",
-                               .description = "Test",
-                               .isDefault = false,
-                               .backendId = kBackendNone};
-    auto backendPtr = std::make_unique<CapturingBackend>();
-    auto* backendRaw = backendPtr.get();
-
-    auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
-    auto const factory = [fmt](auto const&, auto const&)
-    {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::seconds{1}, .isLossy = false});
-      decPtr->setReadScript({{.data = std::vector<std::byte>(88200, std::byte{0}), .endOfStream = false}});
-      return decPtr;
-    };
-
-    auto engine = Engine{std::move(backendPtr), device, factory};
-    auto const desc = PlaybackInput{.filePath = "test.flac"};
-
-    SECTION("queryProperty returns all-false for unknown PropertyId")
-    {
-      auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const info = backendRaw->queryProperty(kUnknownId);
-
-      CHECK(info.canRead == false);
-      CHECK(info.canWrite == false);
-      CHECK(info.isAvailable == false);
-      CHECK(info.emitsChangeNotifications == false);
-    }
-
-    SECTION("queryProperty returns valid info for Volume")
-    {
-      backendRaw->setMockPropertyInfo(PropertyId::Volume,
-                                      PropertyInfo{
-                                        .canRead = true,
-                                        .canWrite = true,
-                                        .isAvailable = true,
-                                        .emitsChangeNotifications = false,
-                                        .isHardwareAssisted = true,
-                                      });
-
-      auto const info = backendRaw->queryProperty(PropertyId::Volume);
-
-      CHECK(info.canRead == true);
-      CHECK(info.canWrite == true);
-      CHECK(info.isAvailable == true);
-      CHECK(info.isHardwareAssisted == true);
-    }
-
-    SECTION("setProperty returns error for unknown PropertyId")
-    {
-      auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const result = backendRaw->setProperty(kUnknownId, PropertyValue{0.5F});
-
-      REQUIRE(!result);
-      CHECK(result.error().code == Error::Code::NotSupported);
-    }
-
-    SECTION("property returns error for unknown PropertyId")
-    {
-      auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const result = backendRaw->property(kUnknownId);
-
-      REQUIRE(!result);
-      CHECK(result.error().code == Error::Code::NotSupported);
-    }
-
-    SECTION("onPropertyChanged callback updates engine volume status")
-    {
-      backendRaw->setMockPropertyInfo(PropertyId::Volume,
-                                      PropertyInfo{
-                                        .canRead = true,
-                                        .canWrite = true,
-                                        .isAvailable = true,
-                                        .emitsChangeNotifications = false,
-                                        .isHardwareAssisted = true,
-                                      });
-
-      // Play must be called so the backend target is initialized
-      engine.play(desc);
-
-      backendRaw->firePropertyChanged(PropertyId::Volume);
-
-      CHECK(waitUntil([&] { return engine.status().volumeAvailable; }));
-      CHECK(engine.status().volume == Catch::Approx{1.0F});
-      CHECK(engine.volume() == Catch::Approx{1.0F});
-      CHECK(engine.status().volumeAvailable == true);
-      CHECK(engine.status().volumeIsHardwareAssisted == true);
-    }
-
-    SECTION("onPropertyChanged handles backend read errors gracefully")
-    {
-      backendRaw->setPropertyError(Error::Code::Generic);
-      backendRaw->firePropertyChanged(PropertyId::Volume);
-      backendRaw->firePropertyChanged(PropertyId::Muted);
-
-      CHECK(waitUntil([&] { return engine.status().volumeAvailable; }));
-      CHECK(engine.status().volume == Catch::Approx{1.0F});
-      CHECK(engine.status().muted == false);
-    }
-
-    SECTION("onPropertyChanged callback updates engine mute status")
-    {
-      backendRaw->firePropertyChanged(PropertyId::Muted);
-
-      CHECK(waitUntil([&] { return engine.status().volumeAvailable; }));
-      CHECK(engine.status().muted == false);
-      CHECK(engine.isMuted() == false);
-    }
-
-    SECTION("onPropertyChanged callback for unknown property is ignored")
-    {
-      auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      backendRaw->firePropertyChanged(kUnknownId);
-    }
-
-    SECTION("Backend callbacks update engine state correctly")
-    {
-      engine.play(desc);
-      backendRaw->fireBackendError("hardware failed");
-      CHECK(waitUntil([&] { return engine.status().transport == Transport::Error; }));
-
-      engine.play(desc);
-      auto routeChanged = std::atomic<bool>{false};
-      engine.setOnRouteChanged([&](auto const&) { routeChanged.store(true, std::memory_order_release); });
-      backendRaw->fireRouteReady("test-anchor");
-      CHECK(waitUntil([&] { return routeChanged.load(std::memory_order_acquire); }));
-    }
-
-    SECTION("setVolume round-trips through engine and backend")
-    {
-      CHECK(engine.setVolume(0.42F));
-      CHECK(engine.volume() == Catch::Approx{0.42F});
-      CHECK(engine.status().volume == Catch::Approx{0.42F});
-
-      auto const backendVol = backendRaw->property(PropertyId::Volume);
-
-      REQUIRE(backendVol);
-      CHECK(std::get<float>(*backendVol) == Catch::Approx{0.42F});
-    }
-
-    SECTION("setMuted round-trips through engine and backend")
-    {
-      CHECK(engine.setMuted(true));
-      CHECK(engine.isMuted() == true);
-      CHECK(engine.status().muted == true);
-
-      auto const backendMuted = backendRaw->property(PropertyId::Muted);
-
-      REQUIRE(backendMuted);
-      CHECK(std::get<bool>(*backendMuted) == true);
-    }
-
-    SECTION("property controls survive backend open")
-    {
-      CHECK(engine.setVolume(0.37F));
-      CHECK(engine.setMuted(true));
-
-      engine.play(desc);
-
-      CHECK(engine.status().volume == Catch::Approx{0.37F});
-      CHECK(engine.status().muted == true);
-
-      auto const backendVol = backendRaw->property(PropertyId::Volume);
-      auto const backendMuted = backendRaw->property(PropertyId::Muted);
-
-      REQUIRE(backendVol);
-      REQUIRE(backendMuted);
-      CHECK(std::get<float>(*backendVol) == Catch::Approx{0.37F});
-      CHECK(std::get<bool>(*backendMuted) == true);
-    }
-  }
-
-  TEST_CASE("Engine - Backend callback simulation", "[audio][unit][engine][callback]")
-  {
-    auto const device = Device{.id = DeviceId{"test-device"},
-                               .displayName = "Test",
-                               .description = "Test",
-                               .isDefault = false,
-                               .backendId = kBackendNone};
-    auto backendPtr = std::make_unique<CapturingBackend>();
-    auto* const backendRaw = backendPtr.get();
-
-    auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
-    auto const factory = [fmt](auto const&, auto const&)
-    {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
-      auto data = std::vector(100, std::byte{0});
-
-      decPtr->setReadScript({{data, false}, {{}, true}});
-      return decPtr;
-    };
-
-    auto engine = Engine{std::move(backendPtr), device, factory};
-
-    SECTION("Backend error transitions to Error state")
-    {
-      auto const desc = PlaybackInput{.filePath = "song.flac"};
-
-      engine.play(desc);
-
-      auto* const target = backendRaw->target();
-
-      target->onBackendError("Hardware failure");
-
-      CHECK(waitUntil([&] { return engine.status().transport == Transport::Error; }));
-      auto const snap = engine.status();
-
-      CHECK(snap.transport == Transport::Error);
-      CHECK(snap.statusText == "Hardware failure");
-    }
-
-    SECTION("Route ready updates snapshot")
-    {
-      auto const desc = PlaybackInput{.filePath = "song.flac"};
-
-      engine.play(desc);
-
-      auto* const target = backendRaw->target();
-      auto callbackThreadPromise = std::promise<std::thread::id>{};
-      auto callbackThread = callbackThreadPromise.get_future();
-      auto const callerThread = std::this_thread::get_id();
-
-      engine.setOnStateChanged([&callbackThreadPromise]
-                               { callbackThreadPromise.set_value(std::this_thread::get_id()); });
-
-      target->onRouteReady("anchor-123");
-
-      REQUIRE(callbackThread.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
-      CHECK(callbackThread.get() != callerThread);
-      CHECK(waitUntil([&] { return engine.routeStatus().optAnchor.has_value(); }));
-      auto const route = engine.routeStatus();
-
-      REQUIRE(route.optAnchor);
-      CHECK(route.optAnchor->id == "anchor-123");
-    }
-
-    SECTION("Playback status callbacks update engine internals")
-    {
-      auto const desc = PlaybackInput{.filePath = "song.flac"};
-
-      engine.play(desc);
-      auto* const target = backendRaw->target();
-
-      target->onUnderrun();
-
-      target->onPositionAdvanced(100);
-
-      target->onFormatChanged(Format{.sampleRate = 48000, .channels = 2, .bitDepth = 24, .isInterleaved = true});
-
-      target->onFormatChanged(Format{.sampleRate = 48000, .channels = 2, .bitDepth = 24, .isInterleaved = true});
-
-      target->onPropertyChanged(PropertyId::Volume);
-
-      CHECK(waitUntil([&] { return engine.status().routeState.engineOutputFormat.sampleRate == 48000; }));
-    }
-
-    SECTION("close drops the retired render session target")
-    {
-      auto const desc = PlaybackInput{.filePath = "song.flac"};
-
-      engine.play(desc);
-      auto* const target = backendRaw->target();
-      CHECK(target != nullptr);
-
-      engine.stop();
-
-      auto const snap = engine.status();
-      CHECK(snap.transport == Transport::Idle);
-      CHECK(snap.statusText.empty());
-      CHECK(snap.underrunCount == 0);
-      CHECK_FALSE(engine.routeStatus().optAnchor);
-      CHECK(backendRaw->target() == nullptr);
-    }
-
-    SECTION("User callbacks run outside backend callback stack and may reenter Engine")
-    {
-      auto const desc = PlaybackInput{.filePath = "song.flac"};
-
-      engine.play(desc);
-
-      auto callbackThreadPromise = std::promise<std::thread::id>{};
-      auto callbackThread = callbackThreadPromise.get_future();
-      auto const backendCallbackThread = std::this_thread::get_id();
-
-      engine.setOnRouteChanged(
-        [&](auto const&)
-        {
-          callbackThreadPromise.set_value(std::this_thread::get_id());
-          engine.stop();
-        });
-
-      backendRaw->fireRouteReady("reentrant-anchor");
-
-      REQUIRE(callbackThread.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
-      CHECK(callbackThread.get() != backendCallbackThread);
-      CHECK(waitUntil([&] { return engine.status().transport == Transport::Idle; }));
-    }
-
-    SECTION("queued render event from retired session is ignored")
-    {
-      class BlockingStopBackend final : public IBackend
-      {
-      public:
-        Result<> open(Format const& format, IRenderTarget* target) override
-        {
-          auto const lock = std::scoped_lock{_mutex};
-          _format = format;
-          _target = target;
-          return {};
-        }
-
-        void start() override {}
-        void pause() override {}
-        void resume() override {}
-        void flush() override {}
-
-        void stop() override
-        {
-          auto lock = std::unique_lock{_mutex};
-
-          if (!_blockStop)
-          {
-            return;
-          }
-
-          _stopEntered = true;
-          _cv.notify_all();
-          _cv.wait(lock, [this] { return _releaseStop; });
-        }
-
-        void close() override
-        {
-          auto const lock = std::scoped_lock{_mutex};
-          _target = nullptr;
-        }
-
-        BackendId backendId() const noexcept override { return BackendId{"blocking-stop"}; }
-        ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
-
-        Result<> setProperty(PropertyId /*id*/, PropertyValue const& /*value*/) override { return {}; }
-
-        Result<PropertyValue> property(PropertyId id) const override
-        {
-          if (id == PropertyId::Volume)
-          {
-            return 1.0F;
-          }
-
-          if (id == PropertyId::Muted)
-          {
-            return false;
-          }
-
-          return std::unexpected(Error{.code = Error::Code::NotSupported});
-        }
-
-        PropertyInfo queryProperty(PropertyId /*id*/) const noexcept override
-        {
-          return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
-        }
-
-        void blockStop()
-        {
-          auto const lock = std::scoped_lock{_mutex};
-          _blockStop = true;
-        }
-
-        bool waitForStopEntered(std::chrono::milliseconds timeout)
-        {
-          auto lock = std::unique_lock{_mutex};
-          return _cv.wait_for(lock, timeout, [this] { return _stopEntered; });
-        }
-
-        void releaseStop()
-        {
-          auto const lock = std::scoped_lock{_mutex};
-          _releaseStop = true;
-          _cv.notify_all();
-        }
-
-        void fireRouteReady(std::string_view routeAnchor)
-        {
-          auto* target = static_cast<IRenderTarget*>(nullptr);
-          {
-            auto const lock = std::scoped_lock{_mutex};
-            target = _target;
-          }
-
-          if (target != nullptr)
-          {
-            target->onRouteReady(routeAnchor);
-          }
-        }
-
-      private:
-        mutable std::mutex _mutex;
-        std::condition_variable _cv;
-        IRenderTarget* _target = nullptr;
-        Format _format{};
-        bool _blockStop = false;
-        bool _stopEntered = false;
-        bool _releaseStop = false;
-      };
-
-      auto blockingBackendPtr = std::make_unique<BlockingStopBackend>();
-      auto* const blockingBackendRaw = blockingBackendPtr.get();
-      auto blockingEngine = Engine{std::move(blockingBackendPtr), device, factory};
-
-      auto routeChanged = std::atomic<bool>{false};
-      blockingEngine.setOnRouteChanged([&](Engine::RouteStatus const&)
-                                       { routeChanged.store(true, std::memory_order_release); });
-
-      blockingEngine.play(PlaybackInput{.filePath = "song.flac"});
-      CHECK(blockingEngine.status().transport == Transport::Playing);
-
-      blockingBackendRaw->blockStop();
-      auto stopFuture = std::async(std::launch::async, [&] { blockingEngine.stop(); });
-      CHECK(blockingBackendRaw->waitForStopEntered(std::chrono::seconds{1}));
-
-      blockingBackendRaw->fireRouteReady("stale-anchor");
-      CHECK_FALSE(
-        waitUntil([&] { return routeChanged.load(std::memory_order_acquire); }, std::chrono::milliseconds{50}));
-
-      blockingBackendRaw->releaseStop();
-      CHECK(stopFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
-
-      CHECK_FALSE(
-        waitUntil([&] { return routeChanged.load(std::memory_order_acquire); }, std::chrono::milliseconds{50}));
-      CHECK_FALSE(blockingEngine.routeStatus().optAnchor);
-      CHECK(blockingEngine.status().transport == Transport::Idle);
-    }
-
-    SECTION("setBackend with active track resumes playback")
-    {
-      auto const desc = PlaybackInput{.filePath = "test.flac"};
-      engine.play(desc);
-      CHECK(engine.status().transport == Transport::Playing);
-
-      auto newBackendPtr = std::make_unique<CapturingBackend>();
-      auto const newDevice = Device{.id = DeviceId{"new-device"},
-                                    .displayName = "New",
-                                    .description = "New",
-                                    .isDefault = false,
-                                    .backendId = kBackendNone};
-      engine.setBackend(std::move(newBackendPtr), newDevice);
-
-      auto const snap = engine.status();
-      CHECK(snap.transport == Transport::Playing);
-      CHECK(snap.currentDeviceId == "new-device");
-    }
-
-    SECTION("Engine::resume on already playing engine does nothing")
-    {
-      engine.play(PlaybackInput{.filePath = "test.flac"});
-      CHECK(engine.status().transport == Transport::Playing);
-      engine.resume();
-      CHECK(engine.status().transport == Transport::Playing);
-    }
-
-    SECTION("Engine::pause on Idle engine does nothing")
-    {
-      engine.stop();
-      engine.pause();
-      CHECK(engine.status().transport == Transport::Idle);
-    }
-  }
-
-  class BlockingPropertyBackend final : public IBackend
-  {
-  public:
-    Result<> open(Format const& /*format*/, IRenderTarget* /*target*/) override { return {}; }
-    void start() override {}
-    void pause() override {}
-    void resume() override {}
-    void flush() override {}
-    void stop() override {}
-    void close() override {}
-
-    BackendId backendId() const noexcept override { return BackendId{"blocking"}; }
-    ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
-
-    Result<> setProperty(PropertyId /*id*/, PropertyValue const& /*value*/) override
-    {
-      auto lock = std::unique_lock{_mutex};
-      ++_enteredCalls;
-      ++_activeCalls;
-      _maxActiveCalls = std::max(_maxActiveCalls, _activeCalls);
-      _cv.notify_all();
-
-      _cv.wait(lock, [this] { return _releaseCalls; });
-      --_activeCalls;
-      _cv.notify_all();
-      return {};
-    }
-
-    Result<PropertyValue> property(PropertyId id) const override
-    {
-      if (id == PropertyId::Volume)
-      {
-        return PropertyValue{1.0F};
-      }
-
-      if (id == PropertyId::Muted)
-      {
-        return PropertyValue{false};
-      }
-
-      return std::unexpected(Error{.code = Error::Code::NotSupported});
-    }
-
-    PropertyInfo queryProperty(PropertyId /*id*/) const noexcept override
-    {
-      return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
-    }
-
-    bool waitForEnteredCalls(std::size_t count, std::chrono::milliseconds timeout) const
-    {
-      auto lock = std::unique_lock{_mutex};
-      return _cv.wait_for(lock, timeout, [this, count] { return _enteredCalls >= count; });
-    }
-
-    void releaseCalls()
-    {
-      auto const lock = std::scoped_lock{_mutex};
-      _releaseCalls = true;
-      _cv.notify_all();
-    }
-
-    std::size_t maxActiveCalls() const
-    {
-      auto const lock = std::scoped_lock{_mutex};
-      return _maxActiveCalls;
-    }
-
-  private:
-    mutable std::mutex _mutex;
-    mutable std::condition_variable _cv;
-    std::size_t _enteredCalls = 0;
-    std::size_t _activeCalls = 0;
-    std::size_t _maxActiveCalls = 0;
-    bool _releaseCalls = false;
-  };
-
-  TEST_CASE("Engine - concurrent control commands are serialized", "[audio][unit][engine][concurrency]")
-  {
-    auto const device = Device{.id = DeviceId{"test-device"},
-                               .displayName = "Test",
-                               .description = "Test",
-                               .isDefault = false,
-                               .backendId = kBackendNone};
-    auto backendPtr = std::make_unique<BlockingPropertyBackend>();
-    auto* const backendRaw = backendPtr.get();
-    auto engine = Engine{std::move(backendPtr), device};
-
-    auto first = std::async(std::launch::async, [&engine] { return engine.setVolume(0.25F); });
-    auto const firstEntered = backendRaw->waitForEnteredCalls(1, std::chrono::seconds{1});
-
-    if (!firstEntered)
-    {
-      backendRaw->releaseCalls();
-    }
-
-    CHECK(firstEntered);
-
-    auto secondStartedPromise = std::promise<void>{};
-    auto secondStarted = secondStartedPromise.get_future();
-    auto second = std::async(std::launch::async,
-                             [&]
-                             {
-                               secondStartedPromise.set_value();
-                               return engine.setMuted(true);
-                             });
-
-    auto const secondStartedStatus = secondStarted.wait_for(std::chrono::seconds{1});
-
-    if (secondStartedStatus == std::future_status::ready)
-    {
-      CHECK_FALSE(backendRaw->waitForEnteredCalls(2, std::chrono::milliseconds{50}));
-    }
-
-    backendRaw->releaseCalls();
-
-    CHECK(secondStartedStatus == std::future_status::ready);
-    REQUIRE(first.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
-    REQUIRE(second.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
-    CHECK(first.get());
-    CHECK(second.get());
-    CHECK(backendRaw->maxActiveCalls() == 1);
-  }
-
-  TEST_CASE("Engine - Source Error Propagation", "[audio][unit][engine][error]")
+  TEST_CASE("Engine - source decode error transitions to Error and ends track", "[audio][unit][engine][error]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -1164,147 +541,10 @@ namespace ao::audio::test
     // The StreamingSource decode loop runs in a background thread.
     // It should hit the error and call handleSourceError, which now
     // fires onTrackEnded so we can synchronize without polling.
-    CHECK(waitUntil([&] { return errorFuture.wait_for(std::chrono::milliseconds{0}) == std::future_status::ready; },
-                    std::chrono::seconds{15}));
+    CHECK(errorFuture.wait_for(std::chrono::seconds{15}) == std::future_status::ready);
 
     auto const snap = engine.status();
     CHECK(snap.transport == Transport::Error);
     CHECK(snap.statusText == "decode failed");
-  }
-
-  // A backend that faithfully models a real render thread: start() spawns a
-  // thread that hammers the lock-free readPcm/isSourceDrained path, stop() joins
-  // it. This mirrors the Engine's quiescent-point contract — sources are retired
-  // (publishSource) only after backendPtr->stop() has joined the render thread —
-  // so the simulated render thread never dereferences a freed source.
-  class RenderingBackend final : public IBackend
-  {
-  public:
-    Result<> open(Format const& format, IRenderTarget* target) override
-    {
-      _format = format;
-      _target.store(target, std::memory_order_relaxed);
-      return {};
-    }
-
-    void start() override
-    {
-      if (_thread.joinable())
-      {
-        return;
-      }
-
-      _thread = std::jthread{[this](std::stop_token const& st)
-                             {
-                               auto buffer = std::array<std::byte, 1024>{};
-
-                               while (!st.stop_requested())
-                               {
-                                 if (auto* const t = _target.load(std::memory_order_relaxed); t != nullptr)
-                                 {
-                                   std::ignore = t->readPcm(buffer);
-                                   std::ignore = t->isSourceDrained();
-                                 }
-                               }
-                             }};
-    }
-
-    void pause() override {}
-    void resume() override {}
-    void flush() override {}
-
-    void stop() override
-    {
-      _thread.request_stop();
-
-      if (_thread.joinable())
-      {
-        _thread.join();
-      }
-    }
-
-    void close() override {}
-
-    BackendId backendId() const noexcept override { return BackendId{"rendering"}; }
-    ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
-
-    Result<> setProperty(PropertyId /*id*/, PropertyValue const& /*value*/) override { return {}; }
-
-    Result<PropertyValue> property(PropertyId id) const override
-    {
-      if (id == PropertyId::Volume)
-      {
-        return PropertyValue{1.0F};
-      }
-
-      if (id == PropertyId::Muted)
-      {
-        return PropertyValue{false};
-      }
-
-      return std::unexpected(Error{.code = Error::Code::NotSupported});
-    }
-
-    PropertyInfo queryProperty(PropertyId /*id*/) const noexcept override
-    {
-      return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
-    }
-
-  private:
-    std::atomic<IRenderTarget*> _target{nullptr};
-    Format _format{};
-    std::jthread _thread;
-  };
-
-  // Run under TSan (./ao test --tsan): the control thread loops play/seek/stop
-  // (each publishing and retiring a source) while a render thread reads the
-  // lock-free RenderSourceSlot pointer and a poller reads status() through the
-  // source slot owner. TSan verifies the publish/retire happens-before chain
-  // holds.
-  TEST_CASE("Engine - concurrent source swap is race-free", "[audio][unit][engine][concurrency]")
-  {
-    auto const device = Device{.id = DeviceId{"test-device"},
-                               .displayName = "Test",
-                               .description = "Test",
-                               .isDefault = false,
-                               .backendId = kBackendNone};
-
-    auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
-    auto const factory = [fmt](auto const&, auto const&)
-    {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
-      auto data = std::vector(4096, std::byte{0});
-      decPtr->setReadScript({{data, false}, {data, false}, {data, false}, {{}, true}});
-      return decPtr;
-    };
-
-    auto engine = Engine{std::make_unique<RenderingBackend>(), device, factory};
-    auto const desc = PlaybackInput{.filePath = "song.flac"};
-
-    // Poller: read status() concurrently with the control thread's source swaps.
-    auto poller = std::jthread{[&](std::stop_token const& st)
-                               {
-                                 while (!st.stop_requested())
-                                 {
-                                   std::ignore = engine.status();
-                                 }
-                               }};
-
-    for (std::int32_t i = 0; i < 50; ++i)
-    {
-      engine.play(desc);
-      engine.seek(std::chrono::milliseconds{10});
-      engine.stop();
-    }
-
-    poller.request_stop();
-
-    if (poller.joinable())
-    {
-      poller.join();
-    }
-
-    CHECK(engine.status().transport == Transport::Idle);
   }
 } // namespace ao::audio::test

@@ -2,26 +2,19 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/AudioCodec.h>
-#include <ao/Error.h>
 #include <ao/Type.h>
-#include <ao/library/CoverArt.h>
-#include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
-#include <ao/yaml/Utils.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -35,11 +28,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
-#include <optional>
 #include <span>
 #include <string>
-#include <system_error>
-#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -47,72 +37,15 @@
 namespace ao::rt::test
 {
   using namespace ao::library;
-  namespace yaml = ao::yaml;
 
   namespace
   {
-    ryml::Tree loadTree(std::filesystem::path const& path, std::vector<char>& buffer)
-    {
-      buffer = yaml::readFile(path);
-      auto tree = ryml::Tree{yaml::callbacks(path.string().c_str())};
-      ryml::parse_in_place(ryml::to_substr(buffer), &tree);
-      return tree;
-    }
-
-    std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold> prepareTrack(TrackBuilder& builder,
-                                                                                  lmdb::WriteTransaction& txn,
-                                                                                  DictionaryStore& dict,
-                                                                                  ResourceStore& resources)
-    {
-      auto result = builder.prepare(txn, dict, resources);
-      REQUIRE(result);
-      return *result;
-    }
-
-    template<typename Writer>
-    std::pair<TrackId, TrackView> createPreparedTrack(Writer&& writer,
-                                                      TrackBuilder::PreparedHot const& preparedHot,
-                                                      TrackBuilder::PreparedCold const& preparedCold)
-    {
-      auto result =
-        std::forward<Writer>(writer).createHotCold(preparedHot.size(),
-                                                   preparedCold.size(),
-                                                   [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                                   {
-                                                     preparedHot.writeTo(hot);
-                                                     preparedCold.writeTo(cold);
-                                                   });
-      REQUIRE(result);
-      return *result;
-    }
-
     ListId createList(ListStore::Writer writer, std::span<std::byte const> payload)
     {
       auto result = writer.create(payload);
       REQUIRE(result);
       return result->first;
     }
-
-    struct DirectoryPermissionRestorer final
-    {
-      explicit DirectoryPermissionRestorer(std::filesystem::path path)
-        : path{std::move(path)}
-      {
-      }
-
-      DirectoryPermissionRestorer(DirectoryPermissionRestorer const&) = delete;
-      DirectoryPermissionRestorer& operator=(DirectoryPermissionRestorer const&) = delete;
-      DirectoryPermissionRestorer(DirectoryPermissionRestorer&&) = delete;
-      DirectoryPermissionRestorer& operator=(DirectoryPermissionRestorer&&) = delete;
-
-      ~DirectoryPermissionRestorer()
-      {
-        auto ec = std::error_code{};
-        std::filesystem::permissions(path, std::filesystem::perms::owner_all, std::filesystem::perm_options::add, ec);
-      }
-
-      std::filesystem::path path;
-    };
   } // namespace
 
   TEST_CASE("LibraryYaml round trip preserves tracks, covers, and lists", "[runtime][workflow][import-export][yaml]")
@@ -127,38 +60,40 @@ namespace ao::rt::test
     // 1. Setup initial library
     {
       auto txn = ml1.writeTransaction();
-      auto& dict = ml1.dictionary();
 
       auto resWriter = ml1.resources().writer(txn);
       auto resIdResult = resWriter.create(lmdb::test::createTestData(100));
       REQUIRE(resIdResult);
       auto const resId = *resIdResult;
       REQUIRE(resWriter.create(lmdb::test::createTestData(64)));
-
-      auto trackBuilder = TrackBuilder::createNew();
-      trackBuilder.property()
-        .uri("song.flac")
-        .duration(std::chrono::minutes{3})
-        .sampleRate(SampleRate{96000})
-        .bitDepth(BitDepth{24})
-        .codec(AudioCodec::Flac);
-      trackBuilder.metadata().title("Test Title").artist("Test Artist");
-      trackBuilder.coverArt().add(PictureType::FrontCover, resId);
-      trackBuilder.tags().add("rock").add("favorite");
-      trackBuilder.customMetadata().add("mood", "happy");
-
-      auto const [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml1.resources());
-      auto trackWriter = ml1.tracks().writer(txn);
-      auto const [trackId, view] = createPreparedTrack(trackWriter, preparedHot, preparedCold);
+      REQUIRE(txn.commit());
+      auto const trackId = library::test::addTrack(ml1,
+                                                   library::test::TrackSpec{.title = "Test Title",
+                                                                            .artist = "Test Artist",
+                                                                            .album = "",
+                                                                            .uri = "song.flac",
+                                                                            .tags = {"rock", "favorite"},
+                                                                            .customMetadata = {{"mood", "happy"}},
+                                                                            .coverArtId = resId,
+                                                                            .year = 0,
+                                                                            .discNumber = 0,
+                                                                            .trackNumber = 0,
+                                                                            .duration = std::chrono::minutes{3},
+                                                                            .bitrate = Bitrate{},
+                                                                            .sampleRate = SampleRate{96000},
+                                                                            .channels = Channels{},
+                                                                            .bitDepth = BitDepth{24},
+                                                                            .codec = AudioCodec::Flac});
+      auto listTxn = ml1.writeTransaction();
 
       auto smartListBuilder = ListBuilder::createNew().name(smartListName).filter(smartFilter);
-      createList(ml1.lists().writer(txn), smartListBuilder.serialize());
+      createList(ml1.lists().writer(listTxn), smartListBuilder.serialize());
 
       auto manualListBuilder = ListBuilder::createNew().name(manualListName).description(manualListDescription);
       manualListBuilder.tracks().add(trackId);
-      createList(ml1.lists().writer(txn), manualListBuilder.serialize());
+      createList(ml1.lists().writer(listTxn), manualListBuilder.serialize());
 
-      REQUIRE(txn.commit());
+      REQUIRE(listTxn.commit());
     }
 
     // 2. Export to YAML
@@ -180,13 +115,19 @@ namespace ao::rt::test
 
     // Pre-create the track in ml2 to test overlay (since physical file song.flac doesn't exist)
     {
-      auto txn = ml2.writeTransaction();
-      auto& dict = ml2.dictionary();
-      auto trackBuilder = TrackBuilder::createNew();
-      trackBuilder.property().uri("song.flac"); // technical properties are missing initially
-      auto const [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml2.resources());
-      createPreparedTrack(ml2.tracks().writer(txn), preparedHot, preparedCold);
-      REQUIRE(txn.commit());
+      library::test::addTrack(ml2,
+                              library::test::TrackSpec{.title = "",
+                                                       .artist = "",
+                                                       .album = "",
+                                                       .uri = "song.flac",
+                                                       .year = 0,
+                                                       .discNumber = 0,
+                                                       .trackNumber = 0,
+                                                       .duration = std::chrono::milliseconds{0},
+                                                       .bitrate = Bitrate{},
+                                                       .sampleRate = SampleRate{},
+                                                       .channels = Channels{},
+                                                       .bitDepth = BitDepth{}});
     }
 
     auto importer = LibraryYamlImporter{ml2};
@@ -276,24 +217,25 @@ namespace ao::rt::test
 
     // 1. Setup initial library with new fields
     {
+      auto const trackId = library::test::addTrack(ml1,
+                                                   library::test::TrackSpec{.title = "Test Title",
+                                                                            .artist = "Test Artist",
+                                                                            .album = "",
+                                                                            .composer = "Test Composer",
+                                                                            .work = "Test Work",
+                                                                            .movement = "Test Movement",
+                                                                            .uri = "full-fields.flac",
+                                                                            .year = 0,
+                                                                            .discNumber = 0,
+                                                                            .trackNumber = 0,
+                                                                            .movementNumber = 2,
+                                                                            .movementTotal = 4,
+                                                                            .duration = std::chrono::minutes{4},
+                                                                            .bitrate = Bitrate{},
+                                                                            .sampleRate = SampleRate{},
+                                                                            .channels = Channels{},
+                                                                            .bitDepth = BitDepth{}});
       auto txn = ml1.writeTransaction();
-      auto& dict = ml1.dictionary();
-
-      auto trackBuilder = TrackBuilder::createNew();
-      trackBuilder.property().uri("full-fields.flac").duration(std::chrono::minutes{4});
-
-      trackBuilder.metadata()
-        .title("Test Title")
-        .artist("Test Artist")
-        .composer("Test Composer")
-        .work("Test Work")
-        .movement("Test Movement")
-        .movementNumber(2)
-        .movementTotal(4);
-
-      auto const [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml1.resources());
-      auto const [trackId, view] = createPreparedTrack(ml1.tracks().writer(txn), preparedHot, preparedCold);
-
       auto manifestWriter = ml1.manifest().writer(txn);
       auto builder = FileManifestBuilder::createNew();
       builder.trackId(trackId).mtime(123456789);
@@ -346,292 +288,6 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml round trip deduplicates shared cover art resources",
-            "[runtime][workflow][import-export][yaml][cover]")
-  {
-    auto const temp1 = ao::test::TempDir{};
-    auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
-
-    auto const coverData = lmdb::test::createTestData(1024);
-    auto const backCoverData = lmdb::test::createTestData(257);
-    auto resId = kInvalidResourceId;
-    auto backResId = kInvalidResourceId;
-
-    // 1. Setup initial library with shared cover art
-    {
-      auto txn = ml1.writeTransaction();
-      auto& dict = ml1.dictionary();
-
-      auto resIdResult = ml1.resources().writer(txn).create(coverData);
-      REQUIRE(resIdResult);
-      resId = *resIdResult;
-      auto backResIdResult = ml1.resources().writer(txn).create(backCoverData);
-      REQUIRE(backResIdResult);
-      backResId = *backResIdResult;
-
-      auto trackBuilder1 = TrackBuilder::createNew();
-      trackBuilder1.property().uri("song1.flac");
-      trackBuilder1.metadata().title("Song 1");
-      trackBuilder1.coverArt().add(PictureType::BackCover, backResId);
-      trackBuilder1.coverArt().add(PictureType::FrontCover, resId);
-
-      auto trackBuilder2 = TrackBuilder::createNew();
-      trackBuilder2.property().uri("song2.flac");
-      trackBuilder2.metadata().title("Song 2");
-      trackBuilder2.coverArt().add(PictureType::FrontCover, resId);
-
-      auto trackWriter = ml1.tracks().writer(txn);
-
-      auto const [p1h, p1c] = prepareTrack(trackBuilder1, txn, dict, ml1.resources());
-      createPreparedTrack(trackWriter, p1h, p1c);
-
-      auto const [p2h, p2c] = prepareTrack(trackBuilder2, txn, dict, ml1.resources());
-      createPreparedTrack(trackWriter, p2h, p2c);
-
-      REQUIRE(txn.commit());
-    }
-
-    // 2. Export to YAML
-    auto const yamlPath = std::filesystem::path{temp1.path()} / "covers.yaml";
-    auto exporter = LibraryYamlExporter{ml1};
-    REQUIRE(exporter.exportToYaml(yamlPath, ExportMode::Full));
-
-    // 3. Verify YAML contains anchor and alias (textual check)
-    {
-      auto ifs = std::ifstream{yamlPath};
-      auto const content = std::string((std::istreambuf_iterator{ifs}), std::istreambuf_iterator<char>{});
-      // Should contain at least one anchor &cover_ and one alias *cover_
-      CHECK(content.find("&cover_") != std::string::npos);
-      CHECK(content.find("*cover_") != std::string::npos);
-    }
-
-    // 4. Import into new library
-    auto const temp2 = ao::test::TempDir{};
-    auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
-    auto importer = LibraryYamlImporter{ml2};
-    REQUIRE(importer.importFromYaml(yamlPath));
-
-    // 5. Verify deduplication and content
-    {
-      auto txn = ml2.readTransaction();
-      auto reader = ml2.tracks().reader(txn);
-      auto& resources = ml2.resources();
-
-      auto tracks = std::unordered_map<std::string, TrackView>{};
-
-      for (auto const& [id, view] : reader)
-      {
-        tracks.emplace(view.property().uri(), view);
-      }
-
-      REQUIRE(tracks.size() == 2);
-      auto const& track1 = tracks.at("song1.flac");
-      auto const& track2 = tracks.at("song2.flac");
-      auto const optPrimary1 = track1.coverArt().primary();
-      auto const optPrimary2 = track2.coverArt().primary();
-
-      REQUIRE(optPrimary1);
-      REQUIRE(optPrimary2);
-      CHECK(optPrimary1->resourceId == optPrimary2->resourceId); // Deduplicated by CAS ResourceStore
-      REQUIRE(track1.coverArt().count() == 2);
-      CHECK(track1.coverArt().at(0).type == PictureType::BackCover);
-      CHECK(track1.coverArt().at(1).type == PictureType::FrontCover);
-
-      auto const optImportedData = resources.reader(txn).get(optPrimary1->resourceId);
-      REQUIRE(optImportedData);
-      CHECK(optImportedData->size() == coverData.size());
-      CHECK(std::ranges::equal(*optImportedData, coverData));
-
-      auto const optBackData = resources.reader(txn).get(track1.coverArt().at(0).resourceId);
-      REQUIRE(optBackData);
-      CHECK(std::ranges::equal(*optBackData, backCoverData));
-    }
-  }
-
-  TEST_CASE("LibraryYaml merge replaces and removes cover art", "[runtime][workflow][import-export][yaml][cover]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
-    auto const uri = std::string{"song.flac"};
-
-    {
-      auto txn = ml.writeTransaction();
-      auto& dict = ml.dictionary();
-      auto resWriter = ml.resources().writer(txn);
-      auto frontIdResult = resWriter.create(lmdb::test::createTestData(8));
-      REQUIRE(frontIdResult);
-      auto const frontId = *frontIdResult;
-      auto backIdResult = resWriter.create(lmdb::test::createTestData(9));
-      REQUIRE(backIdResult);
-      auto const backId = *backIdResult;
-
-      auto builder = TrackBuilder::createNew();
-      builder.property().uri(uri);
-      builder.coverArt().add(PictureType::FrontCover, frontId);
-      builder.coverArt().add(PictureType::BackCover, backId);
-      auto const [hot, cold] = prepareTrack(builder, txn, dict, ml.resources());
-      auto const trackId = createPreparedTrack(ml.tracks().writer(txn), hot, cold).first;
-
-      auto manifest = FileManifestBuilder::createNew();
-      manifest.trackId(trackId);
-      REQUIRE(ml.manifest().writer(txn).put(uri, manifest.serialize()));
-      REQUIRE(txn.commit());
-    }
-
-    auto const yamlPath = std::filesystem::path{temp.path()} / "covers.yaml";
-    {
-      auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
-export_mode: full
-library:
-  tracks:
-    - uri: song.flac
-      covers:
-        - type: 4
-          data: BAUG
-  lists: []
-)";
-    }
-
-    auto importer = LibraryYamlImporter{ml};
-    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
-
-    {
-      auto txn = ml.readTransaction();
-      auto const manifestResult = ml.manifest().reader(txn).get(uri);
-      REQUIRE(manifestResult);
-      auto const optView = ml.tracks().reader(txn).get(manifestResult->trackId(), TrackStore::Reader::LoadMode::Both);
-      REQUIRE(optView);
-      REQUIRE(optView->coverArt().count() == 1);
-      CHECK(optView->coverArt().at(0).type == PictureType::BackCover);
-
-      auto const optData = ml.resources().reader(txn).get(optView->coverArt().at(0).resourceId);
-      REQUIRE(optData);
-      REQUIRE(optData->size() == 3);
-      CHECK((*optData)[0] == std::byte{4});
-      CHECK((*optData)[1] == std::byte{5});
-      CHECK((*optData)[2] == std::byte{6});
-    }
-
-    {
-      auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
-export_mode: delta
-library:
-  tracks:
-    - uri: song.flac
-      covers: []
-  lists: []
-)";
-    }
-
-    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
-
-    {
-      auto txn = ml.readTransaction();
-      auto const manifestResult = ml.manifest().reader(txn).get(uri);
-      REQUIRE(manifestResult);
-      auto const optView = ml.tracks().reader(txn).get(manifestResult->trackId(), TrackStore::Reader::LoadMode::Both);
-      REQUIRE(optView);
-      CHECK(optView->coverArt().count() == 0);
-    }
-  }
-
-  TEST_CASE("LibraryYaml list-only export restores lists by track URI",
-            "[runtime][workflow][import-export][yaml][list]")
-  {
-    auto const temp1 = ao::test::TempDir{};
-    auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
-
-    auto trackId = kInvalidTrackId;
-    auto const* const uri = "special-list-song.flac";
-
-    // 1. Setup initial library
-    {
-      auto txn = ml1.writeTransaction();
-      auto& dict = ml1.dictionary();
-
-      auto trackBuilder = TrackBuilder::createNew();
-      trackBuilder.property().uri(uri);
-      auto const [p1h, p1c] = prepareTrack(trackBuilder, txn, dict, ml1.resources());
-      std::tie(trackId, std::ignore) = createPreparedTrack(ml1.tracks().writer(txn), p1h, p1c);
-
-      auto manifestWriter = ml1.manifest().writer(txn);
-      auto builder = FileManifestBuilder::createNew();
-      builder.trackId(trackId);
-      REQUIRE(manifestWriter.put(uri, builder.serialize()));
-
-      auto listBuilder = ListBuilder::createNew().name("My URI List");
-      listBuilder.tracks().add(trackId);
-      createList(ml1.lists().writer(txn), listBuilder.serialize());
-
-      REQUIRE(txn.commit());
-    }
-
-    // 2. Export in ListOnly mode
-    auto const yamlPath = std::filesystem::path{temp1.path()} / "list-only.yaml";
-    auto exporter = LibraryYamlExporter{ml1};
-    REQUIRE(exporter.exportToYaml(yamlPath, ExportMode::ListOnly));
-
-    // 3. Verify YAML content
-    {
-      auto buffer = std::vector<char>{};
-      auto tree = loadTree(yamlPath, buffer);
-      auto root = tree.rootref();
-      CHECK_FALSE(root["library"]["tracks"].readable());
-      CHECK(root["library"]["lists"].readable());
-    }
-
-    // 4. Import into a library that has the SAME track but DIFFERENT TrackId
-    auto const temp2 = ao::test::TempDir{};
-    auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
-
-    auto targetTrackId = kInvalidTrackId;
-    {
-      auto txn = ml2.writeTransaction();
-      auto& dict = ml2.dictionary();
-
-      // Create junk track first to ensure IDs don't match
-      REQUIRE(ml2.tracks().writer(txn).createHotCold(0, 0, [](auto, auto, auto) {}));
-
-      auto trackBuilder = TrackBuilder::createNew();
-      trackBuilder.property().uri(uri);
-      auto const [p1h, p1c] = prepareTrack(trackBuilder, txn, dict, ml2.resources());
-      std::tie(targetTrackId, std::ignore) = createPreparedTrack(ml2.tracks().writer(txn), p1h, p1c);
-
-      auto manifestWriter = ml2.manifest().writer(txn);
-      auto builder = FileManifestBuilder::createNew();
-      builder.trackId(targetTrackId);
-      REQUIRE(manifestWriter.put(uri, builder.serialize()));
-
-      REQUIRE(txn.commit());
-    }
-
-    auto importer = LibraryYamlImporter{ml2};
-    REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
-
-    // 5. Verify list was restored and track remapped
-    {
-      auto txn = ml2.readTransaction();
-      auto const listReader = ml2.lists().reader(txn);
-
-      std::int32_t listCount = 0;
-
-      for (auto const& [lid, lview] : listReader)
-      {
-        listCount++;
-        CHECK(lview.name() == "My URI List");
-        REQUIRE(lview.tracks().size() == 1);
-        CHECK(lview.tracks()[0] == targetTrackId); // Remapped!
-      }
-
-      CHECK(listCount == 1);
-
-      // Verify tracks were NOT cleared
-      CHECK(ml2.tracks().reader(txn).begin() != ml2.tracks().reader(txn).end());
-    }
-  }
-
   TEST_CASE("LibraryYaml merge updates existing tracks and adds new tracks",
             "[runtime][workflow][import-export][yaml][merge]")
   {
@@ -643,13 +299,20 @@ library:
 
     // 1. Setup initial library with track 1
     {
+      auto const tid = library::test::addTrack(ml,
+                                               library::test::TrackSpec{.title = "Original Title",
+                                                                        .artist = "",
+                                                                        .album = "",
+                                                                        .uri = uri1,
+                                                                        .year = 0,
+                                                                        .discNumber = 0,
+                                                                        .trackNumber = 0,
+                                                                        .duration = std::chrono::milliseconds{0},
+                                                                        .bitrate = Bitrate{},
+                                                                        .sampleRate = SampleRate{},
+                                                                        .channels = Channels{},
+                                                                        .bitDepth = BitDepth{}});
       auto txn = ml.writeTransaction();
-      auto& dict = ml.dictionary();
-      auto trackBuilder = TrackBuilder::createNew();
-      trackBuilder.property().uri(uri1);
-      trackBuilder.metadata().title("Original Title");
-      auto [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml.resources());
-      auto [tid, view] = createPreparedTrack(ml.tracks().writer(txn), preparedHot, preparedCold);
       auto builder = FileManifestBuilder::createNew();
       builder.trackId(tid);
       REQUIRE(ml.manifest().writer(txn).put(uri1, builder.serialize()));
@@ -698,447 +361,6 @@ library:
       auto const& v2 = tracks.at(uri2);
       CHECK(std::string{v2.metadata().title()} == "New Track");
     }
-  }
-
-  TEST_CASE("LibraryYaml import remaps list parents regardless of YAML order",
-            "[runtime][workflow][import-export][yaml][list][regression]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
-
-    auto trackId = kInvalidTrackId;
-    {
-      auto txn = ml.writeTransaction();
-      auto& dict = ml.dictionary();
-      auto trackBuilder = TrackBuilder::createNew();
-      trackBuilder.property().uri("song.flac");
-      auto [preparedHot, preparedCold] = prepareTrack(trackBuilder, txn, dict, ml.resources());
-      std::tie(trackId, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), preparedHot, preparedCold);
-      REQUIRE(txn.commit());
-    }
-
-    auto const yamlPath = std::filesystem::path{temp.path()} / "child-first.yaml";
-    {
-      auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
-library:
-  tracks:
-    - id: 10
-      uri: song.flac
-  lists:
-    - id: 2
-      parentId: 1
-      name: Child
-      tracks:
-        - 10
-    - id: 1
-      parentId: 0
-      name: Parent
-)";
-    }
-
-    auto importer = LibraryYamlImporter{ml};
-    REQUIRE(importer.importFromYaml(yamlPath));
-
-    {
-      auto txn = ml.readTransaction();
-      auto const listReader = ml.lists().reader(txn);
-
-      auto optParent = std::optional<ListView>{};
-      auto optChild = std::optional<ListView>{};
-      auto parentId = kInvalidListId;
-      auto childId = kInvalidListId;
-
-      for (auto const& [listId, view] : listReader)
-      {
-        if (view.name() == "Parent")
-        {
-          parentId = listId;
-          optParent = view;
-        }
-
-        if (view.name() == "Child")
-        {
-          childId = listId;
-          optChild = view;
-        }
-      }
-
-      REQUIRE(optParent);
-      REQUIRE(optChild);
-      CHECK(optParent->parentId() == kInvalidListId);
-      CHECK(optChild->parentId() == parentId);
-      CHECK(childId != parentId);
-      REQUIRE(optChild->tracks().size() == 1);
-      CHECK(optChild->tracks()[0] == trackId);
-    }
-  }
-
-  TEST_CASE("LibraryYaml import reports invalid input errors", "[runtime][workflow][import-export][yaml][error]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
-    auto importer = LibraryYamlImporter{ml};
-    auto const yamlPath = std::filesystem::path{temp.path()} / "bad.yaml";
-
-    auto testError = [&](std::string_view yamlContent, Error::Code expectedCode, std::string_view expectedErrorFragment)
-    {
-      {
-        auto yaml = std::ofstream{yamlPath};
-        yaml << yamlContent;
-      }
-      auto const result = importer.importFromYaml(yamlPath);
-      REQUIRE(!result);
-      CHECK(result.error().code == expectedCode);
-      CHECK_THAT(result.error().message, Catch::Matchers::ContainsSubstring(std::string{expectedErrorFragment}));
-    };
-
-    SECTION("IO Error: File not found")
-    {
-      auto const nonExistentPath = std::filesystem::path{temp.path()} / "ghost.yaml";
-      auto const result = importer.importFromYaml(nonExistentPath);
-      REQUIRE(!result);
-      CHECK(result.error().code == Error::Code::IoError);
-    }
-
-    SECTION("Missing version")
-    {
-      testError(R"(
-library:
-  tracks: []
-  lists: []
-)",
-                Error::Code::FormatRejected,
-                "Missing 'version'");
-    }
-
-    SECTION("Unsupported version")
-    {
-      testError(R"(
-version: 2
-library:
-  tracks: []
-)",
-                Error::Code::FormatRejected,
-                "Unsupported YAML version");
-    }
-
-    SECTION("Missing library section")
-    {
-      testError(R"(
-version: 1
-)",
-                Error::Code::FormatRejected,
-                "Missing 'library' section");
-    }
-
-    SECTION("Track missing URI")
-    {
-      testError(R"(
-version: 1
-library:
-  tracks:
-    - id: 1
-      title: "No URI"
-  lists: []
-)",
-                Error::Code::FormatRejected,
-                "missing required 'uri'");
-    }
-
-    SECTION("Track empty URI")
-    {
-      testError(R"(
-version: 1
-library:
-  tracks:
-    - id: 1
-      uri: ""
-  lists: []
-)",
-                Error::Code::FormatRejected,
-                "empty 'uri'");
-    }
-
-    SECTION("Duplicate track ID")
-    {
-      testError(R"(
-version: 1
-library:
-  tracks:
-    - id: 1
-      uri: "song1.flac"
-    - id: 1
-      uri: "song2.flac"
-  lists: []
-)",
-                Error::Code::FormatRejected,
-                "Duplicate track YAML id");
-    }
-
-    SECTION("List missing ID")
-    {
-      testError(R"(
-version: 1
-library:
-  tracks: []
-  lists:
-    - name: "No ID"
-)",
-                Error::Code::FormatRejected,
-                "missing required 'id'");
-    }
-
-    SECTION("List ID 0 (Reserved)")
-    {
-      testError(R"(
-version: 1
-library:
-  tracks: []
-  lists:
-    - id: 0
-      name: "Root List"
-)",
-                Error::Code::FormatRejected,
-                "List id 0 is reserved");
-    }
-
-    SECTION("Duplicate list ID")
-    {
-      testError(R"(
-version: 1
-library:
-  tracks: []
-  lists:
-    - id: 1
-      name: "List 1"
-    - id: 1
-      name: "List 2"
-)",
-                Error::Code::FormatRejected,
-                "Duplicate list YAML id");
-    }
-
-    SECTION("List missing name")
-    {
-      testError(R"(
-version: 1
-library:
-  tracks: []
-  lists:
-    - id: 1
-)",
-                Error::Code::FormatRejected,
-                "missing required 'name'");
-    }
-
-    SECTION("Malformed Base64 cover art is skipped gracefully")
-    {
-      {
-        auto yaml = std::ofstream{yamlPath};
-        yaml << R"(
-version: 1
-library:
-  tracks:
-    - uri: "song1.flac"
-      covers:
-        - type: 3
-          data: "Not!Valid@Base#64$"
-  lists: []
-)";
-      }
-      REQUIRE(importer.importFromYaml(yamlPath));
-      auto txn = ml.readTransaction();
-      auto const reader = ml.tracks().reader(txn);
-      auto const it = reader.begin();
-      REQUIRE(it != reader.end());
-      auto const& [tid, view] = *it;
-      // Cover art should be absent because it was skipped
-      CHECK_FALSE(view.coverArt().primary().has_value());
-    }
-  }
-
-  TEST_CASE("LibraryYaml delta export writes changed and unreadable tracks",
-            "[runtime][workflow][import-export][yaml][delta]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
-
-    auto trackId1 = kInvalidTrackId;
-    auto trackId2 = kInvalidTrackId;
-    auto trackId3 = kInvalidTrackId;
-    auto trackId4 = kInvalidTrackId;
-    {
-      auto txn = ml.writeTransaction();
-      auto& dict = ml.dictionary();
-
-      auto trackBuilder1 = TrackBuilder::createNew();
-      trackBuilder1.property().uri("no-file.flac");
-      trackBuilder1.metadata().title("Should Export Fully");
-      auto const [p1h, p1c] = prepareTrack(trackBuilder1, txn, dict, ml.resources());
-      std::tie(trackId1, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), p1h, p1c);
-
-      auto trackBuilder2 = TrackBuilder::createNew();
-      trackBuilder2.property().uri("dummy.flac");
-      trackBuilder2.metadata().title("Will fallback to full export because TagFile fails");
-      auto const [p2h, p2c] = prepareTrack(trackBuilder2, txn, dict, ml.resources());
-      std::tie(trackId2, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), p2h, p2c);
-
-      auto trackBuilder3 = TrackBuilder::createNew();
-      trackBuilder3.property().uri("cover.flac");
-      trackBuilder3.metadata().title("Different Title");
-      auto coverData = std::vector{std::byte{1}, std::byte{2}, std::byte{3}};
-      trackBuilder3.coverArt().add(PictureType::FrontCover, coverData);
-      auto const [p3h, p3c] = prepareTrack(trackBuilder3, txn, dict, ml.resources());
-      std::tie(trackId3, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), p3h, p3c);
-
-      auto trackBuilder4 = TrackBuilder::createNew();
-      trackBuilder4.property().uri("cover-removed.flac");
-      auto const [p4h, p4c] = prepareTrack(trackBuilder4, txn, dict, ml.resources());
-      std::tie(trackId4, std::ignore) = createPreparedTrack(ml.tracks().writer(txn), p4h, p4c);
-
-      REQUIRE(txn.commit());
-    }
-
-    std::filesystem::copy_file(std::filesystem::current_path() / "test/integration/tag/test_data/with_cover.flac",
-                               std::filesystem::path{temp.path()} / "cover.flac");
-    std::filesystem::copy_file(std::filesystem::current_path() / "test/integration/tag/test_data/with_cover.flac",
-                               std::filesystem::path{temp.path()} / "cover-removed.flac");
-
-    auto const yamlPath = std::filesystem::path{temp.path()} / "delta.yaml";
-    auto exporter = LibraryYamlExporter{ml};
-    REQUIRE(exporter.exportToYaml(yamlPath, rt::ExportMode::Delta));
-
-    {
-      auto buffer = std::vector<char>{};
-      auto tree = loadTree(yamlPath, buffer);
-      auto root = tree.rootref();
-      auto tracks = root["library"]["tracks"];
-      REQUIRE(tracks.is_seq());
-      REQUIRE(tracks.num_children() == 4);
-
-      CHECK(yaml::scalarView(tracks[0]["title"]) == "Should Export Fully");
-      CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because TagFile fails");
-      CHECK(yaml::scalarView(tracks[2]["title"]) == "Different Title");
-      CHECK(tracks[2].has_child("covers"));
-      REQUIRE(tracks[3].has_child("covers"));
-      CHECK(tracks[3]["covers"].is_seq());
-      CHECK(tracks[3]["covers"].num_children() == 0);
-      CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because TagFile fails");
-    }
-  }
-
-  TEST_CASE("LibraryYaml delta export reports filesystem inspection errors",
-            "[runtime][workflow][import-export][yaml][delta][error]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
-    auto const blockedDir = std::filesystem::path{temp.path()} / "blocked";
-    std::filesystem::create_directory(blockedDir);
-    auto restorePermissions = DirectoryPermissionRestorer{blockedDir};
-
-    {
-      auto txn = ml.writeTransaction();
-      auto& dict = ml.dictionary();
-
-      auto trackBuilder = TrackBuilder::createNew();
-      trackBuilder.property().uri("blocked/song.flac");
-      trackBuilder.metadata().title("Cannot inspect baseline");
-      auto const [hot, cold] = prepareTrack(trackBuilder, txn, dict, ml.resources());
-      std::ignore = createPreparedTrack(ml.tracks().writer(txn), hot, cold);
-      REQUIRE(txn.commit());
-    }
-
-    std::filesystem::permissions(blockedDir, std::filesystem::perms::none, std::filesystem::perm_options::replace);
-
-    auto exporter = LibraryYamlExporter{ml};
-    auto const result = exporter.exportToYaml(std::filesystem::path{temp.path()} / "delta.yaml", ExportMode::Delta);
-
-    REQUIRE(!result);
-    CHECK(result.error().code == Error::Code::IoError);
-  }
-
-  TEST_CASE("LibraryYaml delta import reports filesystem inspection errors",
-            "[runtime][workflow][import-export][yaml][delta][error]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
-    auto importer = LibraryYamlImporter{ml};
-    auto const yamlPath = std::filesystem::path{temp.path()} / "delta-import.yaml";
-    auto const blockedDir = std::filesystem::path{temp.path()} / "blocked";
-    std::filesystem::create_directory(blockedDir);
-    auto restorePermissions = DirectoryPermissionRestorer{blockedDir};
-
-    {
-      auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 1\n"
-           << "export_mode: delta\n"
-           << "library:\n"
-           << "  tracks:\n"
-           << "    - uri: \"blocked/song.flac\"\n"
-           << "      title: Cannot inspect baseline\n"
-           << "  lists: []\n";
-    }
-
-    std::filesystem::permissions(blockedDir, std::filesystem::perms::none, std::filesystem::perm_options::replace);
-
-    auto const result = importer.importFromYaml(yamlPath);
-
-    REQUIRE(!result);
-    CHECK(result.error().code == Error::Code::IoError);
-  }
-
-  TEST_CASE("LibraryYaml import drops dangling list references", "[runtime][workflow][import-export][yaml][list]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
-    auto importer = LibraryYamlImporter{ml};
-    auto const yamlPath = std::filesystem::path{temp.path()} / "list-edges.yaml";
-
-    {
-      auto yaml = std::ofstream{yamlPath};
-      yaml << R"(
-version: 1
-library:
-  tracks:
-    - id: 10
-      uri: valid.flac
-  lists:
-    - id: 1
-      name: Parent
-      tracks:
-        - 10
-        - 999
-        - uri: invalid-uri.flac
-    - id: 2
-      parentId: 999
-      name: Dangling Parent
-)";
-    }
-
-    REQUIRE(importer.importFromYaml(yamlPath));
-
-    auto txn = ml.readTransaction();
-    auto const listReader = ml.lists().reader(txn);
-
-    std::int32_t listCount = 0;
-
-    for (auto const& [lid, view] : listReader)
-    {
-      listCount++;
-
-      if (view.name() == "Parent")
-      {
-        REQUIRE(view.tracks().size() == 1);
-        CHECK(view.parentId() == kInvalidListId);
-      }
-      else if (view.name() == "Dangling Parent")
-      {
-        CHECK(view.parentId() == kInvalidListId);
-      }
-    }
-
-    CHECK(listCount == 2);
   }
 
   TEST_CASE("LibraryYaml import canonicalizes track URIs and recovers file sizes",
@@ -1213,81 +435,6 @@ library:
     auto optList = listReader.get(ListId{1});
     REQUIRE(optList);
     REQUIRE(optList->tracks().size() == 3);
-  }
-
-  TEST_CASE("LibraryYaml import handles structural corruption cases", "[runtime][workflow][import-export][yaml][error]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
-    auto importer = LibraryYamlImporter{ml};
-    auto const yamlPath = std::filesystem::path{temp.path()} / "corrupt.yaml";
-
-    SECTION("Tracks is scalar instead of sequence")
-    {
-      {
-        auto yaml = std::ofstream{yamlPath};
-        yaml << R"(
-version: 1
-library:
-  tracks: "not-a-sequence"
-  lists: []
-)";
-      }
-      auto const result = importer.importFromYaml(yamlPath);
-      // Currently validate() checks if tracks.readable() but doesn't strictly check is_seq() in validate()
-      // But validateTracks() iterates children.
-      // Let's see if ryml handles scalar iteration gracefully or returns error.
-      // Based on Importer code: if (auto const tracks = yaml::findChild(library, "tracks"); tracks.readable())
-      // If it's a scalar, it's still readable.
-      // Then validateTracks calls tracks.children() which might be empty or throw for scalar?
-      // Actually ryml::NodeRef::children() for scalar is empty.
-      // So it might just import 0 tracks.
-      // If we want it to fail, we should check is_seq().
-      REQUIRE(result);
-    }
-
-    SECTION("List missing mandatory ID")
-    {
-      {
-        auto yaml = std::ofstream{yamlPath};
-        yaml << R"(
-version: 1
-library:
-  tracks: []
-  lists:
-    - name: "No ID"
-)";
-      }
-      auto const result = importer.importFromYaml(yamlPath);
-      REQUIRE(!result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.find("missing required 'id'") != std::string::npos);
-    }
-
-    SECTION("List entry points to non-existent track")
-    {
-      {
-        auto yaml = std::ofstream{yamlPath};
-        yaml << R"(
-version: 1
-library:
-  tracks: []
-  lists:
-    - id: 1
-      name: "Ghost List"
-      tracks:
-        - 999
-)";
-      }
-      // Import should succeed but the list will be empty (or the ghost track ignored)
-      auto const result = importer.importFromYaml(yamlPath);
-      REQUIRE(result);
-
-      auto txn = ml.readTransaction();
-      auto const optList = ml.lists().reader(txn).get(ListId{1});
-      REQUIRE(optList);
-      CHECK(optList->tracks().empty());
-    }
   }
 
   TEST_CASE("LibraryYaml import accepts metadata and delta-mode YAML examples",

@@ -5,15 +5,30 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
+#include <optional>
 #include <span>
 #include <thread>
 #include <vector>
 
 namespace ao::audio::test
 {
+  namespace
+  {
+    constexpr auto kConcurrentCompletionTimeout = std::chrono::seconds{5};
+
+    struct ByteMismatch final
+    {
+      std::int32_t index{};
+      std::byte expected{};
+      std::byte actual{};
+    };
+  } // namespace
+
   TEST_CASE("PcmRingBuffer - reads preserve FIFO bytes and clear resets state", "[audio][unit][ring_buffer]")
   {
     auto buffer = PcmRingBuffer{};
@@ -97,11 +112,22 @@ namespace ao::audio::test
 
       // Fill remaining if any
       auto b = std::byte{0xDD};
+      bool reachedCapacity = false;
 
-      while (buffer.write(std::span<std::byte const>{&b, 1}) == 1)
+      for (std::size_t attempts = 0; attempts <= cap; ++attempts)
       {
+        auto const extraWritten = buffer.write(std::span<std::byte const>{&b, 1});
+
+        if (extraWritten == 0)
+        {
+          reachedCapacity = true;
+          break;
+        }
+
+        CHECK(extraWritten == 1);
       }
 
+      CHECK(reachedCapacity);
       CHECK(buffer.write(std::span<std::byte const>{&b, 1}) == 0);
     }
   }
@@ -109,8 +135,19 @@ namespace ao::audio::test
   TEST_CASE("PcmRingBuffer - single producer and consumer preserve byte order", "[audio][unit][ring_buffer]")
   {
     auto buffer = PcmRingBuffer{};
-    int const iterations = 10000;
-    auto done = std::atomic{false};
+    std::int32_t const iterations = 10000;
+
+    auto progressMutex = std::mutex{};
+    auto progressChanged = std::condition_variable{};
+    auto const deadline = std::chrono::steady_clock::now() + kConcurrentCompletionTimeout;
+
+    std::int32_t produced = 0;
+    std::int32_t consumed = 0;
+    bool producerDone = false;
+    auto optProducerWriteTimeoutAt = std::optional<std::int32_t>{};
+    auto optConsumerTimeoutAt = std::optional<std::int32_t>{};
+    auto optConsumerReadFailureAt = std::optional<std::int32_t>{};
+    auto optMismatch = std::optional<ByteMismatch>{};
 
     auto producer = std::jthread{[&]
                                  {
@@ -120,34 +157,107 @@ namespace ao::audio::test
 
                                      while (buffer.write(std::span{&b, 1}) == 0)
                                      {
-                                       std::this_thread::yield();
+                                       auto lock = std::unique_lock{progressMutex};
+
+                                       if (auto const observedConsumed = consumed; !progressChanged.wait_until(
+                                             lock, deadline, [&] { return consumed > observedConsumed; }))
+                                       {
+                                         optProducerWriteTimeoutAt = i;
+                                         producerDone = true;
+                                         progressChanged.notify_all();
+                                         return;
+                                       }
                                      }
+
+                                     {
+                                       auto lock = std::scoped_lock{progressMutex};
+                                       ++produced;
+                                     }
+
+                                     progressChanged.notify_all();
                                    }
 
-                                   done = true;
-                                 }};
-
-    auto consumer = std::jthread{[&]
-                                 {
-                                   std::int32_t count = 0;
-
-                                   while (!done || buffer.size() > 0)
                                    {
-                                     if (auto b = std::byte{}; buffer.read(std::span{&b, 1}) == 1)
-                                     {
-                                       CHECK(b == static_cast<std::byte>(count % 256));
-                                       count++;
-                                     }
-                                     else
-                                     {
-                                       std::this_thread::yield();
-                                     }
+                                     auto lock = std::scoped_lock{progressMutex};
+                                     producerDone = true;
                                    }
 
-                                   CHECK(count == iterations);
+                                   progressChanged.notify_all();
                                  }};
+
+    auto consumer = std::jthread{
+      [&]
+      {
+        std::int32_t count = 0;
+
+        while (count < iterations)
+        {
+          {
+            auto lock = std::unique_lock{progressMutex};
+
+            if (!progressChanged.wait_until(lock, deadline, [&] { return produced > count || producerDone; }))
+            {
+              optConsumerTimeoutAt = count;
+              return;
+            }
+
+            if (produced <= count)
+            {
+              return;
+            }
+          }
+
+          auto b = std::byte{};
+
+          if (buffer.read(std::span{&b, 1}) != 1)
+          {
+            auto lock = std::scoped_lock{progressMutex};
+            optConsumerReadFailureAt = count;
+            return;
+          }
+
+          if (auto const expected = static_cast<std::byte>(count % 256); b != expected)
+          {
+            auto lock = std::scoped_lock{progressMutex};
+            optMismatch = ByteMismatch{.index = count, .expected = expected, .actual = b};
+            return;
+          }
+
+          ++count;
+          {
+            auto lock = std::scoped_lock{progressMutex};
+            consumed = count;
+          }
+          progressChanged.notify_all();
+        }
+      }};
 
     producer.join();
     consumer.join();
+
+    if (optProducerWriteTimeoutAt)
+    {
+      FAIL("Producer timed out waiting for capacity at iteration " << *optProducerWriteTimeoutAt);
+    }
+
+    if (optConsumerTimeoutAt)
+    {
+      FAIL("Consumer timed out after reading " << *optConsumerTimeoutAt << " of " << iterations << " bytes");
+    }
+
+    if (optConsumerReadFailureAt)
+    {
+      FAIL("Consumer observed a produced byte but read no data at iteration " << *optConsumerReadFailureAt);
+    }
+
+    if (optMismatch)
+    {
+      FAIL("Byte mismatch at iteration " << optMismatch->index << ": expected "
+                                         << std::to_integer<int>(optMismatch->expected) << " but read "
+                                         << std::to_integer<int>(optMismatch->actual));
+    }
+
+    CHECK(consumed == iterations);
+    CHECK(buffer.size() == 0);
   }
 } // namespace ao::audio::test

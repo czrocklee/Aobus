@@ -24,7 +24,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("TransportViewModel - view state by action", "[unit][uimodel][playback]")
+  TEST_CASE("TransportViewModel - view state by action", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -174,7 +174,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TransportViewModel - handleClick command resolution", "[unit][uimodel][playback]")
+  TEST_CASE("TransportViewModel - handleClick command resolution", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -345,7 +345,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TransportViewModel - subscription callbacks refresh view", "[unit][uimodel][playback]")
+  TEST_CASE("TransportViewModel - subscription callbacks refresh view", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -383,7 +383,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TransportViewModel stops rendering after destruction", "[unit][uimodel][playback]")
+  TEST_CASE("TransportViewModel stops rendering after destruction", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};

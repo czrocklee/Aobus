@@ -20,7 +20,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("SeekViewModel - reactive updates", "[unit][uimodel][playback]")
+  TEST_CASE("SeekViewModel - reactive updates", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
