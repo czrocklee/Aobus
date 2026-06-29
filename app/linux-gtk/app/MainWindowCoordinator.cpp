@@ -17,17 +17,18 @@
 #include "tag/TagEditController.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackRowCache.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -266,9 +267,9 @@ namespace ao::gtk
 
     prefs.lastLibraryPath = _runtime.musicLibrary().rootPath().string();
     auto const& pb = _runtime.playback().state();
-    prefs.lastBackend = pb.selectedOutput.backendId.raw();
-    prefs.lastOutputDeviceId = pb.selectedOutput.deviceId.raw();
-    prefs.lastProfile = pb.selectedOutput.profileId.raw();
+    prefs.lastOutputBackendId = pb.selectedOutputDevice.backendId.raw();
+    prefs.lastOutputDeviceId = pb.selectedOutputDevice.deviceId.raw();
+    prefs.lastOutputProfileId = pb.selectedOutputDevice.profileId.raw();
     prefs.lastThemePreset = std::string{themePresetToString(_implPtr->themeController.activeTheme())};
 
     _configPtr->saveAppPrefs(prefs);
@@ -299,11 +300,11 @@ namespace ao::gtk
     auto prefs = rt::AppPrefsState{};
     _configPtr->loadAppPrefs(prefs);
 
-    if (!prefs.lastBackend.empty())
+    if (!prefs.lastOutputBackendId.empty())
     {
-      _runtime.playback().setOutput(audio::BackendId{prefs.lastBackend},
-                                    audio::DeviceId{prefs.lastOutputDeviceId},
-                                    audio::ProfileId{prefs.lastProfile});
+      _runtime.playback().setOutputDevice(audio::BackendId{prefs.lastOutputBackendId},
+                                          audio::DeviceId{prefs.lastOutputDeviceId},
+                                          audio::ProfileId{prefs.lastOutputProfileId});
     }
 
     _implPtr->themeController.load(*_configPtr);

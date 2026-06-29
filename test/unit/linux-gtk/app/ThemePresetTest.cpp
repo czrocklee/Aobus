@@ -3,7 +3,7 @@
 
 #include "app/ThemePreset.h"
 
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/AppPrefsState.h>
 
 #include <catch2/catch_test_macros.hpp>
 

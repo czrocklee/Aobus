@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/library/TrackBuilderTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Type.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>

@@ -7,7 +7,7 @@
 #include "app/ThemeCoordinator.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>

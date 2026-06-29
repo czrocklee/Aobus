@@ -4,10 +4,10 @@
 #include "test/unit/RuntimeTestUtils.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>

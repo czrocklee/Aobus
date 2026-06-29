@@ -5,7 +5,7 @@
 
 #include "layout/component/track/TrackFieldGridRows.h"
 #include "sigc++/signal.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/enums.h>

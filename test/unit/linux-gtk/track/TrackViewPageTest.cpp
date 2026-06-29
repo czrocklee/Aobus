@@ -11,7 +11,7 @@
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>

@@ -20,9 +20,9 @@ namespace ao::gtk
   class TrackCustomViewDialog final : public AppDialog
   {
   public:
-    struct Result final
+    struct TrackCustomPresentationDialogResult final
     {
-      rt::CustomTrackPresentationPreset state;
+      rt::CustomTrackPresentationPreset preset;
       bool deleted = false;
     };
 
@@ -30,7 +30,7 @@ namespace ao::gtk
                           rt::TrackPresentationSpec const& initialSpec,
                           std::string_view initialLabel);
 
-    std::optional<Result> runDialog();
+    std::optional<TrackCustomPresentationDialogResult> runDialog();
 
   private:
     void setupUi();

@@ -6,7 +6,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowObject.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/TrackField.h>
 

@@ -446,8 +446,8 @@ button.ao-quick-filter-action:disabled {
   margin-top: 6px;
 }
 
-/* OutputSelector */
-.ao-device-row {
+/* OutputDeviceSelector */
+.ao-output-device-row {
   padding: 6px 16px;
   transition: background 150ms ease;
 }
@@ -469,12 +469,12 @@ listboxrow:first-child .ao-menu-header {
   padding-top: 8px;
 }
 
-.ao-output-selected-row {
+.ao-output-device-selected-row {
   background-color: alpha(@theme_selected_bg_color, 0.15);
   border-left: 4px solid @theme_selected_bg_color;
 }
 
-.ao-output-selected-row label {
+.ao-output-device-selected-row label {
   color: @theme_selected_bg_color;
   font-weight: bold;
 }

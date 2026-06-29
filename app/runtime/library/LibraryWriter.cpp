@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
-#include <ao/Type.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListBuilder.h>
@@ -11,7 +11,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/tag/TagFile.h>

@@ -9,8 +9,7 @@
 #include "layout/LayoutConstants.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"
-#include <ao/Type.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>

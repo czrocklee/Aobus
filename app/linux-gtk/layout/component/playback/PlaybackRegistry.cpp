@@ -10,7 +10,7 @@ namespace ao::gtk::layout
 {
   void registerPlaybackComponents(ComponentRegistry& registry)
   {
-    registerOutputSelectorComponent(registry);
+    registerOutputDeviceSelectorComponent(registry);
     registerPlaybackImageComponent(registry);
     registerSoulTransportButtonComponent(registry);
     registerSoulButtonComponent(registry);

@@ -4,7 +4,7 @@
 
 #include "app/AppConfig.h"
 #include "app/ThemePreset.h"
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/AppPrefsState.h>
 
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>

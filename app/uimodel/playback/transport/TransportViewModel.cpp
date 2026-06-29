@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/Types.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 

@@ -77,7 +77,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/track/TrackFilterViewModel.cpp
     uimodel/library/track/TrackPageRoute.cpp
     uimodel/playback/now-playing/NowPlayingViewModel.cpp
-    uimodel/playback/output/AudioOutputViewModel.cpp
+    uimodel/playback/output/OutputDeviceViewModel.cpp
     uimodel/playback/output/VolumeViewModel.cpp
     uimodel/playback/quality/AudioQualityFormatter.cpp
     uimodel/playback/queue/PlaybackQueueModel.cpp

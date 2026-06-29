@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>

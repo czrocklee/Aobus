@@ -9,7 +9,7 @@
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 
 #include <cstdint>
@@ -107,7 +107,7 @@ namespace ao::uimodel
     rt::Subscription _pausedSub;
     rt::Subscription _idleSub;
     rt::Subscription _stoppedSub;
-    rt::Subscription _outputChangedSub;
+    rt::Subscription _outputDeviceChangedSub;
     rt::Subscription _qualityChangedSub;
     rt::Subscription _nowPlayingSub;
   };

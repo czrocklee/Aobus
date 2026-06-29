@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Type.h>
 
 #include <cstddef>
 #include <cstdint>

@@ -3,7 +3,7 @@
 
 #include "track/LibraryTrackCountLabel.h"
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/source/TrackSource.h>
 
 #include <cstddef>

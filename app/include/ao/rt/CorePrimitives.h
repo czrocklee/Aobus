@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/async/Executor.h>
 #include <ao/utility/ScopedRegistration.h>
 #include <ao/utility/StrongType.h>

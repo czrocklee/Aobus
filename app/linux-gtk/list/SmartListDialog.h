@@ -5,7 +5,7 @@
 
 #include "app/AppDialog.h"
 #include "list/QueryExpressionBox.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <gtkmm/box.h>

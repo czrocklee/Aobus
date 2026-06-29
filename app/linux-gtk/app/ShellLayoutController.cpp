@@ -18,17 +18,18 @@
 #include "layout/runtime/LayoutHost.h"
 #include "layout/runtime/LayoutRuntime.h"
 #include "playback/AobusSoulWindow.h"
-#include "playback/AudioDeviceSelector.h"
+#include "playback/OutputDeviceSelector.h"
 #include "tag/TagEditController.h"
+#include <ao/CoreIds.h>
 #include <ao/Exception.h>
-#include <ao/Type.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Types.h>
+#include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -142,14 +143,14 @@ namespace ao::gtk
         std::move(stateProvider));
     };
 
-    auto const hasActiveQueue = [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionState
+    auto const hasActiveQueue = [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
     {
       if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
       {
-        return uimodel::LayoutActionState{.enabled = queueModel->isActive(), .disabledReason = ""};
+        return uimodel::LayoutActionAvailability{.enabled = queueModel->isActive(), .disabledReason = ""};
       }
 
-      return uimodel::LayoutActionState{.enabled = false, .disabledReason = ""};
+      return uimodel::LayoutActionAvailability{.enabled = false, .disabledReason = ""};
     };
 
     registerPlaybackActions(registerAction, hasActiveQueue);
@@ -203,14 +204,14 @@ namespace ao::gtk
           queueModel->next();
         }
       },
-      [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionState
+      [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
       {
         if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
         {
-          return uimodel::LayoutActionState{.enabled = queueModel->hasNext(), .disabledReason = ""};
+          return uimodel::LayoutActionAvailability{.enabled = queueModel->hasNext(), .disabledReason = ""};
         }
 
-        return uimodel::LayoutActionState{.enabled = false, .disabledReason = ""};
+        return uimodel::LayoutActionAvailability{.enabled = false, .disabledReason = ""};
       });
 
     registerAction(
@@ -225,14 +226,14 @@ namespace ao::gtk
           queueModel->previous();
         }
       },
-      [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionState
+      [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
       {
         if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
         {
-          return uimodel::LayoutActionState{.enabled = queueModel->hasPrevious(), .disabledReason = ""};
+          return uimodel::LayoutActionAvailability{.enabled = queueModel->hasPrevious(), .disabledReason = ""};
         }
 
-        return uimodel::LayoutActionState{.enabled = false, .disabledReason = ""};
+        return uimodel::LayoutActionAvailability{.enabled = false, .disabledReason = ""};
       });
 
     registerAction(
@@ -277,13 +278,13 @@ namespace ao::gtk
       },
       hasActiveQueue);
 
-    registerAction("playback.showAudioDeviceSelector",
-                   "Audio Devices",
+    registerAction("playback.showOutputDeviceSelector",
+                   "Output Devices",
                    "Playback",
                    uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [](layout::ActionActivationContext& ctx)
                    {
-                     auto* const popover = Gtk::make_managed<AudioDeviceSelector>(ctx.runtime.playback());
+                     auto* const popover = Gtk::make_managed<OutputDeviceSelector>(ctx.runtime.playback());
                      popover->set_parent(ctx.anchorWidget);
                      popover->signal_closed().connect([popover] { popover->unparent(); });
                      popover->popup();
@@ -376,12 +377,13 @@ namespace ao::gtk
           }
         }
       },
-      [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionState
+      [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
       {
         auto const target = rt::FocusedViewTarget{};
         auto projPtr =
           ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
-        return uimodel::LayoutActionState{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
+        return uimodel::LayoutActionAvailability{
+          .enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
 
     registerAction(
@@ -404,12 +406,13 @@ namespace ao::gtk
           }
         }
       },
-      [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionState
+      [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
       {
         auto const target = rt::FocusedViewTarget{};
         auto projPtr =
           ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
-        return uimodel::LayoutActionState{.enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
+        return uimodel::LayoutActionAvailability{
+          .enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
   }
 

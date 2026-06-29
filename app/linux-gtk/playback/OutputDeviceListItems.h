@@ -16,16 +16,16 @@ namespace ao::gtk
   /**
    * @brief GObject wrapper for a backend section header.
    */
-  class BackendItem final : public Glib::Object
+  class OutputBackendItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<BackendItem> create(audio::BackendId id, std::string name);
+    static Glib::RefPtr<OutputBackendItem> create(audio::BackendId id, std::string name);
 
     audio::BackendId const& id() const;
     std::string const& name() const;
 
   protected:
-    BackendItem();
+    OutputBackendItem();
 
   private:
     audio::BackendId _id;
@@ -35,13 +35,13 @@ namespace ao::gtk
   /**
    * @brief GObject wrapper for an individual audio device/profile combination.
    */
-  class DeviceItem final : public Glib::Object
+  class OutputDeviceItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<DeviceItem> create(audio::BackendId backend,
-                                           audio::Device const& device,
-                                           audio::ProfileId profile,
-                                           std::string customName = "");
+    static Glib::RefPtr<OutputDeviceItem> create(audio::BackendId backend,
+                                                 audio::Device const& device,
+                                                 audio::ProfileId profile,
+                                                 std::string customName = "");
 
     audio::BackendId const& backendId() const;
     audio::ProfileId const& profileId() const;
@@ -55,7 +55,7 @@ namespace ao::gtk
     bool matches(audio::BackendId const& backend, audio::DeviceId const& devId, audio::ProfileId const& profile) const;
 
   protected:
-    DeviceItem();
+    OutputDeviceItem();
 
   private:
     audio::BackendId _backendId;

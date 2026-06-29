@@ -4,7 +4,8 @@
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
 #include <ao/AudioCodec.h>
-#include <ao/Type.h>
+#include <ao/AudioScalars.h>
+#include <ao/CoreIds.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>

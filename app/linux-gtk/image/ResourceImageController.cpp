@@ -6,7 +6,7 @@
 #include "image/ImageCache.h"
 #include "image/ImageWidget.h"
 #include "image/ThumbnailLoader.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/projection/ProjectionTypes.h>

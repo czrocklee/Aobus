@@ -3,7 +3,7 @@
 
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/NotificationService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/NotificationState.h>
 
 #include <algorithm>
 #include <chrono>

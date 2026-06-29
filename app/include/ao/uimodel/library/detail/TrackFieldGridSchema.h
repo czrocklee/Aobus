@@ -34,8 +34,8 @@ namespace ao::uimodel
 
   TrackFieldGridSchema buildTrackFieldGridSchema(TrackFieldGridSchemaRequest request);
 
-  std::string formatTrackFieldGridMetadataHeader(std::string_view titleText, std::string_view artistText);
-  std::string formatTrackFieldGridTechnicalHeader(std::string_view codecText,
-                                                  std::string_view sampleRateText,
-                                                  std::string_view bitDepthText);
+  std::string formatMetadataHeader(std::string_view titleText, std::string_view artistText);
+  std::string formatTechnicalHeader(std::string_view codecText,
+                                    std::string_view sampleRateText,
+                                    std::string_view bitDepthText);
 } // namespace ao::uimodel

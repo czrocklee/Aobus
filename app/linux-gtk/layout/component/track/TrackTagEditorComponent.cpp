@@ -8,7 +8,7 @@
 #include "layout/runtime/LayoutContext.h"
 #include "tag/TagEditController.h"
 #include "tag/TagEditor.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>

@@ -41,7 +41,7 @@ namespace ao::audio::detail
     _optAnchor.reset();
   }
 
-  RouteState RouteTracker::state() const
+  AudioRouteFormatState RouteTracker::state() const
   {
     auto const lock = std::scoped_lock{_mutex};
     return _state;

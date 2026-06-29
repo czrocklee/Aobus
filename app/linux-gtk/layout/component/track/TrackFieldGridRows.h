@@ -5,7 +5,7 @@
 
 #include "gtkmm/enums.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 
 #include <gtkmm/box.h>

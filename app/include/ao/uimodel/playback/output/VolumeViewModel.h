@@ -49,7 +49,7 @@ namespace ao::uimodel
     rt::PlaybackService& _playback;
     std::function<void(VolumeViewState const&)> _onRender;
 
-    rt::Subscription _outputSub;
+    rt::Subscription _outputDeviceSub;
     rt::Subscription _startedSub;
     rt::Subscription _volumeSub;
     rt::Subscription _mutedSub;

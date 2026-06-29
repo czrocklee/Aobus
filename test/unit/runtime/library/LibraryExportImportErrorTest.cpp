@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Type.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>

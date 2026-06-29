@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <glibmm/refptr.h>

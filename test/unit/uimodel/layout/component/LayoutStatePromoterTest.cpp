@@ -51,14 +51,14 @@ namespace ao::uimodel::test
     auto stateDoc = LayoutComponentStateDocument{.preset = "classic"};
     stateDoc.components["main-paned"] = LayoutComponentStateEntry{
       .type = "split",
-      .stateVersion = kLayoutComponentStateEntryVersion,
-      .baselineHash = layoutComponentBaselineHash(doc.root.children[0]),
+      .stateVersion = kStateEntryVersion,
+      .baselineHash = componentBaselineHash(doc.root.children[0]),
       .state = {{"positionPercent", LayoutValue{0.42}}},
     };
     stateDoc.components["detail-split"] = LayoutComponentStateEntry{
       .type = "collapsibleSplit",
-      .stateVersion = kLayoutComponentStateEntryVersion,
-      .baselineHash = layoutComponentBaselineHash(doc.root.children[1]),
+      .stateVersion = kStateEntryVersion,
+      .baselineHash = componentBaselineHash(doc.root.children[1]),
       .state = {{"size", LayoutValue{static_cast<std::int64_t>(320)}}, {"revealed", LayoutValue{false}}},
     };
 
@@ -80,7 +80,7 @@ namespace ao::uimodel::test
     REQUIRE(stateDoc.components.contains("detail-split"));
     CHECK(stateDoc.components.at("detail-split").state.size() == 1);
     CHECK(stateDoc.components.at("detail-split").state.at("revealed").asBool(true) == false);
-    CHECK(stateDoc.components.at("detail-split").baselineHash == layoutComponentBaselineHash(doc.root.children[1]));
+    CHECK(stateDoc.components.at("detail-split").baselineHash == componentBaselineHash(doc.root.children[1]));
   }
 
   TEST_CASE("LayoutStatePromoter ignores documents with no matching state", "[uimodel][unit][layout][component]")
@@ -117,8 +117,8 @@ namespace ao::uimodel::test
     auto stateDoc = LayoutComponentStateDocument{.preset = "classic"};
     stateDoc.components["deep-split"] = LayoutComponentStateEntry{
       .type = "collapsibleSplit",
-      .stateVersion = kLayoutComponentStateEntryVersion,
-      .baselineHash = layoutComponentBaselineHash(doc.root.children[0].children[0].children[0]),
+      .stateVersion = kStateEntryVersion,
+      .baselineHash = componentBaselineHash(doc.root.children[0].children[0].children[0]),
       .state = {{"size", LayoutValue{static_cast<std::int64_t>(320)}}},
     };
 
@@ -136,7 +136,7 @@ namespace ao::uimodel::test
     auto stateDoc = LayoutComponentStateDocument{.preset = "classic"};
     stateDoc.components["main-paned"] = LayoutComponentStateEntry{
       .type = "split",
-      .stateVersion = kLayoutComponentStateEntryVersion,
+      .stateVersion = kStateEntryVersion,
       .baselineHash = "bad_hash",
       .state = {{"positionPercent", LayoutValue{0.42}}},
     };
@@ -155,8 +155,8 @@ namespace ao::uimodel::test
     auto stateDoc = LayoutComponentStateDocument{.preset = "classic"};
     stateDoc.components["detail-split"] = LayoutComponentStateEntry{
       .type = "collapsibleSplit",
-      .stateVersion = kLayoutComponentStateEntryVersion,
-      .baselineHash = layoutComponentBaselineHash(doc.root.children[0]),
+      .stateVersion = kStateEntryVersion,
+      .baselineHash = componentBaselineHash(doc.root.children[0]),
       .state = {{"size", LayoutValue{true}}},
     };
 

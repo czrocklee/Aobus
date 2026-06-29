@@ -14,7 +14,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryTasks.h>

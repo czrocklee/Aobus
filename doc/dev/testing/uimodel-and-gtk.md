@@ -27,7 +27,7 @@ Full-window smoke              -> constructs, binds, shows/hides under Xvfb;
 
 Most awkward GTK tests come from bypassing an existing view model and re-proving
 its semantics at the widget layer. If a view model already exists for the
-component (`AobusSoulViewModel`, `AudioOutputViewModel`, `TransportViewModel`,
+component (`AobusSoulViewModel`, `OutputDeviceViewModel`, `TransportViewModel`,
 and similar), the semantics belong in the view model test and the widget keeps a
 thin adapter or smoke test.
 

@@ -7,7 +7,7 @@
 #include "list/ListNavigationPanel.h"
 #include "list/SmartListDialog.h"
 #include "track/TrackRowCache.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListNode.h>

@@ -4,7 +4,7 @@
 #pragma once
 
 #include "tag/TagEditor.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <gtkmm/popover.h>
 

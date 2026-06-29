@@ -4,7 +4,7 @@
 #include "TrackCommand.h"
 
 #include "DumpUtils.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>

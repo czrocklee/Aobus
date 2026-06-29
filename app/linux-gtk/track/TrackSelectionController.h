@@ -5,7 +5,7 @@
 
 #include "track/TrackListModel.h"
 #include "track/TrackRowObject.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/multiselection.h>

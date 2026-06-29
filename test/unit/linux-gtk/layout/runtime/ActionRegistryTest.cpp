@@ -135,7 +135,7 @@ namespace ao::gtk::layout::test
       registry.registerAction(
         descriptor1,
         [&](auto&) { called = true; },
-        [](auto const&) { return LayoutActionState{.enabled = false, .disabledReason = "Test"}; });
+        [](auto const&) { return LayoutActionAvailability{.enabled = false, .disabledReason = "Test"}; });
 
       auto const s = registry.state("test.action1", ctx);
       CHECK_FALSE(s.enabled);
@@ -171,7 +171,7 @@ namespace ao::gtk::layout::test
         [&](auto const&)
         {
           stateCalls++;
-          return LayoutActionState{.enabled = true, .disabledReason = ""};
+          return LayoutActionAvailability{.enabled = true, .disabledReason = ""};
         });
 
       registry.activate("test.action1", ctx);

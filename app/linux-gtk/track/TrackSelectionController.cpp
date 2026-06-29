@@ -6,7 +6,7 @@
 #include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowObject.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <gdk/gdk.h>
 #include <gdk/gdkkeysyms.h>

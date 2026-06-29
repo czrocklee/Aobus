@@ -5,7 +5,7 @@
 
 #include "../CorePrimitives.h"
 #include "../TrackField.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <array>
 #include <cstdint>

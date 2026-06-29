@@ -7,8 +7,8 @@
 #include "../TrackField.h"
 #include "../TrackFieldValue.h"
 #include "../TrackPresentation.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Type.h>
 
 #include <boost/container/small_vector.hpp>
 

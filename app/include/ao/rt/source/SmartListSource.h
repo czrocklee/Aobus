@@ -4,8 +4,8 @@
 #pragma once
 
 #include "TrackSource.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Type.h>
 #include <ao/query/PlanEvaluator.h>
 
 #include <cstddef>

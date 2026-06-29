@@ -7,11 +7,12 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSessionState.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -91,7 +92,7 @@ namespace ao::rt::test
       runtime.workspace().navigateTo(ListId{20});
       runtime.workspace().saveSession(runtime.configStore());
 
-      auto loaded = SessionState{};
+      auto loaded = WorkspaceSessionState{};
       auto verifyStore = ConfigStore{workspaceConfigPath};
       REQUIRE(verifyStore.load("workspace", loaded));
       CHECK(loaded.openViews.size() == 2);
@@ -121,7 +122,7 @@ namespace ao::rt::test
 
       runtime.workspace().saveSession(runtime.configStore());
 
-      auto loaded = SessionState{};
+      auto loaded = WorkspaceSessionState{};
       auto verifyStore = ConfigStore{workspaceConfigPath};
       REQUIRE(verifyStore.load("workspace", loaded));
       REQUIRE(loaded.openViews.size() == 1);

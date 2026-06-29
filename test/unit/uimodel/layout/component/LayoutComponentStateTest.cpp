@@ -34,8 +34,8 @@ namespace ao::uimodel::test
       doc.preset = "modern";
       doc.components[node.id] = LayoutComponentStateEntry{
         .type = node.type,
-        .stateVersion = kLayoutComponentStateEntryVersion,
-        .baselineHash = layoutComponentBaselineHash(node),
+        .stateVersion = kStateEntryVersion,
+        .baselineHash = componentBaselineHash(node),
         .state = {{"positionPercent", LayoutValue{0.42}}},
       };
       return doc;
@@ -53,7 +53,7 @@ namespace ao::uimodel::test
     auto decoded = LayoutComponentStateDocument{};
     REQUIRE(yaml::read(tree.rootref(), decoded));
 
-    CHECK(decoded.version == kLayoutComponentStateFileVersion);
+    CHECK(decoded.version == kStateFileVersion);
     CHECK(decoded.preset == "modern");
     REQUIRE(decoded.components.contains("main-paned"));
     CHECK(decoded.components.at("main-paned").type == "split");
@@ -68,7 +68,7 @@ namespace ao::uimodel::test
 
     SECTION("matching state resolves")
     {
-      auto const optResolved = resolveLayoutComponentState(stateDoc, node);
+      auto const optResolved = resolveComponentState(stateDoc, node);
       REQUIRE(optResolved.has_value());
       CHECK(optResolved->state.at("positionPercent").asDouble() == 0.42);
     }
@@ -76,31 +76,31 @@ namespace ao::uimodel::test
     SECTION("unknown file version is ignored")
     {
       stateDoc.version = 99;
-      CHECK_FALSE(resolveLayoutComponentState(stateDoc, node).has_value());
+      CHECK_FALSE(resolveComponentState(stateDoc, node).has_value());
     }
 
     SECTION("unknown component state version is ignored")
     {
       stateDoc.components.at(node.id).stateVersion = 99;
-      CHECK_FALSE(resolveLayoutComponentState(stateDoc, node).has_value());
+      CHECK_FALSE(resolveComponentState(stateDoc, node).has_value());
     }
 
     SECTION("type mismatch is ignored")
     {
       stateDoc.components.at(node.id).type = "collapsibleSplit";
-      CHECK_FALSE(resolveLayoutComponentState(stateDoc, node).has_value());
+      CHECK_FALSE(resolveComponentState(stateDoc, node).has_value());
     }
 
     SECTION("baseline mismatch is ignored")
     {
       node.props["resizeStart"] = LayoutValue{false};
-      CHECK_FALSE(resolveLayoutComponentState(stateDoc, node).has_value());
+      CHECK_FALSE(resolveComponentState(stateDoc, node).has_value());
     }
 
     SECTION("anonymous nodes are never resolved")
     {
       node.id.clear();
-      CHECK_FALSE(resolveLayoutComponentState(stateDoc, node).has_value());
+      CHECK_FALSE(resolveComponentState(stateDoc, node).has_value());
     }
   }
 
@@ -115,7 +115,7 @@ namespace ao::uimodel::test
       auto second = splitNode();
       second.props["initialPositionPercent"] = LayoutValue{std::string{"0.20"}};
 
-      CHECK(layoutComponentBaselineHash(first) == layoutComponentBaselineHash(second));
+      CHECK(componentBaselineHash(first) == componentBaselineHash(second));
     }
 
     SECTION("irrelevant children do not change parent hash")
@@ -124,7 +124,7 @@ namespace ao::uimodel::test
       auto second = first;
       second.children.push_back(LayoutNode{.id = "extra-child", .type = "separator"});
 
-      CHECK(layoutComponentBaselineHash(first) == layoutComponentBaselineHash(second));
+      CHECK(componentBaselineHash(first) == componentBaselineHash(second));
     }
 
     SECTION("relevant prop edits change the hash")
@@ -133,7 +133,7 @@ namespace ao::uimodel::test
       auto second = first;
       second.props["orientation"] = LayoutValue{std::string{"vertical"}};
 
-      CHECK(layoutComponentBaselineHash(first) != layoutComponentBaselineHash(second));
+      CHECK(componentBaselineHash(first) != componentBaselineHash(second));
     }
   }
 
@@ -187,25 +187,25 @@ namespace ao::uimodel::test
     stateDoc.preset = "classic";
     stateDoc.components["live-split"] = LayoutComponentStateEntry{
       .type = "split",
-      .stateVersion = kLayoutComponentStateEntryVersion,
-      .baselineHash = layoutComponentBaselineHash(liveNode),
+      .stateVersion = kStateEntryVersion,
+      .baselineHash = componentBaselineHash(liveNode),
       .state = {{"positionPercent", LayoutValue{0.25}}},
     };
     stateDoc.components["deleted-split"] = LayoutComponentStateEntry{
       .type = "split",
-      .stateVersion = kLayoutComponentStateEntryVersion,
+      .stateVersion = kStateEntryVersion,
       .baselineHash = "orphan",
       .state = {{"positionPercent", LayoutValue{0.50}}},
     };
     stateDoc.components["wrong-type"] = LayoutComponentStateEntry{
       .type = "collapsibleSplit",
-      .stateVersion = kLayoutComponentStateEntryVersion,
-      .baselineHash = layoutComponentBaselineHash(liveNode),
+      .stateVersion = kStateEntryVersion,
+      .baselineHash = componentBaselineHash(liveNode),
       .state = {{"positionPercent", LayoutValue{0.75}}},
     };
     doc.root.children.push_back(LayoutNode{.id = "wrong-type", .type = "split"});
 
-    pruneLayoutComponentState(stateDoc, doc);
+    pruneComponentState(stateDoc, doc);
 
     CHECK(stateDoc.components.size() == 1);
     CHECK(stateDoc.components.contains("live-split"));

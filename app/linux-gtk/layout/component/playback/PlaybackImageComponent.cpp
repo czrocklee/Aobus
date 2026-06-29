@@ -7,10 +7,9 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>

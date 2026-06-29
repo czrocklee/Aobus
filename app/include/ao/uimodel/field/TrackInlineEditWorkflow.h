@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 
@@ -13,6 +13,11 @@
 #include <functional>
 #include <string>
 #include <string_view>
+
+namespace ao::rt
+{
+  struct MetadataPatch;
+}
 
 namespace ao::uimodel
 {

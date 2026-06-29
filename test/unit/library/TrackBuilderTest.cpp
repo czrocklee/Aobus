@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/AudioCodec.h>
-#include <ao/Type.h>
+#include <ao/AudioScalars.h>
 #include <ao/library/TrackBuilder.h>
 
 #include <catch2/catch_test_macros.hpp>

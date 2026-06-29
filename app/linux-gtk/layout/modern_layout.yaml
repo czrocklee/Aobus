@@ -171,11 +171,11 @@ templates:
               slot: center
               valign: center
             children:
-              - type: playback.outputSelector
+              - type: playback.outputDeviceSelector
                 layout:
                   widthRequest: 30
                   valign: center
-                  cssClasses: ao-output-selector-modern
+                  cssClasses: ao-output-device-selector-modern
               - type: playback.timeLabel
                 props:
                   mode: elapsed

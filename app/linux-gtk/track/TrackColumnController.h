@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>

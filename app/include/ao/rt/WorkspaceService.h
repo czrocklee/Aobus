@@ -4,9 +4,10 @@
 #pragma once
 
 #include "CorePrimitives.h"
-#include "StateTypes.h"
 #include "TrackPresentation.h"
-#include <ao/Type.h>
+#include "ViewState.h"
+#include "WorkspaceViewState.h"
+#include <ao/CoreIds.h>
 
 #include <functional>
 #include <memory>
@@ -63,7 +64,7 @@ namespace ao::rt
     WorkspaceService(WorkspaceService&&) = delete;
     WorkspaceService& operator=(WorkspaceService&&) = delete;
 
-    LayoutState layoutState() const;
+    WorkspaceViewState layoutState() const;
 
     void setFocusedView(ViewId viewId);
     void addView(ViewId viewId);

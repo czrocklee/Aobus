@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/audio/Types.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>

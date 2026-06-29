@@ -63,7 +63,7 @@ namespace ao::uimodel
     LayoutActionCapabilities capabilities = LayoutActionCapability::None;
   };
 
-  struct LayoutActionState final
+  struct LayoutActionAvailability final
   {
     bool enabled = true;
     std::string disabledReason;
@@ -110,6 +110,6 @@ namespace ao::uimodel
   struct LayoutActionActivationOutcome final
   {
     LayoutActionActivationResult result = LayoutActionActivationResult::UnknownAction;
-    LayoutActionState state = {};
+    LayoutActionAvailability state = {};
   };
 } // namespace ao::uimodel

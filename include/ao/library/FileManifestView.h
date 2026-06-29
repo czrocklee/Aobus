@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
 
 #include <cstddef>

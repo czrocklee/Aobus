@@ -3,7 +3,7 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>

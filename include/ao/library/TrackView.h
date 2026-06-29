@@ -4,7 +4,8 @@
 #pragma once
 
 #include <ao/AudioCodec.h>
-#include <ao/Type.h>
+#include <ao/AudioScalars.h>
+#include <ao/CoreIds.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>

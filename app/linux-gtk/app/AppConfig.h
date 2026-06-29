@@ -3,11 +3,15 @@
 
 #pragma once
 
-#include <ao/rt/StateTypes.h>
 #include <ao/uimodel/input/KeymapModel.h>
 
 #include <filesystem>
 #include <memory>
+
+namespace ao::rt
+{
+  struct AppPrefsState;
+}
 
 namespace ao::rt
 {

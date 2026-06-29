@@ -4,7 +4,7 @@
 #pragma once
 
 #include "CoreRuntime.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <filesystem>
 #include <memory>

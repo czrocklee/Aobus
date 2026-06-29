@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/lmdb/TestUtils.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>

@@ -39,7 +39,7 @@ namespace ao::audio
       std::vector<Device> devices;
     };
 
-    struct PendingOutput
+    struct PendingOutputDeviceSelection
     {
       BackendId backend;
       DeviceId deviceId;
@@ -92,7 +92,7 @@ namespace ao::audio
       }
 
       // Defensive: prevent dangling use if Engine teardown somehow triggers handleRouteChanged.
-      activeManager = nullptr;
+      activeBackendProvider = nullptr;
       enginePtr.reset();
       providers.clear();
     }
@@ -100,8 +100,8 @@ namespace ao::audio
     async::IExecutor& executor;
     std::atomic<std::uint64_t> playbackGeneration{1};
     std::vector<std::unique_ptr<ProviderRecord>> providers;
-    std::optional<PendingOutput> optPendingOutput;
-    IBackendProvider* activeManager = nullptr;
+    std::optional<PendingOutputDeviceSelection> optPendingOutputDeviceSelection;
+    IBackendProvider* activeBackendProvider = nullptr;
     Subscription graphSubscription;
     std::unique_ptr<Engine> enginePtr;
     std::shared_ptr<CallbackGate> gatePtr = std::make_shared<CallbackGate>();
@@ -117,10 +117,10 @@ namespace ao::audio
     QualityResult qualityResult;
     std::function<void()> onTrackEnded;
     std::function<void()> onStateChanged;
-    std::function<void(std::vector<IBackendProvider::Status> const&)> onDevicesChanged;
+    std::function<void(std::vector<IBackendProvider::Status> const&)> onOutputDevicesChanged;
     std::function<void(Quality, bool)> onQualityChanged;
 
-    void handleDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices);
+    void handleOutputDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices);
     void handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation);
     void updateMergedGraph();
 
@@ -165,7 +165,9 @@ namespace ao::audio
     }
   };
 
-  void Player::Impl::handleDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices)
+  void Player::Impl::handleOutputDevicesChanged(Player* owner,
+                                                IBackendProvider* provider,
+                                                std::vector<Device> const& devices)
   {
     // Update individual provider cache
     auto const it =
@@ -214,11 +216,11 @@ namespace ao::audio
       enginePtr->updateDevice(*activeIt);
     }
 
-    if (optPendingOutput)
+    if (optPendingOutputDeviceSelection)
     {
       // Try to apply pending output
-      auto const pending = PendingOutput{*optPendingOutput};
-      std::ignore = owner->setOutput(pending.backend, pending.deviceId, pending.profile);
+      auto const pending = PendingOutputDeviceSelection{*optPendingOutputDeviceSelection};
+      std::ignore = owner->setOutputDevice(pending.backend, pending.deviceId, pending.profile);
     }
 
     auto snapshot = std::vector<IBackendProvider::Status>{};
@@ -227,7 +229,7 @@ namespace ao::audio
       snapshot = cachedBackends;
     }
 
-    dispatchOutward(&Impl::onDevicesChanged, std::move(snapshot));
+    dispatchOutward(&Impl::onOutputDevicesChanged, std::move(snapshot));
   }
 
   void Player::Impl::handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation)
@@ -327,7 +329,7 @@ namespace ao::audio
     _implPtr->enginePtr = std::make_unique<Engine>(std::make_unique<NullBackend>(),
                                                    Device{.id = DeviceId{"null"},
                                                           .displayName = "None",
-                                                          .description = "No audio output selected",
+                                                          .description = "No audio output device selected",
                                                           .backendId = kBackendNone,
                                                           .capabilities = {}});
 
@@ -360,9 +362,9 @@ namespace ao::audio
     _implPtr->onStateChanged = std::move(callback);
   }
 
-  void Player::setOnDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback)
+  void Player::setOnOutputDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback)
   {
-    _implPtr->onDevicesChanged = std::move(callback);
+    _implPtr->onOutputDevicesChanged = std::move(callback);
   }
 
   void Player::setOnQualityChanged(std::function<void(Quality quality, bool ready)> callback)
@@ -389,8 +391,10 @@ namespace ao::audio
     record->subscription = provider->subscribeDevices(
       [this, provider, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor](std::vector<Device> const& devices)
       {
-        Impl::dispatchInternal(
-          executor, gatePtr, [this, provider, devices] { _implPtr->handleDevicesChanged(this, provider, devices); });
+        Impl::dispatchInternal(executor,
+                               gatePtr,
+                               [this, provider, devices]
+                               { _implPtr->handleOutputDevicesChanged(this, provider, devices); });
         return true;
       });
   }
@@ -418,12 +422,12 @@ namespace ao::audio
     return {};
   }
 
-  Result<> Player::setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
+  Result<> Player::setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
   {
     if (auto const currentSnap = _implPtr->enginePtr->status();
         backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
     {
-      _implPtr->optPendingOutput.reset();
+      _implPtr->optPendingOutputDeviceSelection.reset();
       _implPtr->dispatchOutward(&Impl::onStateChanged);
       return {};
     }
@@ -449,18 +453,19 @@ namespace ao::audio
     if (it == allDevicesCopy.end())
     {
       // If we don't have it yet, store it as pending.
-      _implPtr->optPendingOutput = Impl::PendingOutput{.backend = backend, .deviceId = deviceId, .profile = profile};
+      _implPtr->optPendingOutputDeviceSelection =
+        Impl::PendingOutputDeviceSelection{.backend = backend, .deviceId = deviceId, .profile = profile};
       _implPtr->dispatchOutward(&Impl::onStateChanged);
       return {};
     }
 
     // Found it! Clear any pending output.
-    _implPtr->optPendingOutput.reset();
+    _implPtr->optPendingOutputDeviceSelection.reset();
 
     // 4. Create the backend and swap it in the engine
     auto const& device = *it;
     auto newBackendPtr = (*recordIt)->providerPtr->createBackend(device, profile);
-    _implPtr->activeManager = (*recordIt)->providerPtr.get();
+    _implPtr->activeBackendProvider = (*recordIt)->providerPtr.get();
     _implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
     _implPtr->enginePtr->setBackend(std::move(newBackendPtr), device);
     return {};
@@ -543,7 +548,7 @@ namespace ao::audio
 
   bool Player::isReady() const
   {
-    return _implPtr->enginePtr->backendId() != kBackendNone && !_implPtr->optPendingOutput;
+    return _implPtr->enginePtr->backendId() != kBackendNone && !_implPtr->optPendingOutputDeviceSelection;
   }
 
   void Player::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)
@@ -558,13 +563,13 @@ namespace ao::audio
     lock.unlock();
 
     // Check if we have a valid anchor and manager to subscribe to the system graph
-    auto const hasRoute = status.optAnchor && _implPtr->activeManager != nullptr;
+    auto const hasRoute = status.optAnchor && _implPtr->activeBackendProvider != nullptr;
 
     if (hasRoute)
     {
       if (!_implPtr->graphSubscription)
       {
-        _implPtr->graphSubscription = _implPtr->activeManager->subscribeGraph(
+        _implPtr->graphSubscription = _implPtr->activeBackendProvider->subscribeGraph(
           status.optAnchor->id,
           [this, generation, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor](flow::Graph const& graph)
           {

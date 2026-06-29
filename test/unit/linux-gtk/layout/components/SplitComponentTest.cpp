@@ -83,8 +83,8 @@ namespace ao::gtk::layout::test
       ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
       ctx.componentState.components["main-paned"] = LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = kLayoutComponentStateEntryVersion,
-        .baselineHash = layoutComponentBaselineHash(doc.root),
+        .stateVersion = kStateEntryVersion,
+        .baselineHash = componentBaselineHash(doc.root),
         .state = {{"positionPercent", LayoutValue{0.6}}},
       };
 
@@ -114,7 +114,7 @@ namespace ao::gtk::layout::test
       ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
       ctx.componentState.components["main-paned"] = LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = kLayoutComponentStateEntryVersion,
+        .stateVersion = kStateEntryVersion,
         .baselineHash = "stale",
         .state = {{"positionPercent", LayoutValue{0.6}}},
       };
@@ -250,8 +250,8 @@ namespace ao::gtk::layout::test
       ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
       ctx.componentState.components["main-paned"] = LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = kLayoutComponentStateEntryVersion,
-        .baselineHash = layoutComponentBaselineHash(doc.root),
+        .stateVersion = kStateEntryVersion,
+        .baselineHash = componentBaselineHash(doc.root),
         .state = {{"positionPercent", LayoutValue{1.5}}},
       };
 

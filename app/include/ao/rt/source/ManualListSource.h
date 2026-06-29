@@ -4,7 +4,7 @@
 #pragma once
 
 #include "TrackSource.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <cstddef>
 #include <optional>

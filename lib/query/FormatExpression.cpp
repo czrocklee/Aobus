@@ -2,8 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/AudioCodec.h>
+#include <ao/AudioScalars.h>
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>

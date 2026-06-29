@@ -186,9 +186,9 @@ namespace ao::gtk::layout::test
       CHECK(soul->get_valign() == Gtk::Align::FILL);
     }
 
-    SECTION("outputSelector creates Gtk::Button with Label")
+    SECTION("outputDeviceSelector creates Gtk::Button with Label")
     {
-      auto const node = LayoutNode{.type = "playback.outputSelector"};
+      auto const node = LayoutNode{.type = "playback.outputDeviceSelector"};
       auto const compPtr = fixture.create(node);
 
       REQUIRE(compPtr != nullptr);
@@ -196,7 +196,7 @@ namespace ao::gtk::layout::test
       auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(button != nullptr);
       CHECK(button->get_has_frame() == false);
-      CHECK(button->has_css_class("ao-output-selector-modern"));
+      CHECK(button->has_css_class("ao-output-device-selector-modern"));
 
       auto* const label = dynamic_cast<Gtk::Label*>(button->get_child());
       REQUIRE(label != nullptr);
@@ -217,7 +217,7 @@ namespace ao::gtk::layout::test
                                                           "playback.qualityIndicator",
                                                           "playback.soulPlayPauseButton",
                                                           "playback.soulButton",
-                                                          "playback.outputSelector"});
+                                                          "playback.outputDeviceSelector"});
 
       for (auto const type : types)
       {

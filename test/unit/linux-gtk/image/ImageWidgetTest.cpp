@@ -8,7 +8,7 @@
 #include "image/ThumbnailLoader.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 

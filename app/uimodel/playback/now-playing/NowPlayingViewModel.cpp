@@ -7,7 +7,6 @@
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
@@ -63,7 +62,7 @@ namespace ao::uimodel
     _pausedSub = _playback.onPaused(refreshCallback);
     _idleSub = _playback.onIdle(refreshCallback);
     _stoppedSub = _playback.onStopped(refreshCallback);
-    _outputChangedSub = _playback.onOutputChanged(refreshCallbackWithArg);
+    _outputDeviceChangedSub = _playback.onOutputDeviceChanged(refreshCallbackWithArg);
     _qualityChangedSub = _playback.onQualityChanged(refreshCallbackWithArg);
     _nowPlayingSub = _playback.onNowPlayingChanged(refreshCallbackWithArg);
 
@@ -121,11 +120,11 @@ namespace ao::uimodel
       auto deviceName = std::string{};
       auto deviceIconName = std::string{};
 
-      for (auto const& backend : state.availableOutputs)
+      for (auto const& backend : state.availableOutputBackends)
       {
         for (auto const& device : backend.devices)
         {
-          if (device.id == state.selectedOutput.deviceId)
+          if (device.id == state.selectedOutputDevice.deviceId)
           {
             deviceName = device.displayName;
             deviceIconName = backend.iconName;

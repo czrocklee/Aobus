@@ -13,7 +13,7 @@
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/WorkspaceService.h>

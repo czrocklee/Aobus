@@ -22,7 +22,7 @@ namespace ao::audio
    * Engine/Player status structs can embed it without pulling the RouteTracker
    * implementation into public headers.
    */
-  struct RouteState final
+  struct AudioRouteFormatState final
   {
     Format sourceFormat;
     Format decoderOutputFormat;
@@ -30,7 +30,7 @@ namespace ao::audio
     bool isLossySource = false;
     AudioCodec codec = AudioCodec::Unknown;
 
-    bool operator==(RouteState const&) const = default;
+    bool operator==(AudioRouteFormatState const&) const = default;
   };
 
   enum class Transport : std::uint8_t

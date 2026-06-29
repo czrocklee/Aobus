@@ -14,9 +14,9 @@
 
 namespace ao::audio::detail
 {
-  // RouteState now lives in the public <ao/audio/Types.h>; this alias keeps the
+  // AudioRouteFormatState now lives in the public <ao/audio/Types.h>; this alias keeps the
   // detail-namespace spelling working for the tracker implementation.
-  using audio::RouteState;
+  using audio::AudioRouteFormatState;
 
   class RouteTracker final
   {
@@ -26,12 +26,12 @@ namespace ao::audio::detail
     void setAnchor(BackendId backend, std::string id);
     void clear();
 
-    RouteState state() const;
+    AudioRouteFormatState state() const;
     std::optional<RouteAnchor> anchor() const;
 
   private:
     mutable std::mutex _mutex;
-    RouteState _state;
+    AudioRouteFormatState _state;
     std::optional<RouteAnchor> _optAnchor;
   };
 } // namespace ao::audio::detail

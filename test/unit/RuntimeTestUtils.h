@@ -4,7 +4,8 @@
 #pragma once
 
 #include "test/unit/TestUtils.h"
-#include <ao/Type.h>
+#include <ao/AudioScalars.h>
+#include <ao/CoreIds.h>
 #include <ao/async/Executor.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/IBackend.h>

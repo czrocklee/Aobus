@@ -34,7 +34,7 @@ namespace ao::gtk::layout
   };
 
   using ActionHandler = std::function<void(ActionActivationContext&)>;
-  using ActionStateProvider = std::function<uimodel::LayoutActionState(ActionActivationContext const&)>;
+  using ActionStateProvider = std::function<uimodel::LayoutActionAvailability(ActionActivationContext const&)>;
 
   class ActionRegistry final
   {
@@ -57,7 +57,7 @@ namespace ao::gtk::layout
     bool canBind(std::string_view id, uimodel::LayoutActionBindingContext const& ctx) const;
     bool tryBind(std::string_view id, uimodel::LayoutActionBindingContext const& ctx) const;
 
-    uimodel::LayoutActionState state(std::string_view id, ActionActivationContext const& ctx) const;
+    uimodel::LayoutActionAvailability state(std::string_view id, ActionActivationContext const& ctx) const;
     uimodel::LayoutActionActivationOutcome activate(std::string_view id, ActionActivationContext& ctx) const;
     uimodel::LayoutActionActivationOutcome tryActivate(std::string_view id, ActionActivationContext& ctx) const;
 

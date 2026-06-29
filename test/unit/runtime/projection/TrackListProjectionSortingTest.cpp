@@ -3,7 +3,7 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>

@@ -6,7 +6,7 @@
 #include "layout/component/track/TrackFieldGridRows.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
 #include "sigc++/connection.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>

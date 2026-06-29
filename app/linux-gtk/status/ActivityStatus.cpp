@@ -6,7 +6,7 @@
 #include "layout/LayoutConstants.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/NotificationService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/activity/ActivityStatusModel.h>
 

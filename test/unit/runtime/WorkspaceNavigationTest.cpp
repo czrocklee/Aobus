@@ -3,13 +3,13 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>

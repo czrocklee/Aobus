@@ -4,10 +4,11 @@
 #pragma once
 
 #include "CorePrimitives.h"
-#include "StateTypes.h"
+#include "TrackMutation.h"
 #include "TrackPresentation.h"
+#include "ViewState.h"
 #include "projection/ProjectionTypes.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <chrono>
 #include <functional>

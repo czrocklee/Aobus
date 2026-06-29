@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 
 #include <cstdint>
@@ -13,7 +13,7 @@
 
 namespace ao::uimodel
 {
-  enum class TrackCustomPropertyAddValidation : std::uint8_t
+  enum class CustomPropertyAddValidation : std::uint8_t
   {
     Accepted,
     DuplicateCustomProperty,
@@ -23,11 +23,10 @@ namespace ao::uimodel
   std::string displayTextForTrackCustomProperty(rt::CustomMetadataItem const& item);
   bool isProtectedTrackCustomPropertyEditText(std::string_view newText);
 
-  TrackCustomPropertyAddValidation validateTrackCustomPropertyAddition(rt::TrackDetailSnapshot const& snap,
-                                                                       std::string_view key);
+  CustomPropertyAddValidation validateCustomPropertyAddition(rt::TrackDetailSnapshot const& snap, std::string_view key);
   std::optional<std::string> undoValueForDeletedTrackCustomProperty(rt::TrackDetailSnapshot const& snap,
                                                                     std::string_view key);
 
-  rt::MetadataPatch makeTrackCustomPropertyUpdatePatch(std::string_view key, std::string_view value);
+  rt::MetadataPatch makeCustomPropertyUpdatePatch(std::string_view key, std::string_view value);
   rt::MetadataPatch makeTrackCustomPropertyDeletePatch(std::string_view key);
 } // namespace ao::uimodel

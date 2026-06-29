@@ -70,7 +70,7 @@ templates:
         children:
           - type: playback.soulButton
             props:
-              primaryAction: playback.showAudioDeviceSelector
+              primaryAction: playback.showOutputDeviceSelector
               secondaryAction: shell.showSystemMenu
               secondaryLongPressAction: shell.showSoul
             tooltip:

@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/PlaybackState.h>
 
 #include <cstddef>
 #include <memory>

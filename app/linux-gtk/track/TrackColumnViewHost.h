@@ -5,7 +5,7 @@
 
 #include "track/TrackColumnController.h"
 #include "track/TrackSelectionController.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <glibmm/refptr.h>

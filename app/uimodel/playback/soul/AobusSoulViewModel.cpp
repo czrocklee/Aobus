@@ -52,7 +52,7 @@ namespace ao::uimodel
     auto const refreshCallback = [this] { refresh(); };
 
     _qualitySub = _playback.onQualityChanged([refreshCallback](auto const&) { refreshCallback(); });
-    _outputSub = _playback.onOutputChanged([refreshCallback](auto const&) { refreshCallback(); });
+    _outputDeviceSub = _playback.onOutputDeviceChanged([refreshCallback](auto const&) { refreshCallback(); });
     _startedSub = _playback.onStarted(refreshCallback);
 
     _stoppedSub = _playback.onStopped(refreshCallback);

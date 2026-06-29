@@ -13,8 +13,8 @@
 #include "track/TrackFieldUi.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/rt/library/Library.h>
@@ -280,7 +280,7 @@ namespace ao::gtk::layout
           uimodel::displayTextForTrackField(row.primaryField, snap, uimodel::kCompositeMixedTrackText, false);
         auto const secText =
           uimodel::displayTextForTrackField(row.secondaryField, snap, uimodel::kCompositeMixedTrackText, false);
-        return shouldShowTrackFieldGridCompositeMetadataRow(TrackFieldGridCompositeMetadataFieldVisibility{
+        return shouldShowCompositeMetadataRow(CompositeMetadataVisibility{
           .metadataExpanded = _metadataExpanded,
           .showEmptyMetadata = _showEmptyMetadata,
           .primaryEditorEditing = row.primaryEditor.getEditing(),
@@ -303,7 +303,7 @@ namespace ao::gtk::layout
           auto const artistText = validUtf8Text(
             uimodel::displayTextForTrackField(rt::TrackField::Artist, snap, uimodel::kMultipleTrackValuesText, true));
 
-          _metadataHeader.label.set_text(uimodel::formatTrackFieldGridMetadataHeader(titleText, artistText));
+          _metadataHeader.label.set_text(uimodel::formatMetadataHeader(titleText, artistText));
         }
 
         if (_technicalExpanded)
@@ -318,7 +318,7 @@ namespace ao::gtk::layout
           auto const bitDepth =
             validUtf8Text(uimodel::displayTextForTrackField(rt::TrackField::BitDepth, snap, "", false));
 
-          _technicalHeader.label.set_text(uimodel::formatTrackFieldGridTechnicalHeader(codec, sampleRate, bitDepth));
+          _technicalHeader.label.set_text(uimodel::formatTechnicalHeader(codec, sampleRate, bitDepth));
         }
       }
 
@@ -838,7 +838,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        _writer.updateMetadata(snap.trackIds, uimodel::makeTrackCustomPropertyUpdatePatch(key, newValue));
+        _writer.updateMetadata(snap.trackIds, uimodel::makeCustomPropertyUpdatePatch(key, newValue));
       }
 
       void onCustomDeleted(std::string const& key)
@@ -868,14 +868,13 @@ namespace ao::gtk::layout
 
         auto const& snap = _scope->snapshot();
 
-        if (uimodel::validateTrackCustomPropertyAddition(snap, key) !=
-            uimodel::TrackCustomPropertyAddValidation::Accepted)
+        if (uimodel::validateCustomPropertyAddition(snap, key) != uimodel::CustomPropertyAddValidation::Accepted)
         {
           _addPropertyRow.markKeyError();
           return;
         }
 
-        _writer.updateMetadata(snap.trackIds, uimodel::makeTrackCustomPropertyUpdatePatch(key, value));
+        _writer.updateMetadata(snap.trackIds, uimodel::makeCustomPropertyUpdatePatch(key, value));
 
         _addPropertyRow.clearInputs();
       }
@@ -896,7 +895,7 @@ namespace ao::gtk::layout
         };
         _customSectionHasSelectedTracks = sectionAvailability.hasSelectedTracks;
 
-        if (shouldRenderTrackFieldGridMetadataSection(sectionAvailability))
+        if (shouldRenderMetadataSection(sectionAvailability))
         {
           _metadataHeader.setExpanded(_metadataExpanded);
           _grid.attach(_metadataHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
@@ -914,7 +913,7 @@ namespace ao::gtk::layout
           _showAllFieldsButtonSlot.set_visible(_metadataExpanded);
         }
 
-        if (shouldRenderTrackFieldGridCustomSection(sectionAvailability))
+        if (shouldRenderCustomSection(sectionAvailability))
         {
           _customHeader.setExpanded(_customExpanded);
           _grid.attach(_customHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
@@ -933,7 +932,7 @@ namespace ao::gtk::layout
           _addPropertyRow.valueSlot().set_visible(_customExpanded);
         }
 
-        if (shouldRenderTrackFieldGridTechnicalSection(sectionAvailability))
+        if (shouldRenderTechnicalSection(sectionAvailability))
         {
           _technicalHeader.setExpanded(_technicalExpanded);
           _grid.attach(_technicalHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);

@@ -249,8 +249,8 @@ namespace ao::gtk::layout::test
       ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
       ctx.componentState.components["detail-split"] = LayoutComponentStateEntry{
         .type = "collapsibleSplit",
-        .stateVersion = kLayoutComponentStateEntryVersion,
-        .baselineHash = layoutComponentBaselineHash(doc.root),
+        .stateVersion = kStateEntryVersion,
+        .baselineHash = componentBaselineHash(doc.root),
         .state = {{"size", LayoutValue{static_cast<std::int64_t>(900)}}, {"revealed", LayoutValue{true}}},
       };
 
@@ -289,8 +289,8 @@ namespace ao::gtk::layout::test
       ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
       ctx.componentState.components["detail-split"] = LayoutComponentStateEntry{
         .type = "collapsibleSplit",
-        .stateVersion = kLayoutComponentStateEntryVersion,
-        .baselineHash = layoutComponentBaselineHash(doc.root),
+        .stateVersion = kStateEntryVersion,
+        .baselineHash = componentBaselineHash(doc.root),
         .state = {{"size", LayoutValue{static_cast<std::int64_t>(180)}}, {"revealed", LayoutValue{false}}},
       };
 
@@ -343,7 +343,7 @@ namespace ao::gtk::layout::test
       REQUIRE(stateStore.document().components.contains("detail-split"));
       auto const& entry = stateStore.document().components.at("detail-split");
       CHECK(entry.type == "collapsibleSplit");
-      CHECK(entry.baselineHash == layoutComponentBaselineHash(doc.root));
+      CHECK(entry.baselineHash == componentBaselineHash(doc.root));
       CHECK(entry.state.at("revealed").asBool(true) == false);
       CHECK(entry.state.at("size").asInt() == 180);
     }

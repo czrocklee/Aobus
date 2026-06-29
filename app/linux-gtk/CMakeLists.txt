@@ -72,11 +72,11 @@ add_library(aobus-gtk-lib STATIC
     playback/AudioPipelinePanel.cpp
     playback/NowPlayingFieldLabel.cpp
     playback/NowPlayingStatusLabel.cpp
-    playback/OutputListItems.cpp
+    playback/OutputDeviceListItems.cpp
     playback/PlaybackDetailsWidget.cpp
     playback/TransportButton.cpp
     playback/TimeLabel.cpp
-    playback/AudioDeviceSelector.cpp
+    playback/OutputDeviceSelector.cpp
     playback/VolumeControl.cpp
     playback/SeekControl.cpp
     playback/VolumeBar.cpp
@@ -121,7 +121,7 @@ add_library(aobus-gtk-lib STATIC
     layout/component/track/TrackTagEditorComponent.cpp
     layout/component/playback/AudioPipelinePanelComponent.cpp
     layout/component/playback/NowPlayingFieldComponent.cpp
-    layout/component/playback/OutputSelectorComponent.cpp
+    layout/component/playback/OutputDeviceSelectorComponent.cpp
     layout/component/playback/PlaybackImageComponent.cpp
     layout/component/playback/PlaybackRegistry.cpp
     layout/component/playback/QualityIndicatorComponent.cpp

@@ -4,7 +4,7 @@
 #pragma once
 
 #include "CorePrimitives.h"
-#include "StateTypes.h"
+#include "NotificationState.h"
 
 #include <chrono>
 #include <functional>

@@ -3,7 +3,7 @@
 
 #include "InitCommand.h"
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>

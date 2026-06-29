@@ -7,7 +7,6 @@
 #include "track/TrackCustomViewDialog.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -185,17 +184,17 @@ namespace ao::gtk
     {
       if (optResult->deleted)
       {
-        _catalog->removeCustomPresentation(optResult->state.spec.id);
+        _catalog->removeCustomPresentation(optResult->preset.spec.id);
 
-        if (spec.id == optResult->state.spec.id)
+        if (spec.id == optResult->preset.spec.id)
         {
           applyCommand(_workflowPtr->selectPresentation(rt::kDefaultTrackPresentationId));
         }
       }
       else
       {
-        _catalog->addCustomPresentation(optResult->state);
-        applyCommand(_workflowPtr->selectPresentation(optResult->state.spec.id));
+        _catalog->addCustomPresentation(optResult->preset);
+        applyCommand(_workflowPtr->selectPresentation(optResult->preset.spec.id));
       }
     }
   }

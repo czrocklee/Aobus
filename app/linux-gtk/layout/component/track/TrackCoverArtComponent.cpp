@@ -9,7 +9,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>

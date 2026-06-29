@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 
 #include <algorithm>

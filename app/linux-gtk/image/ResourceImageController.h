@@ -4,7 +4,7 @@
 #pragma once
 
 #include "image/ThumbnailLoader.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 

@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/runtime/ViewServiceTestSupport.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>

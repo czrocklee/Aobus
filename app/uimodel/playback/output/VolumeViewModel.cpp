@@ -18,7 +18,7 @@ namespace ao::uimodel
     : _playback{playback}, _onRender{std::move(onRender)}
   {
     auto const refreshCallback = [this] { refresh(); };
-    _outputSub = _playback.onOutputChanged([refreshCallback](auto const&) { refreshCallback(); });
+    _outputDeviceSub = _playback.onOutputDeviceChanged([refreshCallback](auto const&) { refreshCallback(); });
     _startedSub = _playback.onStarted(refreshCallback);
     _volumeSub = _playback.onVolumeChanged([refreshCallback](float) { refreshCallback(); });
     _mutedSub = _playback.onMutedChanged([refreshCallback](bool) { refreshCallback(); });

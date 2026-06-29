@@ -3,7 +3,7 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>

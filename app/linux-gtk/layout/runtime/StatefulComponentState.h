@@ -34,11 +34,11 @@ namespace ao::gtk::layout
       , _componentId{node.id}
       , _type{type}
       , _presetId{ctx.activePresetId}
-      , _baselineHash{uimodel::layoutComponentBaselineHash(node)}
+      , _baselineHash{uimodel::componentBaselineHash(node)}
       , _capturedGeneration{ctx.componentStateGeneration}
       , _persistable{!ctx.editMode && ctx.surface == LayoutSurface::Main && !node.id.empty() &&
                      !ctx.activePresetId.empty() && ctx.componentStateStore != nullptr}
-      , _optRestored{uimodel::resolveLayoutComponentState(ctx.componentState, node)}
+      , _optRestored{uimodel::resolveComponentState(ctx.componentState, node)}
     {
     }
 
@@ -69,7 +69,7 @@ namespace ao::gtk::layout
       _ctx->componentState.preset = _presetId;
       _ctx->componentState.components[_componentId] = uimodel::LayoutComponentStateEntry{
         .type = _type,
-        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
+        .stateVersion = uimodel::kStateEntryVersion,
         .baselineHash = _baselineHash,
         .state = std::move(state),
       };

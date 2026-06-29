@@ -5,7 +5,7 @@
 
 #include "../GtkTestSupport.h"
 #include "app/AppConfig.h"
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/AppPrefsState.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/window.h>

@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/uimodel/status/activity/ActivityStatusModelTestSupport.h"
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusModel.h>
 
 #include <catch2/catch_test_macros.hpp>

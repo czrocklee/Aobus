@@ -5,7 +5,7 @@
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/library/LibraryWriter.h>
 

@@ -3,9 +3,13 @@
 
 #pragma once
 
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
+
+namespace ao::rt
+{
+  struct MetadataPatch;
+}
 
 namespace ao::uimodel
 {

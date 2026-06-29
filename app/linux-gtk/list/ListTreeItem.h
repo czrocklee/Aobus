@@ -4,7 +4,7 @@
 #pragma once
 
 #include "list/ListRowObject.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <giomm/liststore.h>
 #include <glib.h>

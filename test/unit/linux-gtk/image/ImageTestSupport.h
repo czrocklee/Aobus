@@ -4,7 +4,7 @@
 #pragma once
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 

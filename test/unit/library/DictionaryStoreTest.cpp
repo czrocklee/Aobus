@@ -3,7 +3,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/lmdb/TestUtils.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>

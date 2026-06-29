@@ -14,7 +14,8 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
-#include <ao/Type.h>
+#include <ao/AudioScalars.h>
+#include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>

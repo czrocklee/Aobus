@@ -7,7 +7,7 @@
 #include "../TrackPresentation.h"
 #include "../source/TrackSource.h"
 #include "ProjectionTypes.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <cstddef>
 #include <cstdint>

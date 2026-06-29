@@ -9,7 +9,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/Backend.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/AppPrefsState.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/actionmap.h>
@@ -102,9 +102,9 @@ namespace ao::gtk::test
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configPtr = std::make_shared<AppConfig>(configPath);
     auto prefs = rt::AppPrefsState{};
-    prefs.lastBackend = "test_backend";
+    prefs.lastOutputBackendId = "test_backend";
     prefs.lastOutputDeviceId = "test_device";
-    prefs.lastProfile = audio::kProfileShared.raw();
+    prefs.lastOutputProfileId = audio::kProfileShared.raw();
     configPtr->saveAppPrefs(prefs);
 
     rt::test::addReadyAudioProvider(fixture.runtime().playback());
@@ -112,7 +112,7 @@ namespace ao::gtk::test
     auto window = MainWindow{fixture.runtime(), configPtr, nullptr};
     drainGtkEvents();
 
-    auto const& output = fixture.runtime().playback().state().selectedOutput;
+    auto const& output = fixture.runtime().playback().state().selectedOutputDevice;
     CHECK(output.backendId == audio::BackendId{"test_backend"});
     CHECK(output.deviceId == audio::DeviceId{"test_device"});
     CHECK(output.profileId == audio::kProfileShared);

@@ -3,7 +3,8 @@
 
 #include "runtime/TrackFieldReaderInternal.h"
 #include <ao/AudioCodec.h>
-#include <ao/Type.h>
+#include <ao/AudioScalars.h>
+#include <ao/CoreIds.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackView.h>

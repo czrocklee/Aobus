@@ -4,7 +4,7 @@
 #pragma once
 
 #include "app/GtkUiServices.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 
 #include <giomm/menumodel.h>

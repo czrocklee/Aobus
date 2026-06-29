@@ -3,7 +3,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureUtils.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryScanner.h>

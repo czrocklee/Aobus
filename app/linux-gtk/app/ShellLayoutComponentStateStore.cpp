@@ -136,7 +136,7 @@ namespace ao::gtk
 
     auto doc = loadUnlocked(presetId).value_or(uimodel::LayoutComponentStateDocument{.preset = std::string{presetId}});
     auto const beforeCount = doc.components.size();
-    uimodel::pruneLayoutComponentState(doc, effectiveDoc);
+    uimodel::pruneComponentState(doc, effectiveDoc);
     auto const changed =
       doc.components.size() != beforeCount || (doc.components.empty() && std::filesystem::exists(filePath(presetId)));
 

@@ -44,8 +44,8 @@ namespace ao::uimodel::test
       auto const& split = doc.root.children.front();
       stateDoc.components["library-panel"] = LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = kLayoutComponentStateEntryVersion,
-        .baselineHash = layoutComponentBaselineHash(split),
+        .stateVersion = kStateEntryVersion,
+        .baselineHash = componentBaselineHash(split),
         .state = {{"positionPercent", LayoutValue{0.68}}},
       };
       return stateDoc;

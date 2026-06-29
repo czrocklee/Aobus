@@ -3,7 +3,7 @@
 
 #include "track/TrackColumnController.h"
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutPolicy.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>

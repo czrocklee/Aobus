@@ -8,7 +8,7 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/audio/Types.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>

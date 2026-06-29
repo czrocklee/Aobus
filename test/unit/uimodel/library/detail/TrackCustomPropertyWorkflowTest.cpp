@@ -29,16 +29,14 @@ namespace ao::uimodel::test
     CHECK_FALSE(isProtectedTrackCustomPropertyEditText("edited"));
   }
 
-  TEST_CASE("validateTrackCustomPropertyAddition rejects duplicate and reserved keys",
-            "[uimodel][unit][library][detail]")
+  TEST_CASE("validateCustomPropertyAddition rejects duplicate and reserved keys", "[uimodel][unit][library][detail]")
   {
     auto snap = rt::TrackDetailSnapshot{};
     snap.customMetadata.push_back(rt::CustomMetadataItem{.key = "Mood"});
 
-    CHECK(validateTrackCustomPropertyAddition(snap, "ReplayGain") == TrackCustomPropertyAddValidation::Accepted);
-    CHECK(validateTrackCustomPropertyAddition(snap, "Mood") ==
-          TrackCustomPropertyAddValidation::DuplicateCustomProperty);
-    CHECK(validateTrackCustomPropertyAddition(snap, "title") == TrackCustomPropertyAddValidation::ReservedTrackField);
+    CHECK(validateCustomPropertyAddition(snap, "ReplayGain") == CustomPropertyAddValidation::Accepted);
+    CHECK(validateCustomPropertyAddition(snap, "Mood") == CustomPropertyAddValidation::DuplicateCustomProperty);
+    CHECK(validateCustomPropertyAddition(snap, "title") == CustomPropertyAddValidation::ReservedTrackField);
   }
 
   TEST_CASE("undoValueForDeletedTrackCustomProperty returns safe restore values", "[uimodel][unit][library][detail]")
@@ -62,7 +60,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("custom property patch helpers write update and delete payloads", "[uimodel][unit][library][detail]")
   {
-    auto const updatePatch = makeTrackCustomPropertyUpdatePatch("Mood", "Bright");
+    auto const updatePatch = makeCustomPropertyUpdatePatch("Mood", "Bright");
     REQUIRE(updatePatch.customUpdates.size() == 1);
     REQUIRE(updatePatch.customUpdates.contains("Mood"));
     CHECK(updatePatch.customUpdates.at("Mood") == std::optional<std::string>{"Bright"});

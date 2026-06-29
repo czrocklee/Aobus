@@ -39,8 +39,8 @@ namespace ao::gtk::test
       doc.preset = "classic";
       doc.components[node.id] = uimodel::LayoutComponentStateEntry{
         .type = node.type,
-        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
-        .baselineHash = uimodel::layoutComponentBaselineHash(node),
+        .stateVersion = uimodel::kStateEntryVersion,
+        .baselineHash = uimodel::componentBaselineHash(node),
         .state = {{"positionPercent", uimodel::LayoutValue{0.35}}},
       };
       return doc;
@@ -98,19 +98,19 @@ namespace ao::gtk::test
       auto doc = stateDocFor(liveNode);
       doc.components["orphan-split"] = uimodel::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
+        .stateVersion = uimodel::kStateEntryVersion,
         .baselineHash = "orphan",
         .state = {{"positionPercent", uimodel::LayoutValue{0.10}}},
       };
       doc.components["wrong-type"] = uimodel::LayoutComponentStateEntry{
         .type = "collapsibleSplit",
-        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
-        .baselineHash = uimodel::layoutComponentBaselineHash(liveNode),
+        .stateVersion = uimodel::kStateEntryVersion,
+        .baselineHash = uimodel::componentBaselineHash(liveNode),
         .state = {{"positionPercent", uimodel::LayoutValue{0.20}}},
       };
       doc.components["stale-split"] = uimodel::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
+        .stateVersion = uimodel::kStateEntryVersion,
         .baselineHash = "stale",
         .state = {{"positionPercent", uimodel::LayoutValue{0.30}}},
       };

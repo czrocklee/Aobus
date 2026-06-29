@@ -13,10 +13,10 @@
 #include "portal/ImportExportCoordinator.h"
 #include <ao/AppVersion.h>
 #include <ao/Exception.h>
+#include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/uimodel/input/KeymapModel.h>
 
 #include <CLI/CLI.hpp>

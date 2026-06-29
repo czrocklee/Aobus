@@ -10,7 +10,7 @@
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackListProjection.h>
 

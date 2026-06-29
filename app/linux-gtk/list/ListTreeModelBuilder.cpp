@@ -5,7 +5,7 @@
 
 #include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>

@@ -10,19 +10,19 @@ namespace ao::uimodel::test
   TEST_CASE("TrackFieldGridPolicy renders sections from available rows and selection state",
             "[uimodel][unit][library][detail]")
   {
-    CHECK_FALSE(shouldRenderTrackFieldGridMetadataSection(TrackFieldGridSectionAvailability{
+    CHECK_FALSE(shouldRenderMetadataSection(TrackFieldGridSectionAvailability{
       .hasMetadataFields = false, .hasSelectedTracks = true, .hasTechnicalFields = true}));
-    CHECK(shouldRenderTrackFieldGridMetadataSection(TrackFieldGridSectionAvailability{
+    CHECK(shouldRenderMetadataSection(TrackFieldGridSectionAvailability{
       .hasMetadataFields = true, .hasSelectedTracks = false, .hasTechnicalFields = false}));
 
-    CHECK_FALSE(shouldRenderTrackFieldGridCustomSection(TrackFieldGridSectionAvailability{
+    CHECK_FALSE(shouldRenderCustomSection(TrackFieldGridSectionAvailability{
       .hasMetadataFields = true, .hasSelectedTracks = false, .hasTechnicalFields = true}));
-    CHECK(shouldRenderTrackFieldGridCustomSection(TrackFieldGridSectionAvailability{
+    CHECK(shouldRenderCustomSection(TrackFieldGridSectionAvailability{
       .hasMetadataFields = false, .hasSelectedTracks = true, .hasTechnicalFields = false}));
 
-    CHECK_FALSE(shouldRenderTrackFieldGridTechnicalSection(TrackFieldGridSectionAvailability{
+    CHECK_FALSE(shouldRenderTechnicalSection(TrackFieldGridSectionAvailability{
       .hasMetadataFields = true, .hasSelectedTracks = true, .hasTechnicalFields = false}));
-    CHECK(shouldRenderTrackFieldGridTechnicalSection(TrackFieldGridSectionAvailability{
+    CHECK(shouldRenderTechnicalSection(TrackFieldGridSectionAvailability{
       .hasMetadataFields = false, .hasSelectedTracks = false, .hasTechnicalFields = true}));
   }
 
@@ -47,60 +47,53 @@ namespace ao::uimodel::test
 
   TEST_CASE("TrackFieldGridPolicy shows composite metadata rows from either side", "[uimodel][unit][library][detail]")
   {
-    CHECK_FALSE(shouldShowTrackFieldGridCompositeMetadataRow(
-      TrackFieldGridCompositeMetadataFieldVisibility{.metadataExpanded = false,
-                                                     .showEmptyMetadata = true,
-                                                     .primaryEditorEditing = true,
-                                                     .secondaryEditorEditing = true,
-                                                     .hasPrimaryDisplayText = true,
-                                                     .hasSecondaryDisplayText = true}));
+    CHECK_FALSE(shouldShowCompositeMetadataRow(CompositeMetadataVisibility{.metadataExpanded = false,
+                                                                           .showEmptyMetadata = true,
+                                                                           .primaryEditorEditing = true,
+                                                                           .secondaryEditorEditing = true,
+                                                                           .hasPrimaryDisplayText = true,
+                                                                           .hasSecondaryDisplayText = true}));
 
-    CHECK_FALSE(shouldShowTrackFieldGridCompositeMetadataRow(
-      TrackFieldGridCompositeMetadataFieldVisibility{.metadataExpanded = true,
-                                                     .showEmptyMetadata = false,
-                                                     .primaryEditorEditing = false,
-                                                     .secondaryEditorEditing = false,
-                                                     .hasPrimaryDisplayText = false,
-                                                     .hasSecondaryDisplayText = false}));
+    CHECK_FALSE(shouldShowCompositeMetadataRow(CompositeMetadataVisibility{.metadataExpanded = true,
+                                                                           .showEmptyMetadata = false,
+                                                                           .primaryEditorEditing = false,
+                                                                           .secondaryEditorEditing = false,
+                                                                           .hasPrimaryDisplayText = false,
+                                                                           .hasSecondaryDisplayText = false}));
 
-    CHECK(shouldShowTrackFieldGridCompositeMetadataRow(
-      TrackFieldGridCompositeMetadataFieldVisibility{.metadataExpanded = true,
-                                                     .showEmptyMetadata = false,
-                                                     .primaryEditorEditing = false,
-                                                     .secondaryEditorEditing = false,
-                                                     .hasPrimaryDisplayText = true,
-                                                     .hasSecondaryDisplayText = false}));
+    CHECK(shouldShowCompositeMetadataRow(CompositeMetadataVisibility{.metadataExpanded = true,
+                                                                     .showEmptyMetadata = false,
+                                                                     .primaryEditorEditing = false,
+                                                                     .secondaryEditorEditing = false,
+                                                                     .hasPrimaryDisplayText = true,
+                                                                     .hasSecondaryDisplayText = false}));
 
-    CHECK(shouldShowTrackFieldGridCompositeMetadataRow(
-      TrackFieldGridCompositeMetadataFieldVisibility{.metadataExpanded = true,
-                                                     .showEmptyMetadata = false,
-                                                     .primaryEditorEditing = false,
-                                                     .secondaryEditorEditing = false,
-                                                     .hasPrimaryDisplayText = false,
-                                                     .hasSecondaryDisplayText = true}));
+    CHECK(shouldShowCompositeMetadataRow(CompositeMetadataVisibility{.metadataExpanded = true,
+                                                                     .showEmptyMetadata = false,
+                                                                     .primaryEditorEditing = false,
+                                                                     .secondaryEditorEditing = false,
+                                                                     .hasPrimaryDisplayText = false,
+                                                                     .hasSecondaryDisplayText = true}));
 
-    CHECK(shouldShowTrackFieldGridCompositeMetadataRow(
-      TrackFieldGridCompositeMetadataFieldVisibility{.metadataExpanded = true,
-                                                     .showEmptyMetadata = true,
-                                                     .primaryEditorEditing = false,
-                                                     .secondaryEditorEditing = false,
-                                                     .hasPrimaryDisplayText = false,
-                                                     .hasSecondaryDisplayText = false}));
+    CHECK(shouldShowCompositeMetadataRow(CompositeMetadataVisibility{.metadataExpanded = true,
+                                                                     .showEmptyMetadata = true,
+                                                                     .primaryEditorEditing = false,
+                                                                     .secondaryEditorEditing = false,
+                                                                     .hasPrimaryDisplayText = false,
+                                                                     .hasSecondaryDisplayText = false}));
 
-    CHECK(shouldShowTrackFieldGridCompositeMetadataRow(
-      TrackFieldGridCompositeMetadataFieldVisibility{.metadataExpanded = true,
-                                                     .showEmptyMetadata = false,
-                                                     .primaryEditorEditing = true,
-                                                     .secondaryEditorEditing = false,
-                                                     .hasPrimaryDisplayText = false,
-                                                     .hasSecondaryDisplayText = false}));
+    CHECK(shouldShowCompositeMetadataRow(CompositeMetadataVisibility{.metadataExpanded = true,
+                                                                     .showEmptyMetadata = false,
+                                                                     .primaryEditorEditing = true,
+                                                                     .secondaryEditorEditing = false,
+                                                                     .hasPrimaryDisplayText = false,
+                                                                     .hasSecondaryDisplayText = false}));
 
-    CHECK(shouldShowTrackFieldGridCompositeMetadataRow(
-      TrackFieldGridCompositeMetadataFieldVisibility{.metadataExpanded = true,
-                                                     .showEmptyMetadata = false,
-                                                     .primaryEditorEditing = false,
-                                                     .secondaryEditorEditing = true,
-                                                     .hasPrimaryDisplayText = false,
-                                                     .hasSecondaryDisplayText = false}));
+    CHECK(shouldShowCompositeMetadataRow(CompositeMetadataVisibility{.metadataExpanded = true,
+                                                                     .showEmptyMetadata = false,
+                                                                     .primaryEditorEditing = false,
+                                                                     .secondaryEditorEditing = true,
+                                                                     .hasPrimaryDisplayText = false,
+                                                                     .hasSecondaryDisplayText = false}));
   }
 } // namespace ao::uimodel::test

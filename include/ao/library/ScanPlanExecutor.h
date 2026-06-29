@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Type.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryScanner.h>

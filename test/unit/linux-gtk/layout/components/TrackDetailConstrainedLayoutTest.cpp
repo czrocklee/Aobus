@@ -5,7 +5,7 @@
 #include "layout/component/track/TrackDetailSizing.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>

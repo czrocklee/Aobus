@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/AppPrefsState.h>
 
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>

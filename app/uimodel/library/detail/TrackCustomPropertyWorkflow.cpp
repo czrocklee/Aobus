@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/detail/TrackCustomPropertyWorkflow.h>
@@ -29,21 +29,21 @@ namespace ao::uimodel
     return newText == kMultipleTrackValuesText;
   }
 
-  TrackCustomPropertyAddValidation validateTrackCustomPropertyAddition(rt::TrackDetailSnapshot const& snap,
-                                                                       std::string_view const key)
+  CustomPropertyAddValidation validateCustomPropertyAddition(rt::TrackDetailSnapshot const& snap,
+                                                             std::string_view const key)
   {
     if (std::ranges::any_of(
           snap.customMetadata, [key](rt::CustomMetadataItem const& item) { return std::string_view{item.key} == key; }))
     {
-      return TrackCustomPropertyAddValidation::DuplicateCustomProperty;
+      return CustomPropertyAddValidation::DuplicateCustomProperty;
     }
 
     if (rt::trackFieldFromId(key))
     {
-      return TrackCustomPropertyAddValidation::ReservedTrackField;
+      return CustomPropertyAddValidation::ReservedTrackField;
     }
 
-    return TrackCustomPropertyAddValidation::Accepted;
+    return CustomPropertyAddValidation::Accepted;
   }
 
   std::optional<std::string> undoValueForDeletedTrackCustomProperty(rt::TrackDetailSnapshot const& snap,
@@ -60,7 +60,7 @@ namespace ao::uimodel
     return std::nullopt;
   }
 
-  rt::MetadataPatch makeTrackCustomPropertyUpdatePatch(std::string_view const key, std::string_view const value)
+  rt::MetadataPatch makeCustomPropertyUpdatePatch(std::string_view const key, std::string_view const value)
   {
     auto patch = rt::MetadataPatch{};
     patch.customUpdates[std::string{key}] = std::string{value};

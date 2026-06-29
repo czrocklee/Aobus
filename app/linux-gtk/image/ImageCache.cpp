@@ -3,7 +3,7 @@
 
 #include "image/ImageCache.h"
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>

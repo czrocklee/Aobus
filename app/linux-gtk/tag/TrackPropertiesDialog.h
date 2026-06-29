@@ -5,7 +5,7 @@
 
 #include "app/AppDialog.h"
 #include "track/TrackFieldUi.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>

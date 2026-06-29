@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "playback/AudioDeviceSelector.h"
+#include "playback/OutputDeviceSelector.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
@@ -12,7 +12,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("AudioDeviceSelector renders devices and routes selected output changes", "[gtk][unit][playback][output]")
+  TEST_CASE("OutputDeviceSelector renders devices and routes selected output changes", "[gtk][unit][playback][output]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -20,7 +20,7 @@ namespace ao::gtk::test
 
     SECTION("constructor wires up the popover with a scrolled list box")
     {
-      auto selector = AudioDeviceSelector{playback, Gtk::PositionType::BOTTOM};
+      auto selector = OutputDeviceSelector{playback, Gtk::PositionType::BOTTOM};
       drainGtkEvents();
 
       CHECK(selector.get_autohide());

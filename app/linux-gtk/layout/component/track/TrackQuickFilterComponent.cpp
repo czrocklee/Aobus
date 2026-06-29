@@ -8,7 +8,7 @@
 #include "list/ListNavigationController.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>

@@ -5,8 +5,8 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/audio/TestUtility.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Type.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/IBackendProvider.h>

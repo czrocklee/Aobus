@@ -7,7 +7,7 @@
 #include <ao/audio/Backend.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -20,12 +20,12 @@ namespace ao::gtk::test
     bool hasBackend(rt::PlaybackState const& state, audio::BackendId const& id)
     {
       return std::ranges::any_of(
-        state.availableOutputs, [&id](rt::OutputBackendSnapshot const& backend) { return backend.id == id; });
+        state.availableOutputBackends, [&id](rt::OutputBackendSnapshot const& backend) { return backend.id == id; });
     }
   } // namespace
 
   // The provider metadata is hardcoded, so each compiled-in backend surfaces in
-  // availableOutputs regardless of whether a daemon or hardware is present. The
+  // availableOutputBackends regardless of whether a daemon or hardware is present. The
   // PIPEWIRE_FOUND/ALSA_FOUND macros reach this TU through ao_audio's PUBLIC
   // definitions.
   TEST_CASE("registerPlatformAudioBackends registers the compiled-in audio backends", "[gtk][unit][platform][audio]")
@@ -34,7 +34,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
 
-    REQUIRE(playback.state().availableOutputs.empty());
+    REQUIRE(playback.state().availableOutputBackends.empty());
 
     registerPlatformAudioBackends(fixture.runtime());
     drainGtkEvents();

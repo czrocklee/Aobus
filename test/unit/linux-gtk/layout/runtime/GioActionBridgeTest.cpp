@@ -139,7 +139,8 @@ namespace ao::gtk::layout::test
                                .category = "Test",
                                .capabilities = LayoutActionCapability::None},
         [&](ActionActivationContext&) {},
-        [&](ActionActivationContext const&) { return LayoutActionState{.enabled = isEnabled, .disabledReason = ""}; });
+        [&](ActionActivationContext const&)
+        { return LayoutActionAvailability{.enabled = isEnabled, .disabledReason = ""}; });
 
       auto sessionPtr = GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
       REQUIRE(sessionPtr != nullptr);

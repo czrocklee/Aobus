@@ -11,7 +11,7 @@
 #include "gtkmm/widget.h"
 #include "gtkmm/window.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
@@ -13,7 +13,7 @@
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/ViewService.h>
 
@@ -77,12 +77,12 @@ namespace ao::rt
 
     PlaybackState buildPlaybackState(audio::Player::Status const& status)
     {
-      auto outputs = std::vector<OutputBackendSnapshot>{};
-      outputs.reserve(status.availableBackends.size());
+      auto outputBackends = std::vector<OutputBackendSnapshot>{};
+      outputBackends.reserve(status.availableBackends.size());
 
       for (auto const& backendStatus : status.availableBackends)
       {
-        outputs.push_back(toOutputBackendSnapshot(backendStatus));
+        outputBackends.push_back(toOutputBackendSnapshot(backendStatus));
       }
 
       return PlaybackState{
@@ -95,25 +95,25 @@ namespace ao::rt
         .volumeAvailable = status.volumeAvailable,
         .volumeIsHardwareAssisted = status.volumeIsHardwareAssisted,
         .ready = status.isReady,
-        .selectedOutput =
-          OutputSelection{
+        .selectedOutputDevice =
+          OutputDeviceSelection{
             .backendId = status.engine.backendId,
             .deviceId = status.engine.currentDeviceId,
             .profileId = status.engine.profileId,
           },
-        .availableOutputs = std::move(outputs),
+        .availableOutputBackends = std::move(outputBackends),
         .flow = status.flow,
         .quality = status.quality,
         .qualityAssessments = status.qualityAssessments,
       };
     }
 
-    bool hasOutput(OutputSelection const& output)
+    bool hasOutputDevice(OutputDeviceSelection const& outputDevice)
     {
-      return !output.backendId.empty();
+      return !outputDevice.backendId.empty();
     }
 
-    bool sameOutput(OutputSelection const& lhs, OutputSelection const& rhs)
+    bool sameOutputDevice(OutputDeviceSelection const& lhs, OutputDeviceSelection const& rhs)
     {
       return lhs.backendId == rhs.backendId && lhs.deviceId == rhs.deviceId && lhs.profileId == rhs.profileId;
     }
@@ -124,45 +124,50 @@ namespace ao::rt
                                        : std::string_view{status.statusText};
     }
 
-    void logOutputSelected(OutputSelection const& output)
+    void logOutputDeviceSelected(OutputDeviceSelection const& outputDevice)
+    {
+      APP_LOG_INFO("Audio output device selected: backend={} device={} profile={}",
+                   outputDevice.backendId,
+                   outputDevice.deviceId,
+                   outputDevice.profileId);
+    }
+
+    void logOutputDeviceCleared(OutputDeviceSelection const& outputDevice)
+    {
+      APP_LOG_INFO("Audio output device cleared: backend={} device={} profile={}",
+                   outputDevice.backendId,
+                   outputDevice.deviceId,
+                   outputDevice.profileId);
+    }
+
+    void logOutputDeviceSwitched(OutputDeviceSelection const& previous, OutputDeviceSelection const& current)
     {
       APP_LOG_INFO(
-        "Audio output selected: backend={} device={} profile={}", output.backendId, output.deviceId, output.profileId);
+        "Audio output device switched: previous_backend={} previous_device={} previous_profile={} backend={} "
+        "device={} profile={}",
+        previous.backendId,
+        previous.deviceId,
+        previous.profileId,
+        current.backendId,
+        current.deviceId,
+        current.profileId);
     }
 
-    void logOutputCleared(OutputSelection const& output)
+    void logOutputDeviceTransition(OutputDeviceSelection const& previous, OutputDeviceSelection const& current)
     {
-      APP_LOG_INFO(
-        "Audio output cleared: backend={} device={} profile={}", output.backendId, output.deviceId, output.profileId);
-    }
+      auto const previousHas = hasOutputDevice(previous);
 
-    void logOutputSwitched(OutputSelection const& previous, OutputSelection const& current)
-    {
-      APP_LOG_INFO("Audio output switched: previous_backend={} previous_device={} previous_profile={} backend={} "
-                   "device={} profile={}",
-                   previous.backendId,
-                   previous.deviceId,
-                   previous.profileId,
-                   current.backendId,
-                   current.deviceId,
-                   current.profileId);
-    }
-
-    void logOutputTransition(OutputSelection const& previous, OutputSelection const& current)
-    {
-      auto const previousHas = hasOutput(previous);
-
-      if (auto const currentHas = hasOutput(current); previousHas && currentHas)
+      if (auto const currentHas = hasOutputDevice(current); previousHas && currentHas)
       {
-        logOutputSwitched(previous, current);
+        logOutputDeviceSwitched(previous, current);
       }
       else if (currentHas)
       {
-        logOutputSelected(current);
+        logOutputDeviceSelected(current);
       }
       else if (previousHas)
       {
-        logOutputCleared(previous);
+        logOutputDeviceCleared(previous);
       }
     }
 
@@ -250,9 +255,9 @@ namespace ao::rt
     Signal<> pausedSignal;
     Signal<> idleSignal;
     Signal<PlaybackService::NowPlayingChanged const&> nowPlayingChangedSignal;
-    Signal<OutputSelection const&> outputChangedSignal;
+    Signal<OutputDeviceSelection const&> outputDeviceChangedSignal;
     Signal<> stoppedSignal;
-    Signal<> devicesChangedSignal;
+    Signal<> outputDevicesChangedSignal;
     Signal<PlaybackService::QualityChanged const&> qualityChangedSignal;
     Signal<float> volumeChangedSignal;
     Signal<bool> mutedChangedSignal;
@@ -309,9 +314,9 @@ namespace ao::rt
         profileId = backend.metadata.supportedProfiles.front().id;
       }
 
-      if (auto const result = playerPtr->setOutput(backend.metadata.id, device.id, profileId); !result)
+      if (auto const result = playerPtr->setOutputDevice(backend.metadata.id, device.id, profileId); !result)
       {
-        APP_LOG_ERROR("Failed to select audio output: {}", result.error().message);
+        APP_LOG_ERROR("Failed to select audio output device: {}", result.error().message);
       }
     }
 
@@ -333,14 +338,14 @@ namespace ao::rt
         state.duration = currentTrackDuration;
       }
 
-      if (!sameOutput(previousState.selectedOutput, state.selectedOutput))
+      if (!sameOutputDevice(previousState.selectedOutputDevice, state.selectedOutputDevice))
       {
-        logOutputTransition(previousState.selectedOutput, state.selectedOutput);
+        logOutputDeviceTransition(previousState.selectedOutputDevice, state.selectedOutputDevice);
       }
 
       if (state.transport == audio::Transport::Error)
       {
-        recordPlaybackError(previousState.transport, status.engine, state.selectedOutput);
+        recordPlaybackError(previousState.transport, status.engine, state.selectedOutputDevice);
       }
       else
       {
@@ -350,7 +355,7 @@ namespace ao::rt
 
     void recordPlaybackError(audio::Transport previousTransport,
                              audio::Engine::Status const& engineStatus,
-                             OutputSelection const& currentOutput)
+                             OutputDeviceSelection const& currentOutputDevice)
     {
       auto const message = std::string{playbackErrorMessage(engineStatus)};
 
@@ -361,9 +366,9 @@ namespace ao::rt
 
       lastPlaybackError = message;
       APP_LOG_ERROR("Playback error on backend={} device={} profile={}: {}",
-                    currentOutput.backendId,
-                    currentOutput.deviceId,
-                    currentOutput.profileId,
+                    currentOutputDevice.backendId,
+                    currentOutputDevice.deviceId,
+                    currentOutputDevice.profileId,
                     lastPlaybackError);
     }
 
@@ -385,23 +390,23 @@ namespace ao::rt
 
       playerPtr->setOnStateChanged([this] { refreshState(); });
 
-      playerPtr->setOnDevicesChanged(
+      playerPtr->setOnOutputDevicesChanged(
         [this](std::vector<audio::IBackendProvider::Status> const&)
         {
           refreshState();
 
-          // Auto-select first available default output if none is selected yet
-          if (!state.selectedOutput.backendId.empty() || state.availableOutputs.empty())
+          // Auto-select first available default output device if none is selected yet.
+          if (!state.selectedOutputDevice.backendId.empty() || state.availableOutputBackends.empty())
           {
-            devicesChangedSignal.emit();
+            outputDevicesChangedSignal.emit();
             return;
           }
 
-          auto const& backend = state.availableOutputs.front();
+          auto const& backend = state.availableOutputBackends.front();
 
           if (backend.devices.empty())
           {
-            devicesChangedSignal.emit();
+            outputDevicesChangedSignal.emit();
             return;
           }
 
@@ -413,13 +418,13 @@ namespace ao::rt
             profileId = backend.supportedProfiles.front().id;
           }
 
-          if (auto const result = playerPtr->setOutput(backend.id, device.id, profileId); !result)
+          if (auto const result = playerPtr->setOutputDevice(backend.id, device.id, profileId); !result)
           {
-            APP_LOG_ERROR("Failed to select audio output: {}", result.error().message);
+            APP_LOG_ERROR("Failed to select audio output device: {}", result.error().message);
           }
 
           refreshState();
-          outputChangedSignal.emit(state.selectedOutput);
+          outputDeviceChangedSignal.emit(state.selectedOutputDevice);
         });
 
       playerPtr->setOnQualityChanged(
@@ -432,12 +437,12 @@ namespace ao::rt
 
     ~Impl()
     {
-      if (hasOutput(state.selectedOutput))
+      if (hasOutputDevice(state.selectedOutputDevice))
       {
-        APP_LOG_INFO("Audio output released: backend={} device={} profile={}",
-                     state.selectedOutput.backendId,
-                     state.selectedOutput.deviceId,
-                     state.selectedOutput.profileId);
+        APP_LOG_INFO("Audio output device released: backend={} device={} profile={}",
+                     state.selectedOutputDevice.backendId,
+                     state.selectedOutputDevice.deviceId,
+                     state.selectedOutputDevice.profileId);
       }
 
       // Tear the player down first: Player::~Impl drains its own callback gate
@@ -484,10 +489,11 @@ namespace ao::rt
     return _implPtr->nowPlayingChangedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onOutputChanged(std::move_only_function<void(OutputSelection const&)> handler)
+  Subscription PlaybackService::onOutputDeviceChanged(
+    std::move_only_function<void(OutputDeviceSelection const&)> handler)
   {
     _implPtr->ensureOnExecutor();
-    return _implPtr->outputChangedSignal.connect(std::move(handler));
+    return _implPtr->outputDeviceChangedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onStopped(std::move_only_function<void()> handler)
@@ -496,10 +502,10 @@ namespace ao::rt
     return _implPtr->stoppedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onDevicesChanged(std::move_only_function<void()> handler)
+  Subscription PlaybackService::onOutputDevicesChanged(std::move_only_function<void()> handler)
   {
     _implPtr->ensureOnExecutor();
-    return _implPtr->devicesChangedSignal.connect(std::move(handler));
+    return _implPtr->outputDevicesChangedSignal.connect(std::move(handler));
   }
 
   Subscription PlaybackService::onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler)
@@ -688,24 +694,24 @@ namespace ao::rt
     _implPtr->seekUpdateSignal.emit(SeekUpdate{.elapsed = elapsed, .mode = mode});
   }
 
-  void PlaybackService::setOutput(audio::BackendId const& backendId,
-                                  audio::DeviceId const& deviceId,
-                                  audio::ProfileId const& profileId)
+  void PlaybackService::setOutputDevice(audio::BackendId const& backendId,
+                                        audio::DeviceId const& deviceId,
+                                        audio::ProfileId const& profileId)
   {
     _implPtr->ensureOnExecutor();
 
-    if (auto const result = _implPtr->playerPtr->setOutput(backendId, deviceId, profileId); !result)
+    if (auto const result = _implPtr->playerPtr->setOutputDevice(backendId, deviceId, profileId); !result)
     {
-      APP_LOG_ERROR("Failed to set audio output: {}", result.error().message);
+      APP_LOG_ERROR("Failed to set audio output device: {}", result.error().message);
     }
 
     _implPtr->refreshState();
     // Publish the engine-confirmed selection from the refreshed state, not the
     // raw request. This keeps the signal consistent with the auto-select path in
-    // onDevicesChanged (which emits state.selectedOutput) and reports what the
+    // onOutputDevicesChanged (which emits state.selectedOutputDevice) and reports what the
     // engine actually selected. The two coincide while Engine::setBackend is
     // synchronous; if it ever becomes async, this still reflects reality.
-    _implPtr->outputChangedSignal.emit(_implPtr->state.selectedOutput);
+    _implPtr->outputDeviceChangedSignal.emit(_implPtr->state.selectedOutputDevice);
   }
 
   void PlaybackService::setVolume(float const volume)

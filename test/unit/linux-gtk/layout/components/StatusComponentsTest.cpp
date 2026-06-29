@@ -7,7 +7,7 @@
 #include "app/linux-gtk/layout/runtime/LayoutContext.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/NotificationService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/uimodel/layout/action/LayoutActionTypes.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -120,7 +120,7 @@ namespace ao::gtk::layout::test
       [&sawFallbackComponentId](ActionActivationContext const& stateCtx)
       {
         sawFallbackComponentId = stateCtx.componentId == "status.activityStatus";
-        return LayoutActionState{.enabled = false, .disabledReason = "Library busy"};
+        return LayoutActionAvailability{.enabled = false, .disabledReason = "Library busy"};
       });
 
     auto ctx =

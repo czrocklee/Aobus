@@ -5,7 +5,7 @@
 
 #include "app/UIState.h"
 #include "test/unit/TestUtils.h"
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/AppPrefsState.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -57,7 +57,7 @@ namespace ao::gtk::test
       auto config = AppConfig{configPath};
 
       auto savePrefs = rt::AppPrefsState{};
-      savePrefs.lastBackend = "test-backend";
+      savePrefs.lastOutputBackendId = "test-backend";
       savePrefs.lastLayoutPreset = "modern";
       savePrefs.lastThemePreset = "modern";
       config.saveAppPrefs(savePrefs);
@@ -66,7 +66,7 @@ namespace ao::gtk::test
       auto loadPrefs = rt::AppPrefsState{};
       config2.loadAppPrefs(loadPrefs);
 
-      CHECK(loadPrefs.lastBackend == "test-backend");
+      CHECK(loadPrefs.lastOutputBackendId == "test-backend");
       CHECK(loadPrefs.lastLayoutPreset == "modern");
       CHECK(loadPrefs.lastThemePreset == "modern");
     }

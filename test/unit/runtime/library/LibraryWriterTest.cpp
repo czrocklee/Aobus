@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include <ao/CoreIds.h>
 #include <ao/Exception.h>
-#include <ao/Type.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 

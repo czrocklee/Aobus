@@ -191,7 +191,7 @@ add_executable(ao_core_test
     unit/uimodel/library/track/TrackSelectionRegionPolicyTest.cpp
     unit/uimodel/library/track/TrackSelectionSummaryTest.cpp
     unit/uimodel/playback/now-playing/NowPlayingViewModelTest.cpp
-    unit/uimodel/playback/output/AudioOutputViewModelTest.cpp
+    unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp
     unit/uimodel/playback/output/VolumeViewModelTest.cpp
     unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp
     unit/uimodel/playback/queue/PlaybackQueueModelTest.cpp
@@ -383,12 +383,12 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/components/StatusComponentsTest.cpp
     unit/linux-gtk/playback/AudioPipelinePanelTest.cpp
     unit/linux-gtk/playback/AobusSoulWindowTest.cpp
-    unit/linux-gtk/playback/AudioDeviceSelectorTest.cpp
+    unit/linux-gtk/playback/OutputDeviceSelectorTest.cpp
     unit/linux-gtk/playback/PlaybackUiComponentsTest.cpp
     unit/linux-gtk/playback/PlaybackDetailsWidgetTest.cpp
     unit/linux-gtk/playback/NowPlayingFieldLabelTest.cpp
     unit/linux-gtk/playback/NowPlayingStatusLabelTest.cpp
-    unit/linux-gtk/playback/OutputListItemsTest.cpp
+    unit/linux-gtk/playback/OutputDeviceListItemsTest.cpp
     unit/linux-gtk/playback/TransportButtonTest.cpp
     unit/linux-gtk/playback/VolumeControlTest.cpp
 )

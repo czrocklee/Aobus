@@ -6,7 +6,6 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 

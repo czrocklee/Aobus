@@ -5,7 +5,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/lmdb/TestUtils.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>

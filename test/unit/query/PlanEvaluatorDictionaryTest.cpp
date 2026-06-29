@@ -5,7 +5,7 @@
 #include "test/unit/lmdb/TestUtils.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/AudioCodec.h>
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/Field.h>

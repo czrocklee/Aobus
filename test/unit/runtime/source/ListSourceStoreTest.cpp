@@ -3,7 +3,7 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>

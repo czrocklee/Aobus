@@ -5,11 +5,11 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "playback/AudioDeviceSelector.h"
+#include "playback/OutputDeviceSelector.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/playback/output/AudioOutputViewModel.h>
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
@@ -25,28 +25,28 @@ namespace ao::gtk::layout
   namespace
   {
     /**
-     * @brief playback.outputSelector
+     * @brief playback.outputDeviceSelector
      */
-    class OutputSelectorComponent final : public ILayoutComponent
+    class OutputDeviceSelectorComponent final : public ILayoutComponent
     {
     public:
-      OutputSelectorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      OutputDeviceSelectorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
         : _playback{ctx.runtime.playback()}
         , _viewModel{_playback,
-                     [this](uimodel::AudioOutputViewState const& view)
+                     [this](uimodel::OutputDeviceViewState const& view)
                      {
-                       _label.set_text(view.backendSummary);
-                       _button.set_tooltip_text(view.outputStatus);
+                       _label.set_text(view.outputBackendSummary);
+                       _button.set_tooltip_text(view.outputDeviceStatus);
                      }}
       {
         _button.set_has_frame(false);
-        _button.add_css_class("ao-output-selector-modern");
+        _button.add_css_class("ao-output-device-selector-modern");
         _button.set_child(_label);
 
         _button.signal_clicked().connect(
           [this]
           {
-            auto* const popover = Gtk::make_managed<AudioDeviceSelector>(_playback, Gtk::PositionType::TOP);
+            auto* const popover = Gtk::make_managed<OutputDeviceSelector>(_playback, Gtk::PositionType::TOP);
             popover->set_parent(_button);
             popover->signal_closed().connect([popover] { popover->unparent(); });
             popover->popup();
@@ -61,24 +61,24 @@ namespace ao::gtk::layout
       rt::PlaybackService& _playback;
       Gtk::Button _button;
       Gtk::Label _label;
-      uimodel::AudioOutputViewModel _viewModel;
+      uimodel::OutputDeviceViewModel _viewModel;
     };
 
-    std::unique_ptr<ILayoutComponent> createOutputSelector(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createOutputDeviceSelector(LayoutContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<OutputSelectorComponent>(ctx, node);
+      return std::make_unique<OutputDeviceSelectorComponent>(ctx, node);
     }
   } // namespace
 
-  void registerOutputSelectorComponent(ComponentRegistry& registry)
+  void registerOutputDeviceSelectorComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "playback.outputSelector",
-                                .displayName = "Output Selector",
+    registry.registerComponent({.type = "playback.outputDeviceSelector",
+                                .displayName = "Output Device Selector",
                                 .category = LayoutComponentCategory::Playback,
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
-                               createOutputSelector);
+                               createOutputDeviceSelector);
   }
 } // namespace ao::gtk::layout

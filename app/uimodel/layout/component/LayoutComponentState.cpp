@@ -144,17 +144,17 @@ namespace ao::uimodel
     }
   } // namespace
 
-  std::string layoutComponentBaselineHash(LayoutNode const& node)
+  std::string componentBaselineHash(LayoutNode const& node)
   {
     return utility::fnv1a64Hex(canonicalBaseline(node));
   }
 
-  std::optional<LayoutComponentStateEntry> resolveLayoutComponentState(LayoutComponentStateDocument const& stateDoc,
-                                                                       std::string_view componentId,
-                                                                       std::string_view componentType,
-                                                                       std::string_view baselineHash)
+  std::optional<LayoutComponentStateEntry> resolveComponentState(LayoutComponentStateDocument const& stateDoc,
+                                                                 std::string_view componentId,
+                                                                 std::string_view componentType,
+                                                                 std::string_view baselineHash)
   {
-    if (stateDoc.version != kLayoutComponentStateFileVersion || componentId.empty())
+    if (stateDoc.version != kStateFileVersion || componentId.empty())
     {
       return std::nullopt;
     }
@@ -168,8 +168,7 @@ namespace ao::uimodel
 
     auto const& entry = it->second;
 
-    if (entry.type != componentType || entry.stateVersion != kLayoutComponentStateEntryVersion ||
-        entry.baselineHash != baselineHash)
+    if (entry.type != componentType || entry.stateVersion != kStateEntryVersion || entry.baselineHash != baselineHash)
     {
       return std::nullopt;
     }
@@ -177,15 +176,15 @@ namespace ao::uimodel
     return entry;
   }
 
-  std::optional<LayoutComponentStateEntry> resolveLayoutComponentState(LayoutComponentStateDocument const& stateDoc,
-                                                                       LayoutNode const& node)
+  std::optional<LayoutComponentStateEntry> resolveComponentState(LayoutComponentStateDocument const& stateDoc,
+                                                                 LayoutNode const& node)
   {
-    return resolveLayoutComponentState(stateDoc, node.id, node.type, layoutComponentBaselineHash(node));
+    return resolveComponentState(stateDoc, node.id, node.type, componentBaselineHash(node));
   }
 
-  void pruneLayoutComponentState(LayoutComponentStateDocument& stateDoc, LayoutDocument const& effectiveDoc)
+  void pruneComponentState(LayoutComponentStateDocument& stateDoc, LayoutDocument const& effectiveDoc)
   {
-    if (stateDoc.version != kLayoutComponentStateFileVersion)
+    if (stateDoc.version != kStateFileVersion)
     {
       stateDoc.components.clear();
       return;
@@ -205,8 +204,8 @@ namespace ao::uimodel
                     }
 
                     auto const& node = nodeIt->second;
-                    return entry.type != node.type || entry.stateVersion != kLayoutComponentStateEntryVersion ||
-                           entry.baselineHash != layoutComponentBaselineHash(node);
+                    return entry.type != node.type || entry.stateVersion != kStateEntryVersion ||
+                           entry.baselineHash != componentBaselineHash(node);
                   });
   }
 } // namespace ao::uimodel

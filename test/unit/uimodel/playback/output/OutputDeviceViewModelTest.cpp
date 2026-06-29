@@ -8,12 +8,11 @@
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/Subscription.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/source/ListSourceStore.h>
-#include <ao/uimodel/playback/output/AudioOutputViewModel.h>
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -30,13 +29,13 @@ namespace ao::uimodel::test
   using namespace ao::rt;
   namespace
   {
-    // ── FakeOutputProvider: hand-written fake IBackendProvider ──────────────
+    // ── FakeOutputDeviceProvider: hand-written fake IBackendProvider ──────────────
     // Unlike mocking frameworks, this directly controls the callback chain:
     // subscribeDevices immediately invokes the callback, which triggers
-    // Player → PlaybackService.onDevicesChanged → state.availableOutputs rebuild.
+    // Player → PlaybackService.onOutputDevicesChanged → state.availableOutputBackends rebuild.
     //
     // Uses TestBackend (below) instead of NullBackend so that backendId() and
-    // profileId() return the expected values, enabling setOutput + isActive tests.
+    // profileId() return the expected values, enabling setOutputDevice + isActive tests.
 
     struct TestBackend final : audio::NullBackend
     {
@@ -52,11 +51,11 @@ namespace ao::uimodel::test
       audio::ProfileId profileId() const noexcept override { return profileIdValue; }
     };
 
-    struct FakeOutputProvider final : audio::IBackendProvider
+    struct FakeOutputDeviceProvider final : audio::IBackendProvider
     {
       Status provStatus;
 
-      explicit FakeOutputProvider(Status status)
+      explicit FakeOutputDeviceProvider(Status status)
         : provStatus{std::move(status)}
       {
       }
@@ -116,7 +115,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("AudioOutputViewModel - state generation", "[uimodel][unit][playback]")
+  TEST_CASE("OutputDeviceViewModel - state generation", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -125,8 +124,8 @@ namespace ao::uimodel::test
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playback = PlaybackService{executor, viewService, testLib.library()};
 
-    auto log = RenderLog<AudioOutputViewState>{};
-    auto viewModel = AudioOutputViewModel{playback, [&log](auto const& view) { log.render(view); }};
+    auto log = RenderLog<OutputDeviceViewState>{};
+    auto viewModel = OutputDeviceViewModel{playback, [&log](auto const& view) { log.render(view); }};
 
     SECTION("Initial state is empty when no outputs registered")
     {
@@ -135,9 +134,9 @@ namespace ao::uimodel::test
       CHECK(log.last().rows.empty());
     }
 
-    SECTION("selectOutput without registered outputs keeps the view state empty")
+    SECTION("selectOutputDevice without registered outputs keeps the view state empty")
     {
-      viewModel.selectOutput(audio::BackendId{"t"}, audio::DeviceId{"d"}, audio::kProfileShared);
+      viewModel.selectOutputDevice(audio::BackendId{"t"}, audio::DeviceId{"d"}, audio::kProfileShared);
       viewModel.refresh();
 
       REQUIRE(!log.empty());
@@ -145,7 +144,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioOutputViewModel - refresh with fake provider", "[uimodel][unit][playback]")
+  TEST_CASE("OutputDeviceViewModel - refresh with fake provider", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -154,12 +153,12 @@ namespace ao::uimodel::test
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playback = PlaybackService{executor, viewService, testLib.library()};
 
-    auto log = RenderLog<AudioOutputViewState>{};
-    auto viewModel = AudioOutputViewModel{playback, [&log](auto const& view) { log.render(view); }};
+    auto log = RenderLog<OutputDeviceViewState>{};
+    auto viewModel = OutputDeviceViewModel{playback, [&log](auto const& view) { log.render(view); }};
 
     SECTION("refresh shows backend header and device×profile rows")
     {
-      playback.addProvider(std::make_unique<FakeOutputProvider>(buildFakeStatus()));
+      playback.addProvider(std::make_unique<FakeOutputDeviceProvider>(buildFakeStatus()));
       viewModel.refresh();
 
       REQUIRE(!log.empty());
@@ -167,14 +166,14 @@ namespace ao::uimodel::test
       REQUIRE(rows.size() == 3); // 1 header + 1 device × 2 profiles
 
       // Row 0: BackendHeader
-      CHECK(rows[0].kind == AudioOutputRow::Kind::BackendHeader);
+      CHECK(rows[0].kind == OutputDeviceRow::Kind::BackendHeader);
       CHECK(rows[0].backendId == audio::BackendId{"pipewire"});
       CHECK(rows[0].title == "PipeWire");
 
       // Rows 1-2: DeviceProfile (Shared + Exclusive)
       for (std::size_t i = 1; i < rows.size(); ++i)
       {
-        CHECK(rows[i].kind == AudioOutputRow::Kind::DeviceProfile);
+        CHECK(rows[i].kind == OutputDeviceRow::Kind::DeviceProfile);
         CHECK(rows[i].deviceId == audio::DeviceId{"device1"});
         CHECK(rows[i].backendId == audio::BackendId{"pipewire"});
       }
@@ -189,10 +188,10 @@ namespace ao::uimodel::test
       CHECK(rows[2].isExclusive == true);
     }
 
-    SECTION("active device is highlighted after setOutput")
+    SECTION("active device is highlighted after setOutputDevice")
     {
-      playback.addProvider(std::make_unique<FakeOutputProvider>(buildFakeStatus()));
-      playback.setOutput(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
+      playback.addProvider(std::make_unique<FakeOutputDeviceProvider>(buildFakeStatus()));
+      playback.setOutputDevice(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
       viewModel.refresh();
 
       auto const& rows = log.last().rows;
@@ -203,12 +202,12 @@ namespace ao::uimodel::test
       CHECK(rows[1].isActive == false);
     }
 
-    SECTION("selectOutput triggers playback state change")
+    SECTION("selectOutputDevice triggers playback state change")
     {
-      playback.addProvider(std::make_unique<FakeOutputProvider>(buildFakeStatus()));
-      viewModel.selectOutput(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
+      playback.addProvider(std::make_unique<FakeOutputDeviceProvider>(buildFakeStatus()));
+      viewModel.selectOutputDevice(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
 
-      auto const& sel = playback.state().selectedOutput;
+      auto const& sel = playback.state().selectedOutputDevice;
       CHECK(sel.backendId == audio::BackendId{"pipewire"});
       CHECK(sel.deviceId == audio::DeviceId{"device1"});
       CHECK(sel.profileId == audio::kProfileShared);
@@ -222,30 +221,30 @@ namespace ao::uimodel::test
       status2.devices[0].backendId = audio::BackendId{"alsa"};
       status2.devices[0].id = audio::DeviceId{"alsa-device1"};
 
-      playback.addProvider(std::make_unique<FakeOutputProvider>(buildFakeStatus()));
-      playback.addProvider(std::make_unique<FakeOutputProvider>(std::move(status2)));
+      playback.addProvider(std::make_unique<FakeOutputDeviceProvider>(buildFakeStatus()));
+      playback.addProvider(std::make_unique<FakeOutputDeviceProvider>(std::move(status2)));
       viewModel.refresh();
 
       auto const& rows = log.last().rows;
       // Should have: PipeWire header + 2 PipeWire profiles + ALSA header + 2 ALSA profiles = 6 rows
       REQUIRE(rows.size() == 6);
 
-      CHECK(rows[0].kind == AudioOutputRow::Kind::BackendHeader);
+      CHECK(rows[0].kind == OutputDeviceRow::Kind::BackendHeader);
       CHECK(rows[0].title == "PipeWire");
-      CHECK(rows[3].kind == AudioOutputRow::Kind::BackendHeader);
+      CHECK(rows[3].kind == OutputDeviceRow::Kind::BackendHeader);
       CHECK(rows[3].title == "ALSA");
     }
 
     SECTION("summary fields for PipeWire shared output")
     {
-      playback.addProvider(std::make_unique<FakeOutputProvider>(buildFakeStatus()));
-      playback.setOutput(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
+      playback.addProvider(std::make_unique<FakeOutputDeviceProvider>(buildFakeStatus()));
+      playback.setOutputDevice(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
       viewModel.refresh();
 
       auto const& view = log.last();
-      CHECK(view.hasActiveOutput == true);
-      CHECK(view.backendSummary == "PW");
-      CHECK(view.outputStatus == "PipeWire: Built-in Audio");
+      CHECK(view.hasActiveOutputDevice == true);
+      CHECK(view.outputBackendSummary == "PW");
+      CHECK(view.outputDeviceStatus == "PipeWire: Built-in Audio");
     }
 
     SECTION("summary fields for ALSA exclusive output")
@@ -256,25 +255,25 @@ namespace ao::uimodel::test
       status.devices[0].backendId = audio::BackendId{"alsa"};
       status.devices[0].displayName = "USB DAC";
 
-      playback.addProvider(std::make_unique<FakeOutputProvider>(std::move(status)));
-      playback.setOutput(audio::BackendId{"alsa"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
+      playback.addProvider(std::make_unique<FakeOutputDeviceProvider>(std::move(status)));
+      playback.setOutputDevice(audio::BackendId{"alsa"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
       viewModel.refresh();
 
       auto const& view = log.last();
-      CHECK(view.hasActiveOutput == true);
-      CHECK(view.backendSummary == "ALSA");
-      CHECK(view.outputStatus == "ALSA: USB DAC (Exclusive Mode)");
+      CHECK(view.hasActiveOutputDevice == true);
+      CHECK(view.outputBackendSummary == "ALSA");
+      CHECK(view.outputDeviceStatus == "ALSA: USB DAC (Exclusive Mode)");
     }
 
     SECTION("summary fields when no output is selected")
     {
-      // No provider added, so no output can be selected
+      // No provider added, so no output device can be selected
       viewModel.refresh();
 
       auto const& view = log.last();
-      CHECK(view.hasActiveOutput == false);
-      CHECK(view.backendSummary == "--");
-      CHECK(view.outputStatus.empty());
+      CHECK(view.hasActiveOutputDevice == false);
+      CHECK(view.outputBackendSummary == "--");
+      CHECK(view.outputDeviceStatus.empty());
     }
   }
 } // namespace ao::uimodel::test

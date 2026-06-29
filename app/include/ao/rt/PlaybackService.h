@@ -4,8 +4,8 @@
 #pragma once
 
 #include "CorePrimitives.h"
-#include "StateTypes.h"
-#include <ao/Type.h>
+#include "PlaybackState.h"
+#include <ao/CoreIds.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Types.h>
 
@@ -112,9 +112,9 @@ namespace ao::rt
     Subscription onPaused(std::move_only_function<void()> handler);
     Subscription onIdle(std::move_only_function<void()> handler);
     Subscription onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&)> handler);
-    Subscription onOutputChanged(std::move_only_function<void(OutputSelection const&)> handler);
+    Subscription onOutputDeviceChanged(std::move_only_function<void(OutputDeviceSelection const&)> handler);
     Subscription onStopped(std::move_only_function<void()> handler);
-    Subscription onDevicesChanged(std::move_only_function<void()> handler);
+    Subscription onOutputDevicesChanged(std::move_only_function<void()> handler);
     Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
     Subscription onVolumeChanged(std::move_only_function<void(float)> handler);
     Subscription onMutedChanged(std::move_only_function<void(bool)> handler);
@@ -140,9 +140,9 @@ namespace ao::rt
     void setShuffleMode(ShuffleMode mode);
     void setRepeatMode(RepeatMode mode);
     void seek(std::chrono::milliseconds elapsed, SeekMode mode = SeekMode::Final);
-    void setOutput(audio::BackendId const& backendId,
-                   audio::DeviceId const& deviceId,
-                   audio::ProfileId const& profileId);
+    void setOutputDevice(audio::BackendId const& backendId,
+                         audio::DeviceId const& deviceId,
+                         audio::ProfileId const& profileId);
     void setVolume(float volume);
     void setMuted(bool muted);
     void revealPlayingTrack();

@@ -4,7 +4,8 @@
 #pragma once
 
 #include <ao/AudioCodec.h>
-#include <ao/Type.h>
+#include <ao/AudioScalars.h>
+#include <ao/CoreIds.h>
 
 #include <array>
 #include <chrono>

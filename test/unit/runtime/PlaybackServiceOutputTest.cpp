@@ -6,7 +6,7 @@
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/audio/Backend.h>
 #include <ao/audio/IRenderTarget.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -15,7 +15,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("PlaybackService output - devices output and quality signal subscriptions",
+  TEST_CASE("PlaybackService output device - devices output and quality signal subscriptions",
             "[runtime][unit][playback][output]")
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
@@ -30,31 +30,31 @@ namespace ao::rt::test
     fixture.onDevicesChangedCb(emptyStatus.devices);
 
     bool devicesChangedFired = false;
-    auto sub1 = fixture.playbackService.onDevicesChanged([&] { devicesChangedFired = true; });
+    auto sub1 = fixture.playbackService.onOutputDevicesChanged([&] { devicesChangedFired = true; });
 
     bool outputChangedFired = false;
-    auto lastOutput = OutputSelection{};
-    auto sub2 = fixture.playbackService.onOutputChanged(
+    auto lastOutputDevice = OutputDeviceSelection{};
+    auto sub2 = fixture.playbackService.onOutputDeviceChanged(
       [&](auto const& ev)
       {
         outputChangedFired = true;
-        lastOutput = ev;
+        lastOutputDevice = ev;
       });
 
     auto qualityEvents = std::vector<PlaybackService::QualityChanged>{};
     auto sub3 = fixture.playbackService.onQualityChanged([&](auto const& ev) { qualityEvents.push_back(ev); });
 
-    fixture.playbackService.setOutput(
+    fixture.playbackService.setOutputDevice(
       audio::BackendId{"mock_backend"}, audio::DeviceId{"mock_device"}, audio::ProfileId{audio::kProfileShared});
     CHECK(outputChangedFired);
-    // setOutput publishes the engine-confirmed selection taken from the
+    // setOutputDevice publishes the engine-confirmed selection taken from the
     // refreshed state, not the raw request, so the emitted event mirrors
-    // state().selectedOutput exactly (and stays consistent with the
-    // auto-select path that also emits state.selectedOutput).
-    CHECK(lastOutput.backendId == audio::BackendId{"mock_backend"});
-    CHECK(lastOutput.deviceId == audio::DeviceId{"mock_device"});
-    CHECK(lastOutput.profileId == audio::ProfileId{audio::kProfileShared});
-    CHECK(lastOutput == fixture.playbackService.state().selectedOutput);
+    // state().selectedOutputDevice exactly (and stays consistent with the
+    // auto-select path that also emits state.selectedOutputDevice).
+    CHECK(lastOutputDevice.backendId == audio::BackendId{"mock_backend"});
+    CHECK(lastOutputDevice.deviceId == audio::DeviceId{"mock_device"});
+    CHECK(lastOutputDevice.profileId == audio::ProfileId{audio::kProfileShared});
+    CHECK(lastOutputDevice == fixture.playbackService.state().selectedOutputDevice);
     CHECK(qualityEvents.empty());
 
     auto qualityFixture = PlaybackFixture<QueuedExecutor>{};
@@ -82,11 +82,11 @@ namespace ao::rt::test
     CHECK(routedQualityEvents[0].ready == qualityFixture.playbackService.state().ready);
   }
 
-  TEST_CASE("PlaybackService output - device notification auto-configures output before first play",
+  TEST_CASE("PlaybackService output device - device notification auto-configures output device before first play",
             "[runtime][unit][playback][output]")
   {
     // A harness receives its first device notification just before the play
-    // request; the notification auto-selects the first available output.
+    // request; the notification auto-selects the first available output device.
     auto fixture = PlaybackFixture<MockExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
 

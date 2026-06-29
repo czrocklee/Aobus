@@ -9,7 +9,7 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 
 #include <glib-object.h>
@@ -606,10 +606,10 @@ namespace ao::gtk::test
       return rt::Subscription{[this] { _seekUpdate = nullptr; }};
     }
 
-    rt::Subscription onOutputChanged(std::move_only_function<void(rt::OutputSelection const&)> handler)
+    rt::Subscription onOutputDeviceChanged(std::move_only_function<void(rt::OutputDeviceSelection const&)> handler)
     {
-      _outputChanged = std::move(handler);
-      return rt::Subscription{[this] { _outputChanged = nullptr; }};
+      _outputDeviceChanged = std::move(handler);
+      return rt::Subscription{[this] { _outputDeviceChanged = nullptr; }};
     }
 
     rt::Subscription onQualityChanged(std::move_only_function<void(rt::PlaybackService::QualityChanged const&)> handler)
@@ -686,11 +686,11 @@ namespace ao::gtk::test
       }
     }
 
-    void emitOutputChanged(rt::OutputSelection const& sel)
+    void emitOutputDeviceChanged(rt::OutputDeviceSelection const& sel)
     {
-      if (_outputChanged)
+      if (_outputDeviceChanged)
       {
-        _outputChanged(sel);
+        _outputDeviceChanged(sel);
       }
     }
 
@@ -734,7 +734,7 @@ namespace ao::gtk::test
     std::move_only_function<void()> _idle;
     std::move_only_function<void()> _preparing;
     std::move_only_function<void(rt::PlaybackService::SeekUpdate const&)> _seekUpdate;
-    std::move_only_function<void(rt::OutputSelection const&)> _outputChanged;
+    std::move_only_function<void(rt::OutputDeviceSelection const&)> _outputDeviceChanged;
     std::move_only_function<void(rt::PlaybackService::QualityChanged const&)> _qualityChanged;
     std::move_only_function<void(rt::PlaybackService::ShuffleModeChanged const&)> _shuffleModeChanged;
     std::move_only_function<void(rt::PlaybackService::RepeatModeChanged const&)> _repeatModeChanged;

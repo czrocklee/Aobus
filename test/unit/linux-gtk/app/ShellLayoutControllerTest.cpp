@@ -144,8 +144,8 @@ namespace ao::gtk::test
       REQUIRE(split != nullptr);
       stateDoc.components["main-paned"] = uimodel::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
-        .baselineHash = uimodel::layoutComponentBaselineHash(*split),
+        .stateVersion = uimodel::kStateEntryVersion,
+        .baselineHash = uimodel::componentBaselineHash(*split),
         .state = {{"positionPercent", uimodel::LayoutValue{0.42}}},
       };
       componentStateStorePtr->save("classic", stateDoc);
@@ -173,8 +173,8 @@ namespace ao::gtk::test
       auto stateDoc = uimodel::LayoutComponentStateDocument{.preset = "classic"};
       stateDoc.components["main-paned"] = uimodel::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
-        .baselineHash = uimodel::layoutComponentBaselineHash(*split),
+        .stateVersion = uimodel::kStateEntryVersion,
+        .baselineHash = uimodel::componentBaselineHash(*split),
         .state = {{"positionPercent", uimodel::LayoutValue{0.42}}},
       };
       componentStateStorePtr->save("classic", stateDoc);
@@ -212,14 +212,14 @@ namespace ao::gtk::test
       auto stateDoc = uimodel::LayoutComponentStateDocument{.preset = "classic"};
       stateDoc.components["main-paned"] = uimodel::LayoutComponentStateEntry{
         .type = "split",
-        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
-        .baselineHash = uimodel::layoutComponentBaselineHash(*split),
+        .stateVersion = uimodel::kStateEntryVersion,
+        .baselineHash = uimodel::componentBaselineHash(*split),
         .state = {{"positionPercent", uimodel::LayoutValue{0.42}}},
       };
       stateDoc.components["detail-split"] = uimodel::LayoutComponentStateEntry{
         .type = "collapsibleSplit",
-        .stateVersion = uimodel::kLayoutComponentStateEntryVersion,
-        .baselineHash = uimodel::layoutComponentBaselineHash(*collapsible),
+        .stateVersion = uimodel::kStateEntryVersion,
+        .baselineHash = uimodel::componentBaselineHash(*collapsible),
         .state = {{"size", uimodel::LayoutValue{static_cast<std::int64_t>(320)}},
                   {"revealed", uimodel::LayoutValue{false}}},
       };
@@ -251,7 +251,7 @@ namespace ao::gtk::test
       CHECK_FALSE(optPromotedState->components.contains("main-paned"));
       REQUIRE(optPromotedState->components.contains("detail-split"));
       auto const& remainingEntry = optPromotedState->components.at("detail-split");
-      CHECK(remainingEntry.baselineHash == uimodel::layoutComponentBaselineHash(*savedCollapsible));
+      CHECK(remainingEntry.baselineHash == uimodel::componentBaselineHash(*savedCollapsible));
       CHECK(remainingEntry.state.size() == 1);
       CHECK(remainingEntry.state.at("revealed").asBool(true) == false);
     }

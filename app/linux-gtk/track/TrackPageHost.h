@@ -7,7 +7,7 @@
 #include "image/ThumbnailLoader.h"
 #include "layout/LayoutConstants.h"
 #include "track/TrackViewPage.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>

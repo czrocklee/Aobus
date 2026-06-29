@@ -5,6 +5,7 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>

@@ -25,7 +25,7 @@ namespace ao::audio::test
     class RouteStateObserver final
     {
     public:
-      void observe(RouteState const& state)
+      void observe(AudioRouteFormatState const& state)
       {
         auto lock = std::scoped_lock{_mutex};
         _optLastState = state;
@@ -37,7 +37,7 @@ namespace ao::audio::test
         }
       }
 
-      std::optional<RouteState> waitForReady(std::chrono::milliseconds timeout)
+      std::optional<AudioRouteFormatState> waitForReady(std::chrono::milliseconds timeout)
       {
         auto lock = std::unique_lock{_mutex};
         _cv.wait_for(lock, timeout, [this] { return _optReadyState != std::nullopt; });
@@ -62,8 +62,8 @@ namespace ao::audio::test
     private:
       mutable std::mutex _mutex;
       std::condition_variable _cv;
-      std::optional<RouteState> _optLastState;
-      std::optional<RouteState> _optReadyState;
+      std::optional<AudioRouteFormatState> _optLastState;
+      std::optional<AudioRouteFormatState> _optReadyState;
     };
   } // namespace
 
@@ -97,14 +97,14 @@ namespace ao::audio::test
     INFO("Expected route state with decoder source format after 1s; " << routeState.describeLastState());
     REQUIRE(optRouteState);
 
-    SECTION("RouteState has decoder source format")
+    SECTION("AudioRouteFormatState has decoder source format")
     {
       CHECK(optRouteState->sourceFormat.sampleRate == 44100);
       CHECK(optRouteState->sourceFormat.channels == 2);
       CHECK(optRouteState->sourceFormat.bitDepth == 16);
     }
 
-    SECTION("RouteState has engine output format")
+    SECTION("AudioRouteFormatState has engine output format")
     {
       CHECK(optRouteState->engineOutputFormat.sampleRate == 44100);
       CHECK(optRouteState->engineOutputFormat.channels == 2);

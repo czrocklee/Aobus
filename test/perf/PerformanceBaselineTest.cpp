@@ -4,7 +4,7 @@
 // Phase 0 baseline measurement — synthetic data, no fixed pass/fail thresholds.
 
 #include "test/unit/RuntimeTestUtils.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/TrackStore.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>

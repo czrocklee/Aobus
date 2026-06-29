@@ -60,7 +60,7 @@ namespace ao::audio
       std::uint32_t underrunCount = 0;
       std::string statusText;
       DeviceId currentDeviceId;
-      RouteState routeState;
+      AudioRouteFormatState routeState;
 
       float volume = 1.0F;
       bool muted = false;
@@ -72,7 +72,7 @@ namespace ao::audio
 
     struct RouteStatus final
     {
-      RouteState state;
+      AudioRouteFormatState state;
       std::optional<RouteAnchor> optAnchor;
 
       bool operator==(RouteStatus const&) const = default;

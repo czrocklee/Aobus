@@ -4,7 +4,7 @@
 #pragma once
 
 #include "TrackPresentation.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <cstddef>
 #include <deque>

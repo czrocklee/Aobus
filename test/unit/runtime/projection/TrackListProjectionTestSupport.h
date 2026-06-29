@@ -5,7 +5,7 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>

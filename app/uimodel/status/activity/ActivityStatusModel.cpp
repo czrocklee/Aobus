@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusModel.h>
 
 #include <algorithm>

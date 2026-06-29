@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Type.h>
 #include <ao/library/ListView.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>

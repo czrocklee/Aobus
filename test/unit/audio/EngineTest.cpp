@@ -142,20 +142,20 @@ namespace ao::audio::test
 
     auto const snap = engine.status();
 
-    SECTION("RouteState reports decoder source format")
+    SECTION("AudioRouteFormatState reports decoder source format")
     {
       CHECK(snap.routeState.sourceFormat.sampleRate == 44100);
       CHECK(snap.routeState.sourceFormat.channels == 2);
       CHECK(snap.routeState.sourceFormat.bitDepth == 16);
     }
 
-    SECTION("RouteState reports engine output format")
+    SECTION("AudioRouteFormatState reports engine output format")
     {
       CHECK(snap.routeState.engineOutputFormat.sampleRate == 44100);
       CHECK(snap.routeState.engineOutputFormat.channels == 2);
     }
 
-    SECTION("RouteState reports lossless source")
+    SECTION("AudioRouteFormatState reports lossless source")
     {
       CHECK(snap.routeState.isLossySource == false);
     }

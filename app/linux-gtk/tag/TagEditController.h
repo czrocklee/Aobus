@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 
 #include <giomm/actionmap.h>
 #include <giomm/simpleaction.h>

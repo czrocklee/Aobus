@@ -172,11 +172,11 @@ namespace ao::audio::test
     auto executor = async::ImmediateExecutor{};
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
-    CHECK(player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared));
+    CHECK(player.setOutputDevice(kBackendNone, DeviceId{"mock-sink"}, kProfileShared));
 
-    SECTION("setOutput same values exits early")
+    SECTION("setOutputDevice same values exits early")
     {
-      CHECK(player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared));
+      CHECK(player.setOutputDevice(kBackendNone, DeviceId{"mock-sink"}, kProfileShared));
       // Success is implicit if no extra provider calls are made (Verify can be used)
       Verify(Method(mockProvider, createBackend)).Once();
     }
@@ -267,13 +267,13 @@ namespace ao::audio::test
   {
     auto mockProvider = Mock<IBackendProvider>{};
     Fake(Method(mockProvider, shutdown));
-    auto onDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
+    auto onOutputDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
 
     When(Method(mockProvider, subscribeDevices))
       .AlwaysDo(
         [&](IBackendProvider::OnDevicesChangedCallback const& cb)
         {
-          onDevicesChanged = cb;
+          onOutputDevicesChanged = cb;
 
           return Subscription{};
         });
@@ -292,8 +292,8 @@ namespace ao::audio::test
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
-    // 1. Call setOutput before devices are available
-    CHECK(player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
+    // 1. Call setOutputDevice before devices are available
+    CHECK(player.setOutputDevice(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
 
     // Verify that it's NOT yet active (engine still has null backend/default device)
     auto const snapBefore = player.status();
@@ -304,12 +304,12 @@ namespace ao::audio::test
     CHECK(player.status().engine.transport == Transport::Idle);
 
     // 2. Simulate devices being discovered
-    REQUIRE(onDevicesChanged);
-    onDevicesChanged({Device{.id = DeviceId{"system-default"},
-                             .displayName = "System Default",
-                             .description = "PipeWire",
-                             .isDefault = true,
-                             .backendId = kBackendPipeWire}});
+    REQUIRE(onOutputDevicesChanged);
+    onOutputDevicesChanged({Device{.id = DeviceId{"system-default"},
+                                   .displayName = "System Default",
+                                   .description = "PipeWire",
+                                   .isDefault = true,
+                                   .backendId = kBackendPipeWire}});
 
     // 3. Verify that the output was automatically restored
     auto const snapAfter = player.status();
@@ -318,15 +318,15 @@ namespace ao::audio::test
     CHECK(player.isReady() == true);
 
     // 4. Simulate SECOND devices change to trigger updateDevice for active device
-    onDevicesChanged({Device{.id = DeviceId{"system-default"},
-                             .displayName = "System Default (Updated)",
-                             .description = "PipeWire",
-                             .isDefault = true,
-                             .backendId = kBackendPipeWire}});
+    onOutputDevicesChanged({Device{.id = DeviceId{"system-default"},
+                                   .displayName = "System Default (Updated)",
+                                   .description = "PipeWire",
+                                   .isDefault = true,
+                                   .backendId = kBackendPipeWire}});
     // This should hit line 126 in Player.cpp
   }
 
-  TEST_CASE("Player - setOutput rejects unknown backend", "[audio][unit][player][output]")
+  TEST_CASE("Player - setOutputDevice rejects unknown backend", "[audio][unit][player][output]")
   {
     auto mockProvider = Mock<IBackendProvider>{};
     Fake(Method(mockProvider, shutdown));
@@ -339,7 +339,7 @@ namespace ao::audio::test
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
-    auto const result = player.setOutput(kBackendAlsa, DeviceId{"alsa-device"}, kProfileShared);
+    auto const result = player.setOutputDevice(kBackendAlsa, DeviceId{"alsa-device"}, kProfileShared);
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotFound);
@@ -351,12 +351,12 @@ namespace ao::audio::test
     auto mockProvider = Mock<IBackendProvider>{};
     Fake(Method(mockProvider, shutdown));
 
-    auto onDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
+    auto onOutputDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
     When(Method(mockProvider, subscribeDevices))
       .AlwaysDo(
         [&](IBackendProvider::OnDevicesChangedCallback const& cb)
         {
-          onDevicesChanged = cb;
+          onOutputDevicesChanged = cb;
           return Subscription{};
         });
 
@@ -372,15 +372,15 @@ namespace ao::audio::test
 
     std::int32_t deviceSignals = 0;
     auto observedStatuses = std::vector<IBackendProvider::Status>{};
-    player.setOnDevicesChanged(
+    player.setOnOutputDevicesChanged(
       [&](std::vector<IBackendProvider::Status> const& statuses)
       {
         ++deviceSignals;
         observedStatuses = statuses;
       });
 
-    REQUIRE(onDevicesChanged);
-    auto worker = std::jthread{[&] { onDevicesChanged({pipeWireDevice()}); }};
+    REQUIRE(onOutputDevicesChanged);
+    auto worker = std::jthread{[&] { onOutputDevicesChanged({pipeWireDevice()}); }};
     worker.join();
 
     CHECK(player.status().availableBackends.empty());
@@ -403,12 +403,12 @@ namespace ao::audio::test
     auto mockProvider = Mock<IBackendProvider>{};
     Fake(Method(mockProvider, shutdown));
 
-    auto onDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
+    auto onOutputDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
     When(Method(mockProvider, subscribeDevices))
       .AlwaysDo(
         [&](IBackendProvider::OnDevicesChangedCallback const& cb)
         {
-          onDevicesChanged = cb;
+          onOutputDevicesChanged = cb;
           return Subscription{};
         });
 
@@ -424,10 +424,10 @@ namespace ao::audio::test
     {
       auto player = Player{executor};
       player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
-      player.setOnDevicesChanged([&](std::vector<IBackendProvider::Status> const&) { ++deviceSignals; });
+      player.setOnOutputDevicesChanged([&](std::vector<IBackendProvider::Status> const&) { ++deviceSignals; });
 
-      REQUIRE(onDevicesChanged);
-      onDevicesChanged({pipeWireDevice()});
+      REQUIRE(onOutputDevicesChanged);
+      onOutputDevicesChanged({pipeWireDevice()});
     }
 
     executor.drain();
@@ -439,12 +439,12 @@ namespace ao::audio::test
     auto mockProvider = Mock<IBackendProvider>{};
     Fake(Method(mockProvider, shutdown));
 
-    auto onDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
+    auto onOutputDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
     When(Method(mockProvider, subscribeDevices))
       .AlwaysDo(
         [&](IBackendProvider::OnDevicesChangedCallback const& cb)
         {
-          onDevicesChanged = cb;
+          onOutputDevicesChanged = cb;
           return Subscription{};
         });
 
@@ -465,11 +465,11 @@ namespace ao::audio::test
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
-    REQUIRE(onDevicesChanged);
-    onDevicesChanged({pipeWireDevice()});
+    REQUIRE(onOutputDevicesChanged);
+    onOutputDevicesChanged({pipeWireDevice()});
     executor.drain();
 
-    CHECK(player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
+    CHECK(player.setOutputDevice(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared));
     auto route = createBaseEngineRoute();
     route.optAnchor = RouteAnchor{.backend = kBackendPipeWire, .id = "mock-stream-id"};
     player.handleRouteChanged(route, player.playbackGeneration());
@@ -513,9 +513,9 @@ namespace ao::audio::test
       // No crash, nothing added.
     }
 
-    SECTION("setOutput with non-existent provider")
+    SECTION("setOutputDevice with non-existent provider")
     {
-      CHECK_FALSE(player.setOutput(kBackendAlsa, DeviceId{"alsa-dev"}, kProfileShared));
+      CHECK_FALSE(player.setOutputDevice(kBackendAlsa, DeviceId{"alsa-dev"}, kProfileShared));
       // It should just log an error and return.
       auto const snap = player.status();
       CHECK(snap.engine.backendId == kBackendNone);
@@ -649,7 +649,7 @@ namespace ao::audio::test
       auto executor = async::ImmediateExecutor{};
       auto player = Player{executor};
       player.addProvider(std::make_unique<LifetimeProvider>(events));
-      CHECK(player.setOutput(kBackendAlsa, DeviceId{"alsa-device"}, kProfileExclusive));
+      CHECK(player.setOutputDevice(kBackendAlsa, DeviceId{"alsa-device"}, kProfileExclusive));
     }
 
     // Old (broken) order was: providers.clear() → enginePtr.reset(), which destroyed the provider

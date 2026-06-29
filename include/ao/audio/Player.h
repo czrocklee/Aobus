@@ -77,7 +77,7 @@ namespace ao::audio
     /// @brief Selects the output device. Returns `NotFound` when no provider is
     /// registered for `backend`. A not-yet-discovered device is stored as pending
     /// and reported as success.
-    Result<> setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
+    Result<> setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
     void pause();
     void resume();
     void stop();
@@ -95,7 +95,7 @@ namespace ao::audio
     void setOnStateChanged(std::function<void()> callback);
 
     /// Called when available output devices change; receives per-provider status snapshots.
-    void setOnDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback);
+    void setOnOutputDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback);
 
     /// Called when playback quality or readiness changes.
     void setOnQualityChanged(std::function<void(Quality quality, bool ready)> callback);

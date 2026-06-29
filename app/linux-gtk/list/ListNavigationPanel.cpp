@@ -5,7 +5,7 @@
 
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/rt/library/Library.h>
 
 #include <gdk/gdk.h>

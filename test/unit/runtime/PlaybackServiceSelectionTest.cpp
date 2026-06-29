@@ -3,7 +3,7 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/flow/Graph.h>

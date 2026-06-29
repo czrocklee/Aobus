@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/audio/IBackendProvider.h>
 #include <ao/rt/AppRuntime.h>

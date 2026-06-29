@@ -58,19 +58,18 @@ namespace ao::uimodel::test
     CHECK_FALSE(technicalOnly.technicalFields.empty());
   }
 
-  TEST_CASE("formatTrackFieldGridMetadataHeader summarizes collapsed metadata", "[uimodel][unit][library][detail]")
+  TEST_CASE("formatMetadataHeader summarizes collapsed metadata", "[uimodel][unit][library][detail]")
   {
-    CHECK(formatTrackFieldGridMetadataHeader("Song", "Artist") == "Song — Artist");
-    CHECK(formatTrackFieldGridMetadataHeader("Song", "") == "Song");
-    CHECK(formatTrackFieldGridMetadataHeader("", "Artist") == "Artist");
-    CHECK(formatTrackFieldGridMetadataHeader("", "") == "Metadata");
+    CHECK(formatMetadataHeader("Song", "Artist") == "Song — Artist");
+    CHECK(formatMetadataHeader("Song", "") == "Song");
+    CHECK(formatMetadataHeader("", "Artist") == "Artist");
+    CHECK(formatMetadataHeader("", "") == "Metadata");
   }
 
-  TEST_CASE("formatTrackFieldGridTechnicalHeader summarizes collapsed audio properties",
-            "[uimodel][unit][library][detail]")
+  TEST_CASE("formatTechnicalHeader summarizes collapsed audio properties", "[uimodel][unit][library][detail]")
   {
-    CHECK(formatTrackFieldGridTechnicalHeader("FLAC", "44.1 kHz", "16-bit") == "FLAC · 44.1 kHz · 16-bit");
-    CHECK(formatTrackFieldGridTechnicalHeader("", "44.1 kHz", "") == "44.1 kHz");
-    CHECK(formatTrackFieldGridTechnicalHeader("", "", "") == "Audio Properties");
+    CHECK(formatTechnicalHeader("FLAC", "44.1 kHz", "16-bit") == "FLAC · 44.1 kHz · 16-bit");
+    CHECK(formatTechnicalHeader("", "44.1 kHz", "") == "44.1 kHz");
+    CHECK(formatTechnicalHeader("", "", "") == "Audio Properties");
   }
 } // namespace ao::uimodel::test

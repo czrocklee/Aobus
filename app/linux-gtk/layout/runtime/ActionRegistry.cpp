@@ -65,7 +65,7 @@ namespace ao::gtk::layout
     return true;
   }
 
-  uimodel::LayoutActionState ActionRegistry::state(std::string_view id, ActionActivationContext const& ctx) const
+  uimodel::LayoutActionAvailability ActionRegistry::state(std::string_view id, ActionActivationContext const& ctx) const
   {
     auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.id == id; });
 
@@ -74,7 +74,7 @@ namespace ao::gtk::layout
       return it->stateProvider(ctx);
     }
 
-    return uimodel::LayoutActionState{.enabled = true, .disabledReason = ""};
+    return uimodel::LayoutActionAvailability{.enabled = true, .disabledReason = ""};
   }
 
   uimodel::LayoutActionActivationOutcome ActionRegistry::activate(std::string_view id,
@@ -87,7 +87,7 @@ namespace ao::gtk::layout
       return uimodel::LayoutActionActivationOutcome{.result = uimodel::LayoutActionActivationResult::UnknownAction};
     }
 
-    auto actionState = uimodel::LayoutActionState{.enabled = true, .disabledReason = ""};
+    auto actionState = uimodel::LayoutActionAvailability{.enabled = true, .disabledReason = ""};
 
     if (it->stateProvider)
     {

@@ -46,7 +46,7 @@ namespace ao::uimodel
     std::function<void(AobusSoulViewState const&)> _onRender;
 
     rt::Subscription _qualitySub;
-    rt::Subscription _outputSub;
+    rt::Subscription _outputDeviceSub;
     rt::Subscription _startedSub;
     rt::Subscription _stoppedSub;
     rt::Subscription _idleSub;

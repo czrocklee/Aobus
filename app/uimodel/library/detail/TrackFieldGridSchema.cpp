@@ -82,7 +82,7 @@ namespace ao::uimodel
     return projection;
   }
 
-  std::string formatTrackFieldGridMetadataHeader(std::string_view const titleText, std::string_view const artistText)
+  std::string formatMetadataHeader(std::string_view const titleText, std::string_view const artistText)
   {
     auto summary = std::string{};
 
@@ -109,9 +109,9 @@ namespace ao::uimodel
     return summary;
   }
 
-  std::string formatTrackFieldGridTechnicalHeader(std::string_view const codecText,
-                                                  std::string_view const sampleRateText,
-                                                  std::string_view const bitDepthText)
+  std::string formatTechnicalHeader(std::string_view const codecText,
+                                    std::string_view const sampleRateText,
+                                    std::string_view const bitDepthText)
   {
     auto summary = std::string{};
     appendHeaderPart(summary, codecText);

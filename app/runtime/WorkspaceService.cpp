@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NavigationHistory.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/StateTypes.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSessionState.h>
+#include <ao/rt/WorkspaceViewState.h>
 #include <ao/rt/library/LibraryChanges.h>
 
 #include <algorithm>
@@ -56,7 +58,7 @@ namespace ao::rt
     ViewService& views;
     PlaybackService& playback;
     library::MusicLibrary& library;
-    LayoutState layoutState;
+    WorkspaceViewState layoutState;
     NavigationHistory navigationHistory;
     bool replayingNavigation = false;
     Subscription listsMutatedSub;
@@ -300,7 +302,7 @@ namespace ao::rt
     return _implPtr->navigationHistoryChangedSignal.connect(std::move(handler));
   }
 
-  LayoutState WorkspaceService::layoutState() const
+  WorkspaceViewState WorkspaceService::layoutState() const
   {
     return _implPtr->layoutState;
   }
@@ -502,7 +504,7 @@ namespace ao::rt
   void WorkspaceService::saveSession(ConfigStore& store) const
   {
     auto const layout = _implPtr->layoutState;
-    auto state = SessionState{};
+    auto state = WorkspaceSessionState{};
 
     auto const presets = _implPtr->customPresets;
     state.customPresets = std::vector(presets.begin(), presets.end());
@@ -532,7 +534,7 @@ namespace ao::rt
 
   void WorkspaceService::restoreSession(ConfigStore& store)
   {
-    auto state = SessionState{};
+    auto state = WorkspaceSessionState{};
 
     if (auto const res = store.load("workspace", state); !res)
     {

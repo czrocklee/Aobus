@@ -68,7 +68,7 @@ namespace ao::uimodel
       }
       else
       {
-        residual.baselineHash = layoutComponentBaselineHash(node);
+        residual.baselineHash = componentBaselineHash(node);
         stateDoc.components[node.id] = std::move(residual);
       }
 
@@ -99,7 +99,7 @@ namespace ao::uimodel
       }
       else
       {
-        residual.baselineHash = layoutComponentBaselineHash(node);
+        residual.baselineHash = componentBaselineHash(node);
         stateDoc.components[node.id] = std::move(residual);
       }
 
@@ -114,7 +114,7 @@ namespace ao::uimodel
     visitLayoutDocumentMutable(doc,
                                [&stateDoc, &result](LayoutNode& node)
                                {
-                                 if (auto const optEntry = resolveLayoutComponentState(stateDoc, node); optEntry)
+                                 if (auto const optEntry = resolveComponentState(stateDoc, node); optEntry)
                                  {
                                    bool promoted = false;
 

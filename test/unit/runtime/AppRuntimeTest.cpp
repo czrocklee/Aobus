@@ -3,7 +3,7 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IBackendProvider.h>
@@ -11,7 +11,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/StateTypes.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 

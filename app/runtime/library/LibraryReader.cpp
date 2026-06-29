@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "runtime/TrackFieldReaderInternal.h"
-#include <ao/Type.h>
+#include <ao/CoreIds.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>

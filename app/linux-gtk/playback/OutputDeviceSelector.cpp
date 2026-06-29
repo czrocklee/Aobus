@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "playback/AudioDeviceSelector.h"
+#include "playback/OutputDeviceSelector.h"
 
-#include "OutputListItems.h"
+#include "OutputDeviceListItems.h"
 #include "layout/LayoutConstants.h"
 #include <ao/audio/Backend.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/playback/output/AudioOutputViewModel.h>
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <giomm/liststore.h>
 #include <glibmm/ustring.h>
@@ -27,35 +27,35 @@
 
 namespace ao::gtk
 {
-  AudioDeviceSelector::AudioDeviceSelector(rt::PlaybackService& playback, Gtk::PositionType position)
+  OutputDeviceSelector::OutputDeviceSelector(rt::PlaybackService& playback, Gtk::PositionType position)
     : _playback{playback}
-    , _outputController{_playback,
-                        [this](ao::uimodel::AudioOutputViewState const& view)
-                        {
-                          _storePtr->remove_all();
+    , _outputDeviceController{_playback,
+                              [this](ao::uimodel::OutputDeviceViewState const& view)
+                              {
+                                _storePtr->remove_all();
 
-                          for (auto const& row : view.rows)
-                          {
-                            if (row.kind == ao::uimodel::AudioOutputRow::Kind::BackendHeader)
-                            {
-                              _storePtr->append(BackendItem::create(row.backendId, row.title));
-                            }
-                            else if (row.kind == ao::uimodel::AudioOutputRow::Kind::DeviceProfile)
-                            {
-                              auto audioDevice = audio::Device{
-                                .id = row.deviceId,
-                                .displayName = row.title,
-                                .description = row.description,
-                                .backendId = row.backendId,
-                              };
+                                for (auto const& row : view.rows)
+                                {
+                                  if (row.kind == ao::uimodel::OutputDeviceRow::Kind::BackendHeader)
+                                  {
+                                    _storePtr->append(OutputBackendItem::create(row.backendId, row.title));
+                                  }
+                                  else if (row.kind == ao::uimodel::OutputDeviceRow::Kind::DeviceProfile)
+                                  {
+                                    auto audioDevice = audio::Device{
+                                      .id = row.deviceId,
+                                      .displayName = row.title,
+                                      .description = row.description,
+                                      .backendId = row.backendId,
+                                    };
 
-                              auto const itemPtr =
-                                DeviceItem::create(row.backendId, audioDevice, row.profileId, row.title);
-                              itemPtr->setActive(row.isActive);
-                              _storePtr->append(itemPtr);
-                            }
-                          }
-                        }}
+                                    auto const itemPtr =
+                                      OutputDeviceItem::create(row.backendId, audioDevice, row.profileId, row.title);
+                                    itemPtr->setActive(row.isActive);
+                                    _storePtr->append(itemPtr);
+                                  }
+                                }
+                              }}
   {
     set_autohide(true);
     set_position(position);
@@ -85,22 +85,23 @@ namespace ao::gtk
         {
           auto const itemPtr = _storePtr->get_item(index);
 
-          if (auto const deviceItemPtr = std::dynamic_pointer_cast<DeviceItem>(itemPtr); deviceItemPtr)
+          if (auto const deviceItemPtr = std::dynamic_pointer_cast<OutputDeviceItem>(itemPtr); deviceItemPtr)
           {
-            _outputController.selectOutput(deviceItemPtr->backendId(), deviceItemPtr->id(), deviceItemPtr->profileId());
+            _outputDeviceController.selectOutputDevice(
+              deviceItemPtr->backendId(), deviceItemPtr->id(), deviceItemPtr->profileId());
             popdown();
           }
         }
       });
 
-    signal_show().connect([this] { _outputController.refresh(); });
+    signal_show().connect([this] { _outputDeviceController.refresh(); });
   }
 
-  AudioDeviceSelector::~AudioDeviceSelector() = default;
+  OutputDeviceSelector::~OutputDeviceSelector() = default;
 
-  Gtk::Widget* AudioDeviceSelector::createRow(Glib::RefPtr<Glib::Object> const& item)
+  Gtk::Widget* OutputDeviceSelector::createRow(Glib::RefPtr<Glib::Object> const& item)
   {
-    if (auto const backendItemPtr = std::dynamic_pointer_cast<BackendItem>(item); backendItemPtr)
+    if (auto const backendItemPtr = std::dynamic_pointer_cast<OutputBackendItem>(item); backendItemPtr)
     {
       auto* const header = Gtk::make_managed<Gtk::Label>(backendItemPtr->name());
       header->set_halign(Gtk::Align::FILL);
@@ -111,23 +112,23 @@ namespace ao::gtk
       return header;
     }
 
-    if (auto const deviceItemPtr = std::dynamic_pointer_cast<DeviceItem>(item); deviceItemPtr)
+    if (auto const deviceItemPtr = std::dynamic_pointer_cast<OutputDeviceItem>(item); deviceItemPtr)
     {
       auto* const rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
       rowBox->set_spacing(layout::kSpacingLarge); // 8
       rowBox->set_valign(Gtk::Align::CENTER);
-      rowBox->add_css_class("ao-device-row");
+      rowBox->add_css_class("ao-output-device-row");
 
       auto* const checkIcon = Gtk::make_managed<Gtk::Image>();
       checkIcon->set_pixel_size(16);
       int constexpr kCheckIconWidth = 20;
       checkIcon->set_size_request(kCheckIconWidth, -1);
-      checkIcon->add_css_class("ao-output-check");
+      checkIcon->add_css_class("ao-output-device-check");
 
       if (deviceItemPtr->active())
       {
         checkIcon->set_from_icon_name("object-select-symbolic");
-        rowBox->add_css_class("ao-output-selected-row");
+        rowBox->add_css_class("ao-output-device-selected-row");
       }
 
       rowBox->append(*checkIcon);
@@ -156,7 +157,7 @@ namespace ao::gtk
       if (deviceItemPtr->profileId() == audio::kProfileExclusive)
       {
         auto* const badge = Gtk::make_managed<Gtk::Label>("[E]");
-        badge->add_css_class("ao-output-exclusive-badge");
+        badge->add_css_class("ao-output-device-exclusive-badge");
         rowBox->append(*badge);
       }
 

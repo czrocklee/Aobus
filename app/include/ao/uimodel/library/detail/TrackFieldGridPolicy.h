@@ -12,17 +12,17 @@ namespace ao::uimodel
     bool hasTechnicalFields = false;
   };
 
-  constexpr bool shouldRenderTrackFieldGridMetadataSection(TrackFieldGridSectionAvailability const availability)
+  constexpr bool shouldRenderMetadataSection(TrackFieldGridSectionAvailability const availability)
   {
     return availability.hasMetadataFields;
   }
 
-  constexpr bool shouldRenderTrackFieldGridCustomSection(TrackFieldGridSectionAvailability const availability)
+  constexpr bool shouldRenderCustomSection(TrackFieldGridSectionAvailability const availability)
   {
     return availability.hasSelectedTracks;
   }
 
-  constexpr bool shouldRenderTrackFieldGridTechnicalSection(TrackFieldGridSectionAvailability const availability)
+  constexpr bool shouldRenderTechnicalSection(TrackFieldGridSectionAvailability const availability)
   {
     return availability.hasTechnicalFields;
   }
@@ -41,7 +41,7 @@ namespace ao::uimodel
            (visibility.showEmptyMetadata || visibility.editorEditing || visibility.hasDisplayText);
   }
 
-  struct TrackFieldGridCompositeMetadataFieldVisibility final
+  struct CompositeMetadataVisibility final
   {
     bool metadataExpanded = false;
     bool showEmptyMetadata = false;
@@ -51,8 +51,7 @@ namespace ao::uimodel
     bool hasSecondaryDisplayText = false;
   };
 
-  constexpr bool shouldShowTrackFieldGridCompositeMetadataRow(
-    TrackFieldGridCompositeMetadataFieldVisibility const visibility)
+  constexpr bool shouldShowCompositeMetadataRow(CompositeMetadataVisibility const visibility)
   {
     return visibility.metadataExpanded &&
            (visibility.showEmptyMetadata || visibility.primaryEditorEditing || visibility.secondaryEditorEditing ||

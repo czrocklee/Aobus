@@ -13,7 +13,7 @@ namespace ao::gtk::layout
 {
   class ComponentRegistry;
 
-  void registerOutputSelectorComponent(ComponentRegistry& registry);
+  void registerOutputDeviceSelectorComponent(ComponentRegistry& registry);
   void registerPlaybackImageComponent(ComponentRegistry& registry);
   void registerSoulTransportButtonComponent(ComponentRegistry& registry);
   void registerSoulButtonComponent(ComponentRegistry& registry);
