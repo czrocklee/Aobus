@@ -65,6 +65,12 @@ Recommended component/domain tags:
 - `[plan-evaluator]`
 - `[import-export]`
 
+Tag ordering: `[layer][type][subsystem]`. The layer tag is always first, the type
+tag second, and optional subsystem tags follow. Keep the total at 3–4 tags.
+
+Use singular form for all tags: `[component]` not `[components]`, `[shortcut]`
+not `[shortcuts]`.
+
 ## Test structure
 
 1. Arrange only the state needed by the behavior.

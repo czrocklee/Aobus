@@ -76,7 +76,7 @@ Do not run clang-tidy for ordinary test changes unless the user explicitly asks 
 ./ao tidy
 ```
 
-If the task is explicitly about coverage percentage or missing lines, use the `improve-test-coverage` skill instead of guessing from source files.
+If the task is explicitly about coverage percentage or missing lines, use `coverage-workflow.md` instead of guessing from source files.
 
 ## Common smells to fix while writing tests
 

@@ -1,7 +1,7 @@
-# Developer Test Suites
+# Test Suites
 
 For test authoring standards, layer placement, tags, assertion quality, and
-helper boundaries, see `doc/design/testing-guidelines.md`.
+helper boundaries, see `doc/dev/testing.md`.
 
 The `./ao test` command exposes individual suites and two suite groups:
 
@@ -17,9 +17,11 @@ The `./ao test` command exposes individual suites and two suite groups:
 `default` is intentionally the normal development loop. The integration, fleet, tooling, and lint suites
 take longer, so they are included only when selected directly or through `all`.
 
-Each suite is registered once in `script/ao/commands/test.py`. The registry defines its display name,
-runner kind, and optional CMake target. Both `./ao test --all` and `./ao check` consume the same `all`
-group, so the interactive test command and the full gate cannot drift apart.
+Each suite is registered once in `script/ao/command/test.py` through `SUITES`
+and `SUITE_GROUPS`. The registry defines the display name, runner kind, and
+optional CMake target. Both `./ao test --all` and `./ao check` consume the same
+`all` group, so the interactive test command and the full gate cannot drift
+apart.
 
 `--no-build` applies uniformly. Catch2 executables and the lint plugin must already exist in the selected
 build tree; tooling tests never need a CMake build. `--path`, compiler, and sanitizer options select the same
