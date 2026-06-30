@@ -10,6 +10,7 @@
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/box.h>
 #include <gtkmm/window.h>
 
 namespace ao::gtk::test
@@ -30,5 +31,25 @@ namespace ao::gtk::test
 
     CHECK(dialog.editListId() == kInvalidListId);
     CHECK(dialog.draft().kind == rt::LibraryWriter::ListKind::Smart);
+
+    bool foundTwoPane = false;
+    bool foundConfigPane = false;
+    bool foundPreviewPane = false;
+
+    for (auto* const box : collectAll<Gtk::Box>(dialog))
+    {
+      foundTwoPane = foundTwoPane || box->has_css_class("ao-dialog-two-pane");
+      foundConfigPane = foundConfigPane || box->has_css_class("ao-dialog-config-pane");
+      foundPreviewPane = foundPreviewPane || box->has_css_class("ao-dialog-preview-pane");
+
+      if (box->has_css_class("ao-dialog-config-pane"))
+      {
+        CHECK_FALSE(box->get_hexpand());
+      }
+    }
+
+    CHECK(foundTwoPane);
+    CHECK(foundConfigPane);
+    CHECK(foundPreviewPane);
   }
 } // namespace ao::gtk::test

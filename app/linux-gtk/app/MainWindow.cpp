@@ -4,6 +4,7 @@
 #include "app/MainWindow.h"
 
 #include "app/AppConfig.h"
+#include "app/AppDialog.h"
 #include "app/KeyboardShortcutsWindow.h"
 #include "app/KeymapApplicator.h"
 #include "app/MainWindowCoordinator.h"
@@ -21,10 +22,8 @@
 #include <gdkmm/enums.h>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/dialog.h>
-#include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/gestureclick.h>
-#include <gtkmm/messagedialog.h>
 
 #include <cstdint>
 #include <exception>
@@ -68,26 +67,18 @@ namespace ao::gtk
     _shellLayout.setConfirmPromotionCallback(
       [this](std::string const& presetId, ShellLayoutController::ConfirmPromotionAnswer answer)
       {
-        auto dialogPtr = std::make_shared<Gtk::MessageDialog>(*this,
-                                                              "Save Current Panel Sizes as Layout Defaults?",
-                                                              false,
-                                                              Gtk::MessageType::QUESTION,
-                                                              Gtk::ButtonsType::YES_NO,
-                                                              true);
-        dialogPtr->set_secondary_text(std::format(
-          "This will update the '{}' layout preset on disk with the current panel sizes.\n\n"
-          "Promoted sizes will be removed from runtime state; other runtime values such as revealed state will remain.",
-          presetId));
-
-        dialogPtr->set_default_response(Gtk::ResponseType::NO);
-
-        dialogPtr->signal_response().connect(
-          [dialogPtr, answer = std::move(answer)](std::int32_t const responseId) mutable
-          {
-            answer(responseId == Gtk::ResponseType::YES);
-            dialogPtr->close();
-          });
-        dialogPtr->present();
+        AppDialog::presentMessage(
+          *this,
+          "Save Current Panel Sizes as Layout Defaults?",
+          std::format("This will update the '{}' layout preset on disk with the current panel sizes.\n\n"
+                      "Promoted sizes will be removed from runtime state; other runtime values such as revealed state "
+                      "will remain.",
+                      presetId),
+          {AppDialogAction{.label = "No", .responseId = Gtk::ResponseType::NO, .role = AppDialogActionRole::Cancel},
+           AppDialogAction{.label = "Yes", .responseId = Gtk::ResponseType::YES, .role = AppDialogActionRole::Primary}},
+          Gtk::ResponseType::NO,
+          [answer = std::move(answer)](std::int32_t const responseId) mutable
+          { answer(responseId == Gtk::ResponseType::YES); });
       });
 
     setupPlaybackSpaceShortcut();

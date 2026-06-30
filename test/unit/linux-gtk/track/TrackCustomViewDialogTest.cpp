@@ -8,6 +8,7 @@
 #include <ao/rt/TrackPresentation.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/button.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/window.h>
 
@@ -28,6 +29,43 @@ namespace ao::gtk::test
 
       auto const entries = collectAll<Gtk::Entry>(dialog);
       CHECK_FALSE(entries.empty());
+    }
+
+    SECTION("row tools use icon-only controls")
+    {
+      spec.sortBy = {{.field = rt::TrackSortField::Title, .ascending = true}};
+      spec.visibleFields = {rt::TrackField::Title, rt::TrackField::Artist};
+
+      auto dialog = TrackCustomViewDialog{window, spec, "Initial Label"};
+      drainGtkEvents();
+
+      for (auto* const button : collectAll<Gtk::Button>(dialog))
+      {
+        CHECK(button->get_label() != "Ascending");
+        CHECK(button->get_label() != "Up");
+        CHECK(button->get_label() != "Down");
+        CHECK(button->get_label() != "Remove");
+        CHECK(button->get_label() != "Add Sort Field");
+        CHECK(button->get_label() != "Add Column");
+      }
+    }
+
+    SECTION("section add actions are attached to headers")
+    {
+      auto dialog = TrackCustomViewDialog{window, spec, "Initial Label"};
+      drainGtkEvents();
+
+      bool foundSortAdd = false;
+      bool foundColumnAdd = false;
+
+      for (auto* const button : collectAll<Gtk::Button>(dialog))
+      {
+        foundSortAdd = foundSortAdd || button->get_tooltip_text() == "Add sort field";
+        foundColumnAdd = foundColumnAdd || button->get_tooltip_text() == "Add column";
+      }
+
+      CHECK(foundSortAdd);
+      CHECK(foundColumnAdd);
     }
   }
 } // namespace ao::gtk::test

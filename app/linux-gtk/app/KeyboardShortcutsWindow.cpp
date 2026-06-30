@@ -3,6 +3,7 @@
 
 #include "app/KeyboardShortcutsWindow.h"
 
+#include "app/AppDialog.h"
 #include "app/GtkAccelTranslator.h"
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
@@ -11,18 +12,18 @@
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
-#include <giomm/asyncresult.h>
-#include <glibmm/error.h>
 #include <glibmm/main.h>
-#include <gtkmm/alertdialog.h>
 #include <gtkmm/button.h>
+#include <gtkmm/dialog.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
 #include <gtkmm/scrolledwindow.h>
+#include <gtkmm/window.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -65,34 +66,22 @@ namespace ao::gtk
     set_title("Keyboard Shortcuts");
     set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);
 
-    // Default reassignment prompt: a modal AlertDialog parented to the editor. Tests replace this
+    // Default reassignment prompt: a modal AppDialog parented to the editor. Tests replace this
     // via setConflictConfirmer() so the decision is driven synchronously without a real dialog.
     _conflictConfirmer =
       [this](std::string const& ownerLabel, std::string const& chordText, std::function<void(bool)> respond)
     {
-      auto const dialogPtr = Gtk::AlertDialog::create();
-      dialogPtr->set_modal(true);
-      dialogPtr->set_message("Reassign shortcut?");
-      dialogPtr->set_detail(chordText + " is already assigned to \"" + ownerLabel + "\". Reassign it to this action?");
-      dialogPtr->set_buttons({"Cancel", "Reassign"});
-      dialogPtr->set_cancel_button(0);
-      dialogPtr->set_default_button(1);
-      dialogPtr->choose(*this,
-                        [dialogPtr, respond = std::move(respond)](Glib::RefPtr<Gio::AsyncResult>& result)
-                        {
-                          bool reassign = false;
-
-                          try
-                          {
-                            reassign = dialogPtr->choose_finish(result) == 1;
-                          }
-                          catch (Glib::Error const&)
-                          {
-                            reassign = false; // dialog dismissed
-                          }
-
-                          respond(reassign);
-                        });
+      AppDialog::presentMessage(
+        *this,
+        "Reassign shortcut?",
+        chordText + " is already assigned to \"" + ownerLabel + "\". Reassign it to this action?",
+        {AppDialogAction{
+           .label = "Cancel", .responseId = Gtk::ResponseType::CANCEL, .role = AppDialogActionRole::Cancel},
+         AppDialogAction{
+           .label = "Reassign", .responseId = Gtk::ResponseType::OK, .role = AppDialogActionRole::Primary}},
+        Gtk::ResponseType::OK,
+        [respond = std::move(respond)](std::int32_t const responseId)
+        { respond(responseId == Gtk::ResponseType::OK); });
     };
 
     for (auto const& desc : catalog.descriptors())

@@ -282,7 +282,15 @@ button.ao-track-detail-section-header:focus-within image {
 }
 
 .ao-dialog-actions {
-  margin-top: var(--ao-spacing-xl);
+  padding: 0 16px 16px;
+}
+
+.ao-dialog-two-pane {
+  min-width: 780px;
+}
+
+.ao-dialog-config-pane {
+  min-width: 360px;
 }
 
 /* Boxed Lists (Modern Scheme) */

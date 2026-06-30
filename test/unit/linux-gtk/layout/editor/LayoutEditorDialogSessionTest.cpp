@@ -11,6 +11,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
+#include <gtkmm/button.h>
 #include <gtkmm/comboboxtext.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/treeview.h>
@@ -26,8 +27,8 @@
 namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel;
+  using ao::gtk::test::collectAll;
   using ao::gtk::test::emitClicked;
-  using ao::gtk::test::findButtonByLabel;
 
   namespace
   {
@@ -82,6 +83,19 @@ namespace ao::gtk::layout::editor::test
       auto* const combo = combos[0]->get_active_id() == "classic" ? combos[0] : combos[1];
       REQUIRE(combo != nullptr);
       return combo;
+    }
+
+    Gtk::Button* resetDefaultButton(LayoutEditorDialog& dialog)
+    {
+      for (auto* const button : collectAll<Gtk::Button>(dialog.headerBar()))
+      {
+        if (button->get_tooltip_text() == "Reset to selected preset's default layout")
+        {
+          return button;
+        }
+      }
+
+      return nullptr;
     }
 
     void selectRoot(LayoutEditorDialog& dialog)
@@ -171,7 +185,7 @@ namespace ao::gtk::layout::editor::test
       fixture.window, fixture.registry, fixture.actionRegistry, fixture.doc, "classic", "modern", customLoader};
 
     auto* const combo = presetCombo(dialog);
-    auto* const resetButton = findButtonByLabel(dialog.headerBar(), "Reset Default");
+    auto* const resetButton = resetDefaultButton(dialog);
     REQUIRE(resetButton != nullptr);
     emitClicked(*resetButton);
 
@@ -253,7 +267,7 @@ namespace ao::gtk::layout::editor::test
     auto dialog = LayoutEditorDialog{
       fixture.window, fixture.registry, fixture.actionRegistry, fixture.doc, "classic", "modern", emptyLayout};
 
-    auto* const resetButton = findButtonByLabel(dialog.headerBar(), "Reset Default");
+    auto* const resetButton = resetDefaultButton(dialog);
     REQUIRE(resetButton != nullptr);
     emitClicked(*resetButton);
 
@@ -282,7 +296,7 @@ namespace ao::gtk::layout::editor::test
     auto* const combo = presetCombo(dialog);
     combo->set_active(-1);
 
-    auto* const resetButton = findButtonByLabel(dialog.headerBar(), "Reset Default");
+    auto* const resetButton = resetDefaultButton(dialog);
     REQUIRE(resetButton != nullptr);
     emitClicked(*resetButton);
 

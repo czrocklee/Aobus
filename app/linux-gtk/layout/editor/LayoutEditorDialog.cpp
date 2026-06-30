@@ -31,7 +31,6 @@
 #include <gtkmm/listbox.h>
 #include <gtkmm/listboxrow.h>
 #include <gtkmm/menubutton.h>
-#include <gtkmm/messagedialog.h>
 #include <gtkmm/object.h>
 #include <gtkmm/paned.h>
 #include <gtkmm/scrolledwindow.h>
@@ -51,7 +50,6 @@
 #include <cstdint>
 #include <format>
 #include <map>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -87,7 +85,7 @@ namespace ao::gtk::layout::editor
     , _currentPresetId{initialPresetId}
   {
     set_title("Layout Editor");
-    set_transient_for(parent);
+    configureForParent(parent);
     set_default_size(-1, -1);
 
     addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
@@ -198,7 +196,9 @@ namespace ao::gtk::layout::editor
     _comboThemePresets.append("classic", "Classic Theme");
     _comboThemePresets.append("modern", "Modern Theme");
 
+    _btnReset.set_icon_name("view-refresh-symbolic");
     _btnReset.set_tooltip_text("Reset to selected preset's default layout");
+    _btnReset.add_css_class("flat");
 
     _actionGroupPtr = Gio::SimpleActionGroup::create();
     insert_action_group("editor", _actionGroupPtr);
@@ -694,11 +694,12 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::presentErrorDialog(std::string const& title, std::string const& message)
   {
-    auto msgPtr =
-      std::make_shared<Gtk::MessageDialog>(*this, title, false, Gtk::MessageType::ERROR, Gtk::ButtonsType::OK, true);
-    msgPtr->set_secondary_text(message);
-    msgPtr->signal_response().connect([msgPtr](std::int32_t) { msgPtr->close(); });
-    msgPtr->present();
+    AppDialog::presentMessage(
+      *this,
+      title,
+      message,
+      {AppDialogAction{.label = "OK", .responseId = Gtk::ResponseType::OK, .role = AppDialogActionRole::Primary}},
+      Gtk::ResponseType::OK);
   }
 
   void LayoutEditorDialog::onSelectionChanged()

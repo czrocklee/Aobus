@@ -173,10 +173,10 @@ namespace ao::gtk::layout::editor
     Gtk::Box _toolbar{Gtk::Orientation::HORIZONTAL};
     Gtk::MenuButton _btnAdd;
     Gtk::MenuButton _btnWrap;
-    Gtk::Button _btnRemove{"Remove"};
+    Gtk::Button _btnRemove;
     Gtk::Button _btnUp;
     Gtk::Button _btnDown;
-    Gtk::Button _btnReset{"Reset Default"};
+    Gtk::Button _btnReset;
     Gtk::ComboBoxText _comboPresets;
     Gtk::ComboBoxText _comboThemePresets;
 

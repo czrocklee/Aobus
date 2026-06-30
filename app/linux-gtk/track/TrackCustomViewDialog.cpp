@@ -37,6 +37,8 @@ namespace ao::gtk
   namespace
   {
     constexpr int kBoxSpacing = 6;
+    constexpr int kRowIconButtonSize = 32;
+    constexpr int kSectionActionButtonSize = 32;
     constexpr int kMinScrollContentWidth = 480;
     constexpr int kMaxScrollContentWidth = 700;
     constexpr std::int32_t kMaxScrollContentHeight = 520;
@@ -84,6 +86,49 @@ namespace ao::gtk
 
       return modelPtr;
     }
+
+    void configureRowIconButton(Gtk::Button& button, std::string_view iconName, std::string_view tooltip)
+    {
+      button.set_icon_name(std::string{iconName});
+      button.set_tooltip_text(std::string{tooltip});
+      button.set_size_request(kRowIconButtonSize, kRowIconButtonSize);
+      button.add_css_class("flat");
+    }
+
+    Gtk::Button* makeRowIconButton(std::string_view iconName, std::string_view tooltip)
+    {
+      auto* const button = Gtk::make_managed<Gtk::Button>();
+      configureRowIconButton(*button, iconName, tooltip);
+      return button;
+    }
+
+    void updateSortDirectionButton(Gtk::ToggleButton& button, bool ascending)
+    {
+      configureRowIconButton(button,
+                             ascending ? "view-sort-ascending-symbolic" : "view-sort-descending-symbolic",
+                             ascending ? "Sort ascending" : "Sort descending");
+    }
+
+    void configureSectionAddButton(Gtk::Button& button, std::string_view tooltip)
+    {
+      button.set_icon_name("list-add-symbolic");
+      button.set_tooltip_text(std::string{tooltip});
+      button.set_size_request(kSectionActionButtonSize, kSectionActionButtonSize);
+      button.add_css_class("flat");
+    }
+
+    Gtk::Box* makeSectionHeader(std::string_view title, Gtk::Button& actionButton)
+    {
+      auto* const header = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
+      auto* const label = Gtk::make_managed<Gtk::Label>(std::string{title});
+      label->set_halign(Gtk::Align::START);
+      label->set_hexpand(true);
+      label->set_xalign(0.0F);
+      label->add_css_class("ao-section-header");
+      header->append(*label);
+      header->append(actionButton);
+      return header;
+    }
   } // namespace
 
   TrackCustomViewDialog::TrackCustomViewDialog(Gtk::Window& parent,
@@ -92,7 +137,7 @@ namespace ao::gtk
     : AppDialog{}
   {
     set_title("Edit Custom View");
-    set_transient_for(parent);
+    configureForParent(parent);
 
     set_default_size(-1, -1);
 
@@ -124,45 +169,35 @@ namespace ao::gtk
     metaList->addRow("Group By", _groupDropdown);
     mainBox->append(*metaList);
 
-    // Sort Terms
-    auto* sortLabel = Gtk::make_managed<Gtk::Label>("Sort Order");
-    sortLabel->set_halign(Gtk::Align::START);
-    sortLabel->add_css_class("ao-section-header");
-    mainBox->append(*sortLabel);
-
-    _sortTermsList.add_css_class("ao-boxed-list");
-    _sortTermsList.set_selection_mode(Gtk::SelectionMode::NONE);
-    mainBox->append(_sortTermsList);
-
-    auto* addSortBtn = Gtk::make_managed<Gtk::Button>("Add Sort Field");
-    addSortBtn->set_halign(Gtk::Align::START);
+    auto* addSortBtn = Gtk::make_managed<Gtk::Button>();
+    configureSectionAddButton(*addSortBtn, "Add sort field");
     addSortBtn->signal_clicked().connect(
       [this]
       {
         _model.addSortTerm();
         rebuildSortList();
       });
-    mainBox->append(*addSortBtn);
 
-    // Visible Fields
-    auto* fieldsLabel = Gtk::make_managed<Gtk::Label>("Visible Columns");
-    fieldsLabel->set_halign(Gtk::Align::START);
-    fieldsLabel->add_css_class("ao-section-header");
-    mainBox->append(*fieldsLabel);
+    mainBox->append(*makeSectionHeader("Sort Order", *addSortBtn));
 
-    _visibleFieldsList.add_css_class("ao-boxed-list");
-    _visibleFieldsList.set_selection_mode(Gtk::SelectionMode::NONE);
-    mainBox->append(_visibleFieldsList);
+    _sortTermsList.add_css_class("ao-boxed-list");
+    _sortTermsList.set_selection_mode(Gtk::SelectionMode::NONE);
+    mainBox->append(_sortTermsList);
 
-    auto* addVisibleBtn = Gtk::make_managed<Gtk::Button>("Add Column");
-    addVisibleBtn->set_halign(Gtk::Align::START);
+    auto* addVisibleBtn = Gtk::make_managed<Gtk::Button>();
+    configureSectionAddButton(*addVisibleBtn, "Add column");
     addVisibleBtn->signal_clicked().connect(
       [this]
       {
         _model.addVisibleField();
         rebuildVisibleFieldsList();
       });
-    mainBox->append(*addVisibleBtn);
+
+    mainBox->append(*makeSectionHeader("Visible Columns", *addVisibleBtn));
+
+    _visibleFieldsList.add_css_class("ao-boxed-list");
+    _visibleFieldsList.set_selection_mode(Gtk::SelectionMode::NONE);
+    mainBox->append(_visibleFieldsList);
 
     auto* scroll = Gtk::make_managed<Gtk::ScrolledWindow>();
     scroll->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
@@ -206,17 +241,24 @@ namespace ao::gtk
         });
       box->append(*dropdown);
 
-      auto* ascBtn = Gtk::make_managed<Gtk::ToggleButton>("Ascending");
+      auto* ascBtn = Gtk::make_managed<Gtk::ToggleButton>();
       ascBtn->set_active(term.ascending);
+      updateSortDirectionButton(*ascBtn, term.ascending);
 
-      ascBtn->signal_toggled().connect([this, i, ascBtn] { _model.setSortAscending(i, ascBtn->get_active()); });
+      ascBtn->signal_toggled().connect(
+        [this, i, ascBtn]
+        {
+          auto const ascending = ascBtn->get_active();
+          updateSortDirectionButton(*ascBtn, ascending);
+          _model.setSortAscending(i, ascending);
+        });
       box->append(*ascBtn);
 
       auto* spacer = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
       spacer->set_hexpand(true);
       box->append(*spacer);
 
-      auto* upBtn = Gtk::make_managed<Gtk::Button>("Up");
+      auto* upBtn = makeRowIconButton("go-up-symbolic", "Move up");
       upBtn->set_sensitive(i > 0);
 
       upBtn->signal_clicked().connect(
@@ -227,7 +269,7 @@ namespace ao::gtk
         });
       box->append(*upBtn);
 
-      auto* downBtn = Gtk::make_managed<Gtk::Button>("Down");
+      auto* downBtn = makeRowIconButton("go-down-symbolic", "Move down");
       downBtn->set_sensitive(i + 1 < sortTerms.size());
 
       downBtn->signal_clicked().connect(
@@ -238,7 +280,7 @@ namespace ao::gtk
         });
       box->append(*downBtn);
 
-      auto* removeBtn = Gtk::make_managed<Gtk::Button>("Remove");
+      auto* removeBtn = makeRowIconButton("user-trash-symbolic", "Remove");
       removeBtn->signal_clicked().connect(
         [this, i]
         {
@@ -285,7 +327,7 @@ namespace ao::gtk
       spacer->set_hexpand(true);
       box->append(*spacer);
 
-      auto* upBtn = Gtk::make_managed<Gtk::Button>("Up");
+      auto* upBtn = makeRowIconButton("go-up-symbolic", "Move up");
       upBtn->set_sensitive(i > 0);
 
       upBtn->signal_clicked().connect(
@@ -296,7 +338,7 @@ namespace ao::gtk
         });
       box->append(*upBtn);
 
-      auto* downBtn = Gtk::make_managed<Gtk::Button>("Down");
+      auto* downBtn = makeRowIconButton("go-down-symbolic", "Move down");
       downBtn->set_sensitive(i + 1 < visibleFields.size());
 
       downBtn->signal_clicked().connect(
@@ -307,7 +349,7 @@ namespace ao::gtk
         });
       box->append(*downBtn);
 
-      auto* removeBtn = Gtk::make_managed<Gtk::Button>("Remove");
+      auto* removeBtn = makeRowIconButton("user-trash-symbolic", "Remove");
       removeBtn->signal_clicked().connect(
         [this, i]
         {

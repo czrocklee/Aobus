@@ -68,7 +68,7 @@ namespace ao::gtk
     : _exprBox{runtime.completion()}, _runtime{runtime}, _parentListId{parentListId}, _trackRowCache{provider}
   {
     set_title("New List");
-    set_transient_for(parent);
+    configureForParent(parent);
     setupUi();
     setupPreview();
     updatePreview();
@@ -126,21 +126,26 @@ namespace ao::gtk
     constexpr int kPreviewMinContentHeight = 360;
     constexpr int kPreviewMaxContentWidth = 640;
     constexpr int kPreviewMaxContentHeight = 520;
+    constexpr int kConfigPanelWidth = 360;
 
     set_default_size(-1, -1);
 
-    // Setup Actions in HeaderBar
     _cancelButton = addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
     _okButton = addPrimaryAction("Create", Gtk::ResponseType::OK);
     _okButton->set_sensitive(false);
 
     auto* const mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing * 2);
+    mainBox->add_css_class("ao-dialog-two-pane");
+    mainBox->set_hexpand(true);
+    mainBox->set_vexpand(true);
 
-    // Left Panel: Configuration Form
     _leftPanel.set_orientation(Gtk::Orientation::VERTICAL);
     _leftPanel.set_spacing(kBoxSpacing * 2);
+    _leftPanel.set_size_request(kConfigPanelWidth, -1);
+    _leftPanel.set_hexpand(false);
+    _leftPanel.set_vexpand(true);
+    _leftPanel.add_css_class("ao-dialog-config-pane");
 
-    // Section 1: Metadata Card
     auto* const metaList = Gtk::make_managed<FormBoxedList>();
     _nameEntry.set_placeholder_text("List name");
     _nameEntry.signal_changed().connect([this] { updateDialogState(); });
@@ -150,15 +155,12 @@ namespace ao::gtk
     metaList->addEntryRow("Description", _descEntry);
     _leftPanel.append(*metaList);
 
-    // Section 2: Filter Card
     auto* const filterList = Gtk::make_managed<FormBoxedList>();
 
-    // Inherited Filter
     _inheritedExprLabel.set_halign(Gtk::Align::END);
     _inheritedExprLabel.set_ellipsize(Pango::EllipsizeMode::END);
     filterList->addRow("Inherited Filter", _inheritedExprLabel);
 
-    // Local Filter
     _exprBox.entry().set_placeholder_text("Filter expression (type $, @, #, or %)");
     _exprBox.entry().signal_changed().connect(
       [this]
@@ -174,14 +176,12 @@ namespace ao::gtk
       });
     filterList->addRow("Local Filter", _exprBox);
 
-    // Effective Filter
     _effectiveExprLabel.set_halign(Gtk::Align::END);
     _effectiveExprLabel.set_ellipsize(Pango::EllipsizeMode::END);
     filterList->addRow("Effective Filter", _effectiveExprLabel);
 
     _leftPanel.append(*filterList);
 
-    // Section 3: Presentation Preference
     auto* const presList = Gtk::make_managed<FormBoxedList>();
     auto stringListPtr = Gtk::StringList::create();
     stringListPtr->append("Auto");
@@ -198,20 +198,18 @@ namespace ao::gtk
     presList->addRow("Presentation", _presentationDropDown);
     _leftPanel.append(*presList);
 
-    // Error Label (Global for the left panel)
     _errorLabel.set_visible(false);
     _errorLabel.set_wrap(true);
     _errorLabel.set_halign(Gtk::Align::START);
     _errorLabel.add_css_class("ao-layout-error"); // Reuse existing error style if appropriate
     _leftPanel.append(_errorLabel);
 
-    // Right Panel: Preview
     _rightPanel.set_orientation(Gtk::Orientation::VERTICAL);
     _rightPanel.set_spacing(kBoxSpacing);
     _rightPanel.set_hexpand(true);
     _rightPanel.set_vexpand(true);
+    _rightPanel.add_css_class("ao-dialog-preview-pane");
 
-    // Wrap Preview in a Card-like structure if needed, or just standard spacing
     auto* const previewHeaderBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
     auto* const previewLabel = Gtk::make_managed<Gtk::Label>("Preview");
     previewLabel->add_css_class("ao-section-header");
@@ -239,7 +237,6 @@ namespace ao::gtk
 
     mainBox->append(_leftPanel);
     mainBox->append(_rightPanel);
-    _leftPanel.set_hexpand(true);
 
     setContentWidget(*mainBox);
   }

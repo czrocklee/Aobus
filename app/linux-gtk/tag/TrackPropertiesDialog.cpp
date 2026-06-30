@@ -78,7 +78,7 @@ namespace ao::gtk
       _multipleTracks ? std::format("Properties — {} tracks selected", _trackIds.size()) : std::string{"Properties"};
 
     set_title(title);
-    set_transient_for(parent);
+    configureForParent(parent);
     set_default_size(-1, -1);
 
     setupUi();

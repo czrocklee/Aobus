@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "app/AppConfig.h"
+#include "app/AppDialog.h"
 #include "app/GtkMainContextExecutor.h"
 #include "app/GtkStyleRuntime.h"
 #include "app/KeymapApplicator.h"
@@ -27,8 +28,8 @@
 #include <glibmm/refptr.h>
 #include <glibmm/variant.h>
 #include <gtkmm/aboutdialog.h>
-#include <gtkmm/alertdialog.h>
 #include <gtkmm/application.h>
+#include <gtkmm/dialog.h>
 
 #include <algorithm>
 #include <csignal>
@@ -435,9 +436,12 @@ namespace
 
     if (auto* const window = appPtr->get_active_window(); window != nullptr)
     {
-      auto dialogPtr = Gtk::AlertDialog::create("The operation could not be completed.");
-      dialogPtr->set_detail(detail);
-      dialogPtr->show(*window);
+      AppDialog::presentMessage(
+        *window,
+        "The operation could not be completed.",
+        detail,
+        {AppDialogAction{.label = "OK", .responseId = Gtk::ResponseType::OK, .role = AppDialogActionRole::Primary}},
+        Gtk::ResponseType::OK);
     }
   }
 

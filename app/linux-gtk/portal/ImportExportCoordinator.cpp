@@ -86,7 +86,7 @@ namespace ao::gtk::portal
   {
     auto* const dialog = Gtk::make_managed<AppDialog>();
     dialog->set_title("Select Export Mode");
-    dialog->set_transient_for(_parent);
+    dialog->configureForParent(_parent);
 
     auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, layout::kSpacingMedium);
 
@@ -114,7 +114,7 @@ namespace ao::gtk::portal
 
     dialog->signal_response().connect([this, modeCombo, dialog, tokenPtr](std::int32_t responseId)
                                       { onExportModeConfirmed(responseId, modeCombo, dialog); });
-    dialog->show();
+    dialog->present();
   }
 
   void ImportExportCoordinator::onExportModeConfirmed(std::int32_t responseId,

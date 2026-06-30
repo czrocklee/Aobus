@@ -48,7 +48,7 @@ namespace ao::gtk
 
     /// Asks the user whether to reassign a chord already bound elsewhere. Invoked with the current
     /// owner's label and the chord text; @p respond must be called with true to proceed with the
-    /// reassignment or false to cancel. The default implementation shows a modal Gtk::AlertDialog;
+    /// reassignment or false to cancel. The default implementation shows a modal AppDialog;
     /// tests inject a synchronous stub.
     using ConflictConfirmer = std::function<
       void(std::string const& ownerLabel, std::string const& chordText, std::function<void(bool)> respond)>;
