@@ -78,6 +78,11 @@ namespace ao::tui
     _statusMessage = "Audio quality";
   }
 
+  void EventController::revealCurrentTrack()
+  {
+    _statusMessage = _library.revealTrack(_playback.state().trackId);
+  }
+
   void EventController::runCommand(Command const& command)
   {
     switch (command.action)
@@ -100,6 +105,8 @@ namespace ao::tui
         _shell.openOverlay(Overlay::Help);
         _statusMessage = "Help";
         break;
+      case CommandAction::RevealCurrentTrack: revealCurrentTrack(); break;
+      case CommandAction::SetPresentation: _statusMessage = _library.setPresentation(command.argument); break;
       case CommandAction::ClearFilter:
         _library.clearFilterDraft();
         applyFilter();
@@ -241,6 +248,12 @@ namespace ao::tui
     {
       _shell.openOverlay(Overlay::Help);
       _statusMessage = "Help";
+      return true;
+    }
+
+    if (event == ftxui::Event::CtrlL)
+    {
+      revealCurrentTrack();
       return true;
     }
 

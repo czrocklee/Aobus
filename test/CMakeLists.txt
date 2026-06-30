@@ -273,7 +273,9 @@ add_executable(ao_tui_test
     unit/tui/ModelTest.cpp
     unit/tui/PlaybackActionsTest.cpp
     unit/tui/PlaybackPanelTest.cpp
+    unit/tui/RenderTest.cpp
     unit/tui/ShellModelTest.cpp
+    unit/tui/TrackTableTest.cpp
 )
 
 target_link_libraries(ao_tui_test PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)

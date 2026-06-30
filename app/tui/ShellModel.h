@@ -26,6 +26,8 @@ namespace ao::tui
     OpenQuality,
     CloseOverlay,
     ShowHelp,
+    RevealCurrentTrack,
+    SetPresentation,
     ClearFilter,
     Reload,
     Play,

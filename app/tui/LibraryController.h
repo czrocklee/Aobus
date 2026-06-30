@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::rt
@@ -52,11 +53,14 @@ namespace ao::tui
     void publishSelection();
     void moveFocusedSelection(bool listChooserFocused, std::int32_t delta);
 
+    std::string revealTrack(TrackId trackId);
+    std::string setPresentation(std::string_view presentationId);
     ListOpenResult openSelectedList();
     std::string reloadActiveList();
     std::string applyFilter();
 
   private:
+    bool setSelectedTrackById(TrackId trackId);
     std::vector<LibraryNavItem> loadLibraryNavigation();
     std::vector<TrackListItem> loadTrackItemsFromView(rt::ViewId activeViewId);
     std::vector<TrackListItem> loadTrackItems(ListId listId);

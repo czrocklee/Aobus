@@ -4,6 +4,7 @@
 #include "LibraryController.h"
 
 #include "Model.h"
+#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ViewService.h>
@@ -18,6 +19,7 @@
 #include <cstdint>
 #include <format>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -78,6 +80,68 @@ namespace ao::tui
 
     _selectedTrack = moveSelection(_selectedTrack, delta, _tracks.size());
     publishSelection();
+  }
+
+  bool LibraryController::setSelectedTrackById(TrackId const trackId)
+  {
+    if (trackId == kInvalidTrackId)
+    {
+      return false;
+    }
+
+    for (std::size_t index = 0; index < _tracks.size(); ++index)
+    {
+      if (_tracks[index].id == trackId)
+      {
+        _selectedTrack = static_cast<std::int32_t>(index);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  std::string LibraryController::revealTrack(TrackId const trackId)
+  {
+    if (trackId == kInvalidTrackId)
+    {
+      return "No current track";
+    }
+
+    if (setSelectedTrackById(trackId))
+    {
+      publishSelection();
+      return std::format("Revealed {}", trackDisplayTitle(_tracks[_selectedTrack].row));
+    }
+
+    return "Current track is not in this view";
+  }
+
+  std::string LibraryController::setPresentation(std::string_view const presentationId)
+  {
+    if (_activeViewId == rt::kInvalidViewId)
+    {
+      return "No active track view";
+    }
+
+    auto const selectedBefore = selectedTrackView();
+    auto const previousTrackId = selectedBefore.track == nullptr ? kInvalidTrackId : selectedBefore.track->id;
+    auto const spec = _runtime.workspace().setActivePresentation(presentationId);
+
+    if (spec.id.empty())
+    {
+      return std::format("Unknown view {}", presentationId);
+    }
+
+    _tracks = loadTrackItemsFromView(_activeViewId);
+
+    if (!setSelectedTrackById(previousTrackId))
+    {
+      _selectedTrack = moveSelection(_selectedTrack, 0, _tracks.size());
+    }
+
+    publishSelection();
+    return std::format("View: {}", spec.id);
   }
 
   ListOpenResult LibraryController::openSelectedList()

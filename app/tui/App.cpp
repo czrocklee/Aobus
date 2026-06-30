@@ -492,7 +492,8 @@ namespace ao::tui
         auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(monotonicFrameTime()));
         auto const viewState = runtime.views().trackListState(library.activeViewId());
         auto const terminalColumns = ftxui::Terminal::Size().dimx;
-        auto workspaceElementPtr = trackTableView(library.tracks(), library.selectedTrack(), state.trackId);
+        auto workspaceElementPtr =
+          trackTableView(library.tracks(), library.selectedTrack(), state.trackId, viewState.presentation);
         auto mainContentPtr = workspaceElementPtr;
         auto popoverElementPtr = ftxui::Element{};
 

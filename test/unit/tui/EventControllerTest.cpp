@@ -9,6 +9,7 @@
 #include "tui/LibraryController.h"
 #include "tui/ShellModel.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ViewService.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
@@ -198,6 +199,13 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::Help);
     CHECK(controller.statusMessage() == "Help");
 
+    enterCommand(controller, "current");
+    CHECK(controller.statusMessage() == "No current track");
+
+    enterCommand(controller, "view albums");
+    CHECK(controller.statusMessage() == "View: albums");
+    CHECK(fixture.runtime.views().trackListState(library.activeViewId()).presentation.id == "albums");
+
     enterCommand(controller, "reload");
     CHECK(controller.statusMessage() == "Reloaded 2 tracks");
 
@@ -254,5 +262,26 @@ namespace ao::tui::test
 
     CHECK(controller.handleEvent(ftxui::Event::Character("s")));
     CHECK(controller.statusMessage() == "Stopped");
+  }
+
+  TEST_CASE("EventController - current track shortcut reveals playback selection", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    rt::test::addReadyAudioProvider(fixture.runtime.playback());
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime.playback()};
+
+    REQUIRE(library.selectedTrack() == 0);
+    CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
+    REQUIRE(library.selectedTrack() == 1);
+    CHECK(controller.handleEvent(ftxui::Event::Character("p")));
+    REQUIRE(controller.statusMessage() == "Playback requested");
+
+    CHECK(controller.handleEvent(ftxui::Event::Home));
+    REQUIRE(library.selectedTrack() == 0);
+
+    CHECK(controller.handleEvent(ftxui::Event::CtrlL));
+    CHECK(library.selectedTrack() == 1);
+    CHECK(controller.statusMessage() == "Revealed Second");
   }
 } // namespace ao::tui::test

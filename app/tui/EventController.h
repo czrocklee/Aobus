@@ -31,6 +31,7 @@ namespace ao::tui
     void applyFilter();
     void toggleDetailPanel();
     void toggleQualityPanel();
+    void revealCurrentTrack();
     void runCommand(Command const& command);
 
     ftxui::ScreenInteractive& _screen;

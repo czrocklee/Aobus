@@ -8,6 +8,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ViewService.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -26,6 +27,11 @@ namespace ao::tui::test
       TrackId addTrack(std::string_view title)
       {
         return library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = std::string{title}});
+      }
+
+      TrackId addTrack(library::test::TrackSpec const& spec)
+      {
+        return library::test::addTrack(runtime.musicLibrary(), spec);
       }
     };
   } // namespace
@@ -92,5 +98,70 @@ namespace ao::tui::test
     auto selected = controller.selectedTrackView();
     CHECK(selected.track == nullptr);
     CHECK(selected.coverArtId == kInvalidResourceId);
+  }
+
+  TEST_CASE("LibraryController - revealTrack selects a visible track", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+
+    auto controller = LibraryController{fixture.runtime};
+
+    CHECK(controller.revealTrack(secondId) == "Revealed Second");
+    CHECK(controller.selectedTrack() == 1);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == secondId);
+  }
+
+  TEST_CASE("LibraryController - revealTrack reports unavailable targets", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("First");
+    auto const hiddenId = fixture.addTrack("Hidden");
+
+    auto controller = LibraryController{fixture.runtime};
+
+    CHECK(controller.revealTrack(kInvalidTrackId) == "No current track");
+
+    controller.setFilterDraft("First");
+    CHECK(controller.applyFilter() == "Quick filter matched 1 tracks");
+    CHECK(controller.revealTrack(hiddenId) == "Current track is not in this view");
+    CHECK(controller.selectedTrack() == 0);
+  }
+
+  TEST_CASE("LibraryController - setPresentation applies active workspace presentation", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("First");
+
+    auto controller = LibraryController{fixture.runtime};
+
+    CHECK(controller.setPresentation("albums") == "View: albums");
+    CHECK(fixture.runtime.views().trackListState(controller.activeViewId()).presentation.id == "albums");
+    CHECK(controller.setPresentation("missing-preset") == "Unknown view missing-preset");
+    CHECK(fixture.runtime.views().trackListState(controller.activeViewId()).presentation.id == "albums");
+  }
+
+  TEST_CASE("LibraryController - setPresentation preserves selected track identity", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const olderId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Older", .artist = "Same Artist", .album = "Z Album", .uri = "/tmp/older.flac", .year = 2000});
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "Newer", .artist = "Same Artist", .album = "A Album", .uri = "/tmp/newer.flac", .year = 2025});
+
+    auto controller = LibraryController{fixture.runtime};
+    REQUIRE(controller.tracks().size() == 2);
+    REQUIRE(controller.tracks()[1].id == olderId);
+
+    controller.moveFocusedSelection(false, 1);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    REQUIRE(controller.selectedTrackView().track->id == olderId);
+
+    CHECK(controller.setPresentation("artists") == "View: artists");
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == olderId);
+    CHECK(controller.selectedTrack() == 0);
   }
 } // namespace ao::tui::test

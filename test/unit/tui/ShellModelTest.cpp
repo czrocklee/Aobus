@@ -14,6 +14,18 @@ namespace ao::tui::test
     CHECK(parseCommand("/quality").action == CommandAction::OpenQuality);
     CHECK(parseCommand("/pipeline").action == CommandAction::OpenQuality);
     CHECK(parseCommand("help").action == CommandAction::ShowHelp);
+    CHECK(parseCommand("/current").action == CommandAction::RevealCurrentTrack);
+    auto presentationCommand = parseCommand("/view albums");
+    CHECK(presentationCommand.action == CommandAction::SetPresentation);
+    CHECK(presentationCommand.argument == "albums");
+    presentationCommand = parseCommand("/presentation tagging");
+    CHECK(presentationCommand.action == CommandAction::SetPresentation);
+    CHECK(presentationCommand.argument == "tagging");
+    presentationCommand = parseCommand("/preset Albums");
+    CHECK(presentationCommand.action == CommandAction::SetPresentation);
+    CHECK(presentationCommand.argument == "Albums");
+    CHECK(parseCommand("now").action == CommandAction::RevealCurrentTrack);
+    CHECK(parseCommand("reveal").action == CommandAction::RevealCurrentTrack);
     CHECK(parseCommand("clear").action == CommandAction::ClearFilter);
     CHECK(parseCommand("reload").action == CommandAction::Reload);
     CHECK(parseCommand("play").action == CommandAction::Play);

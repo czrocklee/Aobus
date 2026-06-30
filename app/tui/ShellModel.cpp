@@ -4,6 +4,7 @@
 #include "ShellModel.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <string>
 #include <string_view>
@@ -37,23 +38,23 @@ namespace ao::tui
         value, value.begin(), [](char ch) { return static_cast<char>(std::tolower(static_cast<unsigned char>(ch))); });
       return value;
     }
-
-    bool consumePrefix(std::string& value, std::string_view prefix)
-    {
-      if (!value.starts_with(prefix))
-      {
-        return false;
-      }
-
-      value.erase(0, prefix.size());
-      value = trim(value);
-      return true;
-    }
   } // namespace
 
   Command parseCommand(std::string_view input)
   {
-    constexpr auto kFilterCommandLength = std::string_view{"filter "}.size();
+    struct PrefixCommand final
+    {
+      std::string_view prefix;
+      CommandAction action;
+    };
+
+    constexpr auto kPrefixCommands = std::array{
+      PrefixCommand{.prefix = "filter ", .action = CommandAction::QuickFilter},
+      PrefixCommand{.prefix = "presentation ", .action = CommandAction::SetPresentation},
+      PrefixCommand{.prefix = "preset ", .action = CommandAction::SetPresentation},
+      PrefixCommand{.prefix = "view ", .action = CommandAction::SetPresentation},
+    };
+
     auto value = trim(input);
 
     if (!value.empty() && (value.front() == '/' || value.front() == ':'))
@@ -64,9 +65,12 @@ namespace ao::tui
 
     auto command = lower(value);
 
-    if (consumePrefix(command, "filter "))
+    for (auto const& prefixCommand : kPrefixCommands)
     {
-      return {.action = CommandAction::QuickFilter, .argument = trim(value.substr(kFilterCommandLength))};
+      if (command.starts_with(prefixCommand.prefix))
+      {
+        return {.action = prefixCommand.action, .argument = trim(value.substr(prefixCommand.prefix.size()))};
+      }
     }
 
     if (command == "lists" || command == "l")
@@ -92,6 +96,11 @@ namespace ao::tui
     if (command == "help" || command == "h" || command == "?")
     {
       return {.action = CommandAction::ShowHelp};
+    }
+
+    if (command == "current" || command == "now" || command == "reveal")
+    {
+      return {.action = CommandAction::RevealCurrentTrack};
     }
 
     if (command == "clear" || command == "c")

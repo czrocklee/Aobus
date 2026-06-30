@@ -16,6 +16,7 @@
 #include <format>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -124,6 +125,8 @@ namespace ao::tui
              text("/lists or /l       choose list"),
              text("/detail or /d      show selected track detail"),
              text("/quality or /a     show audio quality"),
+             text("/current           reveal current track"),
+             text("/view <id>         switch presentation"),
              text("/clear             clear filter"),
              text("/reload            reload active list"),
              text("/play /pause /stop playback"),
@@ -137,6 +140,8 @@ namespace ao::tui
   ftxui::Element statusBar(StatusBarViewState const& state)
   {
     constexpr std::int32_t kCompactColumns = 110;
+    using namespace std::literals;
+    constexpr auto kShortcutText = "/ command  l lists  d detail  Ctrl-L current  /view id  q quit"sv;
     using namespace ftxui;
 
     auto const& shell = *state.shell;
@@ -165,7 +170,7 @@ namespace ao::tui
         }),
         hbox({
           text(filter + "  " + presentation) | dim | flex,
-          text("/ command  l lists  d detail  a quality  q quit") | dim,
+          text(std::string{kShortcutText}) | dim,
         }),
       });
     }
@@ -174,7 +179,7 @@ namespace ao::tui
       text(state.statusMessage) | flex,
       text("Mode: " + overlay + "  ") | dim,
       text(filter + "  " + presentation + "  ") | dim,
-      text("/ command  l lists  d detail  a quality  q quit  ") | dim,
+      text(std::string{kShortcutText} + "  ") | dim,
       text(selection),
     });
   }

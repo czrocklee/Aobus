@@ -5,6 +5,7 @@
 
 #include "Model.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/TrackPresentation.h>
 
 #include <cstdint>
 #include <memory>
@@ -21,6 +22,7 @@ namespace ao::tui
 {
   ftxui::Element trackTableView(std::vector<TrackListItem> const& tracks,
                                 std::int32_t selected,
-                                TrackId playingTrackId);
+                                TrackId playingTrackId,
+                                rt::TrackPresentationSpec const& presentation);
   ftxui::Element libraryChooserPane(std::vector<std::string> const& labels, std::int32_t selected);
 } // namespace ao::tui
