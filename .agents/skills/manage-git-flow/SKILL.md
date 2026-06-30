@@ -35,8 +35,16 @@ Re-run `./ao hygiene` to verify before staging. Done in this order, clang-tidy r
 
 ## Validation
 
-Run the narrowest meaningful build or test after code changes. Use `./ao check` when there is no
-safer focused check. Preserve unrelated worktree changes.
+For commit requests, use the final project gate directly:
+
+```bash
+./ao check
+```
+
+The gate is fast enough that fine-grained pre-commit test selection is usually wasted agent loop
+time and can miss coverage from tooling, lint integration, or platform suites. Use narrower tests
+only while actively debugging a failure or validating a small hypothesis before the final gate.
+Preserve unrelated worktree changes.
 
 ## Fleet Proposals
 
@@ -54,10 +62,13 @@ Route statistics affect selection and breaker state only; an oracle pass is not 
 1. Inspect `git status`, `git diff HEAD`, and `git log -n 3`.
 2. Confirm implementation and debugging are complete.
 3. Run `./ao hygiene`; resolve any findings in the order given in Hygiene Tools (format first, then
-   lint) and re-run until clean, then run scoped validation if code changed.
-4. Stage only intended changes.
-5. Commit using `doc/dev/commit-messages.md`. The subject must describe the primary technical
+   lint) and re-run until clean.
+4. Run `./ao check`; fix any failures and re-run it until clean.
+5. Stage only intended changes.
+6. Commit using `doc/dev/commit-messages.md`. The subject must describe the primary technical
    contribution and must not mention AI, internal plans, or append co-author signatures.
-6. Run `git status` and report any remaining unrelated changes.
+   Do not add validation trailers such as `Validation: ./ao check`; report validation results in the
+   final user-facing response instead.
+7. Run `git status` and report any remaining unrelated changes.
 
 Never use destructive checkout, restore, or reset operations without explicit user approval.

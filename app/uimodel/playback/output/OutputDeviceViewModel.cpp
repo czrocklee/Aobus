@@ -97,6 +97,12 @@ namespace ao::uimodel
         for (auto const& profileMeta : backend.supportedProfiles)
         {
           auto const profile = profileMeta.id;
+
+          if (!rt::supportsOutputProfile(device, profile))
+          {
+            continue;
+          }
+
           bool const isExclusive = (profile == audio::kProfileExclusive);
 
           bool const isActive =

@@ -9,6 +9,7 @@
 #include "Executor.h"
 #include "LibraryController.h"
 #include "Model.h"
+#include "OutputDeviceController.h"
 #include "PlaybackPanel.h"
 #include "Render.h"
 #include "ShellModel.h"
@@ -67,6 +68,7 @@ namespace ao::tui
     constexpr std::int32_t kBlockCoverArtRows = 12;
     constexpr std::int32_t kKittyCoverArtColumns = 768;
     constexpr std::int32_t kKittyCoverArtRows = 384;
+    constexpr std::int32_t kMainLayerTopRows = 2;
     std::atomic<std::int32_t> gSignalWriteFd{-1}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
     void exitSignalHandler(int /*signal*/) // NOLINT(aobus-modernize-use-std-numbers)
@@ -76,6 +78,13 @@ namespace ao::tui
         auto const token = std::byte{1};
         [[maybe_unused]] auto const ignored = ::write(fd, &token, sizeof(token));
       }
+    }
+
+    ftxui::Box popoverAnchor(ftxui::Box anchor)
+    {
+      anchor.y_min -= kMainLayerTopRows;
+      anchor.y_max -= kMainLayerTopRows;
+      return anchor;
     }
 
     enum class CoverArtMode : std::uint8_t
@@ -407,8 +416,11 @@ namespace ao::tui
     rt::Log::init(options.logLevel, options.libraryRoot / ".aobus" / "logs", rt::LogConsoleMode::Disabled);
 
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
+    screen.TrackMouse(true);
+    auto executorPtr = std::make_unique<Executor>(screen);
+    auto* const executor = executorPtr.get();
     auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
-      .executorPtr = std::make_unique<Executor>(screen),
+      .executorPtr = std::move(executorPtr),
       .musicRoot = options.libraryRoot,
       .databasePath = options.databasePath,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(options.configPath),
@@ -422,6 +434,10 @@ namespace ao::tui
     auto optCoverArtPreview = std::optional<CoverArtRows>{};
     auto optKittyCoverArtPng = std::optional<std::vector<std::byte>>{};
     auto coverBox = ftxui::Box{};
+    auto libraryButtonBox = ftxui::Box{};
+    auto qualityButtonBox = ftxui::Box{};
+    auto outputDeviceButtonBox = ftxui::Box{};
+    auto outputDeviceRowBoxes = std::vector<OutputDeviceRowBox>{};
     auto kittyPaintState = KittyPaintState{};
 
     auto& playback = runtime.playback();
@@ -459,7 +475,16 @@ namespace ao::tui
     auto qualitySub = playback.onQualityChanged([requestRefresh](auto const&) { requestRefresh(); });
     auto volumeSub = playback.onVolumeChanged([requestRefresh](float) { requestRefresh(); });
     auto mutedSub = playback.onMutedChanged([requestRefresh](bool) { requestRefresh(); });
-    auto events = EventController{screen, shell, library, playback};
+    auto outputDevices = OutputDeviceController{playback, requestRefresh};
+    auto events = EventController{screen,
+                                  shell,
+                                  library,
+                                  playback,
+                                  &outputDevices,
+                                  &outputDeviceButtonBox,
+                                  &outputDeviceRowBoxes,
+                                  &libraryButtonBox,
+                                  &qualityButtonBox};
 
     auto rendererPtr = ftxui::Renderer(
       [&]
@@ -489,6 +514,7 @@ namespace ao::tui
 
         auto const currentListTitle = library.currentListTitle();
         auto const state = playback.state();
+        outputDeviceRowBoxes.clear();
         auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(monotonicFrameTime()));
         auto const viewState = runtime.views().trackListState(library.activeViewId());
         auto const terminalColumns = ftxui::Terminal::Size().dimx;
@@ -501,7 +527,10 @@ namespace ao::tui
         {
           case Overlay::None: break;
           case Overlay::ListChooser:
-            popoverElementPtr = bottomPopover(libraryChooserPane(library.libraryLabels(), library.selectedList()));
+            popoverElementPtr = anchoredPopover(popoverAnchor(libraryButtonBox),
+                                                kLibraryChooserPaneColumns,
+                                                terminalColumns,
+                                                libraryChooserPane(library.libraryLabels(), library.selectedList()));
             break;
           case Overlay::DetailPanel:
             mainContentPtr = hbox({
@@ -509,7 +538,17 @@ namespace ao::tui
               detailPane(selectedTrackView.track, std::move(coverElementPtr)),
             });
             break;
-          case Overlay::QualityPanel: popoverElementPtr = topPopover(qualityPanel(state)); break;
+          case Overlay::QualityPanel:
+            popoverElementPtr = anchoredPopover(
+              popoverAnchor(qualityButtonBox), kQualityPanelColumns, terminalColumns, qualityPanel(state));
+            break;
+          case Overlay::OutputDevices:
+            popoverElementPtr = anchoredPopover(
+              popoverAnchor(outputDeviceButtonBox),
+              kOutputDevicePanelColumns,
+              terminalColumns,
+              outputDevicePanel(outputDevices.viewState(), outputDevices.selectedRow(), &outputDeviceRowBoxes));
+            break;
           case Overlay::Help:
             mainContentPtr = hbox({
               workspaceElementPtr,
@@ -525,7 +564,13 @@ namespace ao::tui
                                                            });
 
         return vbox({
-          playbackBar(state, currentListTitle, displayElapsed),
+          playbackBar(state,
+                      currentListTitle,
+                      displayElapsed,
+                      &outputDevices.viewState(),
+                      &outputDeviceButtonBox,
+                      &libraryButtonBox,
+                      &qualityButtonBox),
           text(""),
           std::move(mainLayerPtr) | flex,
           text(""),
@@ -546,6 +591,8 @@ namespace ao::tui
     auto signalExit = SignalExitWatcher{screen};
     auto refreshTick =
       PeriodicRefresh{screen, kPlaybackTickInterval, [&clockTickActive] { return clockTickActive.load(); }};
+
+    executor->drainPendingTasks();
 
     while (!loop.HasQuitted())
     {

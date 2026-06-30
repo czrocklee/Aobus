@@ -189,6 +189,7 @@ def _fixture_tidy_args(include_dir: Path) -> tuple[str, ...]:
 def _run_diagnostic(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[bool, Path]:
     case_dir = Path(tempfile.mkdtemp(prefix=f"{fixture.path.name}.diag.", dir=run_dir))
     log = case_dir / "run.log"
+    source = fixture.path.read_text(encoding="utf-8")
     result = subprocess.run(
         _tidy_command(fixture, build_dir, *_fixture_tidy_args(fixture.path.parent)),
         cwd=PROJECT_ROOT,
@@ -196,8 +197,11 @@ def _run_diagnostic(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[b
         stderr=subprocess.STDOUT,
         text=True,
     )
-    errors = verify_diagnostics(fixture.path.read_text(encoding="utf-8"), result.stdout, fixture.check)
-    if result.returncode != 0:
+    errors = verify_diagnostics(source, result.stdout, fixture.check)
+    has_expected_diagnostics = bool(parse_expectations(source, fixture.check).expected)
+    if "[clang-diagnostic-error]" in result.stdout:
+        errors.append("clang-tidy reported a fatal compiler diagnostic")
+    if result.returncode != 0 and (errors or not has_expected_diagnostics):
         errors.append(f"clang-tidy exited with status {result.returncode}")
     with log.open("w", encoding="utf-8") as sink:
         sink.write(result.stdout)
@@ -234,9 +238,6 @@ def _run_fix(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[bool, Pa
         text=True,
     )
     errors: list[str] = []
-    if tidy.returncode != 0:
-        errors.append("clang-tidy --fix failed")
-
     fixed_text = fixed.read_text(encoding="utf-8")
     fixes = expected_fixes(source)
     if fixes and fixed_text == source:

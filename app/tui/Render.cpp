@@ -80,6 +80,28 @@ namespace ao::tui
     });
   }
 
+  ftxui::Element anchoredPopover(ftxui::Box const anchor,
+                                 std::int32_t const popoverColumns,
+                                 std::int32_t const terminalColumns,
+                                 ftxui::Element popoverPtr)
+  {
+    using namespace ftxui;
+
+    auto const maxLeft = terminalColumns > popoverColumns ? terminalColumns - popoverColumns : 0;
+    auto const left = std::clamp(anchor.x_min, 0, maxLeft);
+    auto const top = std::max(0, anchor.y_max + 1);
+
+    return vbox({
+      filler() | size(HEIGHT, EQUAL, top),
+      hbox({
+        filler() | size(WIDTH, EQUAL, left),
+        std::move(popoverPtr) | clear_under,
+        filler(),
+      }),
+      filler(),
+    });
+  }
+
   ftxui::Element detailPane(TrackListItem const* selectedTrack, ftxui::Element coverElementPtr)
   {
     constexpr int kLabelColumns = 14;
@@ -125,6 +147,7 @@ namespace ao::tui
              text("/lists or /l       choose list"),
              text("/detail or /d      show selected track detail"),
              text("/quality or /a     show audio quality"),
+             text("/output or /o      choose output device"),
              text("/current           reveal current track"),
              text("/view <id>         switch presentation"),
              text("/clear             clear filter"),
@@ -141,7 +164,8 @@ namespace ao::tui
   {
     constexpr std::int32_t kCompactColumns = 110;
     using namespace std::literals;
-    constexpr auto kShortcutText = "/ command  l lists  d detail  Ctrl-L current  /view id  q quit"sv;
+    constexpr auto kShortcutText =
+      "/ command  l lists  d detail  a quality  o output  Ctrl-L current  /view id  q quit"sv;
     using namespace ftxui;
 
     auto const& shell = *state.shell;

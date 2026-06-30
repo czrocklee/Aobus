@@ -24,6 +24,7 @@ extern "C"
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -162,6 +163,24 @@ namespace ao::audio::backend::test
         return _updateCount;
       }
 
+      bool hasDuplicateDeviceIds() const
+      {
+        auto lock = std::scoped_lock{_mutex};
+
+        for (auto left = _devices.begin(); left != _devices.end(); ++left)
+        {
+          for (auto right = std::next(left); right != _devices.end(); ++right)
+          {
+            if (left->id == right->id)
+            {
+              return true;
+            }
+          }
+        }
+
+        return false;
+      }
+
     private:
       bool containsDeviceLocked(std::string_view expectedNameOrId) const
       {
@@ -216,6 +235,15 @@ namespace ao::audio::backend::test
       INFO("Expected PipeWire device 'rs-test-dummy-sink' after 1s; observed "
            << devicesPtr->updateCount() << " device snapshots: " << devicesPtr->describeSnapshot());
       CHECK(found);
+    }
+
+    SECTION("Enumeration exposes one logical device per id")
+    {
+      auto const found = devicesPtr->waitUntilContains("rs-test-dummy-sink", std::chrono::seconds{1});
+      REQUIRE(found);
+
+      INFO("Observed PipeWire device snapshot: " << devicesPtr->describeSnapshot());
+      CHECK_FALSE(devicesPtr->hasDuplicateDeviceIds());
     }
 
     SECTION("Enumeration finds Audio/Duplex nodes")

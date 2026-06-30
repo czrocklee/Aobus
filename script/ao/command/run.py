@@ -32,6 +32,7 @@ examples:
   ./ao run cli -n           # run the CLI client without rebuilding
   ./ao run cli release      # build and run the CLI client built in release mode
   ./ao run gtk --clang      # build and run the GTK client built using clang compiler
+  ./ao run tui -- --library ~/Music   # forward option flags to the application after --
 """
 
 
@@ -42,7 +43,11 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     parser.add_argument("app", choices=APPS.keys(), help="the application to run (cli, tui, or gtk)")
     build.add_build_arguments(parser)
     parser.add_argument("-n", "--no-build", action="store_true", help="skip building the target")
-    parser.add_argument("app_args", nargs="*", help="non-option arguments forwarded to the application")
+    parser.add_argument(
+        "app_args",
+        nargs="*",
+        help="arguments forwarded to the application; put option flags after `--`",
+    )
     parser.set_defaults(func=run_command)
 
 

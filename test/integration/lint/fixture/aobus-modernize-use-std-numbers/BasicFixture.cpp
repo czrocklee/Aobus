@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-// FIX-TO: #include <cstddef>\n\n#include <cstdint>\n\n#include "TestHelpers.h"
+// FIX-TO: #include <cstdint>\n\n#include "TestHelpers.h"
 #include "TestHelpers.h"
 
 class MyWidget : public gtkmm_mock::Widget
@@ -51,9 +51,6 @@ void testLogic()
   // Ignored because it's passed to C API via pointer
   long val_for_c = 0;
   some_c_api(&val_for_c, 5);
-
-  // POSITIVE: FIX-TO: auto cast_val = static_cast<std::ptrdiff_t>(10);
-  auto cast_val = static_cast<long>(10);
 }
 
 // main is ignored

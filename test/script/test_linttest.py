@@ -184,6 +184,47 @@ class LintTestRunnerTest(unittest.TestCase):
             self.assertFalse(success)
             self.assertIn("clang-tidy exited with status 2", log.read_text(encoding="utf-8"))
 
+    def test_diagnostic_stage_accepts_nonzero_tidy_exit_for_expected_warnings(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+            root = Path(temp_dir)
+            fixture_path = root / "BasicFixture.cpp"
+            fixture_path.write_text("int bad; // POSITIVE\n", encoding="utf-8")
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+            completed = linttest.subprocess.CompletedProcess(
+                [],
+                1,
+                stdout=f"{fixture_path}:1:1: warning: expected [aobus-example]\n",
+            )
+
+            with mock.patch.object(linttest.subprocess, "run", return_value=completed):
+                success, log = linttest._run_diagnostic(fixture, root, root)
+
+            self.assertTrue(success)
+            self.assertNotIn("clang-tidy exited", log.read_text(encoding="utf-8"))
+
+    def test_diagnostic_stage_rejects_compiler_errors_even_with_expected_warnings(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+            root = Path(temp_dir)
+            fixture_path = root / "BasicFixture.cpp"
+            fixture_path.write_text("int bad; // POSITIVE\n", encoding="utf-8")
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+            completed = linttest.subprocess.CompletedProcess(
+                [],
+                1,
+                stdout=(
+                    f"{fixture_path}:1:1: warning: expected [aobus-example]\n"
+                    f"{fixture_path}:2:1: error: missing type [clang-diagnostic-error]\n"
+                ),
+            )
+
+            with mock.patch.object(linttest.subprocess, "run", return_value=completed):
+                success, log = linttest._run_diagnostic(fixture, root, root)
+
+            self.assertFalse(success)
+            text = log.read_text(encoding="utf-8")
+            self.assertIn("clang-tidy reported a fatal compiler diagnostic", text)
+            self.assertIn("clang-tidy exited with status 1", text)
+
     def test_runner_requires_existing_compile_database_and_plugin(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
             build_dir = Path(temp_dir)
@@ -248,6 +289,35 @@ class LintTestRunnerTest(unittest.TestCase):
                 "fixture declares FIX-TO expectations but clang-tidy made no changes",
                 log.read_text(encoding="utf-8"),
             )
+
+    def test_fix_stage_accepts_nonzero_tidy_exit_when_expected_fix_is_applied(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+            root = Path(temp_dir)
+            fixture_dir = root / "fixture"
+            fixture_dir.mkdir()
+            fixture_path = fixture_dir / "BasicFixture.cpp"
+            fixture_path.write_text(
+                "// POSITIVE: FIX-TO: int replacement;\nint original;\n",
+                encoding="utf-8",
+            )
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+
+            def run_fix_or_syntax(command, **_kwargs):
+                if command[0] == "g++":
+                    return linttest.subprocess.CompletedProcess(command, 0, stdout="")
+
+                fixed = Path(command[-1])
+                fixed.write_text(
+                    "// POSITIVE: FIX-TO: int replacement;\nint replacement;\n",
+                    encoding="utf-8",
+                )
+                return linttest.subprocess.CompletedProcess(command, 1, stdout="expected warning\n")
+
+            with mock.patch.object(linttest.subprocess, "run", side_effect=run_fix_or_syntax):
+                success, log = linttest._run_fix(fixture, root, root)
+
+            self.assertTrue(success)
+            self.assertNotIn("ERROR:", log.read_text(encoding="utf-8"))
 
     def test_runner_aggregates_all_stages_and_removes_success_workspace(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:

@@ -664,13 +664,7 @@ namespace ao::audio::backend
                            .description = description,
                            .isDefault = false,
                            .backendId = kBackendPipeWire,
-                           .capabilities = {}});
-        devices.push_back({.id = DeviceId{deviceId},
-                           .displayName = std::format("{} (Exclusive)", displayName),
-                           .description = description,
-                           .isDefault = false,
-                           .backendId = kBackendPipeWire,
-                           .capabilities = caps});
+                           .capabilities = std::move(caps)});
       }
     }
 

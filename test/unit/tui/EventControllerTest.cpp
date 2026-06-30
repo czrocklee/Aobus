@@ -7,13 +7,18 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "tui/LibraryController.h"
+#include "tui/OutputDeviceController.h"
+#include "tui/PlaybackPanel.h"
 #include "tui/ShellModel.h"
+#include <ao/audio/Backend.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
+#include <ftxui/component/mouse.hpp>
 #include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/screen/box.hpp>
 
 #include <chrono>
 #include <string_view>
@@ -124,6 +129,24 @@ namespace ao::tui::test
     CHECK(controller.statusMessage() == "Quality closed");
   }
 
+  TEST_CASE("EventController - output shortcut toggles the output overlay", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    rt::test::addReadyAudioProvider(fixture.runtime.playback());
+    auto library = fixture.makeLibrary();
+    auto outputDevices = OutputDeviceController{fixture.runtime.playback()};
+    auto controller =
+      EventController{fixture.screen, fixture.shell, library, fixture.runtime.playback(), &outputDevices};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("o")));
+    CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
+    CHECK(controller.statusMessage() == "Output devices");
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("o")));
+    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK(controller.statusMessage() == "Output devices closed");
+  }
+
   TEST_CASE("EventController - navigation shortcuts move the focused selection", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
@@ -217,6 +240,41 @@ namespace ao::tui::test
 
     enterCommand(controller, "stop");
     CHECK(controller.statusMessage() == "Stopped");
+  }
+
+  TEST_CASE("EventController - output commands and mouse clicks select devices", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    rt::test::addReadyAudioProvider(fixture.runtime.playback());
+    auto library = fixture.makeLibrary();
+    auto outputDevices = OutputDeviceController{fixture.runtime.playback()};
+    auto outputButtonBox = ftxui::Box{.x_min = 4, .x_max = 9, .y_min = 0, .y_max = 0};
+    auto rowBoxes = std::vector{
+      OutputDeviceRowBox{.rowIndex = 1, .box = ftxui::Box{.x_min = 2, .x_max = 30, .y_min = 3, .y_max = 3}}};
+    auto controller = EventController{
+      fixture.screen, fixture.shell, library, fixture.runtime.playback(), &outputDevices, &outputButtonBox, &rowBoxes};
+
+    auto clickBadge = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 6, .y = 0};
+    CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickBadge)));
+    CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
+
+    auto clickOrigin = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 0, .y = 0};
+    CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", clickOrigin)));
+    CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
+
+    auto clickRow = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 3};
+    CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickRow)));
+    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK(controller.statusMessage() == "Output: Test Device");
+    CHECK(fixture.runtime.playback().state().selectedOutputDevice.backendId == audio::BackendId{"test_backend"});
+
+    enterCommand(controller, "output");
+    CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
+    CHECK(controller.statusMessage() == "Output devices");
+
+    CHECK(controller.handleEvent(ftxui::Event::Return));
+    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK(controller.statusMessage() == "Output: Test Device");
   }
 
   TEST_CASE("EventController - list chooser return opens the selected list", "[tui][unit][event]")

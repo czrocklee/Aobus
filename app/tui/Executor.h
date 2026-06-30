@@ -22,6 +22,8 @@ namespace ao::tui
     Executor(Executor&&) = delete;
     Executor& operator=(Executor&&) = delete;
 
+    void drainPendingTasks();
+
   private:
     void wake() override;
     void executeTask(std::move_only_function<void()>& task) override;

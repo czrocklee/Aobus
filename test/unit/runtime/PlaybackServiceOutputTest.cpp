@@ -5,10 +5,12 @@
 #include "test/unit/audio/AudioFixtureUtils.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/audio/Backend.h>
+#include <ao/audio/IBackendProvider.h>
 #include <ao/audio/IRenderTarget.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <fakeit.hpp>
 
 #include <chrono>
 #include <vector>
@@ -95,5 +97,47 @@ namespace ao::rt::test
 
     CHECK(fixture.playbackService.play(desc, ListId{1}));
     CHECK(fixture.playbackService.state().trackId == TrackId{1});
+  }
+
+  TEST_CASE("PlaybackService output device - auto-select notifies device list subscribers",
+            "[runtime][unit][playback][output]")
+  {
+    auto fixture = PlaybackFixture<MockExecutor>{};
+    bool devicesChangedFired = false;
+    auto sub = fixture.playbackService.onOutputDevicesChanged([&] { devicesChangedFired = true; });
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+
+    CHECK(devicesChangedFired);
+    CHECK(fixture.playbackService.state().selectedOutputDevice.backendId == audio::BackendId{"mock_backend"});
+    REQUIRE(fixture.playbackService.state().availableOutputBackends.size() == 1);
+    REQUIRE(fixture.playbackService.state().availableOutputBackends.front().devices.size() == 1);
+  }
+
+  TEST_CASE("PlaybackService output device - auto-select skips unsupported default exclusive profile",
+            "[runtime][unit][playback][output]")
+  {
+    auto fixture = PlaybackFixture<MockExecutor>{};
+    fixture.status.devices = {
+      audio::Device{.id = audio::DeviceId{},
+                    .displayName = "System Default",
+                    .description = "PipeWire",
+                    .isDefault = true,
+                    .backendId = audio::BackendId{"mock_backend"}},
+    };
+    fixture.status.metadata.supportedProfiles = {
+      audio::IBackendProvider::ProfileMetadata{
+        .id = audio::kProfileExclusive, .name = "Exclusive", .description = "Exclusive profile"},
+      audio::IBackendProvider::ProfileMetadata{
+        .id = audio::kProfileShared, .name = "Shared", .description = "Shared profile"},
+    };
+    fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+
+    auto const& selection = fixture.playbackService.state().selectedOutputDevice;
+    CHECK(selection.backendId == audio::BackendId{"mock_backend"});
+    CHECK(selection.deviceId == audio::DeviceId{});
+    CHECK(selection.profileId == audio::kProfileShared);
   }
 } // namespace ao::rt::test

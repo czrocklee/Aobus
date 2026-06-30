@@ -119,6 +119,30 @@ namespace ao::rt
       return lhs.backendId == rhs.backendId && lhs.deviceId == rhs.deviceId && lhs.profileId == rhs.profileId;
     }
 
+    std::optional<OutputDeviceSelection> defaultOutputDeviceSelection(
+      std::vector<OutputBackendSnapshot> const& backends)
+    {
+      for (auto const& backend : backends)
+      {
+        for (auto const& device : backend.devices)
+        {
+          for (auto const& profile : backend.supportedProfiles)
+          {
+            if (supportsOutputProfile(device, profile.id))
+            {
+              return OutputDeviceSelection{
+                .backendId = backend.id,
+                .deviceId = device.id,
+                .profileId = profile.id,
+              };
+            }
+          }
+        }
+      }
+
+      return std::nullopt;
+    }
+
     std::string_view playbackErrorMessage(audio::Engine::Status const& status)
     {
       return status.statusText.empty() ? std::string_view{"Audio playback failed"}
@@ -403,29 +427,24 @@ namespace ao::rt
             return;
           }
 
-          auto const& backend = state.availableOutputBackends.front();
+          auto const optSelection = defaultOutputDeviceSelection(state.availableOutputBackends);
 
-          if (backend.devices.empty())
+          if (!optSelection)
           {
             outputDevicesChangedSignal.emit();
             return;
           }
 
-          auto const& device = backend.devices.front();
-          auto profileId = audio::ProfileId{audio::kProfileShared};
-
-          if (!backend.supportedProfiles.empty())
-          {
-            profileId = backend.supportedProfiles.front().id;
-          }
-
-          if (auto const result = playerPtr->setOutputDevice(backend.id, device.id, profileId); !result)
+          if (auto const result =
+                playerPtr->setOutputDevice(optSelection->backendId, optSelection->deviceId, optSelection->profileId);
+              !result)
           {
             APP_LOG_ERROR("Failed to select audio output device: {}", result.error().message);
           }
 
           refreshState();
           outputDeviceChangedSignal.emit(state.selectedOutputDevice);
+          outputDevicesChangedSignal.emit();
         });
 
       playerPtr->setOnQualityChanged(

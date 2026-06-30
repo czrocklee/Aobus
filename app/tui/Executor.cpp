@@ -23,6 +23,11 @@ namespace ao::tui
     _screen.Post([this] { drainQueuedTasks(); });
   }
 
+  void Executor::drainPendingTasks()
+  {
+    drainQueuedTasks();
+  }
+
   void Executor::executeTask(std::move_only_function<void()>& task)
   {
     try

@@ -23,10 +23,19 @@
 #include <pangomm/layout.h>
 
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace ao::gtk
 {
+  namespace
+  {
+    std::string badgeForOutputDevice(uimodel::OutputDeviceRow const& row)
+    {
+      return row.isExclusive ? "E" : "";
+    }
+  } // namespace
+
   OutputDeviceSelector::OutputDeviceSelector(rt::PlaybackService& playback, Gtk::PositionType position)
     : _playback{playback}
     , _outputDeviceController{_playback,
@@ -49,8 +58,8 @@ namespace ao::gtk
                                       .backendId = row.backendId,
                                     };
 
-                                    auto const itemPtr =
-                                      OutputDeviceItem::create(row.backendId, audioDevice, row.profileId, row.title);
+                                    auto const itemPtr = OutputDeviceItem::create(
+                                      row.backendId, audioDevice, row.profileId, badgeForOutputDevice(row));
                                     itemPtr->setActive(row.isActive);
                                     _storePtr->append(itemPtr);
                                   }
@@ -154,10 +163,10 @@ namespace ao::gtk
 
       rowBox->append(*textBox);
 
-      if (deviceItemPtr->profileId() == audio::kProfileExclusive)
+      if (!deviceItemPtr->badge().empty())
       {
-        auto* const badge = Gtk::make_managed<Gtk::Label>("[E]");
-        badge->add_css_class("ao-output-device-exclusive-badge");
+        auto* const badge = Gtk::make_managed<Gtk::Label>(std::string{"["} + deviceItemPtr->badge() + "]");
+        badge->add_css_class("ao-output-device-badge");
         rowBox->append(*badge);
       }
 

@@ -9,6 +9,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/dom/elements.hpp>
@@ -16,7 +17,10 @@
 #include <ftxui/screen/screen.hpp>
 
 #include <chrono>
+#include <cstdint>
+#include <format>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::tui::test
@@ -26,6 +30,13 @@ namespace ao::tui::test
     std::string renderText(ftxui::Element elementPtr)
     {
       auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fit(elementPtr));
+      ftxui::Render(screen, elementPtr);
+      return screen.ToString();
+    }
+
+    std::string renderText(ftxui::Element elementPtr, std::int32_t const width, std::int32_t const height)
+    {
+      auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(width), ftxui::Dimension::Fixed(height));
       ftxui::Render(screen, elementPtr);
       return screen.ToString();
     }
@@ -67,6 +78,21 @@ namespace ao::tui::test
     CHECK(text.find("Playing") != std::string::npos);
     CHECK(text.find("1:05 / 2:05") != std::string::npos);
     CHECK(text.find("42%") != std::string::npos);
+  }
+
+  TEST_CASE("PlaybackPanel - playback bar renders output backend badge", "[tui][unit][playback]")
+  {
+    auto const state = rt::PlaybackState{};
+    auto const output = uimodel::OutputDeviceViewState{
+      .outputBackendSummary = "PW",
+      .outputDeviceStatus = "PipeWire: Studio DAC",
+      .hasActiveOutputDevice = true,
+    };
+
+    auto const text = renderText(playbackBar(state, "Library", std::chrono::milliseconds{0}, &output));
+
+    CHECK(text.find("PW") != std::string::npos);
+    CHECK(text.find("No active track") != std::string::npos);
   }
 
   TEST_CASE("PlaybackPanel - quality panel renders empty pipeline state", "[tui][unit][playback]")
@@ -137,5 +163,88 @@ namespace ao::tui::test
     CHECK(text.find("[Device] DAC") != std::string::npos);
     CHECK(text.find("Software volume attenuation") != std::string::npos);
     CHECK(text.find("Linear intervention") != std::string::npos);
+  }
+
+  TEST_CASE("PlaybackPanel - output device panel renders grouped selectable rows", "[tui][unit][playback]")
+  {
+    auto rowBoxes = std::vector<OutputDeviceRowBox>{};
+    auto const view = uimodel::OutputDeviceViewState{
+      .rows =
+        std::vector{
+          uimodel::OutputDeviceRow{
+            .kind = uimodel::OutputDeviceRow::Kind::BackendHeader,
+            .backendId = audio::BackendId{"pipewire"},
+            .title = "PipeWire",
+          },
+          uimodel::OutputDeviceRow{
+            .kind = uimodel::OutputDeviceRow::Kind::DeviceProfile,
+            .backendId = audio::BackendId{"pipewire"},
+            .deviceId = audio::DeviceId{"studio"},
+            .profileId = audio::kProfileShared,
+            .title = "Studio DAC",
+            .description = "USB interface",
+            .isActive = true,
+          },
+          uimodel::OutputDeviceRow{
+            .kind = uimodel::OutputDeviceRow::Kind::DeviceProfile,
+            .backendId = audio::BackendId{"pipewire"},
+            .deviceId = audio::DeviceId{"studio"},
+            .profileId = audio::kProfileExclusive,
+            .title = "Studio DAC",
+            .isExclusive = true,
+          },
+        },
+      .outputBackendSummary = "PW",
+      .outputDeviceStatus = "PipeWire: Studio DAC",
+      .hasActiveOutputDevice = true,
+    };
+
+    auto const text = renderText(outputDevicePanel(view, 2, &rowBoxes));
+
+    CHECK(text.find("Output Devices") != std::string::npos);
+    CHECK(text.find("PipeWire") != std::string::npos);
+    CHECK(text.find("Studio DAC") != std::string::npos);
+    CHECK(text.find("USB interface") != std::string::npos);
+    CHECK(text.find("PipeWire: Studio DAC") != std::string::npos);
+    CHECK(text.find("Enter select") != std::string::npos);
+    REQUIRE(rowBoxes.size() == 2);
+    CHECK(rowBoxes[0].rowIndex == 1);
+    CHECK(rowBoxes[1].rowIndex == 2);
+  }
+
+  TEST_CASE("PlaybackPanel - output device panel frames long device lists", "[tui][unit][playback]")
+  {
+    auto rows = std::vector{
+      uimodel::OutputDeviceRow{
+        .kind = uimodel::OutputDeviceRow::Kind::BackendHeader,
+        .backendId = audio::BackendId{"pipewire"},
+        .title = "PipeWire",
+      },
+    };
+
+    for (std::int32_t index = 0; index < 20; ++index)
+    {
+      rows.push_back(uimodel::OutputDeviceRow{
+        .kind = uimodel::OutputDeviceRow::Kind::DeviceProfile,
+        .backendId = audio::BackendId{"pipewire"},
+        .deviceId = audio::DeviceId{std::format("device-{}", index)},
+        .profileId = audio::kProfileShared,
+        .title = std::format("Device {}", index),
+        .description = "alsa_output.usb-Sonata_Sonata_BHD_Pro_Sonata_BHD_Pro_very_long_identifier",
+        .isActive = index == 0,
+      });
+    }
+
+    auto const view = uimodel::OutputDeviceViewState{
+      .rows = std::move(rows),
+      .outputBackendSummary = "PW",
+      .outputDeviceStatus = "PipeWire: Device 0",
+      .hasActiveOutputDevice = true,
+    };
+
+    auto const text = renderText(outputDevicePanel(view, 1), 48, 24);
+
+    CHECK(text.find("very_long_identifier") == std::string::npos);
+    CHECK(text.find("o toggle") != std::string::npos);
   }
 } // namespace ao::tui::test

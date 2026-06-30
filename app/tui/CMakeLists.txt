@@ -3,6 +3,7 @@ add_library(aobus-tui-lib STATIC
     EventController.cpp
     Executor.cpp
     LibraryController.cpp
+    OutputDeviceController.cpp
     PlaybackActions.cpp
     PlaybackPanel.cpp
     Render.cpp

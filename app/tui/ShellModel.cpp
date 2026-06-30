@@ -14,6 +14,65 @@ namespace ao::tui
 {
   namespace
   {
+    struct PrefixCommand final
+    {
+      std::string_view prefix;
+      CommandAction action;
+    };
+
+    struct AliasCommand final
+    {
+      std::string_view alias;
+      CommandAction action;
+    };
+
+    constexpr auto kPrefixCommands = std::to_array<PrefixCommand>({
+      {.prefix = "filter ", .action = CommandAction::QuickFilter},
+      {.prefix = "presentation ", .action = CommandAction::SetPresentation},
+      {.prefix = "preset ", .action = CommandAction::SetPresentation},
+      {.prefix = "view ", .action = CommandAction::SetPresentation},
+    });
+
+    constexpr auto kAliasCommands = std::to_array<AliasCommand>({
+      {.alias = "lists", .action = CommandAction::OpenLists},
+      {.alias = "l", .action = CommandAction::OpenLists},
+      {.alias = "detail", .action = CommandAction::OpenDetail},
+      {.alias = "details", .action = CommandAction::OpenDetail},
+      {.alias = "d", .action = CommandAction::OpenDetail},
+      {.alias = "quality", .action = CommandAction::OpenQuality},
+      {.alias = "audio", .action = CommandAction::OpenQuality},
+      {.alias = "pipeline", .action = CommandAction::OpenQuality},
+      {.alias = "a", .action = CommandAction::OpenQuality},
+      {.alias = "output", .action = CommandAction::OpenOutputDevices},
+      {.alias = "outputs", .action = CommandAction::OpenOutputDevices},
+      {.alias = "device", .action = CommandAction::OpenOutputDevices},
+      {.alias = "devices", .action = CommandAction::OpenOutputDevices},
+      {.alias = "o", .action = CommandAction::OpenOutputDevices},
+      {.alias = "close", .action = CommandAction::CloseOverlay},
+      {.alias = "hide", .action = CommandAction::CloseOverlay},
+      {.alias = "esc", .action = CommandAction::CloseOverlay},
+      {.alias = "help", .action = CommandAction::ShowHelp},
+      {.alias = "h", .action = CommandAction::ShowHelp},
+      {.alias = "?", .action = CommandAction::ShowHelp},
+      {.alias = "current", .action = CommandAction::RevealCurrentTrack},
+      {.alias = "now", .action = CommandAction::RevealCurrentTrack},
+      {.alias = "reveal", .action = CommandAction::RevealCurrentTrack},
+      {.alias = "clear", .action = CommandAction::ClearFilter},
+      {.alias = "c", .action = CommandAction::ClearFilter},
+      {.alias = "reload", .action = CommandAction::Reload},
+      {.alias = "refresh", .action = CommandAction::Reload},
+      {.alias = "r", .action = CommandAction::Reload},
+      {.alias = "play", .action = CommandAction::Play},
+      {.alias = "p", .action = CommandAction::Play},
+      {.alias = "pause", .action = CommandAction::TogglePlayback},
+      {.alias = "toggle", .action = CommandAction::TogglePlayback},
+      {.alias = "space", .action = CommandAction::TogglePlayback},
+      {.alias = "stop", .action = CommandAction::Stop},
+      {.alias = "s", .action = CommandAction::Stop},
+      {.alias = "quit", .action = CommandAction::Quit},
+      {.alias = "q", .action = CommandAction::Quit},
+    });
+
     std::string trim(std::string_view value)
     {
       auto const* begin = value.begin();
@@ -42,19 +101,6 @@ namespace ao::tui
 
   Command parseCommand(std::string_view input)
   {
-    struct PrefixCommand final
-    {
-      std::string_view prefix;
-      CommandAction action;
-    };
-
-    constexpr auto kPrefixCommands = std::array{
-      PrefixCommand{.prefix = "filter ", .action = CommandAction::QuickFilter},
-      PrefixCommand{.prefix = "presentation ", .action = CommandAction::SetPresentation},
-      PrefixCommand{.prefix = "preset ", .action = CommandAction::SetPresentation},
-      PrefixCommand{.prefix = "view ", .action = CommandAction::SetPresentation},
-    };
-
     auto value = trim(input);
 
     if (!value.empty() && (value.front() == '/' || value.front() == ':'))
@@ -73,64 +119,12 @@ namespace ao::tui
       }
     }
 
-    if (command == "lists" || command == "l")
-    {
-      return {.action = CommandAction::OpenLists};
-    }
+    auto const* const aliasIt = std::ranges::find_if(
+      kAliasCommands, [&](AliasCommand const& aliasCommand) { return command == aliasCommand.alias; });
 
-    if (command == "detail" || command == "details" || command == "d")
+    if (aliasIt != kAliasCommands.end())
     {
-      return {.action = CommandAction::OpenDetail};
-    }
-
-    if (command == "quality" || command == "audio" || command == "pipeline" || command == "a")
-    {
-      return {.action = CommandAction::OpenQuality};
-    }
-
-    if (command == "close" || command == "hide" || command == "esc")
-    {
-      return {.action = CommandAction::CloseOverlay};
-    }
-
-    if (command == "help" || command == "h" || command == "?")
-    {
-      return {.action = CommandAction::ShowHelp};
-    }
-
-    if (command == "current" || command == "now" || command == "reveal")
-    {
-      return {.action = CommandAction::RevealCurrentTrack};
-    }
-
-    if (command == "clear" || command == "c")
-    {
-      return {.action = CommandAction::ClearFilter};
-    }
-
-    if (command == "reload" || command == "refresh" || command == "r")
-    {
-      return {.action = CommandAction::Reload};
-    }
-
-    if (command == "play" || command == "p")
-    {
-      return {.action = CommandAction::Play};
-    }
-
-    if (command == "pause" || command == "toggle" || command == "space")
-    {
-      return {.action = CommandAction::TogglePlayback};
-    }
-
-    if (command == "stop" || command == "s")
-    {
-      return {.action = CommandAction::Stop};
-    }
-
-    if (command == "quit" || command == "q")
-    {
-      return {.action = CommandAction::Quit};
+      return {.action = aliasIt->action};
     }
 
     return {.action = CommandAction::QuickFilter, .argument = value};
@@ -144,6 +138,7 @@ namespace ao::tui
       case Overlay::ListChooser: return "Lists";
       case Overlay::DetailPanel: return "Detail";
       case Overlay::QualityPanel: return "Quality";
+      case Overlay::OutputDevices: return "Output";
       case Overlay::Help: return "Help";
     }
 

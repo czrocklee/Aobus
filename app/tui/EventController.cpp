@@ -4,13 +4,19 @@
 #include "EventController.h"
 
 #include "LibraryController.h"
+#include "OutputDeviceController.h"
 #include "PlaybackActions.h"
+#include "PlaybackPanel.h"
 #include "ShellModel.h"
 
 #include <ftxui/component/event.hpp>
+#include <ftxui/component/mouse.hpp>
+#include <ftxui/screen/box.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <vector>
 
 namespace ao::tui
 {
@@ -20,13 +26,37 @@ namespace ao::tui
     constexpr std::int32_t kBoundarySelectionDelta = 1'000'000;
     constexpr auto kKeyboardSeekDelta = std::chrono::seconds{5};
     constexpr float kKeyboardVolumeDelta = 0.05F;
+
+    bool hasArea(ftxui::Box const& box)
+    {
+      return box.x_min <= box.x_max && box.y_min <= box.y_max &&
+             (box.x_min != 0 || box.x_max != 0 || box.y_min != 0 || box.y_max != 0);
+    }
+
+    bool contains(ftxui::Box const& box, std::int32_t const column, std::int32_t const row)
+    {
+      return hasArea(box) && column >= box.x_min && column <= box.x_max && row >= box.y_min && row <= box.y_max;
+    }
   } // namespace
 
   EventController::EventController(ftxui::ScreenInteractive& screen,
                                    ShellModel& shell,
                                    LibraryController& library,
-                                   rt::PlaybackService& playback)
-    : _screen{screen}, _shell{shell}, _library{library}, _playback{playback}
+                                   rt::PlaybackService& playback,
+                                   OutputDeviceController* const outputDevices,
+                                   ftxui::Box* const outputDeviceButtonBox,
+                                   std::vector<OutputDeviceRowBox>* const outputDeviceRowBoxes,
+                                   ftxui::Box* const libraryButtonBox,
+                                   ftxui::Box* const qualityButtonBox)
+    : _screen{screen}
+    , _shell{shell}
+    , _library{library}
+    , _playback{playback}
+    , _outputDevices{outputDevices}
+    , _outputDeviceButtonBox{outputDeviceButtonBox}
+    , _outputDeviceRowBoxes{outputDeviceRowBoxes}
+    , _libraryButtonBox{libraryButtonBox}
+    , _qualityButtonBox{qualityButtonBox}
   {
   }
 
@@ -50,6 +80,19 @@ namespace ao::tui
   void EventController::applyFilter()
   {
     _statusMessage = _library.applyFilter();
+  }
+
+  void EventController::toggleListChooser()
+  {
+    if (_shell.overlay() == Overlay::ListChooser)
+    {
+      _shell.closeOverlay();
+      _statusMessage = "Lists closed";
+      return;
+    }
+
+    _shell.openOverlay(Overlay::ListChooser);
+    _statusMessage = "Lists";
   }
 
   void EventController::toggleDetailPanel()
@@ -78,6 +121,38 @@ namespace ao::tui
     _statusMessage = "Audio quality";
   }
 
+  void EventController::toggleOutputDevices()
+  {
+    if (_shell.overlay() == Overlay::OutputDevices)
+    {
+      _shell.closeOverlay();
+      _statusMessage = "Output devices closed";
+      return;
+    }
+
+    if (_outputDevices == nullptr)
+    {
+      _statusMessage = "Output devices unavailable";
+      return;
+    }
+
+    _outputDevices->refresh();
+    _shell.openOverlay(Overlay::OutputDevices);
+    _statusMessage = "Output devices";
+  }
+
+  void EventController::selectOutputDevice()
+  {
+    if (_outputDevices == nullptr)
+    {
+      _statusMessage = "Output devices unavailable";
+      return;
+    }
+
+    _statusMessage = _outputDevices->selectSelected();
+    _shell.closeOverlay();
+  }
+
   void EventController::revealCurrentTrack()
   {
     _statusMessage = _library.revealTrack(_playback.state().trackId);
@@ -91,12 +166,10 @@ namespace ao::tui
         _library.setFilterDraft(command.argument);
         applyFilter();
         break;
-      case CommandAction::OpenLists:
-        _shell.openOverlay(Overlay::ListChooser);
-        _statusMessage = "Lists";
-        break;
+      case CommandAction::OpenLists: toggleListChooser(); break;
       case CommandAction::OpenDetail: toggleDetailPanel(); break;
       case CommandAction::OpenQuality: toggleQualityPanel(); break;
+      case CommandAction::OpenOutputDevices: toggleOutputDevices(); break;
       case CommandAction::CloseOverlay:
         _shell.closeOverlay();
         _statusMessage = "Overlay closed";
@@ -134,10 +207,61 @@ namespace ao::tui
     }
   }
 
+  bool EventController::handleMouse(ftxui::Mouse const& mouse)
+  {
+    if (mouse.button != ftxui::Mouse::Left || mouse.motion != ftxui::Mouse::Pressed)
+    {
+      return false;
+    }
+
+    if (_outputDeviceButtonBox != nullptr && contains(*_outputDeviceButtonBox, mouse.x, mouse.y))
+    {
+      toggleOutputDevices();
+      return true;
+    }
+
+    if (_qualityButtonBox != nullptr && contains(*_qualityButtonBox, mouse.x, mouse.y))
+    {
+      toggleQualityPanel();
+      return true;
+    }
+
+    if (_libraryButtonBox != nullptr && contains(*_libraryButtonBox, mouse.x, mouse.y))
+    {
+      toggleListChooser();
+      return true;
+    }
+
+    if (_shell.overlay() != Overlay::OutputDevices || _outputDevices == nullptr || _outputDeviceRowBoxes == nullptr)
+    {
+      return false;
+    }
+
+    auto const rowBoxIt = std::ranges::find_if(
+      *_outputDeviceRowBoxes,
+      [&](OutputDeviceRowBox const& rowBox)
+      { return contains(rowBox.box, mouse.x, mouse.y) || contains(rowBox.secondaryBox, mouse.x, mouse.y); });
+
+    if (rowBoxIt != _outputDeviceRowBoxes->end())
+    {
+      _statusMessage = _outputDevices->selectRow(rowBoxIt->rowIndex);
+      _shell.closeOverlay();
+      return true;
+    }
+
+    return false;
+  }
+
   // TUI key dispatch is intentionally flat so shortcuts stay visible in one place.
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   bool EventController::handleEvent(ftxui::Event const& event)
   {
+    if (event.is_mouse())
+    {
+      auto mouseEvent = event;
+      return handleMouse(mouseEvent.mouse());
+    }
+
     if (_shell.commandActive())
     {
       if (event == ftxui::Event::Escape)
@@ -184,12 +308,24 @@ namespace ao::tui
 
     if (event == ftxui::Event::ArrowUp)
     {
+      if (_shell.overlay() == Overlay::OutputDevices && _outputDevices != nullptr)
+      {
+        _outputDevices->moveSelection(-1);
+        return true;
+      }
+
       _library.moveFocusedSelection(_shell.overlay() == Overlay::ListChooser, -1);
       return true;
     }
 
     if (event == ftxui::Event::ArrowDown)
     {
+      if (_shell.overlay() == Overlay::OutputDevices && _outputDevices != nullptr)
+      {
+        _outputDevices->moveSelection(1);
+        return true;
+      }
+
       _library.moveFocusedSelection(_shell.overlay() == Overlay::ListChooser, 1);
       return true;
     }
@@ -227,8 +363,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::Character("l"))
     {
-      _shell.openOverlay(Overlay::ListChooser);
-      _statusMessage = "Lists";
+      toggleListChooser();
       return true;
     }
 
@@ -241,6 +376,12 @@ namespace ao::tui
     if (event == ftxui::Event::Character("a"))
     {
       toggleQualityPanel();
+      return true;
+    }
+
+    if (event == ftxui::Event::Character("o"))
+    {
+      toggleOutputDevices();
       return true;
     }
 
@@ -275,6 +416,12 @@ namespace ao::tui
       if (_shell.overlay() == Overlay::ListChooser)
       {
         openSelectedList();
+        return true;
+      }
+
+      if (_shell.overlay() == Overlay::OutputDevices)
+      {
+        selectOutputDevice();
         return true;
       }
 

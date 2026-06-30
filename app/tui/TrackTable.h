@@ -20,6 +20,8 @@ namespace ftxui
 
 namespace ao::tui
 {
+  inline constexpr std::int32_t kLibraryChooserPaneColumns = 34;
+
   ftxui::Element trackTableView(std::vector<TrackListItem> const& tracks,
                                 std::int32_t selected,
                                 TrackId playingTrackId,

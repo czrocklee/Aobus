@@ -15,6 +15,7 @@ namespace ao::tui
     ListChooser,
     DetailPanel,
     QualityPanel,
+    OutputDevices,
     Help,
   };
 
@@ -24,6 +25,7 @@ namespace ao::tui
     OpenLists,
     OpenDetail,
     OpenQuality,
+    OpenOutputDevices,
     CloseOverlay,
     ShowHelp,
     RevealCurrentTrack,

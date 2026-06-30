@@ -14,6 +14,7 @@
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/screen/string.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -31,6 +32,7 @@ namespace ao::tui
     constexpr std::int32_t kColumnPadding = 2;
     constexpr std::int32_t kMinimumFieldColumns = 8;
     constexpr std::int32_t kMaximumFieldColumns = 72;
+    constexpr std::int32_t kExpandedFieldColumns = 72;
     constexpr std::int32_t kScrollIndicatorColumns = 1;
     // GTK policy widths are pixels; TUI columns are character cells. This keeps
     // relative presentation widths while avoiding terminal-specific measurement.
@@ -42,12 +44,58 @@ namespace ao::tui
       std::string label{};
       std::int32_t width = kMinimumFieldColumns;
       bool rightAligned = false;
-      bool expanding = false;
     };
 
     std::string blankFallback(std::string_view value)
     {
       return value.empty() ? std::string{"-"} : std::string{value};
+    }
+
+    std::string truncateToCellWidth(std::string_view const value, std::int32_t const width)
+    {
+      auto result = std::string{};
+      std::int32_t used = 0;
+
+      for (auto const& glyph : ftxui::Utf8ToGlyphs(std::string{value}))
+      {
+        auto const glyphWidth = static_cast<std::int32_t>(ftxui::string_width(glyph));
+
+        if (glyphWidth == 0)
+        {
+          result += glyph;
+          continue;
+        }
+
+        if (used + glyphWidth > width)
+        {
+          break;
+        }
+
+        result += glyph;
+        used += glyphWidth;
+      }
+
+      return result;
+    }
+
+    std::string fitCellText(std::string value, std::int32_t const width, bool const rightAligned)
+    {
+      value = truncateToCellWidth(value, width);
+
+      auto const padding = width - static_cast<std::int32_t>(ftxui::string_width(value));
+
+      if (padding <= 0)
+      {
+        return value;
+      }
+
+      if (rightAligned)
+      {
+        return std::string(static_cast<std::size_t>(padding), ' ') + value;
+      }
+
+      value.append(static_cast<std::size_t>(padding), ' ');
+      return value;
     }
 
     bool rightAlignField(rt::TrackField const field)
@@ -88,36 +136,15 @@ namespace ao::tui
         policyWidth / kPresentationPixelToTerminalColumnRatio, kMinimumFieldColumns, kMaximumFieldColumns);
     }
 
-    ftxui::Element fixedCell(std::string value, std::int32_t const width)
+    ftxui::Element fixedCell(std::string value, std::int32_t const width, bool const rightAligned = false)
     {
-      return ftxui::text(std::move(value)) | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, width);
-    }
-
-    ftxui::Element fixedRightCell(std::string value, std::int32_t const width)
-    {
-      return ftxui::text(std::move(value)) | ftxui::align_right | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, width);
+      return ftxui::text(fitCellText(std::move(value), width, rightAligned)) |
+             ftxui::size(ftxui::WIDTH, ftxui::EQUAL, width);
     }
 
     ftxui::Element fieldCell(std::string value, TrackColumn const& column)
     {
-      if (column.expanding)
-      {
-        auto elementPtr = ftxui::text(std::move(value));
-
-        if (column.rightAligned)
-        {
-          elementPtr = elementPtr | ftxui::align_right;
-        }
-
-        return elementPtr | ftxui::size(ftxui::WIDTH, ftxui::GREATER_THAN, column.width) | ftxui::flex;
-      }
-
-      if (column.rightAligned)
-      {
-        return fixedRightCell(std::move(value), column.width);
-      }
-
-      return fixedCell(std::move(value), column.width);
+      return fixedCell(std::move(value), column.width, column.rightAligned);
     }
 
     rt::TrackFieldRawValue rawValueForField(rt::TrackField const field, rt::TrackRow const& row)
@@ -198,11 +225,17 @@ namespace ao::tui
 
       for (auto const field : normalized.visibleFields)
       {
+        auto width = terminalColumnWidth(field);
+
+        if (field == expandingField)
+        {
+          width = std::max(width, kExpandedFieldColumns);
+        }
+
         columns.push_back(TrackColumn{.field = field,
                                       .label = std::string{uimodel::trackFieldColumnTitle(field)},
-                                      .width = terminalColumnWidth(field),
-                                      .rightAligned = rightAlignField(field),
-                                      .expanding = field == expandingField});
+                                      .width = width,
+                                      .rightAligned = rightAlignField(field)});
       }
 
       return columns;
@@ -303,7 +336,6 @@ namespace ao::tui
 
   ftxui::Element libraryChooserPane(std::vector<std::string> const& labels, std::int32_t const selected)
   {
-    constexpr int kChooserColumns = 34;
     using namespace ftxui;
 
     auto rows = Elements{};
@@ -321,6 +353,6 @@ namespace ao::tui
              separator(),
              text("Enter open  Esc close") | dim,
            }) |
-           border | size(WIDTH, EQUAL, kChooserColumns);
+           border | size(WIDTH, EQUAL, kLibraryChooserPaneColumns);
   }
 } // namespace ao::tui

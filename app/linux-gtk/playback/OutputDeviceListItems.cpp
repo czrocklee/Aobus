@@ -44,14 +44,15 @@ namespace ao::gtk
   Glib::RefPtr<OutputDeviceItem> OutputDeviceItem::create(audio::BackendId backend,
                                                           audio::Device const& device,
                                                           audio::ProfileId profile,
-                                                          std::string customName)
+                                                          std::string badge)
   {
     auto itemPtr = Glib::make_refptr_for_instance<OutputDeviceItem>(new OutputDeviceItem{});
     itemPtr->_backendId = std::move(backend);
     itemPtr->_profileId = std::move(profile);
     itemPtr->_id = device.id;
-    itemPtr->_name = customName.empty() ? device.displayName : std::move(customName);
+    itemPtr->_name = device.displayName;
     itemPtr->_description = device.description;
+    itemPtr->_badge = std::move(badge);
     return itemPtr;
   }
 
@@ -78,6 +79,11 @@ namespace ao::gtk
   std::string const& OutputDeviceItem::description() const
   {
     return _description;
+  }
+
+  std::string const& OutputDeviceItem::badge() const
+  {
+    return _badge;
   }
 
   bool OutputDeviceItem::active() const

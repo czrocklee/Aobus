@@ -13,6 +13,7 @@
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/screen.hpp>
+#include <ftxui/screen/string.hpp>
 
 #include <cctype>
 #include <chrono>
@@ -119,6 +120,18 @@ namespace ao::tui::test
       return std::string{text.substr(begin, end - begin)};
     }
 
+    std::int32_t cellPosition(std::string_view line, std::string_view needle)
+    {
+      auto const position = line.find(needle);
+
+      if (position == std::string_view::npos)
+      {
+        return -1;
+      }
+
+      return static_cast<std::int32_t>(ftxui::string_width(std::string{line.substr(0, position)}));
+    }
+
     TrackListItem trackItem(TrackId const id,
                             std::string title,
                             std::string artist,
@@ -142,7 +155,7 @@ namespace ao::tui::test
       trackItem(TrackId{2}, "Beta", "Artist Two", "Album Two", 8, std::chrono::seconds{125}),
     };
 
-    auto const text = renderText(trackTableView(tracks, -1, TrackId{2}, rt::defaultTrackPresentationSpec()));
+    auto const text = renderText(trackTableView(tracks, -1, TrackId{2}, rt::defaultTrackPresentationSpec()), 180);
     auto const header = lineContaining(text, "Title");
     auto const first = lineContaining(text, "Alpha");
     auto const second = lineContaining(text, "Beta");
@@ -151,14 +164,37 @@ namespace ao::tui::test
     REQUIRE_FALSE(first.empty());
     REQUIRE_FALSE(second.empty());
 
-    CHECK(first.find("Artist One") == header.find("Artist"));
-    CHECK(second.find("Artist Two") == header.find("Artist"));
-    CHECK(first.find("Album One") == header.find("Album"));
-    CHECK(second.find("Album Two") == header.find("Album"));
-    CHECK(first.find("1:05") + std::string_view{"1:05"}.size() ==
-          header.find("Duration") + std::string_view{"Duration"}.size());
-    CHECK(second.find("2:05") + std::string_view{"2:05"}.size() ==
-          header.find("Duration") + std::string_view{"Duration"}.size());
+    CHECK(cellPosition(first, "Artist One") == cellPosition(header, "Artist"));
+    CHECK(cellPosition(second, "Artist Two") == cellPosition(header, "Artist"));
+    CHECK(cellPosition(first, "Album One") == cellPosition(header, "Album"));
+    CHECK(cellPosition(second, "Album Two") == cellPosition(header, "Album"));
+    CHECK(cellPosition(first, "1:05") + ftxui::string_width("1:05") ==
+          cellPosition(header, "Duration") + ftxui::string_width("Duration"));
+    CHECK(cellPosition(second, "2:05") + ftxui::string_width("2:05") ==
+          cellPosition(header, "Duration") + ftxui::string_width("Duration"));
+  }
+
+  TEST_CASE("TrackTable - wide glyph titles do not shift metadata columns", "[tui][unit][track-table]")
+  {
+    auto const tracks = std::vector{
+      trackItem(
+        TrackId{1}, "今日から思い出（Live in church ver.）", "Aimer", "After Dark", 8, std::chrono::seconds{376}),
+      trackItem(TrackId{2}, "ASCII title", "Artist Two", "Album Two", 9, std::chrono::seconds{125}),
+    };
+
+    auto const text = renderText(trackTableView(tracks, -1, kInvalidTrackId, rt::defaultTrackPresentationSpec()), 180);
+    auto const header = lineContaining(text, "Title");
+    auto const first = lineContaining(text, "今日から思い出");
+    auto const second = lineContaining(text, "ASCII title");
+
+    REQUIRE_FALSE(header.empty());
+    REQUIRE_FALSE(first.empty());
+    REQUIRE_FALSE(second.empty());
+
+    CHECK(cellPosition(first, "Aimer") == cellPosition(header, "Artist"));
+    CHECK(cellPosition(second, "Artist Two") == cellPosition(header, "Artist"));
+    CHECK(cellPosition(first, "After Dark") == cellPosition(header, "Album"));
+    CHECK(cellPosition(second, "Album Two") == cellPosition(header, "Album"));
   }
 
   TEST_CASE("TrackTable - playing marker uses its own leading column", "[tui][unit][track-table]")

@@ -843,7 +843,7 @@ listview>row:first-child .ao-track-section-box {
   color: @theme_selected_bg_color;
 }
 
-.ao-output-device-exclusive-badge {
+.ao-output-device-badge {
   border-radius: 4px;
   padding: 1px 5px;
   font-size: 0.72em;

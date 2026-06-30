@@ -59,6 +59,11 @@ namespace ao::rt
     bool operator==(OutputDeviceSelection const&) const = default;
   };
 
+  inline bool supportsOutputProfile(OutputDeviceSnapshot const& device, audio::ProfileId const& profile)
+  {
+    return profile != audio::kProfileExclusive || !device.id.empty();
+  }
+
   enum class ShuffleMode : std::uint8_t
   {
     Off,

@@ -41,13 +41,14 @@ namespace ao::gtk
     static Glib::RefPtr<OutputDeviceItem> create(audio::BackendId backend,
                                                  audio::Device const& device,
                                                  audio::ProfileId profile,
-                                                 std::string customName = "");
+                                                 std::string badge = "");
 
     audio::BackendId const& backendId() const;
     audio::ProfileId const& profileId() const;
     audio::DeviceId const& id() const;
     std::string const& name() const;
     std::string const& description() const;
+    std::string const& badge() const;
     bool active() const;
     void setActive(bool active);
 
@@ -63,6 +64,7 @@ namespace ao::gtk
     audio::DeviceId _id;
     std::string _name;
     std::string _description;
+    std::string _badge;
     bool _active = false;
   };
 } // namespace ao::gtk

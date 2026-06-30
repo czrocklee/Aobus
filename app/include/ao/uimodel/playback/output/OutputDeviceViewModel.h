@@ -23,20 +23,20 @@ namespace ao::uimodel
     };
 
     Kind kind = Kind::BackendHeader;
-    audio::BackendId backendId;
-    audio::DeviceId deviceId;
-    audio::ProfileId profileId;
-    std::string title;
-    std::string description;
+    audio::BackendId backendId{};
+    audio::DeviceId deviceId{};
+    audio::ProfileId profileId{};
+    std::string title{};
+    std::string description{};
     bool isActive = false;
     bool isExclusive = false;
   };
 
   struct OutputDeviceViewState final
   {
-    std::vector<OutputDeviceRow> rows;
-    std::string outputBackendSummary;
-    std::string outputDeviceStatus;
+    std::vector<OutputDeviceRow> rows{};
+    std::string outputBackendSummary{};
+    std::string outputDeviceStatus{};
     bool hasActiveOutputDevice = false;
   };
 

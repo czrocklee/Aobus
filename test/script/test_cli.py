@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.__main__ import main, make_parser
+from ao.__main__ import main, make_parser, parse_arguments
 from ao.command import check as check_command
 from ao.command import run as run_command_mod
 from ao.command import test as test_command
@@ -17,7 +17,7 @@ from ao.command.build import BuildResult
 
 class CliParseTest(unittest.TestCase):
     def parse(self, argv):
-        return make_parser().parse_args(argv)
+        return parse_arguments(make_parser(), argv)
 
     def test_all_commands_are_registered(self):
         buffer = io.StringIO()
@@ -293,6 +293,32 @@ class CliParseTest(unittest.TestCase):
         args = self.parse(["run", "tui", "-n"])
         self.assertEqual(args.app, "tui")
         self.assertTrue(args.no_build)
+
+    def test_run_forwards_option_flags_after_double_dash(self):
+        args = self.parse(["run", "tui", "--", "--library", "/home/u/Music"])
+        self.assertEqual(args.app, "tui")
+        self.assertEqual(args.flavor, "debug")
+        self.assertEqual(args.app_args, ["--library", "/home/u/Music"])
+
+    def test_run_forwards_flags_alongside_explicit_flavor(self):
+        args = self.parse(["run", "tui", "release", "--", "--library", "/m", "--verbose"])
+        self.assertEqual(args.flavor, "release")
+        self.assertEqual(args.app_args, ["--library", "/m", "--verbose"])
+
+    def test_run_double_dash_keeps_ao_flags_before_it(self):
+        args = self.parse(["run", "-n", "cli", "--", "--config", "/etc/aobus"])
+        self.assertEqual(args.app, "cli")
+        self.assertTrue(args.no_build)
+        self.assertEqual(args.app_args, ["--config", "/etc/aobus"])
+
+    def test_run_empty_after_double_dash_forwards_nothing(self):
+        args = self.parse(["run", "tui", "--"])
+        self.assertEqual(args.app_args, [])
+
+    def test_double_dash_only_special_cased_for_run(self):
+        # Other commands keep argparse's stock `--` handling; the forwarding split is run-only.
+        with self.assertRaises(SystemExit):
+            self.parse(["build", "--", "--library", "/m"])
 
     def test_run_command_builds_and_execs(self):
         args = self.parse(["run", "cli"])

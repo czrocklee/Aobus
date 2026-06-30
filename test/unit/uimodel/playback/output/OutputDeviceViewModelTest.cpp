@@ -115,7 +115,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("OutputDeviceViewModel - state generation", "[uimodel][unit][playback]")
+  TEST_CASE("OutputDeviceViewModel - state generation", "[uimodel][unit][playback][output]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -144,7 +144,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("OutputDeviceViewModel - refresh with fake provider", "[uimodel][unit][playback]")
+  TEST_CASE("OutputDeviceViewModel - refresh with fake provider", "[uimodel][unit][playback][output]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -186,6 +186,29 @@ namespace ao::uimodel::test
       CHECK(rows[2].title == "Built-in Audio");
       CHECK(rows[2].description == "Built-in analog stereo");
       CHECK(rows[2].isExclusive == true);
+    }
+
+    SECTION("system default output is not offered as an exclusive target")
+    {
+      auto status = buildFakeStatus();
+      status.devices = {
+        audio::Device{.id = audio::DeviceId{},
+                      .displayName = "System Default",
+                      .description = "PipeWire",
+                      .isDefault = true,
+                      .backendId = audio::BackendId{"pipewire"}},
+      };
+
+      playback.addProvider(std::make_unique<FakeOutputDeviceProvider>(std::move(status)));
+      viewModel.refresh();
+
+      REQUIRE(!log.empty());
+      auto const& rows = log.last().rows;
+      REQUIRE(rows.size() == 2);
+      CHECK(rows[1].kind == OutputDeviceRow::Kind::DeviceProfile);
+      CHECK(rows[1].title == "System Default");
+      CHECK(rows[1].profileId == audio::kProfileShared);
+      CHECK(rows[1].isExclusive == false);
     }
 
     SECTION("active device is highlighted after setOutputDevice")

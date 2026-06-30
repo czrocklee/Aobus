@@ -23,9 +23,11 @@ namespace ao::gtk::test
     SECTION("OutputDeviceItem")
     {
       auto device = audio::Device{.id = audio::DeviceId{"hw:0,0"}, .displayName = "Default", .description = "Hardware"};
-      auto itemPtr = OutputDeviceItem::create(audio::BackendId{"alsa"}, device, audio::ProfileId{"stereo"});
+      auto itemPtr = OutputDeviceItem::create(audio::BackendId{"alsa"}, device, audio::ProfileId{"stereo"}, "E");
       REQUIRE(itemPtr);
 
+      CHECK(itemPtr->name() == "Default");
+      CHECK(itemPtr->badge() == "E");
       itemPtr->setActive(true);
       CHECK(itemPtr->active() == true);
     }
