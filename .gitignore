@@ -57,6 +57,7 @@ vcpkg_installed/
 
 # Environment and Cache
 .cache/
+.aobus/
 logs/
 .direnv/
 .env

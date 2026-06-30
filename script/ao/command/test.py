@@ -38,6 +38,7 @@ class SuiteSpec:
 
 SUITES = {
     "core": SuiteSpec("Core", "catch2", "ao_core_test"),
+    "tui": SuiteSpec("TUI", "catch2", "ao_tui_test"),
     "gtk": SuiteSpec("GTK", "catch2", "ao_gtk_test"),
     "integration": SuiteSpec("Integration", "catch2", "ao_integration_test"),
     "fleet": SuiteSpec("Fleet", "catch2", "ao_fleet_test"),
@@ -51,7 +52,7 @@ SUITE_TARGETS = {
 
 SUITE_GROUPS = {
     "default": ("core", "gtk"),
-    "all": ("core", "gtk", "integration", "fleet", "tooling", "lint"),
+    "all": ("core", "tui", "gtk", "integration", "fleet", "tooling", "lint"),
 }
 
 
@@ -101,6 +102,7 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         help="test suite or group (default: default)",
     )
     suite.add_argument("--core", dest="suite", action="store_const", const="core", help="shortcut for --suite core")
+    suite.add_argument("--tui", dest="suite", action="store_const", const="tui", help="shortcut for --suite tui")
     suite.add_argument("--gtk", dest="suite", action="store_const", const="gtk", help="shortcut for --suite gtk")
     suite.add_argument(
         "--integration",

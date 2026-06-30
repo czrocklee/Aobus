@@ -76,6 +76,7 @@ pkgs.mkShell {
       catch2_3
       gsl-lite
       rapidyaml
+      ftxui
       libogg
       libxml2
       sysprof

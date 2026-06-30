@@ -1,0 +1,38 @@
+add_library(aobus-tui-lib STATIC
+    CoverArt.cpp
+    EventController.cpp
+    Executor.cpp
+    LibraryController.cpp
+    PlaybackActions.cpp
+    PlaybackPanel.cpp
+    Render.cpp
+    TrackTable.cpp
+    Model.cpp
+    ShellModel.cpp
+)
+
+target_include_directories(aobus-tui-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(aobus-tui-lib PUBLIC ao_app_runtime ao_app_uimodel ftxui::component)
+target_link_libraries(aobus-tui-lib PRIVATE PkgGDKPIXBUF)
+
+add_executable(aobus-tui
+    AudioBackendBootstrap.cpp
+    Main.cpp
+    App.cpp
+)
+
+target_link_libraries(aobus-tui PRIVATE
+    aobus-tui-lib
+    ao_app_uimodel
+    ao_app_runtime
+    ao
+    ao_audio
+    CLI11::CLI11
+    PkgGDKPIXBUF
+    ftxui::component
+    ftxui::dom
+    ftxui::screen
+    mimalloc
+)
+
+target_include_directories(aobus-tui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")

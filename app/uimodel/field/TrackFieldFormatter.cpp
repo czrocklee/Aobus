@@ -84,7 +84,7 @@ namespace ao::uimodel
 
     if (hours > 0)
     {
-      return std::format("{}:{}:{:02}", hours, minutes, seconds);
+      return std::format("{}:{:02}:{:02}", hours, minutes, seconds);
     }
 
     return std::format("{}:{:02}", minutes, seconds);

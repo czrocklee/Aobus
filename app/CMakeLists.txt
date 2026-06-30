@@ -203,7 +203,7 @@ endforeach()
 # Frontends
 add_subdirectory(linux-gtk)
 add_subdirectory(cli)
+add_subdirectory(tui)
 
 # Placeholders for future platforms
 # add_subdirectory(windows-winui)
-# add_subdirectory(tui)

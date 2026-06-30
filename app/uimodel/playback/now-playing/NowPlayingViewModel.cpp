@@ -30,26 +30,23 @@ namespace ao::uimodel
     }
   } // namespace
 
-  namespace
+  AudioQualityCategory audioQualityCategory(audio::Quality const quality) noexcept
   {
-    AudioQualityCategory mapQuality(audio::Quality quality)
+    using Quality = audio::Quality;
+
+    switch (quality)
     {
-      using Quality = audio::Quality;
-
-      switch (quality)
-      {
-        case Quality::BitwisePerfect:
-        case Quality::LosslessPadded: return AudioQualityCategory::Perfect;
-        case Quality::LosslessFloat: return AudioQualityCategory::Lossless;
-        case Quality::LinearIntervention: return AudioQualityCategory::Intervention;
-        case Quality::LossySource: return AudioQualityCategory::Lossy;
-        case Quality::Clipped: return AudioQualityCategory::Clipped;
-        case Quality::Unknown: return AudioQualityCategory::Unknown;
-      }
-
-      return AudioQualityCategory::Unknown;
+      case Quality::BitwisePerfect:
+      case Quality::LosslessPadded: return AudioQualityCategory::Perfect;
+      case Quality::LosslessFloat: return AudioQualityCategory::Lossless;
+      case Quality::LinearIntervention: return AudioQualityCategory::Intervention;
+      case Quality::LossySource: return AudioQualityCategory::Lossy;
+      case Quality::Clipped: return AudioQualityCategory::Clipped;
+      case Quality::Unknown: return AudioQualityCategory::Unknown;
     }
-  } // namespace
+
+    return AudioQualityCategory::Unknown;
+  }
 
   NowPlayingViewModel::NowPlayingViewModel(rt::PlaybackService& playback,
                                            std::function<void(NowPlayingViewState const&)> onRender)
@@ -146,7 +143,7 @@ namespace ao::uimodel
                                              .plainTextFallback = plainTextFallback};
 
       view.isActive = (state.quality != audio::Quality::Unknown);
-      view.qualityCategory = mapQuality(state.quality);
+      view.qualityCategory = audioQualityCategory(state.quality);
     }
 
     if (_onRender)

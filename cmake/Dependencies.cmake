@@ -9,6 +9,7 @@ find_package(PkgConfig REQUIRED)
 find_package(Catch2 3 REQUIRED)
 find_package(Boost REQUIRED COMPONENTS headers process filesystem)
 find_package(CLI11 CONFIG REQUIRED)
+find_package(ftxui CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(ryml REQUIRED)
 find_package(c4core REQUIRED)
@@ -64,6 +65,13 @@ add_library(PkgGLIBMM INTERFACE)
 target_include_directories(PkgGLIBMM INTERFACE ${GLIBMM_INCLUDE_DIRS})
 target_link_libraries(PkgGLIBMM INTERFACE ${GLIBMM_LIBRARIES})
 target_compile_options(PkgGLIBMM INTERFACE ${GLIBMM_CFLAGS_OTHER})
+
+# ── gdk-pixbuf ──────────────────────────────────────────────────────────────
+pkg_check_modules(GDKPIXBUF REQUIRED gdk-pixbuf-2.0)
+add_library(PkgGDKPIXBUF INTERFACE)
+target_include_directories(PkgGDKPIXBUF INTERFACE ${GDKPIXBUF_INCLUDE_DIRS})
+target_link_libraries(PkgGDKPIXBUF INTERFACE ${GDKPIXBUF_LIBRARIES})
+target_compile_options(PkgGDKPIXBUF INTERFACE ${GDKPIXBUF_CFLAGS_OTHER})
 
 # ── FLAC ────────────────────────────────────────────────────────────────────
 pkg_check_modules(FLAC REQUIRED flac)

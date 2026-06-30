@@ -34,6 +34,8 @@ namespace ao::uimodel
     Clipped,
   };
 
+  AudioQualityCategory audioQualityCategory(audio::Quality quality) noexcept;
+
   enum class NowPlayingFieldAction : std::uint8_t
   {
     None,

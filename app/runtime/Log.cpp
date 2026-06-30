@@ -41,7 +41,7 @@ namespace ao::rt
   bool Log::_initialized = false;
   std::mutex Log::_lifecycleMutex;
 
-  void Log::init(LogLevel level, std::filesystem::path logDir)
+  void Log::init(LogLevel level, std::filesystem::path logDir, LogConsoleMode consoleMode)
   {
     auto const lock = std::scoped_lock{_lifecycleMutex};
 
@@ -59,17 +59,20 @@ namespace ao::rt
     auto const logPath = logDir / "app.log";
     auto const spdLevel = static_cast<spdlog::level::level_enum>(level);
 
-    // Setup sinks
-    auto const consoleSinkPtr = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-    consoleSinkPtr->set_pattern("%^[%T] %n: %v%$");
-    consoleSinkPtr->set_level(spdLevel);
-
     auto const fileSinkPtr = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
       logPath.string(), kRotatingLogMaxSize, kRotatingLogMaxFiles);
     fileSinkPtr->set_pattern("[%Y-%m-%d %T.%e] [%l] %n: %v");
     fileSinkPtr->set_level(spdlog::level::trace);
 
-    auto const sinks = std::vector<spdlog::sink_ptr>{consoleSinkPtr, fileSinkPtr};
+    auto sinks = std::vector<spdlog::sink_ptr>{fileSinkPtr};
+
+    if (consoleMode == LogConsoleMode::Enabled)
+    {
+      auto const consoleSinkPtr = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+      consoleSinkPtr->set_pattern("%^[%T] %n: %v%$");
+      consoleSinkPtr->set_level(spdLevel);
+      sinks.push_back(consoleSinkPtr);
+    }
 
     // Initialize async registry
     spdlog::init_thread_pool(kAsyncQueueSize, kAsyncThreadCount);

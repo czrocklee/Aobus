@@ -25,11 +25,19 @@ namespace ao::rt
     Off = 6
   };
 
+  enum class LogConsoleMode : std::uint8_t
+  {
+    Enabled,
+    Disabled
+  };
+
   class Log final
   {
   public:
     // Logging threads must be stopped before shutdown; init/shutdown do not synchronize with log calls.
-    static void init(LogLevel level = LogLevel::Info, std::filesystem::path logDir = {});
+    static void init(LogLevel level = LogLevel::Info,
+                     std::filesystem::path logDir = {},
+                     LogConsoleMode consoleMode = LogConsoleMode::Enabled);
     static void shutdown();
 
     static bool isInitialized();

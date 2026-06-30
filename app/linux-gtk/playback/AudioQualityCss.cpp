@@ -29,20 +29,7 @@ namespace ao::gtk
 
   char const* qualityCssClass(audio::Quality quality) noexcept
   {
-    using Quality = audio::Quality;
-
-    switch (quality)
-    {
-      case Quality::BitwisePerfect:
-      case Quality::LosslessPadded: return "ao-quality-perfect";
-      case Quality::LosslessFloat: return "ao-quality-lossless";
-      case Quality::LinearIntervention: return "ao-quality-intervention";
-      case Quality::LossySource: return "ao-quality-lossy";
-      case Quality::Clipped: return "ao-quality-clipped";
-      case Quality::Unknown: return "";
-    }
-
-    return "";
+    return qualityCssClass(uimodel::audioQualityCategory(quality));
   }
 
   void clearQualityCssClasses(Gtk::Widget& widget)

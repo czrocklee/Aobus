@@ -36,8 +36,8 @@ namespace ao::uimodel::test
     CHECK(formatDuration(std::chrono::seconds{1}) == "0:01");
     CHECK(formatDuration(std::chrono::seconds{61}) == "1:01");
     CHECK(formatDuration(std::chrono::seconds{225}) == "3:45");
-    CHECK(formatDuration(std::chrono::minutes{60}) == "1:0:00"); // 60 minutes
-    CHECK(formatDuration(std::chrono::seconds{3723}) == "1:2:03");
+    CHECK(formatDuration(std::chrono::minutes{60}) == "1:00:00");
+    CHECK(formatDuration(std::chrono::seconds{3723}) == "1:02:03");
   }
 
   TEST_CASE("TrackFieldFormatter - uint16 formatting", "[uimodel][unit][field][formatter]")

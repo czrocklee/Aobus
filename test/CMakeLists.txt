@@ -208,6 +208,7 @@ add_executable(ao_core_test
 
     # app unit tests (no platform deps)
     unit/runtime/AsyncRuntimeTest.cpp
+    unit/runtime/QueuedExecutorTest.cpp
     unit/runtime/library/LibraryReaderTest.cpp
     unit/runtime/StorageResultTest.cpp
     unit/runtime/completion/CompletionServiceTest.cpp
@@ -262,6 +263,19 @@ add_executable(ao_core_test
 
 target_link_libraries(ao_core_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
 add_test(NAME ao_core_test COMMAND ao_core_test)
+
+# ao_tui_test: terminal frontend unit tests
+add_executable(ao_tui_test
+    unit/tui/CoverArtTest.cpp
+    unit/tui/EventControllerTest.cpp
+    unit/tui/ExecutorTest.cpp
+    unit/tui/LibraryControllerTest.cpp
+    unit/tui/ModelTest.cpp
+    unit/tui/ShellModelTest.cpp
+)
+
+target_link_libraries(ao_tui_test PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
+add_test(NAME ao_tui_test COMMAND ao_tui_test)
 
 # ao_fleet_test: fleet tool unit and integration tests
 add_executable(ao_fleet_test
@@ -326,6 +340,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/MouseNavigationPolicyTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
+    unit/linux-gtk/app/GtkMainContextExecutorTest.cpp
     unit/linux-gtk/app/AppConfigTest.cpp
     unit/linux-gtk/app/MainWindowTest.cpp
     unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp
