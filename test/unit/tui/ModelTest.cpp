@@ -48,6 +48,12 @@ namespace ao::tui::test
     item = makeTrackListItem(row);
 
     CHECK(item.label == "--  untitled.flac  A. Composer  Keyboard Works");
+
+    row.optUriPath.reset();
+    row.id = TrackId{99};
+    item = makeTrackListItem(row);
+
+    CHECK(item.label == "--  Track 99  A. Composer  Keyboard Works");
   }
 
   TEST_CASE("Model - library navigation includes all tracks and list hierarchy", "[tui][unit][model]")
@@ -150,7 +156,12 @@ namespace ao::tui::test
   TEST_CASE("Model - transport labels describe playback state", "[tui][unit][model]")
   {
     CHECK(transportLabel(audio::Transport::Idle) == "Idle");
+    CHECK(transportLabel(audio::Transport::Opening) == "Opening");
+    CHECK(transportLabel(audio::Transport::Buffering) == "Buffering");
     CHECK(transportLabel(audio::Transport::Playing) == "Playing");
+    CHECK(transportLabel(audio::Transport::Paused) == "Paused");
+    CHECK(transportLabel(audio::Transport::Seeking) == "Seeking");
+    CHECK(transportLabel(audio::Transport::Stopping) == "Stopping");
     CHECK(transportLabel(audio::Transport::Error) == "Error");
   }
 
@@ -194,5 +205,11 @@ namespace ao::tui::test
     CHECK(style.red == 0xEF);
     CHECK(style.green == 0x44);
     CHECK(style.blue == 0x44);
+
+    style = qualityIndicatorStyle(audio::Quality::Unknown);
+    CHECK(style.red == 0x6B);
+    CHECK(style.green == 0x72);
+    CHECK(style.blue == 0x80);
+    CHECK(style.label == "Unknown quality");
   }
 } // namespace ao::tui::test

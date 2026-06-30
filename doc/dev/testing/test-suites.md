@@ -6,6 +6,7 @@ helper boundaries, see `doc/dev/testing.md`.
 The `./ao test` command exposes individual suites and two suite groups:
 
 - `core`: core library Catch2 tests (`ao_core_test`).
+- `tui`: terminal frontend Catch2 tests (`ao_tui_test`).
 - `gtk`: GTK Catch2 tests (`ao_gtk_test`).
 - `integration`: standalone integration tests (`ao_integration_test`).
 - `fleet`: fleet C++ tests (`ao_fleet_test`).
@@ -14,7 +15,7 @@ The `./ao test` command exposes individual suites and two suite groups:
 - `default`: the core and GTK suites. This is selected when no suite option is given.
 - `all`: every suite listed above.
 
-`default` is intentionally the normal development loop. The integration, fleet, tooling, and lint suites
+`default` is intentionally the normal development loop. The TUI, integration, fleet, tooling, and lint suites
 take longer, so they are included only when selected directly or through `all`.
 
 Each suite is registered once in `script/ao/command/test.py` through `SUITES`
@@ -36,5 +37,5 @@ diagnostics against `POSITIVE` and `NEGATIVE` markers, and derives auto-fix expe
 `FIX-TO` markers. Only fixtures that declare `FIX-TO` expectations enter the auto-fix stage. This keeps
 checker execution policy in `ao tidy` and avoids a second shell-based test orchestration layer.
 
-Coverage keeps its narrower `all` definition of core plus GTK because tooling and standalone integration
+Coverage keeps its narrower `all` definition of core, TUI, and GTK because tooling and standalone integration
 tests are not part of the application source coverage calculation.

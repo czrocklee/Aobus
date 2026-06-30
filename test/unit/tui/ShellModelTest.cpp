@@ -34,6 +34,11 @@ namespace ao::tui::test
 
     CHECK(command.action == CommandAction::QuickFilter);
     CHECK(command.argument == "live acoustic");
+
+    command = parseCommand("  :filter   spaced query   ");
+
+    CHECK(command.action == CommandAction::QuickFilter);
+    CHECK(command.argument == "spaced query");
   }
 
   TEST_CASE("ShellModel - command draft lifecycle submits and clears", "[tui][unit][shell]")
@@ -49,6 +54,17 @@ namespace ao::tui::test
     auto command = model.submitCommand();
 
     CHECK(command.action == CommandAction::OpenDetail);
+    CHECK_FALSE(model.commandActive());
+    CHECK(model.commandDraft().empty());
+  }
+
+  TEST_CASE("ShellModel - cancelling command input clears the draft", "[tui][unit][shell]")
+  {
+    auto model = ShellModel{};
+
+    model.beginCommand("help");
+    model.cancelCommand();
+
     CHECK_FALSE(model.commandActive());
     CHECK(model.commandDraft().empty());
   }
@@ -73,5 +89,14 @@ namespace ao::tui::test
     CHECK(model.overlay() == Overlay::ListChooser);
     model.closeOverlay();
     CHECK(model.overlay() == Overlay::None);
+  }
+
+  TEST_CASE("ShellModel - overlay labels are stable", "[tui][unit][shell]")
+  {
+    CHECK(overlayLabel(Overlay::None) == "Tracks");
+    CHECK(overlayLabel(Overlay::ListChooser) == "Lists");
+    CHECK(overlayLabel(Overlay::DetailPanel) == "Detail");
+    CHECK(overlayLabel(Overlay::QualityPanel) == "Quality");
+    CHECK(overlayLabel(Overlay::Help) == "Help");
   }
 } // namespace ao::tui::test

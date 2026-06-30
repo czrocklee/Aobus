@@ -271,6 +271,8 @@ add_executable(ao_tui_test
     unit/tui/ExecutorTest.cpp
     unit/tui/LibraryControllerTest.cpp
     unit/tui/ModelTest.cpp
+    unit/tui/PlaybackActionsTest.cpp
+    unit/tui/PlaybackPanelTest.cpp
     unit/tui/ShellModelTest.cpp
 )
 

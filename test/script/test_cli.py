@@ -64,6 +64,7 @@ class CliParseTest(unittest.TestCase):
             test_command.SUITE_TARGETS,
             {
                 "core": ["ao_core_test"],
+                "tui": ["ao_tui_test"],
                 "gtk": ["ao_gtk_test"],
                 "integration": ["ao_integration_test"],
                 "fleet": ["ao_fleet_test"],
@@ -77,7 +78,7 @@ class CliParseTest(unittest.TestCase):
             self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core", "gtk", "integration", "fleet", "tooling", "lint"),
+            ("core", "tui", "gtk", "integration", "fleet", "tooling", "lint"),
             Path("/tmp/aobus-test-build"),
             test_filter="",
             list_only=False,
@@ -90,7 +91,9 @@ class CliParseTest(unittest.TestCase):
             with mock.patch.object(test_command, "run_non_catch2_suite", return_value=0) as run_non_catch2:
                 self.assertEqual(test_command.run_suites(test_command.SUITE_GROUPS["all"], build_dir), 0)
 
-        self.assertEqual([call.args[0] for call in run_suite.call_args_list], ["core", "gtk", "integration", "fleet"])
+        self.assertEqual(
+            [call.args[0] for call in run_suite.call_args_list], ["core", "tui", "gtk", "integration", "fleet"]
+        )
         self.assertEqual([call.args[0] for call in run_non_catch2.call_args_list], ["tooling", "lint"])
 
     def test_gtk_suite_runs_inside_virtual_x11_display(self):
@@ -206,6 +209,12 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.summary_limit, 7)
         self.assertEqual(args.filter, "[layout]")
 
+    def test_coverage_accepts_tui_suite_shortcut(self):
+        args = self.parse(["coverage", "--tui", "--scope", "app/tui", "[tui]"])
+        self.assertEqual(args.suite, "tui")
+        self.assertEqual(args.scope, ["app/tui"])
+        self.assertEqual(args.filter, "[tui]")
+
     def test_tidy_scope_and_passthrough_arguments(self):
         args = self.parse(
             [
@@ -280,6 +289,11 @@ class CliParseTest(unittest.TestCase):
         self.assertTrue(args.no_build)
         self.assertEqual(args.app_args, [])
 
+    def test_run_accepts_tui_app(self):
+        args = self.parse(["run", "tui", "-n"])
+        self.assertEqual(args.app, "tui")
+        self.assertTrue(args.no_build)
+
     def test_run_command_builds_and_execs(self):
         args = self.parse(["run", "cli"])
         with mock.patch.object(run_command_mod.build, "do_build") as do_build:
@@ -287,6 +301,15 @@ class CliParseTest(unittest.TestCase):
                 with mock.patch.object(run_command_mod.Path, "exists", return_value=True):
                     run_command_mod.run_command(args)
         do_build.assert_called_once_with(args, ["aobus"])
+        execvp.assert_called_once()
+
+    def test_run_command_builds_tui_target(self):
+        args = self.parse(["run", "tui"])
+        with mock.patch.object(run_command_mod.build, "do_build") as do_build:
+            with mock.patch.object(run_command_mod.os, "execvp") as execvp:
+                with mock.patch.object(run_command_mod.Path, "exists", return_value=True):
+                    run_command_mod.run_command(args)
+        do_build.assert_called_once_with(args, ["aobus-tui"])
         execvp.assert_called_once()
 
     def test_run_command_no_build_skips_build(self):

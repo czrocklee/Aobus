@@ -22,6 +22,7 @@ EPILOG = """\
 examples:
   ./ao coverage                          # core suite, full report
   ./ao coverage "rt::SmartListEvaluator" # coverage for a test subset
+  ./ao coverage --tui --scope app/tui
   ./ao coverage --gtk "[layout]"         # GTK suite with a Catch2 filter
   ./ao coverage --gtk --scope app/linux-gtk
 """
@@ -36,8 +37,11 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     )
     parser.add_argument("filter", nargs="?", default="", help="Catch2 test filter")
     suite = parser.add_mutually_exclusive_group()
-    suite.add_argument("--suite", choices=("core", "gtk", "all"), default="core", help="test suite (default: core)")
+    suite.add_argument(
+        "--suite", choices=("core", "tui", "gtk", "all"), default="core", help="test suite (default: core)"
+    )
     suite.add_argument("--core", dest="suite", action="store_const", const="core", help="shortcut for --suite core")
+    suite.add_argument("--tui", dest="suite", action="store_const", const="tui", help="shortcut for --suite tui")
     suite.add_argument("--gtk", dest="suite", action="store_const", const="gtk", help="shortcut for --suite gtk")
     suite.add_argument("--all", dest="suite", action="store_const", const="all", help="shortcut for --suite all")
     parser.add_argument("-p", "--path", metavar="<dir>", help="build directory (default: /tmp/build/coverage)")
@@ -270,7 +274,7 @@ def run_command(args: argparse.Namespace) -> int:
             raise die("coverage configure failed.")
 
     print("Building tests...")
-    suites = ("core", "gtk") if args.suite == "all" else (args.suite,)
+    suites = ("core", "tui", "gtk") if args.suite == "all" else (args.suite,)
     targets = [target for suite in suites for target in SUITE_TARGETS[suite]]
     if run(["cmake", "--build", str(build_dir), f"-j{args.jobs}", "--target", *targets]) != 0:
         raise die("coverage build failed.")

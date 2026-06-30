@@ -63,4 +63,34 @@ namespace ao::tui::test
     CHECK(controller.filterDraft().empty());
     CHECK(controller.tracks().size() == 2);
   }
+
+  TEST_CASE("LibraryController - expression filters report expression mode", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const trackId = fixture.addTrack("Needle");
+    fixture.addTrack("Other");
+
+    auto controller = LibraryController{fixture.runtime};
+    controller.setFilterDraft("$title ~ \"Needle\"");
+
+    CHECK(controller.applyFilter() == "Expression filter matched 1 tracks");
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks()[0].id == trackId);
+  }
+
+  TEST_CASE("LibraryController - empty track views have no selected track", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Needle");
+
+    auto controller = LibraryController{fixture.runtime};
+    controller.setFilterDraft("not-present");
+
+    CHECK(controller.applyFilter() == "Quick filter matched 0 tracks");
+    CHECK(controller.tracks().empty());
+
+    auto selected = controller.selectedTrackView();
+    CHECK(selected.track == nullptr);
+    CHECK(selected.coverArtId == kInvalidResourceId);
+  }
 } // namespace ao::tui::test
