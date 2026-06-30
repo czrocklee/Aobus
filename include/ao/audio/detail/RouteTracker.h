@@ -4,9 +4,9 @@
 #pragma once
 
 #include <ao/AudioCodec.h>
+#include <ao/audio/AudioRouteFormatState.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/Types.h>
 
 #include <mutex>
 #include <optional>
@@ -14,7 +14,7 @@
 
 namespace ao::audio::detail
 {
-  // AudioRouteFormatState now lives in the public <ao/audio/Types.h>; this alias keeps the
+  // AudioRouteFormatState is public; this alias keeps the
   // detail-namespace spelling working for the tracker implementation.
   using audio::AudioRouteFormatState;
 

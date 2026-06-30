@@ -9,7 +9,7 @@
 #include "test/unit/audio/AudioFixtureUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/PlaybackInput.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 

@@ -6,7 +6,7 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/QualityAnalyzer.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackState.h>
 

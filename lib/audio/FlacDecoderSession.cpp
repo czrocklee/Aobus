@@ -10,7 +10,6 @@
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
-#include <ao/audio/Types.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ByteView.h>
 

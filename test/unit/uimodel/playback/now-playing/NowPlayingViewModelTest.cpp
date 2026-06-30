@@ -4,7 +4,8 @@
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/PlaybackInput.h>
+#include <ao/audio/Transport.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/PlaybackService.h>

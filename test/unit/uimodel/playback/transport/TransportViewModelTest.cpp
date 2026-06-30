@@ -3,7 +3,8 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include <ao/CoreIds.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/PlaybackInput.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewService.h>

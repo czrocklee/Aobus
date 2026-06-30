@@ -5,7 +5,7 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/audio/Types.h>
+#include <ao/audio/PlaybackInput.h>
 #include <ao/rt/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>

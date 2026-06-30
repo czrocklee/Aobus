@@ -8,7 +8,7 @@
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/QualityAnalyzer.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <chrono>
@@ -24,6 +24,8 @@ namespace ao::async
 
 namespace ao::audio
 {
+  struct PlaybackInput;
+
   /**
    * @brief High-level player that coordinates multiple backends and tracks playback state.
    * Manages audio routing graphs and quality analysis.

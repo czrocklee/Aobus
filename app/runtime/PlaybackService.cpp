@@ -5,8 +5,9 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
+#include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Player.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/Transport.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>

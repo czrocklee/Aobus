@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/Backend.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>

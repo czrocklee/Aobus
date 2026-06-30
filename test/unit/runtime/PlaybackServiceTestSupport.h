@@ -10,8 +10,8 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/IBackendProvider.h>
+#include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
-#include <ao/audio/Types.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>

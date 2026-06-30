@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 
@@ -71,5 +72,28 @@ namespace ao::audio
     }
 
     return static_cast<std::uint64_t>(format.sampleRate) * frameBytes(format);
+  }
+
+  /**
+   * @brief Converts a duration to a sample count for a given sample rate.
+   */
+  constexpr std::uint64_t durationToSamples(std::chrono::milliseconds const duration,
+                                            std::uint32_t const sampleRate) noexcept
+  {
+    return (static_cast<std::uint64_t>(duration.count()) * sampleRate) / 1000U;
+  }
+
+  /**
+   * @brief Converts a sample count to a duration for a given sample rate.
+   */
+  constexpr std::chrono::milliseconds samplesToDuration(std::uint64_t const samples,
+                                                        std::uint32_t const sampleRate) noexcept
+  {
+    if (sampleRate == 0U)
+    {
+      return std::chrono::milliseconds{0};
+    }
+
+    return std::chrono::milliseconds{(samples * 1000U) / sampleRate};
   }
 } // namespace ao::audio

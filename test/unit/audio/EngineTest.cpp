@@ -6,12 +6,14 @@
 #include "TestUtility.h"
 #include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/Error.h>
+#include <ao/audio/AudioRouteFormatState.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IRenderTarget.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/PlaybackInput.h>
+#include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>

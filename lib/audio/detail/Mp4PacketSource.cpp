@@ -5,7 +5,7 @@
 
 #include "TimeConversion.h"
 #include <ao/Error.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/Format.h>
 #include <ao/media/mp4/Demuxer.h>
 
 #include <chrono>

@@ -5,7 +5,7 @@
 
 #include "Model.h"
 #include <ao/CoreIds.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 

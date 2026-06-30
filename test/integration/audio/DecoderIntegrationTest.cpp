@@ -8,7 +8,6 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/Mp3DecoderSession.h>
-#include <ao/audio/Types.h>
 
 #include <catch2/catch_test_macros.hpp>
 

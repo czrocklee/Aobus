@@ -4,7 +4,8 @@
 #include "CapturingBackend.h"
 #include "EngineTestSupport.h"
 #include <ao/audio/Engine.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/PlaybackInput.h>
+#include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
 

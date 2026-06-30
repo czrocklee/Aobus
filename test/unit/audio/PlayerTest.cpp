@@ -8,8 +8,9 @@
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/NullBackend.h>
+#include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Player.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <catch2/catch_approx.hpp>

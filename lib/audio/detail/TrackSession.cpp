@@ -11,8 +11,8 @@
 #include <ao/audio/FormatNegotiator.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/ISource.h>
+#include <ao/audio/PlaybackInput.h>
 #include <ao/audio/StreamingSource.h>
-#include <ao/audio/Types.h>
 #include <ao/audio/detail/DecoderError.h>
 
 #include <chrono>

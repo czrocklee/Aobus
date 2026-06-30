@@ -4,9 +4,10 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/audio/AudioRouteFormatState.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/Transport.h>
 
 #include <chrono>
 #include <cstdint>
@@ -21,6 +22,7 @@ namespace ao::audio
   class IBackend;
   class ISource;
   class IDecoderSession;
+  struct PlaybackInput;
   using DecoderFactoryFn = std::function<std::unique_ptr<IDecoderSession>(std::filesystem::path const&, Format)>;
 }
 

@@ -8,8 +8,9 @@
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IRenderTarget.h>
+#include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -25,7 +25,7 @@
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>

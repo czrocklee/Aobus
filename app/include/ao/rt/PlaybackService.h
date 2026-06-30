@@ -7,7 +7,7 @@
 #include "PlaybackState.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/PlaybackInput.h>
 
 #include <chrono>
 #include <cstdint>

@@ -5,7 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/Types.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackRow.h>
