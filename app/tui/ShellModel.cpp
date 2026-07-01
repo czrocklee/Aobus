@@ -68,6 +68,9 @@ namespace ao::tui
       {.alias = "q", .action = CommandAction::Quit, .detail = "quit"},
     });
 
+    constexpr std::string_view kWorkspaceHint =
+      "/ command  l lists  v view  d detail  a quality  o output  { } groups  Ctrl-L current  q quit";
+
     std::string trim(std::string_view value)
     {
       auto const* begin = value.begin();
@@ -157,7 +160,7 @@ namespace ao::tui
 
     switch (overlay)
     {
-      case Overlay::None: return "/ command  l lists  v view  d detail  a quality  o output  Ctrl-L current  q quit"sv;
+      case Overlay::None: return kWorkspaceHint;
       case Overlay::ListChooser: return "l toggle  Enter open  Esc close"sv;
       case Overlay::DetailPanel: return "d toggle  Esc close"sv;
       case Overlay::QualityPanel: return "a toggle  Esc close"sv;
@@ -166,7 +169,7 @@ namespace ao::tui
       case Overlay::Help: return "Esc close"sv;
     }
 
-    return "/ command  l lists  v view  d detail  a quality  o output  Ctrl-L current  q quit"sv;
+    return kWorkspaceHint;
   }
 
   bool ShellModel::commandActive() const noexcept

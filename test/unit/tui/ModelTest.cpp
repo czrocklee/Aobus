@@ -134,6 +134,12 @@ namespace ao::tui::test
     CHECK(presentationBadgeLabel("albums") == "view:albums");
   }
 
+  TEST_CASE("Model - section display names fall back consistently", "[tui][unit][model]")
+  {
+    CHECK(sectionDisplayName(TrackSection{.primaryText = "Album A"}) == "Album A");
+    CHECK(sectionDisplayName(TrackSection{}) == "Untitled Section");
+  }
+
   TEST_CASE("Model - menu labels preserve track order", "[tui][unit][model]")
   {
     auto tracks =

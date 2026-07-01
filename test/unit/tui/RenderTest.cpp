@@ -67,6 +67,7 @@ namespace ao::tui::test
     CHECK(text.find("/view <id>") != std::string::npos);
     CHECK(text.find("/output") != std::string::npos);
     CHECK(text.find("/views") != std::string::npos);
+    CHECK(text.find("{ / }") != std::string::npos);
   }
 
   TEST_CASE("Render - wide idle status bar keeps feedback shortcuts and selection on one row", "[tui][unit][render]")

@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <format>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -33,7 +34,9 @@ namespace ao::tui
     , _libraryLabels{libraryNavigationLabels(_libraryItems)}
     , _presentationItems{loadPresentationNavigation()}
   {
-    _tracks = loadTrackItems(_currentListId);
+    auto snapshot = loadTrackItems(_currentListId);
+    _tracks = std::move(snapshot.tracks);
+    _sections = std::move(snapshot.sections);
     syncSelectedPresentation(activePresentationId());
     _customPresetsSub = _runtime.workspace().onCustomPresetsChanged([this] { refreshPresentationNavigation(); });
     publishSelection();
@@ -115,6 +118,81 @@ namespace ao::tui
     return true;
   }
 
+  void LibraryController::setSelectedTrackIndex(std::int32_t const index)
+  {
+    _selectedTrack = moveSelection(index, 0, _tracks.size());
+    publishSelection();
+  }
+
+  std::string LibraryController::jumpToAdjacentSection(std::int32_t const delta)
+  {
+    if (_sections.empty())
+    {
+      return "No sections in this view";
+    }
+
+    auto optContainingSection = std::optional<std::int32_t>{};
+    auto optPreviousSection = std::optional<std::int32_t>{};
+    auto optNextSection = std::optional<std::int32_t>{};
+    auto const selected = static_cast<std::size_t>(std::max(0, _selectedTrack));
+
+    for (std::size_t index = 0; index < _sections.size(); ++index)
+    {
+      auto const& section = _sections[index];
+
+      if (selected >= section.rowBegin && selected < section.rowBegin + section.rowCount)
+      {
+        optContainingSection = static_cast<std::int32_t>(index);
+        break;
+      }
+
+      if (selected >= section.rowBegin)
+      {
+        optPreviousSection = static_cast<std::int32_t>(index);
+        continue;
+      }
+
+      optNextSection = static_cast<std::int32_t>(index);
+      break;
+    }
+
+    auto const nextSection = [&]
+    {
+      if (optContainingSection)
+      {
+        return moveSelection(*optContainingSection, delta, _sections.size());
+      }
+
+      if (delta > 0)
+      {
+        return optNextSection.value_or(optPreviousSection.value_or(0));
+      }
+
+      if (delta < 0)
+      {
+        return optPreviousSection.value_or(optNextSection.value_or(0));
+      }
+
+      return optPreviousSection.value_or(optNextSection.value_or(0));
+    }();
+
+    return selectSection(nextSection);
+  }
+
+  std::string LibraryController::selectSection(std::int32_t const sectionIndex)
+  {
+    if (sectionIndex < 0 || static_cast<std::size_t>(sectionIndex) >= _sections.size())
+    {
+      return "No section selected";
+    }
+
+    auto const& section = _sections[static_cast<std::size_t>(sectionIndex)];
+    std::size_t const lastTrackIndex = _tracks.empty() ? 0 : _tracks.size() - 1;
+    _selectedTrack = static_cast<std::int32_t>(std::min(section.rowBegin, lastTrackIndex));
+    publishSelection();
+    return std::format("Section: {}", sectionDisplayName(section));
+  }
+
   bool LibraryController::setSelectedTrackById(TrackId const trackId)
   {
     if (trackId == kInvalidTrackId)
@@ -166,7 +244,9 @@ namespace ao::tui
       return std::format("Unknown view {}", presentationId);
     }
 
-    _tracks = loadTrackItemsFromView(_activeViewId);
+    auto snapshot = loadTrackItemsFromView(_activeViewId);
+    _tracks = std::move(snapshot.tracks);
+    _sections = std::move(snapshot.sections);
     syncSelectedPresentation(spec.id);
 
     if (!setSelectedTrackById(previousTrackId))
@@ -195,6 +275,7 @@ namespace ao::tui
     if (_libraryItems.empty())
     {
       _tracks.clear();
+      _sections.clear();
       _selectedTrack = 0;
       _currentListId = rt::kAllTracksListId;
       _activeViewId = rt::kInvalidViewId;
@@ -204,7 +285,9 @@ namespace ao::tui
     auto const selectedIndex =
       clampSelection(static_cast<std::size_t>(std::max(0, _selectedList)), _libraryItems.size());
     _currentListId = _libraryItems[selectedIndex].id;
-    _tracks = loadTrackItems(_currentListId);
+    auto snapshot = loadTrackItems(_currentListId);
+    _tracks = std::move(snapshot.tracks);
+    _sections = std::move(snapshot.sections);
     _selectedTrack = 0;
     _filterDraft.clear();
     publishSelection();
@@ -214,7 +297,9 @@ namespace ao::tui
 
   std::string LibraryController::reloadActiveList()
   {
-    _tracks = loadTrackItems(_currentListId);
+    auto snapshot = loadTrackItems(_currentListId);
+    _tracks = std::move(snapshot.tracks);
+    _sections = std::move(snapshot.sections);
     _selectedTrack = moveSelection(_selectedTrack, 0, _tracks.size());
     _filterDraft.clear();
     publishSelection();
@@ -230,7 +315,9 @@ namespace ao::tui
 
     auto const resolved = uimodel::resolveTrackFilterExpression(_filterDraft);
     _runtime.views().setFilter(_activeViewId, resolved.expression);
-    _tracks = loadTrackItemsFromView(_activeViewId);
+    auto snapshot = loadTrackItemsFromView(_activeViewId);
+    _tracks = std::move(snapshot.tracks);
+    _sections = std::move(snapshot.sections);
     _selectedTrack = 0;
     publishSelection();
 
@@ -247,7 +334,7 @@ namespace ao::tui
 
   std::vector<LibraryNavItem> LibraryController::loadLibraryNavigation()
   {
-    auto reader = _runtime.library().reader();
+    auto const reader = _runtime.library().reader();
     return makeLibraryNavigation(reader.lists());
   }
 
@@ -275,18 +362,21 @@ namespace ao::tui
     return makePresentationNavigation(rt::builtinTrackPresentationPresets(), _runtime.workspace().customPresets());
   }
 
-  std::vector<TrackListItem> LibraryController::loadTrackItemsFromView(rt::ViewId const activeViewId)
+  LibraryController::TrackItemsSnapshot LibraryController::loadTrackItemsFromView(rt::ViewId const activeViewId)
   {
-    auto projectionPtr = _runtime.views().trackListProjection(activeViewId);
+    auto const projectionPtr = _runtime.views().trackListProjection(activeViewId);
 
     if (projectionPtr == nullptr)
     {
       return {};
     }
 
-    auto reader = _runtime.library().reader();
-    auto tracks = std::vector<TrackListItem>{};
-    tracks.reserve(projectionPtr->size());
+    auto const reader = _runtime.library().reader();
+    auto snapshot = TrackItemsSnapshot{};
+    snapshot.tracks.reserve(projectionPtr->size());
+    snapshot.sections.reserve(projectionPtr->groupCount());
+
+    auto optActiveGroupIndex = std::optional<std::size_t>{};
 
     for (std::size_t index = 0; index < projectionPtr->size(); ++index)
     {
@@ -294,14 +384,39 @@ namespace ao::tui
 
       if (auto optRow = reader.trackRow(trackId); optRow)
       {
-        tracks.push_back(makeTrackListItem(*optRow));
+        auto const optGroupIndex = projectionPtr->groupIndexAt(index);
+
+        if (optGroupIndex && *optGroupIndex < projectionPtr->groupCount())
+        {
+          if (!optActiveGroupIndex || *optActiveGroupIndex != *optGroupIndex)
+          {
+            auto group = projectionPtr->groupAt(*optGroupIndex);
+            snapshot.sections.push_back(TrackSection{
+              .rowBegin = snapshot.tracks.size(),
+              .rowCount = 0,
+              .primaryText = std::move(group.primaryText),
+              .secondaryText = std::move(group.secondaryText),
+              .tertiaryText = std::move(group.tertiaryText),
+              .imageId = group.imageId,
+            });
+            optActiveGroupIndex = optGroupIndex;
+          }
+
+          ++snapshot.sections.back().rowCount;
+        }
+        else
+        {
+          optActiveGroupIndex.reset();
+        }
+
+        snapshot.tracks.push_back(makeTrackListItem(*optRow));
       }
     }
 
-    return tracks;
+    return snapshot;
   }
 
-  std::vector<TrackListItem> LibraryController::loadTrackItems(ListId const listId)
+  LibraryController::TrackItemsSnapshot LibraryController::loadTrackItems(ListId const listId)
   {
     _runtime.reloadAllTracks();
 

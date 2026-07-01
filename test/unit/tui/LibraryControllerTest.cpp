@@ -196,4 +196,63 @@ namespace ao::tui::test
     CHECK(controller.selectedTrackView().track->id == olderId);
     CHECK(controller.selectedTrack() == 0);
   }
+
+  TEST_CASE("LibraryController - album presentation exposes projection sections", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "A One", .artist = "Artist", .album = "Album A", .albumArtist = "Artist", .year = 2020});
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "A Two", .artist = "Artist", .album = "Album A", .albumArtist = "Artist", .year = 2020});
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "B One", .artist = "Artist", .album = "Album B", .albumArtist = "Artist", .year = 2021});
+
+    auto controller = LibraryController{fixture.runtime};
+
+    CHECK(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.sections().size() == 2);
+    CHECK(controller.sections()[0].primaryText == "Album A");
+    CHECK(controller.sections()[0].secondaryText == "Artist");
+    CHECK(controller.sections()[0].tertiaryText == "2020");
+    CHECK(controller.sections()[0].rowBegin == 0);
+    CHECK(controller.sections()[0].rowCount == 2);
+    CHECK(controller.sections()[1].primaryText == "Album B");
+    CHECK(controller.sections()[1].rowBegin == 2);
+    CHECK(controller.sections()[1].rowCount == 1);
+  }
+
+  TEST_CASE("LibraryController - section jumps keep track selection flat", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack(
+      library::test::TrackSpec{.title = "A One", .artist = "Artist", .album = "Album A", .albumArtist = "Artist"});
+    fixture.addTrack(
+      library::test::TrackSpec{.title = "A Two", .artist = "Artist", .album = "Album A", .albumArtist = "Artist"});
+    fixture.addTrack(
+      library::test::TrackSpec{.title = "B One", .artist = "Artist", .album = "Album B", .albumArtist = "Artist"});
+
+    auto controller = LibraryController{fixture.runtime};
+    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.sections().size() == 2);
+
+    CHECK(controller.jumpToAdjacentSection(1) == "Section: Album B");
+    CHECK(controller.selectedTrack() == 2);
+
+    CHECK(controller.jumpToAdjacentSection(-1) == "Section: Album A");
+    CHECK(controller.selectedTrack() == 0);
+  }
+
+  TEST_CASE("LibraryController - section selection reports empty and invalid states", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("First");
+
+    auto controller = LibraryController{fixture.runtime};
+    REQUIRE(controller.sections().empty());
+
+    CHECK(controller.jumpToAdjacentSection(1) == "No sections in this view");
+    CHECK(controller.selectSection(0) == "No section selected");
+    CHECK(controller.selectSection(-1) == "No section selected");
+    CHECK(controller.selectedTrack() == 0);
+  }
 } // namespace ao::tui::test

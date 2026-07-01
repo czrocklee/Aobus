@@ -312,6 +312,11 @@ namespace ao::tui
     return std::format("view:{}", presentationDisplayId(presentationId));
   }
 
+  std::string sectionDisplayName(TrackSection const& section)
+  {
+    return section.primaryText.empty() ? std::string{"Untitled Section"} : section.primaryText;
+  }
+
   TrackListItem makeTrackListItem(rt::TrackRow const& row)
   {
     auto detail = trackDisplayDetail(row);

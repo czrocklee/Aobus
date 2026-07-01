@@ -8,7 +8,9 @@
 #include "PlaybackPanel.h"
 #include "Render.h"
 #include "ShellModel.h"
+#include "TrackTable.h"
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionResult.h>
 
 #include <ftxui/component/event.hpp>
@@ -16,6 +18,7 @@
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/screen/box.hpp>
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
@@ -35,6 +38,10 @@ namespace ao::tui
     ftxui::Box* qualityButtonBox = nullptr;
     ftxui::Box* presentationButtonBox = nullptr;
     std::vector<PresentationRowBox>* presentationRowBoxes = nullptr;
+    std::vector<TrackColumnResizeHandle>* trackColumnResizeHandles = nullptr;
+    std::vector<TrackColumnWidthOverride>* trackColumnWidthOverrides = nullptr;
+    ftxui::Box* trackTableBox = nullptr;
+    std::vector<TrackSectionRowBox>* trackSectionRowBoxes = nullptr;
     CommandCompletionCallback commandCompletionCallback{};
   };
 
@@ -65,6 +72,17 @@ namespace ao::tui
     void runCommand(Command const& command);
     void refreshCommandCompletion();
     bool handleMouse(ftxui::Mouse const& mouse);
+    bool selectTrackFromScrollbar(std::int32_t row);
+
+    struct TrackColumnResizeDrag final
+    {
+      rt::TrackField field = rt::TrackField::Title;
+      std::int32_t startX = 0;
+      std::int32_t startColumns = 0;
+    };
+
+    struct TrackScrollbarDrag final
+    {};
 
     ftxui::ScreenInteractive& _screen;
     ShellModel& _shell;
@@ -77,6 +95,12 @@ namespace ao::tui
     ftxui::Box* _qualityButtonBox = nullptr;
     ftxui::Box* _presentationButtonBox = nullptr;
     std::vector<PresentationRowBox>* _presentationRowBoxes = nullptr;
+    std::vector<TrackColumnResizeHandle>* _trackColumnResizeHandles = nullptr;
+    std::vector<TrackColumnWidthOverride>* _trackColumnWidthOverrides = nullptr;
+    ftxui::Box* _trackTableBox = nullptr;
+    std::vector<TrackSectionRowBox>* _trackSectionRowBoxes = nullptr;
+    std::optional<TrackColumnResizeDrag> _optTrackColumnResizeDrag{};
+    std::optional<TrackScrollbarDrag> _optTrackScrollbarDrag{};
     CommandCompletionCallback _commandCompletionCallback{};
     std::string _statusMessage{"Ready"};
   };

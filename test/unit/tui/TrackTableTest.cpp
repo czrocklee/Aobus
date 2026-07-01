@@ -172,6 +172,8 @@ namespace ao::tui::test
           cellPosition(header, "Duration") + ftxui::string_width("Duration"));
     CHECK(cellPosition(second, "2:05") + ftxui::string_width("2:05") ==
           cellPosition(header, "Duration") + ftxui::string_width("Duration"));
+    CHECK(first.find('|') == header.find('|'));
+    CHECK(second.find('|') == header.find('|'));
   }
 
   TEST_CASE("TrackTable - wide glyph titles do not shift metadata columns", "[tui][unit][track-table]")
@@ -218,7 +220,8 @@ namespace ao::tui::test
 
   TEST_CASE("TrackTable - empty state remains visible", "[tui][unit][track-table]")
   {
-    auto const text = renderText(trackTableView({}, 0, kInvalidTrackId, rt::defaultTrackPresentationSpec()));
+    auto const tracks = std::vector<TrackListItem>{};
+    auto const text = renderText(trackTableView(tracks, 0, kInvalidTrackId, rt::defaultTrackPresentationSpec()));
 
     CHECK(text.find("Title") != std::string::npos);
     CHECK(text.find("No tracks found. Run `aobus init` in this library first.") != std::string::npos);
@@ -240,6 +243,121 @@ namespace ao::tui::test
     CHECK(text.find("Album") == std::string::npos);
     CHECK(text.find("2026") != std::string::npos);
     CHECK(text.find("1:05") != std::string::npos);
+  }
+
+  TEST_CASE("TrackTable - maps track rows through section headers", "[tui][unit][track-table]")
+  {
+    auto const sections = std::vector{
+      TrackSection{.rowBegin = 0, .rowCount = 2, .primaryText = "Album A"},
+      TrackSection{.rowBegin = 2, .rowCount = 1, .primaryText = "Album B"},
+    };
+
+    CHECK(trackVisualRow(0, sections) == 1);
+    CHECK(trackVisualRow(-1, sections) == -1);
+    CHECK(trackVisualRow(1, sections) == 2);
+    CHECK(trackVisualRow(2, sections) == 4);
+    CHECK(trackIndexForVisualRow(0, 3, sections) == 0);
+    CHECK(trackIndexForVisualRow(1, 3, sections) == 0);
+    CHECK(trackIndexForVisualRow(2, 3, sections) == 1);
+    CHECK(trackIndexForVisualRow(3, 3, sections) == 2);
+    CHECK(trackIndexForVisualRow(4, 3, sections) == 2);
+  }
+
+  TEST_CASE("TrackTable - grouped sections render as non-selectable headers", "[tui][unit][track-table]")
+  {
+    auto const presentation =
+      rt::TrackPresentationSpec{.id = "grouped", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
+    auto const tracks = std::vector{
+      makeTrackListItem(rt::TrackRow{.id = TrackId{1}, .title = "A One", .duration = std::chrono::seconds{61}}),
+      makeTrackListItem(rt::TrackRow{.id = TrackId{2}, .title = "A Two", .duration = std::chrono::seconds{62}}),
+      makeTrackListItem(rt::TrackRow{.id = TrackId{3}, .title = "B One", .duration = std::chrono::seconds{63}}),
+    };
+    auto const sections = std::vector{
+      TrackSection{.rowBegin = 0, .rowCount = 2, .primaryText = "Album A", .secondaryText = "Artist"},
+      TrackSection{.rowBegin = 2, .rowCount = 1, .primaryText = "Album B", .secondaryText = "Artist"},
+    };
+    auto sectionBoxes = std::vector<TrackSectionRowBox>{};
+
+    auto const rendered = renderElement(
+      trackTableView(
+        tracks, sections, 2, kInvalidTrackId, presentation, TrackTableViewOptions{.sectionRowBoxes = &sectionBoxes}),
+      100);
+    auto const albumALine = lineIndexContaining(rendered.text, "Album A");
+    auto const firstTrackLine = lineIndexContaining(rendered.text, "A One");
+    auto const albumBLine = lineIndexContaining(rendered.text, "Album B");
+    auto const selectedTrackLine = lineIndexContaining(rendered.text, "B One");
+
+    REQUIRE(albumALine >= 0);
+    REQUIRE(firstTrackLine >= 0);
+    REQUIRE(albumBLine >= 0);
+    REQUIRE(selectedTrackLine >= 0);
+    CHECK(albumALine < firstTrackLine);
+    CHECK(albumBLine < selectedTrackLine);
+    CHECK_FALSE(rendered.screen.PixelAt(2, albumBLine).inverted);
+    CHECK(rendered.screen.PixelAt(2, selectedTrackLine).inverted);
+    REQUIRE(sectionBoxes.size() == 2);
+    CHECK(sectionBoxes[1].sectionIndex == 1);
+    CHECK(sectionBoxes[1].box.y_min == albumBLine);
+  }
+
+  TEST_CASE("TrackTable - negative selection does not highlight section headers", "[tui][regression][track-table]")
+  {
+    auto const presentation =
+      rt::TrackPresentationSpec{.id = "grouped", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
+    auto const tracks = std::vector{
+      makeTrackListItem(rt::TrackRow{.id = TrackId{1}, .title = "A One", .duration = std::chrono::seconds{61}})};
+    auto const sections = std::vector{TrackSection{.rowBegin = 0, .rowCount = 1, .primaryText = "Album A"}};
+
+    auto const rendered = renderElement(trackTableView(tracks, sections, -1, kInvalidTrackId, presentation), 100);
+    auto const sectionLine = lineIndexContaining(rendered.text, "Album A");
+    auto const trackLine = lineIndexContaining(rendered.text, "A One");
+
+    REQUIRE(sectionLine >= 0);
+    REQUIRE(trackLine >= 0);
+    CHECK_FALSE(rendered.screen.PixelAt(2, sectionLine).inverted);
+    CHECK_FALSE(rendered.screen.PixelAt(2, trackLine).inverted);
+  }
+
+  TEST_CASE("TrackTable - column width overrides reposition following columns", "[tui][unit][track-table]")
+  {
+    auto const presentation =
+      rt::TrackPresentationSpec{.id = "widths", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
+    auto const tracks = std::vector{
+      makeTrackListItem(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .duration = std::chrono::seconds{65}})};
+    auto const defaultText = renderText(trackTableView(tracks, -1, kInvalidTrackId, presentation), 120);
+    auto const defaultHeader = lineContaining(defaultText, "Duration");
+    auto const overrides = std::vector{TrackColumnWidthOverride{.field = rt::TrackField::Title, .columns = 12}};
+
+    auto const resizedText = renderText(
+      trackTableView(tracks, -1, kInvalidTrackId, presentation, TrackTableViewOptions{.columnWidths = &overrides}),
+      120);
+    auto const resizedHeader = lineContaining(resizedText, "Duration");
+
+    REQUIRE_FALSE(defaultHeader.empty());
+    REQUIRE_FALSE(resizedHeader.empty());
+    CHECK(cellPosition(resizedHeader, "Duration") < cellPosition(defaultHeader, "Duration"));
+  }
+
+  TEST_CASE("TrackTable - header exposes resize handles", "[tui][unit][track-table]")
+  {
+    auto const presentation =
+      rt::TrackPresentationSpec{.id = "handles", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
+    auto const tracks = std::vector{
+      makeTrackListItem(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .duration = std::chrono::seconds{65}})};
+    auto handles = std::vector<TrackColumnResizeHandle>{};
+
+    auto const rendered = renderElement(
+      trackTableView(tracks, -1, kInvalidTrackId, presentation, TrackTableViewOptions{.resizeHandles = &handles}), 120);
+
+    REQUIRE_FALSE(rendered.text.empty());
+    REQUIRE(handles.size() == 2);
+    auto const header = lineContaining(rendered.text, "Title");
+    REQUIRE(static_cast<std::size_t>(handles[0].box.x_max + 1) < header.size());
+    CHECK(handles[0].field == rt::TrackField::Title);
+    CHECK(handles[0].columns > 0);
+    CHECK(handles[0].box.x_min < handles[0].box.x_max);
+    CHECK(handles[0].box.y_min == handles[0].box.y_max);
+    CHECK(header[static_cast<std::size_t>(handles[0].box.x_max + 1)] == '|');
   }
 
   TEST_CASE("TrackTable - selected row style fills the table width", "[tui][unit][track-table]")

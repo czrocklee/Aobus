@@ -40,6 +40,7 @@ namespace ao::tui
     std::vector<std::string> const& libraryLabels() const noexcept { return _libraryLabels; }
     std::vector<PresentationNavItem> const& presentationItems() const noexcept { return _presentationItems; }
     std::vector<TrackListItem> const& tracks() const noexcept { return _tracks; }
+    std::vector<TrackSection> const& sections() const noexcept { return _sections; }
     ListId currentListId() const noexcept { return _currentListId; }
     rt::ViewId activeViewId() const noexcept { return _activeViewId; }
     std::int32_t selectedList() const noexcept { return _selectedList; }
@@ -57,7 +58,10 @@ namespace ao::tui
     void moveFocusedSelection(bool listChooserFocused, std::int32_t delta);
     void movePresentationSelection(std::int32_t delta);
     bool setSelectedPresentation(std::int32_t index);
+    void setSelectedTrackIndex(std::int32_t index);
 
+    std::string jumpToAdjacentSection(std::int32_t delta);
+    std::string selectSection(std::int32_t sectionIndex);
     std::string revealTrack(TrackId trackId);
     std::string setPresentation(std::string_view presentationId);
     std::string selectSelectedPresentation();
@@ -71,14 +75,21 @@ namespace ao::tui
     void refreshPresentationNavigation();
     std::vector<LibraryNavItem> loadLibraryNavigation();
     std::vector<PresentationNavItem> loadPresentationNavigation();
-    std::vector<TrackListItem> loadTrackItemsFromView(rt::ViewId activeViewId);
-    std::vector<TrackListItem> loadTrackItems(ListId listId);
+    struct TrackItemsSnapshot final
+    {
+      std::vector<TrackListItem> tracks{};
+      std::vector<TrackSection> sections{};
+    };
+
+    TrackItemsSnapshot loadTrackItemsFromView(rt::ViewId activeViewId);
+    TrackItemsSnapshot loadTrackItems(ListId listId);
 
     rt::AppRuntime& _runtime;
     std::vector<LibraryNavItem> _libraryItems{};
     std::vector<std::string> _libraryLabels{};
     std::vector<PresentationNavItem> _presentationItems{};
     std::vector<TrackListItem> _tracks{};
+    std::vector<TrackSection> _sections{};
     ListId _currentListId{rt::kAllTracksListId};
     rt::ViewId _activeViewId{rt::kInvalidViewId};
     std::int32_t _selectedList = 0;

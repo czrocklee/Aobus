@@ -37,6 +37,16 @@ namespace ao::tui
     std::string detail{};
   };
 
+  struct TrackSection final
+  {
+    std::size_t rowBegin = 0;
+    std::size_t rowCount = 0;
+    std::string primaryText{};
+    std::string secondaryText{};
+    std::string tertiaryText{};
+    ResourceId imageId{kInvalidResourceId};
+  };
+
   struct PresentationNavItem final
   {
     std::string id{};
@@ -66,6 +76,7 @@ namespace ao::tui
   std::string trackDisplayDetail(rt::TrackRow const& row);
   std::string presentationDisplayId(std::string_view presentationId);
   std::string presentationBadgeLabel(std::string_view presentationId);
+  std::string sectionDisplayName(TrackSection const& section);
   std::string listNodeIcon(rt::ListNodeKind kind);
   std::string listTitle(ListId listId, std::vector<LibraryNavItem> const& items);
 

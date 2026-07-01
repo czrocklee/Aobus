@@ -132,6 +132,7 @@ namespace ao::tui
              text("/views or /v       choose presentation"),
              text("/current           reveal current track"),
              text("/view <id>         switch presentation"),
+             text("{ / }              previous / next group"),
              text("/clear             clear filter"),
              text("/reload            reload active list"),
              text("/play /pause /stop playback"),

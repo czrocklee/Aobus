@@ -121,7 +121,7 @@ namespace ao::tui::test
   TEST_CASE("ShellModel - overlay hints are stable", "[tui][unit][shell]")
   {
     CHECK(overlayHint(Overlay::None) ==
-          "/ command  l lists  v view  d detail  a quality  o output  Ctrl-L current  q quit");
+          "/ command  l lists  v view  d detail  a quality  o output  { } groups  Ctrl-L current  q quit");
     CHECK(overlayHint(Overlay::ListChooser) == "l toggle  Enter open  Esc close");
     CHECK(overlayHint(Overlay::DetailPanel) == "d toggle  Esc close");
     CHECK(overlayHint(Overlay::QualityPanel) == "a toggle  Esc close");

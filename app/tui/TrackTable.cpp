@@ -20,6 +20,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <format>
+#include <limits>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -31,7 +34,6 @@ namespace ao::tui
   {
     constexpr std::int32_t kPlayingColumns = 2;
     constexpr std::int32_t kColumnPadding = 2;
-    constexpr std::int32_t kMinimumFieldColumns = 8;
     constexpr std::int32_t kMaximumFieldColumns = 72;
     constexpr std::int32_t kExpandedFieldColumns = 72;
     constexpr std::int32_t kScrollIndicatorColumns = 1;
@@ -43,7 +45,7 @@ namespace ao::tui
     {
       rt::TrackField field = rt::TrackField::Title;
       std::string label{};
-      std::int32_t width = kMinimumFieldColumns;
+      std::int32_t width = kMinimumTrackColumnWidthColumns;
       bool rightAligned = false;
     };
 
@@ -83,11 +85,11 @@ namespace ao::tui
 
       if (policyWidth <= 0)
       {
-        return kMinimumFieldColumns;
+        return kMinimumTrackColumnWidthColumns;
       }
 
       return std::clamp(
-        policyWidth / kPresentationPixelToTerminalColumnRatio, kMinimumFieldColumns, kMaximumFieldColumns);
+        policyWidth / kPresentationPixelToTerminalColumnRatio, kMinimumTrackColumnWidthColumns, kMaximumFieldColumns);
     }
 
     ftxui::Element fixedCell(std::string value, std::int32_t const width, bool const rightAligned = false)
@@ -164,7 +166,27 @@ namespace ao::tui
       return blankFallback(value);
     }
 
-    std::vector<TrackColumn> columnsForPresentation(rt::TrackPresentationSpec const& presentation)
+    std::int32_t overrideColumnWidth(rt::TrackField const field,
+                                     std::int32_t const fallback,
+                                     std::vector<TrackColumnWidthOverride> const* const columnWidths)
+    {
+      if (columnWidths == nullptr)
+      {
+        return fallback;
+      }
+
+      auto const it = std::ranges::find(*columnWidths, field, &TrackColumnWidthOverride::field);
+
+      if (it == columnWidths->end() || it->columns <= 0)
+      {
+        return fallback;
+      }
+
+      return std::clamp(it->columns, kMinimumTrackColumnWidthColumns, kMaximumTrackColumnResizeColumns);
+    }
+
+    std::vector<TrackColumn> columnsForPresentation(rt::TrackPresentationSpec const& presentation,
+                                                    std::vector<TrackColumnWidthOverride> const* const columnWidths)
     {
       auto normalized = rt::normalizeTrackPresentationSpec(presentation);
 
@@ -186,6 +208,8 @@ namespace ao::tui
           width = std::max(width, kExpandedFieldColumns);
         }
 
+        width = overrideColumnWidth(field, width, columnWidths);
+
         columns.push_back(TrackColumn{.field = field,
                                       .label = std::string{uimodel::trackFieldColumnTitle(field)},
                                       .width = width,
@@ -195,18 +219,40 @@ namespace ao::tui
       return columns;
     }
 
-    ftxui::Element trackHeaderRow(std::vector<TrackColumn> const& columns)
+    ftxui::Element trackHeaderRow(std::vector<TrackColumn> const& columns,
+                                  std::vector<TrackColumnResizeHandle>* const resizeHandles)
     {
       using namespace ftxui;
 
       auto cells = Elements{};
-      cells.reserve((columns.size() * 2) + 1);
+      cells.reserve((columns.size() * 2) + 4);
       cells.push_back(fixedCell("", kPlayingColumns));
 
-      for (auto const& column : columns)
+      if (resizeHandles != nullptr)
       {
-        cells.push_back(text(std::string(kColumnPadding, ' ')));
-        cells.push_back(fieldCell(column.label, column));
+        resizeHandles->clear();
+        resizeHandles->reserve(columns.size());
+      }
+
+      for (std::size_t index = 0; index < columns.size(); ++index)
+      {
+        auto const& column = columns[index];
+        cells.push_back(text(index == 0 ? std::string(kColumnPadding, ' ') : std::string{"| "}));
+
+        auto cellPtr = fieldCell(column.label, column);
+
+        if (resizeHandles != nullptr)
+        {
+          resizeHandles->push_back(TrackColumnResizeHandle{.field = column.field, .box = {}, .columns = column.width});
+          cellPtr = std::move(cellPtr) | reflect(resizeHandles->back().box);
+        }
+
+        cells.push_back(std::move(cellPtr));
+      }
+
+      if (!columns.empty())
+      {
+        cells.push_back(text("|"));
       }
 
       cells.push_back(filler());
@@ -222,17 +268,71 @@ namespace ao::tui
 
       auto const playing = track.id == playingTrackId;
       auto cells = Elements{};
-      cells.reserve((columns.size() * 2) + 1);
+      cells.reserve((columns.size() * 2) + 3);
       cells.push_back(fixedCell(playing ? std::string{">"} : std::string{}, kPlayingColumns));
 
-      for (auto const& column : columns)
+      for (std::size_t index = 0; index < columns.size(); ++index)
       {
-        cells.push_back(text(std::string(kColumnPadding, ' ')));
+        auto const& column = columns[index];
+        cells.push_back(text(index == 0 ? std::string(kColumnPadding, ' ') : std::string{"| "}));
         cells.push_back(fieldCell(displayTextForField(column.field, track.row), column));
+      }
+
+      if (!columns.empty())
+      {
+        cells.push_back(text("|"));
       }
 
       cells.push_back(filler());
       return hbox(std::move(cells));
+    }
+
+    std::string sectionDetailText(TrackSection const& section)
+    {
+      auto details = std::vector<std::string>{};
+
+      if (!section.secondaryText.empty())
+      {
+        details.push_back(section.secondaryText);
+      }
+
+      if (!section.tertiaryText.empty())
+      {
+        details.push_back(section.tertiaryText);
+      }
+
+      details.push_back(
+        std::format("{} {}", section.rowCount, section.rowCount == std::size_t{1} ? "track" : "tracks"));
+
+      auto result = std::string{};
+
+      for (std::size_t index = 0; index < details.size(); ++index)
+      {
+        if (index > 0)
+        {
+          result.append("  ");
+        }
+
+        result.append(details[index]);
+      }
+
+      return result;
+    }
+
+    ftxui::Element sectionHeaderRow(TrackSection const& section)
+    {
+      using namespace ftxui;
+
+      auto const primary = sectionDisplayName(section);
+      auto detail = sectionDetailText(section);
+
+      return hbox({
+        text("  "),
+        text(primary) | bold,
+        filler(),
+        text(std::move(detail)) | dim,
+        text(" "),
+      });
     }
 
     ftxui::Element selectableRows(ftxui::Elements rows,
@@ -264,28 +364,130 @@ namespace ao::tui
     }
   } // namespace
 
-  ftxui::Element trackTableView(std::vector<TrackListItem> const& tracks,
+  std::int32_t trackVisualRow(std::int32_t const trackIndex, std::span<TrackSection const> const sections) noexcept
+  {
+    if (trackIndex < 0)
+    {
+      return -1;
+    }
+
+    std::int32_t headerCount = 0;
+
+    for (auto const& section : sections)
+    {
+      if (std::cmp_less_equal(section.rowBegin, trackIndex))
+      {
+        ++headerCount;
+      }
+    }
+
+    return trackIndex + headerCount;
+  }
+
+  std::int32_t trackIndexForVisualRow(std::int32_t const visualRow,
+                                      std::size_t const trackCount,
+                                      std::span<TrackSection const> const sections) noexcept
+  {
+    if (trackCount == 0)
+    {
+      return 0;
+    }
+
+    auto const maxVisualRow = static_cast<std::int32_t>(std::min<std::size_t>(
+      trackCount + sections.size() - 1, static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())));
+    auto const clampedVisualRow = std::clamp(visualRow, 0, maxVisualRow);
+    std::int32_t headersBefore = 0;
+
+    for (auto const& section : sections)
+    {
+      auto const headerRow = static_cast<std::int32_t>(section.rowBegin) + headersBefore;
+
+      if (clampedVisualRow == headerRow)
+      {
+        return static_cast<std::int32_t>(std::min(section.rowBegin, trackCount - 1));
+      }
+
+      if (clampedVisualRow < headerRow)
+      {
+        break;
+      }
+
+      ++headersBefore;
+    }
+
+    auto const trackIndex = clampedVisualRow - headersBefore;
+    auto const maxTrackIndex = static_cast<std::int32_t>(
+      std::min<std::size_t>(trackCount - 1, static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())));
+    return std::clamp(trackIndex, 0, maxTrackIndex);
+  }
+
+  ftxui::Element trackTableView(std::span<TrackListItem const> const tracks,
                                 std::int32_t const selected,
                                 TrackId const playingTrackId,
-                                rt::TrackPresentationSpec const& presentation)
+                                rt::TrackPresentationSpec const& presentation,
+                                TrackTableViewOptions options)
+  {
+    return trackTableView(
+      tracks, std::span<TrackSection const>{}, selected, playingTrackId, presentation, std::move(options));
+  }
+
+  ftxui::Element trackTableView(std::span<TrackListItem const> const tracks,
+                                std::span<TrackSection const> const sections,
+                                std::int32_t const selected,
+                                TrackId const playingTrackId,
+                                rt::TrackPresentationSpec const& presentation,
+                                TrackTableViewOptions options)
   {
     using namespace ftxui;
 
-    auto columns = columnsForPresentation(presentation);
+    auto const columns = columnsForPresentation(presentation, options.columnWidths);
     auto rows = Elements{};
-    rows.reserve(tracks.size());
+    rows.reserve(tracks.size() + sections.size());
+    std::size_t sectionIndex = 0;
 
-    for (auto const& track : tracks)
+    if (options.sectionRowBoxes != nullptr)
     {
-      rows.push_back(trackRow(track, playingTrackId, columns));
+      options.sectionRowBoxes->clear();
+      options.sectionRowBoxes->reserve(sections.size());
     }
 
-    return vbox({
-             trackHeaderRow(columns),
-             selectableRows(
-               std::move(rows), selected, true, "No tracks found. Run `aobus init` in this library first."),
-           }) |
-           flex;
+    for (std::size_t trackIndex = 0; trackIndex < tracks.size(); ++trackIndex)
+    {
+      while (sectionIndex < sections.size() && sections[sectionIndex].rowBegin <= trackIndex)
+      {
+        auto rowPtr = sectionHeaderRow(sections[sectionIndex]);
+
+        if (options.sectionRowBoxes != nullptr)
+        {
+          // reflect() stores into the vector element during layout, so reserve()
+          // above must keep row-box addresses stable while rows are built.
+          options.sectionRowBoxes->push_back(
+            TrackSectionRowBox{.sectionIndex = static_cast<std::int32_t>(sectionIndex), .box = {}});
+          rowPtr = std::move(rowPtr) | reflect(options.sectionRowBoxes->back().box);
+        }
+
+        rows.push_back(std::move(rowPtr));
+        ++sectionIndex;
+      }
+
+      rows.push_back(trackRow(tracks[trackIndex], playingTrackId, columns));
+    }
+
+    auto const visualSelected = trackVisualRow(selected, sections);
+    auto tablePtr =
+      vbox({
+        trackHeaderRow(columns, options.resizeHandles),
+        selectableRows(
+          std::move(rows), visualSelected, true, "No tracks found. Run `aobus init` in this library first."),
+      }) |
+      flex;
+
+    if (options.tableBox != nullptr)
+    {
+      tablePtr = std::move(tablePtr) | reflect(*options.tableBox);
+    }
+
+    return tablePtr;
   }
 
   ftxui::Element libraryChooserPane(std::vector<std::string> const& labels, std::int32_t const selected)

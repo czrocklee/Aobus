@@ -369,7 +369,7 @@ namespace ao::tui
         return std::nullopt;
       }
 
-      auto reader = runtime.library().reader();
+      auto const reader = runtime.library().reader();
       auto optBytes = reader.loadResource(resourceId);
 
       if (!optBytes)
@@ -387,7 +387,7 @@ namespace ao::tui
         return std::nullopt;
       }
 
-      auto reader = runtime.library().reader();
+      auto const reader = runtime.library().reader();
       auto optBytes = reader.loadResource(resourceId);
 
       if (!optBytes)
@@ -413,6 +413,11 @@ namespace ao::tui
       ftxui::Box paintedCoverBox{};
     };
 
+    bool sameKittyImage(KittyPaintState const& state, ResourceId const coverArtId, ftxui::Box const& coverBox)
+    {
+      return state.visible && coverArtId == state.paintedCoverArtId && sameBox(coverBox, state.paintedCoverBox);
+    }
+
     void updateKittyCoverArt(KittyPaintState& state,
                              ShellModel const& shell,
                              ResourceId const cachedCoverArtId,
@@ -420,12 +425,10 @@ namespace ao::tui
                              std::optional<std::vector<std::byte>> const& optKittyCoverArtPng)
     {
       auto const shouldShow = shell.overlay() == Overlay::DetailPanel && optKittyCoverArtPng && validBox(coverBox);
-      auto const shouldPaint = shouldShow && (!state.visible || cachedCoverArtId != state.paintedCoverArtId ||
-                                              !sameBox(coverBox, state.paintedCoverBox));
 
-      if (shouldPaint)
+      if (shouldShow)
       {
-        if (state.visible)
+        if (state.visible && !sameKittyImage(state, cachedCoverArtId, coverBox))
         {
           std::cout << kittyDeleteImageEscape(kKittyCoverArtImageId);
         }
@@ -480,8 +483,12 @@ namespace ao::tui
     auto outputDeviceButtonBox = ftxui::Box{};
     auto commandInputBox = ftxui::Box{};
     auto presentationButtonBox = ftxui::Box{};
+    auto trackTableBox = ftxui::Box{};
     auto outputDeviceRowBoxes = std::vector<OutputDeviceRowBox>{};
     auto presentationRowBoxes = std::vector<PresentationRowBox>{};
+    auto trackColumnResizeHandles = std::vector<TrackColumnResizeHandle>{};
+    auto trackColumnWidthOverrides = std::vector<TrackColumnWidthOverride>{};
+    auto trackSectionRowBoxes = std::vector<TrackSectionRowBox>{};
     auto kittyPaintState = KittyPaintState{};
 
     auto& playback = runtime.playback();
@@ -533,6 +540,10 @@ namespace ao::tui
                                     .qualityButtonBox = &qualityButtonBox,
                                     .presentationButtonBox = &presentationButtonBox,
                                     .presentationRowBoxes = &presentationRowBoxes,
+                                    .trackColumnResizeHandles = &trackColumnResizeHandles,
+                                    .trackColumnWidthOverrides = &trackColumnWidthOverrides,
+                                    .trackTableBox = &trackTableBox,
+                                    .trackSectionRowBoxes = &trackSectionRowBoxes,
                                     .commandCompletionCallback = [&commandCompletions](std::string_view const draft)
                                     { return commandCompletions.complete(draft); },
                                   }};
@@ -572,8 +583,15 @@ namespace ao::tui
         auto const terminalSize = ftxui::Terminal::Size();
         auto const terminalColumns = terminalSize.dimx;
         auto const terminalRows = terminalSize.dimy;
-        auto workspaceElementPtr =
-          trackTableView(library.tracks(), library.selectedTrack(), state.trackId, viewState.presentation);
+        auto workspaceElementPtr = trackTableView(library.tracks(),
+                                                  library.sections(),
+                                                  library.selectedTrack(),
+                                                  state.trackId,
+                                                  viewState.presentation,
+                                                  TrackTableViewOptions{.columnWidths = &trackColumnWidthOverrides,
+                                                                        .resizeHandles = &trackColumnResizeHandles,
+                                                                        .sectionRowBoxes = &trackSectionRowBoxes,
+                                                                        .tableBox = &trackTableBox});
         auto mainContentPtr = workspaceElementPtr;
         auto popoverElementPtr = ftxui::Element{};
         auto mainLayerPopover = [&](ftxui::Box const& rootAnchor,
