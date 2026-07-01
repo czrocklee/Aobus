@@ -73,6 +73,7 @@ namespace ao::gtk::layout::editor
     uimodel::LayoutDocument const& document() const { return _document; }
     std::string selectedPresetId() const { return _comboPresets.get_active_id(); }
     std::string selectedThemeId() const { return _comboThemePresets.get_active_id(); }
+    void setSelectedThemeIdForTest(std::string_view themeId) { _comboThemePresets.set_active_id(std::string{themeId}); }
 
     sigc::signal<void(uimodel::LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
     sigc::signal<void(std::string_view)>& signalThemePreview() { return _signalThemePreview; }

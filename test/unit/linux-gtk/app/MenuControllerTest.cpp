@@ -3,6 +3,7 @@
 
 #include "app/MenuController.h"
 
+#include "app/WindowActionRegistry.h"
 #include "portal/ImportExportActions.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
@@ -37,10 +38,7 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  // MenuController wires window actions to injected collaborators. The contract worth
-  // pinning is that dispatch: activating each window action invokes the matching std::function.
-  // Menu *shape* (labels, ordering) is gtkmm glue and intentionally not asserted.
-  TEST_CASE("MenuController - actions dispatch to injected collaborators", "[gtk][unit][menu]")
+  TEST_CASE("WindowActionRegistry - actions dispatch to injected collaborators", "[gtk][unit][menu]")
   {
     auto const appPtr = ensureGtkApplication();
     auto importExport = FakeImportExportActions{};
@@ -48,30 +46,20 @@ namespace ao::gtk::test
     bool editLayoutCalled = false;
     bool resetCalled = false;
     bool savePanelsCalled = false;
-    bool keyboardShortcutsCalled = false;
 
-    auto controller = MenuController{importExport,
-                                     [&editLayoutCalled] { editLayoutCalled = true; },
-                                     [&resetCalled] { resetCalled = true; },
-                                     [&savePanelsCalled] { savePanelsCalled = true; },
-                                     [&keyboardShortcutsCalled] { keyboardShortcutsCalled = true; }};
-
-    SECTION("menu model is only built once setup runs")
-    {
-      CHECK(controller.menuModel() == nullptr);
-
-      auto window = Gtk::ApplicationWindow{};
-      window.set_application(appPtr);
-      controller.setup(window);
-
-      CHECK(controller.menuModel() != nullptr);
-    }
+    auto registry = WindowActionRegistry{
+      importExport,
+      WindowActionRegistry::Callbacks{
+        .onEditLayout = [&editLayoutCalled] { editLayoutCalled = true; },
+        .onResetRuntimeLayoutState = [&resetCalled] { resetCalled = true; },
+        .onSaveCurrentPanelSizesAsLayoutDefaults = [&savePanelsCalled] { savePanelsCalled = true; },
+      }};
 
     SECTION("file actions invoke import/export collaborators")
     {
       auto window = Gtk::ApplicationWindow{};
       window.set_application(appPtr);
-      controller.setup(window);
+      registry.install(window);
 
       auto* const actions = dynamic_cast<Gio::ActionGroup*>(&window);
       REQUIRE(actions != nullptr);
@@ -96,7 +84,7 @@ namespace ao::gtk::test
     {
       auto window = Gtk::ApplicationWindow{};
       window.set_application(appPtr);
-      controller.setup(window);
+      registry.install(window);
 
       auto* const actions = dynamic_cast<Gio::ActionGroup*>(&window);
       REQUIRE(actions != nullptr);
@@ -111,9 +99,17 @@ namespace ao::gtk::test
 
       actions->activate_action("save-panel-sizes-as-layout-defaults");
       CHECK(savePanelsCalled);
-
-      actions->activate_action("keyboard-shortcuts");
-      CHECK(keyboardShortcutsCalled);
     }
+  }
+
+  TEST_CASE("MenuController - builds menu model around window and app actions", "[gtk][unit][menu]")
+  {
+    auto controller = MenuController{};
+
+    CHECK(controller.menuModel() == nullptr);
+
+    controller.setup();
+
+    CHECK(controller.menuModel() != nullptr);
   }
 } // namespace ao::gtk::test

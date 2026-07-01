@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/KeyboardShortcutsWindow.h"
+#include "preferences/ShortcutEditorWidget.h"
 
 #include "app/AppDialog.h"
 #include "app/GtkAccelTranslator.h"
@@ -13,6 +13,7 @@
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
 #include <glibmm/main.h>
+#include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/enums.h>
@@ -37,8 +38,6 @@ namespace ao::gtk
   {
     using uimodel::LayoutActionCapability;
 
-    constexpr auto kDefaultWindowWidth = 560;
-    constexpr auto kDefaultWindowHeight = 640;
     constexpr auto kContentMargin = 12;
     constexpr auto kWarningMarginBottom = 6;
     constexpr auto kCategoryMarginTop = 12;
@@ -58,21 +57,22 @@ namespace ao::gtk
     }
   } // namespace
 
-  KeyboardShortcutsWindow::KeyboardShortcutsWindow(uimodel::LayoutActionCatalog const& catalog,
-                                                   uimodel::KeymapModel keymap,
-                                                   ChangedCallback onChanged)
-    : _keymap{std::move(keymap)}, _onChanged{std::move(onChanged)}
+  ShortcutEditorWidget::ShortcutEditorWidget(uimodel::LayoutActionCatalog const& catalog,
+                                             uimodel::KeymapModel keymap,
+                                             ChangedCallback onChanged,
+                                             Gtk::Window& hostForDialogs)
+    : Gtk::Box{Gtk::Orientation::VERTICAL, 8}
+    , _hostForDialogs{hostForDialogs}
+    , _keymap{std::move(keymap)}
+    , _onChanged{std::move(onChanged)}
   {
-    set_title("Keyboard Shortcuts");
-    set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);
-
-    // Default reassignment prompt: a modal AppDialog parented to the editor. Tests replace this
-    // via setConflictConfirmer() so the decision is driven synchronously without a real dialog.
+    // Default reassignment prompt: a modal AppDialog parented to the injected host. Tests replace
+    // this via setConflictConfirmer() so the decision is driven synchronously without a real dialog.
     _conflictConfirmer =
       [this](std::string const& ownerLabel, std::string const& chordText, std::function<void(bool)> respond)
     {
       AppDialog::presentMessage(
-        *this,
+        _hostForDialogs,
         "Reassign shortcut?",
         chordText + " is already assigned to \"" + ownerLabel + "\". Reassign it to this action?",
         {AppDialogAction{
@@ -97,7 +97,8 @@ namespace ao::gtk
       _editableActionIds.push_back(desc.id);
     }
 
-    _content.set_margin(kContentMargin);
+    set_margin(kContentMargin);
+    _unmapConn = signal_unmap().connect([this] { closeCapture(); });
 
     auto* const header = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
     auto* const title = Gtk::make_managed<Gtk::Label>("Customize keyboard shortcuts");
@@ -110,7 +111,7 @@ namespace ao::gtk
     resetAllButton->set_tooltip_text("Reset every shortcut to its default");
     resetAllButton->signal_clicked().connect([this] { resetAll(); });
     header->append(*resetAllButton);
-    _content.append(*header);
+    append(*header);
 
     auto* const scroller = Gtk::make_managed<Gtk::ScrolledWindow>();
     scroller->set_vexpand(true);
@@ -119,21 +120,21 @@ namespace ao::gtk
     auto* const list = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
     _listBox = list;
     scroller->set_child(*list);
-    _content.append(*scroller);
-
-    set_child(_content);
+    append(*scroller);
 
     rebuild();
   }
 
-  KeyboardShortcutsWindow::~KeyboardShortcutsWindow()
+  ShortcutEditorWidget::~ShortcutEditorWidget()
   {
-    // Cancel a still-pending deferred capture teardown so the idle callback never dereferences a
-    // freed `this`.
+    *_aliveTokenPtr = false;
+
+    // Cancel a still-pending capture teardown and mark delayed conflict responses as stale.
     _captureCloseConn.disconnect();
+    _unmapConn.disconnect();
   }
 
-  bool KeyboardShortcutsWindow::bindChord(std::string const& actionId, uimodel::KeyChord const& chord)
+  bool ShortcutEditorWidget::bindChord(std::string const& actionId, uimodel::KeyChord const& chord)
   {
     if (!chord.valid())
     {
@@ -170,8 +171,8 @@ namespace ao::gtk
     return changed;
   }
 
-  std::optional<std::string> KeyboardShortcutsWindow::conflictingOwner(std::string const& actionId,
-                                                                       uimodel::KeyChord const& chord) const
+  std::optional<std::string> ShortcutEditorWidget::conflictingOwner(std::string const& actionId,
+                                                                    uimodel::KeyChord const& chord) const
   {
     if (auto optOwner = _keymap.actionFor(chord); optOwner && *optOwner != actionId)
     {
@@ -181,7 +182,7 @@ namespace ao::gtk
     return std::nullopt;
   }
 
-  void KeyboardShortcutsWindow::requestBind(std::string const& actionId, uimodel::KeyChord const& chord)
+  void ShortcutEditorWidget::requestBind(std::string const& actionId, uimodel::KeyChord const& chord)
   {
     auto const optOwner = conflictingOwner(actionId, chord);
 
@@ -193,16 +194,16 @@ namespace ao::gtk
 
     _conflictConfirmer(labelFor(*optOwner),
                        chord.toString(),
-                       [this, actionId, chord](bool accepted)
+                       [this, aliveTokenPtr = _aliveTokenPtr, actionId, chord](bool accepted)
                        {
-                         if (accepted)
+                         if (accepted && *aliveTokenPtr)
                          {
                            bindChord(actionId, chord);
                          }
                        });
   }
 
-  std::string KeyboardShortcutsWindow::labelFor(std::string const& actionId) const
+  std::string ShortcutEditorWidget::labelFor(std::string const& actionId) const
   {
     for (auto const& action : _actions)
     {
@@ -215,7 +216,7 @@ namespace ao::gtk
     return actionId;
   }
 
-  bool KeyboardShortcutsWindow::unbindChord(std::string const& actionId, uimodel::KeyChord const& chord)
+  bool ShortcutEditorWidget::unbindChord(std::string const& actionId, uimodel::KeyChord const& chord)
   {
     if (!_keymap.unbind(actionId, chord))
     {
@@ -226,19 +227,19 @@ namespace ao::gtk
     return true;
   }
 
-  void KeyboardShortcutsWindow::resetAction(std::string const& actionId)
+  void ShortcutEditorWidget::resetAction(std::string const& actionId)
   {
     _keymap.resetToDefault(actionId);
     commit();
   }
 
-  void KeyboardShortcutsWindow::resetAll()
+  void ShortcutEditorWidget::resetAll()
   {
     _keymap.resetAllToDefault();
     commit();
   }
 
-  void KeyboardShortcutsWindow::commit()
+  void ShortcutEditorWidget::commit()
   {
     rebuild();
 
@@ -248,7 +249,7 @@ namespace ao::gtk
     }
   }
 
-  void KeyboardShortcutsWindow::rebuild()
+  void ShortcutEditorWidget::rebuild()
   {
     while (auto* const child = _listBox->get_first_child())
     {
@@ -292,7 +293,7 @@ namespace ao::gtk
     }
   }
 
-  Gtk::Widget& KeyboardShortcutsWindow::buildActionRow(EditableAction const& action)
+  Gtk::Widget& ShortcutEditorWidget::buildActionRow(EditableAction const& action)
   {
     auto* const row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
     row->set_margin_top(2);
@@ -343,13 +344,13 @@ namespace ao::gtk
     return *row;
   }
 
-  void KeyboardShortcutsWindow::beginCapture(std::string actionId)
+  void ShortcutEditorWidget::beginCapture(std::string actionId)
   {
     closeCapture();
 
     auto capturePtr = std::make_unique<Gtk::Window>();
     capturePtr->set_title("Set Shortcut");
-    capturePtr->set_transient_for(*this);
+    capturePtr->set_transient_for(_hostForDialogs);
     capturePtr->set_modal(true);
     capturePtr->set_resizable(false);
 
@@ -393,22 +394,23 @@ namespace ao::gtk
     _captureWindowPtr = std::move(capturePtr);
   }
 
-  void KeyboardShortcutsWindow::closeCapture()
+  void ShortcutEditorWidget::closeCapture()
   {
     if (!_captureWindowPtr)
     {
       return;
     }
 
-    _captureWindowPtr->set_visible(false);
+    auto capturePtr = std::shared_ptr<Gtk::Window>{_captureWindowPtr.release()};
+    capturePtr->set_visible(false);
 
     // Defer destruction: closeCapture() runs inside the capture window's own key controller, so
     // the window (and that controller) must outlive the current event dispatch. The connection is
     // retained so the destructor can cancel a teardown that is still pending.
+    _captureCloseConn.disconnect();
     _captureCloseConn = Glib::signal_idle().connect(
-      [this]
+      [capturePtr = std::move(capturePtr)]
       {
-        _captureWindowPtr.reset();
         return false; // one-shot
       });
   }

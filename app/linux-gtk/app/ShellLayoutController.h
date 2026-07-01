@@ -59,6 +59,12 @@ namespace ao::gtk
                           std::shared_ptr<ShellLayoutStore> layoutStorePtr,
                           std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
                           ThemeCoordinator& themeCoordinator);
+    ~ShellLayoutController() override;
+
+    ShellLayoutController(ShellLayoutController const&) = delete;
+    ShellLayoutController& operator=(ShellLayoutController const&) = delete;
+    ShellLayoutController(ShellLayoutController&&) = delete;
+    ShellLayoutController& operator=(ShellLayoutController&&) = delete;
 
     layout::ComponentRegistry& registry() { return _registry; }
     uimodel::LayoutActionCatalog const& actionCatalog() const { return _actionRegistry.catalog(); }
@@ -78,6 +84,8 @@ namespace ao::gtk
     void setConfirmPromotionCallback(ConfirmPromotionFn fn);
 
     uimodel::LayoutActionActivationOutcome activateAction(std::string_view id);
+
+    layout::editor::LayoutEditorDialog* editorDialogForTest() const { return _editorDialogPtr.get(); }
 
     layout::ActionActivationContext getActionContext(std::string_view componentId) override;
     bool canProvideSafeAnchor(uimodel::LayoutActionDescriptor const& desc) const override;

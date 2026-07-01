@@ -34,14 +34,14 @@ namespace ao::gtk
   {
     auto prefs = rt::AppPrefsState{};
     config.loadAppPrefs(prefs);
-    _activePreset = themePresetFromString(prefs.lastThemePreset);
+    _activePreset = rt::themePresetFromString(prefs.lastThemePreset);
   }
 
   void ThemeCoordinator::save(AppConfig& config) const
   {
     auto prefs = rt::AppPrefsState{};
     config.loadAppPrefs(prefs);
-    prefs.lastThemePreset = std::string{themePresetToString(_activePreset)};
+    prefs.lastThemePreset = std::string{rt::themePresetToString(_activePreset)};
     config.saveAppPrefs(prefs);
   }
 

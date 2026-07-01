@@ -4,6 +4,9 @@
 #pragma once
 
 #include "app/ShellLayoutController.h"
+#include <ao/rt/AppPrefsState.h>
+#include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 
 #include <gtkmm/applicationwindow.h>
 
@@ -12,6 +15,7 @@
 namespace ao::rt
 {
   class AppRuntime;
+  class PlaybackService;
 }
 
 namespace ao::gtk
@@ -21,7 +25,7 @@ namespace ao::gtk
   class ShellLayoutStore;
   class MenuController;
   class MainWindowCoordinator;
-  class KeyboardShortcutsWindow;
+  class WindowActionRegistry;
   namespace portal
   {
     class ImportExportCoordinator;
@@ -48,17 +52,23 @@ namespace ao::gtk
 
     void initializeSession();
     void rebuildLayout();
+    void openLayoutEditor();
+    void resetRuntimeLayoutState();
+    void saveCurrentPanelSizesAsLayoutDefaults();
+    void applyKeymap(uimodel::KeymapModel const& keymap);
+    void applyTheme(rt::ThemePresetId theme);
+    rt::PlaybackService& playbackService();
+    uimodel::LayoutActionCatalog const& layoutActionCatalog() const;
 
   private:
     void setupPlaybackSpaceShortcut();
-    void openKeyboardShortcutsWindow();
 
     rt::AppRuntime& _runtime;
     std::shared_ptr<AppConfig> _configPtr;
 
     std::unique_ptr<MainWindowCoordinator> _mainWindowCoordinatorPtr;
     ShellLayoutController _shellLayout;
+    std::unique_ptr<WindowActionRegistry> _windowActionRegistryPtr;
     std::unique_ptr<MenuController> _menuControllerPtr;
-    std::unique_ptr<KeyboardShortcutsWindow> _keyboardShortcutsWindowPtr;
   };
 } // namespace ao::gtk

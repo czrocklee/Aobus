@@ -12,6 +12,7 @@
 #include "app/ShellLayoutStore.h"
 #include "platform/AudioBackendBootstrap.h"
 #include "portal/ImportExportCoordinator.h"
+#include "preferences/PreferencesWindow.h"
 #include <ao/AppVersion.h>
 #include <ao/Exception.h>
 #include <ao/rt/AppPrefsState.h>
@@ -19,6 +20,7 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/preferences/PreferencesModel.h>
 
 #include <CLI/CLI.hpp>
 #include <giomm/simpleaction.h>
@@ -30,6 +32,7 @@
 #include <gtkmm/aboutdialog.h>
 #include <gtkmm/application.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/window.h>
 
 #include <algorithm>
 #include <csignal>
@@ -59,8 +62,8 @@ namespace
 
   LibraryPaths resolveLibraryPaths(AppConfig const& config)
   {
-    auto snapshot = rt::AppPrefsState{};
-    config.loadAppPrefs(snapshot);
+    auto snapshot = rt::AppSessionState{};
+    config.loadAppSession(snapshot);
 
     if (!snapshot.lastLibraryPath.empty())
     {
@@ -323,7 +326,119 @@ namespace
     ::g_unix_signal_add(SIGTERM, handler, &app);
   }
 
-  void addAppActions(Glib::RefPtr<Gtk::Application>& app)
+  MainWindow* activeMainWindow(Glib::RefPtr<Gtk::Application> const& app)
+  {
+    if (auto* const activeWindow = app->get_active_window(); activeWindow != nullptr)
+    {
+      if (auto* const mainWindow = dynamic_cast<MainWindow*>(activeWindow); mainWindow != nullptr)
+      {
+        return mainWindow;
+      }
+
+      if (auto* const transient = activeWindow->get_transient_for(); transient != nullptr)
+      {
+        if (auto* const mainWindow = dynamic_cast<MainWindow*>(transient); mainWindow != nullptr)
+        {
+          return mainWindow;
+        }
+      }
+    }
+
+    for (auto* const window : app->get_windows())
+    {
+      if (auto* const mainWindow = dynamic_cast<MainWindow*>(window); mainWindow != nullptr)
+      {
+        return mainWindow;
+      }
+    }
+
+    return nullptr;
+  }
+
+  void applyThemeToMainWindows(Glib::RefPtr<Gtk::Application> const& app, rt::ThemePresetId const theme)
+  {
+    for (auto* const window : app->get_windows())
+    {
+      if (auto* const mainWindow = dynamic_cast<MainWindow*>(window); mainWindow != nullptr)
+      {
+        mainWindow->applyTheme(theme);
+      }
+    }
+  }
+
+  void presentPreferences(Glib::RefPtr<Gtk::Application> const& app,
+                          std::unique_ptr<PreferencesWindow>& preferencesWindowPtr,
+                          std::shared_ptr<AppConfig> const& appConfigPtr)
+  {
+    auto* const targetWindow = activeMainWindow(app);
+
+    if (targetWindow == nullptr || !appConfigPtr)
+    {
+      return;
+    }
+
+    if (!preferencesWindowPtr)
+    {
+      preferencesWindowPtr = std::make_unique<PreferencesWindow>(PreferencesWindow::Callbacks{
+        .onEditLayout =
+          [app]
+        {
+          if (auto* const window = activeMainWindow(app); window != nullptr)
+          {
+            window->openLayoutEditor();
+          }
+        },
+        .onResetRuntimeLayoutState =
+          [app]
+        {
+          if (auto* const window = activeMainWindow(app); window != nullptr)
+          {
+            window->resetRuntimeLayoutState();
+          }
+        },
+        .onSaveCurrentPanelSizesAsLayoutDefaults =
+          [app]
+        {
+          if (auto* const window = activeMainWindow(app); window != nullptr)
+          {
+            window->saveCurrentPanelSizesAsLayoutDefaults();
+          }
+        },
+        .onPersistPreferences =
+          [appConfigPtr](rt::AppPrefsState const& prefs, uimodel::PreferencesChange const change)
+        {
+          auto current = rt::AppPrefsState{};
+          appConfigPtr->loadAppPrefs(current);
+          appConfigPtr->saveAppPrefs(uimodel::mergePreferenceChange(std::move(current), prefs, change));
+        },
+        .onApplyTheme = [app](rt::ThemePresetId const theme) { applyThemeToMainWindows(app, theme); },
+      });
+    }
+
+    if (!preferencesWindowPtr->get_application())
+    {
+      app->add_window(*preferencesWindowPtr);
+    }
+
+    preferencesWindowPtr->set_transient_for(*targetWindow);
+    auto prefs = rt::AppPrefsState{};
+    appConfigPtr->loadAppPrefs(prefs);
+    preferencesWindowPtr->refreshPreferences(prefs, &targetWindow->playbackService(), targetWindow);
+    preferencesWindowPtr->refreshKeyboardPage(targetWindow->layoutActionCatalog(),
+                                              appConfigPtr->loadKeymap(uimodel::defaultKeymap()),
+                                              [app](uimodel::KeymapModel const& keymap)
+                                              {
+                                                if (auto* const window = activeMainWindow(app); window != nullptr)
+                                                {
+                                                  window->applyKeymap(keymap);
+                                                }
+                                              });
+    preferencesWindowPtr->present();
+  }
+
+  void addAppActions(Glib::RefPtr<Gtk::Application>& app,
+                     std::unique_ptr<PreferencesWindow>& preferencesWindowPtr,
+                     std::shared_ptr<AppConfig> const& appConfigPtr)
   {
     auto const aboutActionPtr = Gio::SimpleAction::create("about");
     aboutActionPtr->signal_activate().connect(
@@ -347,6 +462,13 @@ namespace
     auto const quitActionPtr = Gio::SimpleAction::create("quit");
     quitActionPtr->signal_activate().connect([&app](Glib::VariantBase const& /*variant*/) { app->quit(); });
     app->add_action(quitActionPtr);
+
+    auto const preferencesActionPtr = Gio::SimpleAction::create("preferences");
+    preferencesActionPtr->signal_activate().connect(
+      [&app, &preferencesWindowPtr, appConfigPtr](Glib::VariantBase const& /*variant*/)
+      { presentPreferences(app, preferencesWindowPtr, appConfigPtr); });
+    app->add_action(preferencesActionPtr);
+    app->set_accels_for_action("app.preferences", {"<Control>comma"});
   }
 
   std::filesystem::path layoutStateDir()
@@ -361,16 +483,15 @@ namespace
     return std::filesystem::path{Glib::get_user_data_dir()}.parent_path() / "state" / "aobus" / "layout-state";
   }
 
-  void onAppActivate(Glib::RefPtr<Gtk::Application>& app, std::vector<Glib::RefPtr<MainWindow>>& windows)
+  void onAppActivate(Glib::RefPtr<Gtk::Application>& app,
+                     std::vector<Glib::RefPtr<MainWindow>>& windows,
+                     std::shared_ptr<AppConfig> const& appConfigPtr,
+                     std::shared_ptr<ShellLayoutStore> const& shellLayoutStorePtr,
+                     std::shared_ptr<ShellLayoutComponentStateStore> const& componentStateStorePtr)
   {
     GtkStyleRuntime::instance().initialize();
 
-    auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
-    auto appConfigPtr = std::make_shared<AppConfig>(globalConfigPath);
     applyKeymapAccelerators(*app, appConfigPtr->loadKeymap(uimodel::defaultKeymap()));
-    auto const layoutsDir = globalConfigPath.parent_path() / "layouts";
-    auto shellLayoutStorePtr = std::make_shared<ShellLayoutStore>(layoutsDir);
-    auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(layoutStateDir());
 
     auto paths = resolveLibraryPaths(*appConfigPtr);
 
@@ -474,17 +595,36 @@ namespace
 
     setupUnixSignalHandlers(appPtr);
 
-    addAppActions(appPtr);
-
     auto windows = std::vector<Glib::RefPtr<MainWindow>>{};
+    auto preferencesWindowPtr = std::unique_ptr<PreferencesWindow>{};
 
-    appPtr->signal_activate().connect([&appPtr, &windows] { onAppActivate(appPtr, windows); });
+    auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
+    auto appConfigPtr = std::make_shared<AppConfig>(globalConfigPath);
+    auto const layoutsDir = globalConfigPath.parent_path() / "layouts";
+    auto shellLayoutStorePtr = std::make_shared<ShellLayoutStore>(layoutsDir);
+    auto componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(layoutStateDir());
+
+    addAppActions(appPtr, preferencesWindowPtr, appConfigPtr);
+
+    appPtr->signal_activate().connect(
+      [&appPtr, &windows, appConfigPtr, shellLayoutStorePtr, componentStateStorePtr]
+      { onAppActivate(appPtr, windows, appConfigPtr, shellLayoutStorePtr, componentStateStorePtr); });
 
     auto gtkArgv = buildGtkArgv(static_cast<std::int32_t>(args.size()), args.data());
     std::int32_t const gtkArgc = static_cast<std::int32_t>(gtkArgv.size());
 
     APP_LOG_INFO("Entering GTK main loop");
     auto exitCode = appPtr->run(gtkArgc, gtkArgv.data());
+
+    if (preferencesWindowPtr)
+    {
+      if (preferencesWindowPtr->get_application())
+      {
+        appPtr->remove_window(*preferencesWindowPtr);
+      }
+
+      preferencesWindowPtr.reset();
+    }
 
     releaseWindows(*appPtr, windows);
     return exitCode;

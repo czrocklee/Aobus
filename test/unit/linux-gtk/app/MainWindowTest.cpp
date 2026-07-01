@@ -48,7 +48,7 @@ namespace ao::gtk::test
     CHECK(actionMap->lookup_action("edit-layout") != nullptr);
     CHECK(actionMap->lookup_action("reset-runtime-layout-state") != nullptr);
     CHECK(actionMap->lookup_action("save-panel-sizes-as-layout-defaults") != nullptr);
-    CHECK(actionMap->lookup_action("keyboard-shortcuts") != nullptr);
+    CHECK(actionMap->lookup_action("keyboard-shortcuts") == nullptr);
   }
 
   TEST_CASE("MainWindow - hide persists current library path", "[gtk][unit][main-window]")
@@ -61,14 +61,14 @@ namespace ao::gtk::test
 
     auto window = MainWindow{fixture.runtime(), configPtr, nullptr};
 
-    auto before = rt::AppPrefsState{};
-    configPtr->loadAppPrefs(before);
+    auto before = rt::AppSessionState{};
+    configPtr->loadAppSession(before);
     REQUIRE(before.lastLibraryPath.empty());
 
     window.on_hide();
 
-    auto after = rt::AppPrefsState{};
-    configPtr->loadAppPrefs(after);
+    auto after = rt::AppSessionState{};
+    configPtr->loadAppSession(after);
     CHECK(after.lastLibraryPath == fixture.runtime().musicLibrary().rootPath().string());
   }
 
@@ -82,14 +82,14 @@ namespace ao::gtk::test
 
     auto window = MainWindow{fixture.runtime(), configPtr, nullptr};
 
-    auto before = rt::AppPrefsState{};
-    configPtr->loadAppPrefs(before);
+    auto before = rt::AppSessionState{};
+    configPtr->loadAppSession(before);
     REQUIRE(before.lastLibraryPath.empty());
 
     window.saveSession();
 
-    auto after = rt::AppPrefsState{};
-    configPtr->loadAppPrefs(after);
+    auto after = rt::AppSessionState{};
+    configPtr->loadAppSession(after);
     CHECK(after.lastLibraryPath == fixture.runtime().musicLibrary().rootPath().string());
   }
 

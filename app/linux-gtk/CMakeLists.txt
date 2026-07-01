@@ -22,7 +22,6 @@ add_library(aobus-gtk-lib STATIC
     app/FormBuilder.cpp
     app/GtkAccelTranslator.cpp
     app/GtkMainContextExecutor.cpp
-    app/KeyboardShortcutsWindow.cpp
     app/KeymapApplicator.cpp
     app/MainWindow.cpp
     app/MenuController.cpp
@@ -33,11 +32,15 @@ add_library(aobus-gtk-lib STATIC
     app/GtkStyleRuntime.cpp
     app/ThemeCoordinator.cpp
     app/ThemePreset.cpp
+    app/WindowActionRegistry.cpp
     app/MainWindowCoordinator.cpp
     app/AppConfig.cpp
     app/ShellLayoutStore.cpp
     app/GtkLayoutConfig.cpp
     platform/AudioBackendBootstrap.cpp
+
+    preferences/ShortcutEditorWidget.cpp
+    preferences/PreferencesWindow.cpp
 
     common/DismissController.cpp
 

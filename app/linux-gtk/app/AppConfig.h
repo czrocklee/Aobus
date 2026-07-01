@@ -11,6 +11,7 @@
 namespace ao::rt
 {
   struct AppPrefsState;
+  struct AppSessionState;
 }
 
 namespace ao::rt
@@ -43,6 +44,8 @@ namespace ao::gtk
 
     void loadAppPrefs(rt::AppPrefsState& state) const;
     void saveAppPrefs(rt::AppPrefsState const& state);
+    void loadAppSession(rt::AppSessionState& state) const;
+    void saveAppSession(rt::AppSessionState const& state);
 
     /// Loads the effective keyboard map: persisted overrides merged onto @p defaults.
     uimodel::KeymapModel loadKeymap(uimodel::KeymapBindings defaults) const;

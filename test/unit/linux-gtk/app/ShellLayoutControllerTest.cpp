@@ -8,6 +8,7 @@
 #include "app/ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/rt/AppPrefsState.h>
 #include <ao/uimodel/layout/component/ILayoutComponentStateStore.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -113,6 +114,74 @@ namespace ao::gtk::test
       drainGtkEvents();
       CHECK(controller.context().componentStateStore ==
             static_cast<uimodel::ILayoutComponentStateStore*>(componentStateStorePtr.get()));
+    }
+
+    SECTION("layout editor cancel rolls back theme preview without changing persisted theme")
+    {
+      auto prefs = rt::AppPrefsState{};
+      prefs.lastLayoutPreset = "classic";
+      prefs.lastThemePreset = "classic";
+      configPtr->saveAppPrefs(prefs);
+      themeController.load(*configPtr);
+
+      controller.loadLayout(*configPtr);
+      REQUIRE(pumpGtkEventsUntil([&controller]
+                                 { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+
+      controller.openEditor(*configPtr);
+      drainGtkEvents();
+
+      auto* const dialog = controller.editorDialogForTest();
+      REQUIRE(dialog != nullptr);
+      CHECK(dialog->selectedThemeId() == "classic");
+
+      dialog->setSelectedThemeIdForTest("modern");
+      drainGtkEvents();
+      CHECK(themeController.activeTheme() == rt::ThemePresetId::Modern);
+
+      auto* const cancelButton = findButtonByLabel(*dialog, "Cancel");
+      REQUIRE(cancelButton != nullptr);
+      emitClicked(*cancelButton);
+      drainGtkEvents();
+
+      auto savedPrefs = rt::AppPrefsState{};
+      configPtr->loadAppPrefs(savedPrefs);
+      CHECK(savedPrefs.lastThemePreset == "classic");
+      CHECK(themeController.activeTheme() == rt::ThemePresetId::Classic);
+    }
+
+    SECTION("layout editor save does not persist the previewed theme")
+    {
+      auto prefs = rt::AppPrefsState{};
+      prefs.lastLayoutPreset = "classic";
+      prefs.lastThemePreset = "classic";
+      configPtr->saveAppPrefs(prefs);
+      themeController.load(*configPtr);
+
+      controller.loadLayout(*configPtr);
+      REQUIRE(pumpGtkEventsUntil([&controller]
+                                 { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+
+      controller.openEditor(*configPtr);
+      drainGtkEvents();
+
+      auto* const dialog = controller.editorDialogForTest();
+      REQUIRE(dialog != nullptr);
+
+      dialog->setSelectedThemeIdForTest("modern");
+      drainGtkEvents();
+      CHECK(themeController.activeTheme() == rt::ThemePresetId::Modern);
+
+      auto* const saveButton = findButtonByLabel(*dialog, "Save");
+      REQUIRE(saveButton != nullptr);
+      emitClicked(*saveButton);
+      drainGtkEvents();
+
+      auto savedPrefs = rt::AppPrefsState{};
+      configPtr->loadAppPrefs(savedPrefs);
+      CHECK(savedPrefs.lastLayoutPreset == "classic");
+      CHECK(savedPrefs.lastThemePreset == "classic");
+      CHECK(themeController.activeTheme() == rt::ThemePresetId::Classic);
     }
 
     SECTION("attachToWindow exports actions and refreshExportedActions works")

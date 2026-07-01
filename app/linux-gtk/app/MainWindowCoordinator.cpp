@@ -8,7 +8,6 @@
 #include "app/GtkUiServices.h"
 #include "app/MainWindow.h"
 #include "app/ThemeCoordinator.h"
-#include "app/ThemePreset.h"
 #include "app/UIState.h"
 #include "image/ImageCache.h"
 #include "list/ListNavigationController.h"
@@ -261,18 +260,17 @@ namespace ao::gtk
 
     saveColumnLayout();
 
-    // App prefs (including playback state and last library)
-    auto prefs = rt::AppPrefsState{};
-    _configPtr->loadAppPrefs(prefs);
+    // Session state: per-window shutdown must not overwrite explicit application preferences.
+    auto session = rt::AppSessionState{};
+    _configPtr->loadAppSession(session);
 
-    prefs.lastLibraryPath = _runtime.musicLibrary().rootPath().string();
+    session.lastLibraryPath = _runtime.musicLibrary().rootPath().string();
     auto const& pb = _runtime.playback().state();
-    prefs.lastOutputBackendId = pb.selectedOutputDevice.backendId.raw();
-    prefs.lastOutputDeviceId = pb.selectedOutputDevice.deviceId.raw();
-    prefs.lastOutputProfileId = pb.selectedOutputDevice.profileId.raw();
-    prefs.lastThemePreset = std::string{themePresetToString(_implPtr->themeController.activeTheme())};
+    session.lastOutputBackendId = pb.selectedOutputDevice.backendId.raw();
+    session.lastOutputDeviceId = pb.selectedOutputDevice.deviceId.raw();
+    session.lastOutputProfileId = pb.selectedOutputDevice.profileId.raw();
 
-    _configPtr->saveAppPrefs(prefs);
+    _configPtr->saveAppSession(session);
 
     _runtime.workspace().saveSession(_runtime.configStore());
   }
@@ -299,12 +297,18 @@ namespace ao::gtk
     // App prefs (playback restoration)
     auto prefs = rt::AppPrefsState{};
     _configPtr->loadAppPrefs(prefs);
+    auto session = rt::AppSessionState{};
+    _configPtr->loadAppSession(session);
 
-    if (!prefs.lastOutputBackendId.empty())
+    bool const hasPreferredOutput = !prefs.lastOutputBackendId.empty() && !prefs.lastOutputProfileId.empty();
+    auto const& outputBackendId = hasPreferredOutput ? prefs.lastOutputBackendId : session.lastOutputBackendId;
+    auto const& outputDeviceId = hasPreferredOutput ? prefs.lastOutputDeviceId : session.lastOutputDeviceId;
+    auto const& outputProfileId = hasPreferredOutput ? prefs.lastOutputProfileId : session.lastOutputProfileId;
+
+    if (!outputBackendId.empty())
     {
-      _runtime.playback().setOutputDevice(audio::BackendId{prefs.lastOutputBackendId},
-                                          audio::DeviceId{prefs.lastOutputDeviceId},
-                                          audio::ProfileId{prefs.lastOutputProfileId});
+      _runtime.playback().setOutputDevice(
+        audio::BackendId{outputBackendId}, audio::DeviceId{outputDeviceId}, audio::ProfileId{outputProfileId});
     }
 
     _implPtr->themeController.load(*_configPtr);

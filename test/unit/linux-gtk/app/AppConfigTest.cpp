@@ -13,7 +13,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("AppConfig persists session, theme, and library preferences", "[gtk][unit][app][config]")
+  TEST_CASE("AppConfig persists session and application preferences", "[gtk][unit][app][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
@@ -69,6 +69,27 @@ namespace ao::gtk::test
       CHECK(loadPrefs.lastOutputBackendId == "test-backend");
       CHECK(loadPrefs.lastLayoutPreset == "modern");
       CHECK(loadPrefs.lastThemePreset == "modern");
+    }
+
+    SECTION("Save and load AppSessionState")
+    {
+      auto config = AppConfig{configPath};
+
+      auto saveSession = rt::AppSessionState{};
+      saveSession.lastLibraryPath = "/tmp/music";
+      saveSession.lastOutputBackendId = "session-backend";
+      saveSession.lastOutputDeviceId = "session-device";
+      saveSession.lastOutputProfileId = "session-profile";
+      config.saveAppSession(saveSession);
+
+      auto const config2 = AppConfig{configPath};
+      auto loadSession = rt::AppSessionState{};
+      config2.loadAppSession(loadSession);
+
+      CHECK(loadSession.lastLibraryPath == "/tmp/music");
+      CHECK(loadSession.lastOutputBackendId == "session-backend");
+      CHECK(loadSession.lastOutputDeviceId == "session-device");
+      CHECK(loadSession.lastOutputProfileId == "session-profile");
     }
   }
 } // namespace ao::gtk::test

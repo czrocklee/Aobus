@@ -7,7 +7,6 @@
 #include "ShellLayoutComponentStateStore.h"
 #include "ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
-#include "app/ThemePreset.h"
 #include "layout/document/GtkLayoutPresets.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/editor/LayoutEditorDialog.h"
@@ -157,6 +156,12 @@ namespace ao::gtk
     registerShellActions(registerAction);
     registerWorkspaceActions(registerAction, hasActiveQueue);
     registerTrackActions(registerAction);
+  }
+
+  ShellLayoutController::~ShellLayoutController()
+  {
+    _optEditorThemeToken.reset();
+    _editorDialogPtr.reset();
   }
 
   void ShellLayoutController::registerPlaybackActions(RegisterActionFn const& registerAction,
@@ -568,7 +573,7 @@ namespace ao::gtk
 
     auto const initialPresetId =
       uimodel::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
-    auto const initialThemeId = std::string{themePresetToString(_themeCoordinator.activeTheme())};
+    auto const initialThemeId = std::string{rt::themePresetToString(_themeCoordinator.activeTheme())};
 
     auto loader = [storePtr = _layoutStorePtr](std::string_view id) -> uimodel::LayoutDocument
     {
@@ -611,7 +616,7 @@ namespace ao::gtk
                                             { _host.setLayout(_context, doc); });
 
     dialogRaw->signalThemePreview().connect([this](std::string_view themeId)
-                                            { _themeCoordinator.setTheme(themePresetFromString(themeId)); });
+                                            { _themeCoordinator.setTheme(rt::themePresetFromString(themeId)); });
 
     dialogRaw->signalSaveRequest().connect([this](layout::editor::LayoutSaveResult const& result)
                                            { this->onEditorSaveRequest(result); });
@@ -686,17 +691,8 @@ namespace ao::gtk
       auto prefsUpdate = rt::AppPrefsState{};
       _configPtr->loadAppPrefs(prefsUpdate);
       prefsUpdate.lastLayoutPreset = snapshot.presetId;
-
-      if (_editorDialogPtr)
-      {
-        if (auto const themeIdStr = _editorDialogPtr->selectedThemeId(); !themeIdStr.empty())
-        {
-          _themeCoordinator.setTheme(themePresetFromString(themeIdStr));
-          prefsUpdate.lastThemePreset = themeIdStr;
-        }
-      }
-
       _configPtr->saveAppPrefs(prefsUpdate);
+      _themeCoordinator.setTheme(rt::themePresetFromString(prefsUpdate.lastThemePreset));
     }
 
     _host.setLayout(_context, snapshot.layout);

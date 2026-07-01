@@ -62,6 +62,24 @@ namespace ao::gtk
     }
   }
 
+  void AppConfig::loadAppSession(rt::AppSessionState& state) const
+  {
+    if (auto const res = _storePtr->load("session", state); !res && res.error().code != Error::Code::NotFound)
+    {
+      APP_LOG_DEBUG("AppConfig: Failed to load app session: {}", res.error().message);
+    }
+  }
+
+  void AppConfig::saveAppSession(rt::AppSessionState const& state)
+  {
+    _storePtr->save("session", state);
+
+    if (auto const res = _storePtr->flush(); !res)
+    {
+      APP_LOG_ERROR("AppConfig: Failed to flush app session: {}", res.error().message);
+    }
+  }
+
   uimodel::KeymapModel AppConfig::loadKeymap(uimodel::KeymapBindings defaults) const
   {
     return uimodel::loadKeymap(*_storePtr, std::move(defaults));

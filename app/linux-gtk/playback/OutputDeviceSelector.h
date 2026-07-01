@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <glibmm/object.h>
@@ -11,6 +12,8 @@
 #include <gtkmm/listbox.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
+
+#include <functional>
 
 namespace Gio
 {
@@ -34,13 +37,15 @@ namespace ao::gtk
     OutputDeviceSelector& operator=(OutputDeviceSelector&&) = delete;
 
     explicit OutputDeviceSelector(rt::PlaybackService& playback,
-                                  Gtk::PositionType position = Gtk::PositionType::BOTTOM);
+                                  Gtk::PositionType position = Gtk::PositionType::BOTTOM,
+                                  std::function<void(rt::OutputDeviceSelection const&)> onSelected = {});
     ~OutputDeviceSelector() override;
 
   private:
     Gtk::Widget* createRow(Glib::RefPtr<Glib::Object> const& item);
 
     rt::PlaybackService& _playback;
+    std::function<void(rt::OutputDeviceSelection const&)> _onSelected;
 
     Gtk::ListBox _listBox;
     Glib::RefPtr<Gio::ListStore<Glib::Object>> _storePtr{};

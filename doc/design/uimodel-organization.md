@@ -55,6 +55,7 @@ ao/uimodel/
 │   ├── queue/
 │   ├── quality/
 │   └── soul/
+├── preferences/
 ├── status/
 │   └── activity/
 └── FrameClock.h
@@ -108,6 +109,8 @@ testable and prevents accidental God objects.
 
 - View state projection and UI-local state machines.
 - UI-local preference/session stores.
+- Application preferences models that map user selections to persisted deltas
+  and platform-supplied applier callbacks.
 - Display formatting and editor parsing / edit-value codecs.
 - UI action, visibility/enabled, and selection policy.
 - User-operation workflows that produce runtime commands or metadata patches.
@@ -194,5 +197,8 @@ Tags follow `[uimodel][unit][feature][component]`, e.g.
   transport (`transport/`), seek/time interpolation (`seek/`), output and volume
   (`output/`), queue (`queue/`), audio quality formatting (`quality/`), Aobus soul
   model (`soul/`).
+- **`preferences`** — platform-neutral application preferences models that
+  convert user selections into persisted deltas and platform-supplied applier
+  callbacks. No GTK widgets or config-store ownership.
 - **`status/activity`** — activity status model, detail/compact state types,
   activity action resolution policy.

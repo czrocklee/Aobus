@@ -52,6 +52,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/input/KeyChord.cpp
      uimodel/input/KeymapModel.cpp
      uimodel/input/KeymapStore.cpp
+    uimodel/preferences/PreferencesModel.cpp
     uimodel/field/TrackFieldEditCodec.cpp
      uimodel/field/TrackFieldEditPolicy.cpp
      uimodel/field/TrackFieldFormatter.cpp
