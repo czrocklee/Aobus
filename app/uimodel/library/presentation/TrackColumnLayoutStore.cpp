@@ -57,7 +57,6 @@ namespace ao::uimodel
     }
 
     _activeListId = listId;
-    _changed.emit(_activeListId);
   }
 
   std::vector<rt::TrackField> TrackColumnLayoutStore::activeFieldOrder() const

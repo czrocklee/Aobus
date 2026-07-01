@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
@@ -90,9 +89,7 @@ namespace ao::gtk
     std::vector<ColumnBinding> _columns;
     sigc::scoped_connection _queuedColumnLayoutUpdateConnection;
     sigc::scoped_connection _queuedTitlePositionUpdateConnection;
-    rt::Subscription _layoutChangedSubscription;
     bool _syncingColumnLayout = false;
-    bool _capturingColumnLayout = false;
     Glib::RefPtr<Gtk::CssProvider> _dynamicCssProviderPtr;
     std::string _lastTitleCss;
     std::vector<sigc::scoped_connection> _columnNotifyConnections;

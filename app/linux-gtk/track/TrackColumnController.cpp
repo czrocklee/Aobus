@@ -39,22 +39,6 @@ namespace ao::gtk
   {
     _dynamicCssProviderPtr = Gtk::CssProvider::create();
 
-    _layoutChangedSubscription = _layoutStore.signalChanged().connect(
-      [this](ao::ListId listId)
-      {
-        if (_capturingColumnLayout || _syncingColumnLayout)
-        {
-          return;
-        }
-
-        if (listId != _listId && listId != ao::kInvalidListId)
-        {
-          return;
-        }
-
-        queueSharedColumnLayoutUpdate();
-      });
-
     _columnView.signal_map().connect(sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable));
 
     if (auto const adjPtr = _columnView.get_hadjustment(); adjPtr)
@@ -84,6 +68,9 @@ namespace ao::gtk
 
   void TrackColumnController::setupColumns(FactoryProvider const& factoryProvider)
   {
+    auto const wasSyncingColumnLayout = _syncingColumnLayout;
+    _syncingColumnLayout = true;
+
     auto const defs = rt::trackFieldDefinitions();
 
     _columns.reserve(defs.size());
@@ -122,6 +109,8 @@ namespace ao::gtk
 
       _columns.push_back({.field = rtDef.field, .columnPtr = columnPtr});
     }
+
+    _syncingColumnLayout = wasSyncingColumnLayout;
   }
 
   void TrackColumnController::applyColumnLayout(std::span<rt::TrackField const> visibleFields)
@@ -218,7 +207,7 @@ namespace ao::gtk
 
   void TrackColumnController::queueSharedColumnLayoutUpdate()
   {
-    if (_queuedColumnLayoutUpdateConnection.connected())
+    if (_syncingColumnLayout || _queuedColumnLayoutUpdateConnection.connected())
     {
       return;
     }
@@ -261,8 +250,6 @@ namespace ao::gtk
 
   void TrackColumnController::updateSharedColumnLayout()
   {
-    _capturingColumnLayout = true;
-
     auto layout = std::vector<uimodel::TrackColumnState>{};
 
     if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
@@ -289,7 +276,6 @@ namespace ao::gtk
     }
 
     _layoutStore.updateLayout(_listId, layout);
-    _capturingColumnLayout = false;
   }
 
   std::vector<rt::TrackField> TrackColumnController::captureCurrentFieldOrder() const

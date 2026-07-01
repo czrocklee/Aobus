@@ -30,9 +30,8 @@ namespace ao::uimodel::test
     store.updateLayout(rt::kAllTracksListId, layout);
     store.setActiveListId(rt::kAllTracksListId);
 
-    REQUIRE(events.size() == 2);
+    REQUIRE(events.size() == 1);
     CHECK(events[0] == rt::kAllTracksListId);
-    CHECK(events[1] == rt::kAllTracksListId);
     REQUIRE(store.layoutForList(rt::kAllTracksListId).size() == 2);
     CHECK(store.layoutForList(rt::kAllTracksListId)[0].field == rt::TrackField::Album);
     CHECK(store.layoutForList(rt::kAllTracksListId)[0].width == 230);

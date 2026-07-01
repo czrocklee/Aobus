@@ -13,6 +13,7 @@
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/signallistitemfactory.h>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -88,6 +89,53 @@ namespace ao::gtk::test
       CHECK(titleColumnPtr->get_visible());
       CHECK(artistColumnPtr->get_visible());
       CHECK_FALSE(albumColumnPtr->get_visible());
+    }
+
+    SECTION("setup and sync do not persist initial column construction")
+    {
+      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+
+      auto visible = std::vector{rt::TrackField::Title, rt::TrackField::Artist};
+      controller.syncLayout(visible);
+      drainGtkEvents();
+
+      CHECK(layoutStore.listLayouts().empty());
+    }
+
+    SECTION("column layout writes do not bounce between open views")
+    {
+      auto events = std::vector<ListId>{};
+      auto sub = layoutStore.signalChanged().connect([&events](ListId listId) { events.push_back(listId); });
+
+      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+
+      auto secondColumnView = Gtk::ColumnView{};
+      auto secondController = TrackColumnController{secondColumnView, layoutStore, rt::kAllTracksListId};
+      secondController.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+
+      auto firstVisible = std::vector{rt::TrackField::Title, rt::TrackField::Artist};
+      auto secondVisible = std::vector{rt::TrackField::Title, rt::TrackField::Album};
+      controller.syncLayout(firstVisible);
+      secondController.syncLayout(secondVisible);
+      drainGtkEvents();
+
+      CHECK(events.empty());
+
+      auto const titleColumnPtr = columnForField(columnView, rt::TrackField::Title);
+      REQUIRE(titleColumnPtr);
+
+      titleColumnPtr->set_fixed_width(333);
+      drainGtkEvents();
+
+      REQUIRE(events.size() == 1);
+      CHECK(events[0] == rt::kAllTracksListId);
+
+      auto const& stored = layoutStore.layoutForList(rt::kAllTracksListId);
+      CHECK(std::ranges::contains(stored, rt::TrackField::Artist, &uimodel::TrackColumnState::field));
+      CHECK_FALSE(std::ranges::contains(stored, rt::TrackField::Album, &uimodel::TrackColumnState::field));
+
+      drainGtkEvents();
+      CHECK(events.size() == 1);
     }
 
     SECTION("title position CSS updates are coalesced through idle")
