@@ -32,6 +32,7 @@ namespace ao::tui
   inline constexpr std::int32_t kPresentationPanelListRows = 10;
   inline constexpr std::int32_t kPresentationPanelChromeRows = 6;
   inline constexpr std::int32_t kPresentationPanelRows = kPresentationPanelListRows + kPresentationPanelChromeRows;
+  inline constexpr std::int32_t kDefaultStatusBarColumns = 140;
 
   struct PresentationRowBox final
   {
@@ -44,6 +45,7 @@ namespace ao::tui
     std::string statusMessage{};
     std::size_t trackCount = 0;
     std::int32_t selectedTrack = 0;
+    std::int32_t terminalColumns = kDefaultStatusBarColumns;
     std::string filterDraft{};
     ShellModel const* shell = nullptr;
     ftxui::Box* commandBox = nullptr;

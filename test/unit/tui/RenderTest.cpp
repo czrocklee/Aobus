@@ -69,7 +69,7 @@ namespace ao::tui::test
     CHECK(text.find("/views") != std::string::npos);
   }
 
-  TEST_CASE("Render - idle status bar renders feedback above shortcuts", "[tui][unit][render]")
+  TEST_CASE("Render - wide idle status bar keeps feedback shortcuts and selection on one row", "[tui][unit][render]")
   {
     auto shell = ShellModel{};
     auto const rendered = renderText(
@@ -79,7 +79,7 @@ namespace ao::tui::test
     CHECK(rendered.find("3 / 8 tracks") != std::string::npos);
     CHECK(lineIndexContaining(rendered, "Ready") == 0);
     CHECK(lineIndexContaining(rendered, "3 / 8 tracks") == 0);
-    CHECK(lineIndexContaining(rendered, "/ command") == 1);
+    CHECK(lineIndexContaining(rendered, "/ command") == 0);
     CHECK(rendered.find("/ command") != std::string::npos);
     CHECK(rendered.find("l lists") != std::string::npos);
     CHECK(rendered.find("v view") != std::string::npos);
@@ -91,6 +91,18 @@ namespace ao::tui::test
     CHECK(rendered.find("Mode:") == std::string::npos);
     CHECK(rendered.find("Filter:") == std::string::npos);
     CHECK(rendered.find("view:") == std::string::npos);
+  }
+
+  TEST_CASE("Render - narrow idle status bar wraps shortcuts below feedback", "[tui][unit][render]")
+  {
+    auto shell = ShellModel{};
+    auto const rendered = renderText(statusBar(StatusBarViewState{
+      .statusMessage = "Ready", .trackCount = 8, .selectedTrack = 2, .terminalColumns = 80, .shell = &shell}));
+
+    CHECK(lineIndexContaining(rendered, "Ready") == 0);
+    CHECK(lineIndexContaining(rendered, "3 / 8 tracks") == 0);
+    CHECK(lineIndexContaining(rendered, "/ command") == 1);
+    CHECK(rendered.find("q quit") != std::string::npos);
   }
 
   TEST_CASE("Render - status bar shows filter only when applied", "[tui][unit][render]")

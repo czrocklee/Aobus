@@ -234,6 +234,8 @@ namespace ao::tui
   {
     using namespace ftxui;
 
+    constexpr std::int32_t kSingleLineStatusColumns = 120;
+
     auto const& shell = *state.shell;
     auto const selection = selectionSummary(state.trackCount, state.selectedTrack);
 
@@ -278,15 +280,36 @@ namespace ao::tui
     auto const interactionHint = std::string{overlayHint(overlay)};
     auto const contextLabel = overlay == Overlay::None ? std::string{} : overlayLabel(overlay);
 
-    auto contextPtr = contextLabel.empty() ? text("") : text(contextLabel) | bold;
-    auto prefixElements = Elements{};
+    auto hint = std::string{};
 
     if (!state.filterDraft.empty())
     {
-      prefixElements.push_back(text(std::format("Filter: {}  ", state.filterDraft)) | dim);
+      hint = std::format("Filter: {}  ", state.filterDraft);
     }
 
-    prefixElements.push_back(text(interactionHint) | dim);
+    hint += interactionHint;
+
+    if (overlay != Overlay::None)
+    {
+      return hbox({
+        text(state.statusMessage) | flex,
+        text(contextLabel) | bold,
+        text("  "),
+        text(hint) | dim,
+        text("  "),
+        text(selection),
+      });
+    }
+
+    if (state.terminalColumns >= kSingleLineStatusColumns)
+    {
+      return hbox({
+        text(state.statusMessage) | flex,
+        text(hint) | dim,
+        text("  "),
+        text(selection),
+      });
+    }
 
     return vbox({
       hbox({
@@ -294,9 +317,7 @@ namespace ao::tui
         text(selection),
       }),
       hbox({
-        std::move(contextPtr),
-        contextLabel.empty() ? text("") : text("  "),
-        hbox(std::move(prefixElements)) | flex,
+        text(hint) | dim | flex,
       }),
     });
   }

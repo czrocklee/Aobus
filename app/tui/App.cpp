@@ -643,6 +643,7 @@ namespace ao::tui
           statusBar(StatusBarViewState{.statusMessage = events.statusMessage(),
                                        .trackCount = library.tracks().size(),
                                        .selectedTrack = library.selectedTrack(),
+                                       .terminalColumns = terminalColumns,
                                        .filterDraft = library.filterDraft(),
                                        .shell = &shell,
                                        .commandBox = &commandInputBox}),
