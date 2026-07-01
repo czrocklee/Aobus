@@ -46,27 +46,6 @@ namespace ao::tui::test
       return screen.ToString();
     }
 
-    std::string renderText(ftxui::Element elementPtr, std::int32_t const width, std::int32_t const height)
-    {
-      return renderElement(std::move(elementPtr), width, height).text;
-    }
-
-    std::string lineContaining(std::string_view text, std::string_view needle)
-    {
-      auto const position = text.find(needle);
-
-      if (position == std::string_view::npos)
-      {
-        return {};
-      }
-
-      auto const lineBegin = text.rfind('\n', position);
-      auto const lineEnd = text.find('\n', position);
-      auto const begin = lineBegin == std::string_view::npos ? 0 : lineBegin + 1;
-      auto const end = lineEnd == std::string_view::npos ? text.size() : lineEnd;
-      return std::string{text.substr(begin, end - begin)};
-    }
-
     std::int32_t lineIndexContaining(std::string_view const text, std::string_view const needle)
     {
       auto const position = text.find(needle);
@@ -245,43 +224,5 @@ namespace ao::tui::test
 
     REQUIRE(rowBoxes.size() == 1);
     CHECK_FALSE(rendered.screen.PixelAt(rowBoxes[0].box.x_min, rowBoxes[0].box.y_min).inverted);
-  }
-
-  TEST_CASE("Render - anchored popover opens below its trigger", "[tui][unit][render]")
-  {
-    using namespace ftxui;
-
-    auto const anchor = Box{.x_min = 12, .x_max = 17, .y_min = 0, .y_max = 0};
-    auto const rendered = renderText(anchoredPopover(anchor, 8, 40, text("Popup") | size(WIDTH, EQUAL, 8)), 40, 4);
-    auto const line = lineContaining(rendered, "Popup");
-
-    REQUIRE_FALSE(line.empty());
-    CHECK(line.find("Popup") == 12);
-  }
-
-  TEST_CASE("Render - anchored popover clamps inside the terminal width", "[tui][unit][render]")
-  {
-    using namespace ftxui;
-
-    auto const anchor = Box{.x_min = 36, .x_max = 39, .y_min = 0, .y_max = 0};
-    auto const rendered = renderText(anchoredPopover(anchor, 8, 40, text("Popup") | size(WIDTH, EQUAL, 8)), 40, 4);
-    auto const line = lineContaining(rendered, "Popup");
-
-    REQUIRE_FALSE(line.empty());
-    CHECK(line.find("Popup") == 32);
-  }
-
-  TEST_CASE("Render - anchored popover above opens over its trigger", "[tui][unit][render]")
-  {
-    using namespace ftxui;
-
-    auto const anchor = Box{.x_min = 12, .x_max = 17, .y_min = 5, .y_max = 5};
-    auto const rendered =
-      renderText(anchoredPopoverAbove(anchor, 8, 40, 8, 2, text("Popup") | size(WIDTH, EQUAL, 8)), 40, 8);
-    auto const line = lineContaining(rendered, "Popup");
-
-    REQUIRE_FALSE(line.empty());
-    CHECK(line.find("Popup") == 12);
-    CHECK(lineIndexContaining(rendered, "Popup") == 3);
   }
 } // namespace ao::tui::test

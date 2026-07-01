@@ -83,52 +83,6 @@ namespace ao::tui
     });
   }
 
-  ftxui::Element anchoredPopover(ftxui::Box const anchor,
-                                 std::int32_t const popoverColumns,
-                                 std::int32_t const terminalColumns,
-                                 ftxui::Element popoverPtr)
-  {
-    using namespace ftxui;
-
-    auto const maxLeft = terminalColumns > popoverColumns ? terminalColumns - popoverColumns : 0;
-    auto const left = std::clamp(anchor.x_min, 0, maxLeft);
-    auto const top = std::max(0, anchor.y_max + 1);
-
-    return vbox({
-      filler() | size(HEIGHT, EQUAL, top),
-      hbox({
-        filler() | size(WIDTH, EQUAL, left),
-        std::move(popoverPtr) | clear_under,
-        filler(),
-      }),
-      filler(),
-    });
-  }
-
-  ftxui::Element anchoredPopoverAbove(ftxui::Box const anchor,
-                                      std::int32_t const popoverColumns,
-                                      std::int32_t const terminalColumns,
-                                      std::int32_t const terminalRows,
-                                      std::int32_t const popoverRows,
-                                      ftxui::Element popoverPtr)
-  {
-    using namespace ftxui;
-
-    auto const maxLeft = terminalColumns > popoverColumns ? terminalColumns - popoverColumns : 0;
-    auto const left = std::clamp(anchor.x_min, 0, maxLeft);
-    auto const top = std::max(0, anchor.y_min - popoverRows);
-
-    return vbox({
-      filler() | size(HEIGHT, EQUAL, top),
-      hbox({
-        filler() | size(WIDTH, EQUAL, left),
-        std::move(popoverPtr) | clear_under,
-        filler(),
-      }),
-      filler() | size(HEIGHT, EQUAL, std::max(0, terminalRows - top - popoverRows)),
-    });
-  }
-
   ftxui::Element detailPane(TrackListItem const* selectedTrack, ftxui::Element coverElementPtr)
   {
     constexpr int kLabelColumns = 14;

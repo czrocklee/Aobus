@@ -5,6 +5,7 @@
 
 #include "Model.h"
 #include "ShellModel.h"
+#include "TextCell.h"
 #include <ao/audio/Backend.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
@@ -14,7 +15,6 @@
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
-#include <ftxui/screen/string.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -74,49 +74,9 @@ namespace ao::tui
       return "No output device selected";
     }
 
-    std::string truncateToCellWidth(std::string_view const value, std::int32_t const width)
-    {
-      auto result = std::string{};
-      std::int32_t used = 0;
-
-      for (auto const& glyph : ftxui::Utf8ToGlyphs(std::string{value}))
-      {
-        auto const glyphWidth = static_cast<std::int32_t>(ftxui::string_width(glyph));
-
-        if (glyphWidth == 0)
-        {
-          result += glyph;
-          continue;
-        }
-
-        if (used + glyphWidth > width)
-        {
-          break;
-        }
-
-        result += glyph;
-        used += glyphWidth;
-      }
-
-      return result;
-    }
-
-    std::string fitCellText(std::string value, std::int32_t const width)
-    {
-      value = truncateToCellWidth(value, width);
-      auto const padding = width - static_cast<std::int32_t>(ftxui::string_width(value));
-
-      if (padding > 0)
-      {
-        value.append(static_cast<std::size_t>(padding), ' ');
-      }
-
-      return value;
-    }
-
     ftxui::Element outputText(std::string value, bool const dimmed = false)
     {
-      auto elementPtr = ftxui::text(fitCellText(std::move(value), kOutputDeviceInnerColumns)) |
+      auto elementPtr = ftxui::text(fitCellText(value, kOutputDeviceInnerColumns)) |
                         ftxui::size(ftxui::WIDTH, ftxui::EQUAL, kOutputDeviceInnerColumns);
 
       if (dimmed)

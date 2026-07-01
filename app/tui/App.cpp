@@ -3,6 +3,7 @@
 
 #include "App.h"
 
+#include "AnchoredOverlay.h"
 #include "AudioBackendBootstrap.h"
 #include "CommandCompletionProvider.h"
 #include "CoverArt.h"
@@ -40,7 +41,6 @@
 #include <ftxui/screen/terminal.hpp>
 #include <unistd.h>
 
-#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cerrno>
@@ -84,28 +84,6 @@ namespace ao::tui
       }
     }
 
-    ftxui::Box popoverAnchor(ftxui::Box anchor)
-    {
-      anchor.y_min -= kMainLayerTopRows;
-      anchor.y_max -= kMainLayerTopRows;
-      return anchor;
-    }
-
-    ftxui::Box commandPopoverAnchor(ftxui::Box anchor,
-                                    std::int32_t const terminalColumns,
-                                    std::int32_t const terminalRows)
-    {
-      if (anchor.x_min == 0 && anchor.x_max == 0 && anchor.y_min == 0 && anchor.y_max == 0)
-      {
-        anchor.x_min = 0;
-        anchor.x_max = std::max(0, terminalColumns - 1);
-        anchor.y_min = std::max(0, terminalRows - 1);
-        anchor.y_max = anchor.y_min;
-      }
-
-      return anchor;
-    }
-
     ftxui::Element commandCompletionPopover(ShellModel const& shell,
                                             ftxui::Box const& commandInputBox,
                                             std::int32_t const terminalColumns,
@@ -118,15 +96,15 @@ namespace ao::tui
         return {};
       }
 
-      auto const commandAnchor = commandPopoverAnchor(commandInputBox, terminalColumns, terminalRows);
-      return anchoredPopoverAbove(commandAnchor,
-                                  kCommandCompletionPanelColumns,
-                                  terminalColumns,
-                                  terminalRows,
-                                  kCommandCompletionPanelRows,
-                                  commandCompletionPanel(*optCompletion, shell.commandCompletionSelection()) |
-                                    ftxui::size(ftxui::WIDTH, ftxui::EQUAL, kCommandCompletionPanelColumns) |
-                                    ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kCommandCompletionPanelRows));
+      return anchoredOverlay(
+        commandCompletionPanel(*optCompletion, shell.commandCompletionSelection()) |
+          ftxui::size(ftxui::WIDTH, ftxui::EQUAL, kCommandCompletionPanelColumns) |
+          ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kCommandCompletionPanelRows),
+        commandInputBox,
+        AnchoredOverlayPlacement::Above,
+        AnchoredOverlaySize{.columns = kCommandCompletionPanelColumns, .rows = kCommandCompletionPanelRows},
+        AnchoredOverlayTerminal{.columns = terminalColumns, .rows = terminalRows},
+        AnchoredOverlayOptions{.fallbackToBottom = true});
     }
 
     ftxui::Element presentationPopover(ShellModel const& shell,
@@ -140,13 +118,14 @@ namespace ao::tui
         return {};
       }
 
-      return anchoredPopover(
-        presentationButtonBox,
-        kPresentationPanelColumns,
-        terminalColumns,
+      return anchoredOverlay(
         presentationPanel(
           library.presentationItems(), library.activePresentationId(), library.selectedPresentation(), rowBoxes) |
-          ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kPresentationPanelRows));
+          ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kPresentationPanelRows),
+        presentationButtonBox,
+        AnchoredOverlayPlacement::Below,
+        AnchoredOverlaySize{.columns = kPresentationPanelColumns, .rows = kPresentationPanelRows},
+        AnchoredOverlayTerminal{.columns = terminalColumns});
     }
 
     enum class CoverArtMode : std::uint8_t
@@ -597,15 +576,27 @@ namespace ao::tui
           trackTableView(library.tracks(), library.selectedTrack(), state.trackId, viewState.presentation);
         auto mainContentPtr = workspaceElementPtr;
         auto popoverElementPtr = ftxui::Element{};
+        auto mainLayerPopover = [&](ftxui::Box const& rootAnchor,
+                                    std::int32_t const columns,
+                                    std::int32_t const rows,
+                                    ftxui::Element contentPtr)
+        {
+          return anchoredOverlay(std::move(contentPtr),
+                                 rootAnchor,
+                                 AnchoredOverlayPlacement::Below,
+                                 AnchoredOverlaySize{.columns = columns, .rows = rows},
+                                 AnchoredOverlayTerminal{.columns = terminalColumns, .rows = terminalRows},
+                                 AnchoredOverlayOptions{.overlayLayerTopRows = kMainLayerTopRows});
+        };
 
         switch (shell.overlay())
         {
           case Overlay::None: break;
           case Overlay::ListChooser:
-            popoverElementPtr = anchoredPopover(popoverAnchor(libraryButtonBox),
-                                                kLibraryChooserPaneColumns,
-                                                terminalColumns,
-                                                libraryChooserPane(library.libraryLabels(), library.selectedList()));
+            popoverElementPtr = mainLayerPopover(libraryButtonBox,
+                                                 kLibraryChooserPaneColumns,
+                                                 0,
+                                                 libraryChooserPane(library.libraryLabels(), library.selectedList()));
             break;
           case Overlay::DetailPanel:
             mainContentPtr = hbox({
@@ -614,14 +605,13 @@ namespace ao::tui
             });
             break;
           case Overlay::QualityPanel:
-            popoverElementPtr = anchoredPopover(
-              popoverAnchor(qualityButtonBox), kQualityPanelColumns, terminalColumns, qualityPanel(state));
+            popoverElementPtr = mainLayerPopover(qualityButtonBox, kQualityPanelColumns, 0, qualityPanel(state));
             break;
           case Overlay::OutputDevices:
-            popoverElementPtr = anchoredPopover(
-              popoverAnchor(outputDeviceButtonBox),
+            popoverElementPtr = mainLayerPopover(
+              outputDeviceButtonBox,
               kOutputDevicePanelColumns,
-              terminalColumns,
+              0,
               outputDevicePanel(outputDevices.viewState(), outputDevices.selectedRow(), &outputDeviceRowBoxes));
             break;
           case Overlay::PresentationPanel: break;

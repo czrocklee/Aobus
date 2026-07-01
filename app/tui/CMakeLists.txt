@@ -1,4 +1,5 @@
 add_library(aobus-tui-lib STATIC
+    AnchoredOverlay.cpp
     CommandCompletion.cpp
     CommandCompletionProvider.cpp
     CommandCompletionState.cpp
@@ -13,6 +14,7 @@ add_library(aobus-tui-lib STATIC
     TrackTable.cpp
     Model.cpp
     ShellModel.cpp
+    TextCell.cpp
 )
 
 target_include_directories(aobus-tui-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")

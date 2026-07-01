@@ -5,6 +5,7 @@
 
 #include "Model.h"
 #include "ShellModel.h"
+#include "TextCell.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -15,7 +16,6 @@
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 
 #include <ftxui/dom/elements.hpp>
-#include <ftxui/screen/string.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -50,53 +50,6 @@ namespace ao::tui
     std::string blankFallback(std::string_view value)
     {
       return value.empty() ? std::string{"-"} : std::string{value};
-    }
-
-    std::string truncateToCellWidth(std::string_view const value, std::int32_t const width)
-    {
-      auto result = std::string{};
-      std::int32_t used = 0;
-
-      for (auto const& glyph : ftxui::Utf8ToGlyphs(std::string{value}))
-      {
-        auto const glyphWidth = static_cast<std::int32_t>(ftxui::string_width(glyph));
-
-        if (glyphWidth == 0)
-        {
-          result += glyph;
-          continue;
-        }
-
-        if (used + glyphWidth > width)
-        {
-          break;
-        }
-
-        result += glyph;
-        used += glyphWidth;
-      }
-
-      return result;
-    }
-
-    std::string fitCellText(std::string value, std::int32_t const width, bool const rightAligned)
-    {
-      value = truncateToCellWidth(value, width);
-
-      auto const padding = width - static_cast<std::int32_t>(ftxui::string_width(value));
-
-      if (padding <= 0)
-      {
-        return value;
-      }
-
-      if (rightAligned)
-      {
-        return std::string(static_cast<std::size_t>(padding), ' ') + value;
-      }
-
-      value.append(static_cast<std::size_t>(padding), ' ');
-      return value;
     }
 
     bool rightAlignField(rt::TrackField const field)
@@ -139,7 +92,7 @@ namespace ao::tui
 
     ftxui::Element fixedCell(std::string value, std::int32_t const width, bool const rightAligned = false)
     {
-      return ftxui::text(fitCellText(std::move(value), width, rightAligned)) |
+      return ftxui::text(fitCellText(value, width, rightAligned ? CellAlignment::Right : CellAlignment::Left)) |
              ftxui::size(ftxui::WIDTH, ftxui::EQUAL, width);
     }
 
