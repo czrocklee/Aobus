@@ -302,6 +302,16 @@ namespace ao::tui
     return detail;
   }
 
+  std::string presentationDisplayId(std::string_view const presentationId)
+  {
+    return presentationId.empty() ? std::string{"default"} : std::string{presentationId};
+  }
+
+  std::string presentationBadgeLabel(std::string_view const presentationId)
+  {
+    return std::format("view:{}", presentationDisplayId(presentationId));
+  }
+
   TrackListItem makeTrackListItem(rt::TrackRow const& row)
   {
     auto detail = trackDisplayDetail(row);

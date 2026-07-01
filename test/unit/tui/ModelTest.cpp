@@ -126,6 +126,14 @@ namespace ao::tui::test
     CHECK(items[1].detail == "custom");
   }
 
+  TEST_CASE("Model - presentation display labels fall back to default", "[tui][unit][model]")
+  {
+    CHECK(presentationDisplayId("") == "default");
+    CHECK(presentationDisplayId("albums") == "albums");
+    CHECK(presentationBadgeLabel("") == "view:default");
+    CHECK(presentationBadgeLabel("albums") == "view:albums");
+  }
+
   TEST_CASE("Model - menu labels preserve track order", "[tui][unit][model]")
   {
     auto tracks =

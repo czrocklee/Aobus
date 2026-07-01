@@ -69,6 +69,7 @@ namespace ao::tui
   std::span<CommandAliasSpec const> commandAliasSpecs();
   Command parseCommand(std::string_view input);
   std::string overlayLabel(Overlay overlay);
+  std::string_view overlayHint(Overlay overlay);
 
   class ShellModel final
   {

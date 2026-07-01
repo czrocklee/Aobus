@@ -4,6 +4,7 @@
 #include "TrackTable.h"
 
 #include "Model.h"
+#include "ShellModel.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -351,7 +352,7 @@ namespace ao::tui
              separator(),
              selectableRows(std::move(rows), selected, true, "No lists found"),
              separator(),
-             text("Enter open  Esc close") | dim,
+             text(std::string{overlayHint(Overlay::ListChooser)}) | dim,
            }) |
            border | size(WIDTH, EQUAL, kLibraryChooserPaneColumns);
   }

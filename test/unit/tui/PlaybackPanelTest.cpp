@@ -14,6 +14,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
+#include <ftxui/screen/box.hpp>
 #include <ftxui/screen/screen.hpp>
 
 #include <chrono>
@@ -51,10 +52,12 @@ namespace ao::tui::test
   {
     auto const state = rt::PlaybackState{};
 
-    auto const text = renderText(playbackBar(state, "Library", std::chrono::milliseconds{0}));
+    auto const text = renderText(
+      playbackBar(PlaybackBarViewState{.playbackState = &state, .listTitle = "Library", .presentationId = "songs"}));
 
     CHECK(text.find("Aobus") != std::string::npos);
     CHECK(text.find("Library") != std::string::npos);
+    CHECK(text.find("view:songs") != std::string::npos);
     CHECK(text.find("No active track") != std::string::npos);
     CHECK(text.find("Idle") != std::string::npos);
     CHECK(text.find("0:00 / --:--") != std::string::npos);
@@ -70,9 +73,13 @@ namespace ao::tui::test
                                    .volume = 0.42F,
                                    .quality = audio::Quality::LosslessFloat};
 
-    auto const text = renderText(playbackBar(state, "Favorites", std::chrono::seconds{65}));
+    auto const text = renderText(playbackBar(PlaybackBarViewState{.playbackState = &state,
+                                                                  .listTitle = "Favorites",
+                                                                  .presentationId = "albums",
+                                                                  .displayElapsed = std::chrono::seconds{65}}));
 
     CHECK(text.find("Favorites") != std::string::npos);
+    CHECK(text.find("view:albums") != std::string::npos);
     CHECK(text.find("Signal Path") != std::string::npos);
     CHECK(text.find("Aobus") != std::string::npos);
     CHECK(text.find("Playing") != std::string::npos);
@@ -89,10 +96,38 @@ namespace ao::tui::test
       .hasActiveOutputDevice = true,
     };
 
-    auto const text = renderText(playbackBar(state, "Library", std::chrono::milliseconds{0}, &output));
+    auto const text = renderText(playbackBar(PlaybackBarViewState{
+      .playbackState = &state, .listTitle = "Library", .presentationId = "songs", .outputView = &output}));
 
     CHECK(text.find("PW") != std::string::npos);
     CHECK(text.find("No active track") != std::string::npos);
+  }
+
+  TEST_CASE("PlaybackPanel - playback bar renders default presentation fallback", "[tui][unit][playback]")
+  {
+    auto const state = rt::PlaybackState{};
+
+    auto const text = renderText(playbackBar(PlaybackBarViewState{.playbackState = &state, .listTitle = "Library"}));
+
+    CHECK(text.find("view:default") != std::string::npos);
+  }
+
+  TEST_CASE("PlaybackPanel - playback bar reflects presentation badge", "[tui][unit][playback]")
+  {
+    auto const state = rt::PlaybackState{};
+    auto presentationBox = ftxui::Box{};
+
+    auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
+    ftxui::Render(screen,
+                  playbackBar(PlaybackBarViewState{.playbackState = &state,
+                                                   .listTitle = "Library",
+                                                   .presentationId = "albums",
+                                                   .presentationBox = &presentationBox}));
+
+    CHECK(screen.ToString().find("view:albums") != std::string::npos);
+    CHECK(presentationBox.x_min > 0);
+    CHECK(presentationBox.x_min < presentationBox.x_max);
+    CHECK(presentationBox.y_min == 0);
   }
 
   TEST_CASE("PlaybackPanel - quality panel renders empty pipeline state", "[tui][unit][playback]")

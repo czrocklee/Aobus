@@ -151,6 +151,24 @@ namespace ao::tui
     return "Tracks";
   }
 
+  std::string_view overlayHint(Overlay const overlay)
+  {
+    using namespace std::literals;
+
+    switch (overlay)
+    {
+      case Overlay::None: return "/ command  l lists  v view  d detail  a quality  o output  Ctrl-L current  q quit"sv;
+      case Overlay::ListChooser: return "l toggle  Enter open  Esc close"sv;
+      case Overlay::DetailPanel: return "d toggle  Esc close"sv;
+      case Overlay::QualityPanel: return "a toggle  Esc close"sv;
+      case Overlay::OutputDevices: return "o toggle  Enter select  Esc close"sv;
+      case Overlay::PresentationPanel: return "v toggle  Enter select  Esc close"sv;
+      case Overlay::Help: return "Esc close"sv;
+    }
+
+    return "/ command  l lists  v view  d detail  a quality  o output  Ctrl-L current  q quit"sv;
+  }
+
   bool ShellModel::commandActive() const noexcept
   {
     return _commandActive;

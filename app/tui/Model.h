@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::tui
@@ -63,6 +64,8 @@ namespace ao::tui
   QualityIndicatorStyle qualityIndicatorStyle(audio::Quality quality);
   std::string trackDisplayTitle(rt::TrackRow const& row);
   std::string trackDisplayDetail(rt::TrackRow const& row);
+  std::string presentationDisplayId(std::string_view presentationId);
+  std::string presentationBadgeLabel(std::string_view presentationId);
   std::string listNodeIcon(rt::ListNodeKind kind);
   std::string listTitle(ListId listId, std::vector<LibraryNavItem> const& items);
 

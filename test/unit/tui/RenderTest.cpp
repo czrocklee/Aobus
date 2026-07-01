@@ -90,38 +90,72 @@ namespace ao::tui::test
     CHECK(text.find("/views") != std::string::npos);
   }
 
-  TEST_CASE("Render - compact and wide status bars advertise the same shortcuts", "[tui][unit][render]")
+  TEST_CASE("Render - idle status bar renders feedback above shortcuts", "[tui][unit][render]")
   {
     auto shell = ShellModel{};
-    auto const compact = renderText(statusBar(StatusBarViewState{.shell = &shell, .terminalColumns = 80}));
-    auto const wide = renderText(statusBar(StatusBarViewState{.shell = &shell, .terminalColumns = 140}));
+    auto const rendered = renderText(
+      statusBar(StatusBarViewState{.statusMessage = "Ready", .trackCount = 8, .selectedTrack = 2, .shell = &shell}));
 
-    CHECK(compact.find("d detail") != std::string::npos);
-    CHECK(compact.find("o output") != std::string::npos);
-    CHECK(compact.find("v view") != std::string::npos);
-    CHECK(compact.find("Ctrl-L current") != std::string::npos);
-    CHECK(compact.find("/view id") != std::string::npos);
-    CHECK(wide.find("d detail") != std::string::npos);
-    CHECK(wide.find("o output") != std::string::npos);
-    CHECK(wide.find("v view") != std::string::npos);
-    CHECK(wide.find("Ctrl-L current") != std::string::npos);
-    CHECK(wide.find("/view id") != std::string::npos);
+    CHECK(rendered.find("Ready") != std::string::npos);
+    CHECK(rendered.find("3 / 8 tracks") != std::string::npos);
+    CHECK(lineIndexContaining(rendered, "Ready") == 0);
+    CHECK(lineIndexContaining(rendered, "3 / 8 tracks") == 0);
+    CHECK(lineIndexContaining(rendered, "/ command") == 1);
+    CHECK(rendered.find("/ command") != std::string::npos);
+    CHECK(rendered.find("l lists") != std::string::npos);
+    CHECK(rendered.find("v view") != std::string::npos);
+    CHECK(rendered.find("d detail") != std::string::npos);
+    CHECK(rendered.find("a quality") != std::string::npos);
+    CHECK(rendered.find("o output") != std::string::npos);
+    CHECK(rendered.find("Ctrl-L current") != std::string::npos);
+    CHECK(rendered.find("q quit") != std::string::npos);
+    CHECK(rendered.find("Mode:") == std::string::npos);
+    CHECK(rendered.find("Filter:") == std::string::npos);
+    CHECK(rendered.find("view:") == std::string::npos);
   }
 
-  TEST_CASE("Render - status bar reflects the presentation label box", "[tui][unit][render]")
+  TEST_CASE("Render - status bar shows filter only when applied", "[tui][unit][render]")
   {
     auto shell = ShellModel{};
-    auto presentationBox = ftxui::Box{};
+    auto const rendered = renderText(statusBar(StatusBarViewState{.statusMessage = "Quick filter matched 2 tracks",
+                                                                  .trackCount = 2,
+                                                                  .selectedTrack = 0,
+                                                                  .filterDraft = "Aimer",
+                                                                  .shell = &shell}));
 
-    auto const rendered = renderElement(
-      statusBar(StatusBarViewState{
-        .presentationId = "albums", .shell = &shell, .presentationBox = &presentationBox, .terminalColumns = 140}),
-      140,
-      1);
+    CHECK(rendered.find("Filter: Aimer") != std::string::npos);
+    CHECK(rendered.find("Filter: -") == std::string::npos);
+  }
 
-    CHECK(rendered.text.find("view:albums") != std::string::npos);
-    CHECK(presentationBox.x_min <= presentationBox.x_max);
-    CHECK(presentationBox.y_min == 0);
+  TEST_CASE("Render - status bar uses overlay-specific help for every overlay", "[tui][unit][render]")
+  {
+    struct Case final
+    {
+      Overlay overlay = Overlay::None;
+      std::string_view label{};
+      std::string_view hint{};
+    };
+
+    auto const cases = std::vector<Case>{
+      {.overlay = Overlay::ListChooser, .label = "Lists", .hint = "l toggle  Enter open  Esc close"},
+      {.overlay = Overlay::DetailPanel, .label = "Detail", .hint = "d toggle  Esc close"},
+      {.overlay = Overlay::QualityPanel, .label = "Quality", .hint = "a toggle  Esc close"},
+      {.overlay = Overlay::OutputDevices, .label = "Output", .hint = "o toggle  Enter select  Esc close"},
+      {.overlay = Overlay::PresentationPanel, .label = "Views", .hint = "v toggle  Enter select  Esc close"},
+      {.overlay = Overlay::Help, .label = "Help", .hint = "Esc close"},
+    };
+
+    for (auto const& item : cases)
+    {
+      auto shell = ShellModel{};
+      shell.openOverlay(item.overlay);
+
+      auto const rendered = renderText(statusBar(StatusBarViewState{.shell = &shell}));
+
+      CHECK(rendered.find(item.label) != std::string::npos);
+      CHECK(rendered.find(item.hint) != std::string::npos);
+      CHECK(rendered.find("/ command") == std::string::npos);
+    }
   }
 
   TEST_CASE("Render - command status shows inline completion suffix", "[tui][unit][render]")
@@ -134,7 +168,7 @@ namespace ao::tui::test
       .items = {rt::CompletionItem{.displayText = "Aimer", .insertText = "Aimer", .detail = "artist"}},
     });
 
-    auto const rendered = renderText(statusBar(StatusBarViewState{.shell = &shell, .terminalColumns = 140}));
+    auto const rendered = renderText(statusBar(StatusBarViewState{.shell = &shell}));
 
     CHECK(rendered.find("/A") != std::string::npos);
     CHECK(rendered.find("imer") != std::string::npos);
@@ -151,7 +185,7 @@ namespace ao::tui::test
       .items = {rt::CompletionItem{.displayText = "/output", .insertText = "output", .detail = "output device"}},
     });
 
-    auto const rendered = renderText(statusBar(StatusBarViewState{.shell = &shell, .terminalColumns = 140}));
+    auto const rendered = renderText(statusBar(StatusBarViewState{.shell = &shell}));
 
     CHECK(rendered.find("/output") == std::string::npos);
     CHECK(rendered.find("Tab complete") != std::string::npos);

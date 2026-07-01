@@ -45,11 +45,8 @@ namespace ao::tui
     std::size_t trackCount = 0;
     std::int32_t selectedTrack = 0;
     std::string filterDraft{};
-    std::string presentationId{};
     ShellModel const* shell = nullptr;
     ftxui::Box* commandBox = nullptr;
-    ftxui::Box* presentationBox = nullptr;
-    std::int32_t terminalColumns = 0;
   };
 
   ftxui::Element renderKittyCoverArtPlaceholder(bool hasCover);

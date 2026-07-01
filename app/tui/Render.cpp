@@ -235,7 +235,7 @@ namespace ao::tui
 
     rows.push_back(hbox({
       text("Views") | bold | flex,
-      text(activePresentationId.empty() ? std::string{"default"} : std::string{activePresentationId}) | bold,
+      text(presentationDisplayId(activePresentationId)) | bold,
     }));
     rows.push_back(separator());
 
@@ -271,26 +271,17 @@ namespace ao::tui
     rows.push_back(vbox(std::move(listRows)) | focusPosition(0, focusRow) | vscroll_indicator | frame |
                    size(HEIGHT, EQUAL, kPresentationPanelListRows));
     rows.push_back(separator());
-    rows.push_back(text("v toggle  Enter select  Esc close") | dim);
+    rows.push_back(text(std::string{overlayHint(Overlay::PresentationPanel)}) | dim);
 
     return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, kPresentationPanelColumns);
   }
 
   ftxui::Element statusBar(StatusBarViewState const& state)
   {
-    constexpr std::int32_t kCompactColumns = 110;
-    using namespace std::literals;
-    constexpr auto kShortcutText =
-      "/ command  l lists  d detail  a quality  o output  v view  Ctrl-L current  /view id  q quit"sv;
     using namespace ftxui;
 
     auto const& shell = *state.shell;
-    auto const filter =
-      state.filterDraft.empty() ? std::string{"filter:-"} : std::format("filter:{}", state.filterDraft);
-    auto const presentation =
-      state.presentationId.empty() ? std::string{"view:default"} : std::format("view:{}", state.presentationId);
     auto const selection = selectionSummary(state.trackCount, state.selectedTrack);
-    auto const overlay = overlayLabel(shell.overlay());
 
     if (shell.commandActive())
     {
@@ -329,38 +320,30 @@ namespace ao::tui
       });
     }
 
-    auto presentationElementPtr = text(presentation) | dim;
+    auto const overlay = shell.overlay();
+    auto const interactionHint = std::string{overlayHint(overlay)};
+    auto const contextLabel = overlay == Overlay::None ? std::string{} : overlayLabel(overlay);
 
-    if (state.presentationBox != nullptr)
+    auto contextPtr = contextLabel.empty() ? text("") : text(contextLabel) | bold;
+    auto prefixElements = Elements{};
+
+    if (!state.filterDraft.empty())
     {
-      presentationElementPtr = std::move(presentationElementPtr) | reflect(*state.presentationBox);
+      prefixElements.push_back(text(std::format("Filter: {}  ", state.filterDraft)) | dim);
     }
 
-    if (state.terminalColumns < kCompactColumns)
-    {
-      return vbox({
-        hbox({
-          text(state.statusMessage) | flex,
-          text("Mode: " + overlay + "  ") | dim,
-          text(selection),
-        }),
-        hbox({
-          text(filter + "  ") | dim,
-          std::move(presentationElementPtr),
-          filler(),
-          text(std::string{kShortcutText}) | dim,
-        }),
-      });
-    }
+    prefixElements.push_back(text(interactionHint) | dim);
 
-    return hbox({
-      text(state.statusMessage) | flex,
-      text("Mode: " + overlay + "  ") | dim,
-      text(filter + "  ") | dim,
-      std::move(presentationElementPtr),
-      text("  ") | dim,
-      text(std::string{kShortcutText} + "  ") | dim,
-      text(selection),
+    return vbox({
+      hbox({
+        text(state.statusMessage) | flex,
+        text(selection),
+      }),
+      hbox({
+        std::move(contextPtr),
+        contextLabel.empty() ? text("") : text("  "),
+        hbox(std::move(prefixElements)) | flex,
+      }),
     });
   }
 } // namespace ao::tui

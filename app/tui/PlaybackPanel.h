@@ -10,7 +10,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
-#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ftxui
@@ -36,13 +36,20 @@ namespace ao::tui
     ftxui::Box secondaryBox{};
   };
 
-  ftxui::Element playbackBar(rt::PlaybackState const& state,
-                             std::string const& listTitle,
-                             std::chrono::milliseconds displayElapsed,
-                             uimodel::OutputDeviceViewState const* outputView = nullptr,
-                             ftxui::Box* outputDeviceBox = nullptr,
-                             ftxui::Box* libraryBox = nullptr,
-                             ftxui::Box* qualityBox = nullptr);
+  struct PlaybackBarViewState final
+  {
+    rt::PlaybackState const* playbackState = nullptr;
+    std::string_view listTitle{};
+    std::string_view presentationId{};
+    std::chrono::milliseconds displayElapsed{};
+    uimodel::OutputDeviceViewState const* outputView = nullptr;
+    ftxui::Box* outputDeviceBox = nullptr;
+    ftxui::Box* libraryBox = nullptr;
+    ftxui::Box* qualityBox = nullptr;
+    ftxui::Box* presentationBox = nullptr;
+  };
+
+  ftxui::Element playbackBar(PlaybackBarViewState const& view);
 
   ftxui::Element qualityPanel(rt::PlaybackState const& state);
   ftxui::Element outputDevicePanel(uimodel::OutputDeviceViewState const& view,

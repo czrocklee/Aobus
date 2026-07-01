@@ -4,6 +4,7 @@
 #include "PlaybackPanel.h"
 
 #include "Model.h"
+#include "ShellModel.h"
 #include <ao/audio/Backend.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
@@ -12,7 +13,6 @@
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <ftxui/dom/elements.hpp>
-#include <ftxui/screen/box.hpp>
 #include <ftxui/screen/color.hpp>
 #include <ftxui/screen/string.hpp>
 
@@ -128,44 +128,47 @@ namespace ao::tui
     }
   } // namespace
 
-  ftxui::Element playbackBar(rt::PlaybackState const& state,
-                             std::string const& listTitle,
-                             std::chrono::milliseconds const displayElapsed,
-                             uimodel::OutputDeviceViewState const* const outputView,
-                             ftxui::Box* const outputDeviceBox,
-                             ftxui::Box* const libraryBox,
-                             ftxui::Box* const qualityBox)
+  ftxui::Element playbackBar(PlaybackBarViewState const& view)
   {
     using namespace ftxui;
 
+    auto fallbackState = rt::PlaybackState{};
+    auto const& state = view.playbackState == nullptr ? fallbackState : *view.playbackState;
     auto const quality = qualityIndicatorStyle(state.quality);
     auto const title = state.trackTitle.empty() ? std::string{"No active track"} : state.trackTitle;
     auto const artist = state.trackArtist.empty() ? std::string{"-"} : state.trackArtist;
-    auto const elapsed = formatDuration(displayElapsed);
+    auto const elapsed = formatDuration(view.displayElapsed);
     auto const duration = state.duration.count() > 0 ? formatDuration(state.duration) : std::string{"--:--"};
     auto const volume = std::format("{}%", static_cast<std::int32_t>(std::round(state.volume * 100.0F)));
-    auto libraryElementPtr = text("  " + listTitle) | dim;
+    auto libraryElementPtr = text("  " + std::string{view.listTitle}) | dim;
+    auto presentationElementPtr = text("  " + presentationBadgeLabel(view.presentationId)) | dim;
     auto qualityElementPtr = text("  ●") | color(Color::RGB(quality.red, quality.green, quality.blue));
-    auto outputElementPtr = outputBadge(outputView);
+    auto outputElementPtr = outputBadge(view.outputView);
 
-    if (libraryBox != nullptr)
+    if (view.libraryBox != nullptr)
     {
-      libraryElementPtr = std::move(libraryElementPtr) | reflect(*libraryBox);
+      libraryElementPtr = std::move(libraryElementPtr) | reflect(*view.libraryBox);
     }
 
-    if (qualityBox != nullptr)
+    if (view.qualityBox != nullptr)
     {
-      qualityElementPtr = std::move(qualityElementPtr) | reflect(*qualityBox);
+      qualityElementPtr = std::move(qualityElementPtr) | reflect(*view.qualityBox);
     }
 
-    if (outputDeviceBox != nullptr)
+    if (view.presentationBox != nullptr)
     {
-      outputElementPtr = std::move(outputElementPtr) | reflect(*outputDeviceBox);
+      presentationElementPtr = std::move(presentationElementPtr) | reflect(*view.presentationBox);
+    }
+
+    if (view.outputDeviceBox != nullptr)
+    {
+      outputElementPtr = std::move(outputElementPtr) | reflect(*view.outputDeviceBox);
     }
 
     return hbox({
       text("Aobus") | bold,
       std::move(libraryElementPtr),
+      std::move(presentationElementPtr),
       std::move(qualityElementPtr),
       text(" "),
       std::move(outputElementPtr),
@@ -272,7 +275,7 @@ namespace ao::tui
     }
 
     rows.push_back(separator());
-    rows.push_back(text("a toggle  Esc close") | dim);
+    rows.push_back(text(std::string{overlayHint(Overlay::QualityPanel)}) | dim);
 
     return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, kQualityPanelColumns);
   }
@@ -348,7 +351,7 @@ namespace ao::tui
                    size(HEIGHT, EQUAL, kOutputDeviceRows));
     rows.push_back(separator());
     rows.push_back(outputText(outputDeviceFooter(view), true));
-    rows.push_back(outputText("o toggle  Enter select  Esc close", true));
+    rows.push_back(outputText(std::string{overlayHint(Overlay::OutputDevices)}, true));
 
     return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, kOutputDevicePanelColumns);
   }

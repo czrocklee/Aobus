@@ -117,4 +117,16 @@ namespace ao::tui::test
     CHECK(overlayLabel(Overlay::PresentationPanel) == "Views");
     CHECK(overlayLabel(Overlay::Help) == "Help");
   }
+
+  TEST_CASE("ShellModel - overlay hints are stable", "[tui][unit][shell]")
+  {
+    CHECK(overlayHint(Overlay::None) ==
+          "/ command  l lists  v view  d detail  a quality  o output  Ctrl-L current  q quit");
+    CHECK(overlayHint(Overlay::ListChooser) == "l toggle  Enter open  Esc close");
+    CHECK(overlayHint(Overlay::DetailPanel) == "d toggle  Esc close");
+    CHECK(overlayHint(Overlay::QualityPanel) == "a toggle  Esc close");
+    CHECK(overlayHint(Overlay::OutputDevices) == "o toggle  Enter select  Esc close");
+    CHECK(overlayHint(Overlay::PresentationPanel) == "v toggle  Enter select  Esc close");
+    CHECK(overlayHint(Overlay::Help) == "Esc close");
+  }
 } // namespace ao::tui::test

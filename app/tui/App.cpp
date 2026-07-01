@@ -70,7 +70,7 @@ namespace ao::tui
     constexpr std::int32_t kBlockCoverArtRows = 12;
     constexpr std::int32_t kKittyCoverArtColumns = 768;
     constexpr std::int32_t kKittyCoverArtRows = 384;
-    constexpr std::int32_t kMainLayerTopRows = 2;
+    constexpr std::int32_t kMainLayerTopRows = 1;
     constexpr std::int32_t kCommandCompletionPanelColumns = 48;
     constexpr std::int32_t kCommandCompletionPanelRows = 10;
     std::atomic<std::int32_t> gSignalWriteFd{-1}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
@@ -133,7 +133,6 @@ namespace ao::tui
                                        LibraryController const& library,
                                        ftxui::Box const& presentationButtonBox,
                                        std::int32_t const terminalColumns,
-                                       std::int32_t const terminalRows,
                                        std::vector<PresentationRowBox>* rowBoxes)
     {
       if (shell.overlay() != Overlay::PresentationPanel)
@@ -141,12 +140,10 @@ namespace ao::tui
         return {};
       }
 
-      return anchoredPopoverAbove(
+      return anchoredPopover(
         presentationButtonBox,
         kPresentationPanelColumns,
         terminalColumns,
-        terminalRows,
-        kPresentationPanelRows,
         presentationPanel(
           library.presentationItems(), library.activePresentationId(), library.selectedPresentation(), rowBoxes) |
           ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kPresentationPanelRows));
@@ -643,25 +640,22 @@ namespace ao::tui
                                                            });
 
         auto rootPtr = vbox({
-          playbackBar(state,
-                      currentListTitle,
-                      displayElapsed,
-                      &outputDevices.viewState(),
-                      &outputDeviceButtonBox,
-                      &libraryButtonBox,
-                      &qualityButtonBox),
-          text(""),
+          playbackBar(PlaybackBarViewState{.playbackState = &state,
+                                           .listTitle = currentListTitle,
+                                           .presentationId = viewState.presentation.id,
+                                           .displayElapsed = displayElapsed,
+                                           .outputView = &outputDevices.viewState(),
+                                           .outputDeviceBox = &outputDeviceButtonBox,
+                                           .libraryBox = &libraryButtonBox,
+                                           .qualityBox = &qualityButtonBox,
+                                           .presentationBox = &presentationButtonBox}),
           std::move(mainLayerPtr) | flex,
-          text(""),
           statusBar(StatusBarViewState{.statusMessage = events.statusMessage(),
                                        .trackCount = library.tracks().size(),
                                        .selectedTrack = library.selectedTrack(),
                                        .filterDraft = library.filterDraft(),
-                                       .presentationId = viewState.presentation.id,
                                        .shell = &shell,
-                                       .commandBox = &commandInputBox,
-                                       .presentationBox = &presentationButtonBox,
-                                       .terminalColumns = terminalColumns}),
+                                       .commandBox = &commandInputBox}),
         });
 
         if (auto commandPopoverPtr = commandCompletionPopover(shell, commandInputBox, terminalColumns, terminalRows);
@@ -673,8 +667,8 @@ namespace ao::tui
           });
         }
 
-        if (auto presentationPopoverPtr = presentationPopover(
-              shell, library, presentationButtonBox, terminalColumns, terminalRows, &presentationRowBoxes);
+        if (auto presentationPopoverPtr =
+              presentationPopover(shell, library, presentationButtonBox, terminalColumns, &presentationRowBoxes);
             presentationPopoverPtr != nullptr)
         {
           return dbox({
