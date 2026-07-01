@@ -9,6 +9,7 @@
 #include "tui/LibraryController.h"
 #include "tui/OutputDeviceController.h"
 #include "tui/PlaybackPanel.h"
+#include "tui/Render.h"
 #include "tui/ShellModel.h"
 #include <ao/audio/Backend.h>
 #include <ao/rt/AppRuntime.h>
@@ -23,6 +24,7 @@
 #include <ftxui/screen/box.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -84,24 +86,20 @@ namespace ao::tui::test
       fixture.shell,
       library,
       fixture.runtime.playback(),
-      nullptr,
-      nullptr,
-      nullptr,
-      nullptr,
-      nullptr,
-      [](std::string_view const draft) -> std::optional<rt::CompletionResult>
-      {
-        if (draft != "de")
+      EventControllerBindings{
+        .commandCompletionCallback = [](std::string_view const draft) -> std::optional<rt::CompletionResult>
         {
-          return std::nullopt;
-        }
+          if (draft != "de")
+          {
+            return std::nullopt;
+          }
 
-        return rt::CompletionResult{
-          .replaceBegin = 0,
-          .replaceEnd = 2,
-          .items = {rt::CompletionItem{.displayText = "/detail", .insertText = "detail", .detail = "track detail"}},
-        };
-      }};
+          return rt::CompletionResult{
+            .replaceBegin = 0,
+            .replaceEnd = 2,
+            .items = {rt::CompletionItem{.displayText = "/detail", .insertText = "detail", .detail = "track detail"}},
+          };
+        }}};
 
     CHECK(controller.handleEvent(ftxui::Event::Character("/")));
     CHECK(controller.handleEvent(ftxui::Event::Character("d")));
@@ -181,8 +179,11 @@ namespace ao::tui::test
     rt::test::addReadyAudioProvider(fixture.runtime.playback());
     auto library = fixture.makeLibrary();
     auto outputDevices = OutputDeviceController{fixture.runtime.playback()};
-    auto controller =
-      EventController{fixture.screen, fixture.shell, library, fixture.runtime.playback(), &outputDevices};
+    auto controller = EventController{fixture.screen,
+                                      fixture.shell,
+                                      library,
+                                      fixture.runtime.playback(),
+                                      EventControllerBindings{.outputDevices = &outputDevices}};
 
     CHECK(controller.handleEvent(ftxui::Event::Character("o")));
     CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
@@ -191,6 +192,62 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Character("o")));
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(controller.statusMessage() == "Output devices closed");
+  }
+
+  TEST_CASE("EventController - presentation shortcut toggles the views overlay closed", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime.playback()};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("v")));
+    CHECK(fixture.shell.overlay() == Overlay::PresentationPanel);
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("v")));
+    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK(controller.statusMessage() == "Views closed");
+  }
+
+  TEST_CASE("EventController - presentation shortcut selects track views", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime.playback()};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("v")));
+    CHECK(fixture.shell.overlay() == Overlay::PresentationPanel);
+    CHECK(controller.statusMessage() == "Views");
+
+    CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
+    CHECK(library.selectedPresentation() == 1);
+
+    CHECK(controller.handleEvent(ftxui::Event::Return));
+    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK(controller.statusMessage() == "View: albums");
+    CHECK(fixture.runtime.views().trackListState(library.activeViewId()).presentation.id == "albums");
+  }
+
+  TEST_CASE("EventController - presentation navigation keys move within views", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime.playback()};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("v")));
+    CHECK(controller.handleEvent(ftxui::Event::End));
+    CHECK(library.selectedPresentation() == static_cast<std::int32_t>(library.presentationItems().size()) - 1);
+
+    CHECK(controller.handleEvent(ftxui::Event::Home));
+    CHECK(library.selectedPresentation() == 0);
+
+    CHECK(controller.handleEvent(ftxui::Event::PageDown));
+    CHECK(library.selectedPresentation() == static_cast<std::int32_t>(library.presentationItems().size()) - 1);
+
+    CHECK(controller.handleEvent(ftxui::Event::PageUp));
+    CHECK(library.selectedPresentation() == 0);
+
+    CHECK(controller.handleEvent(ftxui::Event::ArrowUp));
+    CHECK(library.selectedPresentation() == 0);
   }
 
   TEST_CASE("EventController - navigation shortcuts move the focused selection", "[tui][unit][event]")
@@ -260,6 +317,10 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::QualityPanel);
     CHECK(controller.statusMessage() == "Audio quality");
 
+    enterCommand(controller, "views");
+    CHECK(fixture.shell.overlay() == Overlay::PresentationPanel);
+    CHECK(controller.statusMessage() == "Views");
+
     enterCommand(controller, "close");
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(controller.statusMessage() == "Overlay closed");
@@ -298,7 +359,12 @@ namespace ao::tui::test
     auto rowBoxes = std::vector{
       OutputDeviceRowBox{.rowIndex = 1, .box = ftxui::Box{.x_min = 2, .x_max = 30, .y_min = 3, .y_max = 3}}};
     auto controller = EventController{
-      fixture.screen, fixture.shell, library, fixture.runtime.playback(), &outputDevices, &outputButtonBox, &rowBoxes};
+      fixture.screen,
+      fixture.shell,
+      library,
+      fixture.runtime.playback(),
+      EventControllerBindings{
+        .outputDevices = &outputDevices, .outputDeviceButtonBox = &outputButtonBox, .outputDeviceRowBoxes = &rowBoxes}};
 
     auto clickBadge = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 6, .y = 0};
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickBadge)));
@@ -321,6 +387,31 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(controller.statusMessage() == "Output: Test Device");
+  }
+
+  TEST_CASE("EventController - presentation mouse clicks open and select views", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto presentationButtonBox = ftxui::Box{.x_min = 20, .x_max = 29, .y_min = 23, .y_max = 23};
+    auto rowBoxes = std::vector{
+      PresentationRowBox{.rowIndex = 1, .box = ftxui::Box{.x_min = 2, .x_max = 40, .y_min = 12, .y_max = 12}}};
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      fixture.runtime.playback(),
+      EventControllerBindings{.presentationButtonBox = &presentationButtonBox, .presentationRowBoxes = &rowBoxes}};
+
+    auto clickView = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 24, .y = 23};
+    CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickView)));
+    CHECK(fixture.shell.overlay() == Overlay::PresentationPanel);
+
+    auto clickRow = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 12};
+    CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickRow)));
+    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK(controller.statusMessage() == "View: albums");
+    CHECK(fixture.runtime.views().trackListState(library.activeViewId()).presentation.id == "albums");
   }
 
   TEST_CASE("EventController - list chooser return opens the selected list", "[tui][unit][event]")

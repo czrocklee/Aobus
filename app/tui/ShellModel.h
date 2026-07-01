@@ -21,6 +21,7 @@ namespace ao::tui
     DetailPanel,
     QualityPanel,
     OutputDevices,
+    PresentationPanel,
     Help,
   };
 
@@ -31,6 +32,7 @@ namespace ao::tui
     OpenDetail,
     OpenQuality,
     OpenOutputDevices,
+    OpenPresentationPanel,
     CloseOverlay,
     ShowHelp,
     RevealCurrentTrack,

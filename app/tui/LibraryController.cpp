@@ -7,6 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
@@ -18,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,15 +28,30 @@
 namespace ao::tui
 {
   LibraryController::LibraryController(rt::AppRuntime& runtime)
-    : _runtime{runtime}, _libraryItems{loadLibraryNavigation()}, _libraryLabels{libraryNavigationLabels(_libraryItems)}
+    : _runtime{runtime}
+    , _libraryItems{loadLibraryNavigation()}
+    , _libraryLabels{libraryNavigationLabels(_libraryItems)}
+    , _presentationItems{loadPresentationNavigation()}
   {
     _tracks = loadTrackItems(_currentListId);
+    syncSelectedPresentation(activePresentationId());
+    _customPresetsSub = _runtime.workspace().onCustomPresetsChanged([this] { refreshPresentationNavigation(); });
     publishSelection();
   }
 
   std::string LibraryController::currentListTitle() const
   {
     return listTitle(_currentListId, _libraryItems);
+  }
+
+  std::string LibraryController::activePresentationId() const
+  {
+    if (_activeViewId == rt::kInvalidViewId)
+    {
+      return {};
+    }
+
+    return _runtime.views().trackListState(_activeViewId).presentation.id;
   }
 
   SelectedTrackView LibraryController::selectedTrackView() const
@@ -80,6 +97,22 @@ namespace ao::tui
 
     _selectedTrack = moveSelection(_selectedTrack, delta, _tracks.size());
     publishSelection();
+  }
+
+  void LibraryController::movePresentationSelection(std::int32_t const delta)
+  {
+    _selectedPresentation = moveSelection(_selectedPresentation, delta, _presentationItems.size());
+  }
+
+  bool LibraryController::setSelectedPresentation(std::int32_t const index)
+  {
+    if (index < 0 || static_cast<std::size_t>(index) >= _presentationItems.size())
+    {
+      return false;
+    }
+
+    _selectedPresentation = index;
+    return true;
   }
 
   bool LibraryController::setSelectedTrackById(TrackId const trackId)
@@ -134,6 +167,7 @@ namespace ao::tui
     }
 
     _tracks = loadTrackItemsFromView(_activeViewId);
+    syncSelectedPresentation(spec.id);
 
     if (!setSelectedTrackById(previousTrackId))
     {
@@ -142,6 +176,18 @@ namespace ao::tui
 
     publishSelection();
     return std::format("View: {}", spec.id);
+  }
+
+  std::string LibraryController::selectSelectedPresentation()
+  {
+    if (_presentationItems.empty())
+    {
+      return "No views available";
+    }
+
+    auto const selectedIndex =
+      clampSelection(static_cast<std::size_t>(std::max(0, _selectedPresentation)), _presentationItems.size());
+    return setPresentation(_presentationItems[selectedIndex].id);
   }
 
   ListOpenResult LibraryController::openSelectedList()
@@ -203,6 +249,30 @@ namespace ao::tui
   {
     auto reader = _runtime.library().reader();
     return makeLibraryNavigation(reader.lists());
+  }
+
+  void LibraryController::syncSelectedPresentation(std::string_view const presentationId)
+  {
+    auto const it = std::ranges::find(_presentationItems, presentationId, &PresentationNavItem::id);
+
+    if (it == _presentationItems.end())
+    {
+      _selectedPresentation = moveSelection(_selectedPresentation, 0, _presentationItems.size());
+      return;
+    }
+
+    _selectedPresentation = static_cast<std::int32_t>(std::distance(_presentationItems.begin(), it));
+  }
+
+  void LibraryController::refreshPresentationNavigation()
+  {
+    _presentationItems = loadPresentationNavigation();
+    syncSelectedPresentation(activePresentationId());
+  }
+
+  std::vector<PresentationNavItem> LibraryController::loadPresentationNavigation()
+  {
+    return makePresentationNavigation(rt::builtinTrackPresentationPresets(), _runtime.workspace().customPresets());
   }
 
   std::vector<TrackListItem> LibraryController::loadTrackItemsFromView(rt::ViewId const activeViewId)

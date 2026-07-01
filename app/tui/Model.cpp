@@ -8,6 +8,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListNode.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
@@ -19,6 +20,7 @@
 #include <cstdint>
 #include <format>
 #include <limits>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -237,6 +239,35 @@ namespace ao::tui
     }
 
     return labels;
+  }
+
+  std::vector<PresentationNavItem> makePresentationNavigation(
+    std::span<rt::TrackPresentationPreset const> const builtinPresets,
+    std::span<rt::CustomTrackPresentationPreset const> const customPresets)
+  {
+    auto items = std::vector<PresentationNavItem>{};
+    items.reserve(builtinPresets.size() + customPresets.size());
+
+    for (auto const& preset : builtinPresets)
+    {
+      items.push_back(PresentationNavItem{
+        .id = preset.spec.id,
+        .label = preset.label.empty() ? preset.spec.id : std::string{preset.label},
+        .detail = std::string{preset.description},
+      });
+    }
+
+    for (auto const& preset : customPresets)
+    {
+      items.push_back(PresentationNavItem{
+        .id = preset.spec.id,
+        .label = preset.label.empty() ? preset.spec.id : preset.label,
+        .detail =
+          preset.basePresetId.empty() ? std::string{"custom"} : std::format("custom from {}", preset.basePresetId),
+      });
+    }
+
+    return items;
   }
 
   std::string trackDisplayDetail(rt::TrackRow const& row)

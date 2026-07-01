@@ -9,6 +9,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListNode.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -89,6 +90,40 @@ namespace ao::tui::test
     REQUIRE(items.size() == 3);
     CHECK((items[1].id == ListId{1} || items[2].id == ListId{1}));
     CHECK((items[1].id == ListId{2} || items[2].id == ListId{2}));
+  }
+
+  TEST_CASE("Model - presentation navigation includes builtin and custom views", "[tui][unit][model]")
+  {
+    auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
+      {.label = "Dense Albums", .basePresetId = "albums", .spec = rt::TrackPresentationSpec{.id = "dense-albums"}},
+    };
+
+    auto const items = makePresentationNavigation(rt::builtinTrackPresentationPresets(), custom);
+
+    REQUIRE(items.size() > custom.size());
+    CHECK(items[0].id == "songs");
+    CHECK(items[0].label == "Songs");
+    CHECK(items[0].detail == "General-purpose song list.");
+    CHECK(items.back().id == "dense-albums");
+    CHECK(items.back().label == "Dense Albums");
+    CHECK(items.back().detail == "custom from albums");
+  }
+
+  TEST_CASE("Model - presentation navigation falls back for sparse preset labels", "[tui][unit][model]")
+  {
+    auto const builtin = std::vector<rt::TrackPresentationPreset>{
+      {.spec = rt::TrackPresentationSpec{.id = "raw"}},
+    };
+    auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
+      {.spec = rt::TrackPresentationSpec{.id = "custom-raw"}},
+    };
+
+    auto const items = makePresentationNavigation(builtin, custom);
+
+    REQUIRE(items.size() == 2);
+    CHECK(items[0].label == "raw");
+    CHECK(items[1].label == "custom-raw");
+    CHECK(items[1].detail == "custom");
   }
 
   TEST_CASE("Model - menu labels preserve track order", "[tui][unit][model]")

@@ -175,6 +175,7 @@ namespace ao::tui
              text("/detail or /d      show selected track detail"),
              text("/quality or /a     show audio quality"),
              text("/output or /o      choose output device"),
+             text("/views or /v       choose presentation"),
              text("/current           reveal current track"),
              text("/view <id>         switch presentation"),
              text("/clear             clear filter"),
@@ -214,12 +215,73 @@ namespace ao::tui
     return vbox(std::move(rows)) | border;
   }
 
+  ftxui::Element presentationPanel(std::vector<PresentationNavItem> const& items,
+                                   std::string_view const activePresentationId,
+                                   std::int32_t const selectedIndex,
+                                   std::vector<PresentationRowBox>* const rowBoxes)
+  {
+    constexpr std::int32_t kIdColumns = 20;
+    using namespace ftxui;
+
+    auto rows = Elements{};
+    auto listRows = Elements{};
+    std::int32_t focusRow = 0;
+
+    if (rowBoxes != nullptr)
+    {
+      rowBoxes->clear();
+      rowBoxes->reserve(items.size());
+    }
+
+    rows.push_back(hbox({
+      text("Views") | bold | flex,
+      text(activePresentationId.empty() ? std::string{"default"} : std::string{activePresentationId}) | bold,
+    }));
+    rows.push_back(separator());
+
+    if (items.empty())
+    {
+      listRows.push_back(text("No views available") | dim);
+    }
+
+    for (std::size_t index = 0; index < items.size(); ++index)
+    {
+      auto const& item = items[index];
+      auto rowPtr = hbox({
+        text(item.id == activePresentationId ? "* " : "  "),
+        text(item.label) | flex,
+        text(item.id) | dim | size(WIDTH, EQUAL, kIdColumns),
+      });
+
+      if (std::cmp_equal(index, selectedIndex))
+      {
+        focusRow = static_cast<std::int32_t>(listRows.size());
+        rowPtr = rowPtr | inverted | bold;
+      }
+
+      if (rowBoxes != nullptr)
+      {
+        rowBoxes->push_back(PresentationRowBox{.rowIndex = static_cast<std::int32_t>(index)});
+        rowPtr = std::move(rowPtr) | reflect(rowBoxes->back().box);
+      }
+
+      listRows.push_back(std::move(rowPtr));
+    }
+
+    rows.push_back(vbox(std::move(listRows)) | focusPosition(0, focusRow) | vscroll_indicator | frame |
+                   size(HEIGHT, EQUAL, kPresentationPanelListRows));
+    rows.push_back(separator());
+    rows.push_back(text("v toggle  Enter select  Esc close") | dim);
+
+    return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, kPresentationPanelColumns);
+  }
+
   ftxui::Element statusBar(StatusBarViewState const& state)
   {
     constexpr std::int32_t kCompactColumns = 110;
     using namespace std::literals;
     constexpr auto kShortcutText =
-      "/ command  l lists  d detail  a quality  o output  Ctrl-L current  /view id  q quit"sv;
+      "/ command  l lists  d detail  a quality  o output  v view  Ctrl-L current  /view id  q quit"sv;
     using namespace ftxui;
 
     auto const& shell = *state.shell;
@@ -267,6 +329,13 @@ namespace ao::tui
       });
     }
 
+    auto presentationElementPtr = text(presentation) | dim;
+
+    if (state.presentationBox != nullptr)
+    {
+      presentationElementPtr = std::move(presentationElementPtr) | reflect(*state.presentationBox);
+    }
+
     if (state.terminalColumns < kCompactColumns)
     {
       return vbox({
@@ -276,7 +345,9 @@ namespace ao::tui
           text(selection),
         }),
         hbox({
-          text(filter + "  " + presentation) | dim | flex,
+          text(filter + "  ") | dim,
+          std::move(presentationElementPtr),
+          filler(),
           text(std::string{kShortcutText}) | dim,
         }),
       });
@@ -285,7 +356,9 @@ namespace ao::tui
     return hbox({
       text(state.statusMessage) | flex,
       text("Mode: " + overlay + "  ") | dim,
-      text(filter + "  " + presentation + "  ") | dim,
+      text(filter + "  ") | dim,
+      std::move(presentationElementPtr),
+      text("  ") | dim,
       text(std::string{kShortcutText} + "  ") | dim,
       text(selection),
     });

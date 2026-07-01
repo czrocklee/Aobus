@@ -7,6 +7,7 @@
 #include "OutputDeviceController.h"
 #include "PlaybackActions.h"
 #include "PlaybackPanel.h"
+#include "Render.h"
 #include "ShellModel.h"
 
 #include <ftxui/component/event.hpp>
@@ -44,22 +45,19 @@ namespace ao::tui
                                    ShellModel& shell,
                                    LibraryController& library,
                                    rt::PlaybackService& playback,
-                                   OutputDeviceController* const outputDevices,
-                                   ftxui::Box* const outputDeviceButtonBox,
-                                   std::vector<OutputDeviceRowBox>* const outputDeviceRowBoxes,
-                                   ftxui::Box* const libraryButtonBox,
-                                   ftxui::Box* const qualityButtonBox,
-                                   CommandCompletionCallback commandCompletionCallback)
+                                   EventControllerBindings bindings)
     : _screen{screen}
     , _shell{shell}
     , _library{library}
     , _playback{playback}
-    , _outputDevices{outputDevices}
-    , _outputDeviceButtonBox{outputDeviceButtonBox}
-    , _outputDeviceRowBoxes{outputDeviceRowBoxes}
-    , _libraryButtonBox{libraryButtonBox}
-    , _qualityButtonBox{qualityButtonBox}
-    , _commandCompletionCallback{std::move(commandCompletionCallback)}
+    , _outputDevices{bindings.outputDevices}
+    , _outputDeviceButtonBox{bindings.outputDeviceButtonBox}
+    , _outputDeviceRowBoxes{bindings.outputDeviceRowBoxes}
+    , _libraryButtonBox{bindings.libraryButtonBox}
+    , _qualityButtonBox{bindings.qualityButtonBox}
+    , _presentationButtonBox{bindings.presentationButtonBox}
+    , _presentationRowBoxes{bindings.presentationRowBoxes}
+    , _commandCompletionCallback{std::move(bindings.commandCompletionCallback)}
   {
   }
 
@@ -144,6 +142,19 @@ namespace ao::tui
     _statusMessage = "Output devices";
   }
 
+  void EventController::togglePresentationPanel()
+  {
+    if (_shell.overlay() == Overlay::PresentationPanel)
+    {
+      _shell.closeOverlay();
+      _statusMessage = "Views closed";
+      return;
+    }
+
+    _shell.openOverlay(Overlay::PresentationPanel);
+    _statusMessage = "Views";
+  }
+
   void EventController::selectOutputDevice()
   {
     if (_outputDevices == nullptr)
@@ -153,6 +164,12 @@ namespace ao::tui
     }
 
     _statusMessage = _outputDevices->selectSelected();
+    _shell.closeOverlay();
+  }
+
+  void EventController::selectPresentation()
+  {
+    _statusMessage = _library.selectSelectedPresentation();
     _shell.closeOverlay();
   }
 
@@ -173,6 +190,7 @@ namespace ao::tui
       case CommandAction::OpenDetail: toggleDetailPanel(); break;
       case CommandAction::OpenQuality: toggleQualityPanel(); break;
       case CommandAction::OpenOutputDevices: toggleOutputDevices(); break;
+      case CommandAction::OpenPresentationPanel: togglePresentationPanel(); break;
       case CommandAction::CloseOverlay:
         _shell.closeOverlay();
         _statusMessage = "Overlay closed";
@@ -244,6 +262,30 @@ namespace ao::tui
     {
       toggleListChooser();
       return true;
+    }
+
+    if (_presentationButtonBox != nullptr && contains(*_presentationButtonBox, mouse.x, mouse.y))
+    {
+      togglePresentationPanel();
+      return true;
+    }
+
+    if (_shell.overlay() == Overlay::PresentationPanel && _presentationRowBoxes != nullptr)
+    {
+      auto const rowBoxIt =
+        std::ranges::find_if(*_presentationRowBoxes,
+                             [&](PresentationRowBox const& rowBox) { return contains(rowBox.box, mouse.x, mouse.y); });
+
+      if (rowBoxIt != _presentationRowBoxes->end())
+      {
+        if (_library.setSelectedPresentation(rowBoxIt->rowIndex))
+        {
+          selectPresentation();
+          return true;
+        }
+      }
+
+      return false;
     }
 
     if (_shell.overlay() != Overlay::OutputDevices || _outputDevices == nullptr || _outputDeviceRowBoxes == nullptr)
@@ -353,6 +395,12 @@ namespace ao::tui
         return true;
       }
 
+      if (_shell.overlay() == Overlay::PresentationPanel)
+      {
+        _library.movePresentationSelection(-1);
+        return true;
+      }
+
       _library.moveFocusedSelection(_shell.overlay() == Overlay::ListChooser, -1);
       return true;
     }
@@ -365,30 +413,60 @@ namespace ao::tui
         return true;
       }
 
+      if (_shell.overlay() == Overlay::PresentationPanel)
+      {
+        _library.movePresentationSelection(1);
+        return true;
+      }
+
       _library.moveFocusedSelection(_shell.overlay() == Overlay::ListChooser, 1);
       return true;
     }
 
     if (event == ftxui::Event::PageUp)
     {
+      if (_shell.overlay() == Overlay::PresentationPanel)
+      {
+        _library.movePresentationSelection(-kPageSelectionDelta);
+        return true;
+      }
+
       _library.moveFocusedSelection(_shell.overlay() == Overlay::ListChooser, -kPageSelectionDelta);
       return true;
     }
 
     if (event == ftxui::Event::PageDown)
     {
+      if (_shell.overlay() == Overlay::PresentationPanel)
+      {
+        _library.movePresentationSelection(kPageSelectionDelta);
+        return true;
+      }
+
       _library.moveFocusedSelection(_shell.overlay() == Overlay::ListChooser, kPageSelectionDelta);
       return true;
     }
 
     if (event == ftxui::Event::Home)
     {
+      if (_shell.overlay() == Overlay::PresentationPanel)
+      {
+        _library.movePresentationSelection(-kBoundarySelectionDelta);
+        return true;
+      }
+
       _library.moveFocusedSelection(_shell.overlay() == Overlay::ListChooser, -kBoundarySelectionDelta);
       return true;
     }
 
     if (event == ftxui::Event::End)
     {
+      if (_shell.overlay() == Overlay::PresentationPanel)
+      {
+        _library.movePresentationSelection(kBoundarySelectionDelta);
+        return true;
+      }
+
       _library.moveFocusedSelection(_shell.overlay() == Overlay::ListChooser, kBoundarySelectionDelta);
       return true;
     }
@@ -422,6 +500,12 @@ namespace ao::tui
     if (event == ftxui::Event::Character("o"))
     {
       toggleOutputDevices();
+      return true;
+    }
+
+    if (event == ftxui::Event::Character("v"))
+    {
+      togglePresentationPanel();
       return true;
     }
 
@@ -462,6 +546,12 @@ namespace ao::tui
       if (_shell.overlay() == Overlay::OutputDevices)
       {
         selectOutputDevice();
+        return true;
+      }
+
+      if (_shell.overlay() == Overlay::PresentationPanel)
+      {
+        selectPresentation();
         return true;
       }
 

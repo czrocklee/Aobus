@@ -41,6 +41,8 @@ namespace ao::tui
       {.alias = "device", .action = CommandAction::OpenOutputDevices, .detail = "output device"},
       {.alias = "devices", .action = CommandAction::OpenOutputDevices, .detail = "output device"},
       {.alias = "o", .action = CommandAction::OpenOutputDevices, .detail = "output device"},
+      {.alias = "views", .action = CommandAction::OpenPresentationPanel, .detail = "choose view"},
+      {.alias = "v", .action = CommandAction::OpenPresentationPanel, .detail = "choose view"},
       {.alias = "close", .action = CommandAction::CloseOverlay, .detail = "close overlay"},
       {.alias = "hide", .action = CommandAction::CloseOverlay, .detail = "close overlay"},
       {.alias = "esc", .action = CommandAction::CloseOverlay, .detail = "close overlay"},
@@ -142,6 +144,7 @@ namespace ao::tui
       case Overlay::DetailPanel: return "Detail";
       case Overlay::QualityPanel: return "Quality";
       case Overlay::OutputDevices: return "Output";
+      case Overlay::PresentationPanel: return "Views";
       case Overlay::Help: return "Help";
     }
 

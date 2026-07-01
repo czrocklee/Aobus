@@ -6,6 +6,7 @@
 #include "LibraryController.h"
 #include "OutputDeviceController.h"
 #include "PlaybackPanel.h"
+#include "Render.h"
 #include "ShellModel.h"
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -25,6 +26,18 @@ namespace ao::tui
 {
   using CommandCompletionCallback = std::function<std::optional<rt::CompletionResult>(std::string_view draft)>;
 
+  struct EventControllerBindings final
+  {
+    OutputDeviceController* outputDevices = nullptr;
+    ftxui::Box* outputDeviceButtonBox = nullptr;
+    std::vector<OutputDeviceRowBox>* outputDeviceRowBoxes = nullptr;
+    ftxui::Box* libraryButtonBox = nullptr;
+    ftxui::Box* qualityButtonBox = nullptr;
+    ftxui::Box* presentationButtonBox = nullptr;
+    std::vector<PresentationRowBox>* presentationRowBoxes = nullptr;
+    CommandCompletionCallback commandCompletionCallback{};
+  };
+
   class EventController final
   {
   public:
@@ -32,12 +45,7 @@ namespace ao::tui
                     ShellModel& shell,
                     LibraryController& library,
                     rt::PlaybackService& playback,
-                    OutputDeviceController* outputDevices = nullptr,
-                    ftxui::Box* outputDeviceButtonBox = nullptr,
-                    std::vector<OutputDeviceRowBox>* outputDeviceRowBoxes = nullptr,
-                    ftxui::Box* libraryButtonBox = nullptr,
-                    ftxui::Box* qualityButtonBox = nullptr,
-                    CommandCompletionCallback commandCompletionCallback = {});
+                    EventControllerBindings bindings = {});
 
     std::string const& statusMessage() const noexcept { return _statusMessage; }
     bool handleEvent(ftxui::Event const& event);
@@ -50,7 +58,9 @@ namespace ao::tui
     void toggleDetailPanel();
     void toggleQualityPanel();
     void toggleOutputDevices();
+    void togglePresentationPanel();
     void selectOutputDevice();
+    void selectPresentation();
     void revealCurrentTrack();
     void runCommand(Command const& command);
     void refreshCommandCompletion();
@@ -65,6 +75,8 @@ namespace ao::tui
     std::vector<OutputDeviceRowBox>* _outputDeviceRowBoxes = nullptr;
     ftxui::Box* _libraryButtonBox = nullptr;
     ftxui::Box* _qualityButtonBox = nullptr;
+    ftxui::Box* _presentationButtonBox = nullptr;
+    std::vector<PresentationRowBox>* _presentationRowBoxes = nullptr;
     CommandCompletionCallback _commandCompletionCallback{};
     std::string _statusMessage{"Ready"};
   };

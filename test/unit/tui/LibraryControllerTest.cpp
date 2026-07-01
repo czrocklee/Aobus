@@ -8,10 +8,13 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -141,6 +144,35 @@ namespace ao::tui::test
     CHECK(fixture.runtime.views().trackListState(controller.activeViewId()).presentation.id == "albums");
     CHECK(controller.setPresentation("missing-preset") == "Unknown view missing-preset");
     CHECK(fixture.runtime.views().trackListState(controller.activeViewId()).presentation.id == "albums");
+  }
+
+  TEST_CASE("LibraryController - presentation list follows custom preset changes", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("First");
+
+    auto controller = LibraryController{fixture.runtime};
+    auto customSpec = rt::defaultTrackPresentationSpec();
+    customSpec.id = "custom-songs";
+
+    auto const initialCount = controller.presentationItems().size();
+    fixture.runtime.workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
+      .label = "Custom Songs",
+      .basePresetId = "songs",
+      .spec = customSpec,
+    });
+
+    REQUIRE(controller.presentationItems().size() == initialCount + 1);
+    CHECK(controller.presentationItems().back().id == "custom-songs");
+    CHECK(controller.selectedPresentation() == 0);
+
+    CHECK_FALSE(controller.setSelectedPresentation(-1));
+    CHECK_FALSE(controller.setSelectedPresentation(static_cast<std::int32_t>(controller.presentationItems().size())));
+    REQUIRE(controller.setSelectedPresentation(static_cast<std::int32_t>(controller.presentationItems().size()) - 1));
+
+    CHECK(controller.selectSelectedPresentation() == "View: custom-songs");
+    CHECK(fixture.runtime.views().trackListState(controller.activeViewId()).presentation.id == "custom-songs");
+    CHECK(controller.selectedPresentation() == static_cast<std::int32_t>(controller.presentationItems().size()) - 1);
   }
 
   TEST_CASE("LibraryController - setPresentation preserves selected track identity", "[tui][unit][library]")

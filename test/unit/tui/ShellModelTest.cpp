@@ -15,6 +15,8 @@ namespace ao::tui::test
     CHECK(parseCommand("/pipeline").action == CommandAction::OpenQuality);
     CHECK(parseCommand("/output").action == CommandAction::OpenOutputDevices);
     CHECK(parseCommand("/devices").action == CommandAction::OpenOutputDevices);
+    CHECK(parseCommand("/views").action == CommandAction::OpenPresentationPanel);
+    CHECK(parseCommand("/v").action == CommandAction::OpenPresentationPanel);
     CHECK(parseCommand("help").action == CommandAction::ShowHelp);
     CHECK(parseCommand("/current").action == CommandAction::RevealCurrentTrack);
     auto presentationCommand = parseCommand("/view albums");
@@ -112,6 +114,7 @@ namespace ao::tui::test
     CHECK(overlayLabel(Overlay::DetailPanel) == "Detail");
     CHECK(overlayLabel(Overlay::QualityPanel) == "Quality");
     CHECK(overlayLabel(Overlay::OutputDevices) == "Output");
+    CHECK(overlayLabel(Overlay::PresentationPanel) == "Views");
     CHECK(overlayLabel(Overlay::Help) == "Help");
   }
 } // namespace ao::tui::test

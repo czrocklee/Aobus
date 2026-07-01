@@ -7,11 +7,13 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/ListNode.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -30,6 +32,13 @@ namespace ao::tui
     TrackId id{};
     ResourceId coverArtId{kInvalidResourceId};
     rt::TrackRow row{};
+    std::string label{};
+    std::string detail{};
+  };
+
+  struct PresentationNavItem final
+  {
+    std::string id{};
     std::string label{};
     std::string detail{};
   };
@@ -59,6 +68,9 @@ namespace ao::tui
 
   std::vector<LibraryNavItem> makeLibraryNavigation(std::vector<rt::ListNode> const& lists);
   std::vector<std::string> libraryNavigationLabels(std::vector<LibraryNavItem> const& items);
+  std::vector<PresentationNavItem> makePresentationNavigation(
+    std::span<rt::TrackPresentationPreset const> builtinPresets,
+    std::span<rt::CustomTrackPresentationPreset const> customPresets);
   TrackListItem makeTrackListItem(rt::TrackRow const& row);
   std::string trackTableLabel(rt::TrackRow const& row);
   std::vector<std::string> menuLabels(std::vector<TrackListItem> const& tracks);

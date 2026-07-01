@@ -3,6 +3,7 @@
 
 #include "tui/Render.h"
 
+#include "tui/Model.h"
 #include "tui/ShellModel.h"
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -18,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::tui::test
 {
@@ -85,6 +87,7 @@ namespace ao::tui::test
     CHECK(text.find("/current") != std::string::npos);
     CHECK(text.find("/view <id>") != std::string::npos);
     CHECK(text.find("/output") != std::string::npos);
+    CHECK(text.find("/views") != std::string::npos);
   }
 
   TEST_CASE("Render - compact and wide status bars advertise the same shortcuts", "[tui][unit][render]")
@@ -95,12 +98,30 @@ namespace ao::tui::test
 
     CHECK(compact.find("d detail") != std::string::npos);
     CHECK(compact.find("o output") != std::string::npos);
+    CHECK(compact.find("v view") != std::string::npos);
     CHECK(compact.find("Ctrl-L current") != std::string::npos);
     CHECK(compact.find("/view id") != std::string::npos);
     CHECK(wide.find("d detail") != std::string::npos);
     CHECK(wide.find("o output") != std::string::npos);
+    CHECK(wide.find("v view") != std::string::npos);
     CHECK(wide.find("Ctrl-L current") != std::string::npos);
     CHECK(wide.find("/view id") != std::string::npos);
+  }
+
+  TEST_CASE("Render - status bar reflects the presentation label box", "[tui][unit][render]")
+  {
+    auto shell = ShellModel{};
+    auto presentationBox = ftxui::Box{};
+
+    auto const rendered = renderElement(
+      statusBar(StatusBarViewState{
+        .presentationId = "albums", .shell = &shell, .presentationBox = &presentationBox, .terminalColumns = 140}),
+      140,
+      1);
+
+    CHECK(rendered.text.find("view:albums") != std::string::npos);
+    CHECK(presentationBox.x_min <= presentationBox.x_max);
+    CHECK(presentationBox.y_min == 0);
   }
 
   TEST_CASE("Render - command status shows inline completion suffix", "[tui][unit][render]")
@@ -154,6 +175,42 @@ namespace ao::tui::test
     CHECK(rendered.text.find("artist") != std::string::npos);
     CHECK_FALSE(rendered.screen.PixelAt(1, 1).inverted);
     CHECK(rendered.screen.PixelAt(1, 2).inverted);
+  }
+
+  TEST_CASE("Render - presentation panel renders selected and active views", "[tui][unit][render]")
+  {
+    auto const items = std::vector<PresentationNavItem>{
+      {.id = "songs", .label = "Songs", .detail = "General-purpose song list."},
+      {.id = "albums", .label = "Albums", .detail = "Grouped by album."},
+    };
+    auto rowBoxes = std::vector<PresentationRowBox>{};
+
+    auto const rendered = renderElement(presentationPanel(items, "albums", 1, &rowBoxes), 48, 16);
+
+    CHECK(rendered.text.find("Views") != std::string::npos);
+    CHECK(rendered.text.find("albums") != std::string::npos);
+    CHECK(rendered.text.find("* Albums") != std::string::npos);
+    REQUIRE(rowBoxes.size() == 2);
+    CHECK(rowBoxes[1].rowIndex == 1);
+    CHECK(rendered.screen.PixelAt(rowBoxes[1].box.x_min, rowBoxes[1].box.y_min).inverted);
+  }
+
+  TEST_CASE("Render - presentation panel handles empty and out-of-range selection", "[tui][unit][render]")
+  {
+    auto rowBoxes = std::vector<PresentationRowBox>{};
+    auto rendered = renderElement(presentationPanel({}, "", 99, &rowBoxes), 48, 16);
+
+    CHECK(rendered.text.find("default") != std::string::npos);
+    CHECK(rendered.text.find("No views available") != std::string::npos);
+    CHECK(rowBoxes.empty());
+
+    auto const items = std::vector<PresentationNavItem>{
+      {.id = "songs", .label = "Songs", .detail = "General-purpose song list."},
+    };
+    rendered = renderElement(presentationPanel(items, "songs", 99, &rowBoxes), 48, 16);
+
+    REQUIRE(rowBoxes.size() == 1);
+    CHECK_FALSE(rendered.screen.PixelAt(rowBoxes[0].box.x_min, rowBoxes[0].box.y_min).inverted);
   }
 
   TEST_CASE("Render - anchored popover opens below its trigger", "[tui][unit][render]")

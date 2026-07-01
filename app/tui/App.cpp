@@ -129,6 +129,29 @@ namespace ao::tui
                                     ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kCommandCompletionPanelRows));
     }
 
+    ftxui::Element presentationPopover(ShellModel const& shell,
+                                       LibraryController const& library,
+                                       ftxui::Box const& presentationButtonBox,
+                                       std::int32_t const terminalColumns,
+                                       std::int32_t const terminalRows,
+                                       std::vector<PresentationRowBox>* rowBoxes)
+    {
+      if (shell.overlay() != Overlay::PresentationPanel)
+      {
+        return {};
+      }
+
+      return anchoredPopoverAbove(
+        presentationButtonBox,
+        kPresentationPanelColumns,
+        terminalColumns,
+        terminalRows,
+        kPresentationPanelRows,
+        presentationPanel(
+          library.presentationItems(), library.activePresentationId(), library.selectedPresentation(), rowBoxes) |
+          ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kPresentationPanelRows));
+    }
+
     enum class CoverArtMode : std::uint8_t
     {
       Auto,
@@ -480,7 +503,9 @@ namespace ao::tui
     auto qualityButtonBox = ftxui::Box{};
     auto outputDeviceButtonBox = ftxui::Box{};
     auto commandInputBox = ftxui::Box{};
+    auto presentationButtonBox = ftxui::Box{};
     auto outputDeviceRowBoxes = std::vector<OutputDeviceRowBox>{};
+    auto presentationRowBoxes = std::vector<PresentationRowBox>{};
     auto kittyPaintState = KittyPaintState{};
 
     auto& playback = runtime.playback();
@@ -524,13 +549,17 @@ namespace ao::tui
                                   shell,
                                   library,
                                   playback,
-                                  &outputDevices,
-                                  &outputDeviceButtonBox,
-                                  &outputDeviceRowBoxes,
-                                  &libraryButtonBox,
-                                  &qualityButtonBox,
-                                  [&commandCompletions](std::string_view const draft)
-                                  { return commandCompletions.complete(draft); }};
+                                  EventControllerBindings{
+                                    .outputDevices = &outputDevices,
+                                    .outputDeviceButtonBox = &outputDeviceButtonBox,
+                                    .outputDeviceRowBoxes = &outputDeviceRowBoxes,
+                                    .libraryButtonBox = &libraryButtonBox,
+                                    .qualityButtonBox = &qualityButtonBox,
+                                    .presentationButtonBox = &presentationButtonBox,
+                                    .presentationRowBoxes = &presentationRowBoxes,
+                                    .commandCompletionCallback = [&commandCompletions](std::string_view const draft)
+                                    { return commandCompletions.complete(draft); },
+                                  }};
 
     auto rendererPtr = ftxui::Renderer(
       [&]
@@ -561,6 +590,7 @@ namespace ao::tui
         auto const currentListTitle = library.currentListTitle();
         auto const state = playback.state();
         outputDeviceRowBoxes.clear();
+        presentationRowBoxes.clear();
         auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(monotonicFrameTime()));
         auto const viewState = runtime.views().trackListState(library.activeViewId());
         auto const terminalSize = ftxui::Terminal::Size();
@@ -597,6 +627,7 @@ namespace ao::tui
               terminalColumns,
               outputDevicePanel(outputDevices.viewState(), outputDevices.selectedRow(), &outputDeviceRowBoxes));
             break;
+          case Overlay::PresentationPanel: break;
           case Overlay::Help:
             mainContentPtr = hbox({
               workspaceElementPtr,
@@ -629,6 +660,7 @@ namespace ao::tui
                                        .presentationId = viewState.presentation.id,
                                        .shell = &shell,
                                        .commandBox = &commandInputBox,
+                                       .presentationBox = &presentationButtonBox,
                                        .terminalColumns = terminalColumns}),
         });
 
@@ -638,6 +670,16 @@ namespace ao::tui
           return dbox({
             std::move(rootPtr),
             std::move(commandPopoverPtr),
+          });
+        }
+
+        if (auto presentationPopoverPtr = presentationPopover(
+              shell, library, presentationButtonBox, terminalColumns, terminalRows, &presentationRowBoxes);
+            presentationPopoverPtr != nullptr)
+        {
+          return dbox({
+            std::move(rootPtr),
+            std::move(presentationPopoverPtr),
           });
         }
 
