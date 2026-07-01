@@ -19,6 +19,11 @@ namespace ftxui
   using Element = std::shared_ptr<Node>;
 } // namespace ftxui
 
+namespace ao::rt
+{
+  struct CompletionResult;
+} // namespace ao::rt
+
 namespace ao::tui
 {
   struct StatusBarViewState final
@@ -29,6 +34,7 @@ namespace ao::tui
     std::string filterDraft{};
     std::string presentationId{};
     ShellModel const* shell = nullptr;
+    ftxui::Box* commandBox = nullptr;
     std::int32_t terminalColumns = 0;
   };
 
@@ -41,7 +47,14 @@ namespace ao::tui
                                  std::int32_t popoverColumns,
                                  std::int32_t terminalColumns,
                                  ftxui::Element popoverPtr);
+  ftxui::Element anchoredPopoverAbove(ftxui::Box anchor,
+                                      std::int32_t popoverColumns,
+                                      std::int32_t terminalColumns,
+                                      std::int32_t terminalRows,
+                                      std::int32_t popoverRows,
+                                      ftxui::Element popoverPtr);
   ftxui::Element detailPane(TrackListItem const* selectedTrack, ftxui::Element coverElementPtr);
   ftxui::Element helpPane();
+  ftxui::Element commandCompletionPanel(rt::CompletionResult const& completion, std::int32_t selectedIndex);
   ftxui::Element statusBar(StatusBarViewState const& state);
 } // namespace ao::tui

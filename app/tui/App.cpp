@@ -4,6 +4,7 @@
 #include "App.h"
 
 #include "AudioBackendBootstrap.h"
+#include "CommandCompletionProvider.h"
 #include "CoverArt.h"
 #include "EventController.h"
 #include "Executor.h"
@@ -39,6 +40,7 @@
 #include <ftxui/screen/terminal.hpp>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cerrno>
@@ -69,6 +71,8 @@ namespace ao::tui
     constexpr std::int32_t kKittyCoverArtColumns = 768;
     constexpr std::int32_t kKittyCoverArtRows = 384;
     constexpr std::int32_t kMainLayerTopRows = 2;
+    constexpr std::int32_t kCommandCompletionPanelColumns = 48;
+    constexpr std::int32_t kCommandCompletionPanelRows = 10;
     std::atomic<std::int32_t> gSignalWriteFd{-1}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
     void exitSignalHandler(int /*signal*/) // NOLINT(aobus-modernize-use-std-numbers)
@@ -85,6 +89,44 @@ namespace ao::tui
       anchor.y_min -= kMainLayerTopRows;
       anchor.y_max -= kMainLayerTopRows;
       return anchor;
+    }
+
+    ftxui::Box commandPopoverAnchor(ftxui::Box anchor,
+                                    std::int32_t const terminalColumns,
+                                    std::int32_t const terminalRows)
+    {
+      if (anchor.x_min == 0 && anchor.x_max == 0 && anchor.y_min == 0 && anchor.y_max == 0)
+      {
+        anchor.x_min = 0;
+        anchor.x_max = std::max(0, terminalColumns - 1);
+        anchor.y_min = std::max(0, terminalRows - 1);
+        anchor.y_max = anchor.y_min;
+      }
+
+      return anchor;
+    }
+
+    ftxui::Element commandCompletionPopover(ShellModel const& shell,
+                                            ftxui::Box const& commandInputBox,
+                                            std::int32_t const terminalColumns,
+                                            std::int32_t const terminalRows)
+    {
+      auto const& optCompletion = shell.commandCompletion();
+
+      if (!shell.commandActive() || !optCompletion || optCompletion->items.empty())
+      {
+        return {};
+      }
+
+      auto const commandAnchor = commandPopoverAnchor(commandInputBox, terminalColumns, terminalRows);
+      return anchoredPopoverAbove(commandAnchor,
+                                  kCommandCompletionPanelColumns,
+                                  terminalColumns,
+                                  terminalRows,
+                                  kCommandCompletionPanelRows,
+                                  commandCompletionPanel(*optCompletion, shell.commandCompletionSelection()) |
+                                    ftxui::size(ftxui::WIDTH, ftxui::EQUAL, kCommandCompletionPanelColumns) |
+                                    ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kCommandCompletionPanelRows));
     }
 
     enum class CoverArtMode : std::uint8_t
@@ -437,6 +479,7 @@ namespace ao::tui
     auto libraryButtonBox = ftxui::Box{};
     auto qualityButtonBox = ftxui::Box{};
     auto outputDeviceButtonBox = ftxui::Box{};
+    auto commandInputBox = ftxui::Box{};
     auto outputDeviceRowBoxes = std::vector<OutputDeviceRowBox>{};
     auto kittyPaintState = KittyPaintState{};
 
@@ -476,6 +519,7 @@ namespace ao::tui
     auto volumeSub = playback.onVolumeChanged([requestRefresh](float) { requestRefresh(); });
     auto mutedSub = playback.onMutedChanged([requestRefresh](bool) { requestRefresh(); });
     auto outputDevices = OutputDeviceController{playback, requestRefresh};
+    auto commandCompletions = CommandCompletionProvider{library, runtime.completion(), runtime.workspace()};
     auto events = EventController{screen,
                                   shell,
                                   library,
@@ -484,7 +528,9 @@ namespace ao::tui
                                   &outputDeviceButtonBox,
                                   &outputDeviceRowBoxes,
                                   &libraryButtonBox,
-                                  &qualityButtonBox};
+                                  &qualityButtonBox,
+                                  [&commandCompletions](std::string_view const draft)
+                                  { return commandCompletions.complete(draft); }};
 
     auto rendererPtr = ftxui::Renderer(
       [&]
@@ -517,7 +563,9 @@ namespace ao::tui
         outputDeviceRowBoxes.clear();
         auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(monotonicFrameTime()));
         auto const viewState = runtime.views().trackListState(library.activeViewId());
-        auto const terminalColumns = ftxui::Terminal::Size().dimx;
+        auto const terminalSize = ftxui::Terminal::Size();
+        auto const terminalColumns = terminalSize.dimx;
+        auto const terminalRows = terminalSize.dimy;
         auto workspaceElementPtr =
           trackTableView(library.tracks(), library.selectedTrack(), state.trackId, viewState.presentation);
         auto mainContentPtr = workspaceElementPtr;
@@ -563,7 +611,7 @@ namespace ao::tui
                                                              std::move(popoverElementPtr),
                                                            });
 
-        return vbox({
+        auto rootPtr = vbox({
           playbackBar(state,
                       currentListTitle,
                       displayElapsed,
@@ -580,8 +628,20 @@ namespace ao::tui
                                        .filterDraft = library.filterDraft(),
                                        .presentationId = viewState.presentation.id,
                                        .shell = &shell,
+                                       .commandBox = &commandInputBox,
                                        .terminalColumns = terminalColumns}),
         });
+
+        if (auto commandPopoverPtr = commandCompletionPopover(shell, commandInputBox, terminalColumns, terminalRows);
+            commandPopoverPtr != nullptr)
+        {
+          return dbox({
+            std::move(rootPtr),
+            std::move(commandPopoverPtr),
+          });
+        }
+
+        return rootPtr;
       });
 
     auto componentPtr =

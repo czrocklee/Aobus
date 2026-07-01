@@ -188,7 +188,12 @@ namespace ao::tui
   {
     auto items = std::vector<LibraryNavItem>{};
     items.reserve(lists.size() + 1);
-    items.push_back(LibraryNavItem{.id = rt::kAllTracksListId, .label = "All Tracks", .detail = "library"});
+    items.push_back(LibraryNavItem{
+      .id = rt::kAllTracksListId,
+      .label = "All Tracks",
+      .detail = "library",
+      .completionText = "All Tracks",
+    });
 
     auto sorted = lists;
     std::ranges::sort(sorted,
@@ -204,15 +209,17 @@ namespace ao::tui
 
     for (auto const& node : sorted)
     {
+      auto const completionText = node.name.empty() ? std::string{"<Unnamed List>"} : node.name;
       auto label = std::string(depthOf(node, sorted) * 2, ' ');
       label.append(listNodeIcon(node.kind));
       label.push_back(' ');
-      label.append(node.name.empty() ? "<Unnamed List>" : node.name);
+      label.append(completionText);
 
       items.push_back(LibraryNavItem{
         .id = node.id,
         .label = std::move(label),
         .detail = node.smartExpression.empty() ? std::string{} : std::format("[{}]", node.smartExpression),
+        .completionText = completionText,
       });
     }
 

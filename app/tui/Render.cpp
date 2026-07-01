@@ -6,6 +6,8 @@
 #include "CoverArt.h"
 #include "Model.h"
 #include "ShellModel.h"
+#include <ao/rt/completion/CompletionResult.h>
+#include <ao/rt/completion/CompletionText.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
@@ -15,6 +17,7 @@
 #include <cstdint>
 #include <format>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -102,6 +105,30 @@ namespace ao::tui
     });
   }
 
+  ftxui::Element anchoredPopoverAbove(ftxui::Box const anchor,
+                                      std::int32_t const popoverColumns,
+                                      std::int32_t const terminalColumns,
+                                      std::int32_t const terminalRows,
+                                      std::int32_t const popoverRows,
+                                      ftxui::Element popoverPtr)
+  {
+    using namespace ftxui;
+
+    auto const maxLeft = terminalColumns > popoverColumns ? terminalColumns - popoverColumns : 0;
+    auto const left = std::clamp(anchor.x_min, 0, maxLeft);
+    auto const top = std::max(0, anchor.y_min - popoverRows);
+
+    return vbox({
+      filler() | size(HEIGHT, EQUAL, top),
+      hbox({
+        filler() | size(WIDTH, EQUAL, left),
+        std::move(popoverPtr) | clear_under,
+        filler(),
+      }),
+      filler() | size(HEIGHT, EQUAL, std::max(0, terminalRows - top - popoverRows)),
+    });
+  }
+
   ftxui::Element detailPane(TrackListItem const* selectedTrack, ftxui::Element coverElementPtr)
   {
     constexpr int kLabelColumns = 14;
@@ -160,6 +187,33 @@ namespace ao::tui
            border | size(WIDTH, EQUAL, kHelpPaneColumns);
   }
 
+  ftxui::Element commandCompletionPanel(rt::CompletionResult const& completion, std::int32_t const selectedIndex)
+  {
+    constexpr std::int32_t kDetailColumns = 18;
+    using namespace ftxui;
+
+    auto rows = Elements{};
+    rows.reserve(completion.items.size());
+
+    for (std::size_t index = 0; index < completion.items.size(); ++index)
+    {
+      auto const& item = completion.items[index];
+      auto rowPtr = hbox({
+        text(item.displayText) | flex,
+        text(item.detail) | dim | size(WIDTH, EQUAL, kDetailColumns),
+      });
+
+      if (std::cmp_equal(index, selectedIndex))
+      {
+        rowPtr = rowPtr | inverted;
+      }
+
+      rows.push_back(std::move(rowPtr));
+    }
+
+    return vbox(std::move(rows)) | border;
+  }
+
   ftxui::Element statusBar(StatusBarViewState const& state)
   {
     constexpr std::int32_t kCompactColumns = 110;
@@ -178,9 +232,38 @@ namespace ao::tui
 
     if (shell.commandActive())
     {
+      auto suffix = std::string{};
+
+      if (auto const& optCompletion = shell.commandCompletion(); optCompletion && !optCompletion->items.empty())
+      {
+        auto const selected = std::clamp<std::int32_t>(
+          shell.commandCompletionSelection(), 0, static_cast<std::int32_t>(optCompletion->items.size()) - 1);
+        auto const& item = optCompletion->items[static_cast<std::size_t>(selected)];
+        auto const replaceBegin = std::min(optCompletion->replaceBegin, shell.commandDraft().size());
+        auto const replaceEnd = std::min(optCompletion->replaceEnd, shell.commandDraft().size());
+        auto const current = std::string_view{shell.commandDraft()}.substr(replaceBegin, replaceEnd - replaceBegin);
+
+        if (!current.empty() && replaceEnd == shell.commandDraft().size() &&
+            rt::completionStartsWithInsensitive(item.insertText, current))
+        {
+          suffix = item.insertText.substr(current.size());
+        }
+      }
+
+      auto commandLinePtr = hbox({
+        text("/" + shell.commandDraft()) | bold,
+        text(suffix) | dim,
+        text("_") | bold,
+      });
+
+      if (state.commandBox != nullptr)
+      {
+        commandLinePtr = std::move(commandLinePtr) | reflect(*state.commandBox);
+      }
+
       return hbox({
-        text("/" + shell.commandDraft() + "_") | bold | flex,
-        text("Enter run  Esc cancel") | dim,
+        std::move(commandLinePtr) | flex,
+        text("Tab complete  Enter run  Esc cancel") | dim,
       });
     }
 

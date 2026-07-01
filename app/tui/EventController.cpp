@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace ao::tui
@@ -47,7 +48,8 @@ namespace ao::tui
                                    ftxui::Box* const outputDeviceButtonBox,
                                    std::vector<OutputDeviceRowBox>* const outputDeviceRowBoxes,
                                    ftxui::Box* const libraryButtonBox,
-                                   ftxui::Box* const qualityButtonBox)
+                                   ftxui::Box* const qualityButtonBox,
+                                   CommandCompletionCallback commandCompletionCallback)
     : _screen{screen}
     , _shell{shell}
     , _library{library}
@@ -57,6 +59,7 @@ namespace ao::tui
     , _outputDeviceRowBoxes{outputDeviceRowBoxes}
     , _libraryButtonBox{libraryButtonBox}
     , _qualityButtonBox{qualityButtonBox}
+    , _commandCompletionCallback{std::move(commandCompletionCallback)}
   {
   }
 
@@ -207,6 +210,17 @@ namespace ao::tui
     }
   }
 
+  void EventController::refreshCommandCompletion()
+  {
+    if (!_shell.commandActive() || !_commandCompletionCallback)
+    {
+      _shell.clearCommandCompletion();
+      return;
+    }
+
+    _shell.setCommandCompletion(_commandCompletionCallback(_shell.commandDraft()));
+  }
+
   bool EventController::handleMouse(ftxui::Mouse const& mouse)
   {
     if (mouse.button != ftxui::Mouse::Left || mouse.motion != ftxui::Mouse::Pressed)
@@ -277,15 +291,40 @@ namespace ao::tui
         return true;
       }
 
+      if (event == ftxui::Event::Tab)
+      {
+        if (_shell.applyCommandCompletion())
+        {
+          refreshCommandCompletion();
+          _statusMessage = "Command completed";
+        }
+
+        return true;
+      }
+
+      if (event == ftxui::Event::ArrowUp)
+      {
+        _shell.moveCommandCompletion(-1);
+        return true;
+      }
+
+      if (event == ftxui::Event::ArrowDown)
+      {
+        _shell.moveCommandCompletion(1);
+        return true;
+      }
+
       if (event == ftxui::Event::Backspace)
       {
         _shell.backspaceCommand();
+        refreshCommandCompletion();
         return true;
       }
 
       if (event.is_character())
       {
         _shell.appendCommandText(event.character());
+        refreshCommandCompletion();
         return true;
       }
 
@@ -357,6 +396,7 @@ namespace ao::tui
     if (event == ftxui::Event::Character("/") || event == ftxui::Event::Character(":"))
     {
       _shell.beginCommand();
+      refreshCommandCompletion();
       _statusMessage = "Command input";
       return true;
     }

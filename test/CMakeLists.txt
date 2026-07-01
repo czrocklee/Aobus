@@ -266,6 +266,8 @@ add_test(NAME ao_core_test COMMAND ao_core_test)
 
 # ao_tui_test: terminal frontend unit tests
 add_executable(ao_tui_test
+    unit/tui/CommandCompletionTest.cpp
+    unit/tui/CommandCompletionStateTest.cpp
     unit/tui/CoverArtTest.cpp
     unit/tui/EventControllerTest.cpp
     unit/tui/ExecutorTest.cpp

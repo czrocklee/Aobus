@@ -13,6 +13,8 @@
 #include <ao/audio/Backend.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/completion/CompletionItem.h>
+#include <ao/rt/completion/CompletionResult.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
@@ -21,6 +23,7 @@
 #include <ftxui/screen/box.hpp>
 
 #include <chrono>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -70,6 +73,49 @@ namespace ao::tui::test
 
     CHECK(fixture.shell.commandActive());
     CHECK(library.selectedTrack() == 0);
+  }
+
+  TEST_CASE("EventController - tab applies command completion without leaving command mode", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      fixture.runtime.playback(),
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      [](std::string_view const draft) -> std::optional<rt::CompletionResult>
+      {
+        if (draft != "de")
+        {
+          return std::nullopt;
+        }
+
+        return rt::CompletionResult{
+          .replaceBegin = 0,
+          .replaceEnd = 2,
+          .items = {rt::CompletionItem{.displayText = "/detail", .insertText = "detail", .detail = "track detail"}},
+        };
+      }};
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("d")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("e")));
+    REQUIRE(fixture.shell.commandCompletion());
+
+    CHECK(controller.handleEvent(ftxui::Event::Tab));
+    CHECK(fixture.shell.commandActive());
+    CHECK(fixture.shell.commandDraft() == "detail");
+    CHECK_FALSE(fixture.shell.commandCompletion());
+
+    CHECK(controller.handleEvent(ftxui::Event::Return));
+    CHECK_FALSE(fixture.shell.commandActive());
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
   }
 
   TEST_CASE("EventController - command input escape cancels the draft", "[tui][unit][event]")

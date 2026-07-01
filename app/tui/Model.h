@@ -22,6 +22,7 @@ namespace ao::tui
     ListId id{};
     std::string label{};
     std::string detail{};
+    std::string completionText{};
   };
 
   struct TrackListItem final

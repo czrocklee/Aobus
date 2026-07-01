@@ -3,9 +3,14 @@
 
 #include "ShellModel.h"
 
+#include <ao/rt/completion/CompletionResult.h>
+
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdint>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -14,63 +19,51 @@ namespace ao::tui
 {
   namespace
   {
-    struct PrefixCommand final
-    {
-      std::string_view prefix;
-      CommandAction action;
-    };
-
-    struct AliasCommand final
-    {
-      std::string_view alias;
-      CommandAction action;
-    };
-
-    constexpr auto kPrefixCommands = std::to_array<PrefixCommand>({
-      {.prefix = "filter ", .action = CommandAction::QuickFilter},
-      {.prefix = "presentation ", .action = CommandAction::SetPresentation},
-      {.prefix = "preset ", .action = CommandAction::SetPresentation},
-      {.prefix = "view ", .action = CommandAction::SetPresentation},
+    constexpr auto kPrefixCommands = std::to_array<CommandPrefixSpec>({
+      {.prefix = "filter ", .action = CommandAction::QuickFilter, .detail = "quick filter"},
+      {.prefix = "presentation ", .action = CommandAction::SetPresentation, .detail = "track view"},
+      {.prefix = "preset ", .action = CommandAction::SetPresentation, .detail = "track view"},
+      {.prefix = "view ", .action = CommandAction::SetPresentation, .detail = "track view"},
     });
 
-    constexpr auto kAliasCommands = std::to_array<AliasCommand>({
-      {.alias = "lists", .action = CommandAction::OpenLists},
-      {.alias = "l", .action = CommandAction::OpenLists},
-      {.alias = "detail", .action = CommandAction::OpenDetail},
-      {.alias = "details", .action = CommandAction::OpenDetail},
-      {.alias = "d", .action = CommandAction::OpenDetail},
-      {.alias = "quality", .action = CommandAction::OpenQuality},
-      {.alias = "audio", .action = CommandAction::OpenQuality},
-      {.alias = "pipeline", .action = CommandAction::OpenQuality},
-      {.alias = "a", .action = CommandAction::OpenQuality},
-      {.alias = "output", .action = CommandAction::OpenOutputDevices},
-      {.alias = "outputs", .action = CommandAction::OpenOutputDevices},
-      {.alias = "device", .action = CommandAction::OpenOutputDevices},
-      {.alias = "devices", .action = CommandAction::OpenOutputDevices},
-      {.alias = "o", .action = CommandAction::OpenOutputDevices},
-      {.alias = "close", .action = CommandAction::CloseOverlay},
-      {.alias = "hide", .action = CommandAction::CloseOverlay},
-      {.alias = "esc", .action = CommandAction::CloseOverlay},
-      {.alias = "help", .action = CommandAction::ShowHelp},
-      {.alias = "h", .action = CommandAction::ShowHelp},
-      {.alias = "?", .action = CommandAction::ShowHelp},
-      {.alias = "current", .action = CommandAction::RevealCurrentTrack},
-      {.alias = "now", .action = CommandAction::RevealCurrentTrack},
-      {.alias = "reveal", .action = CommandAction::RevealCurrentTrack},
-      {.alias = "clear", .action = CommandAction::ClearFilter},
-      {.alias = "c", .action = CommandAction::ClearFilter},
-      {.alias = "reload", .action = CommandAction::Reload},
-      {.alias = "refresh", .action = CommandAction::Reload},
-      {.alias = "r", .action = CommandAction::Reload},
-      {.alias = "play", .action = CommandAction::Play},
-      {.alias = "p", .action = CommandAction::Play},
-      {.alias = "pause", .action = CommandAction::TogglePlayback},
-      {.alias = "toggle", .action = CommandAction::TogglePlayback},
-      {.alias = "space", .action = CommandAction::TogglePlayback},
-      {.alias = "stop", .action = CommandAction::Stop},
-      {.alias = "s", .action = CommandAction::Stop},
-      {.alias = "quit", .action = CommandAction::Quit},
-      {.alias = "q", .action = CommandAction::Quit},
+    constexpr auto kAliasCommands = std::to_array<CommandAliasSpec>({
+      {.alias = "lists", .action = CommandAction::OpenLists, .detail = "choose list"},
+      {.alias = "l", .action = CommandAction::OpenLists, .detail = "choose list"},
+      {.alias = "detail", .action = CommandAction::OpenDetail, .detail = "track detail"},
+      {.alias = "details", .action = CommandAction::OpenDetail, .detail = "track detail"},
+      {.alias = "d", .action = CommandAction::OpenDetail, .detail = "track detail"},
+      {.alias = "quality", .action = CommandAction::OpenQuality, .detail = "audio quality"},
+      {.alias = "audio", .action = CommandAction::OpenQuality, .detail = "audio quality"},
+      {.alias = "pipeline", .action = CommandAction::OpenQuality, .detail = "audio quality"},
+      {.alias = "a", .action = CommandAction::OpenQuality, .detail = "audio quality"},
+      {.alias = "output", .action = CommandAction::OpenOutputDevices, .detail = "output device"},
+      {.alias = "outputs", .action = CommandAction::OpenOutputDevices, .detail = "output device"},
+      {.alias = "device", .action = CommandAction::OpenOutputDevices, .detail = "output device"},
+      {.alias = "devices", .action = CommandAction::OpenOutputDevices, .detail = "output device"},
+      {.alias = "o", .action = CommandAction::OpenOutputDevices, .detail = "output device"},
+      {.alias = "close", .action = CommandAction::CloseOverlay, .detail = "close overlay"},
+      {.alias = "hide", .action = CommandAction::CloseOverlay, .detail = "close overlay"},
+      {.alias = "esc", .action = CommandAction::CloseOverlay, .detail = "close overlay"},
+      {.alias = "help", .action = CommandAction::ShowHelp, .detail = "help"},
+      {.alias = "h", .action = CommandAction::ShowHelp, .detail = "help"},
+      {.alias = "?", .action = CommandAction::ShowHelp, .detail = "help"},
+      {.alias = "current", .action = CommandAction::RevealCurrentTrack, .detail = "now playing"},
+      {.alias = "now", .action = CommandAction::RevealCurrentTrack, .detail = "now playing"},
+      {.alias = "reveal", .action = CommandAction::RevealCurrentTrack, .detail = "now playing"},
+      {.alias = "clear", .action = CommandAction::ClearFilter, .detail = "clear filter"},
+      {.alias = "c", .action = CommandAction::ClearFilter, .detail = "clear filter"},
+      {.alias = "reload", .action = CommandAction::Reload, .detail = "reload list"},
+      {.alias = "refresh", .action = CommandAction::Reload, .detail = "reload list"},
+      {.alias = "r", .action = CommandAction::Reload, .detail = "reload list"},
+      {.alias = "play", .action = CommandAction::Play, .detail = "play"},
+      {.alias = "p", .action = CommandAction::Play, .detail = "play"},
+      {.alias = "pause", .action = CommandAction::TogglePlayback, .detail = "pause"},
+      {.alias = "toggle", .action = CommandAction::TogglePlayback, .detail = "toggle playback"},
+      {.alias = "space", .action = CommandAction::TogglePlayback, .detail = "toggle playback"},
+      {.alias = "stop", .action = CommandAction::Stop, .detail = "stop"},
+      {.alias = "s", .action = CommandAction::Stop, .detail = "stop"},
+      {.alias = "quit", .action = CommandAction::Quit, .detail = "quit"},
+      {.alias = "q", .action = CommandAction::Quit, .detail = "quit"},
     });
 
     std::string trim(std::string_view value)
@@ -99,6 +92,16 @@ namespace ao::tui
     }
   } // namespace
 
+  std::span<CommandPrefixSpec const> commandPrefixSpecs()
+  {
+    return kPrefixCommands;
+  }
+
+  std::span<CommandAliasSpec const> commandAliasSpecs()
+  {
+    return kAliasCommands;
+  }
+
   Command parseCommand(std::string_view input)
   {
     auto value = trim(input);
@@ -120,7 +123,7 @@ namespace ao::tui
     }
 
     auto const* const aliasIt = std::ranges::find_if(
-      kAliasCommands, [&](AliasCommand const& aliasCommand) { return command == aliasCommand.alias; });
+      kAliasCommands, [&](CommandAliasSpec const& aliasCommand) { return command == aliasCommand.alias; });
 
     if (aliasIt != kAliasCommands.end())
     {
@@ -155,6 +158,16 @@ namespace ao::tui
     return _commandDraft;
   }
 
+  std::optional<rt::CompletionResult> const& ShellModel::commandCompletion() const noexcept
+  {
+    return _completion.result();
+  }
+
+  std::int32_t ShellModel::commandCompletionSelection() const noexcept
+  {
+    return _completion.selection();
+  }
+
   Overlay ShellModel::overlay() const noexcept
   {
     return _overlay;
@@ -164,6 +177,7 @@ namespace ao::tui
   {
     _commandActive = true;
     _commandDraft = std::move(draft);
+    clearCommandCompletion();
   }
 
   void ShellModel::appendCommandText(std::string_view text)
@@ -192,6 +206,7 @@ namespace ao::tui
   {
     _commandActive = false;
     _commandDraft.clear();
+    clearCommandCompletion();
   }
 
   Command ShellModel::submitCommand()
@@ -199,7 +214,28 @@ namespace ao::tui
     auto command = parseCommand(_commandDraft);
     _commandActive = false;
     _commandDraft.clear();
+    clearCommandCompletion();
     return command;
+  }
+
+  void ShellModel::setCommandCompletion(std::optional<rt::CompletionResult> optCompletion)
+  {
+    _completion.set(std::move(optCompletion));
+  }
+
+  bool ShellModel::moveCommandCompletion(std::int32_t const delta)
+  {
+    return _completion.moveSelection(delta);
+  }
+
+  bool ShellModel::applyCommandCompletion()
+  {
+    return _completion.applyTo(_commandDraft);
+  }
+
+  void ShellModel::clearCommandCompletion()
+  {
+    _completion.clear();
   }
 
   void ShellModel::openOverlay(Overlay overlay) noexcept

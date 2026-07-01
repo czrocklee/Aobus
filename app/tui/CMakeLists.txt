@@ -1,4 +1,7 @@
 add_library(aobus-tui-lib STATIC
+    CommandCompletion.cpp
+    CommandCompletionProvider.cpp
+    CommandCompletionState.cpp
     CoverArt.cpp
     EventController.cpp
     Executor.cpp
