@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/projection/ProjectionTypes.h>
@@ -17,8 +18,8 @@ namespace ao::rt::test
             "[runtime][unit][projection]")
   {
     auto env = TestEnv{};
-    auto const id1 = env.lib.addTrack(makeSpec("Track A", 2020));
-    auto const id2 = env.lib.addTrack(makeSpec("Track B", 2021));
+    auto const id1 = env.lib.addTrack(library::test::makeTrackSpec("Track A", 2020));
+    auto const id2 = env.lib.addTrack(library::test::makeTrackSpec("Track B", 2021));
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -56,7 +57,7 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - subscribe immediately publishes reset", "[runtime][unit][projection]")
   {
     auto env = TestEnv{};
-    auto const id1 = env.lib.addTrack(makeSpec("Track", 2020));
+    auto const id1 = env.lib.addTrack(library::test::makeTrackSpec("Track", 2020));
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -75,7 +76,7 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - subscribe replays reset to each subscriber", "[runtime][unit][projection]")
   {
     auto env = TestEnv{};
-    auto const id1 = env.lib.addTrack(makeSpec("Track", 2020));
+    auto const id1 = env.lib.addTrack(library::test::makeTrackSpec("Track", 2020));
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -89,7 +90,7 @@ namespace ao::rt::test
             "[runtime][unit][projection]")
   {
     auto env = TestEnv{};
-    auto const id1 = env.lib.addTrack(makeSpec("Track", 2020));
+    auto const id1 = env.lib.addTrack(library::test::makeTrackSpec("Track", 2020));
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});

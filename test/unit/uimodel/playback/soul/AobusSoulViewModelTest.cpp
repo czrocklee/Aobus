@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -27,7 +28,7 @@ namespace ao::uimodel::test
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playback = PlaybackService{executor, viewService, testLib.library()};
 
-    auto log = RenderLog<AobusSoulViewState>{};
+    auto log = ao::test::RenderLog<AobusSoulViewState>{};
     auto const viewModel = AobusSoulViewModel{playback, [&log](auto const& view) { log.render(view); }};
 
     SECTION("Initial render when idle")

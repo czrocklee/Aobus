@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
@@ -31,9 +32,9 @@ namespace ao::rt::test
 
     for (std::int32_t idx = 0; idx < kTrackCount; ++idx)
     {
-      ids.push_back(env.addTrack(TrackSpec{.title = std::format("Track {:05d}", idx),
-                                           .artist = std::format("Artist {:03d}", idx % 100),
-                                           .album = std::format("Album {:03d}", idx % 500)}));
+      ids.push_back(env.addTrack(library::test::TrackSpec{.title = std::format("Track {:05d}", idx),
+                                                          .artist = std::format("Artist {:03d}", idx % 100),
+                                                          .album = std::format("Album {:03d}", idx % 500)}));
     }
 
     auto source = MutableTrackSource{};
@@ -52,7 +53,7 @@ namespace ao::rt::test
 
       for (std::int32_t idx = 0; idx < 100; ++idx)
       {
-        newIds.push_back(env.addTrack(TrackSpec{.title = std::format("New Track {:05d}", idx)}));
+        newIds.push_back(env.addTrack(library::test::TrackSpec{.title = std::format("New Track {:05d}", idx)}));
       }
 
       source.batchInsert(newIds);

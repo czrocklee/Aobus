@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackStore.h>
@@ -25,13 +26,13 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - title sort ignores leading articles", "[runtime][unit][projection]")
   {
     auto env = TestEnv{};
-    auto const id1 = env.lib.addTrack(TrackSpec{.title = "The Best"});
-    auto const id2 = env.lib.addTrack(TrackSpec{.title = "A Better"});
-    auto const id3 = env.lib.addTrack(TrackSpec{.title = "An Apple"});
-    auto const id4 = env.lib.addTrack(TrackSpec{.title = "Zeppelin"});
-    auto const id5 = env.lib.addTrack(TrackSpec{.title = "the other"});
-    auto const id6 = env.lib.addTrack(TrackSpec{.title = "a different"});
-    auto const id7 = env.lib.addTrack(TrackSpec{.title = "ANOTHER"});
+    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "The Best"});
+    auto const id2 = env.lib.addTrack(library::test::TrackSpec{.title = "A Better"});
+    auto const id3 = env.lib.addTrack(library::test::TrackSpec{.title = "An Apple"});
+    auto const id4 = env.lib.addTrack(library::test::TrackSpec{.title = "Zeppelin"});
+    auto const id5 = env.lib.addTrack(library::test::TrackSpec{.title = "the other"});
+    auto const id6 = env.lib.addTrack(library::test::TrackSpec{.title = "a different"});
+    auto const id7 = env.lib.addTrack(library::test::TrackSpec{.title = "ANOTHER"});
 
     env.setupFiltered({{id1, id2, id3, id4, id5, id6, id7}});
 
@@ -68,12 +69,12 @@ namespace ao::rt::test
 
     for (std::int32_t idx = 0; idx < 10; ++idx)
     {
-      ids.push_back(env.lib.addTrack(makeSpec(std::string(1, static_cast<char>('J' - idx)), 2020)));
+      ids.push_back(env.lib.addTrack(library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - idx)), 2020)));
     }
 
     for (std::int32_t idx = 0; idx < 10; ++idx)
     {
-      ids.push_back(env.lib.addTrack(makeSpec(std::string(1, static_cast<char>('J' - idx)), 2021)));
+      ids.push_back(env.lib.addTrack(library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - idx)), 2021)));
     }
 
     env.setupFiltered(ids);
@@ -157,7 +158,7 @@ namespace ao::rt::test
 
     for (auto const& r : rows)
     {
-      auto spec = TrackSpec{};
+      auto spec = library::test::TrackSpec{};
       spec.album = r.album;
       spec.discNumber = r.disc;
       spec.trackNumber = r.track;
@@ -240,7 +241,7 @@ namespace ao::rt::test
 
     for (auto const& r : rows)
     {
-      auto spec = TrackSpec{};
+      auto spec = library::test::TrackSpec{};
       spec.composer = "Beethoven";
       spec.work = "Symphony No. 5";
       spec.album = r.album;
@@ -297,7 +298,7 @@ namespace ao::rt::test
 
     for (std::int32_t i = 0; i < 10; ++i)
     {
-      ids.push_back(env.lib.addTrack(makeSpec("Same", 2020)));
+      ids.push_back(env.lib.addTrack(library::test::makeTrackSpec("Same", 2020)));
     }
 
     env.setupFiltered(ids);
@@ -324,7 +325,8 @@ namespace ao::rt::test
 
     for (std::int32_t y = 2019; y >= 2010; --y)
     {
-      ids.push_back(env.lib.addTrack(makeSpec(std::format("{}", y), static_cast<std::uint16_t>(y))));
+      ids.push_back(
+        env.lib.addTrack(library::test::makeTrackSpec(std::format("{}", y), static_cast<std::uint16_t>(y))));
     }
 
     env.setupFiltered(ids);
@@ -379,7 +381,8 @@ namespace ao::rt::test
     for (std::int32_t i = 0; i < 15; ++i)
     {
       auto title = std::string(1, static_cast<char>('A' + ((i * 7) % 15)));
-      ids.push_back(env.lib.addTrack(makeSpec(title, static_cast<std::uint16_t>(2000 + ((i * 3) % 20)))));
+      ids.push_back(
+        env.lib.addTrack(library::test::makeTrackSpec(title, static_cast<std::uint16_t>(2000 + ((i * 3) % 20)))));
     }
 
     env.setupFiltered(ids);
@@ -422,8 +425,8 @@ namespace ao::rt::test
   {
     auto env = TestEnv{};
 
-    auto id1 = env.lib.addTrack(TrackSpec{.title = "A", .duration = std::chrono::seconds{5}});
-    auto id2 = env.lib.addTrack(TrackSpec{.title = "B", .duration = std::chrono::seconds{3}});
+    auto id1 = env.lib.addTrack(library::test::TrackSpec{.title = "A", .duration = std::chrono::seconds{5}});
+    auto id2 = env.lib.addTrack(library::test::TrackSpec{.title = "B", .duration = std::chrono::seconds{3}});
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});

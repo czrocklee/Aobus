@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/rt/PlaybackService.h>
@@ -30,7 +31,7 @@ namespace ao::uimodel::test
     auto playback = PlaybackService{executor, viewService, testLib.library()};
     addReadyAudioProvider(playback);
 
-    auto log = RenderLog<SeekViewState>{};
+    auto log = ao::test::RenderLog<SeekViewState>{};
     auto viewModel = SeekViewModel{playback, [&log](auto const& state) { log.render(state); }};
 
     SECTION("Initial state is insensitive when idle")

@@ -61,6 +61,22 @@ namespace ao::library::test
     return TrackSpec{.title = std::string{title}, .year = year};
   }
 
+  inline TrackSpec makeEmptyTrackSpec(std::string_view uri)
+  {
+    return TrackSpec{.title = "",
+                     .artist = "",
+                     .album = "",
+                     .uri = std::string{uri},
+                     .year = 0,
+                     .discNumber = 0,
+                     .trackNumber = 0,
+                     .duration = std::chrono::milliseconds{0},
+                     .bitrate = Bitrate{},
+                     .sampleRate = SampleRate{},
+                     .channels = Channels{},
+                     .bitDepth = BitDepth{}};
+  }
+
   inline void applyTrackSpec(TrackBuilder& builder, TrackSpec const& spec)
   {
     builder.metadata()

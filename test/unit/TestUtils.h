@@ -18,6 +18,7 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace ao::test
 {
@@ -111,4 +112,16 @@ namespace ao::test
     auto input = std::ifstream{path, std::ios::binary};
     return {std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
   }
+
+  template<typename TState>
+  struct RenderLog final
+  {
+    std::vector<TState> states;
+
+    void render(TState state) { states.push_back(std::move(state)); }
+
+    bool empty() const noexcept { return states.empty(); }
+    TState const& last() const { return states.back(); }
+    void clear() { states.clear(); }
+  };
 } // namespace ao::test

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ViewServiceTestSupport.h"
 #include <ao/rt/CorePrimitives.h>
 
@@ -14,8 +15,10 @@ namespace ao::rt::test
   TEST_CASE("ViewService - selectionDuration sums selected track durations", "[runtime][unit][view][selection]")
   {
     auto env = ViewServiceTestEnv{};
-    auto const trackA = env.library.addTrack(TrackSpec{.title = "A", .duration = std::chrono::seconds{200}});
-    auto const trackB = env.library.addTrack(TrackSpec{.title = "B", .duration = std::chrono::seconds{100}});
+    auto const trackA =
+      env.library.addTrack(library::test::TrackSpec{.title = "A", .duration = std::chrono::seconds{200}});
+    auto const trackB =
+      env.library.addTrack(library::test::TrackSpec{.title = "B", .duration = std::chrono::seconds{100}});
 
     auto service = env.makeService();
     auto const result = service.createView({}, true);

@@ -3,12 +3,9 @@
 
 #include "playback/OutputDeviceSelector.h"
 
+#include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/Backend.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IBackendProvider.h>
-#include <ao/audio/NullBackend.h>
-#include <ao/audio/Subscription.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -17,86 +14,12 @@
 #include <gtkmm/menubutton.h>
 #include <gtkmm/scrolledwindow.h>
 
-#include <memory>
 #include <optional>
-#include <string_view>
-#include <utility>
 
 namespace ao::gtk::test
 {
   namespace
   {
-    class TestBackend final : public audio::NullBackend
-    {
-    public:
-      TestBackend(audio::BackendId backendId, audio::ProfileId profileId)
-        : _backendId{std::move(backendId)}, _profileId{std::move(profileId)}
-      {
-      }
-
-      audio::BackendId backendId() const noexcept override { return _backendId; }
-      audio::ProfileId profileId() const noexcept override { return _profileId; }
-
-    private:
-      audio::BackendId _backendId;
-      audio::ProfileId _profileId;
-    };
-
-    class FakeOutputDeviceProvider final : public audio::IBackendProvider
-    {
-    public:
-      void shutdown() noexcept override {}
-
-      audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
-      {
-        if (callback)
-        {
-          callback(_status.devices);
-        }
-
-        return audio::Subscription{};
-      }
-
-      Status status() const override { return _status; }
-
-      std::unique_ptr<audio::IBackend> createBackend(audio::Device const& device,
-                                                     audio::ProfileId const& profile) override
-      {
-        return std::make_unique<TestBackend>(device.backendId, profile);
-      }
-
-      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
-      {
-        return audio::Subscription{};
-      }
-
-    private:
-      Status _status{
-        .metadata =
-          {
-            .id = audio::BackendId{"pipewire"},
-            .name = "PipeWire",
-            .description = "PipeWire Sound Server",
-            .iconName = "pipewire",
-            .supportedProfiles =
-              {
-                {.id = audio::kProfileShared, .name = "Shared", .description = "Shared mode"},
-                {.id = audio::kProfileExclusive, .name = "Exclusive", .description = "Exclusive mode"},
-              },
-          },
-        .devices =
-          {
-            {
-              .id = audio::DeviceId{"device1"},
-              .displayName = "Built-in Audio",
-              .description = "Built-in analog stereo",
-              .isDefault = true,
-              .backendId = audio::BackendId{"pipewire"},
-            },
-          },
-      };
-    };
-
     Gtk::ListBox* listBoxFor(OutputDeviceSelector& selector)
     {
       auto* const scrolled = dynamic_cast<Gtk::ScrolledWindow*>(selector.get_child());
@@ -144,7 +67,7 @@ namespace ao::gtk::test
 
     SECTION("row activation reports the engine-confirmed selection")
     {
-      playback.addProvider(std::make_unique<FakeOutputDeviceProvider>());
+      rt::test::addReadyAudioProvider(playback, rt::test::makePipeWireOutputStatus());
 
       auto optSelected = std::optional<rt::OutputDeviceSelection>{};
       auto selector = OutputDeviceSelector{

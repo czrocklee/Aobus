@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/CorePrimitives.h>
@@ -25,8 +26,8 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - batch insertion keeps sorted rows and index map", "[runtime][unit][projection]")
   {
     auto env = TestEnv{};
-    auto id1 = env.lib.addTrack(makeSpec("B", 2020));
-    auto id2 = env.lib.addTrack(makeSpec("D", 2020));
+    auto id1 = env.lib.addTrack(library::test::makeTrackSpec("B", 2020));
+    auto id2 = env.lib.addTrack(library::test::makeTrackSpec("D", 2020));
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -39,9 +40,9 @@ namespace ao::rt::test
     CHECK(proj.trackIdAt(0) == id1);
     CHECK(proj.trackIdAt(1) == id2);
 
-    auto id3 = env.lib.addTrack(makeSpec("A", 2020));
-    auto id4 = env.lib.addTrack(makeSpec("C", 2020));
-    auto id5 = env.lib.addTrack(makeSpec("E", 2020));
+    auto id3 = env.lib.addTrack(library::test::makeTrackSpec("A", 2020));
+    auto id4 = env.lib.addTrack(library::test::makeTrackSpec("C", 2020));
+    auto id5 = env.lib.addTrack(library::test::makeTrackSpec("E", 2020));
 
     // Simulate batch insertion from source
     // In our TestEnv, the filtered (SmartListSource) is the one attached to proj.
@@ -68,10 +69,10 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - batch removal drops rows and stale index entries", "[runtime][unit][projection]")
   {
     auto env = TestEnv{};
-    auto id1 = env.lib.addTrack(makeSpec("A", 2020));
-    auto id2 = env.lib.addTrack(makeSpec("B", 2020));
-    auto id3 = env.lib.addTrack(makeSpec("C", 2020));
-    auto id4 = env.lib.addTrack(makeSpec("D", 2020));
+    auto id1 = env.lib.addTrack(library::test::makeTrackSpec("A", 2020));
+    auto id2 = env.lib.addTrack(library::test::makeTrackSpec("B", 2020));
+    auto id3 = env.lib.addTrack(library::test::makeTrackSpec("C", 2020));
+    auto id4 = env.lib.addTrack(library::test::makeTrackSpec("D", 2020));
     env.setupFiltered({{id1, id2, id3, id4}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -100,8 +101,8 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - single and batch mutations without grouping", "[runtime][unit][projection]")
   {
     auto env = TestEnv{};
-    auto id1 = env.lib.addTrack(makeSpec("A", 2020));
-    auto id2 = env.lib.addTrack(makeSpec("C", 2020));
+    auto id1 = env.lib.addTrack(library::test::makeTrackSpec("A", 2020));
+    auto id2 = env.lib.addTrack(library::test::makeTrackSpec("C", 2020));
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -115,7 +116,7 @@ namespace ao::rt::test
 
     SECTION("single insertion via single method")
     {
-      auto id3 = env.lib.addTrack(TrackSpec{.title = "B", .year = 2020});
+      auto id3 = env.lib.addTrack(library::test::TrackSpec{.title = "B", .year = 2020});
       env.source.singleInsert(id3);
       REQUIRE(proj.size() == 3);
       CHECK(proj.trackIdAt(0) == id1);
@@ -131,7 +132,7 @@ namespace ao::rt::test
 
     SECTION("single insertion via batch method")
     {
-      auto id3 = env.lib.addTrack(TrackSpec{.title = "B", .year = 2020});
+      auto id3 = env.lib.addTrack(library::test::TrackSpec{.title = "B", .year = 2020});
       auto arr = std::array{id3};
       env.source.batchInsert(arr);
       REQUIRE(proj.size() == 3);
@@ -177,7 +178,7 @@ namespace ao::rt::test
 
     SECTION("single update of non-sort field preserves order")
     {
-      env.lib.updateTrack(id1, [](TrackSpec& s) { s.artist = "Updated Artist"; });
+      env.lib.updateTrack(id1, [](library::test::TrackSpec& s) { s.artist = "Updated Artist"; });
       env.source.singleUpdate(id1);
       REQUIRE(proj.size() == 2);
       CHECK(proj.trackIdAt(0) == id1);
@@ -192,7 +193,7 @@ namespace ao::rt::test
     SECTION("single update breaking order")
     {
       // A -> Z
-      env.lib.updateTrack(id1, [](TrackSpec& s) { s.title = "Z"; });
+      env.lib.updateTrack(id1, [](library::test::TrackSpec& s) { s.title = "Z"; });
       env.source.singleUpdate(id1);
       REQUIRE(proj.size() == 2);
       CHECK(proj.trackIdAt(0) == id2); // C
@@ -205,7 +206,7 @@ namespace ao::rt::test
 
     SECTION("single update via batch method")
     {
-      env.lib.updateTrack(id1, [](TrackSpec& s) { s.artist = "Updated Artist"; });
+      env.lib.updateTrack(id1, [](library::test::TrackSpec& s) { s.artist = "Updated Artist"; });
       auto arr = std::array{id1};
       env.source.batchUpdate(arr);
       REQUIRE(proj.size() == 2);
@@ -217,8 +218,8 @@ namespace ao::rt::test
 
     SECTION("batch update of non-sort fields preserves order and coalesces update ranges")
     {
-      env.lib.updateTrack(id1, [](TrackSpec& s) { s.artist = "Updated Artist A"; });
-      env.lib.updateTrack(id2, [](TrackSpec& s) { s.artist = "Updated Artist C"; });
+      env.lib.updateTrack(id1, [](library::test::TrackSpec& s) { s.artist = "Updated Artist A"; });
+      env.lib.updateTrack(id2, [](library::test::TrackSpec& s) { s.artist = "Updated Artist C"; });
 
       auto arr = std::array{id1, id2};
       env.source.batchUpdate(arr);
@@ -237,8 +238,8 @@ namespace ao::rt::test
     SECTION("batch update of sort fields moves entries without reset")
     {
       // A, C -> Z, B
-      env.lib.updateTrack(id1, [](TrackSpec& s) { s.title = "Z"; });
-      env.lib.updateTrack(id2, [](TrackSpec& s) { s.title = "B"; });
+      env.lib.updateTrack(id1, [](library::test::TrackSpec& s) { s.title = "Z"; });
+      env.lib.updateTrack(id2, [](library::test::TrackSpec& s) { s.title = "B"; });
 
       auto arr = std::array{id1, id2};
       env.source.batchUpdate(arr);
@@ -256,8 +257,8 @@ namespace ao::rt::test
 
     SECTION("batch update mixing stable and moved rows publishes reset")
     {
-      env.lib.updateTrack(id1, [](TrackSpec& s) { s.artist = "Updated Artist A"; });
-      env.lib.updateTrack(id2, [](TrackSpec& s) { s.title = "B"; });
+      env.lib.updateTrack(id1, [](library::test::TrackSpec& s) { s.artist = "Updated Artist A"; });
+      env.lib.updateTrack(id2, [](library::test::TrackSpec& s) { s.title = "B"; });
 
       auto arr = std::array{id1, id2};
       env.source.batchUpdate(arr);
@@ -276,8 +277,8 @@ namespace ao::rt::test
         .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
       batches.clear();
 
-      auto id3 = env.lib.addTrack(TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
-      auto id4 = env.lib.addTrack(TrackSpec{.title = "D", .genre = "Rock", .year = 2020});
+      auto id3 = env.lib.addTrack(library::test::TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
+      auto id4 = env.lib.addTrack(library::test::TrackSpec{.title = "D", .genre = "Rock", .year = 2020});
       auto arr = std::array{id3, id4};
       env.source.batchInsert(arr);
       REQUIRE(proj.size() == 4);
@@ -295,8 +296,8 @@ namespace ao::rt::test
         .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
       batches.clear();
 
-      auto id3 = env.lib.addTrack(TrackSpec{.title = "B", .year = 2020});
-      auto id4 = env.lib.addTrack(TrackSpec{.title = "D", .year = 2020});
+      auto id3 = env.lib.addTrack(library::test::TrackSpec{.title = "B", .year = 2020});
+      auto id4 = env.lib.addTrack(library::test::TrackSpec{.title = "D", .year = 2020});
       auto arr = std::array{id3, id4};
       env.source.batchInsert(arr);
       REQUIRE(proj.size() == 4);
@@ -331,8 +332,8 @@ namespace ao::rt::test
       proj.setPresentation(TrackPresentationSpec{
         .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
 
-      auto id3 = env.lib.addTrack(TrackSpec{.title = "B", .year = 2020});
-      auto id4 = env.lib.addTrack(TrackSpec{.title = "D", .year = 2020});
+      auto id3 = env.lib.addTrack(library::test::TrackSpec{.title = "B", .year = 2020});
+      auto id4 = env.lib.addTrack(library::test::TrackSpec{.title = "D", .year = 2020});
       auto insertArr = std::array{id3, id4};
       env.source.batchInsert(insertArr);
       REQUIRE(proj.groupCount() == 1);
@@ -361,8 +362,8 @@ namespace ao::rt::test
                               .sortBy = {TrackSortTerm{.field = TrackSortField::Artist, .ascending = true}}});
       batches.clear();
 
-      env.lib.updateTrack(id1, [](TrackSpec& s) { s.artist = "Zulu"; });
-      env.lib.updateTrack(id2, [](TrackSpec& s) { s.artist = "Bravo"; });
+      env.lib.updateTrack(id1, [](library::test::TrackSpec& s) { s.artist = "Zulu"; });
+      env.lib.updateTrack(id2, [](library::test::TrackSpec& s) { s.artist = "Bravo"; });
       auto arr = std::array{id1, id2};
       env.source.batchUpdate(arr);
       REQUIRE(proj.size() == 2);
@@ -382,7 +383,7 @@ namespace ao::rt::test
                               .sortBy = {TrackSortTerm{.field = TrackSortField::Artist, .ascending = true}}});
       batches.clear();
 
-      env.lib.updateTrack(id1, [](TrackSpec& s) { s.artist = "Zulu"; });
+      env.lib.updateTrack(id1, [](library::test::TrackSpec& s) { s.artist = "Zulu"; });
       env.source.singleUpdate(id1);
       REQUIRE(proj.size() == 2);
       CHECK(proj.trackIdAt(0) == id2);
@@ -400,7 +401,7 @@ namespace ao::rt::test
         .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
       batches.clear();
 
-      auto id3 = env.lib.addTrack(TrackSpec{.title = "B", .year = 2020});
+      auto id3 = env.lib.addTrack(library::test::TrackSpec{.title = "B", .year = 2020});
       env.source.singleInsert(id3);
       REQUIRE(proj.size() == 3);
       REQUIRE(proj.groupCount() == 1);
@@ -420,7 +421,7 @@ namespace ao::rt::test
         .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
       batches.clear();
 
-      auto id3 = env.lib.addTrack(TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
+      auto id3 = env.lib.addTrack(library::test::TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
       env.source.singleInsert(id3);
       REQUIRE(proj.size() == 3);
       REQUIRE(proj.groupCount() == 2);
@@ -455,7 +456,7 @@ namespace ao::rt::test
       proj.setPresentation(TrackPresentationSpec{
         .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
 
-      auto id3 = env.lib.addTrack(TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
+      auto id3 = env.lib.addTrack(library::test::TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
       env.source.singleInsert(id3);
       REQUIRE(proj.groupCount() == 2);
       batches.clear();
@@ -477,8 +478,8 @@ namespace ao::rt::test
                               .sortBy = {TrackSortTerm{.field = TrackSortField::Artist, .ascending = true}}});
       batches.clear();
 
-      env.lib.updateTrack(id1, [](TrackSpec& s) { s.title = "AA"; });
-      env.lib.updateTrack(id2, [](TrackSpec& s) { s.title = "CC"; });
+      env.lib.updateTrack(id1, [](library::test::TrackSpec& s) { s.title = "AA"; });
+      env.lib.updateTrack(id2, [](library::test::TrackSpec& s) { s.title = "CC"; });
       auto arr = std::array{id1, id2};
       env.source.batchUpdate(arr);
       REQUIRE(proj.size() == 2);
@@ -501,8 +502,8 @@ namespace ao::rt::test
                                                  }});
       batches.clear();
 
-      env.lib.updateTrack(id1, [](TrackSpec& s) { s.title = "Z"; });
-      env.lib.updateTrack(id2, [](TrackSpec& s) { s.title = "B"; });
+      env.lib.updateTrack(id1, [](library::test::TrackSpec& s) { s.title = "Z"; });
+      env.lib.updateTrack(id2, [](library::test::TrackSpec& s) { s.title = "B"; });
       auto arr = std::array{id1, id2};
       env.source.batchUpdate(arr);
       REQUIRE(proj.size() == 2);
@@ -521,8 +522,8 @@ namespace ao::rt::test
       proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None});
       batches.clear();
 
-      auto id3 = env.lib.addTrack(TrackSpec{.title = "B", .year = 2020});
-      auto id4 = env.lib.addTrack(TrackSpec{.title = "D", .year = 2020});
+      auto id3 = env.lib.addTrack(library::test::TrackSpec{.title = "B", .year = 2020});
+      auto id4 = env.lib.addTrack(library::test::TrackSpec{.title = "D", .year = 2020});
       auto arr = std::array{id3, id4};
       env.source.batchInsert(arr);
       REQUIRE(proj.size() == 4);
@@ -539,7 +540,7 @@ namespace ao::rt::test
       proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None});
       batches.clear();
 
-      env.lib.updateTrack(id1, [](TrackSpec& s) { s.title = "AA"; });
+      env.lib.updateTrack(id1, [](library::test::TrackSpec& s) { s.title = "AA"; });
       env.source.singleUpdate(id1);
       REQUIRE(proj.size() == 2);
       CHECK(proj.trackIdAt(0) == id1);

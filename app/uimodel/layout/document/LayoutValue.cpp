@@ -3,10 +3,8 @@
 
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
-#include <charconv>
 #include <memory>
 #include <string>
-#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -27,14 +25,9 @@ namespace ao::uimodel
         }
         else if constexpr (std::is_same_v<T, std::string>)
         {
-          double parsed = 0.0;
-          auto const* const begin = val.data();
-          auto const* const end = val.data() + val.size();
-          auto const [ptr, ec] = std::from_chars(begin, end, parsed);
-
-          if (ec == std::errc{} && ptr == end)
+          if (auto optParsed = detail::parseLayoutNumber<double>(val); optParsed)
           {
-            return parsed;
+            return *optParsed;
           }
 
           return defaultValue;

@@ -4,6 +4,7 @@
 #include "tag/TagEditor.h"
 
 #include "common/DismissController.h"
+#include "common/WidgetMeasure.h"
 #include "layout/LayoutConstants.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/library/Library.h>
@@ -38,21 +39,6 @@ namespace ao::gtk
   {
     constexpr int kChipSpacing = layout::kSpacingSmall; // 4
     constexpr std::size_t kMaxAvailableTags = 50;
-
-    struct MeasureResult final
-    {
-      std::int32_t minimum = 0;
-      std::int32_t natural = 0;
-    };
-
-    MeasureResult measureWidget(Gtk::Widget const& widget, Gtk::Orientation orientation, std::int32_t forSize)
-    {
-      auto result = MeasureResult{};
-      std::int32_t minimumBaseline = -1;
-      std::int32_t naturalBaseline = -1;
-      widget.measure(orientation, forSize, result.minimum, result.natural, minimumBaseline, naturalBaseline);
-      return result;
-    }
 
     struct FlowSize final
     {

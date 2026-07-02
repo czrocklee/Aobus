@@ -10,21 +10,18 @@
 #include "portal/ImportExportCoordinator.h"
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
-#include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/audio/Backend.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <chrono>
 #include <memory>
 #include <string_view>
 
@@ -34,39 +31,13 @@ namespace ao::gtk::test
   {
     TrackId addTrackWithTitle(rt::AppRuntime& runtime, std::string_view title)
     {
-      auto& library = runtime.musicLibrary();
-      auto txn = library.writeTransaction();
-      auto writer = library.tracks().writer(txn);
-
-      auto builder = library::TrackBuilder::createNew();
-      builder.metadata().title(title).artist("Artist");
-      builder.property()
-        .uri("/tmp/main-window-coordinator-test.flac")
-        .duration(std::chrono::minutes{3})
-        .sampleRate(SampleRate{44100})
-        .channels(Channels{2})
-        .bitDepth(BitDepth{16});
-
-      auto serialized = ao::test::requireValue(builder.serialize(txn, library.dictionary(), library.resources()));
-      auto const [trackId, _] = ao::test::requireValue(writer.createHotCold(serialized.first, serialized.second));
-      REQUIRE(txn.commit());
-      return trackId;
+      return library::test::addTrack(runtime.musicLibrary(), {.title = std::string{title}});
     }
 
     void updateTrackTitle(rt::AppRuntime& runtime, TrackId trackId, std::string_view title)
     {
-      auto& library = runtime.musicLibrary();
-      auto txn = library.writeTransaction();
-      auto writer = library.tracks().writer(txn);
-
-      auto const optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
-      REQUIRE(optView.has_value());
-
-      auto builder = library::TrackBuilder::fromView(*optView, library.dictionary());
-      builder.metadata().title(title);
-      auto hotData = ao::test::requireValue(builder.serializeHot(txn, library.dictionary()));
-      REQUIRE(writer.updateHot(trackId, hotData));
-      REQUIRE(txn.commit());
+      library::test::updateTrackSpec(
+        runtime.musicLibrary(), trackId, [&](library::test::TrackSpec& spec) { spec.title = std::string{title}; });
     }
   } // namespace
 

@@ -116,19 +116,7 @@ namespace ao::rt::test
 
     // Pre-create the track in ml2 to test overlay (since physical file song.flac doesn't exist)
     {
-      library::test::addTrack(ml2,
-                              library::test::TrackSpec{.title = "",
-                                                       .artist = "",
-                                                       .album = "",
-                                                       .uri = "song.flac",
-                                                       .year = 0,
-                                                       .discNumber = 0,
-                                                       .trackNumber = 0,
-                                                       .duration = std::chrono::milliseconds{0},
-                                                       .bitrate = Bitrate{},
-                                                       .sampleRate = SampleRate{},
-                                                       .channels = Channels{},
-                                                       .bitDepth = BitDepth{}});
+      library::test::addTrack(ml2, library::test::makeEmptyTrackSpec("song.flac"));
     }
 
     auto importer = LibraryYamlImporter{ml2};

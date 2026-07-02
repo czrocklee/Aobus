@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 
 #include <chrono>
 #include <cstdint>
@@ -12,11 +12,11 @@
 
 namespace ao::rt::test
 {
-  inline TrackSpec makeSmartListSpec(std::string_view title,
-                                     std::uint16_t year,
-                                     std::chrono::milliseconds duration = std::chrono::seconds{180})
+  inline library::test::TrackSpec makeSmartListSpec(std::string_view title,
+                                                    std::uint16_t year,
+                                                    std::chrono::milliseconds duration = std::chrono::seconds{180})
   {
-    auto spec = TrackSpec{};
+    auto spec = library::test::TrackSpec{};
     spec.title = std::string{title};
     spec.year = year;
     spec.duration = duration;

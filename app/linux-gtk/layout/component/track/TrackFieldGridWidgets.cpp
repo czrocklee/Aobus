@@ -3,6 +3,7 @@
 
 #include "layout/component/track/TrackFieldGridWidgets.h"
 
+#include "common/WidgetMeasure.h"
 #include "completion/EntryCompletionController.h"
 #include "sigc++/signal.h"
 #include <ao/rt/completion/CompletionResult.h>
@@ -28,21 +29,6 @@ namespace ao::gtk::layout::track_field_grid
 {
   namespace
   {
-    struct MeasureResult final
-    {
-      std::int32_t minimum = 0;
-      std::int32_t natural = 0;
-    };
-
-    MeasureResult measureWidget(Gtk::Widget const& widget, Gtk::Orientation orientation, std::int32_t forSize)
-    {
-      auto result = MeasureResult{};
-      std::int32_t minimumBaseline = -1;
-      std::int32_t naturalBaseline = -1;
-      widget.measure(orientation, forSize, result.minimum, result.natural, minimumBaseline, naturalBaseline);
-      return result;
-    }
-
     std::int32_t minimumWidth(Gtk::Widget const& widget)
     {
       return std::max(0, measureWidget(widget, Gtk::Orientation::HORIZONTAL, -1).minimum);

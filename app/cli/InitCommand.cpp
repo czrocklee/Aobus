@@ -8,6 +8,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackWrite.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Finder.h>
@@ -15,7 +16,6 @@
 #include <CLI/App.hpp>
 
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -76,14 +76,7 @@ namespace ao::cli
           }
 
           auto const& [preparedHot, preparedCold] = *preparedResult;
-          auto createResult = writer.createHotCold(
-            preparedHot.size(),
-            preparedCold.size(),
-            [&preparedHot, &preparedCold](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-            {
-              preparedHot.writeTo(hot);
-              preparedCold.writeTo(cold);
-            });
+          auto createResult = library::createPreparedTrackData(writer, preparedHot, preparedCold);
 
           if (!createResult)
           {

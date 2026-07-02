@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Transport.h>
@@ -36,7 +37,7 @@ namespace ao::uimodel::test
 
     SECTION("Play action - disabled when not ready")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Play, {}, false, [&log](auto const& v) { log.render(v); }};
 
@@ -47,7 +48,7 @@ namespace ao::uimodel::test
 
     SECTION("Pause action - disabled when not playing")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Pause, {}, false, [&log](auto const& v) { log.render(v); }};
 
@@ -57,7 +58,7 @@ namespace ao::uimodel::test
 
     SECTION("Stop action - disabled when idle")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Stop, {}, false, [&log](auto const& v) { log.render(v); }};
 
@@ -67,7 +68,7 @@ namespace ao::uimodel::test
 
     SECTION("PlayPause action - shows play glyph when idle, disabled when not ready")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::PlayPause, {}, false, [&log](auto const& v) { log.render(v); }};
 
@@ -79,7 +80,7 @@ namespace ao::uimodel::test
 
     SECTION("PlayPause action with showLabel")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::PlayPause, {}, true, [&log](auto const& v) { log.render(v); }};
 
@@ -88,8 +89,8 @@ namespace ao::uimodel::test
 
     SECTION("Next/Previous action - disabled when not ready")
     {
-      auto logNext = RenderLog<TransportViewState>{};
-      auto logPrev = RenderLog<TransportViewState>{};
+      auto logNext = ao::test::RenderLog<TransportViewState>{};
+      auto logPrev = ao::test::RenderLog<TransportViewState>{};
       auto vmNext = TransportViewModel{
         playback, nullptr, TransportAction::Next, {}, false, [&logNext](auto const& v) { logNext.render(v); }};
       auto vmPrev = TransportViewModel{
@@ -101,7 +102,7 @@ namespace ao::uimodel::test
 
     SECTION("Shuffle action")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Shuffle, {}, false, [&log](auto const& v) { log.render(v); }};
 
@@ -111,7 +112,7 @@ namespace ao::uimodel::test
 
     SECTION("Repeat action - Off mode")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Repeat, {}, false, [&log](auto const& v) { log.render(v); }};
 
@@ -122,7 +123,7 @@ namespace ao::uimodel::test
 
     SECTION("Repeat action - All mode")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       playback.setRepeatMode(rt::RepeatMode::All);
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Repeat, {}, false, [&log](auto const& v) { log.render(v); }};
@@ -133,7 +134,7 @@ namespace ao::uimodel::test
 
     SECTION("Repeat action - One mode")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       playback.setRepeatMode(rt::RepeatMode::One);
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Repeat, {}, false, [&log](auto const& v) { log.render(v); }};
@@ -144,7 +145,7 @@ namespace ao::uimodel::test
 
     SECTION("Shuffle action with shuffle On")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       playback.setShuffleMode(rt::ShuffleMode::On);
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Shuffle, {}, false, [&log](auto const& v) { log.render(v); }};
@@ -154,10 +155,10 @@ namespace ao::uimodel::test
 
     SECTION("showLabel=true renders label for all actions")
     {
-      auto logNext = RenderLog<TransportViewState>{};
-      auto logPrev = RenderLog<TransportViewState>{};
-      auto logShuffle = RenderLog<TransportViewState>{};
-      auto logRepeat = RenderLog<TransportViewState>{};
+      auto logNext = ao::test::RenderLog<TransportViewState>{};
+      auto logPrev = ao::test::RenderLog<TransportViewState>{};
+      auto logShuffle = ao::test::RenderLog<TransportViewState>{};
+      auto logRepeat = ao::test::RenderLog<TransportViewState>{};
 
       auto vmNext = TransportViewModel{
         playback, nullptr, TransportAction::Next, {}, true, [&logNext](auto const& v) { logNext.render(v); }};
@@ -190,7 +191,7 @@ namespace ao::uimodel::test
 
     SECTION("Play fires onPlaySelection when idle")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Play, onPlaySelection, false, [&log](auto const& v) { log.render(v); }};
 
@@ -201,7 +202,7 @@ namespace ao::uimodel::test
 
     SECTION("PlayPause fires onPlaySelection when idle")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{playback,
                                    nullptr,
                                    TransportAction::PlayPause,
@@ -216,7 +217,7 @@ namespace ao::uimodel::test
 
     SECTION("Stop does nothing when already idle")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Stop, {}, false, [&log](auto const& v) { log.render(v); }};
 
@@ -226,7 +227,7 @@ namespace ao::uimodel::test
 
     SECTION("Shuffle click with null queue is no-op")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Shuffle, {}, false, [&log](auto const& v) { log.render(v); }};
       auto const initialCount = log.states.size();
@@ -240,7 +241,7 @@ namespace ao::uimodel::test
 
     SECTION("Repeat click with null queue is no-op")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Repeat, {}, false, [&log](auto const& v) { log.render(v); }};
       auto const initialCount = log.states.size();
@@ -255,7 +256,7 @@ namespace ao::uimodel::test
 
     SECTION("Next/Previous with null queue is no-op")
     {
-      auto log = RenderLog<TransportViewState>{};
+      auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
         playback, nullptr, TransportAction::Next, {}, false, [&log](auto const& v) { log.render(v); }};
       auto const initialCount = log.states.size();
@@ -281,7 +282,7 @@ namespace ao::uimodel::test
 
       SECTION("Next with queue")
       {
-        auto log = RenderLog<TransportViewState>{};
+        auto log = ao::test::RenderLog<TransportViewState>{};
         auto vm = TransportViewModel{
           playback, &queueModel, TransportAction::Next, {}, false, [&log](auto const& v) { log.render(v); }};
 
@@ -296,7 +297,7 @@ namespace ao::uimodel::test
       SECTION("Previous with queue")
       {
         REQUIRE(queueModel.playQueue(trackIds, secondTrackId, kInvalidListId));
-        auto log = RenderLog<TransportViewState>{};
+        auto log = ao::test::RenderLog<TransportViewState>{};
         auto vm = TransportViewModel{
           playback, &queueModel, TransportAction::Previous, {}, false, [&log](auto const& v) { log.render(v); }};
 
@@ -310,7 +311,7 @@ namespace ao::uimodel::test
 
       SECTION("Shuffle click with queue toggles mode")
       {
-        auto log = RenderLog<TransportViewState>{};
+        auto log = ao::test::RenderLog<TransportViewState>{};
         auto vm = TransportViewModel{
           playback, &queueModel, TransportAction::Shuffle, {}, false, [&log](auto const& v) { log.render(v); }};
         vm.handleClick();
@@ -322,7 +323,7 @@ namespace ao::uimodel::test
 
       SECTION("Repeat click with queue cycles modes")
       {
-        auto log = RenderLog<TransportViewState>{};
+        auto log = ao::test::RenderLog<TransportViewState>{};
         auto vm = TransportViewModel{
           playback, &queueModel, TransportAction::Repeat, {}, false, [&log](auto const& v) { log.render(v); }};
         vm.handleClick();
@@ -358,7 +359,7 @@ namespace ao::uimodel::test
 
     auto const trackId = testLib.addTrack({.title = "Sub Test", .artist = "Sub Artist", .album = "Sub Album"});
 
-    auto log = RenderLog<TransportViewState>{};
+    auto log = ao::test::RenderLog<TransportViewState>{};
     auto vm = TransportViewModel{
       playback, nullptr, TransportAction::PlayPause, {}, false, [&log](auto const& v) { log.render(v); }};
 
@@ -394,7 +395,7 @@ namespace ao::uimodel::test
     auto playback = PlaybackService{executor, viewService, testLib.library()};
     addReadyAudioProvider(playback);
 
-    auto log = RenderLog<TransportViewState>{};
+    auto log = ao::test::RenderLog<TransportViewState>{};
     auto viewModelPtr = std::make_unique<TransportViewModel>(playback,
                                                              nullptr,
                                                              TransportAction::Shuffle,

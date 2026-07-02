@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/rt/ConfigStore.h>
@@ -77,7 +78,8 @@ namespace ao::rt::test
   {
     auto env = Env{};
 
-    auto const id1 = env.lib.addTrack(TrackSpec{.title = "Before", .artist = "ArtistA", .album = "AlbumX"});
+    auto const id1 =
+      env.lib.addTrack(library::test::TrackSpec{.title = "Before", .artist = "ArtistA", .album = "AlbumX"});
 
     auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1});
@@ -130,8 +132,8 @@ namespace ao::rt::test
   {
     auto env = Env{};
 
-    auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A", .artist = "Same", .album = "AlbumX"});
-    auto const id2 = env.lib.addTrack(TrackSpec{.title = "Song B", .artist = "Same", .album = "AlbumY"});
+    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Song A", .artist = "Same", .album = "AlbumX"});
+    auto const id2 = env.lib.addTrack(library::test::TrackSpec{.title = "Song B", .artist = "Same", .album = "AlbumY"});
 
     auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1, id2});
@@ -158,7 +160,7 @@ namespace ao::rt::test
             "[runtime][unit][projection][detail]")
   {
     auto env = Env{};
-    auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
+    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Song A"});
     auto const projPtr =
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
@@ -170,8 +172,8 @@ namespace ao::rt::test
             "[runtime][unit][projection][detail][workspace]")
   {
     auto env = Env{};
-    auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
-    auto const id2 = env.lib.addTrack(TrackSpec{.title = "Song B"});
+    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Song A"});
+    auto const id2 = env.lib.addTrack(library::test::TrackSpec{.title = "Song B"});
 
     auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.changes);
 
@@ -207,7 +209,7 @@ namespace ao::rt::test
             "[runtime][unit][projection][detail][workspace]")
   {
     auto env = Env{};
-    auto const id1 = env.lib.addTrack(TrackSpec{.title = "Already Selected"});
+    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Already Selected"});
 
     auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.workspace.setFocusedView(reply.viewId);
@@ -236,7 +238,7 @@ namespace ao::rt::test
             "[runtime][unit][projection][detail][tags]")
   {
     auto env = Env{};
-    auto const id1 = env.lib.addTrack(TrackSpec{.title = "Song A"});
+    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Song A"});
 
     // Add tag
     auto const targetIds = std::vector{id1};

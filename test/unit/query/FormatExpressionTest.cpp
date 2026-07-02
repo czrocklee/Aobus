@@ -1,26 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackView.h>
-#include <ao/lmdb/Environment.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/FormatExpression.h>
 #include <ao/query/Parser.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <chrono>
 #include <cstddef>
-#include <cstdint>
-#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -32,17 +25,6 @@ namespace ao::query::test
 {
   namespace
   {
-    using namespace ao::library;
-    using namespace ao::lmdb;
-    using namespace ao::lmdb::test;
-
-    Expression parseOk(std::string_view text)
-    {
-      auto result = ::ao::query::parse(text);
-      REQUIRE(result.has_value());
-      return std::move(*result);
-    }
-
     FormatPlan compileOk(FormatCompiler& compiler, Expression const& expr)
     {
       auto result = compiler.compile(expr);
@@ -58,90 +40,30 @@ namespace ao::query::test
       return result.error();
     }
 
-    struct FormatTrackSpec final
+    TrackSpec formatTrackSpec()
     {
-      std::string title = "Cello Suite";
-      std::string artist = "Johann Sebastian Bach";
-      std::string album = "Solo Works";
-      std::string albumArtist = "Bach";
-      std::string genre = "Classical";
-      std::string composer = "Bach";
-      std::string work = "BWV 1007";
-      std::uint16_t year = 1720;
-      std::uint16_t trackNumber = 3;
-      std::uint16_t trackTotal = 6;
-      std::uint16_t discNumber = 1;
-      std::uint16_t discTotal = 2;
-      std::chrono::milliseconds duration = std::chrono::seconds{143};
-      std::uint32_t bitrate = 912000;
-      std::uint32_t sampleRate = 96000;
-      std::uint8_t channels = 2;
-      std::uint8_t bitDepth = 24;
-      AudioCodec codec = AudioCodec::Flac;
-      std::vector<std::pair<std::string, std::string>> customPairs = {{"catalog", "Archiv 123"}};
-    };
+      return TrackSpec{.title = "Cello Suite",
+                       .artist = "Johann Sebastian Bach",
+                       .album = "Solo Works",
+                       .albumArtist = "Bach",
+                       .composer = "Bach",
+                       .work = "BWV 1007",
+                       .genre = "Classical",
+                       .year = 1720,
+                       .trackNumber = 3,
+                       .trackTotal = 6,
+                       .discNumber = 1,
+                       .discTotal = 2,
+                       .duration = std::chrono::seconds{143},
+                       .bitrate = 912000,
+                       .sampleRate = 96000,
+                       .channels = 2,
+                       .bitDepth = 24,
+                       .codec = AudioCodec::Flac,
+                       .customPairs = {{"catalog", "Archiv 123"}}};
+    }
 
-    class FormatTrackFixture final
-    {
-    public:
-      explicit FormatTrackFixture(FormatTrackSpec const& spec = {})
-      {
-        auto envOpts = Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
-        _optEnv.emplace(openEnvironment(_temp.path(), envOpts));
-        auto wtxn = beginWriteTransaction(*_optEnv);
-        _optDict.emplace(openDatabase(wtxn, "dict"), wtxn);
-        _optResources.emplace(openDatabase(wtxn, "resources"));
-
-        auto builder = TrackBuilder::createNew();
-        builder.metadata()
-          .title(spec.title)
-          .artist(spec.artist)
-          .album(spec.album)
-          .albumArtist(spec.albumArtist)
-          .genre(spec.genre)
-          .composer(spec.composer)
-          .work(spec.work)
-          .year(spec.year)
-          .trackNumber(spec.trackNumber)
-          .trackTotal(spec.trackTotal)
-          .discNumber(spec.discNumber)
-          .discTotal(spec.discTotal);
-        builder.property()
-          .duration(spec.duration)
-          .bitrate(Bitrate{spec.bitrate})
-          .sampleRate(SampleRate{spec.sampleRate})
-          .channels(Channels{spec.channels})
-          .bitDepth(BitDepth{spec.bitDepth})
-          .codec(spec.codec);
-
-        for (auto const& [key, value] : spec.customPairs)
-        {
-          builder.customMetadata().add(key, value);
-        }
-
-        auto hotDataResult = builder.serializeHot(wtxn, *_optDict);
-        REQUIRE(hotDataResult);
-        auto coldDataResult = builder.serializeCold(wtxn, *_optDict, *_optResources);
-        REQUIRE(coldDataResult);
-        _hotData = *hotDataResult;
-        _coldData = *coldDataResult;
-      }
-
-      TrackView view() const { return TrackView{_hotData, _coldData}; }
-      TrackView hotOnlyView() const { return TrackView{_hotData, std::span<std::byte const>{}}; }
-      TrackView coldOnlyView() const { return TrackView{std::span<std::byte const>{}, _coldData}; }
-      DictionaryStore& dictionary() { return *_optDict; }
-
-    private:
-      ao::test::TempDir _temp;
-      std::optional<Environment> _optEnv;
-      std::optional<DictionaryStore> _optDict;
-      std::optional<ResourceStore> _optResources;
-      std::vector<std::byte> _hotData;
-      std::vector<std::byte> _coldData;
-    };
-
-    std::string evaluate(std::string_view expression, FormatTrackFixture& fixture)
+    std::string evaluate(std::string_view expression, TrackFixture& fixture)
     {
       auto ast = parseOk(expression);
       auto compiler = FormatCompiler{&fixture.dictionary()};
@@ -153,7 +75,7 @@ namespace ao::query::test
 
   TEST_CASE("FormatExpression - concatenates fields and literals", "[query][unit][format_expression]")
   {
-    auto fixture = FormatTrackFixture{};
+    auto fixture = TrackFixture{formatTrackSpec()};
 
     CHECK(evaluate(R"($artist + " - " + $title)", fixture) == "Johann Sebastian Bach - Cello Suite");
     CHECK(evaluate(R"($albumArtist + "/" + $year + " - " + $album)", fixture) == "Bach/1720 - Solo Works");
@@ -162,7 +84,7 @@ namespace ao::query::test
 
   TEST_CASE("FormatExpression - formats cold fields custom metadata and properties", "[query][unit][format_expression]")
   {
-    auto fixture = FormatTrackFixture{};
+    auto fixture = TrackFixture{formatTrackSpec()};
 
     CHECK(evaluate(R"($trackNumber + "/" + $trackTotal + " " + $work)", fixture) == "3/6 BWV 1007");
     CHECK(evaluate(R"(@codec + " " + @sampleRate + "Hz " + @bitDepth + "bit")", fixture) == "FLAC 96000Hz 24bit");
@@ -171,21 +93,23 @@ namespace ao::query::test
 
   TEST_CASE("FormatExpression - formats unknown codecs as empty", "[query][unit][format_expression]")
   {
-    auto fixture = FormatTrackFixture{FormatTrackSpec{.codec = AudioCodec::Unknown}};
+    auto spec = formatTrackSpec();
+    spec.codec = AudioCodec::Unknown;
+    auto fixture = TrackFixture{spec};
 
     CHECK(evaluate(R"("[" + @codec + "]")", fixture) == "[]");
   }
 
   TEST_CASE("FormatExpression - keeps unit constants as literal text", "[query][unit][format_expression]")
   {
-    auto fixture = FormatTrackFixture{};
+    auto fixture = TrackFixture{formatTrackSpec()};
 
     CHECK(evaluate(R"($title + " " + 3m)", fixture) == "Cello Suite 3m");
   }
 
   TEST_CASE("FormatExpression - shares query literal keyword tokenization", "[query][unit][format_expression]")
   {
-    auto fixture = FormatTrackFixture{};
+    auto fixture = TrackFixture{formatTrackSpec()};
 
     CHECK(evaluate(R"(TRUE + " " + False)", fixture) == "true false");
     CHECK(evaluate(R"('AND' + " " + "Or")", fixture) == "AND Or");
@@ -194,19 +118,19 @@ namespace ao::query::test
 
   TEST_CASE("FormatExpression - formats missing values as empty strings", "[query][unit][format_expression]")
   {
-    auto fixture = FormatTrackFixture{FormatTrackSpec{
-      .albumArtist = {},
-      .work = {},
-      .trackNumber = 0,
-      .customPairs = {},
-    }};
+    auto spec = formatTrackSpec();
+    spec.albumArtist = {};
+    spec.work = {};
+    spec.trackNumber = 0;
+    spec.customPairs = {};
+    auto fixture = TrackFixture{spec};
 
     CHECK(evaluate(R"($albumArtist + "-" + $work + "-" + $trackNumber + "-" + %catalog)", fixture) == "---");
   }
 
   TEST_CASE("FormatExpression - reports access profile", "[query][unit][format_expression]")
   {
-    auto fixture = FormatTrackFixture{};
+    auto fixture = TrackFixture{formatTrackSpec()};
 
     SECTION("HotOnly")
     {
@@ -254,7 +178,7 @@ namespace ao::query::test
 
   TEST_CASE("FormatExpression - returns empty when required track data is missing", "[query][unit][format_expression]")
   {
-    auto fixture = FormatTrackFixture{};
+    auto fixture = TrackFixture{formatTrackSpec()};
     auto evaluator = FormatEvaluator{};
 
     SECTION("Hot plan with cold-only track")
@@ -276,7 +200,7 @@ namespace ao::query::test
 
   TEST_CASE("FormatExpression - rejects query-only expressions", "[query][unit][format_expression]")
   {
-    auto fixture = FormatTrackFixture{};
+    auto fixture = TrackFixture{formatTrackSpec()};
     auto compiler = FormatCompiler{&fixture.dictionary()};
 
     std::ignore = compileError(compiler, parseOk("$artist = Bach"));
@@ -287,7 +211,7 @@ namespace ao::query::test
 
   TEST_CASE("FormatExpression - rejects non-scalar fields", "[query][unit][format_expression]")
   {
-    auto fixture = FormatTrackFixture{};
+    auto fixture = TrackFixture{formatTrackSpec()};
     auto compiler = FormatCompiler{&fixture.dictionary()};
 
     std::ignore = compileError(compiler, parseOk("#favorite"));
@@ -305,7 +229,7 @@ namespace ao::query::test
 
   TEST_CASE("compileFormat returns Result without throwing", "[query][unit][format_expression]")
   {
-    auto fixture = FormatTrackFixture{};
+    auto fixture = TrackFixture{formatTrackSpec()};
 
     SECTION("Valid format expression yields a plan")
     {

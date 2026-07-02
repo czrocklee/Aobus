@@ -21,14 +21,9 @@
 #include <fakeit.hpp>
 
 #include <chrono>
-#include <condition_variable>
-#include <deque>
-#include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 
 namespace ao::audio
@@ -70,90 +65,7 @@ namespace ao::rt::test
     return status;
   }
 
-  // Executor that queues tasks instead of running them inline, so a test can
-  // drive the executor turn boundary explicitly via drain(). isCurrent() answers
-  // truthfully so the PlaybackService affinity guard is exercised on a real
-  // thread-id comparison rather than the unconditional-true MockExecutor.
-  class QueuedExecutor final : public async::IExecutor
-  {
-  public:
-    bool isCurrent() const noexcept override { return std::this_thread::get_id() == _ownerThreadId; }
-
-    void dispatch(std::move_only_function<void()> task) override
-    {
-      {
-        auto const lock = std::scoped_lock{_mutex};
-        _tasks.push_back(std::move(task));
-      }
-
-      _cv.notify_one();
-    }
-
-    void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
-
-    void drain()
-    {
-      while (true)
-      {
-        auto task = std::move_only_function<void()>{};
-        {
-          auto const lock = std::scoped_lock{_mutex};
-
-          if (_tasks.empty())
-          {
-            return;
-          }
-
-          task = std::move(_tasks.front());
-          _tasks.pop_front();
-        }
-
-        if (task)
-        {
-          task();
-        }
-      }
-    }
-
-    bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2})
-    {
-      auto lock = std::unique_lock{_mutex};
-      return _cv.wait_for(lock, timeout, [this] { return !_tasks.empty(); });
-    }
-
-    template<typename Predicate>
-    bool drainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{2})
-    {
-      auto const deadline = std::chrono::steady_clock::now() + timeout;
-
-      while (!predicate())
-      {
-        auto const now = std::chrono::steady_clock::now();
-
-        if (now >= deadline)
-        {
-          return predicate();
-        }
-
-        auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
-
-        if (!waitUntilQueued(remaining))
-        {
-          return predicate();
-        }
-
-        drain();
-      }
-
-      return true;
-    }
-
-  private:
-    std::thread::id _ownerThreadId = std::this_thread::get_id();
-    std::deque<std::move_only_function<void()>> _tasks;
-    std::mutex _mutex;
-    std::condition_variable _cv;
-  };
+  using rt::test::QueuedExecutor;
 
   // Shared wiring for the PlaybackService tests: a music library, a view service,
   // a spy backend, and a mocked IBackendProvider that hands out that backend.

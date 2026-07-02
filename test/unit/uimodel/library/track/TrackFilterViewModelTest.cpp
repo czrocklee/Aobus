@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
@@ -34,7 +35,7 @@ namespace ao::uimodel::test
       ViewService viewService{executor, testLib.library(), listSourceStore};
       PlaybackService playback{executor, viewService, testLib.library()};
       WorkspaceService workspaceService{viewService, playback, changes, testLib.library()};
-      RenderLog<TrackFilterViewState> renderLog;
+      ao::test::RenderLog<TrackFilterViewState> renderLog;
       TrackFilterViewModel viewModel{viewService,
                                      workspaceService,
                                      [this](auto const& view) { renderLog.render(view); }};

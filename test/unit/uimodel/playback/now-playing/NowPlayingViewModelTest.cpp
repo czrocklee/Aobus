@@ -52,7 +52,7 @@ namespace ao::uimodel::test
     auto playback = PlaybackService{executor, viewService, testLib.library()};
     addReadyAudioProvider(playback);
 
-    auto log = RenderLog<NowPlayingViewState>{};
+    auto log = ao::test::RenderLog<NowPlayingViewState>{};
     auto const viewModel = NowPlayingViewModel{playback, [&log](auto const& view) { log.render(view); }};
 
     SECTION("Initial render when idle")
@@ -171,7 +171,7 @@ namespace ao::uimodel::test
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playback = PlaybackService{executor, viewService, testLib.library()};
 
-    auto log = RenderLog<NowPlayingViewState>{};
+    auto log = ao::test::RenderLog<NowPlayingViewState>{};
     auto const viewModel = NowPlayingViewModel{playback, [&log](auto const& view) { log.render(view); }};
 
     REQUIRE(!log.empty());
@@ -188,7 +188,7 @@ namespace ao::uimodel::test
     auto playback = PlaybackService{executor, viewService, testLib.library()};
     addReadyAudioProvider(playback);
 
-    auto log = RenderLog<NowPlayingViewState>{};
+    auto log = ao::test::RenderLog<NowPlayingViewState>{};
     auto viewModelPtr = std::make_unique<NowPlayingViewModel>(playback, [&log](auto const& view) { log.render(view); });
 
     REQUIRE(!log.empty());

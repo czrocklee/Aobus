@@ -5,6 +5,7 @@
 
 #include "app/GtkStyleRuntime.h"
 #include "image/ImageWidget.h"
+#include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
 #include "image/ThumbnailLoader.h"
 #include "layout/LayoutConstants.h"
@@ -178,21 +179,11 @@ namespace ao::gtk
         auto const childX = std::max(0, (width - side) / 2);
         auto const childY = std::max(0, (height - side) / 2);
 
-        measureImageForAllocation(side);
+        measureImageWidgetForSquareAllocation(_imageWidget, side);
         _imageWidget.size_allocate(Gtk::Allocation{childX, childY, side, side}, baseline);
       }
 
     private:
-      void measureImageForAllocation(std::int32_t side) const
-      {
-        std::int32_t minimum = 0;
-        std::int32_t natural = 0;
-        std::int32_t minimumBaseline = -1;
-        std::int32_t naturalBaseline = -1;
-        _imageWidget.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
-        _imageWidget.measure(Gtk::Orientation::VERTICAL, side, minimum, natural, minimumBaseline, naturalBaseline);
-      }
-
       ImageWidget& _imageWidget;
       std::int32_t _size = 0;
     };

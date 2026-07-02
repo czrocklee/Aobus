@@ -5,9 +5,7 @@
 #include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/IBackend.h>
 #include <ao/audio/IBackendProvider.h>
-#include <ao/audio/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
@@ -18,32 +16,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
-#include <string_view>
 #include <utility>
 
 namespace ao::rt::test
 {
   using namespace ao::test;
-
-  namespace
-  {
-    class DummyAudioProvider final : public audio::IBackendProvider
-    {
-    public:
-      void shutdown() noexcept override {}
-      audio::Subscription subscribeDevices(OnDevicesChangedCallback /*callback*/) override { return {}; }
-      Status status() const override { return Status{.metadata = {.id = audio::BackendId{"dummy"}}}; }
-      std::unique_ptr<audio::IBackend> createBackend(audio::Device const& /*device*/,
-                                                     audio::ProfileId const& /*profile*/) override
-      {
-        return nullptr;
-      }
-      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
-      {
-        return {};
-      }
-    };
-  } // namespace
 
   TEST_CASE("AppRuntime - dependencies expose services and empty selection is safe", "[runtime][unit][app-runtime]")
   {
@@ -64,8 +41,8 @@ namespace ao::rt::test
     [[maybe_unused]] auto& commands = appPtr->library().writer();
     [[maybe_unused]] auto& notifications = appPtr->notifications();
 
-    // addAudioProvider
-    appPtr->addAudioProvider(std::make_unique<DummyAudioProvider>());
+    appPtr->addAudioProvider(
+      makeReadyAudioProvider(audio::IBackendProvider::Status{.metadata = {.id = audio::BackendId{"dummy"}}}));
 
     // reloadAllTracks
     CHECK_NOTHROW(appPtr->reloadAllTracks());

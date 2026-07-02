@@ -19,6 +19,25 @@
 
 namespace ao::uimodel
 {
+  namespace detail
+  {
+    template<typename T>
+    std::optional<T> parseLayoutNumber(std::string_view value)
+    {
+      T parsed = {};
+      auto const* const begin = value.data();
+      auto const* const end = value.data() + value.size();
+      auto const [ptr, ec] = std::from_chars(begin, end, parsed);
+
+      if (ec == std::errc{} && ptr == end)
+      {
+        return parsed;
+      }
+
+      return std::nullopt;
+    }
+  } // namespace detail
+
   struct LayoutValue final
   {
     using Value = std::variant<std::monostate, bool, std::int64_t, double, std::string, std::vector<std::string>>;
@@ -89,14 +108,9 @@ namespace ao::uimodel
           }
           else if constexpr (std::is_same_v<T, std::string>)
           {
-            std::int64_t parsed = 0;
-            auto const* const begin = val.data();
-            auto const* const end = val.data() + val.size();
-            auto const [ptr, ec] = std::from_chars(begin, end, parsed);
-
-            if (ec == std::errc{} && ptr == end)
+            if (auto optParsed = detail::parseLayoutNumber<std::int64_t>(val); optParsed)
             {
-              return parsed;
+              return *optParsed;
             }
 
             return defaultValue;

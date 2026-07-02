@@ -4,6 +4,7 @@
 // Phase 0 baseline measurement — synthetic data, no fixed pass/fail thresholds.
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackStore.h>
 #include <ao/query/Field.h>
@@ -1003,7 +1004,7 @@ namespace ao::rt::test
 
       for (std::int32_t idx = 0; idx < trackCount; ++idx)
       {
-        auto const spec = TrackSpec{
+        auto const spec = library::test::TrackSpec{
           .title = std::format("Track {:06d}", idx),
           .artist = std::format("Artist {:04d}", idx % (trackCount / 50 + 1)),
           .album = std::format("Album {:04d}", idx % (trackCount / 200 + 1)),

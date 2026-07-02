@@ -13,6 +13,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/library/TrackWrite.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
@@ -46,19 +47,11 @@ namespace ao::rt::test
       return *result;
     }
 
-    template<typename Writer>
-    std::pair<TrackId, TrackView> createPreparedTrack(Writer&& writer,
+    std::pair<TrackId, TrackView> createPreparedTrack(TrackStore::Writer& writer,
                                                       TrackBuilder::PreparedHot const& preparedHot,
                                                       TrackBuilder::PreparedCold const& preparedCold)
     {
-      auto result =
-        std::forward<Writer>(writer).createHotCold(preparedHot.size(),
-                                                   preparedCold.size(),
-                                                   [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                                   {
-                                                     preparedHot.writeTo(hot);
-                                                     preparedCold.writeTo(cold);
-                                                   });
+      auto result = createPreparedTrackData(writer, preparedHot, preparedCold);
       REQUIRE(result);
       return *result;
     }
@@ -188,7 +181,8 @@ namespace ao::rt::test
       builder.coverArt().add(PictureType::FrontCover, frontId);
       builder.coverArt().add(PictureType::BackCover, backId);
       auto const [hot, cold] = prepareTrack(builder, txn, dict, ml.resources());
-      auto const trackId = createPreparedTrack(ml.tracks().writer(txn), hot, cold).first;
+      auto trackWriter = ml.tracks().writer(txn);
+      auto const trackId = createPreparedTrack(trackWriter, hot, cold).first;
 
       auto manifest = FileManifestBuilder::createNew();
       manifest.trackId(trackId);

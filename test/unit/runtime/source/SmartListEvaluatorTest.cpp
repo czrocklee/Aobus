@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
@@ -67,7 +68,7 @@ namespace ao::rt::test
     auto t2 = testLibrary.addTrack(makeSmartListSpec("Track2", 2010));
     auto t3 = testLibrary.addTrack(makeSmartListSpec("Track3", 2021));
 
-    source.batchInsert(std::to_array<TrackId>({t1, t2, t3}));
+    source.batchInsert(std::array{t1, t2, t3});
 
     // Test SmartListSource::indexOf
     CHECK(list.indexOf(t1) == 0);                      // Present

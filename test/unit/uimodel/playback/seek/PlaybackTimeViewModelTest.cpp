@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/rt/PlaybackService.h>
@@ -30,7 +31,7 @@ namespace ao::uimodel::test
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
     auto playback = PlaybackService{executor, viewService, testLib.library()};
 
-    auto log = RenderLog<PlaybackTimeViewState>{};
+    auto log = ao::test::RenderLog<PlaybackTimeViewState>{};
     auto const viewModel = PlaybackTimeViewModel{playback, [&log](auto const& view) { log.render(view); }};
 
     SECTION("Initial render")

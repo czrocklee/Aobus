@@ -1,24 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/library/TrackViewTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
-#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <ranges>
-#include <span>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -29,48 +21,12 @@ namespace ao::library::test
 #if defined(__GNUC__) && !defined(__clang__)
     static_assert(std::ranges::view<TrackView::CustomMetadataProxy>);
 #endif
-
-    using namespace ao::lmdb::test;
-
-    std::vector<std::byte> createColdData(TrackColdHeader const& header = {},
-                                          std::vector<std::pair<std::string, std::string>> const& customPairs = {},
-                                          std::string_view uri = "")
-    {
-      auto builder = TrackBuilder::createNew();
-      builder.property().uri(uri);
-      builder.metadata().trackNumber(header.trackNumber);
-      builder.metadata().trackTotal(header.trackTotal);
-      builder.metadata().discNumber(header.discNumber);
-      builder.metadata().discTotal(header.discTotal);
-      builder.property().duration(header.duration);
-      builder.property().bitrate(header.bitrate);
-      builder.property().channels(header.channels);
-
-      for (auto const& [key, value] : customPairs)
-      {
-        builder.customMetadata().add(key, value);
-      }
-
-      auto temp = ao::test::TempDir{};
-      auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-      auto wtxn = lmdb::test::beginWriteTransaction(env);
-      auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
-      auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
-      auto result = builder.serializeCold(wtxn, dict, resources);
-      REQUIRE(result);
-      return *result;
-    }
-
-    TrackView makeColdView(std::vector<std::byte> const& data)
-    {
-      return TrackView{std::span<std::byte const>{}, data};
-    }
   } // namespace
 
   TEST_CASE("TrackView - round-trips empty custom metadata", "[library][unit][track][custom-metadata]")
   {
-    auto const data = createColdData();
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData();
+    auto const view = makeColdTrackView(data);
 
     std::int32_t count = 0;
 
@@ -85,8 +41,8 @@ namespace ao::library::test
   TEST_CASE("TrackView - round-trips one custom metadata pair", "[library][unit][track][custom-metadata]")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"key1", "value1"}};
-    auto const data = createColdData({}, pairs, "/path/to/file.flac");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, pairs, "/path/to/file.flac");
+    auto const view = makeColdTrackView(data);
 
     std::int32_t count = 0;
 
@@ -110,8 +66,8 @@ namespace ao::library::test
                                    std::pair{key2, std::string{"USSM19999999"}},
                                    std::pair{key3, std::string{"remaster"}}};
 
-    auto const data = createColdData({}, pairs, "/path/to/file.flac");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, pairs, "/path/to/file.flac");
+    auto const view = makeColdTrackView(data);
 
     // DictionaryStore assigns sequential IDs: key1->1, key2->2, key3->3
     auto const id0 = DictionaryId{1};
@@ -136,8 +92,8 @@ namespace ao::library::test
 
   TEST_CASE("TrackView - iterates no custom metadata when empty", "[library][unit][track][custom-metadata]")
   {
-    auto const data = createColdData({}, {}, "");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, {}, "");
+    auto const view = makeColdTrackView(data);
 
     std::int32_t count = 0;
 
@@ -153,8 +109,8 @@ namespace ao::library::test
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"key1", "value1"}};
 
-    auto const data = createColdData({}, pairs, "");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, pairs, "");
+    auto const view = makeColdTrackView(data);
 
     std::int32_t count = 0;
 
@@ -172,8 +128,8 @@ namespace ao::library::test
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"comment", "Hello, World! 你好"}};
 
-    auto const data = createColdData({}, pairs, "");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, pairs, "");
+    auto const view = makeColdTrackView(data);
 
     for (auto const& [key, value] : view.customMetadata())
     {
@@ -191,8 +147,8 @@ namespace ao::library::test
                                    std::pair{key2, std::string{"USSM19999999"}},
                                    std::pair{key3, std::string{"remaster"}}};
 
-    auto const data = createColdData({}, pairs, "");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, pairs, "");
+    auto const view = makeColdTrackView(data);
 
     auto result = std::vector<std::pair<DictionaryId, std::string_view>>{};
 
@@ -215,8 +171,8 @@ namespace ao::library::test
     auto const pairs = std::vector{std::pair<std::string, std::string>{"replaygain_track_gain_db", "-6.5"},
                                    std::pair<std::string, std::string>{"isrc", "USSM19999999"}};
 
-    auto const data = createColdData({}, pairs, "");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, pairs, "");
+    auto const view = makeColdTrackView(data);
 
     // DictionaryStore assigns: replaygain->1, isrc->2
     auto const optValue = view.customMetadata().get(DictionaryId{2});
@@ -228,8 +184,8 @@ namespace ao::library::test
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"replaygain_track_gain_db", "-6.5"}};
 
-    auto const data = createColdData({}, pairs, "");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, pairs, "");
+    auto const view = makeColdTrackView(data);
 
     // ID 99 was never assigned
     auto const optValue = view.customMetadata().get(DictionaryId{99});
@@ -240,8 +196,8 @@ namespace ao::library::test
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"ISRC", "USSM19999999"}};
 
-    auto const data = createColdData({}, pairs, "");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, pairs, "");
+    auto const view = makeColdTrackView(data);
 
     // "ISRC" is stored at ID 1, looking up by ID 1 returns the value
     auto const optValue = view.customMetadata().get(DictionaryId{1});
@@ -259,8 +215,8 @@ namespace ao::library::test
       pairs.emplace_back(std::format("key{}", i), std::format("value{}", i));
     }
 
-    auto const data = createColdData({}, pairs, "");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, pairs, "");
+    auto const view = makeColdTrackView(data);
 
     auto const optFirst = view.customMetadata().get(DictionaryId{1});
     REQUIRE(optFirst.has_value());
@@ -283,8 +239,8 @@ namespace ao::library::test
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"", ""}};
 
-    auto const data = createColdData({}, pairs, "");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, pairs, "");
+    auto const view = makeColdTrackView(data);
 
     std::int32_t count = 0;
 
@@ -303,8 +259,8 @@ namespace ao::library::test
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"comment", "Hello, World! 你好"}};
 
-    auto const data = createColdData({}, pairs, "");
-    auto const view = makeColdView(data);
+    auto const data = makeColdTrackViewData({}, pairs, "");
+    auto const view = makeColdTrackView(data);
 
     for (auto const& [k, v] : view.customMetadata())
     {

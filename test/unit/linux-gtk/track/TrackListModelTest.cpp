@@ -9,7 +9,6 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
@@ -47,16 +46,6 @@ namespace ao::gtk::test
       return spec;
     }
 
-    class TestMusicLibrary final
-    {
-    public:
-      library::MusicLibrary& library() { return _fixture.runtime().musicLibrary(); }
-      rt::AppRuntime& runtime() { return _fixture.runtime(); }
-
-    private:
-      GtkRuntimeFixture _fixture;
-    };
-
     struct ModelSpy final
     {
       struct Event
@@ -80,19 +69,19 @@ namespace ao::gtk::test
   TEST_CASE("TrackListModel exposes projection rows and emits playing-track updates", "[gtk][unit][track][adapter]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.list_model_test");
-    auto testLibrary = TestMusicLibrary{};
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto& musicLibrary = runtime.musicLibrary();
 
-    auto const id1 =
-      library::test::addTrack(testLibrary.library(), makeTrackSpec("Song A", "Artist A", "Album A", 2020));
-    auto const id2 =
-      library::test::addTrack(testLibrary.library(), makeTrackSpec("Song B", "Artist B", "Album B", 2021));
+    auto const id1 = library::test::addTrack(musicLibrary, makeTrackSpec("Song A", "Artist A", "Album A", 2020));
+    auto const id2 = library::test::addTrack(musicLibrary, makeTrackSpec("Song B", "Artist B", "Album B", 2021));
 
     auto source = rt::test::MutableTrackSource{};
     source.addInitial(id1);
     source.addInitial(id2);
 
-    auto rowCache = TrackRowCache{testLibrary.runtime().library()};
-    auto const projectionPtr = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, source, testLibrary.library());
+    auto rowCache = TrackRowCache{runtime.library()};
+    auto const projectionPtr = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, source, musicLibrary);
 
     auto const modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
@@ -198,8 +187,7 @@ namespace ao::gtk::test
 
     SECTION("Delta batch notifications - Insert")
     {
-      auto const id3 =
-        library::test::addTrack(testLibrary.library(), makeTrackSpec("Song C", "Artist C", "Album C", 2022));
+      auto const id3 = library::test::addTrack(musicLibrary, makeTrackSpec("Song C", "Artist C", "Album C", 2022));
       source.insert(id3, 0);
 
       REQUIRE(spy.events.size() == 1);

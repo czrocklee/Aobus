@@ -3,6 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "image/ImageWidget.h"
+#include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
@@ -75,21 +76,11 @@ namespace ao::gtk::layout
         auto const offsetX = (width - side) / 2;
         auto const offsetY = (height - side) / 2;
 
-        measureImageForAllocation(side);
+        measureImageWidgetForSquareAllocation(_imageWidget, side);
         _imageWidget.size_allocate(Gtk::Allocation{offsetX, offsetY, side, side}, baseline);
       }
 
     private:
-      void measureImageForAllocation(int const side) const
-      {
-        std::int32_t minimum = 0;
-        std::int32_t natural = 0;
-        std::int32_t minimumBaseline = -1;
-        std::int32_t naturalBaseline = -1;
-        _imageWidget.measure(Gtk::Orientation::HORIZONTAL, -1, minimum, natural, minimumBaseline, naturalBaseline);
-        _imageWidget.measure(Gtk::Orientation::VERTICAL, side, minimum, natural, minimumBaseline, naturalBaseline);
-      }
-
       ImageWidget& _imageWidget;
       std::int32_t _widthHint = 0;
     };

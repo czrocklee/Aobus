@@ -3,7 +3,6 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -17,7 +16,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -61,19 +59,7 @@ namespace ao::rt::test
 
     // 1. Setup initial library
     {
-      trackId = library::test::addTrack(ml1,
-                                        library::test::TrackSpec{.title = "",
-                                                                 .artist = "",
-                                                                 .album = "",
-                                                                 .uri = uri,
-                                                                 .year = 0,
-                                                                 .discNumber = 0,
-                                                                 .trackNumber = 0,
-                                                                 .duration = std::chrono::milliseconds{0},
-                                                                 .bitrate = Bitrate{},
-                                                                 .sampleRate = SampleRate{},
-                                                                 .channels = Channels{},
-                                                                 .bitDepth = BitDepth{}});
+      trackId = library::test::addTrack(ml1, library::test::makeEmptyTrackSpec(uri));
       auto txn = ml1.writeTransaction();
 
       auto manifestWriter = ml1.manifest().writer(txn);
@@ -116,19 +102,7 @@ namespace ao::rt::test
     }
 
     {
-      targetTrackId = library::test::addTrack(ml2,
-                                              library::test::TrackSpec{.title = "",
-                                                                       .artist = "",
-                                                                       .album = "",
-                                                                       .uri = uri,
-                                                                       .year = 0,
-                                                                       .discNumber = 0,
-                                                                       .trackNumber = 0,
-                                                                       .duration = std::chrono::milliseconds{0},
-                                                                       .bitrate = Bitrate{},
-                                                                       .sampleRate = SampleRate{},
-                                                                       .channels = Channels{},
-                                                                       .bitDepth = BitDepth{}});
+      targetTrackId = library::test::addTrack(ml2, library::test::makeEmptyTrackSpec(uri));
       auto txn = ml2.writeTransaction();
 
       auto manifestWriter = ml2.manifest().writer(txn);
@@ -172,19 +146,7 @@ namespace ao::rt::test
 
     auto trackId = kInvalidTrackId;
     {
-      trackId = library::test::addTrack(ml,
-                                        library::test::TrackSpec{.title = "",
-                                                                 .artist = "",
-                                                                 .album = "",
-                                                                 .uri = "song.flac",
-                                                                 .year = 0,
-                                                                 .discNumber = 0,
-                                                                 .trackNumber = 0,
-                                                                 .duration = std::chrono::milliseconds{0},
-                                                                 .bitrate = Bitrate{},
-                                                                 .sampleRate = SampleRate{},
-                                                                 .channels = Channels{},
-                                                                 .bitDepth = BitDepth{}});
+      trackId = library::test::addTrack(ml, library::test::makeEmptyTrackSpec("song.flac"));
     }
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "child-first.yaml";

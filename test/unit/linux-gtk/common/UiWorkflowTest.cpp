@@ -3,8 +3,8 @@
 
 #include "common/UiWorkflow.h"
 
+#include "test/unit/RuntimeTestUtils.h"
 #include <ao/Exception.h>
-#include <ao/async/Executor.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -14,74 +14,15 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <deque>
 #include <exception>
-#include <functional>
 #include <mutex>
 #include <thread>
-#include <utility>
 
 namespace ao::gtk::test
 {
   namespace
   {
-    // A callback executor that queues dispatched work and runs it on the draining (test) thread, so that
-    // "ran on the callback executor" is observable as "ran on the test thread".
-    class QueuedExecutor final : public async::IExecutor
-    {
-    public:
-      bool isCurrent() const noexcept override { return true; }
-
-      void dispatch(std::move_only_function<void()> task) override
-      {
-        {
-          auto const lock = std::scoped_lock{_mutex};
-          _tasks.push_back(std::move(task));
-        }
-
-        _cv.notify_all();
-      }
-
-      void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
-
-      bool runOne()
-      {
-        auto task = std::move_only_function<void()>{};
-
-        {
-          auto const lock = std::scoped_lock{_mutex};
-
-          if (_tasks.empty())
-          {
-            return false;
-          }
-
-          task = std::move(_tasks.front());
-          _tasks.pop_front();
-        }
-
-        task();
-        return true;
-      }
-
-      void runUntilIdle()
-      {
-        while (runOne())
-        {
-        }
-      }
-
-      bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
-      {
-        auto lock = std::unique_lock{_mutex};
-        return _cv.wait_for(lock, timeout, [this] { return !_tasks.empty(); });
-      }
-
-    private:
-      mutable std::mutex _mutex;
-      mutable std::condition_variable _cv;
-      std::deque<std::move_only_function<void()>> _tasks;
-    };
+    using rt::test::ManualExecutor;
 
     struct WorkflowOwner final
     {
@@ -125,7 +66,7 @@ namespace ao::gtk::test
 
     // Pumps the callback executor on the test thread until the predicate holds.
     template<typename Predicate>
-    bool pumpUntil(QueuedExecutor& executor, Predicate const& predicate)
+    bool pumpUntil(ManualExecutor& executor, Predicate const& predicate)
     {
       while (!predicate())
       {
@@ -140,7 +81,7 @@ namespace ao::gtk::test
   TEST_CASE("UiWorkflow - internal failure invokes the handler on the callback executor",
             "[gtk][unit][common][uiworkflow]")
   {
-    auto executor = QueuedExecutor{};
+    auto executor = ManualExecutor{};
     auto runtime = async::Runtime{executor};
     auto scope = async::LifetimeScope{};
     auto owner = WorkflowOwner{};
@@ -181,7 +122,7 @@ namespace ao::gtk::test
 
   TEST_CASE("UiWorkflow - successful body does not invoke the exception handler", "[gtk][unit][common][uiworkflow]")
   {
-    auto executor = QueuedExecutor{};
+    auto executor = ManualExecutor{};
     auto runtime = async::Runtime{executor};
     auto scope = async::LifetimeScope{};
     auto owner = WorkflowOwner{};

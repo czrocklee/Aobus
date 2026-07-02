@@ -4,7 +4,7 @@
 #pragma once
 
 #include "test/unit/TestUtils.h"
-#include <ao/AudioScalars.h>
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Executor.h>
 #include <ao/audio/Backend.h>
@@ -13,8 +13,6 @@
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/Subscription.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackService.h>
@@ -27,20 +25,65 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
-#include <cstdint>
 #include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <utility>
-#include <vector>
 
 namespace ao::rt::test
 {
+  inline audio::IBackendProvider::Status makeReadyAudioStatus()
+  {
+    return {.metadata =
+              {
+                .id = audio::BackendId{"test_backend"},
+                .name = "Test Backend",
+                .supportedProfiles =
+                  {
+                    {.id = audio::kProfileShared, .name = "Shared", .description = "Shared profile"},
+                  },
+              },
+            .devices = {
+              audio::Device{.id = audio::DeviceId{"test_device"},
+                            .displayName = "Test Device",
+                            .description = "Ready test output",
+                            .isDefault = true,
+                            .backendId = audio::BackendId{"test_backend"}},
+            }};
+  }
+
+  inline audio::IBackendProvider::Status makePipeWireOutputStatus()
+  {
+    return {
+      .metadata =
+        {
+          .id = audio::BackendId{"pipewire"},
+          .name = "PipeWire",
+          .description = "PipeWire Sound Server",
+          .iconName = "pipewire",
+          .supportedProfiles =
+            {
+              {.id = audio::kProfileShared, .name = "Shared", .description = "Shared mode"},
+              {.id = audio::kProfileExclusive, .name = "Exclusive", .description = "Exclusive mode"},
+            },
+        },
+      .devices =
+        {
+          {
+            .id = audio::DeviceId{"device1"},
+            .displayName = "Built-in Audio",
+            .description = "Built-in analog stereo",
+            .isDefault = true,
+            .backendId = audio::BackendId{"pipewire"},
+          },
+        },
+    };
+  }
+
   namespace detail
   {
     struct ReadyAudioBackend final : audio::NullBackend
@@ -61,17 +104,14 @@ namespace ao::rt::test
     {
       Status provStatus;
 
-      ReadyAudioProvider()
+      explicit ReadyAudioProvider(Status status)
+        : provStatus{std::move(status)}
       {
-        provStatus.metadata.id = audio::BackendId{"test_backend"};
-        provStatus.metadata.name = "Test Backend";
-        provStatus.metadata.supportedProfiles.push_back(
-          {.id = audio::kProfileShared, .name = "Shared", .description = "Shared profile"});
-        provStatus.devices.push_back(audio::Device{.id = audio::DeviceId{"test_device"},
-                                                   .displayName = "Test Device",
-                                                   .description = "Ready test output",
-                                                   .isDefault = true,
-                                                   .backendId = audio::BackendId{"test_backend"}});
+      }
+
+      ReadyAudioProvider()
+        : provStatus{makeReadyAudioStatus()}
+      {
       }
 
       void shutdown() noexcept override {}
@@ -101,32 +141,24 @@ namespace ao::rt::test
     };
   } // namespace detail
 
-  inline void addReadyAudioProvider(PlaybackService& playback)
+  inline std::unique_ptr<audio::IBackendProvider> makeReadyAudioProvider()
   {
-    playback.addProvider(std::make_unique<detail::ReadyAudioProvider>());
+    return std::make_unique<detail::ReadyAudioProvider>();
   }
 
-  struct TrackSpec final
+  inline std::unique_ptr<audio::IBackendProvider> makeReadyAudioProvider(audio::IBackendProvider::Status status)
   {
-    std::string title = "Track";
-    std::string artist = "Artist";
-    std::string album = "Album";
-    std::string albumArtist{};
-    std::string genre{};
-    std::string composer{};
-    std::string work{};
-    std::string movement{};
-    std::uint16_t year = 2020;
-    std::uint16_t discNumber = 1;
-    std::uint16_t trackNumber = 1;
-    std::uint16_t movementNumber = 0;
-    std::uint16_t movementTotal = 0;
-    std::chrono::milliseconds duration = std::chrono::seconds{200};
-  };
+    return std::make_unique<detail::ReadyAudioProvider>(std::move(status));
+  }
 
-  inline TrackSpec makeSpec(std::string_view title, std::uint16_t year)
+  inline void addReadyAudioProvider(PlaybackService& playback)
   {
-    return TrackSpec{.title = std::string{title}, .year = year};
+    playback.addProvider(makeReadyAudioProvider());
+  }
+
+  inline void addReadyAudioProvider(PlaybackService& playback, audio::IBackendProvider::Status status)
+  {
+    playback.addProvider(makeReadyAudioProvider(std::move(status)));
   }
 
   class TestMusicLibrary final
@@ -140,80 +172,14 @@ namespace ao::rt::test
     library::MusicLibrary& library() { return _library; }
     library::MusicLibrary const& library() const { return _library; }
 
-    TrackId addTrack(TrackSpec const& spec)
+    TrackId addTrack(library::test::TrackSpec const& spec) { return library::test::addTrack(_library, spec); }
+
+    void updateTrack(TrackId id, std::move_only_function<void(library::test::TrackSpec&)> updater)
     {
-      auto txn = _library.writeTransaction();
-      auto writer = _library.tracks().writer(txn);
-      auto builder = library::TrackBuilder::createNew();
-      builder.metadata()
-        .title(spec.title)
-        .artist(spec.artist)
-        .album(spec.album)
-        .albumArtist(spec.albumArtist)
-        .genre(spec.genre)
-        .composer(spec.composer)
-        .work(spec.work)
-        .movement(spec.movement)
-        .year(spec.year)
-        .discNumber(spec.discNumber)
-        .trackNumber(spec.trackNumber)
-        .movementNumber(spec.movementNumber)
-        .movementTotal(spec.movementTotal);
-      builder.property()
-        .uri("/tmp/test.flac")
-        .duration(spec.duration)
-        .bitrate(Bitrate{320000})
-        .sampleRate(SampleRate{44100})
-        .channels(Channels{2})
-        .bitDepth(BitDepth{16});
-      auto hotData = builder.serializeHot(txn, _library.dictionary());
-      REQUIRE(hotData);
-      auto coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
-      REQUIRE(coldData);
-      auto createResult = writer.createHotCold(*hotData, *coldData);
-      REQUIRE(createResult);
-      auto const [id, _] = *createResult;
-      REQUIRE(txn.commit());
-      return id;
+      library::test::updateTrackSpec(_library, id, std::move(updater));
     }
 
-    void updateTrack(TrackId id, std::move_only_function<void(TrackSpec&)> updater)
-    {
-      auto txn = _library.writeTransaction();
-      auto reader = _library.tracks().reader(txn);
-      auto writer = _library.tracks().writer(txn);
-
-      auto optViewResult = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
-
-      if (!optViewResult)
-      {
-        return;
-      }
-
-      auto spec =
-        TrackSpec{.title = std::string{optViewResult->metadata().title()},
-                  .artist = std::string{_library.dictionary().getOrDefault(optViewResult->metadata().artistId())},
-                  .album = std::string{_library.dictionary().getOrDefault(optViewResult->metadata().albumId())},
-                  .work = std::string{_library.dictionary().getOrDefault(optViewResult->metadata().workId())},
-                  .year = optViewResult->metadata().year()};
-
-      updater(spec);
-
-      auto builder = library::TrackBuilder::createNew();
-      builder.metadata().title(spec.title).artist(spec.artist).album(spec.album).work(spec.work).year(spec.year);
-
-      auto hotData = builder.serializeHot(txn, _library.dictionary());
-      REQUIRE(hotData);
-      auto coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
-      REQUIRE(coldData);
-
-      REQUIRE(writer.updateHot(id, *hotData));
-      REQUIRE(writer.updateCold(
-        id, coldData->size(), [&](std::span<std::byte> buf) { std::ranges::copy(*coldData, buf.begin()); }));
-      REQUIRE(txn.commit());
-    }
-
-    TrackId addTrack(std::string_view title) { return addTrack(TrackSpec{.title = std::string{title}}); }
+    TrackId addTrack(std::string_view title) { return addTrack(library::test::TrackSpec{.title = std::string{title}}); }
 
   private:
     ao::test::TempDir _tempDir;
@@ -291,7 +257,7 @@ namespace ao::rt::test
     std::condition_variable _cv;
   };
 
-  class ManualExecutor final : public async::IExecutor
+  class ManualExecutor : public async::IExecutor
   {
   public:
     bool isCurrent() const noexcept override { return true; }
@@ -360,6 +326,10 @@ namespace ao::rt::test
       REQUIRE(waitUntilQueued(timeout));
     }
 
+  protected:
+    std::mutex& taskMutex() noexcept { return _mutex; }
+    std::deque<std::move_only_function<void()>>& queuedTasks() noexcept { return _tasks; }
+
   private:
     mutable std::mutex _mutex;
     std::deque<std::move_only_function<void()>> _tasks;
@@ -376,21 +346,59 @@ namespace ao::rt::test
     void defer(std::move_only_function<void()> task) override { task(); }
   };
 
-  /**
-   * @brief Lightweight test utility that records rendered states.
-   */
-  template<typename TState>
-  struct RenderLog final
+  class QueuedExecutor final : public ManualExecutor
   {
-    std::vector<TState> states;
+  public:
+    bool isCurrent() const noexcept override { return std::this_thread::get_id() == _ownerThreadId; }
 
-    void render(TState const& state) { states.push_back(state); }
+    void dispatch(std::move_only_function<void()> task) override
+    {
+      {
+        auto const lock = std::scoped_lock{taskMutex()};
+        queuedTasks().push_back(std::move(task));
+      }
 
-    TState const& last() const { return states.back(); }
+      _cv.notify_all();
+    }
 
-    bool empty() const { return states.empty(); }
+    void drain() { runUntilIdle(); }
 
-    void clear() { states.clear(); }
+    bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2})
+    {
+      auto lock = std::unique_lock{taskMutex()};
+      return _cv.wait_for(lock, timeout, [this] { return !queuedTasks().empty(); });
+    }
+
+    template<typename Predicate>
+    bool drainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{2})
+    {
+      auto const deadline = std::chrono::steady_clock::now() + timeout;
+
+      while (!predicate())
+      {
+        auto const now = std::chrono::steady_clock::now();
+
+        if (now >= deadline)
+        {
+          return predicate();
+        }
+
+        auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+
+        if (!waitUntilQueued(remaining))
+        {
+          return predicate();
+        }
+
+        drain();
+      }
+
+      return true;
+    }
+
+  private:
+    std::thread::id _ownerThreadId = std::this_thread::get_id();
+    std::condition_variable _cv;
   };
 
   /**

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TestUtility.h"
+#include "test/unit/RuntimeTestUtils.h"
 #include <ao/AudioCodec.h>
 #include <ao/async/ImmediateExecutor.h>
 #include <ao/audio/Backend.h>
@@ -20,10 +21,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
-#include <deque>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -66,48 +65,7 @@ namespace ao::audio::test
       ProfileId _profileId;
     };
 
-    class QueuedExecutor final : public async::IExecutor
-    {
-    public:
-      bool isCurrent() const noexcept override { return std::this_thread::get_id() == _ownerThreadId; }
-
-      void dispatch(std::move_only_function<void()> task) override
-      {
-        auto const lock = std::scoped_lock{_mutex};
-        _tasks.push_back(std::move(task));
-      }
-
-      void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
-
-      void drain()
-      {
-        while (true)
-        {
-          auto task = std::move_only_function<void()>{};
-          {
-            auto const lock = std::scoped_lock{_mutex};
-
-            if (_tasks.empty())
-            {
-              return;
-            }
-
-            task = std::move(_tasks.front());
-            _tasks.pop_front();
-          }
-
-          if (task)
-          {
-            task();
-          }
-        }
-      }
-
-    private:
-      std::thread::id _ownerThreadId = std::this_thread::get_id();
-      std::deque<std::move_only_function<void()>> _tasks;
-      std::mutex _mutex;
-    };
+    using rt::test::QueuedExecutor;
 
     Device pipeWireDevice(std::string displayName = "System Default")
     {

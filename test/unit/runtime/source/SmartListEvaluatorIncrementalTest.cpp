@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/rt/source/SmartListEvaluator.h>
@@ -112,7 +113,7 @@ namespace ao::rt::test
     auto spy = TrackSourceObserverSpy{};
     filtered.attach(&spy);
 
-    testLibrary.updateTrack(trackId, [](TrackSpec& spec) { spec.year = 2022; });
+    testLibrary.updateTrack(trackId, [](library::test::TrackSpec& spec) { spec.year = 2022; });
     source.update(trackId);
 
     REQUIRE(spy.events.size() == 1);
@@ -122,7 +123,7 @@ namespace ao::rt::test
 
     spy.clear();
 
-    testLibrary.updateTrack(trackId, [](TrackSpec& spec) { spec.title = "renamed"; });
+    testLibrary.updateTrack(trackId, [](library::test::TrackSpec& spec) { spec.title = "renamed"; });
     source.update(trackId);
 
     REQUIRE(spy.events.size() == 1);
@@ -132,7 +133,7 @@ namespace ao::rt::test
 
     spy.clear();
 
-    testLibrary.updateTrack(trackId, [](TrackSpec& spec) { spec.year = 2019; });
+    testLibrary.updateTrack(trackId, [](library::test::TrackSpec& spec) { spec.year = 2019; });
     source.update(trackId);
 
     REQUIRE(spy.events.size() == 1);
@@ -184,7 +185,7 @@ namespace ao::rt::test
 
     spy.clear();
 
-    testLibrary.updateTrack(modern, [](TrackSpec& spec) { spec.year = 2019; });
+    testLibrary.updateTrack(modern, [](library::test::TrackSpec& spec) { spec.year = 2019; });
     source.update(modern);
 
     REQUIRE(spy.events.size() == 1);
@@ -219,7 +220,7 @@ namespace ao::rt::test
     CHECK(list.size() == 1);
 
     // Single Update
-    testLibrary.updateTrack(t1, [](TrackSpec& spec) { spec.year = 2022; });
+    testLibrary.updateTrack(t1, [](library::test::TrackSpec& spec) { spec.year = 2022; });
     source.update(t1);
     CHECK(list.size() == 2);
 
@@ -244,7 +245,7 @@ namespace ao::rt::test
     source.batchInsert(batchArray);
 
     // Mutate via base library, then notify list directly
-    testLibrary.updateTrack(t1, [](TrackSpec& spec) { spec.year = 2022; });
+    testLibrary.updateTrack(t1, [](library::test::TrackSpec& spec) { spec.year = 2022; });
     list.notifyUpdated(t1);
 
     CHECK(list.size() == 1);

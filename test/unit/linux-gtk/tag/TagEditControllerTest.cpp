@@ -3,13 +3,11 @@
 
 #include "tag/TagEditController.h"
 
-#include "../../TestUtils.h"
 #include "app/ThemeCoordinator.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -31,16 +29,7 @@ namespace ao::gtk::test
   {
     TrackId createTrack(library::MusicLibrary& library, std::string const& title)
     {
-      auto txn = library.writeTransaction();
-      auto writer = library.tracks().writer(txn);
-      auto builder = library::TrackBuilder::createNew();
-      builder.metadata().title(title);
-      auto serializeResult = builder.serialize(txn, library.dictionary(), library.resources());
-      REQUIRE(serializeResult);
-      auto const [hotData, coldData] = *serializeResult;
-      auto const trackId = ao::test::requireValue(writer.createHotCold(hotData, coldData)).first;
-      REQUIRE(txn.commit());
-      return trackId;
+      return library::test::addTrack(library, {.title = title});
     }
   } // namespace
 

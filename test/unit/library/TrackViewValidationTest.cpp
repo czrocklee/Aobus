@@ -1,68 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/library/TestUtils.h"
-#include "test/unit/lmdb/TestUtils.h"
-#include <ao/AudioCodec.h>
-#include <ao/AudioScalars.h>
-#include <ao/CoreIds.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackLayout.h>
+#include "test/unit/library/TrackViewTestSupport.h"
 #include <ao/library/TrackView.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <array>
 #include <cstddef>
 #include <span>
-#include <vector>
 
 namespace ao::library::test
 {
-  namespace
-  {
-    using namespace ao::lmdb::test;
-
-    std::vector<std::byte> createMinimalHotData()
-    {
-      auto h = TrackHotHeader{};
-      h.tagBloom = 0;
-      h.artistId = DictionaryId{1};
-      h.albumId = DictionaryId{2};
-      h.genreId = DictionaryId{3};
-      h.albumArtistId = kInvalidDictionaryId;
-      h.composerId = kInvalidDictionaryId;
-      h.year = 2020;
-      h.codec = AudioCodec::Unknown;
-      h.bitDepth = BitDepth{16};
-      h.tagLength = 0;
-      h.titleLength = 0;
-
-      return serializeHeader(h);
-    }
-
-    std::vector<std::byte> createColdData()
-    {
-      auto builder = TrackBuilder::createNew();
-
-      auto temp = ao::test::TempDir{};
-      auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-      auto wtxn = lmdb::test::beginWriteTransaction(env);
-      auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
-      auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
-      auto result = builder.serializeCold(wtxn, dict, resources);
-      REQUIRE(result);
-      return *result;
-    }
-  } // namespace
-
   TEST_CASE("TrackView - validates hot buffers", "[library][unit][track][validation]")
   {
-    auto const data = createMinimalHotData();
+    auto const data = makeMinimalHotTrackViewData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.isHotValid() == true);
   }
@@ -83,7 +36,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackView - validates cold buffers", "[library][unit][track][validation]")
   {
-    auto const data = createColdData();
+    auto const data = makeColdTrackViewData();
     auto const view = TrackView{std::span<std::byte const>{}, data};
     CHECK(view.isColdValid() == true);
   }

@@ -27,6 +27,7 @@ add_executable(ao_core_test
     unit/utility/ByteViewTest.cpp
     unit/utility/StringArenaTest.cpp
     unit/utility/StrongTypeTest.cpp
+    unit/utility/UuidTest.cpp
     unit/core/AudioCodecTest.cpp
     unit/core/ExceptionTest.cpp
     unit/core/ErrorTest.cpp
@@ -101,6 +102,7 @@ add_executable(ao_core_test
     unit/library/ResourceStoreTest.cpp
 
     unit/library/TrackStoreTest.cpp
+    unit/library/TrackWriteTest.cpp
     unit/library/TrackStoreRawLayoutTest.cpp
     unit/library/ListBuilderTest.cpp
     unit/library/MusicLibraryTest.cpp

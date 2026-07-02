@@ -14,11 +14,11 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/Uuid.h>
 
 #include <CLI/App.hpp>
 
 #include <algorithm>
-#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -32,44 +32,6 @@ namespace ao::cli
 {
   namespace
   {
-    constexpr std::size_t kUuidByteCount = 16;
-    constexpr std::size_t kHexCharsPerByte = 2;
-    constexpr std::size_t kUuidTimeLowByteCount = 4;
-    constexpr std::size_t kUuidTimeMidByteCount = 2;
-    constexpr std::size_t kUuidTimeHighByteCount = 2;
-    constexpr std::size_t kUuidClockSeqByteCount = 2;
-    constexpr std::size_t kUuidNodeByteCount = 6;
-    constexpr auto kUuidGroupByteCounts = std::to_array<std::size_t>({kUuidTimeLowByteCount,
-                                                                      kUuidTimeMidByteCount,
-                                                                      kUuidTimeHighByteCount,
-                                                                      kUuidClockSeqByteCount,
-                                                                      kUuidNodeByteCount});
-    constexpr auto kUuidHyphenCount = kUuidGroupByteCounts.size() - 1;
-    constexpr auto kUuidTextLength = (kUuidByteCount * kHexCharsPerByte) + kUuidHyphenCount;
-
-    std::string formatUuid(std::array<std::byte, kUuidByteCount> const& id)
-    {
-      auto result = std::string{};
-      result.reserve(kUuidTextLength);
-      std::size_t byteIndex = 0;
-
-      for (std::size_t groupIndex = 0; groupIndex < kUuidGroupByteCounts.size(); ++groupIndex)
-      {
-        if (groupIndex > 0)
-        {
-          result.push_back('-');
-        }
-
-        for (std::size_t groupByte = 0; groupByte < kUuidGroupByteCounts.at(groupIndex); ++groupByte)
-        {
-          result += std::format("{:02x}", static_cast<unsigned char>(id.at(byteIndex)));
-          ++byteIndex;
-        }
-      }
-
-      return result;
-    }
-
     std::string formatTimestamp(std::chrono::sys_time<std::chrono::milliseconds> timestamp)
     {
       auto const tp = std::chrono::system_clock::time_point{timestamp.time_since_epoch()};
@@ -80,7 +42,7 @@ namespace ao::cli
     {
       auto const& header = ml.metaHeader();
 
-      os << "Library ID:    " << formatUuid(header.libraryId) << "\n";
+      os << "Library ID:    " << utility::formatUuid(header.libraryId) << "\n";
       os << "Library Version:  " << header.libraryVersion << "\n";
       os << "Flags:       0x" << std::hex << header.flags << std::dec << "\n";
       os << "Created:      " << formatTimestamp(header.createdTime) << "\n";
@@ -169,7 +131,7 @@ namespace ao::cli
       {
         os << "meta:\n";
         auto const& header = ml.metaHeader();
-        os << "  libraryId: \"" << formatUuid(header.libraryId) << "\"\n"
+        os << "  libraryId: \"" << utility::formatUuid(header.libraryId) << "\"\n"
            << "  libraryVersion: " << header.libraryVersion << "\n"
            << "  flags: \"0x" << std::hex << header.flags << std::dec << "\"\n"
            << "  createdTime: \"" << formatTimestamp(header.createdTime) << "\"\n";

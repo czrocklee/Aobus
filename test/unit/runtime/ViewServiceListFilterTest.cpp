@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ViewServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/CorePrimitives.h>
@@ -19,7 +20,7 @@ namespace ao::rt::test
   {
     auto env = ViewServiceTestEnv{};
     auto service = env.makeService();
-    auto const trackId = env.library.addTrack(TrackSpec{.title = "List Track"});
+    auto const trackId = env.library.addTrack(library::test::TrackSpec{.title = "List Track"});
     auto const listId = env.writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Manual",
@@ -52,8 +53,8 @@ namespace ao::rt::test
   TEST_CASE("ViewService - setFilter updates filter state and projection", "[runtime][unit][view][filter]")
   {
     auto env = ViewServiceTestEnv{};
-    auto const oldTrackId = env.library.addTrack(TrackSpec{.title = "Old", .year = 1999});
-    auto const newTrackId = env.library.addTrack(TrackSpec{.title = "New", .year = 2021});
+    auto const oldTrackId = env.library.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
+    auto const newTrackId = env.library.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
     env.storePtr->reloadAllTracks();
 
     auto service = env.makeService();
@@ -129,8 +130,8 @@ namespace ao::rt::test
             "[runtime][unit][view][filter][list]")
   {
     auto env = ViewServiceTestEnv{};
-    auto const oldTrackId = env.library.addTrack(TrackSpec{.title = "Old", .year = 1999});
-    auto const newTrackId = env.library.addTrack(TrackSpec{.title = "New", .year = 2021});
+    auto const oldTrackId = env.library.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
+    auto const newTrackId = env.library.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
     env.storePtr->reloadAllTracks();
 
     auto const oldListId = env.writer.createList(LibraryWriter::ListDraft{

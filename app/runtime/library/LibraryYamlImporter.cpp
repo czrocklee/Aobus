@@ -14,6 +14,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackWrite.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
@@ -734,32 +735,17 @@ namespace ao::rt
     if (optExistingTrackId)
     {
       auto const targetTrackId = *optExistingTrackId;
-      auto hotResult = trackWriter.updateHot(
-        targetTrackId, preparedHot.size(), [&](std::span<std::byte> hot) { preparedHot.writeTo(hot); });
+      auto writeResult = library::updatePreparedTrackData(trackWriter, targetTrackId, preparedHot, preparedCold);
 
-      if (!hotResult)
+      if (!writeResult)
       {
-        return std::unexpected{hotResult.error()};
-      }
-
-      auto coldResult = trackWriter.updateCold(
-        targetTrackId, preparedCold.size(), [&](std::span<std::byte> cold) { preparedCold.writeTo(cold); });
-
-      if (!coldResult)
-      {
-        return std::unexpected{coldResult.error()};
+        return std::unexpected{writeResult.error()};
       }
 
       return targetTrackId;
     }
 
-    auto createResult = trackWriter.createHotCold(preparedHot.size(),
-                                                  preparedCold.size(),
-                                                  [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                                  {
-                                                    preparedHot.writeTo(hot);
-                                                    preparedCold.writeTo(cold);
-                                                  });
+    auto createResult = library::createPreparedTrackData(trackWriter, preparedHot, preparedCold);
 
     if (!createResult)
     {

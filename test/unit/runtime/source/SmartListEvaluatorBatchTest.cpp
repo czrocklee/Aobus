@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
@@ -33,7 +34,7 @@ namespace ao::rt::test
     auto t2 = testLibrary.addTrack(makeSmartListSpec("New1", 2021));
     auto t3 = testLibrary.addTrack(makeSmartListSpec("New2", 2022));
 
-    auto const batchArray = std::to_array<TrackId>({t1, t2, t3});
+    auto const batchArray = std::array{t1, t2, t3};
     source.batchInsert(batchArray);
 
     REQUIRE(spy.events.size() == 1);
@@ -45,7 +46,7 @@ namespace ao::rt::test
     CHECK(list.size() == 2);
 
     spy.clear();
-    auto const removeArray = std::to_array<TrackId>({t2});
+    auto const removeArray = std::array{t2};
     source.batchRemove(removeArray);
 
     REQUIRE(spy.events.size() == 1);
@@ -72,11 +73,11 @@ namespace ao::rt::test
     auto t2 = testLibrary.addTrack(makeSmartListSpec("New1", 2021));
     auto t3 = testLibrary.addTrack(makeSmartListSpec("New2", 2022));
 
-    auto const batchArray = std::to_array<TrackId>({t1, t2, t3});
+    auto const batchArray = std::array{t1, t2, t3};
     source.batchInsert(batchArray);
     CHECK(list.size() == 2);
 
-    auto const removeArray = std::to_array<TrackId>({t1});
+    auto const removeArray = std::array{t1};
     source.batchRemove(removeArray);
     CHECK(list.size() == 2); // t2 and t3
 
@@ -84,12 +85,12 @@ namespace ao::rt::test
     // t2 matches -> won't match (removed)
     // t1 doesn't match -> will match (inserted)
     // t3 matches -> still matches (updated)
-    testLibrary.updateTrack(t2, [](TrackSpec& spec) { spec.year = 2010; }); // Remove
-    source.insert(t1, source.size());                                       // re-add t1 to source so it can be updated
-    testLibrary.updateTrack(t1, [](TrackSpec& spec) { spec.year = 2025; }); // Insert
-    testLibrary.updateTrack(t3, [](TrackSpec& spec) { spec.title = "Updated"; }); // Update
+    testLibrary.updateTrack(t2, [](library::test::TrackSpec& spec) { spec.year = 2010; }); // Remove
+    source.insert(t1, source.size()); // re-add t1 to source so it can be updated
+    testLibrary.updateTrack(t1, [](library::test::TrackSpec& spec) { spec.year = 2025; });       // Insert
+    testLibrary.updateTrack(t3, [](library::test::TrackSpec& spec) { spec.title = "Updated"; }); // Update
 
-    auto const updateArray = std::to_array<TrackId>({t1, t2, t3});
+    auto const updateArray = std::array{t1, t2, t3};
     source.batchUpdate(updateArray);
 
     CHECK(list.size() == 2); // t1 and t3

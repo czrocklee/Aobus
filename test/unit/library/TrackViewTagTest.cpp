@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/library/TestUtils.h"
+#include "test/unit/library/TrackViewTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -25,27 +26,6 @@ namespace ao::library::test
 #if defined(__GNUC__) && !defined(__clang__)
     static_assert(std::ranges::view<TrackView::TagProxy>);
 #endif
-
-    std::vector<std::byte> createTrackWithStrings(std::string_view title)
-    {
-      auto h = TrackHotHeader{};
-      h.tagBloom = 0;
-      h.artistId = DictionaryId{1};
-      h.albumId = DictionaryId{2};
-      h.genreId = DictionaryId{3};
-      h.albumArtistId = kInvalidDictionaryId;
-      h.composerId = kInvalidDictionaryId;
-      h.year = 2020;
-      h.codec = AudioCodec::Unknown;
-      h.bitDepth = BitDepth{16};
-      h.tagLength = 0;
-
-      h.titleLength = static_cast<std::uint16_t>(title.size());
-
-      auto data = serializeHeader(h);
-      appendString(data, title);
-      return data;
-    }
   } // namespace
 
   TEST_CASE("TrackView - exposes tag bloom filters", "[library][unit][track][tag]")
@@ -60,7 +40,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackView - returns zero tag count without tags", "[library][unit][track][tag]")
   {
-    auto const data = createTrackWithStrings("Test");
+    auto const data = makeHotTrackViewData("Test");
     auto const view = TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().count() == 0);
@@ -68,7 +48,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackView - iterates no tags when tag data is empty", "[library][unit][track][tag]")
   {
-    auto const data = createTrackWithStrings("Test");
+    auto const data = makeHotTrackViewData("Test");
     auto const view = TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().begin() == view.tags().end());

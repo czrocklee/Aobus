@@ -3,18 +3,13 @@
 
 #include "tag/TrackPropertiesDialog.h"
 
-#include "../../TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -36,60 +31,39 @@ namespace ao::gtk::test
     auto cache = TrackRowCache{runtime.library()};
     auto window = Gtk::Window{};
 
-    auto trackId1 = TrackId{kInvalidTrackId};
-    auto trackId2 = TrackId{kInvalidTrackId};
-    {
-      auto txn = library.writeTransaction();
-      auto writer = library.tracks().writer(txn);
+    auto const trackId1 = library::test::addTrack(library,
+                                                  {.title = "Track 1",
+                                                   .artist = "Artist 1",
+                                                   .album = "Album 1",
+                                                   .albumArtist = "AA",
+                                                   .genre = "Rock",
+                                                   .uri = "/music/track1.flac",
+                                                   .year = 2023,
+                                                   .discNumber = 1,
+                                                   .trackNumber = 1,
+                                                   .duration = std::chrono::seconds{1},
+                                                   .bitrate = Bitrate{320},
+                                                   .sampleRate = SampleRate{44100},
+                                                   .channels = Channels{2},
+                                                   .bitDepth = BitDepth{16},
+                                                   .codec = AudioCodec::Flac});
 
-      auto builder1 = library::TrackBuilder::createNew();
-      builder1.metadata()
-        .title("Track 1")
-        .artist("Artist 1")
-        .album("Album 1")
-        .albumArtist("AA")
-        .genre("Rock")
-        .year(2023)
-        .trackNumber(1)
-        .discNumber(1);
-      builder1.property()
-        .uri("/music/track1.flac")
-        .duration(std::chrono::seconds{1})
-        .sampleRate(SampleRate{44100})
-        .bitrate(Bitrate{320})
-        .channels(Channels{2})
-        .bitDepth(BitDepth{16})
-        .codec(AudioCodec::Flac);
-      auto serializeResult1 = builder1.serialize(txn, library.dictionary(), library.resources());
-      REQUIRE(serializeResult1);
-      auto const [hot1, cold1] = *serializeResult1;
-      trackId1 = ao::test::requireValue(writer.createHotCold(hot1, cold1)).first;
-
-      auto builder2 = library::TrackBuilder::createNew();
-      builder2.metadata()
-        .title("Track 2")
-        .artist("Artist 2")
-        .album("Album 1")
-        .albumArtist("AA")
-        .genre("Rock")
-        .year(2023)
-        .trackNumber(2)
-        .discNumber(1);
-      builder2.property()
-        .uri("/music/track2.flac")
-        .duration(std::chrono::seconds{2})
-        .sampleRate(SampleRate{48000})
-        .bitrate(Bitrate{320})
-        .channels(Channels{2})
-        .bitDepth(BitDepth{24})
-        .codec(AudioCodec::Flac);
-      auto serializeResult2 = builder2.serialize(txn, library.dictionary(), library.resources());
-      REQUIRE(serializeResult2);
-      auto const [hot2, cold2] = *serializeResult2;
-      trackId2 = ao::test::requireValue(writer.createHotCold(hot2, cold2)).first;
-
-      REQUIRE(txn.commit());
-    }
+    auto const trackId2 = library::test::addTrack(library,
+                                                  {.title = "Track 2",
+                                                   .artist = "Artist 2",
+                                                   .album = "Album 1",
+                                                   .albumArtist = "AA",
+                                                   .genre = "Rock",
+                                                   .uri = "/music/track2.flac",
+                                                   .year = 2023,
+                                                   .discNumber = 1,
+                                                   .trackNumber = 2,
+                                                   .duration = std::chrono::seconds{2},
+                                                   .bitrate = Bitrate{320},
+                                                   .sampleRate = SampleRate{48000},
+                                                   .channels = Channels{2},
+                                                   .bitDepth = BitDepth{24},
+                                                   .codec = AudioCodec::Flac});
 
     REQUIRE(trackId1 != kInvalidTrackId);
     REQUIRE(trackId2 != kInvalidTrackId);

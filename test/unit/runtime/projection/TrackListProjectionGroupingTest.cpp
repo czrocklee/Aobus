@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
@@ -24,11 +25,16 @@ namespace ao::rt::test
   {
     auto env = TestEnv{};
 
-    auto id1 = env.lib.addTrack(TrackSpec{.title = "T1", .artist = "Zeppelin", .album = "IV", .trackNumber = 1});
-    auto id2 = env.lib.addTrack(TrackSpec{.title = "T2", .artist = "Zeppelin", .album = "IV", .trackNumber = 2});
-    auto id3 = env.lib.addTrack(TrackSpec{.title = "T3", .artist = "Abba", .album = "Gold", .trackNumber = 1});
-    auto id4 = env.lib.addTrack(TrackSpec{.title = "T4", .artist = "Coldplay", .album = "X", .trackNumber = 1});
-    auto id5 = env.lib.addTrack(TrackSpec{.title = "T5", .artist = "Coldplay", .album = "Y", .trackNumber = 1});
+    auto id1 =
+      env.lib.addTrack(library::test::TrackSpec{.title = "T1", .artist = "Zeppelin", .album = "IV", .trackNumber = 1});
+    auto id2 =
+      env.lib.addTrack(library::test::TrackSpec{.title = "T2", .artist = "Zeppelin", .album = "IV", .trackNumber = 2});
+    auto id3 =
+      env.lib.addTrack(library::test::TrackSpec{.title = "T3", .artist = "Abba", .album = "Gold", .trackNumber = 1});
+    auto id4 =
+      env.lib.addTrack(library::test::TrackSpec{.title = "T4", .artist = "Coldplay", .album = "X", .trackNumber = 1});
+    auto id5 =
+      env.lib.addTrack(library::test::TrackSpec{.title = "T5", .artist = "Coldplay", .album = "Y", .trackNumber = 1});
     env.setupFiltered({{id1, id2, id3, id4, id5}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -77,11 +83,11 @@ namespace ao::rt::test
     auto const add =
       [&](std::string title, std::string artist, std::string album, std::uint16_t disc, std::uint16_t track) -> TrackId
     {
-      auto const id = env.lib.addTrack(TrackSpec{.title = std::move(title),
-                                                 .artist = std::move(artist),
-                                                 .album = std::move(album),
-                                                 .discNumber = disc,
-                                                 .trackNumber = track});
+      auto const id = env.lib.addTrack(library::test::TrackSpec{.title = std::move(title),
+                                                                .artist = std::move(artist),
+                                                                .album = std::move(album),
+                                                                .discNumber = disc,
+                                                                .trackNumber = track});
       ids.push_back(id);
       return id;
     };
@@ -196,7 +202,7 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - group sections empty for None grouping", "[runtime][unit][projection]")
   {
     auto env = TestEnv{};
-    auto id1 = env.lib.addTrack(makeSpec("T1", 2020));
+    auto id1 = env.lib.addTrack(library::test::makeTrackSpec("T1", 2020));
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -235,7 +241,7 @@ namespace ao::rt::test
   {
     auto env = TestEnv{};
 
-    auto id1 = env.lib.addTrack(TrackSpec{.title = "T1", .artist = "", .album = "A"});
+    auto id1 = env.lib.addTrack(library::test::TrackSpec{.title = "T1", .artist = "", .album = "A"});
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -255,7 +261,7 @@ namespace ao::rt::test
   {
     auto env = TestEnv{};
 
-    auto id1 = env.lib.addTrack(TrackSpec{.title = "T1", .year = 0});
+    auto id1 = env.lib.addTrack(library::test::TrackSpec{.title = "T1", .year = 0});
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -277,9 +283,9 @@ namespace ao::rt::test
 
     // Same album title, different album artists
     auto id1 = env.lib.addTrack(
-      TrackSpec{.title = "T1", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist One"});
+      library::test::TrackSpec{.title = "T1", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist One"});
     auto id2 = env.lib.addTrack(
-      TrackSpec{.title = "T2", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist Two"});
+      library::test::TrackSpec{.title = "T2", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist Two"});
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -330,7 +336,7 @@ namespace ao::rt::test
   {
     auto env = TestEnv{};
 
-    auto id1 = env.lib.addTrack(TrackSpec{.title = "T1", .album = "Solo Album", .albumArtist = ""});
+    auto id1 = env.lib.addTrack(library::test::TrackSpec{.title = "T1", .album = "Solo Album", .albumArtist = ""});
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -352,7 +358,7 @@ namespace ao::rt::test
   {
     auto env = TestEnv{};
 
-    auto id1 = env.lib.addTrack(TrackSpec{.title = "T1", .album = "", .albumArtist = ""});
+    auto id1 = env.lib.addTrack(library::test::TrackSpec{.title = "T1", .album = "", .albumArtist = ""});
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -374,8 +380,10 @@ namespace ao::rt::test
   {
     auto env = TestEnv{};
 
-    auto id1 = env.lib.addTrack(TrackSpec{.title = "A", .genre = "Pop", .composer = "Mozart", .work = "Opus 1"});
-    auto id2 = env.lib.addTrack(TrackSpec{.title = "B", .genre = "Rock", .composer = "Bach", .work = "Opus 2"});
+    auto id1 =
+      env.lib.addTrack(library::test::TrackSpec{.title = "A", .genre = "Pop", .composer = "Mozart", .work = "Opus 1"});
+    auto id2 =
+      env.lib.addTrack(library::test::TrackSpec{.title = "B", .genre = "Rock", .composer = "Bach", .work = "Opus 2"});
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});

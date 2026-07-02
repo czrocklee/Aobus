@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "CapturingBackend.h"
+#include "EngineTestSupport.h"
 #include "ScriptedDecoderSession.h"
 #include "TestUtility.h"
 #include "test/unit/audio/AudioFixtureUtils.h"
@@ -21,50 +22,17 @@
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cstddef>
 #include <expected>
 #include <filesystem>
 #include <future>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <utility>
 #include <vector>
 
 namespace ao::audio::test
 {
-  namespace
-  {
-    class CallbackLatch final
-    {
-    public:
-      void notify()
-      {
-        auto const lock = std::scoped_lock{_mutex};
-        ++_count;
-        _cv.notify_all();
-      }
-
-      bool waitForCount(std::size_t expected, std::chrono::milliseconds timeout = std::chrono::seconds{1})
-      {
-        auto lock = std::unique_lock{_mutex};
-        return _cv.wait_for(lock, timeout, [this, expected] { return _count >= expected; });
-      }
-
-      std::size_t count() const
-      {
-        auto const lock = std::scoped_lock{_mutex};
-        return _count;
-      }
-
-    private:
-      mutable std::mutex _mutex;
-      std::condition_variable _cv;
-      std::size_t _count = 0;
-    };
-  } // namespace
-
   using namespace fakeit;
 
   TEST_CASE("Engine - stop closes backend and leaves transport idle", "[audio][unit][engine]")

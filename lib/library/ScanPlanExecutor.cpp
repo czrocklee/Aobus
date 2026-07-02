@@ -11,6 +11,7 @@
 #include <ao/library/ScanPlanExecutor.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackWrite.h>
 #include <ao/tag/TagFile.h>
 
 #include <cstddef>
@@ -299,8 +300,7 @@ namespace ao::library
                                      TrackBuilder::PreparedHot const& hot,
                                      TrackBuilder::PreparedCold const& cold)
   {
-    auto hotResult =
-      trackWriter.updateHot(trackId, hot.size(), [&](std::span<std::byte> hotBuffer) { hot.writeTo(hotBuffer); });
+    auto hotResult = updatePreparedHotTrackData(trackWriter, trackId, hot);
 
     if (!hotResult)
     {
@@ -308,8 +308,7 @@ namespace ao::library
       return false;
     }
 
-    auto coldResult =
-      trackWriter.updateCold(trackId, cold.size(), [&](std::span<std::byte> coldBuffer) { cold.writeTo(coldBuffer); });
+    auto coldResult = updatePreparedColdTrackData(trackWriter, trackId, cold);
 
     if (!coldResult)
     {
@@ -325,14 +324,7 @@ namespace ao::library
                                                        TrackBuilder::PreparedHot const& hot,
                                                        TrackBuilder::PreparedCold const& cold)
   {
-    auto createResult = trackWriter.createHotCold(
-      hot.size(),
-      cold.size(),
-      [&hot, &cold](TrackId /*id*/, std::span<std::byte> hotBuffer, std::span<std::byte> coldBuffer)
-      {
-        hot.writeTo(hotBuffer);
-        cold.writeTo(coldBuffer);
-      });
+    auto createResult = createPreparedTrackData(trackWriter, hot, cold);
 
     if (!createResult)
     {

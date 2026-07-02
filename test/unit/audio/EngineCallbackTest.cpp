@@ -17,7 +17,6 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <cstddef>
 #include <expected>
 #include <future>
 #include <memory>
@@ -30,28 +29,6 @@ namespace ao::audio::test
 {
   namespace
   {
-    class CallbackLatch final
-    {
-    public:
-      void notify()
-      {
-        auto const lock = std::scoped_lock{_mutex};
-        ++_count;
-        _cv.notify_all();
-      }
-
-      bool waitForCount(std::size_t expected, std::chrono::milliseconds timeout = std::chrono::seconds{1})
-      {
-        auto lock = std::unique_lock{_mutex};
-        return _cv.wait_for(lock, timeout, [this, expected] { return _count >= expected; });
-      }
-
-    private:
-      mutable std::mutex _mutex;
-      std::condition_variable _cv;
-      std::size_t _count = 0;
-    };
-
     class BlockingStopBackend final : public IBackend
     {
     public:

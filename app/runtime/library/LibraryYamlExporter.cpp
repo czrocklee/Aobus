@@ -20,6 +20,7 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Base64.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/Utils.h>
 
 #include <algorithm>
@@ -44,44 +45,6 @@ namespace ao::rt
 {
   namespace
   {
-    constexpr std::size_t kUuidByteCount = 16;
-    constexpr std::size_t kHexCharsPerByte = 2;
-    constexpr std::size_t kUuidTimeLowByteCount = 4;
-    constexpr std::size_t kUuidTimeMidByteCount = 2;
-    constexpr std::size_t kUuidTimeHighByteCount = 2;
-    constexpr std::size_t kUuidClockSeqByteCount = 2;
-    constexpr std::size_t kUuidNodeByteCount = 6;
-    constexpr auto kUuidGroupByteCounts = std::to_array<std::size_t>({kUuidTimeLowByteCount,
-                                                                      kUuidTimeMidByteCount,
-                                                                      kUuidTimeHighByteCount,
-                                                                      kUuidClockSeqByteCount,
-                                                                      kUuidNodeByteCount});
-    constexpr auto kUuidHyphenCount = kUuidGroupByteCounts.size() - 1;
-    constexpr auto kUuidTextLength = (kUuidByteCount * kHexCharsPerByte) + kUuidHyphenCount;
-
-    std::string formatUuid(std::array<std::byte, kUuidByteCount> const& id)
-    {
-      auto result = std::string{};
-      result.reserve(kUuidTextLength);
-      std::size_t byteIndex = 0;
-
-      for (std::size_t groupIndex = 0; groupIndex < kUuidGroupByteCounts.size(); ++groupIndex)
-      {
-        if (groupIndex > 0)
-        {
-          result.push_back('-');
-        }
-
-        for (std::size_t groupByte = 0; groupByte < kUuidGroupByteCounts.at(groupIndex); ++groupByte)
-        {
-          result += std::format("{:02x}", static_cast<unsigned char>(id.at(byteIndex)));
-          ++byteIndex;
-        }
-      }
-
-      return result;
-    }
-
     std::string_view modeToString(ExportMode mode)
     {
       switch (mode)
@@ -467,7 +430,7 @@ namespace ao::rt
     root |= ryml::MAP;
 
     root.append_child() << ryml::key("version") << 1;
-    appendString(root, "libraryId", formatUuid(ml.metaHeader().libraryId));
+    appendString(root, "libraryId", utility::formatUuid(ml.metaHeader().libraryId));
     appendString(root, "export_mode", modeToString(mode));
 
     auto const txn = ml.readTransaction();

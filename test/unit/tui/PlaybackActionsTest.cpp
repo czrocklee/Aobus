@@ -4,6 +4,7 @@
 #include "tui/PlaybackActions.h"
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include "tui/Model.h"
 #include <ao/CoreIds.h>
@@ -34,8 +35,8 @@ namespace ao::tui::test
     auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
     primeOutput(fixture);
 
-    auto first = rt::test::TrackSpec{.title = "First", .artist = "One"};
-    auto second = rt::test::TrackSpec{.title = "Second", .artist = "Two"};
+    auto first = library::test::TrackSpec{.title = "First", .artist = "One"};
+    auto second = library::test::TrackSpec{.title = "Second", .artist = "Two"};
     auto const firstId = fixture.testLib.addTrack(first);
     auto const secondId = fixture.testLib.addTrack(second);
     auto const tracks = std::vector{trackItem(firstId), trackItem(secondId)};
@@ -65,7 +66,8 @@ namespace ao::tui::test
     auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
     primeOutput(fixture);
 
-    auto spec = rt::test::TrackSpec{.title = "Toggle Target", .artist = "Switcher"};
+    auto spec = library::test::TrackSpec{.title = "Toggle Target", .artist = "Switcher"};
+
     auto const trackId = fixture.testLib.addTrack(spec);
     auto const tracks = std::vector{trackItem(trackId)};
 

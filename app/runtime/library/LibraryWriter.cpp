@@ -11,6 +11,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackWrite.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -460,14 +461,7 @@ namespace ao::rt
     }
 
     auto& [preparedHot, preparedCold] = *preparedResult;
-    auto createResult =
-      writer.createHotCold(preparedHot.size(),
-                           preparedCold.size(),
-                           [&preparedHot, &preparedCold](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                           {
-                             preparedHot.writeTo(hot);
-                             preparedCold.writeTo(cold);
-                           });
+    auto createResult = library::createPreparedTrackData(writer, preparedHot, preparedCold);
 
     if (!createResult)
     {
