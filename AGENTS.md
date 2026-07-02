@@ -16,6 +16,7 @@ Read the human docs for project policy instead of duplicating them here:
 - `doc/README.md` for where documentation belongs.
 - `doc/dev/coding-style.md` for C++ style.
 - `doc/dev/testing.md` for testing policy.
+- `doc/dev/linting.md` for lint policy (warning fix/suppress rules, NOLINT playbook).
 - `doc/dev/commit-messages.md` for commit message rules.
 
 ## Working Rules
@@ -33,6 +34,12 @@ Read the human docs for project policy instead of duplicating them here:
 
 > [!TIP]
 > Heavy development, no compatibility/migration constraints. Propose the best approach without historical baggage.
+
+## Agent Delegation
+
+`aobus-fleet` (registry `config/agent-fleet.yaml`) provides gated implementation delegation and
+multi-model council review. The workflows live in `.agents/skills/` (`execute-plan`, `run-council`);
+fleet results are proposals for chair review, never automatic edits to the real tree.
 
 ## Build and Validation
 

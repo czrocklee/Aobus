@@ -11,6 +11,7 @@ page hard to scan.
 | `doc/README.md` | Documentation tree organization and update expectations |
 | `doc/dev/coding-style.md` | C++ standard, formatting, naming, includes, language idioms, class design, const/threading rules |
 | `doc/dev/commit-messages.md` | Commit message format, scopes, subject/body guidance, and examples |
+| `doc/dev/linting.md` | Lint policy: warning triage, suppression rules, cleanup playbook, Python hygiene, automatic-fix guidance |
 | `doc/design/error-model.md` | Error contracts by layer and subsystem |
 | `doc/dev/testing.md` | Testing policy and detailed test-writing references |
 

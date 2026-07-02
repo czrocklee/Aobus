@@ -1,14 +1,18 @@
 ---
 name: manage-git-flow
 description: >-
-  BLOCKING — Activate before git status/diff/log/add/commit/push/rebase/stash/checkout/reset/show/branch,
-  or when the user says commit, push, rebase, or diff. Enforces project hygiene, scoped validation,
-  proposal review, and no AI attribution in commits.
+  BLOCKING — Activate before any git operation that mutates repository state
+  (add/commit/push/rebase/merge/cherry-pick/stash/checkout/restore/reset), or when the user says
+  commit, push, or rebase. Read-only inspection (status/diff/log/show/blame/branch listing) does
+  not require this skill. Enforces project hygiene, scoped validation, proposal review, and no AI
+  attribution in commits.
 ---
 
 # Manage Git Flow
 
-Use this skill before every Git operation in Aobus.
+Use this skill before any Git operation that mutates repository state. Read-only inspection
+commands (`git status`, `git diff`, `git log`, `git show`, `git blame`) may run without it;
+the repository's own git hooks still enforce hard rules such as the no-AI-attribution check.
 
 ## Hygiene Tools
 

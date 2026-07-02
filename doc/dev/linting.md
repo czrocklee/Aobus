@@ -1,0 +1,186 @@
+# Linting Policy
+
+This document is the contributor policy for lint findings in Aobus. It defines
+how to triage `clang-tidy`, Ruff, and mypy findings, when suppressions are
+acceptable, and how to clean up existing suppressions without changing behavior.
+
+Use project commands as the public entry points:
+
+- `./ao tidy` runs C++ `clang-tidy` plus Python Ruff and mypy for files in
+  scope.
+- `./ao hygiene` is the check-only commit gate: format check first, then tidy.
+- `./ao test --lint` tests the Aobus `clang-tidy` plugin fixtures; it is not the
+  Python lint command.
+
+Do not call `clang-tidy`, Ruff, or mypy directly during normal repository work.
+The `./ao` commands own scope discovery, strict/relaxed check modes, plugin
+loading, include paths, fix filtering, and diagnostic de-duplication. Keep lint
+work scoped to the task; do not turn a feature, bug fix, or test change into a
+drive-by lint sweep.
+
+## Scope Behavior
+
+- `STRICT` checks apply to production C++ under `lib/`, `app/`, `include/`, and
+  `tool/`.
+- `RELAXED` checks apply to C++ tests under `test/`. Test mode keeps the same
+  baseline but disables test-noisy checks such as unchecked optional access,
+  discarded return values, cognitive complexity, identifier length, magic
+  numbers, C arrays, C varargs, and test-only casts.
+- `test/main.cpp` and non-fixture files under `test/integration/lint/` are
+  ignored by normal tidy runs.
+- Lint checker fixtures under `test/integration/lint/fixture/` are skipped in
+  batch scans and checked only when named explicitly. The `./ao test --lint`
+  suite owns fixture diagnostic and auto-fix coverage.
+- Python files in scope are checked by Ruff and mypy through `./ao tidy` using
+  `pyproject.toml`.
+
+## Triage
+
+Start by deciding whether the warning points at a real code issue, a project
+style issue, a tool false positive, or an unavoidable external API shape.
+
+- Treat correctness, lifetime, ownership, optional access, and special-member
+  warnings as real problems unless the local code proves otherwise.
+- Fix readability findings when the change makes the code clearer to a future
+  reader. Prefer named constants, early returns, clearer expressions, or a small
+  local helper over mechanical churn.
+- Fix include findings by adding the direct header that provides the used
+  symbol. Do not rely on transitive includes.
+- For RAII guards, explicitly delete copy/move or define the needed operations.
+- For naming and style findings, follow `doc/dev/coding-style.md`. Do not
+  rename public API, framework-required names, or vocabulary names just to
+  appease a generic rule.
+- If the tool is consistently wrong for a project pattern, consider narrowing
+  the check configuration or custom rule. Do not scatter many identical
+  suppressions across the tree.
+
+## Suppressions
+
+Use `NOLINT` only when the warning is caused by an external API shape, a clear
+false positive, or a test-only pattern where the fix would be worse than the
+warning.
+
+- Prefer `NOLINTNEXTLINE(check-name)` or inline `NOLINT(check-name)` at the
+  exact expression.
+- Include the specific check name. Avoid bare `NOLINT`.
+- Add a short English reason when the boundary is not obvious from the code.
+- Use `NOLINTBEGIN/END` only for a compact, contiguous region that cannot be
+  made clearer locally.
+
+Common acceptable cases include GTKmm ownership handoff such as
+`Glib::make_refptr_for_instance(new T)`, GLib/GTK macros, C varargs or C arrays
+at an API boundary, unavoidable `reinterpret_cast` in tests, framework-required
+method names, and `clang-tidy` false positives around framework or template
+code.
+
+## Things To Avoid
+
+- Do not disable checks directory-wide or file-wide.
+- Do not add umbrella includes to satisfy include-cleaner unless the external
+  library requires that umbrella header.
+- Do not add global constants for one-use literals.
+- Do not hide a one-off C API warning behind an abstraction that has no design
+  value.
+- Do not split clear local logic into many single-use functions just to reduce a
+  metric.
+- Do not mix include cleanup with behavioral lint cleanup unless the task
+  explicitly asks for both.
+
+## NOLINT Cleanup Playbook
+
+When reducing existing suppressions, use the smallest semantic-preserving edit
+and re-run tidy on the touched files before widening scope.
+
+1. Delete stale suppressions first. If the line no longer warns, keep only the
+   deletion.
+2. Keep include-cleaner work separate when the task excludes include cleanup.
+3. Replace a suppression with clearer code when the fix is local and
+   behavior-preserving.
+4. Keep a targeted suppression when the clean code would be less readable or
+   would obscure an external API contract.
+
+Useful cleanup patterns:
+
+- Replace unexplained protocol, binary-layout, or UI-policy literals with named
+  `constexpr` values when the name carries real domain meaning.
+- For binary-layout assertions, prefer a named byte-count constant on the layout
+  type over suppressing a raw size literal.
+- For unused overload parameters, use comment names such as `Type& /*value*/`
+  instead of suppressing `readability-named-parameter`.
+- For strict full-string unsigned parsing, prefer `std::from_chars` over
+  `strtoul`; it avoids C output-parameter suppressions and preserves
+  no-leading-space behavior.
+- At C API pointer boundaries in tests, prefer existing helpers such as
+  `utility::layout::asLegacyPtr<T>(ptr)` when they express the boundary
+  directly. Otherwise keep a narrow suppression at the boundary.
+- For C structs used by framework tests, prefer `std::array`, `std::to_array`,
+  `std::span`, or a tiny local designated-initializer helper when that is
+  clearer than raw arrays and macro initializers.
+- Iterator trait aliases such as `value_type`, `difference_type`, `reference`,
+  `pointer`, and `iterator_category` are STL vocabulary names. Keep them
+  allowlisted in lint configuration instead of suppressing each alias.
+- GTKmm/glibmm ownership boundaries are usually acceptable suppressions. Do not
+  hide them behind helpers unless the local class design already supports that
+  helper cleanly.
+- Binary or protocol literals can be cleaned with named constants, but if the
+  named constant reads worse than the documented format literal, keep a narrow
+  suppression or revisit the rule.
+
+## Include-Cleaner Triage
+
+Add the direct include where the symbol is used.
+
+- If a symbol appears in a public header, the public header must include the
+  provider.
+- If a symbol is used only in a `.cpp`, add the provider include to the `.cpp`
+  instead of relying on a paired header's transitive includes.
+- For standard library symbols, include the standard header that owns the symbol.
+- For GTKmm, GLib, PipeWire, LLVM, and other Nix-provided libraries, use the
+  package's headers and build configuration to find the provider. From the repo
+  root, `nix-shell --run "pkg-config --cflags <lib>"` is useful for libraries
+  that publish pkg-config metadata.
+- For Clang/LLVM internals, inspect the compile database under
+  `/tmp/build/debug-clang-tidy/compile_commands.json` or use
+  `llvm-config --cxxflags`.
+
+Suppress `misc-include-cleaner` only when the tool genuinely cannot model the
+provider, such as required umbrella headers or C macros from framework headers.
+
+## Python Hygiene
+
+Ruff and mypy findings should be fixed with the same bias as C++ lint: prefer a
+local code or typing improvement, keep the public shape stable unless the task
+requires an API change, and avoid broad ignores.
+
+- Use `./ao format` for Python formatting changes. `./ao tidy --fix` applies
+  only exported `clang-tidy` replacements.
+- Use targeted `# noqa: RULE` or `# type: ignore[code]` only when the tool cannot
+  express the real contract. Add a short reason when it is not obvious.
+- Do not silence mypy by widening types to `Any` unless the value is genuinely
+  dynamic at that boundary.
+
+## Automatic Fixes
+
+Automatic fixes can be useful, but they can also leave the working tree in a
+large or confusing state. Treat them as an optional recovery-friendly shortcut,
+not as the normal lint workflow.
+
+Consider automatic fixes only when the working tree is clean or otherwise easy
+to revert, and when the diagnostic is mechanical enough that the generated diff
+will be straightforward to review. They are most defensible for simple repeated
+edits, checker fixtures, obvious local modernization, or a large batch of
+low-judgment changes that would be more error-prone to perform by hand.
+
+Prefer hand edits when the warning involves ownership, public API shape,
+behavior, naming, readability tradeoffs, or framework boundaries. Never run
+automatic fixes across the whole repository. After any automatic fix, review the
+diff before continuing and run the same verification you would run for a manual
+edit.
+
+## Verification
+
+After C++ lint edits, re-run the narrowest `./ao tidy` scope that covers the
+modified C++ files. After Python hygiene edits, re-run `./ao tidy` for the
+modified Python files and `./ao test --tooling` when tooling behavior changed.
+Run focused build or test validation when a lint fix changes behavior,
+ownership, public API shape, or test semantics.
