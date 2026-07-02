@@ -75,6 +75,7 @@ namespace ao::tui
     constexpr std::int32_t kCommandCompletionPanelRows = 10;
     std::atomic<std::int32_t> gSignalWriteFd{-1}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
+    // POSIX signal handlers must use the C ABI int parameter type.
     void exitSignalHandler(int /*signal*/) // NOLINT(aobus-modernize-use-std-numbers)
     {
       if (auto const fd = gSignalWriteFd.load(std::memory_order_relaxed); fd >= 0)

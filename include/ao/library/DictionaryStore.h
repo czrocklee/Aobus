@@ -102,7 +102,7 @@ namespace ao::library
   private:
     struct DictHash final
     {
-      using is_transparent = void; // NOLINT(readability-identifier-naming)
+      using is_transparent = void;
       std::deque<std::string> const* storage;
 
       std::size_t operator()(DictionaryId id) const { return std::hash<std::string_view>{}((*storage)[id.raw() - 1]); }
@@ -112,7 +112,7 @@ namespace ao::library
 
     struct DictEqual final
     {
-      using is_transparent = void; // NOLINT(readability-identifier-naming)
+      using is_transparent = void;
       std::deque<std::string> const* storage;
 
       bool operator()(DictionaryId lhs, DictionaryId rhs) const { return lhs == rhs; }

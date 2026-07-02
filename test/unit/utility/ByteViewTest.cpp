@@ -76,6 +76,9 @@ namespace ao::utility::test
 
       CHECK(bytes::stringView(v8) == "Hello");
       CHECK(bytes::stringView(std::span<std::byte const>{}).empty());
+
+      auto const* const unsignedChars = bytes::unsignedCharData(v8);
+      CHECK(static_cast<char>(unsignedChars[0]) == 'H');
     }
 
     SECTION("bytes::tryLayout / requireLayout are always checked")

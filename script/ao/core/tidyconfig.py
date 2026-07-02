@@ -32,7 +32,7 @@ CONFIG_BASE = """
   {key: 'readability-identifier-naming.ParameterCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.LocalVariableCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.TypeAliasCase', value: 'CamelCase'},
-  {key: 'readability-identifier-naming.TypeAliasIgnoredRegexp', value: '^(difference_type|value_type|pointer|reference|iterator_category|operand|operation)$'},
+  {key: 'readability-identifier-naming.TypeAliasIgnoredRegexp', value: '^(difference_type|value_type|pointer|reference|iterator_category|operand|operation|is_transparent)$'},
   {key: 'readability-magic-numbers.IgnorePowersOf2IntegerValues', value: false},
   {key: 'readability-magic-numbers.IgnoredIntegerValues', value: '0;1;2;3;4;8;8U;16;16U;24;32;32U;64;64U;60;100;1000;1000U'},
   {key: 'readability-qualified-auto.AllowedTypes', value: 'std::array<.*>::(const_)?iterator;std::string_view::(const_)?iterator;.*::iterator;.*Iterator'},

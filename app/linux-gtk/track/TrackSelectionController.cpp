@@ -52,9 +52,9 @@ namespace ao::gtk
       return false;
     }
 
-    Gtk::Stack* findInlineEditStack(Gtk::Widget const* widget)
+    Gtk::Stack* findInlineEditStack(Gtk::Widget* widget)
     {
-      auto* current = const_cast<Gtk::Widget*>(widget); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+      auto* current = widget;
 
       while (current != nullptr)
       {

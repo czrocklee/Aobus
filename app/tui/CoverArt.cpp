@@ -4,6 +4,7 @@
 #include "CoverArt.h"
 
 #include <ao/utility/Base64.h>
+#include <ao/utility/ByteView.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
@@ -106,8 +107,8 @@ namespace ao::tui
       }
 
       auto* rawError = static_cast<GError*>(nullptr);
-      auto const* data =
-        reinterpret_cast<guchar const*>(bytes.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+      auto const byteSpan = std::span<std::byte const>{bytes.data(), bytes.size()};
+      auto const* data = utility::bytes::unsignedCharData(byteSpan);
 
       if (::gdk_pixbuf_loader_write(loaderPtr.get(), data, bytes.size(), &rawError) == FALSE)
       {
@@ -303,9 +304,8 @@ namespace ao::tui
     auto result = std::vector<std::byte>{};
     result.reserve(bufferSize);
 
-    auto const* bytesBegin =
-      reinterpret_cast<std::byte const*>(bufferPtr.get()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-    result.insert(result.end(), bytesBegin, bytesBegin + bufferSize);
+    auto const bufferBytes = std::as_bytes(std::span{bufferPtr.get(), bufferSize});
+    result.insert(result.end(), bufferBytes.begin(), bufferBytes.end());
     return result;
   }
 
