@@ -133,7 +133,7 @@ Focused iteration examples:
 ./ao test --core "Component - behavior"
 ./ao test --gtk "Component - behavior"
 ./ao test --integration "Component - behavior"
-./ao test --fleet "Component - behavior"
+./ao test --council "Component - behavior"
 ```
 
 Do not run clang-tidy for ordinary test changes unless the user explicitly asks for linting, clang-tidy, tidy cleanup, or lint findings. If requested, use:

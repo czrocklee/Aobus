@@ -9,6 +9,7 @@ from unittest import mock
 
 from ao.__main__ import main, make_parser, parse_arguments
 from ao.command import check as check_command
+from ao.command import council as council_command
 from ao.command import run as run_command_mod
 from ao.command import test as test_command
 from ao.command import tidy as tidy_command
@@ -23,7 +24,7 @@ class CliParseTest(unittest.TestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             self.assertEqual(main(["help"]), 0)
-        for command in ("build", "check", "test", "coverage", "tidy", "analyze", "format", "hygiene", "run"):
+        for command in ("build", "check", "test", "coverage", "tidy", "analyze", "format", "hygiene", "run", "council"):
             self.assertIn(command, buffer.getvalue())
         self.assertNotIn("selftest", buffer.getvalue())
         self.assertNotIn("pycheck", buffer.getvalue())
@@ -47,6 +48,31 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.flavor, "debug")
         self.assertFalse(args.asan)
 
+    def test_council_forwards_subcommand_arguments(self):
+        args = self.parse(
+            ["council", "-p", "/tmp/aobus-test-build", "-n", "validate-config", "--registry", "config.yaml"]
+        )
+        self.assertEqual(args.path, "/tmp/aobus-test-build")
+        self.assertTrue(args.no_build)
+        self.assertEqual(args.council_args, ["validate-config", "--registry", "config.yaml"])
+
+    def test_council_builds_and_runs_selected_executable(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+            build_dir = Path(temp_dir)
+            binary = build_dir / "tool" / "council" / "aobus-council"
+            binary.parent.mkdir(parents=True)
+            binary.touch()
+            args = self.parse(["council", "-p", str(build_dir), "validate-config", "--registry", "config.yaml"])
+
+            with mock.patch.object(council_command, "run", return_value=0) as run:
+                self.assertEqual(council_command.run_command(args), 0)
+
+        self.assertEqual(
+            run.call_args_list[0].args[0],
+            ["cmake", "--build", str(build_dir), "--parallel", "--target", "aobus-council"],
+        )
+        self.assertEqual(run.call_args_list[1].args[0], [str(binary), "validate-config", "--registry", "config.yaml"])
+
     def test_test_suite_shortcuts(self):
         args = self.parse(["test", "--gtk", "[layout],[model]", "-n", "--clang", "--asan"])
         self.assertEqual(args.suite, "gtk")
@@ -67,7 +93,7 @@ class CliParseTest(unittest.TestCase):
                 "tui": ["ao_tui_test"],
                 "gtk": ["ao_gtk_test"],
                 "integration": ["ao_integration_test"],
-                "fleet": ["ao_fleet_test"],
+                "council": ["ao_council_test"],
             },
         )
 
@@ -78,7 +104,7 @@ class CliParseTest(unittest.TestCase):
             self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core", "tui", "gtk", "integration", "fleet", "tooling", "lint"),
+            ("core", "tui", "gtk", "integration", "council", "tooling", "lint"),
             Path("/tmp/aobus-test-build"),
             test_filter="",
             list_only=False,
@@ -92,7 +118,7 @@ class CliParseTest(unittest.TestCase):
                 self.assertEqual(test_command.run_suites(test_command.SUITE_GROUPS["all"], build_dir), 0)
 
         self.assertEqual(
-            [call.args[0] for call in run_suite.call_args_list], ["core", "tui", "gtk", "integration", "fleet"]
+            [call.args[0] for call in run_suite.call_args_list], ["core", "tui", "gtk", "integration", "council"]
         )
         self.assertEqual([call.args[0] for call in run_non_catch2.call_args_list], ["tooling", "lint"])
 

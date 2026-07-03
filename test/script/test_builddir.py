@@ -48,9 +48,9 @@ class BuildDirTest(unittest.TestCase):
             self.assertEqual(builddir.build_dir("pgo1", clang=True), Path("/tmp/build/pgo-clang"))
 
     def test_build_dir_env_always_wins(self):
-        # The fleet oracle sandbox redirects builds via BUILD_DIR (see Engine.cpp).
-        with mock.patch.dict("os.environ", {"BUILD_DIR": "/host/oracle-build"}):
-            self.assertEqual(builddir.build_dir("debug", asan=True), Path("/host/oracle-build"))
+        # External tooling can redirect builds via BUILD_DIR.
+        with mock.patch.dict("os.environ", {"BUILD_DIR": "/host/custom-build"}):
+            self.assertEqual(builddir.build_dir("debug", asan=True), Path("/host/custom-build"))
 
 
 if __name__ == "__main__":

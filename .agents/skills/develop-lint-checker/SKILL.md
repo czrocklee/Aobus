@@ -12,9 +12,9 @@ This guide provides the mandatory workflow and debugging strategies for developi
 ## Delegation Boundary
 
 Checker behavior, AST matcher design, diagnostic policy, checker registration, and fixture design are
-chair work. Lint-checker implementation is a poor fit for fleet delegation: new or registered checker files
-touch CMake and the checker registry — forbidden, ruler-protected surfaces that the `execute-plan`
-proposal engine rejects. Treat checker development as chair-owned end-to-end work.
+chair work. Lint-checker implementation is a poor fit for council review because new or registered checker
+files touch CMake and the checker registry, and the council only returns advisory text. Treat checker
+development as chair-owned end-to-end work.
 
 ## 1. Test-Driven Development (TDD) Workflow
 

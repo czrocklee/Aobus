@@ -9,13 +9,13 @@ The `./ao test` command exposes individual suites and two suite groups:
 - `tui`: terminal frontend Catch2 tests (`ao_tui_test`).
 - `gtk`: GTK Catch2 tests (`ao_gtk_test`).
 - `integration`: standalone integration tests (`ao_integration_test`).
-- `fleet`: fleet C++ tests (`ao_fleet_test`).
+- `council`: council C++ tests (`ao_council_test`).
 - `tooling`: Python tests for the `./ao` tooling.
 - `lint`: integration tests for the Aobus clang-tidy plugin.
 - `default`: the core and GTK suites. This is selected when no suite option is given.
 - `all`: every suite listed above.
 
-`default` is intentionally the normal development loop. The TUI, integration, fleet, tooling, and lint suites
+`default` is intentionally the normal development loop. The TUI, integration, council, tooling, and lint suites
 take longer, so they are included only when selected directly or through `all`.
 
 Each suite is registered once in `script/ao/command/test.py` through `SUITES`

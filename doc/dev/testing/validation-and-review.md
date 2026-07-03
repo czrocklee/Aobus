@@ -65,7 +65,7 @@ Focused iteration after the test binary already exists:
 ./ao test --core "Component - behavior"
 ./ao test --gtk "Component - behavior"
 ./ao test --integration "Component - behavior"
-./ao test --fleet "Component - behavior"
+./ao test --council "Component - behavior"
 ```
 
 Run the narrowest useful filter first, then the normal project test target when practical.

@@ -28,14 +28,6 @@ playbook, include-cleaner triage, and automatic-fix guidance — lives in `doc/d
 it before fixing or suppressing any finding. When editing C++ to fix warnings, follow the
 conventions in `doc/dev/coding-style.md` (the `aobus-*` checks enforce them).
 
-## Fleet Delegation
-
-The mechanical subset may be delegated with an `aobus-fleet-intent/v1` document using
-`task-kind: fix-lint`, exact file scope, and an invariant that behavior is preserved. The registered
-GateEngine fans out isolated candidates, extracts patches itself, enforces scope and ruler protection,
-and runs the `tidy-clean` oracle. Public API changes, cross-file redesign, NOLINT judgment, or exhausted
-gate budgets remain chair work. A passing result is still a proposal, not an automatic edit.
-
 ## Default Workflow
 
 Choose the smallest useful scope, then widen only when needed.

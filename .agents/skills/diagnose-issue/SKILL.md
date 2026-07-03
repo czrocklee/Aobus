@@ -16,13 +16,6 @@ Stay focused on the failing behavior. Do not start documentation updates, format
 
 When the fix touches C++ files, follow the repository's local style directly and keep the edit scoped to the failing path. Use `use-clang-tidy` only when the user explicitly asks to diagnose linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session; otherwise do not run lint validation.
 
-## Delegation Boundary
-
-Diagnosis, root-cause selection, error-contract choices, and bug-fix design remain chair work. Once the
-fix and regression coverage are settled, implementation may be delegated through the `execute-plan`
-skill and the `aobus-fleet` GateEngine. The result remains a chair-reviewed proposal; the fleet never
-decides the diagnosis or writes to the real tree.
-
 ## Debugging Loop
 
 1. Capture the exact failing command, test filter, input, log excerpt, signal, assertion, or stack trace.
@@ -44,7 +37,7 @@ nix-shell --run "cmake --build /tmp/build/debug --parallel"
 ./ao test --core "test filter"
 ./ao test --gtk "test filter"
 ./ao test --integration "test filter"
-./ao test --fleet "test filter"
+./ao test --council "test filter"
 ```
 
 Inspect build logs instead of rerunning full builds when a previous run already captured the failure:

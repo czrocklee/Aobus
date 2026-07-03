@@ -4,8 +4,7 @@ description: >-
   BLOCKING — Activate before any git operation that mutates repository state
   (add/commit/push/rebase/merge/cherry-pick/stash/checkout/restore/reset), or when the user says
   commit, push, or rebase. Read-only inspection (status/diff/log/show/blame/branch listing) does
-  not require this skill. Enforces project hygiene, scoped validation, proposal review, and no AI
-  attribution in commits.
+  not require this skill. Enforces project hygiene, validation, and no AI attribution in commits.
 ---
 
 # Manage Git Flow
@@ -49,17 +48,6 @@ The gate is fast enough that fine-grained pre-commit test selection is usually w
 time and can miss coverage from tooling, lint integration, or platform suites. Use narrower tests
 only while actively debugging a failure or validating a small hypothesis before the final gate.
 Preserve unrelated worktree changes.
-
-## Fleet Proposals
-
-An `aobus-fleet` result is never landed automatically. Before staging a fleet patch:
-
-1. Read `manifest.yaml`, `review.md` or `dossier.md`, `evidence.yaml`, and the harness `patch`.
-2. Review the patch semantically and apply or modify it on the real tree.
-3. Run real-tree validation.
-4. Record `accept`, `modify`, or `reject` with `aobus-fleet review record`.
-
-Route statistics affect selection and breaker state only; an oracle pass is not acceptance authority.
 
 ## Commit Procedure
 

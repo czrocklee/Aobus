@@ -1,2 +1,2 @@
 add_subdirectory(lint)
-add_subdirectory(fleet)
+add_subdirectory(council)

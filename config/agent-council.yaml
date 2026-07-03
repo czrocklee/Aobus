@@ -1,0 +1,72 @@
+schema: aobus-council-registry/v1
+# Council is the only agent mechanism. Agents receive advisory focus hints in
+# their prompts, run in copied workspaces, and return review text.
+harnesses:
+  opencode:
+    argv: [opencode, run, --pure, --auto, --variant, max, -m, "{model}"]
+    prompt-delivery: stdin
+    environment-whitelist: [PATH, HOME, USER, XDG_CONFIG_HOME, OPENCODE_CONFIG_DIR]
+    timeout-ms: 1200000
+  codex:
+    argv: [codex, exec, --ephemeral, --ignore-rules, -s, danger-full-access, --skip-git-repo-check, -m, "{model}"]
+    prompt-delivery: stdin
+    environment-whitelist: [PATH, HOME, USER, CODEX_HOME]
+    timeout-ms: 1200000
+  claude:
+    argv: [claude, -p, --dangerously-skip-permissions, --no-session-persistence, --model, "{model}", --effort, "{effort}"]
+    prompt-delivery: stdin
+    environment-whitelist: [PATH, HOME, USER, ANTHROPIC_API_KEY]
+    timeout-ms: 1200000
+  antigravity:
+    argv: [agy, -p, --new-project, --add-dir, ., --dangerously-skip-permissions, --model, "{model}"]
+    prompt-delivery: stdin
+    environment-whitelist: [PATH, HOME, USER, GOOGLE_API_KEY]
+    timeout-ms: 1200000
+agents:
+  deepseek-pro:
+    harness: opencode
+    model: opencode-go/deepseek-v4-pro
+    vendor: deepseek
+  openai-gpt:
+    harness: codex
+    model: gpt-5.5
+    vendor: openai
+  anthropic-opus:
+    harness: claude
+    model: claude-opus-4-8
+    vendor: anthropic
+    effort: xhigh
+  google-gemini-pro:
+    harness: antigravity
+    model: "Gemini 3.1 Pro (High)"
+    vendor: google
+  deepseek-flash:
+    harness: opencode
+    model: opencode-go/deepseek-v4-flash
+    vendor: deepseek
+    timeout-ms: 600000
+  openai-gpt-mini:
+    harness: codex
+    model: gpt-5.4-mini
+    vendor: openai
+    timeout-ms: 600000
+  anthropic-sonnet:
+    harness: claude
+    model: claude-sonnet-4-6
+    vendor: anthropic
+    effort: high
+    timeout-ms: 600000
+  google-gemini-flash:
+    harness: antigravity
+    model: "Gemini 3.5 Flash (HIGH)"
+    vendor: google
+    timeout-ms: 600000
+councils:
+  council-plan:
+    roster: [anthropic-opus, openai-gpt, google-gemini-pro, deepseek-pro]
+    depth: full
+    quorum: 3
+  council-review:
+    roster: [anthropic-opus, openai-gpt, google-gemini-pro, deepseek-pro]
+    depth: challenge
+    quorum: 3

@@ -37,9 +37,9 @@ Read the human docs for project policy instead of duplicating them here:
 
 ## Agent Delegation
 
-`aobus-fleet` (registry `config/agent-fleet.yaml`) provides gated implementation delegation and
-multi-model council review. The workflows live in `.agents/skills/` (`execute-plan`, `run-council`);
-fleet results are proposals for chair review, never automatic edits to the real tree.
+`aobus-council` (registry `config/agent-council.yaml`) provides the only agent workflow:
+multi-model advisory council review. The workflow lives in `.agents/skills/run-council`;
+council results are dossiers for chair review, never automatic edits to the real tree.
 
 ## Build and Validation
 

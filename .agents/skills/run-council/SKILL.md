@@ -1,7 +1,7 @@
 ---
 name: run-council
 description: >-
-  Convene the aobus-fleet SynthesisEngine only when the user explicitly asks for a council
+  Convene the aobus-council runner only when the user explicitly asks for a council
   (for example, says "ask council", "convene council", "summon council", "consult council",
   "council", or "run-council") for a plan or code review.
   Do not use this skill merely because a task is high-stakes, architectural, concurrent, or risky.
@@ -9,19 +9,19 @@ description: >-
 
 # Run Council
 
-Follow the frontmatter trigger rule strictly. The fleet runs member rounds only; the chair performs
-final synthesis and owns the verdict.
+Follow the frontmatter trigger rule strictly. Council is the only agent mechanism: it runs a
+registered roster in copied workspaces and returns an advisory dossier. The chair still checks the
+claims and owns the final plan or review.
 
 ## Intent
 
-Minimal intent for repository-wide or discussion-only review:
+Minimal repository-wide or discussion-only review:
 
 ```yaml
-schema: aobus-fleet-intent/v1
-id: optional-council-id
+schema: aobus-council-intent/v1
+id: council-review-id
 task-kind: council-review
 invariant: Identify correctness and regression risks.
-scope: []
 depends-on: []
 overrides: {}
 body: |
@@ -29,61 +29,66 @@ body: |
   Findings must cite concrete files and behavior.
 ```
 
-When the council should focus on specific files, `scope` items must be objects, not bare path strings.
-Each item needs a path and one or more operations from `create`, `modify`, and `delete`:
+When the council should focus on specific files, use `focus:` hints. These are advisory prompt
+context, not a hard write boundary. Items must be objects, not bare path strings. A trailing `/` marks
+a directory prefix:
 
 ```yaml
-schema: aobus-fleet-intent/v1
+schema: aobus-council-intent/v1
 id: custom-metadata-review
 task-kind: council-review
 invariant: Preserve the intended metadata import boundary.
-scope:
+focus:
   - path: lib/tag/mpeg/id3v2/Reader.cpp
-    operations: [modify]
   - path: test/unit/tag/MpegFileTest.cpp
-    operations: [modify]
-  - path: doc/design/track-detail-grid.md
-    operations: [modify]
 depends-on: []
 overrides: {}
 body: |
   Review the supplied implementation for correctness risks, regressions, and missing tests.
 ```
 
-The engine injects the scope list into every member prompt ("Scope (focus on these paths and
-operations):"); the body does not need to restate it.
+Do not use `scope:`. That field belonged to the removed gate/patch mechanism and is rejected.
 
-For review-only council runs, choose operations that describe the existing change under review. Do not
-invent a `read` or `review` operation; the schema accepts only `create`, `modify`, and `delete`.
+Use `task-kind: council-plan` for implementation planning. Registered depths are `panel`,
+`challenge`, and `full`; registry defaults live in `config/agent-council.yaml`. `panel` runs one
+independent-review round, `challenge` adds a peer-challenge round among usable draft members, and
+`full` adds a self-revision round after peer challenge.
 
-Use `task-kind: council-plan` for implementation planning. Registered depths: `council-review` runs
-`challenge`, `council-plan` runs `full`. An override may only tighten — reduce depth (for example
-`depth: panel` on a review) or increase quorum; requesting `depth: full` on `council-review` is a
-relaxation and is rejected.
+## Roster
+
+A `roster:` override replaces the registered panel with any subset of the agent catalog in
+`config/agent-council.yaml`:
+
+```yaml
+overrides:
+  roster: [anthropic-sonnet, openai-gpt-mini, google-gemini-flash]
+  depth: panel
+  quorum: 2
+```
+
+The merged roster must reference known agents, contain no duplicates, use distinct vendors, and
+satisfy `1 <= quorum <= roster size`. Only `roster`, `depth`, and `quorum` may be overridden.
 
 ## Run And Synthesize
 
 ```bash
-/tmp/build/debug/tool/fleet/aobus-fleet run --registry config/agent-fleet.yaml --repo "$PWD" \
-  --out /tmp/aobus-fleet/council-$(date +%s) /tmp/council-intent.yaml
+mkdir -p /tmp/aobus-council
+out="$(mktemp -d /tmp/aobus-council/council-XXXXXX)"
+./ao council run --registry config/agent-council.yaml --repo "$PWD" --out "$out" /tmp/council-intent.yaml
 ```
 
-Read `dossier.md`, `manifest.yaml`, `trace.yaml`, and the per-member round artifacts under
-`members/<member>/<round>/`. Each round directory contains `prompt.md`, `stdout.txt`, `stderr.txt`, and
-`result.yaml`; inspect these when a member is missing from the dossier or when prompt/context quality is
-in question. Timed-out, failed, or empty members are quarantined and omitted from the dossier.
-The dossier is always `ADVISORY`; write the final plan or review yourself after checking claims against
-the repository.
+For each intent, read artifacts under `$out/<intent-id>/`: `dossier.md`, `manifest.yaml`,
+`evidence.yaml`, `trace.yaml`, and per-member round artifacts under `members/<member>/<round>/`.
+Round ids are `r1` for independent review, `r2` for peer challenge, and `r3` for self-revision. Each
+round directory contains `prompt.md`, `stdout.txt`, `stderr.txt`, `response.md`, and a copied
+`workspace/`. Treat `usable: false` in `evidence.yaml` or `response.md` as not contributing to
+quorum, even if the process exited successfully. `review-stream` tells whether the usable review text
+came from stdout or stderr. Member sandboxes bind the host `HOME` at `/tmp/aobus-home` for agent CLI
+auth/config and expose review tools under `/tmp/aobus-tools` at the front of `PATH`.
+Resolved-intent errors are rejected before output setup. Phase-level infrastructure failures still
+write `evidence.yaml`, `dossier.md`, `manifest.yaml`, and `trace.yaml`; dependent phases are then
+recorded as `dependency-failed`, and the CLI exits with the infrastructure code if any phase is
+`infrastructure-failed`.
 
-After closing the council — once the final plan or review is written — append a brief performance
-evaluation of each participating member. Judge from the round artifacts, not the dossier alone: draft
-quality and concreteness (R1), substance of challenges and whether peer claims were actually verified
-against the repository (R2), and responsiveness in revision (R3). One or two sentences per member is
-enough; note quarantined members and the quarantine reason. This evaluation is chair commentary for
-future roster and depth decisions, not part of the verdict.
-
-Round context is isolated per member: R1 is independent; R2 contains only other members' drafts; R3
-contains the member's own original draft and own challenge notes plus only other members' challenges.
-Each prompt states the round position and where the output goes, and instructs members to verify peer
-claims against the repository. Verify these boundaries in the saved `prompt.md` artifacts when
-diagnosing council quality.
+The dossier is advisory. Write the final plan or review yourself after checking claims against the
+repository.

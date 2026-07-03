@@ -28,8 +28,8 @@ def suffix(*, clang: bool = False, asan: bool = False, tsan: bool = False) -> st
 def build_dir(flavor: str, *, clang: bool = False, asan: bool = False, tsan: bool = False) -> Path:
     """Resolve the build tree for a flavor.
 
-    The BUILD_DIR environment variable always wins: the fleet oracle sandbox relies on it
-    to redirect sanitizer builds into dedicated host-persistent trees (see Engine.cpp).
+    The BUILD_DIR environment variable always wins, which lets callers redirect builds into
+    dedicated host-persistent trees.
     Both PGO steps share one tree so step 2 can consume the profile data of step 1.
     """
     if override := os.environ.get("BUILD_DIR"):

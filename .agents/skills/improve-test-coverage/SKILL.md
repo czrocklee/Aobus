@@ -13,4 +13,4 @@ For coverage workflow, common Aobus coverage gaps, and execution steps, read:
 
 For how to write each test, use the `write-unit-test` skill.
 
-Deciding what to test and which boundaries to cover remains chair judgment. Implementing a decided coverage plan can be delegated through the `execute-plan` skill, then reviewed before landing.
+Deciding what to test and which boundaries to cover remains chair judgment. Implement the coverage plan directly and review the resulting tests before landing.

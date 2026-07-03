@@ -41,7 +41,7 @@ SUITES = {
     "tui": SuiteSpec("TUI", "catch2", "ao_tui_test"),
     "gtk": SuiteSpec("GTK", "catch2", "ao_gtk_test"),
     "integration": SuiteSpec("Integration", "catch2", "ao_integration_test"),
-    "fleet": SuiteSpec("Fleet", "catch2", "ao_fleet_test"),
+    "council": SuiteSpec("Council", "catch2", "ao_council_test"),
     "tooling": SuiteSpec("Tooling Tests", "tooling"),
     "lint": SuiteSpec("Lint Integration", "lint", "AobusLintPlugin"),
 }
@@ -52,7 +52,7 @@ SUITE_TARGETS = {
 
 SUITE_GROUPS = {
     "default": ("core", "gtk"),
-    "all": ("core", "tui", "gtk", "integration", "fleet", "tooling", "lint"),
+    "all": ("core", "tui", "gtk", "integration", "council", "tooling", "lint"),
 }
 
 
@@ -111,7 +111,9 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         const="integration",
         help="shortcut for --suite integration",
     )
-    suite.add_argument("--fleet", dest="suite", action="store_const", const="fleet", help="shortcut for --suite fleet")
+    suite.add_argument(
+        "--council", dest="suite", action="store_const", const="council", help="shortcut for --suite council"
+    )
     suite.add_argument(
         "--tooling", dest="suite", action="store_const", const="tooling", help="shortcut for --suite tooling"
     )

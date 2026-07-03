@@ -290,24 +290,27 @@ add_executable(ao_tui_test
 target_link_libraries(ao_tui_test PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
 add_test(NAME ao_tui_test COMMAND ao_tui_test)
 
-# ao_fleet_test: fleet tool unit and integration tests
-add_executable(ao_fleet_test
-    unit/fleet/ModelTest.cpp
-    unit/fleet/IntentSerializationTest.cpp
-    unit/fleet/PatchGuardTest.cpp
-    unit/fleet/RegistrySerializationTest.cpp
-    unit/fleet/RouteStoreTest.cpp
-    unit/fleet/SchedulerTest.cpp
-    unit/fleet/SubstrateTest.cpp
-    unit/fleet/YamlStreamSerializationTest.cpp
-    integration/fleet/FleetRunnerTest.cpp
-    integration/fleet/ProcessRunnerTest.cpp
-    integration/fleet/SubstrateTest.cpp
+# ao_council_test: council tool unit and integration tests
+add_executable(ao_council_test
+    unit/council/ModelTest.cpp
+    unit/council/IntentSerializationTest.cpp
+    unit/council/RegistrySerializationTest.cpp
+    unit/council/SchedulerTest.cpp
+    unit/council/SubstrateTest.cpp
+    unit/council/YamlStreamSerializationTest.cpp
+    integration/council/CliTest.cpp
+    integration/council/RunnerTest.cpp
+    integration/council/ProcessRunnerTest.cpp
+    integration/council/SubstrateTest.cpp
 )
-target_include_directories(ao_fleet_test PRIVATE "${CMAKE_SOURCE_DIR}")
-target_link_libraries(ao_fleet_test PRIVATE ao_fleet Catch2::Catch2WithMain)
-target_compile_definitions(ao_fleet_test PRIVATE AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-add_test(NAME ao_fleet_test COMMAND ao_fleet_test)
+target_include_directories(ao_council_test PRIVATE "${CMAKE_SOURCE_DIR}")
+target_link_libraries(ao_council_test PRIVATE ao_council Catch2::Catch2WithMain)
+target_compile_definitions(ao_council_test PRIVATE
+  AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+  AOBUS_COUNCIL_EXE="$<TARGET_FILE:aobus-council>"
+)
+add_dependencies(ao_council_test aobus-council)
+add_test(NAME ao_council_test COMMAND ao_council_test)
 
 # ao_integration_test: standalone integration tests (full gate only, not the default ./ao test loop)
 add_executable(ao_integration_test
