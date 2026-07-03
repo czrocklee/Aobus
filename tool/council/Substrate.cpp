@@ -13,6 +13,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <exception>
 #include <expected>
@@ -21,7 +22,7 @@
 #include <fstream>
 #include <functional>
 #include <ios>
-#include <iostream>
+#include <print>
 #include <ranges>
 #include <set>
 #include <string>
@@ -74,6 +75,31 @@ namespace ao::council
       "sh",
       "nix-shell",
     });
+
+    void printWarningNoexcept(std::string_view message) noexcept
+    {
+      try
+      {
+        std::println(stderr, "warning: {}", message);
+      }
+      catch (...)
+      {
+        std::fputs("warning: cleanup warning could not be written\n", stderr);
+      }
+    }
+
+    template<typename... Args>
+    void printFormattedWarningNoexcept(std::format_string<Args...> fmt, Args&&... args) noexcept
+    {
+      try
+      {
+        printWarningNoexcept(std::format(fmt, std::forward<Args>(args)...));
+      }
+      catch (...)
+      {
+        std::fputs("warning: cleanup warning could not be written\n", stderr);
+      }
+    }
 
     bool ignoredCanaryPath(std::filesystem::path const& relative)
     {
@@ -388,7 +414,7 @@ namespace ao::council
       }
       catch (std::exception const& exception)
       {
-        std::cerr << "warning: could not strip stale git locks: " << exception.what() << '\n';
+        std::println(stderr, "warning: could not strip stale git locks: {}", exception.what());
       }
     }
   } // namespace
@@ -610,8 +636,7 @@ namespace ao::council
           return;
         }
 
-        std::cerr << "warning: btrfs subvolume delete failed for " << path.string() << ": " << removed.standardError
-                  << '\n';
+        printFormattedWarningNoexcept("btrfs subvolume delete failed for {}: {}", path.string(), removed.standardError);
       }
 
       auto error = std::error_code{};
@@ -619,12 +644,12 @@ namespace ao::council
 
       if (error)
       {
-        std::cerr << "warning: cannot remove " << path.string() << ": " << error.message() << '\n';
+        printFormattedWarningNoexcept("cannot remove {}: {}", path.string(), error.message());
       }
     }
     catch (...)
     {
-      std::cerr << "warning: snapshot cleanup failed\n";
+      printWarningNoexcept("snapshot cleanup failed");
     }
   }
 
@@ -735,7 +760,7 @@ namespace ao::council
       return makeError(Error::Code::IoError, std::format("cannot write {}", path.string()));
     }
 
-    file << content;
+    file.write(content.data(), static_cast<std::streamsize>(content.size()));
 
     if (!file)
     {

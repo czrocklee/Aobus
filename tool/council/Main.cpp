@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <iostream>
+#include <print>
 #include <string>
 #include <vector>
 
@@ -36,11 +36,11 @@ namespace
   {
     if (auto registry = ao::council::loadRegistry(registryPath); !registry)
     {
-      std::cerr << registry.error().message << '\n';
+      std::println(stderr, "{}", registry.error().message);
       return kConfigurationExit;
     }
 
-    std::cout << "registry valid\n";
+    std::println("registry valid");
     return 0;
   }
 
@@ -53,7 +53,7 @@ namespace
 
     if (!registry)
     {
-      std::cerr << registry.error().message << '\n';
+      std::println(stderr, "{}", registry.error().message);
       return kConfigurationExit;
     }
 
@@ -61,7 +61,7 @@ namespace
 
     if (!intents)
     {
-      std::cerr << intents.error().message << '\n';
+      std::println(stderr, "{}", intents.error().message);
       return kCliExit;
     }
 
@@ -70,7 +70,7 @@ namespace
 
     if (!result)
     {
-      std::cerr << result.error().message << '\n';
+      std::println(stderr, "{}", result.error().message);
 
       if (result.error().code == ao::Error::Code::IoError)
       {
@@ -87,8 +87,7 @@ namespace
 
     for (auto const& manifest : result->manifests)
     {
-      std::cout << manifest.phaseId << ' ' << ao::council::toString(manifest.failure) << ' ' << manifest.summary
-                << '\n';
+      std::println("{} {} {}", manifest.phaseId, ao::council::toString(manifest.failure), manifest.summary);
     }
 
     if (hasFailure(*result, ao::council::FailureReason::InfrastructureFailed))
@@ -100,6 +99,7 @@ namespace
   }
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char** argv)
 {
   // Agent stdin pipes and our own stdout may close early; report EPIPE as an error
@@ -146,12 +146,12 @@ int main(int argc, char** argv)
   }
   catch (std::exception const& exception)
   {
-    std::cerr << "fatal error: " << exception.what() << '\n';
+    std::println(stderr, "fatal error: {}", exception.what());
     return kInfrastructureExit;
   }
   catch (...)
   {
-    std::cerr << "unknown fatal error\n";
+    std::println(stderr, "unknown fatal error");
     return kInfrastructureExit;
   }
 

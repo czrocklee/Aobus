@@ -17,7 +17,6 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
-#include <string>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -32,8 +31,10 @@ namespace ao::rt::test
     ryml::Tree loadTree(std::filesystem::path const& path, std::vector<char>& buffer)
     {
       buffer = yaml::readFile(path);
-      auto tree = ryml::Tree{yaml::callbacks(path.string().c_str())};
-      ryml::parse_in_place(ryml::to_substr(buffer), &tree);
+      auto context = yaml::CallbackContext{path.string()};
+      auto tree = ryml::Tree{yaml::callbacks(context)};
+      yaml::parseInPlace(tree, buffer, context);
+      tree.callbacks(yaml::callbacks());
       return tree;
     }
 

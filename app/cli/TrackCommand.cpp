@@ -23,8 +23,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <iomanip>
 #include <iostream>
+#include <print>
 #include <string>
 #include <utility>
 #include <vector>
@@ -33,8 +33,6 @@ namespace ao::cli
 {
   namespace
   {
-    constexpr int kPlainTrackIdWidth = 5;
-
     std::vector<std::pair<TrackId, library::TrackView>> collectTracks(library::MusicLibrary& ml,
                                                                       std::string const& filter)
     {
@@ -56,7 +54,7 @@ namespace ao::cli
 
       if (!expr)
       {
-        std::cerr << "filter error: " << expr.error().message << '\n';
+        std::println(stderr, "filter error: {}", expr.error().message);
         return matches;
       }
 
@@ -64,7 +62,7 @@ namespace ao::cli
 
       if (!plan)
       {
-        std::cerr << "filter error: " << plan.error().message << '\n';
+        std::println(stderr, "filter error: {}", plan.error().message);
         return matches;
       }
 
@@ -89,27 +87,27 @@ namespace ao::cli
     {
       if (offset >= matches.size())
       {
-        os << "tracks: []\n";
+        std::println(os, "tracks: []");
         return;
       }
 
       std::size_t const end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
-      os << "tracks:\n";
+      std::println(os, "tracks:");
 
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& [id, view] = matches[i];
-        os << "  - id: " << id << "\n"
-           << "    title: \"" << view.metadata().title() << "\"\n";
+        std::println(os, "  - id: {}", id);
+        std::println(os, "    title: \"{}\"", view.metadata().title());
 
         if (view.metadata().artistId() > 0)
         {
-          os << "    artist: \"" << ml.dictionary().get(view.metadata().artistId()) << "\"\n";
+          std::println(os, "    artist: \"{}\"", ml.dictionary().get(view.metadata().artistId()));
         }
 
         if (view.metadata().albumId() > 0)
         {
-          os << "    album: \"" << ml.dictionary().get(view.metadata().albumId()) << "\"\n";
+          std::println(os, "    album: \"{}\"", ml.dictionary().get(view.metadata().albumId()));
         }
       }
     }
@@ -129,12 +127,12 @@ namespace ao::cli
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& [id, view] = matches[i];
-        os << std::setw(kPlainTrackIdWidth) << id << " " << view.metadata().title() << '\n';
+        std::println(os, "{:>5} {}", id, view.metadata().title());
       }
 
       if (limit > 0 && offset + limit < matches.size())
       {
-        os << "... (" << (matches.size() - offset - limit) << " more)\n";
+        std::println(os, "... ({} more)", matches.size() - offset - limit);
       }
     }
 
@@ -164,31 +162,31 @@ namespace ao::cli
     {
       if (yaml)
       {
-        os << "  - id: " << id << "\n";
+        std::println(os, "  - id: {}", id);
 
         if (view.isHotValid())
         {
-          os << "    title: \"" << view.metadata().title() << "\"\n"
-             << "    artist: \"" << resolveDict(dict, view.metadata().artistId()) << "\"\n"
-             << "    album: \"" << resolveDict(dict, view.metadata().albumId()) << "\"\n";
+          std::println(os, "    title: \"{}\"", view.metadata().title());
+          std::println(os, "    artist: \"{}\"", resolveDict(dict, view.metadata().artistId()));
+          std::println(os, "    album: \"{}\"", resolveDict(dict, view.metadata().albumId()));
         }
 
         if (view.isColdValid())
         {
-          os << "    duration: " << view.property().duration().count() << "\n"
-             << "    sampleRate: " << view.property().sampleRate() << "\n"
-             << "    uri: \"" << view.property().uri() << "\"\n";
+          std::println(os, "    duration: {}", view.property().duration().count());
+          std::println(os, "    sampleRate: {}", view.property().sampleRate());
+          std::println(os, "    uri: \"{}\"", view.property().uri());
         }
       }
       else if (raw)
       {
-        os << "Track ID: " << id << "\n";
+        std::println(os, "Track ID: {}", id);
 
         if (view.isHotValid())
         {
-          os << "Hot Header:\n";
+          std::println(os, "Hot Header:");
           hexDump(view.hotData().subspan(0, sizeof(library::TrackHotHeader)), os);
-          os << "Hot Payload:\n";
+          std::println(os, "Hot Payload:");
 
           if (view.hotData().size() > sizeof(library::TrackHotHeader))
           {
@@ -198,9 +196,9 @@ namespace ao::cli
 
         if (view.isColdValid())
         {
-          os << "Cold Header:\n";
+          std::println(os, "Cold Header:");
           hexDump(view.coldData().subspan(0, sizeof(library::TrackColdHeader)), os);
-          os << "Cold Payload:\n";
+          std::println(os, "Cold Payload:");
 
           if (view.coldData().size() > sizeof(library::TrackColdHeader))
           {
@@ -210,36 +208,35 @@ namespace ao::cli
       }
       else
       {
-        os << "Track ID: " << id << "\n";
+        std::println(os, "Track ID: {}", id);
 
         if (view.isHotValid())
         {
-          os << "  Title: " << view.metadata().title() << "\n"
-             << "  Artist: " << resolveDict(dict, view.metadata().artistId()) << " (ID: " << view.metadata().artistId()
-             << ")\n"
-             << "  Album: " << resolveDict(dict, view.metadata().albumId()) << " (ID: " << view.metadata().albumId()
-             << ")\n"
-             << "  Tag Bloom: 0x" << std::hex << std::setw(8) << std::setfill('0') << view.tags().bloom() << std::dec
-             << std::setfill(' ') << "\n"
-             << "  Tags: ";
+          std::println(os, "  Title: {}", view.metadata().title());
+          std::println(
+            os, "  Artist: {} (ID: {})", resolveDict(dict, view.metadata().artistId()), view.metadata().artistId());
+          std::println(
+            os, "  Album: {} (ID: {})", resolveDict(dict, view.metadata().albumId()), view.metadata().albumId());
+          std::println(os, "  Tag Bloom: 0x{:08x}", view.tags().bloom());
+          std::print(os, "  Tags: ");
 
           for (auto const tagId : view.tags())
           {
-            os << resolveDict(dict, tagId) << " (ID: " << tagId << ") ";
+            std::print(os, "{} (ID: {}) ", resolveDict(dict, tagId), tagId);
           }
 
-          os << "\n";
+          std::println(os, "");
         }
 
         if (view.isColdValid())
         {
-          os << "  Duration: " << view.property().duration().count() << "ms\n"
-             << "  Sample Rate: " << view.property().sampleRate() << "Hz\n"
-             << "  URI: " << view.property().uri() << "\n";
+          std::println(os, "  Duration: {}ms", view.property().duration().count());
+          std::println(os, "  Sample Rate: {}Hz", view.property().sampleRate());
+          std::println(os, "  URI: {}", view.property().uri());
 
           for (auto const& [customId, val] : view.customMetadata())
           {
-            os << "  Custom [" << resolveDict(dict, customId) << "]: " << val << "\n";
+            std::println(os, "  Custom [{}]: {}", resolveDict(dict, customId), val);
           }
         }
       }
@@ -253,7 +250,7 @@ namespace ao::cli
 
       if (yaml)
       {
-        os << "tracks:\n";
+        std::println(os, "tracks:");
       }
 
       if (targetId > 0)
@@ -270,7 +267,7 @@ namespace ao::cli
         {
           if (!yaml)
           {
-            os << "Track " << targetId << " not found.\n";
+            std::println(os, "Track {} not found.", targetId);
           }
         }
       }
@@ -311,11 +308,11 @@ namespace ao::cli
       {
         if (auto const optTrackId = runtime.library().writer().createTrackFromFile(path->as<std::string>()); optTrackId)
         {
-          std::cout << "added track: " << *optTrackId << '\n';
+          std::println("added track: {}", *optTrackId);
         }
         else
         {
-          std::cout << "error adding track from: " << path->as<std::string>() << '\n';
+          std::println("error adding track from: {}", path->as<std::string>());
         }
       });
 
@@ -326,11 +323,11 @@ namespace ao::cli
       {
         if (auto const trackId = TrackId{id->as<std::uint32_t>()}; runtime.library().writer().deleteTrack(trackId))
         {
-          std::cout << "deleted track: " << trackId << '\n';
+          std::println("deleted track: {}", trackId);
         }
         else
         {
-          std::cout << "track not found: " << trackId << '\n';
+          std::println("track not found: {}", trackId);
         }
       });
 

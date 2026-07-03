@@ -28,6 +28,7 @@ add_executable(ao_core_test
     unit/utility/StringArenaTest.cpp
     unit/utility/StrongTypeTest.cpp
     unit/utility/UuidTest.cpp
+    unit/utility/YamlUtilsTest.cpp
     unit/core/AudioCodecTest.cpp
     unit/core/ExceptionTest.cpp
     unit/core/ErrorTest.cpp

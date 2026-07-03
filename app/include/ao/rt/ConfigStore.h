@@ -106,6 +106,7 @@ namespace ao::rt
     Result<> ensureLoaded();
 
     std::filesystem::path _filePath;
+    yaml::CallbackContext _yamlContext;
     OpenMode _mode = OpenMode::ReadWrite;
     ryml::Tree _root;
     std::vector<char> _inputBuffer;

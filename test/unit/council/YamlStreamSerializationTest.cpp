@@ -13,11 +13,25 @@
 #include <fstream>
 #include <ios>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
 namespace ao::council::test
 {
+  namespace
+  {
+    bool hasRawUnsafeByte(std::string_view document)
+    {
+      return std::ranges::any_of(document,
+                                 [](char character)
+                                 {
+                                   auto const byte = static_cast<unsigned char>(character);
+                                   return (byte < 0x20 && character != '\n') || byte == 0x7F || byte >= 0x80;
+                                 });
+    }
+  } // namespace
+
   TEST_CASE("YAML stream - control bytes in scalars round trip", "[council][unit][yaml]")
   {
     auto temp = ao::test::TempDir{};
@@ -33,6 +47,28 @@ namespace ao::council::test
     REQUIRE(stream);
     CHECK_FALSE(stream->trailingCorruption);
     REQUIRE(stream->documents.size() == 1);
+    CHECK(stream->documents.front().at("value") == hostile);
+  }
+
+  TEST_CASE("YAML stream - emitted trace fields with control bytes round trip", "[council][unit][yaml]")
+  {
+    auto temp = ao::test::TempDir{};
+    auto const path = tempPath(temp) / "trace.yaml";
+    auto const hostile = std::string{"esc\x1b[31m bell\x07 del\x7f raw\xff end"};
+
+    auto const document = emitTraceEvent("hostile-field", {{"value", hostile}});
+    CHECK_FALSE(hasRawUnsafeByte(document));
+    CHECK(document.find("\\x1B") != std::string::npos);
+    CHECK(document.find("\\x07") != std::string::npos);
+    CHECK(document.find("\\x7F") != std::string::npos);
+    CHECK(document.find("\\xFF") != std::string::npos);
+    REQUIRE(appendYamlDocument(path, document));
+
+    auto stream = readScalarStream(path, "aobus-council-trace-event/v1");
+    REQUIRE(stream);
+    CHECK_FALSE(stream->trailingCorruption);
+    REQUIRE(stream->documents.size() == 1);
+    CHECK(stream->documents.front().at("event") == "hostile-field");
     CHECK(stream->documents.front().at("value") == hostile);
   }
 

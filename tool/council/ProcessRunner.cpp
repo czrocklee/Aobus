@@ -228,7 +228,8 @@ namespace ao::council
 
         if (file.is_open())
         {
-          file << chunk.substr(0, accepted);
+          auto const acceptedChunk = chunk.substr(0, accepted);
+          file.write(acceptedChunk.data(), static_cast<std::streamsize>(acceptedChunk.size()));
           file.flush();
         }
       }

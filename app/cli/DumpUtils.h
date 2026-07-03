@@ -10,9 +10,8 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
-#include <iomanip>
-#include <ios>
 #include <ostream>
+#include <print>
 #include <span>
 #include <string_view>
 
@@ -24,7 +23,7 @@ namespace ao::cli
 
     while (offset < data.size())
     {
-      os << "  " << std::hex << std::setw(4) << std::setfill('0') << offset << "  ";
+      std::print(os, "  {:04x}  ", offset);
 
       std::size_t const chunk = std::min<std::size_t>(16, data.size() - offset);
 
@@ -32,28 +31,26 @@ namespace ao::cli
       {
         if (i < chunk)
         {
-          os << std::hex << std::setw(2) << std::setfill('0') << static_cast<std::int32_t>(data[offset + i]) << " ";
+          std::print(os, "{:02x} ", static_cast<std::int32_t>(data[offset + i]));
         }
         else
         {
-          os << "   ";
+          std::print(os, "   ");
         }
       }
 
-      os << " |";
+      std::print(os, " |");
 
       for (std::size_t i = 0; i < chunk; ++i)
       {
         char const charVal = static_cast<char>(data[offset + i]);
-        os << (std::isprint(static_cast<unsigned char>(charVal)) != 0 ? charVal : '.');
+        std::print(os, "{}", std::isprint(static_cast<unsigned char>(charVal)) != 0 ? charVal : '.');
       }
 
-      os << "|\n";
+      std::println(os, "|");
 
       offset += chunk;
     }
-
-    os << std::dec << std::setfill(' '); // reset format
   }
 
   inline std::string_view resolveDict(library::DictionaryStore const& dict, DictionaryId id)

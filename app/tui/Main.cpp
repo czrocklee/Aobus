@@ -12,8 +12,8 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
-#include <iostream>
 #include <map>
+#include <print>
 #include <span>
 #include <string>
 
@@ -34,7 +34,7 @@ namespace
       "--version",
       []
       {
-        std::cout << "Aobus TUI " << ao::kAppVersion << '\n';
+        std::println("Aobus TUI {}", ao::kAppVersion);
         std::exit(0);
       },
       "Show version information");
@@ -87,13 +87,13 @@ int main(int argc, char* argv[])
   }
   catch (ao::Exception const& e)
   {
-    std::cerr << "Internal error: " << e.what() << "\n(at " << e.file() << ":" << e.line() << ")\n";
+    std::println(stderr, "Internal error: {}\n(at {}:{})", e.what(), e.file(), e.line());
     ao::rt::Log::shutdown();
     return 1;
   }
   catch (std::exception const& e)
   {
-    std::cerr << "Error: " << e.what() << '\n';
+    std::println(stderr, "Error: {}", e.what());
     ao::rt::Log::shutdown();
     return 1;
   }

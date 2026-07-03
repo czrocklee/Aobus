@@ -15,12 +15,10 @@
 #include <array>
 #include <charconv>
 #include <cstdint>
+#include <format>
 #include <functional>
-#include <iomanip>
-#include <limits>
 #include <map>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -40,9 +38,7 @@ namespace ao::uimodel
         return {buffer.data(), result.ptr};
       }
 
-      auto stream = std::ostringstream{};
-      stream << std::setprecision(std::numeric_limits<double>::max_digits10) << value;
-      return stream.str();
+      return std::format("{:.17g}", value);
     }
 
     void appendField(std::string& canonical, std::string_view key, std::string_view value)

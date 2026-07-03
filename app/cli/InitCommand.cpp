@@ -20,6 +20,7 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <print>
 #include <span>
 
 namespace ao::cli
@@ -47,8 +48,8 @@ namespace ao::cli
               continue;
             }
 
-            std::cerr << "failed to open metadata for " << path.filename() << ": " << tagFileResult.error().message
-                      << '\n';
+            std::println(
+              stderr, "failed to open metadata for {}: {}", path.filename().string(), tagFileResult.error().message);
             continue;
           }
 
@@ -56,8 +57,8 @@ namespace ao::cli
 
           if (!builderResult)
           {
-            std::cerr << "failed to parse metadata for " << path.filename() << ": " << builderResult.error().message
-                      << '\n';
+            std::println(
+              stderr, "failed to parse metadata for {}: {}", path.filename().string(), builderResult.error().message);
             continue;
           }
 
@@ -70,8 +71,10 @@ namespace ao::cli
 
           if (!preparedResult)
           {
-            std::cerr << "failed to serialize metadata for " << path.filename() << ": "
-                      << preparedResult.error().message << '\n';
+            std::println(stderr,
+                         "failed to serialize metadata for {}: {}",
+                         path.filename().string(),
+                         preparedResult.error().message);
             continue;
           }
 
@@ -80,8 +83,8 @@ namespace ao::cli
 
           if (!createResult)
           {
-            std::cerr << "failed to create track for " << path.filename() << ": " << createResult.error().message
-                      << '\n';
+            std::println(
+              stderr, "failed to create track for {}: {}", path.filename().string(), createResult.error().message);
             continue;
           }
 
@@ -97,22 +100,22 @@ namespace ao::cli
 
           if (auto putResult = manifestWriter.put(pathStr, manifestBuilder.serialize()); !putResult)
           {
-            std::cerr << "failed to update manifest for " << path.filename() << ": " << putResult.error().message
-                      << '\n';
+            std::println(
+              stderr, "failed to update manifest for {}: {}", path.filename().string(), putResult.error().message);
             continue;
           }
 
-          os << "add track: " << id << " " << trackView.metadata().title() << '\n';
+          std::println(os, "add track: {} {}", id, trackView.metadata().title());
         }
         catch (std::exception const& e)
         {
-          std::cerr << "failed to parse metadata for " << path.filename() << ": " << e.what() << '\n';
+          std::println(stderr, "failed to parse metadata for {}: {}", path.filename().string(), e.what());
         }
       }
 
       if (auto result = txn.commit(); !result)
       {
-        std::cerr << "failed to commit imported tracks: " << result.error().message << '\n';
+        std::println(stderr, "failed to commit imported tracks: {}", result.error().message);
       }
     }
   } // namespace

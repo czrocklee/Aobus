@@ -15,9 +15,10 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <format>
-#include <iostream>
 #include <optional>
+#include <print>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -53,8 +54,8 @@ namespace ao::tui
     auto const column = coverBox.x_min + std::max(1, (panelWidth - kImageColumns) / 2);
     auto const row = coverBox.y_min + 3;
 
-    std::cout << "\033[s" << std::format("\033[{};{}H", row + 1, column + 1)
-              << kittyImageEscape(png, kImageColumns, kImageRows) << "\033[u" << std::flush;
+    std::print("\033[s\033[{};{}H{}\033[u", row + 1, column + 1, kittyImageEscape(png, kImageColumns, kImageRows));
+    std::fflush(stdout);
   }
 
   ftxui::Element bottomPopover(ftxui::Element popoverPtr)

@@ -13,8 +13,8 @@
 #include <CLI/App.hpp>
 
 #include <cstdint>
-#include <iomanip>
 #include <iostream>
+#include <print>
 #include <span>
 
 namespace ao::cli
@@ -30,30 +30,30 @@ namespace ao::cli
 
       for (auto const& [id, view] : reader)
       {
-        os << std::setw(kIdWidth) << id << " " << view.name() << "\n";
-        os << std::string(kIdWidth, ' ') << " [" << (view.isSmart() ? "smart" : "manual") << "] parent: ";
+        std::println(os, "{:>5} {}", id, view.name());
+        std::print(os, "{} [{}] parent: ", std::string(kIdWidth, ' '), view.isSmart() ? "smart" : "manual");
 
         if (view.isRootParent())
         {
-          os << "all-tracks\n";
+          std::println(os, "all-tracks");
         }
         else
         {
-          os << view.parentId() << "\n";
+          std::println(os, "{}", view.parentId());
         }
 
         if (view.isSmart())
         {
-          os << std::string(kIdWidth, ' ') << " [smart] filter: \"" << view.filter() << "\"\n";
+          std::println(os, "{} [smart] filter: \"{}\"", std::string(kIdWidth, ' '), view.filter());
         }
         else
         {
-          os << std::string(kIdWidth, ' ') << " [manual] " << view.tracks().size() << " tracks\n";
+          std::println(os, "{} [manual] {} tracks", std::string(kIdWidth, ' '), view.tracks().size());
         }
 
         if (!view.description().empty())
         {
-          os << std::string(kIdWidth, ' ') << " desc: \"" << view.description() << "\"\n";
+          std::println(os, "{} desc: \"{}\"", std::string(kIdWidth, ' '), view.description());
         }
       }
     }
@@ -81,7 +81,7 @@ namespace ao::cli
 
       if (!createResult)
       {
-        os << "failed to create list: " << createResult.error().message << "\n";
+        std::println(os, "failed to create list: {}", createResult.error().message);
         return;
       }
 
@@ -89,11 +89,11 @@ namespace ao::cli
 
       if (auto result = txn.commit(); !result)
       {
-        os << "failed to commit list: " << result.error().message << "\n";
+        std::println(os, "failed to commit list: {}", result.error().message);
         return;
       }
 
-      os << "add list: " << id << " " << name << "\n";
+      std::println(os, "add list: {} {}", id, name);
     }
 
     void dumpLists(library::MusicLibrary& ml, bool raw, bool yaml, std::ostream& os)
@@ -103,62 +103,62 @@ namespace ao::cli
 
       if (yaml)
       {
-        os << "lists:\n";
+        std::println(os, "lists:");
       }
 
       for (auto const& [id, view] : reader)
       {
         if (yaml)
         {
-          os << "  - id: " << id << "\n"
-             << "    name: \"" << view.name() << "\"\n"
-             << "    description: \"" << view.description() << "\"\n"
-             << "    type: \"" << (view.isSmart() ? "smart" : "manual") << "\"\n"
-             << "    parentId: " << view.parentId() << "\n";
+          std::println(os, "  - id: {}", id);
+          std::println(os, "    name: \"{}\"", view.name());
+          std::println(os, "    description: \"{}\"", view.description());
+          std::println(os, "    type: \"{}\"", view.isSmart() ? "smart" : "manual");
+          std::println(os, "    parentId: {}", view.parentId());
 
           if (view.isSmart())
           {
-            os << "    filter: \"" << view.filter() << "\"\n";
+            std::println(os, "    filter: \"{}\"", view.filter());
           }
           else
           {
-            os << "    tracks: [";
+            std::print(os, "    tracks: [");
             bool first = true;
 
             for (auto const trackId : view.tracks())
             {
               if (!first)
               {
-                os << ", ";
+                std::print(os, ", ");
               }
 
-              os << trackId;
+              std::print(os, "{}", trackId);
               first = false;
             }
 
-            os << "]\n";
+            std::println(os, "]");
           }
         }
         else if (raw)
         {
-          os << "List ID: " << id << "\n";
+          std::println(os, "List ID: {}", id);
           hexDump(view.rawData(), os);
         }
         else
         {
-          os << "List ID: " << id << "\n"
-             << "  Name: " << view.name() << "\n"
-             << "  Description: " << view.description() << "\n"
-             << "  Type: " << (view.isSmart() ? "smart" : "manual") << "\n"
-             << "  Parent ID: " << view.parentId() << "\n";
+          std::println(os, "List ID: {}", id);
+          std::println(os, "  Name: {}", view.name());
+          std::println(os, "  Description: {}", view.description());
+          std::println(os, "  Type: {}", view.isSmart() ? "smart" : "manual");
+          std::println(os, "  Parent ID: {}", view.parentId());
 
           if (view.isSmart())
           {
-            os << "  Filter: " << view.filter() << "\n";
+            std::println(os, "  Filter: {}", view.filter());
           }
           else
           {
-            os << "  Tracks: " << view.tracks().size() << "\n";
+            std::println(os, "  Tracks: {}", view.tracks().size());
           }
         }
       }
@@ -200,15 +200,15 @@ namespace ao::cli
 
         if (!writer.remove(listId))
         {
-          std::cout << "list not found: " << listId << "\n";
+          std::println("list not found: {}", listId);
           return;
         }
 
-        std::cout << "deleted list: " << listId << "\n";
+        std::println("deleted list: {}", listId);
 
         if (auto result = txn.commit(); !result)
         {
-          std::cout << "failed to commit list delete: " << result.error().message << "\n";
+          std::println("failed to commit list delete: {}", result.error().message);
         }
       });
 

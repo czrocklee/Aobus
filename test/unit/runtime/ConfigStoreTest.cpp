@@ -112,7 +112,8 @@ namespace ao::rt::test
   TEST_CASE("ConfigStore - persists aggregate values and defaults", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
-    auto configStore = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
+    auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
+    auto configStore = ConfigStore{configPath};
 
     SECTION("Round-trip preserves all fields")
     {
@@ -130,8 +131,9 @@ namespace ao::rt::test
 
       configStore.save("complex", original);
       REQUIRE(configStore.flush());
+      CHECK(ao::test::readFile(configPath).find("enabled: false") != std::string::npos);
 
-      auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
+      auto reloaded = ConfigStore{configPath};
       auto loaded = ComplexAggregate{};
       REQUIRE(reloaded.load("complex", loaded));
 
@@ -161,8 +163,9 @@ namespace ao::rt::test
       auto const original = ComplexAggregate{};
       configStore.save("complex", original);
       REQUIRE(configStore.flush());
+      CHECK(ao::test::readFile(configPath).find("enabled: true") != std::string::npos);
 
-      auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
+      auto reloaded = ConfigStore{configPath};
       auto loaded = ComplexAggregate{.count = -1, .name = "garbage"};
       REQUIRE(reloaded.load("complex", loaded));
 
@@ -430,6 +433,23 @@ namespace ao::rt::test
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::NotFound);
 
+      CHECK(obj.count == 99);
+    }
+
+    SECTION("Malformed YAML is rejected as a format error")
+    {
+      auto const configPath = std::filesystem::path{tempDir.path()} / "bad.yaml";
+      {
+        auto out = std::ofstream{configPath};
+        out << "complex: [unterminated";
+      }
+
+      auto malformedStore = ConfigStore{configPath};
+      auto obj = ComplexAggregate{.count = 99};
+
+      auto result = malformedStore.load("complex", obj);
+      REQUIRE(!result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
       CHECK(obj.count == 99);
     }
 

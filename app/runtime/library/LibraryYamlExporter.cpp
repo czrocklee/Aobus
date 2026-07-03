@@ -31,6 +31,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <ios>
 #include <memory>
 #include <optional>
 #include <span>
@@ -459,7 +460,7 @@ namespace ao::rt
     }
 
     std::string const yaml = ryml::emitrs_yaml<std::string>(tree);
-    ofs << yaml;
+    ofs.write(yaml.data(), static_cast<std::streamsize>(yaml.size()));
 
     if (!ofs.good())
     {

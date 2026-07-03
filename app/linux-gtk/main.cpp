@@ -40,9 +40,9 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
-#include <iostream>
 #include <map>
 #include <memory>
+#include <print>
 #include <span>
 #include <string>
 #include <utility>
@@ -152,7 +152,7 @@ namespace
       "--version",
       []
       {
-        std::cout << "Aobus " << kAppVersion << '\n';
+        std::println("Aobus {}", kAppVersion);
         std::exit(0);
       },
       "Show version information");
@@ -631,6 +631,7 @@ namespace
   }
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char* argv[])
 {
   std::int32_t exitCode = 0;
@@ -642,19 +643,18 @@ int main(int argc, char* argv[])
   catch (ao::Exception const& e)
   {
     APP_LOG_CRITICAL("Internal error: {} (at {}:{})", e.what(), e.file(), e.line());
-    std::cerr << "Internal error: " << e.what() << "\n(at " << e.file() << ":" << e.line() << ")\n"
-              << "Please report this bug.\n";
+    std::println(stderr, "Internal error: {}\n(at {}:{})\nPlease report this bug.", e.what(), e.file(), e.line());
     exitCode = 1;
   }
   catch (std::exception const& ex)
   {
     APP_LOG_CRITICAL("Unhandled exception: {}", ex.what());
-    std::cerr << "Unhandled exception: " << ex.what() << '\n';
+    std::println(stderr, "Unhandled exception: {}", ex.what());
     exitCode = 1;
   }
   catch (...)
   {
-    std::cerr << "Unknown unhandled exception" << '\n';
+    std::println(stderr, "Unknown unhandled exception");
     exitCode = 1;
   }
 

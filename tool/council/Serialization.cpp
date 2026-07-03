@@ -4,6 +4,7 @@
 #include "council/Serialization.h"
 
 #include "council/Model.h"
+#include "council/YamlEmit.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/yaml/Utils.h>
@@ -30,6 +31,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <print>
 #include <ranges>
 #include <set>
 #include <sstream>
@@ -46,9 +48,6 @@ namespace ao::council
     constexpr auto kMaxDocumentBytes = std::size_t{2UL * 1024 * 1024};
     constexpr auto kMaxDepth = std::size_t{32};
     constexpr auto kMaxCollectionEntries = std::size_t{20'000};
-    constexpr auto kAsciiControlBound = 0x20;
-    constexpr auto kAsciiDel = 0x7F;
-    constexpr auto kAsciiLimit = 0x80;
     constexpr auto kIntentSchema = std::string_view{"aobus-council-intent/v1"};
     constexpr auto kRegistrySchema = std::string_view{"aobus-council-registry/v1"};
 
@@ -175,11 +174,13 @@ namespace ao::council
     {
       try
       {
+        auto yamlContext = yaml::CallbackContext{context};
         auto parsed = ParsedYaml{};
         parsed.source = std::move(source);
-        ryml::parse_in_arena(yaml::toCsubstr(parsed.source), &parsed.tree);
+        yaml::parseInArena(parsed.tree, parsed.source, yamlContext);
         std::size_t entries = 0;
         validateTree(parsed.tree.rootref(), 0, entries);
+        parsed.tree.callbacks(yaml::callbacks());
         return parsed;
       }
       catch (std::exception const& exception)
@@ -954,119 +955,80 @@ namespace ao::council
 
   std::string yamlScalar(std::string_view value)
   {
-    auto const plain = !value.empty() && std::ranges::all_of(value,
-                                                             [](char character)
-                                                             {
-                                                               auto const byte = static_cast<unsigned char>(character);
-                                                               return std::isalnum(byte) != 0 || character == '-' ||
-                                                                      character == '_' || character == '.' ||
-                                                                      character == '/' || character == '@';
-                                                             });
-
-    if (plain)
-    {
-      return std::string{value};
-    }
-
-    auto output = std::ostringstream{};
-    output << '"';
-
-    for (auto const character : value)
-    {
-      switch (auto const byte = static_cast<unsigned char>(character); character)
-      {
-        case '\\': output << "\\\\"; break;
-        case '"': output << "\\\""; break;
-        case '\n': output << "\\n"; break;
-        case '\r': output << "\\r"; break;
-        case '\t': output << "\\t"; break;
-        default:
-          if (byte < kAsciiControlBound || byte == kAsciiDel || byte >= kAsciiLimit)
-          {
-            output << std::format("\\\\x{:02X}", byte);
-          }
-          else
-          {
-            output << character;
-          }
-      }
-    }
-
-    output << '"';
-    return output.str();
+    return yaml_emit::scalar(value);
   }
 
   std::string emitIntent(PhaseIntent const& intent)
   {
     auto out = std::ostringstream{};
-    out << "schema: " << kIntentSchema << "\n";
-    out << "id: " << yamlScalar(intent.id) << "\n";
-    out << "task-kind: " << yamlScalar(intent.taskKind) << "\n";
-    out << "invariant: " << yamlScalar(intent.invariant) << "\n";
+    std::println(out, "schema: {}", kIntentSchema);
+    std::println(out, "id: {}", yamlScalar(intent.id));
+    std::println(out, "task-kind: {}", yamlScalar(intent.taskKind));
+    std::println(out, "invariant: {}", yamlScalar(intent.invariant));
 
     if (!intent.focus.empty())
     {
-      out << "focus:\n";
+      std::print(out, "focus:\n");
 
       for (auto const& rule : intent.focus)
       {
-        out << "  - path: " << yamlScalar(rule.path.generic_string()) << "\n";
-        out << "    match: " << (rule.match == FocusMatch::Prefix ? "prefix" : "exact") << "\n";
+        std::println(out, "  - path: {}", yamlScalar(rule.path.generic_string()));
+        std::println(out, "    match: {}", rule.match == FocusMatch::Prefix ? "prefix" : "exact");
       }
     }
 
-    out << "depends-on: [";
+    std::print(out, "depends-on: [");
 
     for (std::size_t index = 0; index < intent.dependsOn.size(); ++index)
     {
-      out << (index == 0 ? "" : ", ") << yamlScalar(intent.dependsOn[index]);
+      std::print(out, "{}{}", index == 0 ? "" : ", ", yamlScalar(intent.dependsOn[index]));
     }
 
-    out << "]\n";
+    std::print(out, "]\n");
 
     if (intent.overrides.optRoster || intent.overrides.optDepth || intent.overrides.optQuorum)
     {
-      out << "overrides:\n";
+      std::print(out, "overrides:\n");
 
       if (intent.overrides.optRoster)
       {
-        out << "  roster: [";
+        std::print(out, "  roster: [");
 
         for (std::size_t index = 0; index < intent.overrides.optRoster->size(); ++index)
         {
-          out << (index == 0 ? "" : ", ") << yamlScalar((*intent.overrides.optRoster)[index]);
+          std::print(out, "{}{}", index == 0 ? "" : ", ", yamlScalar((*intent.overrides.optRoster)[index]));
         }
 
-        out << "]\n";
+        std::print(out, "]\n");
       }
 
       if (intent.overrides.optDepth)
       {
-        out << "  depth: " << toString(*intent.overrides.optDepth) << "\n";
+        std::println(out, "  depth: {}", toString(*intent.overrides.optDepth));
       }
 
       if (intent.overrides.optQuorum)
       {
-        out << "  quorum: " << *intent.overrides.optQuorum << "\n";
+        std::println(out, "  quorum: {}", *intent.overrides.optQuorum);
       }
     }
     else
     {
-      out << "overrides: {}\n";
+      std::print(out, "overrides: {{}}\n");
     }
 
-    out << "body: |\n";
+    std::print(out, "body: |\n");
     auto body = std::istringstream{intent.body};
     auto line = std::string{};
 
     while (std::getline(body, line))
     {
-      out << "  " << line << "\n";
+      std::println(out, "  {}", line);
     }
 
     if (intent.body.empty() || intent.body.ends_with('\n'))
     {
-      out << "\n";
+      std::print(out, "\n");
     }
 
     return out.str();
@@ -1075,43 +1037,36 @@ namespace ao::council
   std::string emitResolved(ResolvedPhase const& phase)
   {
     auto out = std::ostringstream{};
-    out << "schema: aobus-council-resolved/v1\n";
-    out << "phase-id: " << yamlScalar(phase.intent.id) << "\n";
-    out << "task-kind: " << yamlScalar(phase.intent.taskKind) << "\n";
-    out << "council:\n";
-    out << "  depth: " << toString(phase.definition.parameters.depth) << "\n";
-    out << "  quorum: " << phase.definition.parameters.quorum << "\n";
-    out << "  roster: [";
-
-    for (std::size_t index = 0; index < phase.definition.parameters.roster.size(); ++index)
-    {
-      out << (index == 0 ? "" : ", ") << yamlScalar(phase.definition.parameters.roster[index]);
-    }
-
-    out << "]\n";
+    yaml_emit::scalarField(out, 0, "schema", "aobus-council-resolved/v1");
+    yaml_emit::scalarField(out, 0, "phase-id", phase.intent.id);
+    yaml_emit::scalarField(out, 0, "task-kind", phase.intent.taskKind);
+    yaml_emit::beginMapField(out, 0, "council");
+    yaml_emit::scalarField(out, 2, "depth", toString(phase.definition.parameters.depth));
+    yaml_emit::scalarField(out, 2, "quorum", phase.definition.parameters.quorum);
+    yaml_emit::flowStringSequenceField(out, 2, "roster", phase.definition.parameters.roster);
     return out.str();
   }
 
   std::string emitManifest(ReviewManifest const& manifest)
   {
     auto out = std::ostringstream{};
-    out << "schema: aobus-council-manifest/v1\n";
-    out << "phase-id: " << yamlScalar(manifest.phaseId) << "\n";
-    out << "failure: " << toString(manifest.failure) << "\n";
-    out << "summary: " << yamlScalar(manifest.summary) << "\n";
+    yaml_emit::scalarField(out, 0, "schema", "aobus-council-manifest/v1");
+    yaml_emit::scalarField(out, 0, "phase-id", manifest.phaseId);
+    yaml_emit::scalarField(out, 0, "failure", toString(manifest.failure));
+    yaml_emit::scalarField(out, 0, "summary", manifest.summary);
     return out.str();
   }
 
   std::string emitTraceEvent(std::string_view event, std::map<std::string, std::string, std::less<>> const& fields)
   {
     auto out = std::ostringstream{};
-    out << "schema: aobus-council-trace-event/v1\n";
-    out << "event: " << yamlScalar(event) << "\n";
-    out << "timestamp: " << yamlScalar(utcTimestamp()) << "\n";
+    yaml_emit::scalarField(out, 0, "schema", "aobus-council-trace-event/v1");
+    yaml_emit::scalarField(out, 0, "event", event);
+    yaml_emit::scalarField(out, 0, "timestamp", utcTimestamp());
 
     for (auto const& [name, value] : fields)
     {
-      out << name << ": " << yamlScalar(value) << "\n";
+      yaml_emit::scalarField(out, 0, name, value);
     }
 
     return out.str();
@@ -1164,14 +1119,14 @@ namespace ao::council
 
     if (needsSeparator)
     {
-      output << "---\n";
+      std::print(output, "---\n");
     }
 
-    output << document;
+    output.write(document.data(), static_cast<std::streamsize>(document.size()));
 
     if (!document.ends_with('\n'))
     {
-      output << '\n';
+      std::print(output, "\n");
     }
 
     if (!output)

@@ -13,12 +13,13 @@
 #include <CLI/CLI.hpp>
 
 #include <exception>
-#include <iostream>
 #include <memory>
+#include <print>
 #include <utility>
 
 using namespace ao;
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char const* argv[])
 {
   try
@@ -40,18 +41,17 @@ int main(int argc, char const* argv[])
   }
   catch (ao::Exception const& e)
   {
-    std::cerr << "Internal error: " << e.what() << "\n(at " << e.file() << ":" << e.line() << ")\n"
-              << "Please report this bug.\n";
+    std::println(stderr, "Internal error: {}\n(at {}:{})\nPlease report this bug.", e.what(), e.file(), e.line());
     return 1;
   }
   catch (std::exception const& e)
   {
-    std::cerr << "Error: " << e.what() << '\n';
+    std::println(stderr, "Error: {}", e.what());
     return 1;
   }
   catch (...)
   {
-    std::cerr << "Unknown error occurred" << '\n';
+    std::println(stderr, "Unknown error occurred");
     return 1;
   }
 }

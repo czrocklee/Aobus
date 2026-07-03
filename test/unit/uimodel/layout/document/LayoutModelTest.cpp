@@ -41,7 +41,18 @@ namespace ao::uimodel::test
       auto const v3 = LayoutValue{true};
       auto tree3 = ryml::Tree{};
       yaml::write(tree3.rootref(), v3);
+      CHECK(yaml::scalarView(tree3.rootref()) == "true");
       CHECK(yaml::asBool(tree3.rootref()) == true);
+
+      auto decoded = LayoutValue{};
+      REQUIRE(yaml::read(tree3.rootref(), decoded));
+      REQUIRE(decoded.getIf<bool>() != nullptr);
+      CHECK(decoded.asBool() == true);
+
+      auto const falseValue = LayoutValue{false};
+      auto falseTree = ryml::Tree{};
+      yaml::write(falseTree.rootref(), falseValue);
+      CHECK(yaml::scalarView(falseTree.rootref()) == "false");
     }
 
     SECTION("string list value")

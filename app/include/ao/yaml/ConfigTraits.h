@@ -9,10 +9,10 @@
 
 #include <boost/pfr/core.hpp>
 #include <boost/pfr/core_name.hpp>
+#include <c4/format.hpp>
 #include <ryml.hpp>
 
 #include <array>
-#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -21,7 +21,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -142,13 +141,12 @@ namespace ao::yaml
       return false;
     }
 
-    node >> value;
-    return true;
+    return tryReadScalar(node, value);
   }
 
   inline void write(ryml::NodeRef node, bool value)
   {
-    node << value;
+    node << c4::fmt::boolalpha(value);
   }
 
   inline bool read(ryml::ConstNodeRef node, bool& value)
@@ -158,8 +156,7 @@ namespace ao::yaml
       return false;
     }
 
-    node >> value;
-    return true;
+    return tryReadScalar(node, value);
   }
 
   inline void write(ryml::NodeRef node, std::filesystem::path const& rhs)
@@ -385,10 +382,8 @@ namespace ao::yaml
       if (auto val = T{}; read(child, val))
       {
         auto const keyStr = keyView(child);
-        std::uint32_t listIdVal = 0;
-        auto const [ptr, ec] = std::from_chars(keyStr.data(), keyStr.data() + keyStr.size(), listIdVal);
 
-        if (ec == std::errc{})
+        if (std::uint32_t listIdVal = 0; tryParseScalar(keyStr, listIdVal))
         {
           rhs.emplace(ListId{listIdVal}, std::move(val));
         }

@@ -17,6 +17,7 @@
 #include <array>
 #include <cstdint>
 #include <iostream>
+#include <print>
 #include <span>
 #include <string>
 
@@ -35,7 +36,7 @@ namespace ao::cli
 
       if (!optTrackView)
       {
-        os << "error: track not found: " << trackId << '\n';
+        std::println(os, "error: track not found: {}", trackId);
         return;
       }
 
@@ -44,18 +45,18 @@ namespace ao::cli
 
       if (tagNames.empty())
       {
-        os << "no tags" << '\n';
+        std::println(os, "no tags");
         return;
       }
 
-      os << "tags: ";
+      std::print(os, "tags: ");
 
       for (auto const& name : tagNames)
       {
-        os << name << " ";
+        std::print(os, "{} ", name);
       }
 
-      os << '\n';
+      std::println(os, "");
     }
   } // namespace
 
@@ -76,11 +77,11 @@ namespace ao::cli
 
         if (!reply.mutatedIds.empty())
         {
-          std::cout << "added tag: " << tagName << " to track " << addId->as<std::uint32_t>() << '\n';
+          std::println("added tag: {} to track {}", tagName, addId->as<std::uint32_t>());
         }
         else
         {
-          std::cout << "error adding tag (track not found or tag already exists)\n";
+          std::println("error adding tag (track not found or tag already exists)");
         }
       });
 
@@ -97,11 +98,11 @@ namespace ao::cli
 
         if (!reply.mutatedIds.empty())
         {
-          std::cout << "removed tag: " << tagName << " from track " << remId->as<std::uint32_t>() << '\n';
+          std::println("removed tag: {} from track {}", tagName, remId->as<std::uint32_t>());
         }
         else
         {
-          std::cout << "error removing tag (track not found or tag missing)\n";
+          std::println("error removing tag (track not found or tag missing)");
         }
       });
 

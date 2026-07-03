@@ -7,6 +7,7 @@
 #include "council/ProcessRunner.h"
 #include "council/Serialization.h"
 #include "council/Substrate.h"
+#include "council/YamlEmit.h"
 #include <ao/Error.h>
 #include <ao/async/ImmediateExecutor.h>
 #include <ao/async/Runtime.h>
@@ -27,6 +28,7 @@
 #include <iterator>
 #include <map>
 #include <optional>
+#include <print>
 #include <set>
 #include <sstream>
 #include <string>
@@ -323,18 +325,18 @@ namespace ao::council
       }
 
       auto out = std::ostringstream{};
-      out << "Focus hints (advisory, not an enforcement boundary):\n";
+      std::print(out, "Focus hints (advisory, not an enforcement boundary):\n");
 
       for (auto const& rule : focus)
       {
-        out << "- " << rule.path.generic_string();
+        std::print(out, "- {}", rule.path.generic_string());
 
         if (rule.match == FocusMatch::Prefix)
         {
-          out << "/";
+          std::print(out, "/");
         }
 
-        out << "\n";
+        std::print(out, "\n");
       }
 
       return out.str();
@@ -346,44 +348,49 @@ namespace ao::council
                           std::string_view roundContext)
     {
       auto out = std::ostringstream{};
-      out << "You are one member of an Aobus council review.\n\n";
-      out << "Phase: " << phase.intent.id << "\n";
-      out << "Task kind: " << phase.intent.taskKind << "\n";
-      out << "Model identity: " << agent.id << " (" << agent.modelVersion() << ")\n";
-      out << "Depth: " << toString(phase.definition.parameters.depth) << "\n";
-      out << "Round: " << roundLabel << "\n";
-      out << "Quorum: " << phase.definition.parameters.quorum << " of " << phase.definition.parameters.roster.size()
-          << "\n\n";
-      out << "Review target:\n";
-      out << "- The workspace is a sealed copy of the real pre-run working tree.\n";
-      out << "- When `" << kReviewBaseRef << "` exists, review uncommitted changes with `git diff --stat "
-          << kReviewBaseRef << "..HEAD` and "
-          << "`git diff " << kReviewBaseRef << "..HEAD`.\n";
-      out << "- If that ref is absent, inspect the current workspace HEAD and the requested focus hints.\n\n";
-      out << "Invariant:\n" << phase.intent.invariant << "\n\n";
-      out << focusPrompt(phase.intent.focus) << "\n";
-      out << "Task:\n" << phase.intent.body << "\n\n";
+      std::print(out, "You are one member of an Aobus council review.\n\n");
+      std::println(out, "Phase: {}", phase.intent.id);
+      std::println(out, "Task kind: {}", phase.intent.taskKind);
+      std::println(out, "Model identity: {} ({})", agent.id, agent.modelVersion());
+      std::println(out, "Depth: {}", toString(phase.definition.parameters.depth));
+      std::println(out, "Round: {}", roundLabel);
+      std::print(
+        out, "Quorum: {} of {}\n\n", phase.definition.parameters.quorum, phase.definition.parameters.roster.size());
+      std::print(out, "Review target:\n");
+      std::print(out, "- The workspace is a sealed copy of the real pre-run working tree.\n");
+      std::print(
+        out,
+        "- When `{}` exists, review uncommitted changes with `git diff --stat {}..HEAD` and `git diff {}..HEAD`.\n",
+        kReviewBaseRef,
+        kReviewBaseRef,
+        kReviewBaseRef);
+      std::print(out, "- If that ref is absent, inspect the current workspace HEAD and the requested focus hints.\n\n");
+      std::print(out, "Invariant:\n{}\n\n", phase.intent.invariant);
+      std::print(out, "{}\n", focusPrompt(phase.intent.focus));
+      std::print(out, "Task:\n{}\n\n", phase.intent.body);
 
       switch (phase.definition.parameters.depth)
       {
         case Depth::Panel:
-          out << "Depth contract: give a concise independent review focused on the highest-value findings.\n";
+          std::print(out, "Depth contract: give a concise independent review focused on the highest-value findings.\n");
           break;
         case Depth::Challenge:
-          out << "Depth contract: actively challenge assumptions, look for regressions, and call out missing "
-                 "validation.\n";
+          std::print(out,
+                     "Depth contract: actively challenge assumptions, look for regressions, and call out missing "
+                     "validation.\n");
           break;
         case Depth::Full:
-          out << "Depth contract: provide a full analysis with alternatives, risks, validation strategy, and open "
-                 "questions.\n";
+          std::print(out,
+                     "Depth contract: provide a full analysis with alternatives, risks, validation strategy, and open "
+                     "questions.\n");
           break;
       }
 
-      out << "Do not edit the real repository.\n";
+      std::print(out, "Do not edit the real repository.\n");
 
       if (!roundContext.empty())
       {
-        out << "\nRound context:\n" << roundContext << "\n";
+        std::print(out, "\nRound context:\n{}\n", roundContext);
       }
 
       return out.str();
@@ -474,18 +481,17 @@ namespace ao::council
     std::string memberResponse(ProcessResult const& result)
     {
       auto out = std::ostringstream{};
-      out << "status: " << toString(result.status) << "\n";
-      out << "exit-code: " << result.exitCode << "\n\n";
-      out << "usable: " << (usableMemberResponse(result) ? "true" : "false") << "\n";
-      out << "review-stream: " << memberReviewStream(result) << "\n";
-      out << "stdout-truncated: " << (result.standardOutputTruncated ? "true" : "false") << "\n";
-      out << "stderr-truncated: " << (result.standardErrorTruncated ? "true" : "false") << "\n\n";
-      out << "stdout:\n";
-      out << result.standardOutput << "\n";
+      std::println(out, "status: {}", toString(result.status));
+      std::print(out, "exit-code: {}\n\n", result.exitCode);
+      std::println(out, "usable: {}", usableMemberResponse(result) ? "true" : "false");
+      std::println(out, "review-stream: {}", memberReviewStream(result));
+      std::println(out, "stdout-truncated: {}", result.standardOutputTruncated ? "true" : "false");
+      std::print(out, "stderr-truncated: {}\n\n", result.standardErrorTruncated ? "true" : "false");
+      std::print(out, "stdout:\n{}\n", result.standardOutput);
 
       if (!result.standardError.empty())
       {
-        out << "\nstderr:\n" << result.standardError << "\n";
+        std::print(out, "\nstderr:\n{}\n", result.standardError);
       }
 
       return out.str();
@@ -533,18 +539,18 @@ namespace ao::council
     std::string dossierFor(ResolvedPhase const& phase, std::vector<MemberRoundResult> const& memberResults)
     {
       auto out = std::ostringstream{};
-      out << "# Dossier\n\n";
-      out << "Phase: " << phase.intent.id << "\n";
-      out << "Task kind: " << phase.intent.taskKind << "\n";
-      out << "Depth: " << toString(phase.definition.parameters.depth) << "\n";
-      out << "Quorum: " << phase.definition.parameters.quorum << "\n\n";
-      out << "## Invariant\n\n" << phase.intent.invariant << "\n\n";
-      out << "## Focus\n\n" << focusPrompt(phase.intent.focus) << "\n";
-      out << "## Body\n\n" << phase.intent.body << "\n\n";
+      std::print(out, "# Dossier\n\n");
+      std::println(out, "Phase: {}", phase.intent.id);
+      std::println(out, "Task kind: {}", phase.intent.taskKind);
+      std::println(out, "Depth: {}", toString(phase.definition.parameters.depth));
+      std::print(out, "Quorum: {}\n\n", phase.definition.parameters.quorum);
+      std::print(out, "## Invariant\n\n{}\n\n", phase.intent.invariant);
+      std::print(out, "## Focus\n\n{}\n", focusPrompt(phase.intent.focus));
+      std::print(out, "## Body\n\n{}\n\n", phase.intent.body);
 
       for (auto const& roundId : roundOrder(memberResults))
       {
-        out << "## " << roundLabel(memberResults, roundId) << "\n";
+        std::println(out, "## {}", roundLabel(memberResults, roundId));
 
         for (auto const& member : memberResults)
         {
@@ -553,19 +559,18 @@ namespace ao::council
             continue;
           }
 
-          out << "\n### " << member.agentId << "\n\n";
-          out << processSummary(member.result) << "\n\n";
-          out << "usable: " << (usableMemberResponse(member.result) ? "true" : "false") << "\n\n";
-          out << "stdout:\n";
-          out << member.result.standardOutput << "\n";
+          std::print(out, "\n### {}\n\n", member.agentId);
+          std::print(out, "{}\n\n", processSummary(member.result));
+          std::print(out, "usable: {}\n\n", usableMemberResponse(member.result) ? "true" : "false");
+          std::print(out, "stdout:\n{}\n", member.result.standardOutput);
 
           if (!member.result.standardError.empty())
           {
-            out << "\nstderr:\n" << member.result.standardError << "\n";
+            std::print(out, "\nstderr:\n{}\n", member.result.standardError);
           }
         }
 
-        out << "\n";
+        std::print(out, "\n");
       }
 
       return out.str();
@@ -574,22 +579,22 @@ namespace ao::council
     std::string evidenceFor(ResolvedPhase const& phase, std::vector<MemberRoundResult> const& memberResults)
     {
       auto out = std::ostringstream{};
-      out << "schema: aobus-council-evidence/v1\n";
-      out << "phase-id: " << yamlScalar(phase.intent.id) << "\n";
+      yaml_emit::scalarField(out, 0, "schema", "aobus-council-evidence/v1");
+      yaml_emit::scalarField(out, 0, "phase-id", phase.intent.id);
 
       if (memberResults.empty())
       {
-        out << "rounds: []\n";
+        yaml_emit::emptySequenceField(out, 0, "rounds");
         return out.str();
       }
 
-      out << "rounds:\n";
+      yaml_emit::beginSequenceField(out, 0, "rounds");
 
       for (auto const& roundId : roundOrder(memberResults))
       {
-        out << "  - round: " << yamlScalar(roundId) << "\n";
-        out << "    label: " << yamlScalar(roundLabel(memberResults, roundId)) << "\n";
-        out << "    members:\n";
+        yaml_emit::beginSequenceMap(out, 2, "round", roundId);
+        yaml_emit::scalarField(out, 4, "label", roundLabel(memberResults, roundId));
+        yaml_emit::beginSequenceField(out, 4, "members");
 
         for (auto const& member : memberResults)
         {
@@ -598,18 +603,19 @@ namespace ao::council
             continue;
           }
 
+          constexpr std::size_t kMemberIndent = 6;
           auto const memberPath = std::filesystem::path{"members"} / member.agentId / member.roundId;
-          out << "      - agent: " << yamlScalar(member.agentId) << "\n";
-          out << "        status: " << toString(member.result.status) << "\n";
-          out << "        exit-code: " << member.result.exitCode << "\n";
-          out << "        signal: " << member.result.signal << "\n";
-          out << "        usable: " << (usableMemberResponse(member.result) ? "true" : "false") << "\n";
-          out << "        review-stream: " << memberReviewStream(member.result) << "\n";
-          out << "        stdout-truncated: " << (member.result.standardOutputTruncated ? "true" : "false") << "\n";
-          out << "        stderr-truncated: " << (member.result.standardErrorTruncated ? "true" : "false") << "\n";
-          out << "        stdout: " << yamlScalar((memberPath / "stdout.txt").generic_string()) << "\n";
-          out << "        stderr: " << yamlScalar((memberPath / "stderr.txt").generic_string()) << "\n";
-          out << "        response: " << yamlScalar((memberPath / "response.md").generic_string()) << "\n";
+          yaml_emit::beginSequenceMap(out, kMemberIndent, "agent", member.agentId);
+          yaml_emit::scalarField(out, 8, "status", toString(member.result.status));
+          yaml_emit::scalarField(out, 8, "exit-code", member.result.exitCode);
+          yaml_emit::scalarField(out, 8, "signal", member.result.signal);
+          yaml_emit::boolField(out, 8, "usable", usableMemberResponse(member.result));
+          yaml_emit::scalarField(out, 8, "review-stream", memberReviewStream(member.result));
+          yaml_emit::boolField(out, 8, "stdout-truncated", member.result.standardOutputTruncated);
+          yaml_emit::boolField(out, 8, "stderr-truncated", member.result.standardErrorTruncated);
+          yaml_emit::scalarField(out, 8, "stdout", (memberPath / "stdout.txt").generic_string());
+          yaml_emit::scalarField(out, 8, "stderr", (memberPath / "stderr.txt").generic_string());
+          yaml_emit::scalarField(out, 8, "response", (memberPath / "response.md").generic_string());
         }
       }
 
@@ -774,13 +780,13 @@ namespace ao::council
       for (auto const& recipient : roster)
       {
         auto out = std::ostringstream{};
-        out << heading << "\n";
+        std::println(out, "{}", heading);
 
         for (auto const& [member, text] : rows)
         {
           if (member != recipient)
           {
-            out << "\n--- " << member << " ---\n" << text << "\n";
+            std::print(out, "\n--- {} ---\n{}\n", member, text);
           }
         }
 

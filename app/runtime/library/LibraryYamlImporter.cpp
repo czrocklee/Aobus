@@ -76,7 +76,162 @@ namespace ao::rt
       std::vector<ValidatedList> lists;
     };
 
-    ExportMode parseExportMode(std::string_view modeStr)
+    Result<ryml::ConstNodeRef> requireField(ryml::ConstNodeRef const& node,
+                                            std::string_view field,
+                                            std::string_view context)
+    {
+      auto const child = yaml::findChild(node, field);
+
+      if (!child.readable())
+      {
+        return makeError(Error::Code::FormatRejected, std::format("{} missing required '{}' field", context, field));
+      }
+
+      return child;
+    }
+
+    Result<std::string_view> requireScalar(ryml::ConstNodeRef const& node, std::string_view context)
+    {
+      if (!node.has_val())
+      {
+        return makeError(Error::Code::FormatRejected, std::format("{} must be a scalar", context));
+      }
+
+      return yaml::scalarView(node);
+    }
+
+    Result<std::string_view> requireScalarInFieldContext(ryml::ConstNodeRef const& node,
+                                                         std::string_view context,
+                                                         std::string_view field)
+    {
+      if (!node.has_val())
+      {
+        return makeError(Error::Code::FormatRejected, std::format("{}.{} must be a scalar", context, field));
+      }
+
+      return yaml::scalarView(node);
+    }
+
+    Result<std::string_view> requireScalarField(ryml::ConstNodeRef const& node,
+                                                std::string_view field,
+                                                std::string_view context)
+    {
+      auto child = requireField(node, field, context);
+
+      if (!child)
+      {
+        return std::unexpected{child.error()};
+      }
+
+      return requireScalarInFieldContext(*child, context, field);
+    }
+
+    template<typename T>
+    Result<T> requireScalarAs(ryml::ConstNodeRef const& node, std::string_view context)
+    {
+      auto value = yaml::scalarAs<T>(node, context);
+
+      if (!value)
+      {
+        return std::unexpected{value.error()};
+      }
+
+      return *value;
+    }
+
+    template<typename T>
+    Result<T> requireScalarInFieldContextAs(ryml::ConstNodeRef const& node,
+                                            std::string_view context,
+                                            std::string_view field)
+    {
+      if (T value = {}; yaml::tryReadScalar(node, value))
+      {
+        return value;
+      }
+
+      return makeError(Error::Code::FormatRejected, std::format("{}.{} must be a valid scalar", context, field));
+    }
+
+    template<typename T>
+    Result<T> requireScalarFieldAs(ryml::ConstNodeRef const& node, std::string_view field, std::string_view context)
+    {
+      auto child = requireField(node, field, context);
+
+      if (!child)
+      {
+        return std::unexpected{child.error()};
+      }
+
+      return requireScalarInFieldContextAs<T>(*child, context, field);
+    }
+
+    Result<> requireMap(ryml::ConstNodeRef const& node, std::string_view context)
+    {
+      if (!node.is_map())
+      {
+        return makeError(Error::Code::FormatRejected, std::format("{} must be a map", context));
+      }
+
+      return {};
+    }
+
+    Result<> requireSequence(ryml::ConstNodeRef const& node, std::string_view context)
+    {
+      if (!node.is_seq())
+      {
+        return makeError(Error::Code::FormatRejected, std::format("{} must be a sequence", context));
+      }
+
+      return {};
+    }
+
+    std::string normalizedUri(std::string_view uri)
+    {
+      auto rawUriStr = std::string{uri};
+      std::ranges::replace(rawUriStr, '\\', '/');
+      return std::filesystem::path{rawUriStr}.lexically_normal().generic_string();
+    }
+
+    bool isHexDigit(char ch) noexcept
+    {
+      return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
+    }
+
+    bool isUuidText(std::string_view uuidStr) noexcept
+    {
+      constexpr std::size_t kUuidLength = 36;
+      constexpr std::size_t kFirstHyphen = 8;
+      constexpr std::size_t kSecondHyphen = 13;
+      constexpr std::size_t kThirdHyphen = 18;
+      constexpr std::size_t kFourthHyphen = 23;
+
+      if (uuidStr.size() != kUuidLength)
+      {
+        return false;
+      }
+
+      for (std::size_t index = 0; index < uuidStr.size(); ++index)
+      {
+        auto const expectsHyphen =
+          index == kFirstHyphen || index == kSecondHyphen || index == kThirdHyphen || index == kFourthHyphen;
+
+        if (expectsHyphen)
+        {
+          if (uuidStr[index] != '-')
+          {
+            return false;
+          }
+        }
+        else if (!isHexDigit(uuidStr[index]))
+        {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    std::optional<ExportMode> parseExportMode(std::string_view modeStr)
     {
       if (modeStr == "delta" || modeStr == "minimum")
       {
@@ -98,7 +253,7 @@ namespace ao::rt
         return ExportMode::ListOnly;
       }
 
-      return ExportMode::Full;
+      return std::nullopt;
     }
 
     constexpr std::uint8_t hexDigit(char ch)
@@ -207,9 +362,9 @@ namespace ao::rt
                               std::unordered_map<std::uint32_t, ListId> const& yamlListIdToNewListId,
                               library::ListStore::Writer& listWriter) const;
 
-    void overlayMetadata(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
-    void overlayCustomData(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
-    void overlayTechnicalProperties(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
+    Result<> overlayMetadata(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
+    Result<> overlayCustomData(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
+    Result<> overlayTechnicalProperties(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
 
     Result<> loadFileBaseline(std::string_view uriStr,
                               ExportMode payloadMode,
@@ -234,19 +389,28 @@ namespace ao::rt
   Result<> LibraryYamlImporter::Impl::importFromYaml(std::filesystem::path const& path, ImportMode mode)
   {
     auto buffer = std::vector<char>{};
+    auto yamlContext = yaml::CallbackContext{path.string()};
     auto tree = ryml::Tree{};
+
+    auto bufferResult = yaml::readFileResult(path);
+
+    if (!bufferResult)
+    {
+      return makeError(
+        Error::Code::IoError, std::format("Failed to read '{}': {}", path.string(), bufferResult.error().message));
+    }
+
+    buffer = std::move(*bufferResult);
 
     try
     {
-      auto const fileName = path.string();
-      buffer = yaml::readFile(path);
-      tree = ryml::Tree{yaml::callbacks(fileName.c_str())};
-      ryml::parse_in_place(yaml::toSubstr(buffer), &tree);
+      tree = ryml::Tree{yaml::callbacks(yamlContext)};
+      yaml::parseInPlace(tree, buffer, yamlContext);
       tree.resolve();
     }
     catch (std::exception const& e)
     {
-      return makeError(Error::Code::IoError, std::format("Failed to read '{}': {}", path.string(), e.what()));
+      return makeError(Error::Code::FormatRejected, std::format("Failed to parse '{}': {}", path.string(), e.what()));
     }
 
     auto const validationResult = validate(tree.rootref());
@@ -314,9 +478,15 @@ namespace ao::rt
     return {};
   }
 
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   Result<ValidatedImport> LibraryYamlImporter::Impl::validate(ryml::ConstNodeRef const& root) const
   {
     auto validated = ValidatedImport{};
+
+    if (auto result = requireMap(root, "YAML root"); !result)
+    {
+      return std::unexpected{result.error()};
+    }
 
     auto const versionNode = yaml::findChild(root, "version");
 
@@ -325,7 +495,14 @@ namespace ao::rt
       return makeError(Error::Code::FormatRejected, "Missing 'version' field in YAML");
     }
 
-    validated.version = yaml::asInt<uint32_t>(versionNode);
+    auto versionResult = requireScalarAs<std::uint32_t>(versionNode, "version");
+
+    if (!versionResult)
+    {
+      return std::unexpected{versionResult.error()};
+    }
+
+    validated.version = *versionResult;
 
     if (validated.version != 1)
     {
@@ -334,7 +511,21 @@ namespace ao::rt
 
     if (auto const exportModeNode = yaml::findChild(root, "export_mode"); exportModeNode.readable())
     {
-      validated.payloadMode = parseExportMode(yaml::scalarView(exportModeNode));
+      auto exportModeText = requireScalar(exportModeNode, "export_mode");
+
+      if (!exportModeText)
+      {
+        return std::unexpected{exportModeText.error()};
+      }
+
+      auto optExportMode = parseExportMode(*exportModeText);
+
+      if (!optExportMode)
+      {
+        return makeError(Error::Code::FormatRejected, std::format("Unknown export_mode '{}'", *exportModeText));
+      }
+
+      validated.payloadMode = *optExportMode;
     }
     else
     {
@@ -343,7 +534,19 @@ namespace ao::rt
 
     if (auto const libraryIdNode = yaml::findChild(root, "libraryId"); libraryIdNode.readable())
     {
-      validated.optLibraryId = yaml::scalarView(libraryIdNode);
+      auto libraryId = requireScalar(libraryIdNode, "libraryId");
+
+      if (!libraryId)
+      {
+        return std::unexpected{libraryId.error()};
+      }
+
+      if (!isUuidText(*libraryId))
+      {
+        return makeError(Error::Code::FormatRejected, "libraryId must be a UUID");
+      }
+
+      validated.optLibraryId = *libraryId;
     }
 
     auto const library = yaml::findChild(root, "library");
@@ -353,10 +556,20 @@ namespace ao::rt
       return makeError(Error::Code::FormatRejected, "Missing 'library' section in YAML");
     }
 
+    if (auto result = requireMap(library, "library"); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
     if (validated.payloadMode != ExportMode::ListOnly)
     {
       if (auto const tracks = yaml::findChild(library, "tracks"); tracks.readable())
       {
+        if (auto result = requireSequence(tracks, "library.tracks"); !result)
+        {
+          return std::unexpected{result.error()};
+        }
+
         if (auto const result = validateTracks(tracks, validated); !result)
         {
           return std::unexpected{result.error()};
@@ -366,6 +579,11 @@ namespace ao::rt
 
     if (auto const lists = yaml::findChild(library, "lists"); lists.readable())
     {
+      if (auto result = requireSequence(lists, "library.lists"); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
       if (auto const result = validateLists(lists, validated); !result)
       {
         return std::unexpected{result.error()};
@@ -381,17 +599,20 @@ namespace ao::rt
 
     for (auto const& trackNode : tracks.children())
     {
-      auto track = ValidatedTrack{};
-      auto const uriNode = yaml::findChild(trackNode, "uri");
-
-      if (!uriNode.readable())
+      if (auto result = requireMap(trackNode, "Track record"); !result)
       {
-        return makeError(Error::Code::FormatRejected, "Track record missing required 'uri' field");
+        return std::unexpected{result.error()};
       }
 
-      auto rawUriStr = std::string{yaml::scalarView(uriNode)};
-      std::ranges::replace(rawUriStr, '\\', '/');
-      track.uri = std::filesystem::path{rawUriStr}.lexically_normal().generic_string();
+      auto track = ValidatedTrack{};
+      auto uri = requireScalarField(trackNode, "uri", "Track record");
+
+      if (!uri)
+      {
+        return std::unexpected{uri.error()};
+      }
+
+      track.uri = normalizedUri(*uri);
 
       if (track.uri.empty())
       {
@@ -400,7 +621,14 @@ namespace ao::rt
 
       if (auto const idNode = yaml::findChild(trackNode, "id"); idNode.readable())
       {
-        track.yamlId = yaml::asInt<uint32_t>(idNode);
+        auto yamlId = requireScalarAs<std::uint32_t>(idNode, "Track record.id");
+
+        if (!yamlId)
+        {
+          return std::unexpected{yamlId.error()};
+        }
+
+        track.yamlId = *yamlId;
 
         if (track.yamlId != 0)
         {
@@ -421,21 +649,27 @@ namespace ao::rt
     return {};
   }
 
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   Result<> LibraryYamlImporter::Impl::validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const
   {
     auto seenYamlIds = std::unordered_set<std::uint32_t>{};
 
     for (auto const& listNode : lists.children())
     {
-      auto list = ValidatedList{};
-      auto const idNode = yaml::findChild(listNode, "id");
-
-      if (!idNode.readable())
+      if (auto result = requireMap(listNode, "List record"); !result)
       {
-        return makeError(Error::Code::FormatRejected, "List record missing required 'id' field");
+        return std::unexpected{result.error()};
       }
 
-      list.yamlId = yaml::asInt<uint32_t>(idNode);
+      auto list = ValidatedList{};
+      auto yamlId = requireScalarFieldAs<std::uint32_t>(listNode, "id", "List record");
+
+      if (!yamlId)
+      {
+        return std::unexpected{yamlId.error()};
+      }
+
+      list.yamlId = *yamlId;
 
       if (list.yamlId == 0)
       {
@@ -449,50 +683,110 @@ namespace ao::rt
 
       seenYamlIds.insert(list.yamlId);
 
-      auto const nameNode = yaml::findChild(listNode, "name");
+      auto name = requireScalarField(listNode, "name", "List record");
 
-      if (!nameNode.readable())
+      if (!name)
       {
-        return makeError(Error::Code::FormatRejected, "List record missing required 'name' field");
+        return std::unexpected{name.error()};
       }
 
-      list.name = yaml::scalarView(nameNode);
+      list.name = *name;
 
       if (auto const parentIdNode = yaml::findChild(listNode, "parentId"); parentIdNode.readable())
       {
-        list.yamlParentId = yaml::asInt<uint32_t>(parentIdNode);
+        auto parentId = requireScalarAs<std::uint32_t>(parentIdNode, "List record.parentId");
+
+        if (!parentId)
+        {
+          return std::unexpected{parentId.error()};
+        }
+
+        list.yamlParentId = *parentId;
       }
 
       if (auto const descriptionNode = yaml::findChild(listNode, "description"); descriptionNode.readable())
       {
-        list.description = yaml::scalarView(descriptionNode);
+        auto description = requireScalar(descriptionNode, "List record.description");
+
+        if (!description)
+        {
+          return std::unexpected{description.error()};
+        }
+
+        list.description = *description;
       }
 
       if (auto const filterNode = yaml::findChild(listNode, "filter"); filterNode.readable())
       {
+        auto filter = requireScalar(filterNode, "List record.filter");
+
+        if (!filter)
+        {
+          return std::unexpected{filter.error()};
+        }
+
         list.isSmart = true;
-        list.filter = yaml::scalarView(filterNode);
+        list.filter = *filter;
       }
       else if (auto const tracksNode = yaml::findChild(listNode, "tracks"); tracksNode.readable())
       {
+        if (auto result = requireSequence(tracksNode, "List record.tracks"); !result)
+        {
+          return std::unexpected{result.error()};
+        }
+
         for (auto const& trackRef : tracksNode.children())
         {
           if (trackRef.is_val())
           {
-            list.yamlTrackIds.push_back(yaml::asInt<uint32_t>(trackRef));
+            auto trackId = requireScalarAs<std::uint32_t>(trackRef, "List record.tracks[]");
+
+            if (!trackId)
+            {
+              return std::unexpected{trackId.error()};
+            }
+
+            list.yamlTrackIds.push_back(*trackId);
           }
           else if (trackRef.is_map())
           {
             if (auto const trackIdNode = yaml::findChild(trackRef, "id"); trackIdNode.readable())
             {
-              list.yamlTrackIds.push_back(yaml::asInt<uint32_t>(trackIdNode));
+              auto trackId = requireScalarAs<std::uint32_t>(trackIdNode, "List record.tracks[].id");
+
+              if (!trackId)
+              {
+                return std::unexpected{trackId.error()};
+              }
+
+              list.yamlTrackIds.push_back(*trackId);
             }
             else if (auto const uriNode = yaml::findChild(trackRef, "uri"); uriNode.readable())
             {
-              auto rawUriStr = std::string{yaml::scalarView(uriNode)};
-              std::ranges::replace(rawUriStr, '\\', '/');
-              list.trackUris.push_back(std::filesystem::path{rawUriStr}.lexically_normal().generic_string());
+              auto uri = requireScalar(uriNode, "List record.tracks[].uri");
+
+              if (!uri)
+              {
+                return std::unexpected{uri.error()};
+              }
+
+              auto normalized = normalizedUri(*uri);
+
+              if (normalized.empty())
+              {
+                return makeError(Error::Code::FormatRejected, "List track reference has empty 'uri'");
+              }
+
+              list.trackUris.push_back(std::move(normalized));
             }
+            else
+            {
+              return makeError(Error::Code::FormatRejected, "List track reference missing 'id' or 'uri'");
+            }
+          }
+          else
+          {
+            return makeError(Error::Code::FormatRejected, "List track reference must be a scalar or map");
           }
         }
       }
@@ -575,9 +869,20 @@ namespace ao::rt
       builder.property().uri(uriStr);
     }
 
-    overlayMetadata(builder, trackNode);
-    overlayCustomData(builder, trackNode);
-    overlayTechnicalProperties(builder, trackNode);
+    if (auto result = overlayMetadata(builder, trackNode); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    if (auto result = overlayCustomData(builder, trackNode); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    if (auto result = overlayTechnicalProperties(builder, trackNode); !result)
+    {
+      return std::unexpected{result.error()};
+    }
 
     auto decodedCoverBlobsResult = importCovers(trackNode, builder);
 
@@ -640,30 +945,44 @@ namespace ao::rt
 
       for (auto const coverNode : coversNode)
       {
-        auto const typeNode = yaml::findChild(coverNode, "type");
-        auto const dataNode = yaml::findChild(coverNode, "data");
-
-        if (!typeNode.readable() || !dataNode.readable())
+        if (auto result = requireMap(coverNode, "Track cover"); !result)
         {
-          continue;
+          return std::unexpected{result.error()};
         }
 
-        std::uint32_t rawType = 0;
-        typeNode >> rawType;
-        auto const picType = rawType <= static_cast<std::uint32_t>(library::PictureType::PublisherLogo)
-                               ? static_cast<library::PictureType>(rawType)
+        auto rawType = requireScalarFieldAs<std::uint32_t>(coverNode, "type", "Track cover");
+
+        if (!rawType)
+        {
+          return std::unexpected{rawType.error()};
+        }
+
+        auto data = requireScalarField(coverNode, "data", "Track cover");
+
+        if (!data)
+        {
+          return std::unexpected{data.error()};
+        }
+
+        auto const picType = *rawType <= static_cast<std::uint32_t>(library::PictureType::PublisherLogo)
+                               ? static_cast<library::PictureType>(*rawType)
                                : library::PictureType::Other;
 
-        auto const b64 = yaml::scalarView(dataNode);
-
-        // base64Decode returns nullopt on malformed input; skip those, and keep the borrowed blob
-        // alive in decodedCoverBlobs until the builder serializes below.
-        if (auto optDecoded = utility::base64Decode(b64); optDecoded && !optDecoded->empty())
+        // Keep the borrowed blob alive in decodedCoverBlobs until the builder serializes below.
+        if (auto optDecoded = utility::base64Decode(*data); optDecoded && !optDecoded->empty())
         {
           decodedCoverBlobs.push_back(*std::move(optDecoded));
           builder.coverArt().add(picType, decodedCoverBlobs.back());
         }
+        else
+        {
+          return makeError(Error::Code::FormatRejected, "Track cover data must be non-empty base64");
+        }
       }
+    }
+    else if (auto const coversNode = yaml::findChild(trackNode, "covers"); coversNode.readable())
+    {
+      return makeError(Error::Code::FormatRejected, "Track covers must be a sequence");
     }
 
     return decodedCoverBlobs;
@@ -715,12 +1034,26 @@ namespace ao::rt
 
     if (auto fileSizeNode = yaml::findChild(trackNode, "fileSize"); fileSizeNode.readable())
     {
-      manifestBuilder.fileSize(yaml::asInt<uint64_t>(fileSizeNode));
+      auto fileSize = requireScalarAs<std::uint64_t>(fileSizeNode, "Track record.fileSize");
+
+      if (!fileSize)
+      {
+        return std::unexpected{fileSize.error()};
+      }
+
+      manifestBuilder.fileSize(*fileSize);
     }
 
     if (auto mtimeNode = yaml::findChild(trackNode, "mtime"); mtimeNode.readable())
     {
-      manifestBuilder.mtime(yaml::asInt<uint64_t>(mtimeNode));
+      auto mtime = requireScalarAs<std::uint64_t>(mtimeNode, "Track record.mtime");
+
+      if (!mtime)
+      {
+        return std::unexpected{mtime.error()};
+      }
+
+      manifestBuilder.mtime(*mtime);
     }
 
     return {};
@@ -869,8 +1202,8 @@ namespace ao::rt
     return {};
   }
 
-  void LibraryYamlImporter::Impl::overlayMetadata(library::TrackBuilder& builder,
-                                                  ryml::ConstNodeRef const& trackNode) const
+  Result<> LibraryYamlImporter::Impl::overlayMetadata(library::TrackBuilder& builder,
+                                                      ryml::ConstNodeRef const& trackNode) const
   {
     using StringSetter = void (*)(library::TrackBuilder::MetadataBuilder&, std::string_view);
     using NumberSetter = void (*)(library::TrackBuilder::MetadataBuilder&, std::uint16_t);
@@ -910,42 +1243,84 @@ namespace ao::rt
       {
         if (map.stringSetter != nullptr)
         {
-          map.stringSetter(builder.metadata(), yaml::scalarView(node));
+          auto text = requireScalarInFieldContext(node, "Track record", key);
+
+          if (!text)
+          {
+            return std::unexpected{text.error()};
+          }
+
+          map.stringSetter(builder.metadata(), *text);
         }
         else if (map.numberSetter != nullptr)
         {
-          map.numberSetter(builder.metadata(), yaml::asInt<std::uint16_t>(node));
+          auto value = requireScalarInFieldContextAs<std::uint16_t>(node, "Track record", key);
+
+          if (!value)
+          {
+            return std::unexpected{value.error()};
+          }
+
+          map.numberSetter(builder.metadata(), *value);
         }
       }
     }
+
+    return {};
   }
 
-  void LibraryYamlImporter::Impl::overlayCustomData(library::TrackBuilder& builder,
-                                                    ryml::ConstNodeRef const& trackNode) const
+  Result<> LibraryYamlImporter::Impl::overlayCustomData(library::TrackBuilder& builder,
+                                                        ryml::ConstNodeRef const& trackNode) const
   {
     if (auto tagsNode = yaml::findChild(trackNode, "tags"); tagsNode.readable())
     {
+      if (auto result = requireSequence(tagsNode, "Track record.tags"); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
       builder.tags().clear();
 
       for (auto const& tag : tagsNode.children())
       {
-        builder.tags().add(yaml::scalarView(tag));
+        auto text = requireScalar(tag, "Track record.tags[]");
+
+        if (!text)
+        {
+          return std::unexpected{text.error()};
+        }
+
+        builder.tags().add(*text);
       }
     }
 
     if (auto customNode = yaml::findChild(trackNode, "custom"); customNode.readable())
     {
+      if (auto result = requireMap(customNode, "Track record.custom"); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
       builder.customMetadata().clear();
 
       for (auto const& it : customNode.children())
       {
-        builder.customMetadata().add(yaml::keyView(it), yaml::scalarView(it));
+        auto value = requireScalar(it, std::format("Track record.custom.{}", yaml::keyView(it)));
+
+        if (!value)
+        {
+          return std::unexpected{value.error()};
+        }
+
+        builder.customMetadata().add(yaml::keyView(it), *value);
       }
     }
+
+    return {};
   }
 
-  void LibraryYamlImporter::Impl::overlayTechnicalProperties(library::TrackBuilder& builder,
-                                                             ryml::ConstNodeRef const& trackNode) const
+  Result<> LibraryYamlImporter::Impl::overlayTechnicalProperties(library::TrackBuilder& builder,
+                                                                 ryml::ConstNodeRef const& trackNode) const
   {
     using U32Setter = void (*)(library::TrackBuilder::PropertyBuilder&, std::uint32_t);
     using U16Setter = void (*)(library::TrackBuilder::PropertyBuilder&, std::uint16_t);
@@ -971,7 +1346,14 @@ namespace ao::rt
 
     if (auto codecNode = yaml::findChild(trackNode, rt::trackFieldId(rt::TrackField::Codec)); codecNode.readable())
     {
-      if (auto const optCodec = parseAudioCodecName(yaml::scalarView(codecNode)); optCodec)
+      auto codec = requireScalar(codecNode, "Track record.codec");
+
+      if (!codec)
+      {
+        return std::unexpected{codec.error()};
+      }
+
+      if (auto const optCodec = parseAudioCodecName(*codec); optCodec)
       {
         builder.property().codec(*optCodec);
       }
@@ -985,18 +1367,41 @@ namespace ao::rt
       {
         if (map.u32Setter != nullptr)
         {
-          map.u32Setter(builder.property(), yaml::asInt<std::uint32_t>(node));
+          auto value = requireScalarInFieldContextAs<std::uint32_t>(node, "Track record", key);
+
+          if (!value)
+          {
+            return std::unexpected{value.error()};
+          }
+
+          map.u32Setter(builder.property(), *value);
         }
         else if (map.u16Setter != nullptr)
         {
-          map.u16Setter(builder.property(), yaml::asInt<std::uint16_t>(node));
+          auto value = requireScalarInFieldContextAs<std::uint16_t>(node, "Track record", key);
+
+          if (!value)
+          {
+            return std::unexpected{value.error()};
+          }
+
+          map.u16Setter(builder.property(), *value);
         }
         else if (map.u8Setter != nullptr)
         {
-          map.u8Setter(builder.property(), yaml::asInt<std::uint8_t>(node));
+          auto value = requireScalarInFieldContextAs<std::uint8_t>(node, "Track record", key);
+
+          if (!value)
+          {
+            return std::unexpected{value.error()};
+          }
+
+          map.u8Setter(builder.property(), *value);
         }
       }
     }
+
+    return {};
   }
 
   Result<> LibraryYamlImporter::Impl::importLists(

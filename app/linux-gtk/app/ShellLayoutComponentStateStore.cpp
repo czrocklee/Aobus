@@ -52,6 +52,7 @@ namespace ao::gtk
     return loadUnlocked(presetId);
   }
 
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   std::optional<uimodel::LayoutComponentStateDocument> ShellLayoutComponentStateStore::loadUnlocked(
     std::string_view presetId) const
   {
@@ -59,10 +60,25 @@ namespace ao::gtk
 
     try
     {
-      auto buffer = yaml::readFile(path);
       auto const fileName = path.string();
-      auto tree = ryml::Tree{yaml::callbacks(fileName.c_str())};
-      ryml::parse_in_place(yaml::toSubstr(buffer), &tree);
+      auto bufferResult = yaml::readFileResult(path);
+
+      if (!bufferResult)
+      {
+        if (bufferResult.error().code != Error::Code::IoError || std::filesystem::exists(path))
+        {
+          APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to load state file ({}): {}",
+                       path.string(),
+                       bufferResult.error().message);
+        }
+
+        return std::nullopt;
+      }
+
+      auto buffer = std::move(*bufferResult);
+      auto yamlContext = yaml::CallbackContext{fileName};
+      auto tree = ryml::Tree{yaml::callbacks(yamlContext)};
+      yaml::parseInPlace(tree, buffer, yamlContext);
 
       auto doc = uimodel::LayoutComponentStateDocument{};
 

@@ -6,8 +6,6 @@
 #include <ao/Error.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -181,11 +179,9 @@ library:
                 "missing required 'name'");
     }
 
-    SECTION("Malformed Base64 cover art is skipped gracefully")
+    SECTION("Malformed Base64 cover art rejects the import")
     {
-      {
-        auto yaml = std::ofstream{yamlPath};
-        yaml << R"(
+      testError(R"(
 version: 1
 library:
   tracks:
@@ -194,16 +190,48 @@ library:
         - type: 3
           data: "Not!Valid@Base#64$"
   lists: []
-)";
-      }
-      REQUIRE(importer.importFromYaml(yamlPath));
-      auto txn = ml.readTransaction();
-      auto const reader = ml.tracks().reader(txn);
-      auto const it = reader.begin();
-      REQUIRE(it != reader.end());
-      auto const& [tid, view] = *it;
-      // Cover art should be absent because it was skipped
-      CHECK_FALSE(view.coverArt().primary().has_value());
+)",
+                Error::Code::FormatRejected,
+                "cover data");
+    }
+
+    SECTION("Unknown export mode is rejected")
+    {
+      testError(R"(
+version: 1
+export_mode: mystery
+library:
+  tracks: []
+  lists: []
+)",
+                Error::Code::FormatRejected,
+                "Unknown export_mode");
+    }
+
+    SECTION("Malformed numeric version is rejected")
+    {
+      testError(R"(
+version: 1x
+library:
+  tracks: []
+  lists: []
+)",
+                Error::Code::FormatRejected,
+                "version");
+    }
+
+    SECTION("Malformed track ID is rejected")
+    {
+      testError(R"(
+version: 1
+library:
+  tracks:
+    - id: 1x
+      uri: "song1.flac"
+  lists: []
+)",
+                Error::Code::FormatRejected,
+                "Track record.id");
     }
   }
 
@@ -226,16 +254,9 @@ library:
 )";
       }
       auto const result = importer.importFromYaml(yamlPath);
-      // Currently validate() checks if tracks.readable() but doesn't strictly check is_seq() in validate()
-      // But validateTracks() iterates children.
-      // Let's see if ryml handles scalar iteration gracefully or returns error.
-      // Based on Importer code: if (auto const tracks = yaml::findChild(library, "tracks"); tracks.readable())
-      // If it's a scalar, it's still readable.
-      // Then validateTracks calls tracks.children() which might be empty or throw for scalar?
-      // Actually ryml::NodeRef::children() for scalar is empty.
-      // So it might just import 0 tracks.
-      // If we want it to fail, we should check is_seq().
-      REQUIRE(result);
+      REQUIRE(!result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(result.error().message.find("library.tracks must be a sequence") != std::string::npos);
     }
 
     SECTION("List missing mandatory ID")

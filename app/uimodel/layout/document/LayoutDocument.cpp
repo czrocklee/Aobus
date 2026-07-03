@@ -53,7 +53,7 @@ namespace ao::yaml
         }
         else
         {
-          node << nodeValue;
+          write(node, nodeValue);
         }
       },
       value.data);

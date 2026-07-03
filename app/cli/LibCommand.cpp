@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <format>
 #include <iostream>
+#include <print>
 #include <span>
 #include <string>
 #include <string_view>
@@ -42,10 +43,10 @@ namespace ao::cli
     {
       auto const& header = ml.metaHeader();
 
-      os << "Library ID:    " << utility::formatUuid(header.libraryId) << "\n";
-      os << "Library Version:  " << header.libraryVersion << "\n";
-      os << "Flags:       0x" << std::hex << header.flags << std::dec << "\n";
-      os << "Created:      " << formatTimestamp(header.createdTime) << "\n";
+      std::println(os, "Library ID:    {}", utility::formatUuid(header.libraryId));
+      std::println(os, "Library Version:  {}", header.libraryVersion);
+      std::println(os, "Flags:       0x{:x}", header.flags);
+      std::println(os, "Created:      {}", formatTimestamp(header.createdTime));
     }
 
     void exportLib(library::MusicLibrary& ml, std::string const& path, std::string const& modeStr, std::ostream& os)
@@ -70,7 +71,7 @@ namespace ao::cli
       }
       else
       {
-        os << "Error: Invalid export mode '" << modeStr << "'. Valid modes are: delta, metadata, full, listOnly.\n";
+        std::println(os, "Error: Invalid export mode '{}'. Valid modes are: delta, metadata, full, listOnly.", modeStr);
         return;
       }
 
@@ -78,11 +79,11 @@ namespace ao::cli
 
       if (auto const result = exporter.exportToYaml(path, mode); !result)
       {
-        os << "Error: Export failed: " << result.error().message << '\n';
+        std::println(os, "Error: Export failed: {}", result.error().message);
         return;
       }
 
-      os << "Library exported to '" << path << "' using mode '" << modeStr << "'.\n";
+      std::println(os, "Library exported to '{}' using mode '{}'.", path, modeStr);
     }
 
     void importLib(library::MusicLibrary& ml, std::string const& path, std::string const& modeStr, std::ostream& os)
@@ -99,7 +100,7 @@ namespace ao::cli
       }
       else
       {
-        os << "Error: Invalid import mode '" << modeStr << "'. Valid modes are: restore, merge.\n";
+        std::println(os, "Error: Invalid import mode '{}'. Valid modes are: restore, merge.", modeStr);
         return;
       }
 
@@ -107,11 +108,11 @@ namespace ao::cli
 
       if (auto const result = importer.importFromYaml(path, mode); !result)
       {
-        os << "Error: Import failed: " << result.error().message << '\n';
+        std::println(os, "Error: Import failed: {}", result.error().message);
         return;
       }
 
-      os << "Library imported from '" << path << "' using mode '" << modeStr << "'.\n";
+      std::println(os, "Library imported from '{}' using mode '{}'.", path, modeStr);
     }
 
     std::string_view formatFileStatus(library::FileStatus status)
@@ -129,22 +130,22 @@ namespace ao::cli
     {
       if (yaml)
       {
-        os << "meta:\n";
+        std::println(os, "meta:");
         auto const& header = ml.metaHeader();
-        os << "  libraryId: \"" << utility::formatUuid(header.libraryId) << "\"\n"
-           << "  libraryVersion: " << header.libraryVersion << "\n"
-           << "  flags: \"0x" << std::hex << header.flags << std::dec << "\"\n"
-           << "  createdTime: \"" << formatTimestamp(header.createdTime) << "\"\n";
+        std::println(os, "  libraryId: \"{}\"", utility::formatUuid(header.libraryId));
+        std::println(os, "  libraryVersion: {}", header.libraryVersion);
+        std::println(os, "  flags: \"0x{:x}\"", header.flags);
+        std::println(os, "  createdTime: \"{}\"", formatTimestamp(header.createdTime));
       }
       else if (raw)
       {
-        os << "--- Meta ---\n";
+        std::println(os, "--- Meta ---");
         auto const& header = ml.metaHeader();
         hexDump(std::as_bytes(std::span{&header, 1}), os);
       }
       else
       {
-        os << "--- Meta ---\n";
+        std::println(os, "--- Meta ---");
         show(ml, os);
       }
     }
@@ -153,20 +154,20 @@ namespace ao::cli
     {
       if (auto const& dict = ml.dictionary(); yaml)
       {
-        os << "dictionary:\n";
+        std::println(os, "dictionary:");
 
         for (std::size_t i = 1; i <= dict.size(); ++i)
         {
-          os << "  " << i << ": \"" << dict.get(DictionaryId{static_cast<std::uint32_t>(i)}) << "\"\n";
+          std::println(os, "  {}: \"{}\"", i, dict.get(DictionaryId{static_cast<std::uint32_t>(i)}));
         }
       }
       else
       {
-        os << "--- Dictionary (" << dict.size() << " entries) ---\n";
+        std::println(os, "--- Dictionary ({} entries) ---", dict.size());
 
         for (std::size_t i = 1; i <= dict.size(); ++i)
         {
-          os << "  " << i << ": " << dict.get(DictionaryId{static_cast<std::uint32_t>(i)}) << "\n";
+          std::println(os, "  {}: {}", i, dict.get(DictionaryId{static_cast<std::uint32_t>(i)}));
         }
       }
     }
@@ -177,39 +178,39 @@ namespace ao::cli
 
       if (auto const reader = ml.manifest().reader(txn); yaml)
       {
-        os << "manifest:\n";
+        std::println(os, "manifest:");
 
         for (auto const& [uri, view] : reader)
         {
-          os << "  - uri: \"" << uri << "\"\n"
-             << "    trackId: " << view.trackId() << "\n"
-             << "    fileSize: " << view.fileSize() << "\n"
-             << "    mtime: " << view.mtime() << "\n"
-             << "    status: \"" << formatFileStatus(view.status()) << "\"\n";
+          std::println(os, "  - uri: \"{}\"", uri);
+          std::println(os, "    trackId: {}", view.trackId());
+          std::println(os, "    fileSize: {}", view.fileSize());
+          std::println(os, "    mtime: {}", view.mtime());
+          std::println(os, "    status: \"{}\"", formatFileStatus(view.status()));
         }
       }
       else if (raw)
       {
-        os << "--- Manifest ---\n";
+        std::println(os, "--- Manifest ---");
 
         for (auto const& [key, val] : reader.databaseReader())
         {
           auto const uri = utility::bytes::stringView(key);
-          os << "URI: " << uri << "\n";
+          std::println(os, "URI: {}", uri);
           hexDump(val, os);
         }
       }
       else
       {
-        os << "--- Manifest ---\n";
+        std::println(os, "--- Manifest ---");
 
         for (auto const& [uri, view] : reader)
         {
-          os << "  URI: " << uri << "\n"
-             << "    Track ID: " << view.trackId() << "\n"
-             << "    File Size: " << view.fileSize() << " bytes\n"
-             << "    MTime: " << view.mtime() << "\n"
-             << "    Status: " << formatFileStatus(view.status()) << "\n";
+          std::println(os, "  URI: {}", uri);
+          std::println(os, "    Track ID: {}", view.trackId());
+          std::println(os, "    File Size: {} bytes", view.fileSize());
+          std::println(os, "    MTime: {}", view.mtime());
+          std::println(os, "    Status: {}", formatFileStatus(view.status()));
         }
       }
     }
@@ -220,27 +221,27 @@ namespace ao::cli
 
       if (auto const reader = ml.resources().reader(txn); yaml)
       {
-        os << "resources:\n";
+        std::println(os, "resources:");
 
         for (auto const& [resId, val] : reader)
         {
-          os << "  - id: " << resId << "\n"
-             << "    size: " << val.size() << "\n";
+          std::println(os, "  - id: {}", resId);
+          std::println(os, "    size: {}", val.size());
         }
       }
       else if (raw)
       {
-        os << "--- Resources ---\n";
+        std::println(os, "--- Resources ---");
 
         for (auto const& [resId, val] : reader)
         {
-          os << "Resource ID: " << resId << " (Size: " << val.size() << ")\n";
+          std::println(os, "Resource ID: {} (Size: {})", resId, val.size());
           hexDump(val, os);
         }
       }
       else
       {
-        os << "--- Resources ---\n";
+        std::println(os, "--- Resources ---");
         std::size_t count = 0;
         std::size_t totalBytes = 0;
 
@@ -250,14 +251,14 @@ namespace ao::cli
           count++;
         }
 
-        os << "Total: " << count << " resources, " << totalBytes << " bytes\n";
+        std::println(os, "Total: {} resources, {} bytes", count, totalBytes);
 
         constexpr std::size_t kPreviewByteLimit = 64;
 
         for (auto const& [resId, val] : reader)
         {
-          os << "  Resource ID: " << resId << " (Size: " << val.size() << ")\n";
-          os << "  Preview:\n";
+          std::println(os, "  Resource ID: {} (Size: {})", resId, val.size());
+          std::println(os, "  Preview:");
           hexDump(val.subspan(0, std::min<std::size_t>(kPreviewByteLimit, val.size())), os);
         }
       }

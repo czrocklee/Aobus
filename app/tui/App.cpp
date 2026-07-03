@@ -48,12 +48,13 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
-#include <iostream>
 #include <memory>
 #include <optional>
+#include <print>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -431,7 +432,7 @@ namespace ao::tui
       {
         if (state.visible && !sameKittyImage(state, cachedCoverArtId, coverBox))
         {
-          std::cout << kittyDeleteImageEscape(kKittyCoverArtImageId);
+          std::print("{}", kittyDeleteImageEscape(kKittyCoverArtImageId));
         }
 
         paintKittyCoverArt(coverBox, *optKittyCoverArtPng);
@@ -443,7 +444,8 @@ namespace ao::tui
 
       if (!shouldShow && state.visible)
       {
-        std::cout << kittyDeleteImageEscape(kKittyCoverArtImageId) << std::flush;
+        std::print("{}", kittyDeleteImageEscape(kKittyCoverArtImageId));
+        std::fflush(stdout);
         state.visible = false;
         state.paintedCoverArtId = kInvalidResourceId;
         state.paintedCoverBox = {};
@@ -712,7 +714,8 @@ namespace ao::tui
 
     if (kittyCoverArt && kittyPaintState.visible)
     {
-      std::cout << kittyDeleteImageEscape(kKittyCoverArtImageId) << std::flush;
+      std::print("{}", kittyDeleteImageEscape(kKittyCoverArtImageId));
+      std::fflush(stdout);
     }
 
     playback.stop();

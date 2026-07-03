@@ -31,8 +31,9 @@ namespace ao::gtk::layout
         gsize size = 0;
         auto const* const data = static_cast<char const*>(bytesPtr->get_data(size));
 
-        auto tree = ryml::Tree{yaml::callbacks(std::string{path}.c_str())};
-        ryml::parse_in_arena(yaml::toCsubstr(std::string_view{data, size}), &tree);
+        auto yamlContext = yaml::CallbackContext{std::string{path}};
+        auto tree = ryml::Tree{yaml::callbacks(yamlContext)};
+        yaml::parseInArena(tree, std::string_view{data, size}, yamlContext);
 
         auto doc = uimodel::LayoutDocument{};
 

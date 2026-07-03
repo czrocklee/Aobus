@@ -9,6 +9,7 @@
 #include <ao/yaml/Utils.h>
 
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <format>
 #include <string>
@@ -18,7 +19,7 @@
 namespace ao::rt
 {
   ConfigStore::ConfigStore(std::filesystem::path filePath, OpenMode mode)
-    : _filePath{std::move(filePath)}, _mode{mode}
+    : _filePath{std::move(filePath)}, _yamlContext{_filePath.string()}, _mode{mode}
   {
   }
 
@@ -63,17 +64,24 @@ namespace ao::rt
       return {};
     }
 
+    auto bufferResult = yaml::readFileResult(_filePath);
+
+    if (!bufferResult)
+    {
+      return std::unexpected{bufferResult.error()};
+    }
+
+    _inputBuffer = std::move(*bufferResult);
+
     try
     {
-      auto const fileName = _filePath.string();
-      _inputBuffer = yaml::readFile(_filePath);
-      _root = ryml::Tree{yaml::callbacks(fileName.c_str())};
-      ryml::parse_in_place(yaml::toSubstr(_inputBuffer), &_root);
+      _root = ryml::Tree{yaml::callbacks(_yamlContext)};
+      yaml::parseInPlace(_root, _inputBuffer, _yamlContext);
     }
     catch (std::exception const& e)
     {
       return makeError(
-        Error::Code::IoError, std::format("Failed to parse config file '{}': {}", _filePath.string(), e.what()));
+        Error::Code::FormatRejected, std::format("Failed to parse config file '{}': {}", _filePath.string(), e.what()));
     }
 
     _loaded = true;

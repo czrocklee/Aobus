@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <print>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -35,12 +36,12 @@ namespace ao::query
       {
         switch (ch)
         {
-          case '\\': oss << "\\\\"; break;
-          case '"': oss << "\\\""; break;
-          case '\n': oss << "\\n"; break;
-          case '\t': oss << "\\t"; break;
-          case '\r': oss << "\\r"; break;
-          default: oss << ch; break;
+          case '\\': std::print(oss, "\\\\"); break;
+          case '"': std::print(oss, "\\\""); break;
+          case '\n': std::print(oss, "\\n"); break;
+          case '\t': std::print(oss, "\\t"); break;
+          case '\r': std::print(oss, "\\r"); break;
+          default: std::print(oss, "{}", ch); break;
         }
       }
     }
@@ -49,13 +50,13 @@ namespace ao::query
     {
       if (isSimpleUserVariableName(name))
       {
-        oss << name;
+        std::print(oss, "{}", name);
         return;
       }
 
-      oss << '"';
+      std::print(oss, "\"");
       appendEscapedString(oss, name);
-      oss << '"';
+      std::print(oss, "\"");
     }
 
     struct [[nodiscard]] ParenthesisGuard final
@@ -65,7 +66,7 @@ namespace ao::query
       {
         if (apply)
         {
-          oss << "(";
+          oss.put('(');
         }
       }
 
@@ -78,7 +79,7 @@ namespace ao::query
       {
         if (apply)
         {
-          oss << ")";
+          oss.put(')');
         }
       }
 
@@ -120,11 +121,11 @@ namespace ao::query
             auto guard = ParenthesisGuard{oss, needsParens};
             std::visit(*this, unary->operand);
           }
-          oss << "?";
+          std::print(oss, "?");
           return;
         }
 
-        oss << "not ";
+        std::print(oss, "not ");
         std::visit(*this, unary->operand);
       }
 
@@ -132,10 +133,10 @@ namespace ao::query
       {
         switch (variable.type)
         {
-          case VariableType::Metadata: oss << '$' << variable.name; return;
-          case VariableType::Property: oss << '@' << variable.name; return;
-          case VariableType::Tag: oss << '#'; break;
-          case VariableType::Custom: oss << '%'; break;
+          case VariableType::Metadata: std::print(oss, "${}", variable.name); return;
+          case VariableType::Property: std::print(oss, "@{}", variable.name); return;
+          case VariableType::Tag: std::print(oss, "#"); break;
+          case VariableType::Custom: std::print(oss, "%"); break;
         }
 
         serializeUserVariableName(oss, variable.name);
@@ -145,7 +146,7 @@ namespace ao::query
 
       void operator()(ListExpression const& list)
       {
-        oss << "[";
+        std::print(oss, "[");
 
         bool first = true;
 
@@ -153,20 +154,20 @@ namespace ao::query
         {
           if (!first)
           {
-            oss << ", ";
+            std::print(oss, ", ");
           }
 
           serializeConstant(value);
           first = false;
         }
 
-        oss << "]";
+        std::print(oss, "]");
       }
 
       void operator()(RangeExpression const& range)
       {
         serializeConstant(range.lower);
-        oss << "..";
+        std::print(oss, "..");
         serializeConstant(range.upper);
       }
 
@@ -174,22 +175,23 @@ namespace ao::query
       {
         // serializeBinary only ever receives binary (infix) operators, so the
         // canonical token from the table reproduces the original spacing exactly.
-        oss << ' ' << detail::operatorInfo(op).spelling << ' ';
+        std::print(oss, " {} ", detail::operatorInfo(op).spelling);
         std::visit(*this, rhs);
       }
 
       void serializeConstant(ConstantExpression const& constant)
       {
-        std::visit(utility::makeVisitor([this](bool val) { oss << (val ? "true" : "false"); },
-                                        [this](std::int64_t val) { oss << val; },
-                                        [this](UnitConstantExpression const& val) { oss << val.lexeme; },
-                                        [this](std::string_view val)
-                                        {
-                                          oss << '"';
-                                          appendEscapedString(oss, val);
-                                          oss << '"';
-                                        }),
-                   constant);
+        std::visit(
+          utility::makeVisitor([this](bool val) { std::print(oss, "{}", val ? "true" : "false"); },
+                               [this](std::int64_t val) { std::print(oss, "{}", val); },
+                               [this](UnitConstantExpression const& val) { std::print(oss, "{}", val.lexeme); },
+                               [this](std::string_view val)
+                               {
+                                 std::print(oss, "\"");
+                                 appendEscapedString(oss, val);
+                                 std::print(oss, "\"");
+                               }),
+          constant);
       }
 
       std::ostringstream oss;
