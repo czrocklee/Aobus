@@ -73,16 +73,16 @@ namespace ao::gtk
 
   void ListNavigationController::setupActions()
   {
-    _newListActionPtr = Gio::SimpleAction::create("new");
+    _newListActionPtr = Gio::SimpleAction::create("list-new-smart-list");
     _newListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
                                                  { openNewSmartListDialog(); });
     _newListActionPtr->set_enabled(false);
 
-    _deleteListActionPtr = Gio::SimpleAction::create("delete");
+    _deleteListActionPtr = Gio::SimpleAction::create("list-delete");
     _deleteListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/) { onDeleteList(); });
     _deleteListActionPtr->set_enabled(false);
 
-    _editListActionPtr = Gio::SimpleAction::create("edit");
+    _editListActionPtr = Gio::SimpleAction::create("list-edit");
     _editListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/) { onEditList(); });
     _editListActionPtr->set_enabled(false);
   }
@@ -187,6 +187,7 @@ namespace ao::gtk
 
         dialog->close();
       });
+    dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
 
     dialog->present();
   }
@@ -224,6 +225,7 @@ namespace ao::gtk
 
           dialog->close();
         });
+      dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
 
       dialog->present();
     }

@@ -55,9 +55,9 @@ namespace ao::gtk
     _listView.set_factory(factoryPtr);
 
     auto menuModelPtr = Gio::Menu::create();
-    menuModelPtr->append("New Smart List...", "win.new");
-    menuModelPtr->append("Edit List...", "win.edit");
-    menuModelPtr->append("Delete List", "win.delete");
+    menuModelPtr->append("New Smart List...", "win.list-new-smart-list");
+    menuModelPtr->append("Edit List...", "win.list-edit");
+    menuModelPtr->append("Delete List", "win.list-delete");
     _listContextMenu.set_menu_model(menuModelPtr);
     _listContextMenu.set_parent(_listView);
   }

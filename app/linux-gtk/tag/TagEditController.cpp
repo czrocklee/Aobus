@@ -187,7 +187,7 @@ namespace ao::gtk
                                                                   *_dataProvider,
                                                                   _optActiveSelection->selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
-    dialog->signal_hide().connect([tokenPtr] {});
+    dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
   }
 
@@ -205,7 +205,7 @@ namespace ao::gtk
                                                                   *_dataProvider,
                                                                   selection.selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
-    dialog->signal_hide().connect([tokenPtr] {});
+    dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
   }
 

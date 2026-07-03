@@ -13,6 +13,7 @@
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/UIState.h"
 #include "app/WindowActionRegistry.h"
+#include "list/ListNavigationController.h"
 #include "portal/ImportExportCoordinator.h"
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
@@ -66,6 +67,7 @@ namespace ao::gtk
 
     _menuControllerPtr = std::make_unique<MenuController>();
     _menuControllerPtr->setup();
+    _mainWindowCoordinatorPtr->listNavigationController()->addActionsTo(*this);
     _shellLayout.context().shell.menuModelPtr = _menuControllerPtr->menuModel();
 
     _shellLayout.attachToWindow();

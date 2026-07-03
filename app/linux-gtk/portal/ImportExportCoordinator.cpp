@@ -114,6 +114,7 @@ namespace ao::gtk::portal
 
     dialog->signal_response().connect([this, modeCombo, dialog, tokenPtr](std::int32_t responseId)
                                       { onExportModeConfirmed(responseId, modeCombo, dialog); });
+    dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
   }
 

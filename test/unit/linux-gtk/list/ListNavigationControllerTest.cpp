@@ -109,9 +109,9 @@ namespace ao::gtk::test
       auto groupPtr = Gio::SimpleActionGroup::create();
       controller.addActionsTo(*groupPtr);
 
-      auto const newActionPtr = simpleAction(*groupPtr, "new");
-      auto const editActionPtr = simpleAction(*groupPtr, "edit");
-      auto const deleteActionPtr = simpleAction(*groupPtr, "delete");
+      auto const newActionPtr = simpleAction(*groupPtr, "list-new-smart-list");
+      auto const editActionPtr = simpleAction(*groupPtr, "list-edit");
+      auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
       REQUIRE(newActionPtr);
       REQUIRE(editActionPtr);
       REQUIRE(deleteActionPtr);
@@ -196,7 +196,7 @@ namespace ao::gtk::test
       auto groupPtr = Gio::SimpleActionGroup::create();
       controller.addActionsTo(*groupPtr);
 
-      auto const deleteActionPtr = simpleAction(*groupPtr, "delete");
+      auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
       REQUIRE(deleteActionPtr);
 
       auto& library = fixture.runtime().musicLibrary();
