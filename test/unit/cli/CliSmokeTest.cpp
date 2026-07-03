@@ -359,6 +359,27 @@ namespace ao::cli::test
                        "track show --format supports only plain output");
   }
 
+  TEST_CASE("CLI - track show resolves explicit id batches directly", "[cli][workflow][track][show]")
+  {
+    auto fixture = CliFixture{};
+    auto const first = fixture.addTrack(library::test::TrackSpec{.title = "First", .uri = "first.flac"});
+    fixture.addTrack(library::test::TrackSpec{.title = "Second", .uri = "second.flac"});
+    auto const third = fixture.addTrack(library::test::TrackSpec{.title = "Third", .uri = "third.flac"});
+
+    auto result = fixture.run(
+      {"track", "show", std::to_string(third.raw()), std::to_string(first.raw()), std::to_string(third.raw())});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(countOccurrences(result.out, "\n") == 2);
+
+    auto const thirdPos = result.out.find("Third");
+    auto const firstPos = result.out.find("First");
+    REQUIRE(thirdPos != std::string::npos);
+    REQUIRE(firstPos != std::string::npos);
+    CHECK(thirdPos < firstPos);
+    CHECK_FALSE(contains(result.out, "Second"));
+  }
+
   TEST_CASE("CLI - version flag reports the application version", "[cli][workflow][contract]")
   {
     auto const result = runArgs({"aobus", "--version"});
@@ -910,7 +931,7 @@ namespace ao::cli::test
     result = fixture.run({"track", "update", "1", "--title", "Renamed"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, "updated 1 track(s)"));
+    CHECK(contains(result.out, "updated 1 of 1 matched track(s)"));
 
     result = fixture.run({"track", "show"});
     REQUIRE(result.status == 0);
@@ -920,7 +941,28 @@ namespace ao::cli::test
     result = fixture.run({"track", "update", "1", "--title", "Renamed"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, "updated 0 track(s)"));
+    CHECK(contains(result.out, "updated 0 of 1 matched track(s)"));
+  }
+
+  TEST_CASE("CLI - track update edits explicit id batches", "[cli][workflow][track][update]")
+  {
+    auto fixture = CliFixture{};
+    auto const firstId = fixture.addTrack(library::test::makeEmptyTrackSpec("first.flac"));
+    auto const secondId = fixture.addTrack(library::test::makeEmptyTrackSpec("second.flac"));
+    auto const thirdId = fixture.addTrack(library::test::makeEmptyTrackSpec("third.flac"));
+
+    auto result = fixture.run(
+      {"track", "update", std::to_string(firstId.raw()), std::to_string(secondId.raw()), "--genre", "Classical"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "updated 2 of 2 matched track(s)"));
+
+    result = fixture.run({"-O", "json", "track", "show", "--filter", "$genre = \"Classical\""});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(countJsonLinesWithField(result.out, "id", std::to_string(firstId.raw())) == 1);
+    CHECK(countJsonLinesWithField(result.out, "id", std::to_string(secondId.raw())) == 1);
+    CHECK(countJsonLinesWithField(result.out, "id", std::to_string(thirdId.raw())) == 0);
   }
 
   TEST_CASE("CLI - track update edits filtered batches with structured output", "[cli][workflow][track][update]")
@@ -937,6 +979,7 @@ namespace ao::cli::test
     CHECK(result.err.empty());
     requireJsonLineParses(result.out);
     auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["matched"]) == "2");
     CHECK(yaml::scalarView(tree.rootref()["updated"]) == "2");
     REQUIRE(tree.rootref()["trackIds"].is_seq());
     CHECK(tree.rootref()["trackIds"].num_children() == 2);
@@ -945,6 +988,188 @@ namespace ao::cli::test
     result = fixture.run({"-O", "json", "track", "show"});
     REQUIRE(result.status == 0);
     CHECK(countJsonLinesWithField(result.out, "artist", "Unified") == 2);
+
+    result = fixture.run({"track", "update", "--filter", "$artist = \"Unified\"", "--artist", "Unified"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "updated 0 of 2 matched track(s)"));
+  }
+
+  TEST_CASE("CLI - track show exposes writable metadata fields", "[cli][workflow][track][output]")
+  {
+    auto fixture = CliFixture{};
+    auto const trackId = fixture.addTrack(library::test::makeEmptyTrackSpec("track.flac"));
+
+    auto result = fixture.run({"track",
+                               "update",
+                               std::to_string(trackId.raw()),
+                               "--album-artist",
+                               "Album Artist",
+                               "--genre",
+                               "Jazz",
+                               "--composer",
+                               "Composer",
+                               "--work",
+                               "Work",
+                               "--movement",
+                               "Finale",
+                               "--year",
+                               "1984",
+                               "--track-number",
+                               "7",
+                               "--track-total",
+                               "11",
+                               "--disc-number",
+                               "2",
+                               "--disc-total",
+                               "3",
+                               "--movement-number",
+                               "4",
+                               "--movement-total",
+                               "5"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+
+    result = fixture.run({"-O", "json", "track", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    auto tree = parseYaml(result.out);
+    auto root = tree.rootref();
+    CHECK(yaml::scalarView(root["albumArtist"]) == "Album Artist");
+    CHECK(yaml::scalarView(root["genre"]) == "Jazz");
+    CHECK(yaml::scalarView(root["composer"]) == "Composer");
+    CHECK(yaml::scalarView(root["work"]) == "Work");
+    CHECK(yaml::scalarView(root["movement"]) == "Finale");
+    CHECK(yaml::scalarView(root["year"]) == "1984");
+    CHECK(yaml::scalarView(root["trackNumber"]) == "7");
+    CHECK(yaml::scalarView(root["trackTotal"]) == "11");
+    CHECK(yaml::scalarView(root["discNumber"]) == "2");
+    CHECK(yaml::scalarView(root["discTotal"]) == "3");
+    CHECK(yaml::scalarView(root["movementNumber"]) == "4");
+    CHECK(yaml::scalarView(root["movementTotal"]) == "5");
+
+    result = fixture.run({"-O", "json", "track", "show", "--filter", "$movement = \"Finale\""});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["movement"]) == "Finale");
+
+    result = fixture.run({"-O", "json", "track", "show", std::to_string(trackId.raw())});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["id"]) == std::to_string(trackId.raw()));
+
+    result = fixture.run({"track", "show", std::to_string(trackId.raw()), "--format", "$genre + \": \" + $movement"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "Jazz: Finale"));
+
+    result = fixture.run({"track", "show", std::to_string(trackId.raw()), "--filter", "$genre = \"Jazz\""});
+    checkDomainFailure(result, "track show accepts either explicit ids or --filter");
+  }
+
+  TEST_CASE("CLI - missing field filters agree with structured omissions", "[cli][workflow][track][output]")
+  {
+    auto fixture = CliFixture{};
+    fixture.addTrack(library::test::makeEmptyTrackSpec("missing.flac"));
+    fixture.addTrack(library::test::TrackSpec{.title = "Known", .genre = "Known", .uri = "known.flac"});
+
+    auto result = fixture.run({"-O", "json", "track", "show", "--filter", "not $genre?"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(countOccurrences(result.out, "\n") == 1);
+
+    auto tree = parseYaml(result.out);
+    auto root = tree.rootref();
+    CHECK(yaml::scalarView(root["uri"]) == "missing.flac");
+    CHECK_FALSE(root["genre"].readable());
+    CHECK_FALSE(root["year"].readable());
+    CHECK_FALSE(root["trackNumber"].readable());
+  }
+
+  TEST_CASE("CLI - genre repair loop converges through filters and structured output", "[cli][workflow][track][agent]")
+  {
+    auto fixture = CliFixture{};
+    fixture.addTrack(library::test::TrackSpec{.title = "Missing One", .genre = "", .uri = "missing-one.flac"});
+    fixture.addTrack(library::test::TrackSpec{.title = "Missing Two", .genre = "", .uri = "missing-two.flac"});
+    fixture.addTrack(library::test::TrackSpec{.title = "Known", .genre = "Known", .uri = "known.flac"});
+
+    auto result = fixture.run({"-O", "json", "track", "show", "--filter", "not $genre?"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(countOccurrences(result.out, "\n") == 2);
+    CHECK(contains(result.out, "Missing One"));
+    CHECK(contains(result.out, "Missing Two"));
+
+    result =
+      fixture.run({"-O", "json", "track", "update", "--dry-run", "--filter", "not $genre?", "--genre", "Inferred"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["matched"]) == "2");
+    CHECK(yaml::scalarView(tree.rootref()["updated"]) == "2");
+    CHECK(yaml::scalarView(tree.rootref()["changes"][0]["fields"][0]["newValue"]) == "Inferred");
+
+    result = fixture.run({"-O", "json", "track", "show", "--filter", "not $genre?"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(countOccurrences(result.out, "\n") == 2);
+
+    result = fixture.run({"-O", "json", "track", "update", "--filter", "not $genre?", "--genre", "Inferred"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "false");
+    CHECK(yaml::scalarView(tree.rootref()["matched"]) == "2");
+    CHECK(yaml::scalarView(tree.rootref()["updated"]) == "2");
+
+    result = fixture.run({"-O", "json", "track", "show", "--filter", "not $genre?"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(result.out.empty());
+
+    result = fixture.run({"-O", "json", "track", "show", "--filter", "$genre = \"Inferred\""});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(countJsonLinesWithField(result.out, "genre", "Inferred") == 2);
+  }
+
+  TEST_CASE("CLI - query help and errors teach filter usage", "[cli][workflow][contract]")
+  {
+    auto fixture = CliFixture{};
+    fixture.addTrack(library::test::TrackSpec{});
+
+    auto result = fixture.run({"track", "show", "--help"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "aobus track show 1 2 3"));
+    CHECK(contains(result.out, "not $genre?"));
+    CHECK(contains(result.out, "$artist + \" - \" + $title"));
+    CHECK(contains(result.out, "$movement($m)"));
+    CHECK(contains(result.out, "%customKey"));
+
+    result = fixture.run({"track", "show", "--filter", "("});
+    checkDomainFailure(result, "hint: expressions look like:");
+    CHECK(contains(result.err, "$genre($g)"));
+    CHECK(contains(result.err, "%customKey"));
+
+    result = fixture.run({"track", "show", "--filter", "$gerne = Jazz"});
+    checkDomainFailure(result, "did you mean '$genre'?");
+    CHECK(contains(result.err, "available metadata fields:"));
+  }
+
+  TEST_CASE("CLI - help-all expands command tree and teaching footers", "[cli][workflow][contract]")
+  {
+    auto result = runArgs({"aobus", "--help-all"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "track update"));
+    CHECK(contains(result.out, "list create"));
+    CHECK(contains(result.out, "--dry-run"));
+    CHECK(contains(result.out, "not $genre?"));
+    CHECK(contains(result.out, "$artist + \" - \" + $title"));
   }
 
   TEST_CASE("CLI - track update sets and unsets custom metadata", "[cli][workflow][track][update]")
@@ -958,7 +1183,7 @@ namespace ao::cli::test
     result = fixture.run({"track", "update", "1", "--set", "mood=bright", "--set", "energy=high"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, "updated 1 track(s)"));
+    CHECK(contains(result.out, "updated 1 of 1 matched track(s)"));
 
     result = fixture.run({"-O", "json", "track", "show"});
     REQUIRE(result.status == 0);
@@ -968,7 +1193,7 @@ namespace ao::cli::test
 
     result = fixture.run({"track", "update", "1", "--unset", "mood"});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "updated 1 track(s)"));
+    CHECK(contains(result.out, "updated 1 of 1 matched track(s)"));
 
     result = fixture.run({"-O", "json", "track", "show"});
     REQUIRE(result.status == 0);
@@ -1004,6 +1229,7 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     tree = parseYaml(result.out);
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["matched"]) == "1");
     CHECK(yaml::scalarView(tree.rootref()["changes"][0]["fields"][0]["oldValue"]) == "Test Title");
     CHECK(yaml::scalarView(tree.rootref()["changes"][0]["fields"][0]["newValue"]) == "Renamed");
 

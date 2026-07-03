@@ -14,6 +14,9 @@ Global options:
   is absent. The library database lives under `<root>/.aobus/library`.
 - `-O, --output <plain|yaml|json>` selects command output. The default is
   `plain`.
+- `--help-all` prints the full command tree by concatenating each command's
+  normal help, including teaching footers such as the query-language
+  cheatsheet.
 - `--version` prints the application version.
 
 Exit codes:
@@ -84,9 +87,23 @@ the manifest using `library::LibraryScanner`.
 
 ## Tracks
 
-`aobus track show [--filter <expr>] [--limit N] [--offset N]` lists matching
-tracks. Structured output includes id, title, artist, album, tags, duration,
-sample rate, URI, and custom metadata.
+`aobus track show [<id>...] [--filter <expr>] [--limit N] [--offset N]` lists
+explicit tracks or tracks matching a filter. Explicit ids are current-library
+operation handles and are resolved by direct lookup, not by the query language.
+Structured output includes id, title, artist, album, albumArtist,
+genre, composer, work, movement, year, trackNumber, trackTotal, discNumber,
+discTotal, movementNumber, movementTotal, tags, duration, sampleRate, uri, and
+custom metadata.
+
+Missing fields are omitted from YAML/JSON rather than emitted as empty scalars:
+empty strings, invalid dictionary ids, and numeric `0` sentinels become absent
+keys. This matches query existence semantics, so `track show -O json --filter
+'not $genre?'` returns records without a `genre` key.
+Track ids can be supplied directly:
+
+```bash
+aobus track show 1 2 3
+```
 
 `aobus track show --format '<expr>'` formats each matching row with the query
 format-expression language, for example:
@@ -110,7 +127,9 @@ standard fields:
 
 Custom metadata uses repeatable `--set key=value` and `--unset key`. Unknown
 explicit ids fail before applying. Identical-value patches succeed and report
-`updated 0 track(s)`.
+`updated 0 of N matched track(s)`. Structured update output includes both
+`matched` and `updated`; `updated` counts only tracks whose stored metadata
+changed.
 
 Other track commands:
 

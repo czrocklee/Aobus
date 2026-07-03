@@ -127,12 +127,15 @@ namespace ao::query::test
   TEST_CASE("Completion - lists query variable specs in UI catalog order", "[query][unit][completion]")
   {
     auto const metadata = detail::queryVariableCompletionSpecs(VariableType::Metadata);
-    REQUIRE(metadata.size() == 13);
+    REQUIRE(metadata.size() == 16);
     CHECK(metadata[0].canonicalName == "title");
     CHECK(metadata[1].canonicalName == "artist");
     CHECK(metadata[2].canonicalName == "album");
     CHECK(metadata[3].canonicalName == "albumArtist");
-    CHECK(metadata[12].canonicalName == "coverArt");
+    CHECK(metadata[6].canonicalName == "movement");
+    CHECK(metadata[7].canonicalName == "genre");
+    CHECK(metadata[13].canonicalName == "movementNumber");
+    CHECK(metadata[15].canonicalName == "coverArt");
 
     auto const properties = detail::queryVariableCompletionSpecs(VariableType::Property);
     REQUIRE(properties.size() == 6);
@@ -253,12 +256,15 @@ namespace ao::query::test
     constexpr auto kAa = std::array{std::string_view{"aa"}};
     constexpr auto kC = std::array{std::string_view{"c"}};
     constexpr auto kW = std::array{std::string_view{"w"}};
+    constexpr auto kM = std::array{std::string_view{"m"}};
     constexpr auto kG = std::array{std::string_view{"g"}};
     constexpr auto kY = std::array{std::string_view{"y"}};
     constexpr auto kTn = std::array{std::string_view{"tn"}};
     constexpr auto kTt = std::array{std::string_view{"tt"}};
     constexpr auto kDn = std::array{std::string_view{"dn"}};
     constexpr auto kTd = std::array{std::string_view{"td"}};
+    constexpr auto kMn = std::array{std::string_view{"mn"}};
+    constexpr auto kMt = std::array{std::string_view{"mt"}};
     constexpr auto kCa = std::array{std::string_view{"ca"}};
     constexpr auto kL = std::array{std::string_view{"l"}};
     constexpr auto kBr = std::array{std::string_view{"br"}};
@@ -281,6 +287,10 @@ namespace ao::query::test
            .field = Field::ComposerId,
            .aliases = std::span{kC}},
       Case{.type = VariableType::Metadata, .canonicalName = "work", .field = Field::WorkId, .aliases = std::span{kW}},
+      Case{.type = VariableType::Metadata,
+           .canonicalName = "movement",
+           .field = Field::MovementId,
+           .aliases = std::span{kM}},
       Case{.type = VariableType::Metadata, .canonicalName = "genre", .field = Field::GenreId, .aliases = std::span{kG}},
       Case{.type = VariableType::Metadata, .canonicalName = "year", .field = Field::Year, .aliases = std::span{kY}},
       Case{.type = VariableType::Metadata,
@@ -299,6 +309,14 @@ namespace ao::query::test
            .canonicalName = "discTotal",
            .field = Field::DiscTotal,
            .aliases = std::span{kTd}},
+      Case{.type = VariableType::Metadata,
+           .canonicalName = "movementNumber",
+           .field = Field::MovementNumber,
+           .aliases = std::span{kMn}},
+      Case{.type = VariableType::Metadata,
+           .canonicalName = "movementTotal",
+           .field = Field::MovementTotal,
+           .aliases = std::span{kMt}},
       Case{.type = VariableType::Metadata,
            .canonicalName = "coverArt",
            .field = Field::CoverArtId,
@@ -350,5 +368,18 @@ namespace ao::query::test
 
     assertSpecs(detail::queryVariableCompletionSpecs(VariableType::Metadata), expectedMetadata);
     assertSpecs(detail::queryVariableCompletionSpecs(VariableType::Property), expectedProperties);
+  }
+
+  TEST_CASE("Completion - exposes public query variable summaries", "[query][unit][completion]")
+  {
+    auto const summaries = queryVariableSummaries(VariableType::Metadata);
+    auto const iter = std::ranges::find_if(
+      summaries, [](QueryVariableSummary const& summary) { return summary.canonicalName == "movement"; });
+
+    REQUIRE(iter != summaries.end());
+    CHECK(iter->type == VariableType::Metadata);
+    CHECK(iter->field == Field::MovementId);
+    REQUIRE(iter->aliases.size() == 1);
+    CHECK(iter->aliases[0] == "m");
   }
 } // namespace ao::query::test

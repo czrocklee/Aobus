@@ -22,12 +22,15 @@ namespace ao::query::detail
     constexpr auto kAlbumArtistAliases = std::to_array<std::string_view>({"aa"});
     constexpr auto kComposerAliases = std::to_array<std::string_view>({"c"});
     constexpr auto kWorkAliases = std::to_array<std::string_view>({"w"});
+    constexpr auto kMovementAliases = std::to_array<std::string_view>({"m"});
     constexpr auto kGenreAliases = std::to_array<std::string_view>({"g"});
     constexpr auto kYearAliases = std::to_array<std::string_view>({"y"});
     constexpr auto kTrackNumberAliases = std::to_array<std::string_view>({"tn"});
     constexpr auto kTrackTotalAliases = std::to_array<std::string_view>({"tt"});
     constexpr auto kDiscNumberAliases = std::to_array<std::string_view>({"dn"});
     constexpr auto kDiscTotalAliases = std::to_array<std::string_view>({"td"});
+    constexpr auto kMovementNumberAliases = std::to_array<std::string_view>({"mn"});
+    constexpr auto kMovementTotalAliases = std::to_array<std::string_view>({"mt"});
     constexpr auto kCoverArtAliases = std::to_array<std::string_view>({"ca"});
 
     constexpr auto kDurationAliases = std::to_array<std::string_view>({"l"});
@@ -61,6 +64,10 @@ namespace ao::query::detail
        .canonicalName = "work",
        .aliases = std::span{kWorkAliases}},
       {.type = VariableType::Metadata,
+       .field = Field::MovementId,
+       .canonicalName = "movement",
+       .aliases = std::span{kMovementAliases}},
+      {.type = VariableType::Metadata,
        .field = Field::GenreId,
        .canonicalName = "genre",
        .aliases = std::span{kGenreAliases}},
@@ -84,6 +91,14 @@ namespace ao::query::detail
        .field = Field::DiscTotal,
        .canonicalName = "discTotal",
        .aliases = std::span{kDiscTotalAliases}},
+      {.type = VariableType::Metadata,
+       .field = Field::MovementNumber,
+       .canonicalName = "movementNumber",
+       .aliases = std::span{kMovementNumberAliases}},
+      {.type = VariableType::Metadata,
+       .field = Field::MovementTotal,
+       .canonicalName = "movementTotal",
+       .aliases = std::span{kMovementTotalAliases}},
       {.type = VariableType::Metadata,
        .field = Field::CoverArtId,
        .canonicalName = "coverArt",

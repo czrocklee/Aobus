@@ -22,6 +22,9 @@ namespace ao::query::test
     CHECK(static_cast<std::uint8_t>(Field::Duration) == 2);
     CHECK(static_cast<std::uint8_t>(Field::Bitrate) == 3);
     CHECK(static_cast<std::uint8_t>(Field::SampleRate) == 4);
+    CHECK(static_cast<std::uint8_t>(Field::Channels) == 5);
+    CHECK(static_cast<std::uint8_t>(Field::BitDepth) == 6);
+    CHECK(static_cast<std::uint8_t>(Field::Codec) == 7);
 
     // Metadata ID fields
     CHECK(static_cast<std::uint8_t>(Field::ArtistId) == 9);
@@ -36,6 +39,11 @@ namespace ao::query::test
     // Tag fields
     CHECK(static_cast<std::uint8_t>(Field::TagBloom) == 21);
     CHECK(static_cast<std::uint8_t>(Field::TagCount) == 22);
+
+    // Cold classical metadata fields
+    CHECK(static_cast<std::uint8_t>(Field::MovementId) == 25);
+    CHECK(static_cast<std::uint8_t>(Field::MovementNumber) == 26);
+    CHECK(static_cast<std::uint8_t>(Field::MovementTotal) == 27);
   }
 
   TEST_CASE("ExecutionPlan - preserves opcode enum values", "[query][unit][execution_plan][contract]")

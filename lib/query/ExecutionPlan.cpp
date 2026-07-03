@@ -1230,9 +1230,13 @@ namespace ao::query
     {
       _plan.accessProfile = AccessProfile::ColdOnly;
     }
-    else
+    else if (_hasHotAccess)
     {
       _plan.accessProfile = AccessProfile::HotOnly;
+    }
+    else
+    {
+      _plan.accessProfile = AccessProfile::NoTrackData;
     }
 
     return _plan;

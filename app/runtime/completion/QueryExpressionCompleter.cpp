@@ -88,6 +88,7 @@ namespace ao::rt
         case query::Field::GenreId: return TrackField::Genre;
         case query::Field::ComposerId: return TrackField::Composer;
         case query::Field::WorkId: return TrackField::Work;
+        case query::Field::MovementId: return TrackField::Movement;
         default: return std::nullopt;
       }
     }

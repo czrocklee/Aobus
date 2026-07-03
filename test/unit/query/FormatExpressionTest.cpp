@@ -48,12 +48,15 @@ namespace ao::query::test
                        .albumArtist = "Bach",
                        .composer = "Bach",
                        .work = "BWV 1007",
+                       .movement = "Prelude",
                        .genre = "Classical",
                        .year = 1720,
                        .trackNumber = 3,
                        .trackTotal = 6,
                        .discNumber = 1,
                        .discTotal = 2,
+                       .movementNumber = 1,
+                       .movementTotal = 6,
                        .duration = std::chrono::seconds{143},
                        .bitrate = 912000,
                        .sampleRate = 96000,
@@ -87,8 +90,18 @@ namespace ao::query::test
     auto fixture = TrackFixture{formatTrackSpec()};
 
     CHECK(evaluate(R"($trackNumber + "/" + $trackTotal + " " + $work)", fixture) == "3/6 BWV 1007");
+    CHECK(evaluate(R"($movementNumber + "/" + $movementTotal + " " + $movement)", fixture) == "1/6 Prelude");
     CHECK(evaluate(R"(@codec + " " + @sampleRate + "Hz " + @bitDepth + "bit")", fixture) == "FLAC 96000Hz 24bit");
     CHECK(evaluate(R"(%catalog + " " + @duration)", fixture) == "Archiv 123 143000");
+  }
+
+  TEST_CASE("FormatExpression - rejects track ids as format fields", "[query][unit][format_expression]")
+  {
+    auto fixture = TrackFixture{formatTrackSpec()};
+    auto ast = parseOk(R"($id + ": " + $title)");
+    auto compiler = FormatCompiler{&fixture.dictionary()};
+    auto const error = compileError(compiler, ast);
+    CHECK(error.message.find("unknown metadata field '$id'") != std::string::npos);
   }
 
   TEST_CASE("FormatExpression - formats unknown codecs as empty", "[query][unit][format_expression]")
@@ -121,11 +134,15 @@ namespace ao::query::test
     auto spec = formatTrackSpec();
     spec.albumArtist = {};
     spec.work = {};
+    spec.movement = {};
     spec.trackNumber = 0;
+    spec.movementNumber = 0;
     spec.customPairs = {};
     auto fixture = TrackFixture{spec};
 
-    CHECK(evaluate(R"($albumArtist + "-" + $work + "-" + $trackNumber + "-" + %catalog)", fixture) == "---");
+    CHECK(evaluate(R"($albumArtist + "-" + $work + "-" + $movement + "-" + )"
+                   R"($trackNumber + "-" + $movementNumber + "-" + %catalog)",
+                   fixture) == "-----");
   }
 
   TEST_CASE("FormatExpression - reports access profile", "[query][unit][format_expression]")

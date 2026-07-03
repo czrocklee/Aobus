@@ -71,6 +71,7 @@ namespace ao::query::test
     std::string albumArtist = {};
     std::string composer = {};
     std::string work = {};
+    std::string movement = {};
     std::string genre = {};
     std::string uri = "/path/to/track.flac";
     std::uint16_t year = 2020;
@@ -78,6 +79,8 @@ namespace ao::query::test
     std::uint16_t trackTotal = 0;
     std::uint16_t discNumber = 0;
     std::uint16_t discTotal = 0;
+    std::uint16_t movementNumber = 0;
+    std::uint16_t movementTotal = 0;
     std::chrono::milliseconds duration = std::chrono::seconds{180};
     std::uint32_t bitrate = 320000;
     std::uint32_t sampleRate = 44100;
@@ -91,6 +94,7 @@ namespace ao::query::test
     std::uint32_t albumArtistId = 0;
     std::uint32_t composerId = 0;
     std::uint32_t workId = 0;
+    std::uint32_t movementId = 0;
     std::vector<std::string> tags = {};
     std::vector<std::pair<std::string, std::string>> customPairs = {};
   };
@@ -174,12 +178,15 @@ namespace ao::query::test
       builder.metadata().albumArtist(spec.albumArtist);
       builder.metadata().composer(spec.composer);
       builder.metadata().work(spec.work);
+      builder.metadata().movement(spec.movement);
       builder.metadata().genre(spec.genre);
       builder.metadata().year(spec.year);
       builder.metadata().trackNumber(spec.trackNumber);
       builder.metadata().trackTotal(spec.trackTotal);
       builder.metadata().discNumber(spec.discNumber);
       builder.metadata().discTotal(spec.discTotal);
+      builder.metadata().movementNumber(spec.movementNumber);
+      builder.metadata().movementTotal(spec.movementTotal);
 
       builder.property().uri(spec.uri);
       builder.property().duration(spec.duration);
@@ -243,6 +250,11 @@ namespace ao::query::test
       if (spec.workId != 0)
       {
         coldHeader->workId = DictionaryId{spec.workId};
+      }
+
+      if (spec.movementId != 0)
+      {
+        coldHeader->movementId = DictionaryId{spec.movementId};
       }
     }
 

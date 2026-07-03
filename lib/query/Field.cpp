@@ -10,13 +10,161 @@
 #include <ao/query/detail/FieldCatalog.h>
 #include <ao/query/detail/FieldResolver.h>
 
+#include <algorithm>
+#include <cstddef>
+#include <expected>
 #include <format>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::query::detail
 {
+  namespace
+  {
+    std::string variableText(VariableType type, std::string_view name)
+    {
+      auto text = std::string{};
+      text.push_back(variablePrefix(type));
+      text += name;
+      return text;
+    }
+
+    std::string fieldListText(VariableType type)
+    {
+      auto result = std::string{};
+
+      for (auto const& spec : queryVariableCompletionSpecs(type))
+      {
+        if (!result.empty())
+        {
+          result += ", ";
+        }
+
+        result += variableText(type, spec.canonicalName);
+
+        if (!spec.aliases.empty())
+        {
+          result += " (";
+
+          for (std::size_t idx = 0; idx < spec.aliases.size(); ++idx)
+          {
+            if (idx > 0)
+            {
+              result += ", ";
+            }
+
+            result += variableText(type, spec.aliases[idx]);
+          }
+
+          result += ")";
+        }
+      }
+
+      return result;
+    }
+
+    char lowerAscii(char ch)
+    {
+      if (ch >= 'A' && ch <= 'Z')
+      {
+        return static_cast<char>(ch - 'A' + 'a');
+      }
+
+      return ch;
+    }
+
+    std::size_t editDistanceInsensitive(std::string_view lhs, std::string_view rhs)
+    {
+      auto previous = std::vector<std::size_t>(rhs.size() + 1);
+      auto current = std::vector<std::size_t>(rhs.size() + 1);
+
+      for (std::size_t idx = 0; idx <= rhs.size(); ++idx)
+      {
+        previous[idx] = idx;
+      }
+
+      for (std::size_t lhsIdx = 0; lhsIdx < lhs.size(); ++lhsIdx)
+      {
+        current[0] = lhsIdx + 1;
+
+        for (std::size_t rhsIdx = 0; rhsIdx < rhs.size(); ++rhsIdx)
+        {
+          auto const substitutionCost = lowerAscii(lhs[lhsIdx]) == lowerAscii(rhs[rhsIdx]) ? 0U : 1U;
+          current[rhsIdx + 1] =
+            std::min({previous[rhsIdx + 1] + 1, current[rhsIdx] + 1, previous[rhsIdx] + substitutionCost});
+        }
+
+        previous.swap(current);
+      }
+
+      return previous.back();
+    }
+
+    std::string closestFieldSuggestion(VariableType type, std::string_view name)
+    {
+      auto bestDistance = std::numeric_limits<std::size_t>::max();
+      auto bestName = std::string_view{};
+
+      for (auto const& spec : queryVariableCompletionSpecs(type))
+      {
+        auto const check = [&](std::string_view candidate)
+        {
+          auto const distance = editDistanceInsensitive(name, candidate);
+
+          if (distance < bestDistance)
+          {
+            bestDistance = distance;
+            bestName = spec.canonicalName;
+          }
+        };
+
+        check(spec.canonicalName);
+
+        for (auto const alias : spec.aliases)
+        {
+          check(alias);
+        }
+      }
+
+      if (bestDistance > 2 || bestName.empty())
+      {
+        return {};
+      }
+
+      return variableText(type, bestName);
+    }
+
+    std::string variableDomainName(VariableType type)
+    {
+      switch (type)
+      {
+        case VariableType::Metadata: return "metadata";
+        case VariableType::Property: return "property";
+        case VariableType::Tag: return "tag";
+        case VariableType::Custom: return "custom";
+      }
+
+      return "variable";
+    }
+
+    Error unknownFieldError(VariableType type, std::string_view name)
+    {
+      auto message = std::format("unknown {} field '{}'", variableDomainName(type), variableText(type, name));
+
+      if (auto const suggestion = closestFieldSuggestion(type, name); !suggestion.empty())
+      {
+        message += std::format("; did you mean '{}'?", suggestion);
+      }
+
+      message += std::format("; available {} fields: {}", variableDomainName(type), fieldListText(type));
+      return Error{.code = Error::Code::FormatRejected, .message = std::move(message)};
+    }
+  } // namespace
+
   Result<Field> resolveVariableField(VariableType type, std::string_view name)
   {
     switch (type)
@@ -28,7 +176,7 @@ namespace ao::query::detail
           return spec->field;
         }
 
-        return makeError(Error::Code::FormatRejected, std::format("unknown property field '@{}'", name));
+        return std::unexpected{unknownFieldError(type, name)};
       }
       case VariableType::Metadata:
       {
@@ -37,7 +185,7 @@ namespace ao::query::detail
           return spec->field;
         }
 
-        return makeError(Error::Code::FormatRejected, std::format("unknown metadata field '${}'", name));
+        return std::unexpected{unknownFieldError(type, name)};
       }
       case VariableType::Tag: return Field::Tag;
       case VariableType::Custom: return Field::Custom;
@@ -87,10 +235,13 @@ namespace ao::query
       case Field::Uri:
       case Field::CoverArtId:
       case Field::WorkId:
+      case Field::MovementId:
       case Field::TrackNumber:
       case Field::TrackTotal:
       case Field::DiscNumber:
       case Field::DiscTotal:
+      case Field::MovementNumber:
+      case Field::MovementTotal:
       case Field::Custom:
       case Field::Duration:
       case Field::Bitrate:
@@ -108,7 +259,8 @@ namespace ao::query
       case Field::GenreId:
       case Field::AlbumArtistId:
       case Field::ComposerId:
-      case Field::WorkId: return true;
+      case Field::WorkId:
+      case Field::MovementId: return true;
       default: return false;
     }
   }
@@ -143,12 +295,15 @@ namespace ao::query
       case Field::TrackTotal: return "trackTotal";
       case Field::DiscNumber: return "discNumber";
       case Field::DiscTotal: return "discTotal";
+      case Field::MovementNumber: return "movementNumber";
+      case Field::MovementTotal: return "movementTotal";
       case Field::ArtistId: return "artist";
       case Field::AlbumId: return "album";
       case Field::GenreId: return "genre";
       case Field::AlbumArtistId: return "albumArtist";
       case Field::ComposerId: return "composer";
       case Field::WorkId: return "work";
+      case Field::MovementId: return "movement";
       default: return "field";
     }
   }
@@ -212,6 +367,7 @@ namespace ao::query
       case Field::AlbumArtistId: dictionaryId = track.metadata().albumArtistId(); break;
       case Field::ComposerId: dictionaryId = track.metadata().composerId(); break;
       case Field::WorkId: dictionaryId = track.metadata().workId(); break;
+      case Field::MovementId: dictionaryId = track.metadata().movementId(); break;
       default: return {};
     }
 

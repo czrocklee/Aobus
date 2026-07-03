@@ -131,7 +131,9 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .groupable = false,
+        .valueCompletion = true,
         .optSortField = TrackSortField::Movement,
+        .filterExpressionVariable = "$movement",
       },
       // --- Metadata: number ---
       {
@@ -202,6 +204,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .optSortField = TrackSortField::Movement,
+        .filterExpressionVariable = "$movementNumber",
       },
       {
         .field = F::MovementTotal,
@@ -211,6 +214,7 @@ namespace ao::rt
         .valueKind = Vk::Number,
         .presentable = true,
         .editable = true,
+        .filterExpressionVariable = "$movementTotal",
       },
       // --- Duration ---
       {

@@ -72,7 +72,8 @@ namespace ao::rt::test
                                                      .albumArtist = "Glenn Gould",
                                                      .genre = "Classical",
                                                      .composer = "Bach",
-                                                     .work = "Variations"});
+                                                     .work = "Variations",
+                                                     .movement = "Aria"});
     library::test::addTrack(testLib.library(),
                             library::test::TrackSpec{.title = "Two",
                                                      .artist = "Bach",
@@ -80,7 +81,8 @@ namespace ao::rt::test
                                                      .albumArtist = "Yo-Yo Ma",
                                                      .genre = "Classical",
                                                      .composer = "Bach",
-                                                     .work = "Suites"});
+                                                     .work = "Suites",
+                                                     .movement = "Prelude"});
     library::test::addTrack(testLib.library(),
                             library::test::TrackSpec{.title = "Three",
                                                      .artist = "Glass",
@@ -88,7 +90,8 @@ namespace ao::rt::test
                                                      .albumArtist = "Philip Glass",
                                                      .genre = "Minimal",
                                                      .composer = "Glass",
-                                                     .work = "Glassworks"});
+                                                     .work = "Glassworks",
+                                                     .movement = "Opening"});
 
     auto changes = LibraryChanges{};
     auto service = CompletionService{testLib.library(), changes};
@@ -107,10 +110,15 @@ namespace ao::rt::test
                                                           {"Suites", 1},
                                                           {"Variations", 1},
                                                         });
+    CHECK(pairs(service.valuesFor(TrackField::Movement)) == std::vector<std::pair<std::string, std::uint32_t>>{
+                                                              {"Aria", 1},
+                                                              {"Opening", 1},
+                                                              {"Prelude", 1},
+                                                            });
 
     CHECK(trackFieldSupportsValueCompletion(TrackField::Composer));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Movement));
     CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Title));
-    CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Movement));
     CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Year));
     CHECK(service.valuesFor(TrackField::Title).empty());
   }

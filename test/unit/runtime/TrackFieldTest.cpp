@@ -315,9 +315,9 @@ namespace ao::rt::test
     CHECK(trackFieldSupportsValueCompletion(TrackField::Genre));
     CHECK(trackFieldSupportsValueCompletion(TrackField::Composer));
     CHECK(trackFieldSupportsValueCompletion(TrackField::Work));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Movement));
 
     CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Title));
-    CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Movement));
     CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Year));
     CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Tags));
   }

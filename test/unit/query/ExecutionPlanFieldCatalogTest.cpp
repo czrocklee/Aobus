@@ -9,7 +9,6 @@
 
 #include <cstdint>
 #include <string>
-#include <tuple>
 
 namespace ao::query::test
 {
@@ -37,16 +36,29 @@ namespace ao::query::test
 
   TEST_CASE("ExecutionPlan - rejects unknown metadata fields", "[query][unit][execution_plan][catalog]")
   {
-    auto expr = parseOk("$uri = 'x'");
+    auto expr = parseOk("$gerne = 'x'");
     auto compiler = QueryCompiler{};
-    std::ignore = compileError(compiler, expr);
+    auto const error = compileError(compiler, expr);
+    CHECK(error.message.find("did you mean '$genre'?") != std::string::npos);
+    CHECK(error.message.find("available metadata fields:") != std::string::npos);
+    CHECK(error.message.find("$movement ($m)") != std::string::npos);
   }
 
   TEST_CASE("ExecutionPlan - rejects unknown property fields", "[query][unit][execution_plan][catalog]")
   {
-    auto expr = parseOk("@tagCount > 0");
+    auto expr = parseOk("@samplerate > 0");
     auto compiler = QueryCompiler{};
-    std::ignore = compileError(compiler, expr);
+    auto const error = compileError(compiler, expr);
+    CHECK(error.message.find("did you mean '@sampleRate'?") != std::string::npos);
+    CHECK(error.message.find("available property fields:") != std::string::npos);
+  }
+
+  TEST_CASE("ExecutionPlan - rejects track ids as query fields", "[query][unit][execution_plan][catalog]")
+  {
+    auto expr = parseOk("$id = 1");
+    auto compiler = QueryCompiler{};
+    auto const error = compileError(compiler, expr);
+    CHECK(error.message.find("unknown metadata field '$id'") != std::string::npos);
   }
 
   TEST_CASE("ExecutionPlan - maps every supported metadata catalog name", "[query][unit][execution_plan][catalog]")
@@ -66,6 +78,10 @@ namespace ao::query::test
                   Case{.name = "dn", .expected = Field::DiscNumber},
                   Case{.name = "discTotal", .expected = Field::DiscTotal},
                   Case{.name = "td", .expected = Field::DiscTotal},
+                  Case{.name = "movementNumber", .expected = Field::MovementNumber},
+                  Case{.name = "mn", .expected = Field::MovementNumber},
+                  Case{.name = "movementTotal", .expected = Field::MovementTotal},
+                  Case{.name = "mt", .expected = Field::MovementTotal},
                   Case{.name = "artist", .expected = Field::ArtistId},
                   Case{.name = "a", .expected = Field::ArtistId},
                   Case{.name = "album", .expected = Field::AlbumId},
@@ -81,7 +97,9 @@ namespace ao::query::test
                   Case{.name = "title", .expected = Field::Title},
                   Case{.name = "t", .expected = Field::Title},
                   Case{.name = "work", .expected = Field::WorkId},
-                  Case{.name = "w", .expected = Field::WorkId}};
+                  Case{.name = "w", .expected = Field::WorkId},
+                  Case{.name = "movement", .expected = Field::MovementId},
+                  Case{.name = "m", .expected = Field::MovementId}};
 
     for (auto const& c : cases)
     {

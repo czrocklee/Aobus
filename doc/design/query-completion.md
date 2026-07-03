@@ -19,9 +19,10 @@ The engine is split across three layers so the grammar stays free of UI and libr
   to parse as a complete AST. It works over a token view produced by `detail::tokenizeCompletionQuery()`
   rather than re-deriving lexing by hand. `queryCompletionTokenAtCursor()` remains a variable-only
   compatibility wrapper. `queryVariableCompletionSpecs()` / `completeQueryVariable()` resolve the
-  *authoritative* catalog of `$`/`@` variables, including aliases and `$coverArt` that exist only on the
-  query side. `resolveVariableField()` uses the same catalog, so parser/compiler field resolution and
-  completion names have one shared source.
+  *authoritative* catalog of `$`/`@` variables, including aliases and query-side fields such as
+  `$coverArt`. `queryVariableSummaries()` exposes the same catalog for generated CLI help and diagnostics.
+  `resolveVariableField()` uses the same catalog, so parser/compiler field resolution and completion names
+  have one shared source.
 
 ### Lexical source of truth
 
@@ -100,7 +101,7 @@ fields. The analyzer also recognizes values inside `in [...]` lists, including l
 items, and keeps them bound to the left-hand field.
 
 Runtime value suggestions use the same whitelisted vocabulary as metadata-value completion:
-Artist, Album, AlbumArtist, Genre, Composer, and Work
+Artist, Album, AlbumArtist, Genre, Composer, Work, and Movement
 (`trackFieldSupportsValueCompletion`). Inserted query values are serialized string
 constants, so a library value such as `Massive Attack` is inserted as `"Massive Attack"` rather than
 as an invalid bare token. Custom values and numeric/unit templates are intentionally not populated
@@ -119,16 +120,15 @@ the parser independently.
 
 Value completion is deliberately limited in v1:
 
-- Whitelisted fields only: Artist, Album, AlbumArtist, Genre, Composer, Work
-  (`trackFieldSupportsValueCompletion`). High-cardinality fields (Title, Movement) and
-  numeric fields are excluded.
+- Whitelisted fields only: Artist, Album, AlbumArtist, Genre, Composer, Work, and Movement
+  (`trackFieldSupportsValueCompletion`). High-cardinality Title and numeric fields are excluded.
 - The vocabulary is built by a full library scan, frequency-ranked (descending, then value
   ascending), and cached until invalidated.
 - Invalidation is coarse: any `LibraryChanges::onTracksMutated` event marks every vocabulary dirty
   and the next access rebuilds. Rebuild counting uses hash maps, then applies the stable final sort.
   Dirty metadata-value vocabularies are rebuilt per storage tier: Artist, Album, AlbumArtist, Genre,
-  and Composer share one hot-store scan; Work uses a cold-store scan. The `span<TrackId>` is retained
-  for a future incremental path but unused today.
+  and Composer share one hot-store scan; Work and Movement share a cold-store scan. The
+  `span<TrackId>` is retained for a future incremental path but unused today.
 - A value editor holds a single value, so applying a suggestion replaces the **entire** entry text
   (the prefix matched is the text up to the cursor; any trailing text is discarded by design).
 

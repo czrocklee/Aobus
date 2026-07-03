@@ -88,6 +88,8 @@ namespace ao::query
         case Field::TrackTotal: return decimalTextOrEmpty(track.metadata().trackTotal());
         case Field::DiscNumber: return decimalTextOrEmpty(track.metadata().discNumber());
         case Field::DiscTotal: return decimalTextOrEmpty(track.metadata().discTotal());
+        case Field::MovementNumber: return decimalTextOrEmpty(track.metadata().movementNumber());
+        case Field::MovementTotal: return decimalTextOrEmpty(track.metadata().movementTotal());
         case Field::Duration: return decimalTextOrEmpty(track.property().duration().count());
         case Field::Bitrate: return decimalTextOrEmpty(track.property().bitrate().raw());
         case Field::SampleRate: return decimalTextOrEmpty(track.property().sampleRate().raw());

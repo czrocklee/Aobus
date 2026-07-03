@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -69,11 +70,21 @@ namespace ao::query
     QueryVariableCompletionMatchKind kind = QueryVariableCompletionMatchKind::CanonicalPrefix;
   };
 
+  struct QueryVariableSummary final
+  {
+    VariableType type = VariableType::Metadata;
+    Field field = Field::Title;
+    std::string_view canonicalName;
+    std::span<std::string_view const> aliases;
+  };
+
   std::optional<QueryCompletionContext> analyzeCompletionContext(std::string_view text, std::size_t cursor);
 
   std::optional<QueryCompletionToken> queryCompletionTokenAtCursor(std::string_view text, std::size_t cursor);
 
   std::vector<QueryVariableCompletionMatch> completeQueryVariable(VariableType type, std::string_view prefix);
+
+  std::vector<QueryVariableSummary> queryVariableSummaries(VariableType type);
 
   std::vector<std::string_view> completeQueryOperator(Field field, std::string_view prefix);
 

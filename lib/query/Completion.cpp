@@ -661,6 +661,25 @@ namespace ao::query
     return matches;
   }
 
+  std::vector<QueryVariableSummary> queryVariableSummaries(VariableType type)
+  {
+    auto summaries = std::vector<QueryVariableSummary>{};
+    auto const specs = detail::queryVariableCompletionSpecs(type);
+    summaries.reserve(specs.size());
+
+    for (auto const& spec : specs)
+    {
+      summaries.push_back(QueryVariableSummary{
+        .type = spec.type,
+        .field = spec.field,
+        .canonicalName = spec.canonicalName,
+        .aliases = spec.aliases,
+      });
+    }
+
+    return summaries;
+  }
+
   std::vector<std::string_view> completeQueryOperator(Field field, std::string_view prefix)
   {
     auto operators = std::span<std::string_view const>{};
@@ -686,7 +705,9 @@ namespace ao::query
         case Field::TrackNumber:
         case Field::TrackTotal:
         case Field::DiscNumber:
-        case Field::DiscTotal: operators = std::span{kNumericOperators}; break;
+        case Field::DiscTotal:
+        case Field::MovementNumber:
+        case Field::MovementTotal: operators = std::span{kNumericOperators}; break;
         default: operators = std::span{kFallbackOperators}; break;
       }
     }

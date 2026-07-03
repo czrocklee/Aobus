@@ -22,22 +22,8 @@ namespace ao::query
   public:
     PlanEvaluator() = default;
 
-    /**
-     * Check if a track matches the execution plan using bloom filter fast-path.
-     *
-     * @param plan The compiled execution plan
-     * @param track The track view to evaluate
-     * @return true if the track matches the query
-     */
     bool matches(ExecutionPlan const& plan, library::TrackView const& track) const;
 
-    /**
-     * Evaluate the full execution plan (without bloom filter optimization).
-     *
-     * @param plan The compiled execution plan
-     * @param track The track view to evaluate
-     * @return true if the track matches the query
-     */
     bool evaluateFull(ExecutionPlan const& plan, library::TrackView const& track) const;
 
   private:

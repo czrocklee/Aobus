@@ -4,6 +4,7 @@
 #include "TrackSelection.h"
 
 #include "CommandError.h"
+#include "QueryHelp.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -42,7 +43,7 @@ namespace ao::cli
     if (!expr)
     {
       auto const& error = expr.error();
-      throwCommandError(error, "filter error: {}", error.message);
+      throwCommandError(error, "filter error: {}{}", error.message, queryFilterUsageHint());
     }
 
     auto const plan = query::compileQuery(*expr, &library.dictionary());
@@ -50,7 +51,7 @@ namespace ao::cli
     if (!plan)
     {
       auto const& error = plan.error();
-      throwCommandError(error, "filter error: {}", error.message);
+      throwCommandError(error, "filter error: {}{}", error.message, queryFilterUsageHint());
     }
 
     auto evaluator = query::PlanEvaluator{};

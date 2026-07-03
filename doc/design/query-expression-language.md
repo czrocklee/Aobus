@@ -133,11 +133,14 @@ Use parentheses to make grouping explicit when mixing `and` and `or`.
 | `$genre` | `$g` |
 | `$composer` | `$c` |
 | `$work` | `$w` |
+| `$movement` | `$m` |
 | `$year` | `$y` |
 | `$trackNumber` | `$tn` |
 | `$trackTotal` | `$tt` |
 | `$discNumber` | `$dn` |
 | `$discTotal` | `$td` |
+| `$movementNumber` | `$mn` |
+| `$movementTotal` | `$mt` |
 | `$coverArt` | `$ca` |
 
 ### Technical Properties
@@ -199,8 +202,8 @@ Existence semantics:
 | Field kind | Exists when |
 | --- | --- |
 | String metadata (`$title`) | string is non-empty |
-| Dictionary metadata (`$artist`, `$album`, `$albumArtist`, `$genre`, `$composer`, `$work`) | id is not invalid |
-| Numeric metadata (`$year`, `$trackNumber`, `$trackTotal`, `$discNumber`, `$discTotal`) | value is greater than zero |
+| Dictionary metadata (`$artist`, `$album`, `$albumArtist`, `$genre`, `$composer`, `$work`, `$movement`) | id is not invalid |
+| Numeric metadata (`$year`, `$trackNumber`, `$trackTotal`, `$discNumber`, `$discTotal`, `$movementNumber`, `$movementTotal`) | value is greater than zero |
 | Cover art (`$coverArt`) | primary resource id is valid |
 | Numeric properties (`@duration`, `@bitrate`, `@sampleRate`, `@channels`, `@bitDepth`) | value is greater than zero |
 | Codec (`@codec`) | codec is not `UNKNOWN` |
@@ -272,7 +275,7 @@ $year in 1990..1999
 
 Ordered comparisons — `<`, `<=`, `>`, `>=`, and ranges — compare the left-hand field's value.
 Dictionary-backed metadata fields (`$artist`, `$album`, `$genre`, `$albumArtist`, `$composer`,
-`$work`) store interned IDs whose order reflects insertion rather than text, so an ordered comparison
+`$work`, `$movement`) store interned IDs whose order reflects insertion rather than text, so an ordered comparison
 resolves the ID back to its string and compares lexicographically (the same resolution `~` uses).
 The operand must therefore be a string: `$artist in Bach..Mozart` is valid, but `$artist in 1..5`
 is rejected. Equality and `in` lists over these fields still match by ID, which is both correct and

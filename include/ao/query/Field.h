@@ -19,7 +19,13 @@ namespace ao::query
 {
   /**
    * Field - Identifies which field to read from a track.
-   * Ordered by category: string -> property -> metadata -> tags.
+   * Values are the internal query bytecode field ids. Presentation order comes
+   * from the field catalog, but keep the enum grouped by query domain so
+   * white-box tests and hand-built plans stay readable. Query bytecode is
+   * runtime-only and not persisted; smart lists store expression text and
+   * recompile it when evaluated, so these ids are safe to reorder between
+   * builds when the in-memory engine contract changes. Slot 8 is intentionally
+   * left unused.
    */
   enum class Field : std::uint8_t
   {
@@ -34,7 +40,6 @@ namespace ao::query
     Channels = 5,
     BitDepth = 6,
     Codec = 7,
-    // 8 retired (formerly Rating; field IDs are a stable contract, slot left as a gap)
 
     // Metadata ID fields (Dictionary IDs)
     ArtistId = 9,
@@ -59,6 +64,11 @@ namespace ao::query
 
     // Custom field (for %custom_key lookups from cold storage)
     Custom = 24,
+
+    // Cold classical metadata.
+    MovementId = 25,
+    MovementNumber = 26,
+    MovementTotal = 27,
   };
 
   /**

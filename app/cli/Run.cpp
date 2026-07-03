@@ -27,6 +27,34 @@
 
 namespace ao::cli
 {
+  namespace
+  {
+    bool hasHelpAllArg(std::int32_t argc, char const* const* argv)
+    {
+      for (std::int32_t i = 1; i < argc; ++i)
+      {
+        if (std::string_view{argv[i]} == "--help-all")
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    void writeHelpTree(CLI::App const& app, std::string const& commandPath, std::ostream& out)
+    {
+      out << app.help(commandPath, CLI::AppFormatMode::Normal);
+
+      for (auto const* const subcommand :
+           app.get_subcommands([](CLI::App const* sub) { return !sub->get_name().empty(); }))
+      {
+        out << "\n\n";
+        writeHelpTree(*subcommand, commandPath + " " + subcommand->get_name(), out);
+      }
+    }
+  } // namespace
+
   std::int32_t run(std::int32_t argc, char const* const* argv, std::ostream& out, std::ostream& err)
   {
     auto context = CliContext{out, err};
@@ -38,6 +66,7 @@ namespace ao::cli
       {"plain", OutputFormat::Plain}, {"yaml", OutputFormat::Yaml}, {"json", OutputFormat::Json}};
     app.add_option("-O,--output", context.options().format, "output format (plain, yaml, json)")
       ->transform(CLI::CheckedTransformer{outputMapping, CLI::ignore_case});
+    app.set_help_all_flag("--help-all", "Print this help message and all subcommand help");
     app.set_version_flag("--version", kAppVersion);
 
     try
@@ -48,6 +77,16 @@ namespace ao::cli
       setupScanCommand(app, context);
       setupTagCommand(app, context);
       setupLibCommand(app, context);
+
+      if (hasHelpAllArg(argc, argv))
+      {
+        // CLI11's built-in help-all still runs after subcommand requirements,
+        // and its All mode expands only one level. Print the full tree before
+        // parse() so `aobus --help-all` works as a complete agent-facing
+        // command reference.
+        writeHelpTree(app, "aobus", out);
+        return 0;
+      }
 
       app.parse(argc, argv);
       return 0;

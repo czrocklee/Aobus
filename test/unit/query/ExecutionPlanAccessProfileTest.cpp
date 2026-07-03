@@ -136,8 +136,6 @@ namespace ao::query::test
                      "$composer",
                      "$year",
                      "#rock",
-                     "true",
-                     "false",
                      "@sampleRate",
                      "@bitDepth",
                      "@codec"};
@@ -153,6 +151,15 @@ namespace ao::query::test
 
         auto plan = compileOk(compiler, expr);
         CHECK(plan.accessProfile == AccessProfile::HotOnly);
+      }
+    }
+
+    SECTION("NoTrackData")
+    {
+      for (auto const* f : {"true", "false"})
+      {
+        auto plan = compileOk(compiler, parseOk(f));
+        CHECK(plan.accessProfile == AccessProfile::NoTrackData);
       }
     }
 

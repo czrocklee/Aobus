@@ -8,7 +8,9 @@
 #include "DryRunFlag.h"
 #include "DumpUtils.h"
 #include "Output.h"
+#include "QueryHelp.h"
 #include "TrackSelection.h"
+#include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/MusicLibrary.h>
@@ -115,9 +117,28 @@ namespace ao::cli
       return requireTrackIds(reader, rawIds);
     }
 
+    std::vector<TrackId> resolveShowTargets(library::MusicLibrary& ml,
+                                            rt::LibraryReader& reader,
+                                            std::vector<std::uint32_t> const& rawIds,
+                                            std::string const& filter)
+    {
+      if (!rawIds.empty() && !filter.empty())
+      {
+        throwCommandError(Error::Code::InvalidInput, "track show accepts either explicit ids or --filter, not both");
+      }
+
+      if (!rawIds.empty())
+      {
+        return requireTrackIds(reader, rawIds);
+      }
+
+      return queryMatchingTrackIds(ml, filter);
+    }
+
     struct TrackUpdateReportDto final
     {
       bool dryRun = false;
+      std::uint64_t matched = 0;
       std::uint64_t updated = 0;
       std::vector<TrackId> trackIds{};
       std::vector<rt::TrackChangeRecord> changes{};
@@ -165,6 +186,7 @@ namespace ao::cli
 
     void formatUpdateReply(rt::UpdateTrackMetadataReply const& reply,
                            bool dryRun,
+                           std::uint64_t matched,
                            OutputFormat format,
                            std::ostream& os)
     {
@@ -175,13 +197,14 @@ namespace ao::cli
         emitDocument(os,
                      format,
                      TrackUpdateReportDto{.dryRun = dryRun,
+                                          .matched = matched,
                                           .updated = static_cast<std::uint64_t>(updated),
                                           .trackIds = reply.mutatedIds,
                                           .changes = reply.changes});
         return;
       }
 
-      std::println(os, "updated {} track(s){}", updated, dryRun ? " (dry-run)" : "");
+      std::println(os, "updated {} of {} matched track(s){}", updated, matched, dryRun ? " (dry-run)" : "");
     }
 
     void formatTrackCreate(std::optional<TrackId> optTrackId,
@@ -251,7 +274,8 @@ namespace ao::cli
           throwCommandError(replyResult.error());
         }
 
-        formatUpdateReply(*replyResult, true, context.options().format, context.io().out);
+        formatUpdateReply(
+          *replyResult, true, static_cast<std::uint64_t>(targetIds.size()), context.options().format, context.io().out);
         return;
       }
 
@@ -262,7 +286,8 @@ namespace ao::cli
         throwCommandError(replyResult.error());
       }
 
-      formatUpdateReply(*replyResult, false, context.options().format, context.io().out);
+      formatUpdateReply(
+        *replyResult, false, static_cast<std::uint64_t>(targetIds.size()), context.options().format, context.io().out);
     }
   } // namespace
 
@@ -272,6 +297,18 @@ namespace ao::cli
     std::optional<std::string> optTitle{};
     std::optional<std::string> optArtist{};
     std::optional<std::string> optAlbum{};
+    std::optional<std::string> optAlbumArtist{};
+    std::optional<std::string> optGenre{};
+    std::optional<std::string> optComposer{};
+    std::optional<std::string> optWork{};
+    std::optional<std::string> optMovement{};
+    std::optional<std::uint16_t> optYear{};
+    std::optional<std::uint16_t> optTrackNumber{};
+    std::optional<std::uint16_t> optTrackTotal{};
+    std::optional<std::uint16_t> optDiscNumber{};
+    std::optional<std::uint16_t> optDiscTotal{};
+    std::optional<std::uint16_t> optMovementNumber{};
+    std::optional<std::uint16_t> optMovementTotal{};
     std::optional<std::vector<std::string>> optTags{};
     std::optional<std::uint64_t> optDuration{};
     std::optional<std::uint32_t> optSampleRate{};
@@ -303,6 +340,66 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::TrackRecordDto>
     if (memberName == "optAlbum")
     {
       return "album";
+    }
+
+    if (memberName == "optAlbumArtist")
+    {
+      return "albumArtist";
+    }
+
+    if (memberName == "optGenre")
+    {
+      return "genre";
+    }
+
+    if (memberName == "optComposer")
+    {
+      return "composer";
+    }
+
+    if (memberName == "optWork")
+    {
+      return "work";
+    }
+
+    if (memberName == "optMovement")
+    {
+      return "movement";
+    }
+
+    if (memberName == "optYear")
+    {
+      return "year";
+    }
+
+    if (memberName == "optTrackNumber")
+    {
+      return "trackNumber";
+    }
+
+    if (memberName == "optTrackTotal")
+    {
+      return "trackTotal";
+    }
+
+    if (memberName == "optDiscNumber")
+    {
+      return "discNumber";
+    }
+
+    if (memberName == "optDiscTotal")
+    {
+      return "discTotal";
+    }
+
+    if (memberName == "optMovementNumber")
+    {
+      return "movementNumber";
+    }
+
+    if (memberName == "optMovementTotal")
+    {
+      return "movementTotal";
     }
 
     if (memberName == "optTags")
@@ -362,23 +459,85 @@ namespace ao::cli
       return result;
     }
 
+    std::optional<std::string> optionalDictName(library::DictionaryStore const& dict, DictionaryId id)
+    {
+      if (id == kInvalidDictionaryId)
+      {
+        return std::nullopt;
+      }
+
+      return std::string{resolveDict(dict, id)};
+    }
+
+    std::optional<std::string> optionalString(std::string_view value)
+    {
+      if (value.empty())
+      {
+        return std::nullopt;
+      }
+
+      return std::string{value};
+    }
+
+    std::optional<std::uint16_t> optionalNumber(std::uint16_t value)
+    {
+      if (value == 0)
+      {
+        return std::nullopt;
+      }
+
+      return value;
+    }
+
+    std::optional<std::uint64_t> optionalDuration(library::TrackDuration duration)
+    {
+      if (duration.count() <= 0)
+      {
+        return std::nullopt;
+      }
+
+      return static_cast<std::uint64_t>(duration.count());
+    }
+
+    std::optional<std::uint32_t> optionalSampleRate(SampleRate value)
+    {
+      if (value.raw() == 0)
+      {
+        return std::nullopt;
+      }
+
+      return value.raw();
+    }
+
     TrackRecordDto trackRecordDto(TrackId id, library::TrackView const& view, library::DictionaryStore const& dict)
     {
       auto dto = TrackRecordDto{.id = id};
 
       if (view.isHotValid())
       {
-        dto.optTitle = view.metadata().title();
-        dto.optArtist = std::string{resolveDict(dict, view.metadata().artistId())};
-        dto.optAlbum = std::string{resolveDict(dict, view.metadata().albumId())};
+        dto.optTitle = optionalString(view.metadata().title());
+        dto.optArtist = optionalDictName(dict, view.metadata().artistId());
+        dto.optAlbum = optionalDictName(dict, view.metadata().albumId());
+        dto.optAlbumArtist = optionalDictName(dict, view.metadata().albumArtistId());
+        dto.optGenre = optionalDictName(dict, view.metadata().genreId());
+        dto.optComposer = optionalDictName(dict, view.metadata().composerId());
+        dto.optYear = optionalNumber(view.metadata().year());
         dto.optTags = tagNames(view, dict);
       }
 
       if (view.isColdValid())
       {
-        dto.optDuration = static_cast<std::uint64_t>(view.property().duration().count());
-        dto.optSampleRate = view.property().sampleRate().raw();
-        dto.optUri = view.property().uri();
+        dto.optWork = optionalDictName(dict, view.metadata().workId());
+        dto.optMovement = optionalDictName(dict, view.metadata().movementId());
+        dto.optTrackNumber = optionalNumber(view.metadata().trackNumber());
+        dto.optTrackTotal = optionalNumber(view.metadata().trackTotal());
+        dto.optDiscNumber = optionalNumber(view.metadata().discNumber());
+        dto.optDiscTotal = optionalNumber(view.metadata().discTotal());
+        dto.optMovementNumber = optionalNumber(view.metadata().movementNumber());
+        dto.optMovementTotal = optionalNumber(view.metadata().movementTotal());
+        dto.optDuration = optionalDuration(view.property().duration());
+        dto.optSampleRate = optionalSampleRate(view.property().sampleRate());
+        dto.optUri = optionalString(view.property().uri());
         dto.optCustom = customMap(view, dict);
       }
 
@@ -482,15 +641,13 @@ namespace ao::cli
     }
 
     void show(library::MusicLibrary& ml,
-              std::string const& filter,
+              std::vector<TrackId> const& trackIds,
               OutputFormat format,
               std::string const& formatExpression,
               std::size_t limit,
               std::size_t offset,
               std::ostream& os)
     {
-      auto const trackIds = queryMatchingTrackIds(ml, filter);
-
       if (!formatExpression.empty())
       {
         if (format != OutputFormat::Plain)
@@ -503,7 +660,7 @@ namespace ao::cli
         if (!expr)
         {
           auto const& error = expr.error();
-          throwCommandError(error, "format error: {}", error.message);
+          throwCommandError(error, "format error: {}{}", error.message, formatExpressionUsageHint());
         }
 
         auto plan = query::compileFormat(*expr, &ml.dictionary());
@@ -511,7 +668,7 @@ namespace ao::cli
         if (!plan)
         {
           auto const& error = plan.error();
-          throwCommandError(error, "format error: {}", error.message);
+          throwCommandError(error, "format error: {}{}", error.message, formatExpressionUsageHint());
         }
 
         if (offset >= trackIds.size())
@@ -650,17 +807,23 @@ namespace ao::cli
 
     void setupTrackShowCommand(CLI::App& track, CliContext& context)
     {
-      auto* showCmd = track.add_subcommand("show", "Show tracks matching a filter");
-      auto* filter = showCmd->add_option("filter,-f,--filter", "track filter expression");
+      auto* showCmd = track.add_subcommand("show", "Show tracks by id or filter");
+      auto* ids = showCmd->add_option("id", "track ids to show")->expected(0, -1);
+      auto* filter = showCmd->add_option("-f,--filter", "track filter expression");
       auto* limit = showCmd->add_option("-l,--limit", "limit number of results (0 = all)")->default_val(0);
       auto* offset = showCmd->add_option("-o,--offset", "offset results")->default_val(0);
-      auto* formatExpression = showCmd->add_option("--format", "format expression");
+      auto* formatExpression = showCmd->add_option("--format", "format expression, e.g. '$artist + \" - \" + $title'");
+      showCmd->footer(trackShowHelpFooter());
 
       showCmd->callback(
-        [&context, filter, limit, offset, formatExpression]
+        [&context, ids, filter, limit, offset, formatExpression]
         {
+          auto reader = context.library().reader();
+          auto const rawIds = ids->count() > 0 ? ids->as<std::vector<std::uint32_t>>() : std::vector<std::uint32_t>{};
+          auto const targetIds = resolveShowTargets(
+            context.musicLibrary(), reader, rawIds, filter->count() > 0 ? filter->as<std::string>() : std::string{});
           show(context.musicLibrary(),
-               filter->as<std::string>(),
+               targetIds,
                context.options().format,
                formatExpression->count() > 0 ? formatExpression->as<std::string>() : std::string{},
                limit->as<std::size_t>(),
@@ -809,10 +972,11 @@ namespace ao::cli
     void setupTrackUpdateCommand(CLI::App& track, CliContext& context)
     {
       auto* update = track.add_subcommand("update", "Update track metadata");
+      update->footer(trackUpdateHelpFooter());
       auto updateSetsPtr = std::make_shared<std::vector<std::string>>();
       auto updateUnsetsPtr = std::make_shared<std::vector<std::string>>();
       auto options = TrackUpdateCliOptions{
-        .ids = update->add_option("id", "track id to update"),
+        .ids = update->add_option("id", "track id to update")->expected(0, -1),
         .filter = update->add_option("-f,--filter", "track filter expression"),
         .title = update->add_option("--title", "title"),
         .artist = update->add_option("--artist", "artist"),
@@ -901,6 +1065,7 @@ namespace ao::cli
   void setupTrackCommand(CLI::App& app, CliContext& context)
   {
     auto* track = app.add_subcommand("track", "Track management commands");
+    track->footer(trackHelpFooter());
     track->require_subcommand(1);
     setupTrackShowCommand(*track, context);
     setupTrackCreateCommand(*track, context);

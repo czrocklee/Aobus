@@ -57,6 +57,50 @@ namespace ao::query::test
     }
   }
 
+  TEST_CASE("PlanEvaluator matches movement metadata equality existence and LIKE expressions",
+            "[query][unit][plan_evaluator]")
+  {
+    auto specWithMovement = TrackSpec{};
+    specWithMovement.movement = "Finale";
+    specWithMovement.movementNumber = 4;
+    specWithMovement.movementTotal = 4;
+    auto trackWithMovement = TestTrack{specWithMovement};
+
+    auto specWithoutMovement = TrackSpec{};
+    specWithoutMovement.movement = "";
+    specWithoutMovement.movementNumber = 0;
+    specWithoutMovement.movementTotal = 0;
+    auto trackWithoutMovement = TestTrack{specWithoutMovement};
+
+    auto evaluator = PlanEvaluator{};
+
+    SECTION("$movement Equality")
+    {
+      auto expr = parseOk("$movement = Finale");
+      auto compiler = QueryCompiler{&trackWithMovement.dictionary()};
+      auto plan = compileOk(compiler, expr);
+      CHECK(evaluator.evaluateFull(plan, trackWithMovement.view()) == true);
+      CHECK(evaluator.evaluateFull(plan, trackWithoutMovement.view()) == false);
+    }
+
+    SECTION("$m LIKE")
+    {
+      auto expr = parseOk("$m ~ Fin");
+      auto compiler = QueryCompiler{&trackWithMovement.dictionary()};
+      auto plan = compileOk(compiler, expr);
+      CHECK(evaluator.evaluateFull(plan, trackWithMovement.view()) == true);
+    }
+
+    SECTION("Movement number existence")
+    {
+      auto expr = parseOk("$movementNumber? and $movementTotal?");
+      auto compiler = QueryCompiler{&trackWithMovement.dictionary()};
+      auto plan = compileOk(compiler, expr);
+      CHECK(evaluator.evaluateFull(plan, trackWithMovement.view()) == true);
+      CHECK(evaluator.evaluateFull(plan, trackWithoutMovement.view()) == false);
+    }
+  }
+
   TEST_CASE("PlanEvaluator matches composer metadata equality and LIKE expressions", "[query][unit][plan_evaluator]")
   {
     auto trackWithComposer = TestTrack{

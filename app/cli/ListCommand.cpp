@@ -8,6 +8,7 @@
 #include "DryRunFlag.h"
 #include "DumpUtils.h"
 #include "Output.h"
+#include "QueryHelp.h"
 #include "TrackSelection.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -726,6 +727,7 @@ namespace ao::cli
       });
 
     auto* create = list->add_subcommand("create", "Create a new list");
+    create->footer(listCreateHelpFooter());
     auto* name = create->add_option("-n,--name", "list name")->required();
     auto* filter = create->add_option("-f,--filter", "track filter expression");
     auto* desc = create->add_option("-d,--desc", "list description");
