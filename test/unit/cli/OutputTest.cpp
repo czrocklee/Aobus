@@ -4,96 +4,82 @@
 #include "Output.h"
 
 #include "CliTestSupport.h"
+#include <ao/yaml/Reflect.h>
 #include <ao/yaml/Utils.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace ao::cli::test
 {
-  TEST_CASE("Output - YAML quote escapes double-quoted scalars", "[cli][unit][output]")
+  struct EmitReportDto final
   {
-    auto value = std::string{"quote \" slash \\ newline\n tab\t return\r control "};
-    value.push_back('\x01');
-    value += " utf8 ";
-    value += "\xC3\xA9";
+    std::string name{};
+    std::uint64_t count = 0;
+    bool ok = false;
+    std::vector<std::uint64_t> ids{};
+    std::optional<std::string> optOmitted{};
+  };
+} // namespace ao::cli::test
 
-    auto const quoted = yamlQuote(value);
-    CHECK(quoted == "\"quote \\\" slash \\\\ newline\\n tab\\t return\\r control \\u0001 utf8 \xC3\xA9\"");
-
-    auto tree = parseYaml("value: " + quoted);
-    CHECK(yaml::scalarView(tree.rootref()["value"]) == value);
-  }
-
-  TEST_CASE("Output - JSON quote escapes string values", "[cli][unit][output]")
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::test::EmitReportDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
   {
-    auto value = std::string{"quote \" slash \\ newline\n tab\t return\r control "};
-    value.push_back('\x02');
-
-    CHECK(jsonQuote(value) == "\"quote \\\" slash \\\\ newline\\n tab\\t return\\r control \\u0002\"");
-    CHECK(jsonQuote("") == "\"\"");
-  }
-
-  TEST_CASE("Output - quote dispatches by output format", "[cli][unit][output]")
-  {
-    CHECK(quote(OutputFormat::Yaml, "a\nb") == yamlQuote("a\nb"));
-    CHECK(quote(OutputFormat::Json, "a\nb") == jsonQuote("a\nb"));
-  }
-
-  TEST_CASE("Output - JSON helpers emit valid objects and arrays", "[cli][unit][output]")
-  {
-    auto os = std::ostringstream{};
+    if (memberName == "optOmitted")
     {
-      auto object = JsonObject{os};
-      object.stringField("name", "alpha");
-      object.uintField("count", 2);
-      object.boolField("ok", true);
-      object.field("ids");
-      auto ids = JsonArray{os};
-      ids.element();
-      os << 4;
-      ids.element();
-      os << 8;
+      return "omitted";
     }
 
-    CHECK(os.str() == R"({"name":"alpha","count":2,"ok":true,"ids":[4,8]})");
+    return memberName;
+  }
+};
+
+namespace ao::cli::test
+{
+  TEST_CASE("Output - emitDocument writes reflected YAML documents", "[cli][unit][output]")
+  {
+    auto os = std::ostringstream{};
+    emitDocument(os, OutputFormat::Yaml, EmitReportDto{.name = "alpha", .count = 2, .ok = true, .ids = {4, 8}});
+
+    REQUIRE_FALSE(os.str().empty());
+    CHECK(os.str().back() == '\n');
+
     auto tree = parseYaml(os.str());
     CHECK(yaml::scalarView(tree.rootref()["name"]) == "alpha");
     CHECK(yaml::scalarView(tree.rootref()["count"]) == "2");
     CHECK(yaml::scalarView(tree.rootref()["ok"]) == "true");
+    REQUIRE(tree.rootref()["ids"].is_seq());
     CHECK(tree.rootref()["ids"].num_children() == 2);
+    CHECK_FALSE(tree.rootref()["omitted"].readable());
   }
 
-  TEST_CASE("Output - YAML helpers emit key values and empty sequences", "[cli][unit][output]")
+  TEST_CASE("Output - emitDocument writes reflected JSON documents", "[cli][unit][output]")
   {
     auto os = std::ostringstream{};
-    yamlKeyValue(os, 0, "name", "alpha");
-    yamlKeyValue(os, 0, "count", std::uint64_t{2});
-    yamlKeyValue(os, 0, "ok", true);
-    {
-      auto empty = YamlSequence{os, 0, "items"};
-    }
+    emitDocument(os, OutputFormat::Json, EmitReportDto{.name = "beta", .count = 3, .ok = true, .ids = {5}});
 
-    CHECK(os.str() == "name: \"alpha\"\ncount: 2\nok: true\nitems: []\n");
+    REQUIRE_FALSE(os.str().empty());
+    CHECK(os.str().back() == '\n');
+
     auto tree = parseYaml(os.str());
-    CHECK(yaml::scalarView(tree.rootref()["name"]) == "alpha");
-    CHECK(tree.rootref()["items"].num_children() == 0);
+    CHECK(yaml::scalarView(tree.rootref()["name"]) == "beta");
+    CHECK(yaml::scalarView(tree.rootref()["count"]) == "3");
+    CHECK(yaml::scalarView(tree.rootref()["ids"][0]) == "5");
   }
 
-  TEST_CASE("Output - YAML sequence helper emits item prefixes", "[cli][unit][output]")
+  TEST_CASE("Output - emitDocument skips plain output", "[cli][unit][output]")
   {
     auto os = std::ostringstream{};
-    {
-      auto items = YamlSequence{os, 0, "items"};
-      items.itemPrefix();
-      os << "1\n";
-      items.itemPrefix();
-      os << "2\n";
-    }
+    emitDocument(os, OutputFormat::Plain, EmitReportDto{.name = "plain"});
 
-    CHECK(os.str() == "items:\n  - 1\n  - 2\n");
+    CHECK(os.str().empty());
   }
 } // namespace ao::cli::test

@@ -5,6 +5,7 @@
 
 #include "CliContext.h"
 #include "CommandError.h"
+#include "DryRunFlag.h"
 #include "DumpUtils.h"
 #include "Output.h"
 #include "TrackSelection.h"
@@ -21,6 +22,7 @@
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
 
@@ -78,105 +80,6 @@ namespace ao::cli
       }
     }
 
-    void yamlTrackIds(std::ostream& os, library::ListView const& view)
-    {
-      if (view.tracks().empty())
-      {
-        std::println(os, "    tracks: []");
-        return;
-      }
-
-      std::println(os, "    tracks:");
-
-      for (auto const trackId : view.tracks())
-      {
-        std::println(os, "      - {}", trackId);
-      }
-    }
-
-    void jsonTrackIds(std::ostream& os, library::ListView const& view)
-    {
-      auto array = JsonArray{os};
-
-      for (auto const trackId : view.tracks())
-      {
-        array.element();
-        std::print(os, "{}", trackId.raw());
-      }
-    }
-
-    void formatYamlListRecord(std::ostream& os, ListId id, library::ListView const& view)
-    {
-      std::println(os, "  - id: {}", id);
-      yamlKeyValue(os, 4, "name", view.name());
-      yamlKeyValue(os, 4, "description", view.description());
-      yamlKeyValue(os, 4, "type", view.isSmart() ? std::string_view{"smart"} : std::string_view{"manual"});
-      yamlKeyValue(os, 4, "parentId", static_cast<std::uint64_t>(view.parentId().raw()));
-
-      if (view.isSmart())
-      {
-        yamlKeyValue(os, 4, "filter", view.filter());
-      }
-      else
-      {
-        yamlTrackIds(os, view);
-      }
-    }
-
-    void formatJsonListRecord(std::ostream& os, ListId id, library::ListView const& view)
-    {
-      auto object = JsonObject{os};
-      object.uintField("id", id.raw());
-      object.stringField("name", view.name());
-      object.stringField("description", view.description());
-      object.stringField("type", view.isSmart() ? std::string_view{"smart"} : std::string_view{"manual"});
-      object.uintField("parentId", view.parentId().raw());
-
-      if (view.isSmart())
-      {
-        object.stringField("filter", view.filter());
-      }
-      else
-      {
-        object.field("tracks");
-        jsonTrackIds(os, view);
-      }
-
-      object.close();
-      std::println(os);
-    }
-
-    void showStructured(library::MusicLibrary& ml, OutputFormat format, std::ostream& os)
-    {
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.lists().reader(txn);
-      bool hasRows = false;
-
-      for (auto const& [id, view] : reader)
-      {
-        if (format == OutputFormat::Yaml)
-        {
-          if (!hasRows)
-          {
-            std::println(os, "lists:");
-          }
-
-          formatYamlListRecord(os, id, view);
-        }
-        else
-        {
-          formatJsonListRecord(os, id, view);
-        }
-
-        hasRows = true;
-      }
-
-      if (format == OutputFormat::Yaml && !hasRows)
-      {
-        std::println(os, "lists: []");
-      }
-    }
-
     std::string_view listKindName(rt::ListNodeKind kind)
     {
       switch (kind)
@@ -187,6 +90,114 @@ namespace ao::cli
       }
 
       return "unknown";
+    }
+  } // namespace
+
+  struct ListRecordDto final
+  {
+    ListId id{};
+    std::string name{};
+    std::string description{};
+    std::string type{};
+    ListId parentId{};
+    std::optional<std::string> optFilter{};
+    std::optional<std::vector<TrackId>> optTracks{};
+  };
+
+  struct ListCollectionDto final
+  {
+    std::vector<ListRecordDto> lists{};
+  };
+
+  struct ListTrackRowDto final
+  {
+    TrackId id{};
+    std::string title{};
+    std::string artist{};
+    std::string album{};
+  };
+
+  struct ListDetailDto final
+  {
+    ListId id{};
+    std::string name{};
+    std::string description{};
+    std::string type{};
+    ListId parentId{};
+    std::optional<std::string> optFilter{};
+    std::vector<ListTrackRowDto> tracks{};
+  };
+} // namespace ao::cli
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::ListRecordDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optFilter")
+    {
+      return "filter";
+    }
+
+    if (memberName == "optTracks")
+    {
+      return "tracks";
+    }
+
+    return memberName;
+  }
+};
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::ListDetailDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optFilter")
+    {
+      return "filter";
+    }
+
+    return memberName;
+  }
+};
+
+namespace ao::cli
+{
+  namespace
+  {
+    ListRecordDto listRecordDto(ListId id, library::ListView const& view)
+    {
+      auto dto = ListRecordDto{.id = id,
+                               .name = std::string{view.name()},
+                               .description = std::string{view.description()},
+                               .type = view.isSmart() ? "smart" : "manual",
+                               .parentId = view.parentId()};
+
+      if (view.isSmart())
+      {
+        dto.optFilter = std::string{view.filter()};
+      }
+      else
+      {
+        dto.optTracks = std::vector<TrackId>{view.tracks().begin(), view.tracks().end()};
+      }
+
+      return dto;
+    }
+
+    void showStructured(library::MusicLibrary& ml, OutputFormat format, std::ostream& os)
+    {
+      auto const txn = ml.readTransaction();
+      auto const reader = ml.lists().reader(txn);
+      auto dto = ListCollectionDto{};
+
+      for (auto const& [id, view] : reader)
+      {
+        dto.lists.push_back(listRecordDto(id, view));
+      }
+
+      emitDocument(os, format, dto);
     }
 
     std::vector<rt::TrackRow> resolveRows(rt::LibraryReader const& reader, std::span<TrackId const> ids)
@@ -229,39 +240,32 @@ namespace ao::cli
       }
     }
 
-    void printYamlTrackRows(std::ostream& os, std::vector<rt::TrackRow> const& rows)
+    ListTrackRowDto listTrackRowDto(rt::TrackRow const& row)
     {
-      if (rows.empty())
-      {
-        std::println(os, "  tracks: []");
-        return;
-      }
-
-      std::println(os, "  tracks:");
-
-      for (auto const& row : rows)
-      {
-        std::println(os, "    - id: {}", row.id.raw());
-        std::int32_t constexpr kIndent = 6;
-        yamlKeyValue(os, kIndent, "title", row.title);
-        yamlKeyValue(os, kIndent, "artist", row.artist);
-        yamlKeyValue(os, kIndent, "album", row.album);
-      }
+      return ListTrackRowDto{.id = row.id, .title = row.title, .artist = row.artist, .album = row.album};
     }
 
-    void printJsonTrackRows(std::ostream& os, std::vector<rt::TrackRow> const& rows)
+    ListDetailDto listDetailDto(rt::ListNode const& node, std::vector<rt::TrackRow> const& rows)
     {
-      auto array = JsonArray{os};
+      auto dto = ListDetailDto{.id = node.id,
+                               .name = node.name,
+                               .description = node.description,
+                               .type = std::string{listKindName(node.kind)},
+                               .parentId = node.parentId};
+
+      if (node.kind == rt::ListNodeKind::Smart)
+      {
+        dto.optFilter = node.smartExpression;
+      }
+
+      dto.tracks.reserve(rows.size());
 
       for (auto const& row : rows)
       {
-        array.element();
-        auto object = JsonObject{os};
-        object.uintField("id", row.id.raw());
-        object.stringField("title", row.title);
-        object.stringField("artist", row.artist);
-        object.stringField("album", row.album);
+        dto.tracks.push_back(listTrackRowDto(row));
       }
+
+      return dto;
     }
 
     void showListDetail(CliContext& context, ListId listId)
@@ -279,40 +283,19 @@ namespace ao::cli
 
       if (context.options().format == OutputFormat::Yaml)
       {
-        std::println(context.io().out, "list:");
-        yamlKeyValue(context.io().out, 2, "id", static_cast<std::uint64_t>(node.id.raw()));
-        yamlKeyValue(context.io().out, 2, "name", node.name);
-        yamlKeyValue(context.io().out, 2, "description", node.description);
-        yamlKeyValue(context.io().out, 2, "type", listKindName(node.kind));
-        yamlKeyValue(context.io().out, 2, "parentId", static_cast<std::uint64_t>(node.parentId.raw()));
-
-        if (node.kind == rt::ListNodeKind::Smart)
+        struct ListDetailDocumentDto final
         {
-          yamlKeyValue(context.io().out, 2, "filter", node.smartExpression);
-        }
+          ListDetailDto list{};
+        };
 
-        printYamlTrackRows(context.io().out, rows);
+        emitDocument(
+          context.io().out, context.options().format, ListDetailDocumentDto{.list = listDetailDto(node, rows)});
         return;
       }
 
       if (context.options().format == OutputFormat::Json)
       {
-        auto object = JsonObject{context.io().out};
-        object.uintField("id", node.id.raw());
-        object.stringField("name", node.name);
-        object.stringField("description", node.description);
-        object.stringField("type", listKindName(node.kind));
-        object.uintField("parentId", node.parentId.raw());
-
-        if (node.kind == rt::ListNodeKind::Smart)
-        {
-          object.stringField("filter", node.smartExpression);
-        }
-
-        object.field("tracks");
-        printJsonTrackRows(context.io().out, rows);
-        object.close();
-        std::println(context.io().out);
+        emitDocument(context.io().out, context.options().format, listDetailDto(node, rows));
         return;
       }
 
@@ -330,14 +313,80 @@ namespace ao::cli
       std::println(context.io().out, "  Tracks: {}", rows.size());
       printPlainTrackRows(context.io().out, rows);
     }
+  } // namespace
 
-    void printListMutation(CliContext& context, std::string_view action, ListId listId, std::string_view name);
+  struct ListCreateReportDto final
+  {
+    std::string action{};
+    bool dryRun = false;
+    std::optional<ListId> optListId{};
+    std::string name{};
+    std::string type{};
+    ListId parentId{};
+    std::optional<std::string> optFilter{};
+  };
+} // namespace ao::cli
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::ListCreateReportDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optListId")
+    {
+      return "listId";
+    }
+
+    if (memberName == "optFilter")
+    {
+      return "filter";
+    }
+
+    return memberName;
+  }
+};
+
+namespace ao::cli
+{
+  namespace
+  {
+    struct ListUpdateReportDto final
+    {
+      std::string action{};
+      bool dryRun = false;
+      ListId listId{};
+      bool changed = false;
+      std::vector<rt::ListFieldChange> fields{};
+      std::vector<TrackId> addedTrackIds{};
+      std::vector<TrackId> removedTrackIds{};
+    };
+
+    struct ListDeleteReportDto final
+    {
+      std::string action{};
+      bool dryRun = false;
+      ListId listId{};
+      std::string name{};
+      std::string type{};
+      std::uint64_t trackCount = 0;
+    };
+
+    std::string draftKindName(rt::LibraryWriter::ListKind kind)
+    {
+      return kind == rt::LibraryWriter::ListKind::Smart ? "smart" : "manual";
+    }
+
+    void printListCreateMutation(CliContext& context,
+                                 std::optional<ListId> optListId,
+                                 rt::LibraryWriter::ListDraft const& draft,
+                                 bool dryRun);
 
     void createList(CliContext& context,
                     std::string const& name,
                     std::string const& filter,
                     std::string const& desc,
-                    ListId parentListId)
+                    ListId parentListId,
+                    bool dryRun)
     {
       auto draft = rt::LibraryWriter::ListDraft{};
       draft.kind = filter.empty() ? rt::LibraryWriter::ListKind::Manual : rt::LibraryWriter::ListKind::Smart;
@@ -346,6 +395,19 @@ namespace ao::cli
       draft.description = desc;
       draft.expression = filter;
 
+      if (dryRun)
+      {
+        auto const listResult = context.library().writer().previewCreateList(draft);
+
+        if (!listResult)
+        {
+          throwCommandError(listResult.error());
+        }
+
+        printListCreateMutation(context, std::nullopt, draft, true);
+        return;
+      }
+
       auto const listResult = context.library().writer().createList(draft);
 
       if (!listResult)
@@ -353,8 +415,7 @@ namespace ao::cli
         throwCommandError(listResult.error());
       }
 
-      auto const listId = *listResult;
-      printListMutation(context, "create", listId, name);
+      printListCreateMutation(context, std::optional<ListId>{*listResult}, draft, false);
     }
 
     rt::LibraryWriter::ListDraft draftFromNode(rt::LibraryReader& reader, rt::ListNode const& node)
@@ -388,57 +449,87 @@ namespace ao::cli
       return draftFromNode(reader, *optNode);
     }
 
-    void printListMutation(CliContext& context, std::string_view action, ListId listId, std::string_view name = {})
+    void printListCreateMutation(CliContext& context,
+                                 std::optional<ListId> optListId,
+                                 rt::LibraryWriter::ListDraft const& draft,
+                                 bool dryRun)
     {
-      if (context.options().format == OutputFormat::Yaml)
+      if (context.options().format != OutputFormat::Plain)
       {
-        yamlKeyValue(context.io().out, 0, "action", action);
-        yamlKeyValue(context.io().out, 0, "listId", static_cast<std::uint64_t>(listId.raw()));
-
-        if (!name.empty())
-        {
-          yamlKeyValue(context.io().out, 0, "name", name);
-        }
+        emitDocument(context.io().out,
+                     context.options().format,
+                     ListCreateReportDto{.action = "create",
+                                         .dryRun = dryRun,
+                                         .optListId = optListId,
+                                         .name = draft.name,
+                                         .type = draftKindName(draft.kind),
+                                         .parentId = draft.parentId,
+                                         .optFilter = draft.kind == rt::LibraryWriter::ListKind::Smart
+                                                        ? std::optional{draft.expression}
+                                                        : std::nullopt});
 
         return;
       }
 
-      if (context.options().format == OutputFormat::Json)
+      if (optListId)
       {
-        auto object = JsonObject{context.io().out};
-        object.stringField("action", action);
-        object.uintField("listId", listId.raw());
-
-        if (!name.empty())
-        {
-          object.stringField("name", name);
-        }
-
-        object.close();
-        std::println(context.io().out);
+        std::println(context.io().out, "add list: {} {}{}", *optListId, draft.name, dryRun ? " (dry-run)" : "");
         return;
       }
 
-      if (action == "create")
+      std::println(context.io().out, "add list: {}{}", draft.name, dryRun ? " (dry-run)" : "");
+    }
+
+    void printListUpdateMutation(CliContext& context,
+                                 std::string_view action,
+                                 ListId listId,
+                                 rt::UpdateListReply const& reply,
+                                 bool dryRun)
+    {
+      if (context.options().format != OutputFormat::Plain)
       {
-        std::println(context.io().out, "add list: {} {}", listId, name);
+        emitDocument(context.io().out,
+                     context.options().format,
+                     ListUpdateReportDto{.action = std::string{action},
+                                         .dryRun = dryRun,
+                                         .listId = listId,
+                                         .changed = reply.changed,
+                                         .fields = reply.fieldChanges,
+                                         .addedTrackIds = reply.addedTrackIds,
+                                         .removedTrackIds = reply.removedTrackIds});
+        return;
       }
-      else if (action == "delete")
+
+      if (action == "add")
       {
-        std::println(context.io().out, "deleted list: {}", listId);
-      }
-      else if (action == "add")
-      {
-        std::println(context.io().out, "added tracks to list: {}", listId);
+        std::println(context.io().out, "added tracks to list: {}{}", listId, dryRun ? " (dry-run)" : "");
       }
       else if (action == "remove")
       {
-        std::println(context.io().out, "removed tracks from list: {}", listId);
+        std::println(context.io().out, "removed tracks from list: {}{}", listId, dryRun ? " (dry-run)" : "");
       }
       else
       {
-        std::println(context.io().out, "updated list: {}", listId);
+        std::println(context.io().out, "updated list: {}{}", listId, dryRun ? " (dry-run)" : "");
       }
+    }
+
+    void printListDeleteMutation(CliContext& context, rt::DeleteListReply const& reply, bool dryRun)
+    {
+      if (context.options().format != OutputFormat::Plain)
+      {
+        emitDocument(context.io().out,
+                     context.options().format,
+                     ListDeleteReportDto{.action = "delete",
+                                         .dryRun = dryRun,
+                                         .listId = reply.listId,
+                                         .name = reply.name,
+                                         .type = reply.kind,
+                                         .trackCount = reply.trackCount});
+        return;
+      }
+
+      std::println(context.io().out, "deleted list: {}{}", reply.listId, dryRun ? " (dry-run)" : "");
     }
 
     void updateList(CliContext& context,
@@ -446,7 +537,8 @@ namespace ao::cli
                     std::optional<std::string> const& optName,
                     std::optional<std::string> const& optDescription,
                     std::optional<std::string> const& optFilter,
-                    std::optional<std::uint32_t> const& optParent)
+                    std::optional<std::uint32_t> const& optParent,
+                    bool dryRun)
     {
       if (!optName && !optDescription && !optFilter && !optParent)
       {
@@ -482,6 +574,19 @@ namespace ao::cli
         }
       }
 
+      if (dryRun)
+      {
+        auto const updateResult = context.library().writer().previewUpdateList(draft);
+
+        if (!updateResult)
+        {
+          throwCommandError(updateResult.error());
+        }
+
+        printListUpdateMutation(context, "update", listId, *updateResult, true);
+        return;
+      }
+
       auto const updateResult = context.library().writer().updateList(draft);
 
       if (!updateResult)
@@ -489,13 +594,14 @@ namespace ao::cli
         throwCommandError(updateResult.error());
       }
 
-      printListMutation(context, "update", listId);
+      printListUpdateMutation(context, "update", listId, *updateResult, false);
     }
 
     void updateManualMembership(CliContext& context,
                                 ListId listId,
                                 std::vector<std::uint32_t> const& rawTrackIds,
-                                bool add)
+                                bool add,
+                                bool dryRun)
     {
       auto reader = context.library().reader();
       auto draft = requireListDraft(listId, reader);
@@ -522,6 +628,19 @@ namespace ao::cli
         }
       }
 
+      if (dryRun)
+      {
+        auto const updateResult = context.library().writer().previewUpdateList(draft);
+
+        if (!updateResult)
+        {
+          throwCommandError(updateResult.error());
+        }
+
+        printListUpdateMutation(context, add ? "add" : "remove", listId, *updateResult, true);
+        return;
+      }
+
       auto const updateResult = context.library().writer().updateList(draft);
 
       if (!updateResult)
@@ -529,7 +648,7 @@ namespace ao::cli
         throwCommandError(updateResult.error());
       }
 
-      printListMutation(context, add ? "add" : "remove", listId);
+      printListUpdateMutation(context, add ? "add" : "remove", listId, *updateResult, false);
     }
 
     void dumpLists(library::MusicLibrary& ml, bool raw, OutputFormat format, std::ostream& os)
@@ -541,22 +660,13 @@ namespace ao::cli
 
       auto const txn = ml.readTransaction();
       auto const reader = ml.lists().reader(txn);
-      bool hasRows = false;
+      auto dto = ListCollectionDto{};
 
       for (auto const& [id, view] : reader)
       {
-        if (format == OutputFormat::Yaml && !raw)
+        if (format != OutputFormat::Plain && !raw)
         {
-          if (!hasRows)
-          {
-            std::println(os, "lists:");
-          }
-
-          formatYamlListRecord(os, id, view);
-        }
-        else if (format == OutputFormat::Json && !raw)
-        {
-          formatJsonListRecord(os, id, view);
+          dto.lists.push_back(listRecordDto(id, view));
         }
         else if (raw)
         {
@@ -580,13 +690,11 @@ namespace ao::cli
             std::println(os, "  Tracks: {}", view.tracks().size());
           }
         }
-
-        hasRows = true;
       }
 
-      if (format == OutputFormat::Yaml && !raw && !hasRows)
+      if (format != OutputFormat::Plain && !raw)
       {
-        std::println(os, "lists: []");
+        emitDocument(os, format, dto);
       }
     }
   } // namespace
@@ -622,14 +730,16 @@ namespace ao::cli
     auto* filter = create->add_option("-f,--filter", "track filter expression");
     auto* desc = create->add_option("-d,--desc", "list description");
     auto* parent = create->add_option("-p,--parent", "parent list id (0 = all-tracks)")->default_val(0);
+    auto* createDryRun = addDryRunFlag(*create);
     create->callback(
-      [&context, name, filter, desc, parent]
+      [&context, name, filter, desc, parent, createDryRun]
       {
         createList(context,
                    name->as<std::string>(),
                    filter->as<std::string>(),
                    desc->as<std::string>(),
-                   ListId{parent->as<std::uint32_t>()});
+                   ListId{parent->as<std::uint32_t>()},
+                   isDryRun(createDryRun));
       });
 
     auto* update = list->add_subcommand("update", "Update a list");
@@ -638,44 +748,76 @@ namespace ao::cli
     auto* updateDesc = update->add_option("--desc", "list description");
     auto* updateFilter = update->add_option("--filter", "smart list filter expression; empty converts to manual");
     auto* updateParent = update->add_option("--parent", "parent list id (0 = all-tracks)");
+    auto* updateDryRun = addDryRunFlag(*update);
     update->callback(
-      [&context, updateId, updateName, updateDesc, updateFilter, updateParent]
+      [&context, updateId, updateName, updateDesc, updateFilter, updateParent, updateDryRun]
       {
         auto optName = updateName->count() > 0 ? std::optional{updateName->as<std::string>()} : std::nullopt;
         auto optDesc = updateDesc->count() > 0 ? std::optional{updateDesc->as<std::string>()} : std::nullopt;
         auto optFilter = updateFilter->count() > 0 ? std::optional{updateFilter->as<std::string>()} : std::nullopt;
         auto optParent = updateParent->count() > 0 ? std::optional{updateParent->as<std::uint32_t>()} : std::nullopt;
-        updateList(context, ListId{updateId->as<std::uint32_t>()}, optName, optDesc, optFilter, optParent);
+        updateList(context,
+                   ListId{updateId->as<std::uint32_t>()},
+                   optName,
+                   optDesc,
+                   optFilter,
+                   optParent,
+                   isDryRun(updateDryRun));
       });
 
     auto* add = list->add_subcommand("add", "Add tracks to a manual list");
     auto* addListId = add->add_option("listId", "list id")->required();
     auto addTrackIdsPtr = std::make_shared<std::vector<std::uint32_t>>();
     add->add_option("trackId", *addTrackIdsPtr, "track id")->required();
-    add->callback([&context, addListId, addTrackIdsPtr]
-                  { updateManualMembership(context, ListId{addListId->as<std::uint32_t>()}, *addTrackIdsPtr, true); });
+    auto* addDryRun = addDryRunFlag(*add);
+    add->callback(
+      [&context, addListId, addTrackIdsPtr, addDryRun]
+      {
+        updateManualMembership(
+          context, ListId{addListId->as<std::uint32_t>()}, *addTrackIdsPtr, true, isDryRun(addDryRun));
+      });
 
     auto* remove = list->add_subcommand("remove", "Remove tracks from a manual list");
     auto* removeListId = remove->add_option("listId", "list id")->required();
     auto removeTrackIdsPtr = std::make_shared<std::vector<std::uint32_t>>();
     remove->add_option("trackId", *removeTrackIdsPtr, "track id")->required();
+    auto* removeDryRun = addDryRunFlag(*remove);
     remove->callback(
-      [&context, removeListId, removeTrackIdsPtr]
-      { updateManualMembership(context, ListId{removeListId->as<std::uint32_t>()}, *removeTrackIdsPtr, false); });
+      [&context, removeListId, removeTrackIdsPtr, removeDryRun]
+      {
+        updateManualMembership(
+          context, ListId{removeListId->as<std::uint32_t>()}, *removeTrackIdsPtr, false, isDryRun(removeDryRun));
+      });
 
     auto* del = list->add_subcommand("delete", "Delete a list");
     auto* id = del->add_option("id", "list id")->required();
+    auto* deleteDryRun = addDryRunFlag(*del);
     del->callback(
-      [&context, id]
+      [&context, id, deleteDryRun]
       {
         auto const listId = ListId{id->as<std::uint32_t>()};
 
-        if (!context.library().writer().deleteList(listId))
+        if (isDryRun(deleteDryRun))
         {
-          throwCommandError(Error::Code::NotFound, "list not found: {}", listId);
+          auto const deleteResult = context.library().writer().previewDeleteList(listId);
+
+          if (!deleteResult)
+          {
+            throwCommandError(deleteResult.error());
+          }
+
+          printListDeleteMutation(context, *deleteResult, true);
+          return;
         }
 
-        printListMutation(context, "delete", listId);
+        auto const deleteResult = context.library().writer().deleteList(listId);
+
+        if (!deleteResult)
+        {
+          throwCommandError(deleteResult.error());
+        }
+
+        printListDeleteMutation(context, *deleteResult, false);
       });
 
     auto* dumpCmd = list->add_subcommand("dump", "Dump lists from database");

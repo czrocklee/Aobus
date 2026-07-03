@@ -35,14 +35,75 @@ namespace ao::rt
     std::map<std::string, std::optional<std::string>> customUpdates{};
   };
 
+  struct TrackFieldChange final
+  {
+    std::string field;
+    std::string oldValue;
+    std::string newValue;
+
+    bool operator==(TrackFieldChange const&) const = default;
+  };
+
+  struct TrackChangeRecord final
+  {
+    TrackId trackId{};
+    std::vector<TrackFieldChange> fields;
+
+    bool operator==(TrackChangeRecord const&) const = default;
+  };
+
+  struct TrackTagsChange final
+  {
+    TrackId trackId{};
+    std::vector<std::string> addedTags;
+    std::vector<std::string> removedTags;
+
+    bool operator==(TrackTagsChange const&) const = default;
+  };
+
   struct UpdateTrackMetadataReply final
   {
-    std::vector<TrackId> mutatedIds;
+    std::vector<TrackId> mutatedIds{};
+    std::vector<TrackChangeRecord> changes{};
+
+    bool operator==(UpdateTrackMetadataReply const&) const = default;
   };
 
   struct EditTrackTagsReply final
   {
-    std::vector<TrackId> mutatedIds;
+    std::vector<TrackId> mutatedIds{};
+    std::vector<TrackTagsChange> changes{};
+
+    bool operator==(EditTrackTagsReply const&) const = default;
+  };
+
+  struct CreateTrackReply final
+  {
+    TrackId trackId{};
+    std::string uri{};
+    std::string title{};
+    std::string artist{};
+
+    bool operator==(CreateTrackReply const&) const = default;
+  };
+
+  struct PreviewCreateTrackReply final
+  {
+    std::string uri{};
+    std::string title{};
+    std::string artist{};
+
+    bool operator==(PreviewCreateTrackReply const&) const = default;
+  };
+
+  struct DeleteTrackReply final
+  {
+    TrackId trackId{};
+    std::string uri{};
+    std::string title{};
+    std::vector<ListId> removedFromListIds{};
+
+    bool operator==(DeleteTrackReply const&) const = default;
   };
 
   struct CreateTrackListViewReply final

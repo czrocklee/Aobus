@@ -48,6 +48,12 @@ namespace ao::rt
 {
   namespace
   {
+    enum class ImportRunMode : std::uint8_t
+    {
+      Commit,
+      Preview,
+    };
+
     struct ValidatedTrack final
     {
       std::uint32_t yamlId = 0;
@@ -310,7 +316,10 @@ namespace ao::rt
     {
     }
 
-    Result<> importFromYaml(std::filesystem::path const& path, ImportMode mode);
+    Result<ImportReport> applyImportFromYaml(std::filesystem::path const& path, ImportMode mode, ImportRunMode runMode);
+
+    void populateDeletionStats(ValidatedImport const& val, ImportReport& rep);
+    Result<> clearDatabase(ValidatedImport const& val, lmdb::WriteTransaction& writeTxn);
 
     Result<ValidatedImport> validate(ryml::ConstNodeRef const& root) const;
     Result<> validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const;
@@ -320,7 +329,8 @@ namespace ao::rt
                           lmdb::WriteTransaction& txn,
                           std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
                           ImportMode strategy,
-                          ExportMode payloadMode);
+                          ExportMode payloadMode,
+                          ImportReport& report);
     Result<> importTrackRecord(ValidatedTrack const& validatedTrack,
                                lmdb::WriteTransaction& txn,
                                library::TrackStore::Writer& trackWriter,
@@ -328,7 +338,8 @@ namespace ao::rt
                                library::FileManifestStore::Reader const& manifestReader,
                                ImportMode strategy,
                                ExportMode payloadMode,
-                               std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId);
+                               std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
+                               ImportReport& report);
     Result<> loadTrackBaseline(std::string_view uriStr,
                                std::optional<TrackId> const& optExistingTrackId,
                                ExportMode payloadMode,
@@ -339,7 +350,8 @@ namespace ao::rt
     Result<> importLists(std::vector<ValidatedList> const& lists,
                          lmdb::WriteTransaction& txn,
                          std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-                         ImportMode strategy);
+                         ImportMode strategy,
+                         ImportReport& report);
 
     Result<std::vector<std::vector<std::byte>>> importCovers(ryml::ConstNodeRef const& trackNode,
                                                              library::TrackBuilder& builder) const;
@@ -381,12 +393,19 @@ namespace ao::rt
 
   LibraryYamlImporter::~LibraryYamlImporter() = default;
 
-  Result<> LibraryYamlImporter::importFromYaml(std::filesystem::path const& path, ImportMode mode)
+  Result<ImportReport> LibraryYamlImporter::importFromYaml(std::filesystem::path const& path, ImportMode mode)
   {
-    return _implPtr->importFromYaml(path, mode);
+    return _implPtr->applyImportFromYaml(path, mode, ImportRunMode::Commit);
   }
 
-  Result<> LibraryYamlImporter::Impl::importFromYaml(std::filesystem::path const& path, ImportMode mode)
+  Result<ImportReport> LibraryYamlImporter::previewImportFromYaml(std::filesystem::path const& path, ImportMode mode)
+  {
+    return _implPtr->applyImportFromYaml(path, mode, ImportRunMode::Preview);
+  }
+
+  Result<ImportReport> LibraryYamlImporter::Impl::applyImportFromYaml(std::filesystem::path const& path,
+                                                                      ImportMode mode,
+                                                                      ImportRunMode runMode)
   {
     auto buffer = std::vector<char>{};
     auto yamlContext = yaml::CallbackContext{path.string()};
@@ -421,26 +440,20 @@ namespace ao::rt
     }
 
     auto const& validated = *validationResult;
+    auto report = ImportReport{};
+
+    if (mode == ImportMode::Restore)
+    {
+      populateDeletionStats(validated, report);
+    }
+
     auto txn = ml.writeTransaction();
 
     if (mode == ImportMode::Restore)
     {
-      if (validated.payloadMode != ExportMode::ListOnly)
+      if (auto const clearResult = clearDatabase(validated, txn); !clearResult)
       {
-        if (auto result = ml.tracks().writer(txn).clear(); !result)
-        {
-          return std::unexpected{result.error()};
-        }
-
-        if (auto result = ml.manifest().writer(txn).clear(); !result)
-        {
-          return std::unexpected{result.error()};
-        }
-      }
-
-      if (auto result = ml.lists().writer(txn).clear(); !result)
-      {
-        return std::unexpected{result.error()};
+        return std::unexpected{clearResult.error()};
       }
     }
 
@@ -448,7 +461,8 @@ namespace ao::rt
 
     if (!validated.tracks.empty())
     {
-      if (auto result = importTracks(validated.tracks, txn, yamlTrackIdToInternalId, mode, validated.payloadMode);
+      if (auto result =
+            importTracks(validated.tracks, txn, yamlTrackIdToInternalId, mode, validated.payloadMode, report);
           !result)
       {
         return std::unexpected{result.error()};
@@ -457,10 +471,15 @@ namespace ao::rt
 
     if (!validated.lists.empty())
     {
-      if (auto result = importLists(validated.lists, txn, yamlTrackIdToInternalId, mode); !result)
+      if (auto result = importLists(validated.lists, txn, yamlTrackIdToInternalId, mode, report); !result)
       {
         return std::unexpected{result.error()};
       }
+    }
+
+    if (runMode == ImportRunMode::Preview)
+    {
+      return report;
     }
 
     if (auto result = txn.commit(); !result)
@@ -475,7 +494,43 @@ namespace ao::rt
       ml.updateMetaHeader(header);
     }
 
-    return {};
+    return report;
+  }
+
+  void LibraryYamlImporter::Impl::populateDeletionStats(ValidatedImport const& val, ImportReport& rep)
+  {
+    auto readTxn = ml.readTransaction();
+
+    if (val.payloadMode != ExportMode::ListOnly)
+    {
+      for ([[maybe_unused]] auto const& row : ml.tracks().reader(readTxn))
+      {
+        ++rep.tracksDeleted;
+      }
+    }
+
+    for ([[maybe_unused]] auto const& row : ml.lists().reader(readTxn))
+    {
+      ++rep.listsDeleted;
+    }
+  }
+
+  Result<> LibraryYamlImporter::Impl::clearDatabase(ValidatedImport const& val, lmdb::WriteTransaction& writeTxn)
+  {
+    if (val.payloadMode != ExportMode::ListOnly)
+    {
+      if (auto result = ml.tracks().writer(writeTxn).clear(); !result)
+      {
+        return result;
+      }
+
+      if (auto result = ml.manifest().writer(writeTxn).clear(); !result)
+      {
+        return result;
+      }
+    }
+
+    return ml.lists().writer(writeTxn).clear();
   }
 
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
@@ -801,7 +856,8 @@ namespace ao::rt
                                                    lmdb::WriteTransaction& txn,
                                                    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
                                                    ImportMode strategy,
-                                                   ExportMode payloadMode)
+                                                   ExportMode payloadMode,
+                                                   ImportReport& report)
   {
     auto trackWriter = ml.tracks().writer(txn);
     auto manifestWriter = ml.manifest().writer(txn);
@@ -816,7 +872,8 @@ namespace ao::rt
                                           manifestReader,
                                           strategy,
                                           payloadMode,
-                                          yamlTrackIdToInternalId);
+                                          yamlTrackIdToInternalId,
+                                          report);
           !result)
       {
         return std::unexpected{result.error()};
@@ -834,7 +891,8 @@ namespace ao::rt
     library::FileManifestStore::Reader const& manifestReader,
     ImportMode strategy,
     ExportMode payloadMode,
-    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
+    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
+    ImportReport& report)
   {
     auto& dict = ml.dictionary();
     auto& resources = ml.resources();
@@ -910,6 +968,15 @@ namespace ao::rt
     }
 
     auto const targetTrackId = *targetTrackIdResult;
+
+    if (optExistingTrackId)
+    {
+      ++report.tracksUpdated;
+    }
+    else
+    {
+      ++report.tracksCreated;
+    }
 
     auto manifestBuilder = library::FileManifestBuilder::createNew();
     manifestBuilder.trackId(targetTrackId);
@@ -1408,7 +1475,8 @@ namespace ao::rt
     std::vector<ValidatedList> const& lists,
     lmdb::WriteTransaction& txn,
     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-    ImportMode /*strategy*/)
+    ImportMode /*strategy*/,
+    ImportReport& report)
   {
     auto listWriter = ml.lists().writer(txn);
     auto manifestReader = ml.manifest().reader(txn);
@@ -1439,6 +1507,7 @@ namespace ao::rt
 
       auto const [newListId, view] = *createResult;
       yamlListIdToNewListId[importedList.yamlId] = newListId;
+      ++report.listsCreated;
     }
 
     for (auto const& importedList : lists)

@@ -25,6 +25,35 @@ namespace ao::rt
   struct MetadataPatch;
   struct UpdateTrackMetadataReply;
 
+  struct ListFieldChange final
+  {
+    std::string field{};
+    std::string oldValue{};
+    std::string newValue{};
+
+    bool operator==(ListFieldChange const&) const = default;
+  };
+
+  struct UpdateListReply final
+  {
+    bool changed = false;
+    std::vector<ListFieldChange> fieldChanges{};
+    std::vector<TrackId> addedTrackIds{};
+    std::vector<TrackId> removedTrackIds{};
+
+    bool operator==(UpdateListReply const&) const = default;
+  };
+
+  struct DeleteListReply final
+  {
+    ListId listId{};
+    std::string name{};
+    std::string kind{};
+    std::uint64_t trackCount = 0;
+
+    bool operator==(DeleteListReply const&) const = default;
+  };
+
   // Synchronous mutation surface over the music library. Each mutator opens,
   // commits and closes its own write transaction before returning, then
   // publishes the corresponding change event. There is no caller-visible
@@ -60,26 +89,38 @@ namespace ao::rt
     // or whose values are unchanged are skipped; the reply's mutatedIds lists
     // only the tracks that genuinely changed (empty = nothing applied). Storage
     // and serialization failures are returned as Result errors.
+    // Preview methods run the same mutation path as their committing
+    // counterparts, but return before commit and publish no change events.
+    // Preview replies never include allocated ids; ids are only valid after a
+    // successful committing call.
     Result<UpdateTrackMetadataReply> updateMetadata(std::span<TrackId const> trackIds, MetadataPatch const& patch);
+    Result<UpdateTrackMetadataReply> previewUpdateMetadata(std::span<TrackId const> trackIds,
+                                                           MetadataPatch const& patch);
     Result<EditTrackTagsReply> editTags(std::span<TrackId const> trackIds,
                                         std::span<std::string const> tagsToAdd,
                                         std::span<std::string const> tagsToRemove);
+    Result<EditTrackTagsReply> previewEditTags(std::span<TrackId const> trackIds,
+                                               std::span<std::string const> tagsToAdd,
+                                               std::span<std::string const> tagsToRemove);
 
     // Returns an error when the draft is invalid, such as a malformed smart
     // filter or an invalid parent relationship.
     Result<ListId> createList(ListDraft const& draft);
+    Result<> previewCreateList(ListDraft const& draft);
     // Returns NotFound if no list with draft.listId exists (e.g. a stale id), or
     // another error when the draft is invalid.
-    Result<> updateList(ListDraft const& draft);
-    // Returns false if no list with listId exists.
-    bool deleteList(ListId listId);
+    Result<UpdateListReply> updateList(ListDraft const& draft);
+    Result<UpdateListReply> previewUpdateList(ListDraft const& draft);
+    Result<DeleteListReply> deleteList(ListId listId);
+    Result<DeleteListReply> previewDeleteList(ListId listId);
 
-    // Returns false if no track with trackId exists.
-    bool deleteTrack(TrackId trackId);
+    Result<DeleteTrackReply> deleteTrack(TrackId trackId);
+    Result<DeleteTrackReply> previewDeleteTrack(TrackId trackId);
     // Imports one audio file under the music root. Recoverable failures include
     // missing/out-of-root files, unsupported or malformed media, and duplicate
     // manifest entries.
-    Result<TrackId> createTrackFromFile(std::filesystem::path const& path);
+    Result<CreateTrackReply> createTrackFromFile(std::filesystem::path const& path);
+    Result<PreviewCreateTrackReply> previewCreateTrackFromFile(std::filesystem::path const& path);
 
     LibraryWriter(LibraryWriter const&) = delete;
     LibraryWriter& operator=(LibraryWriter const&) = delete;

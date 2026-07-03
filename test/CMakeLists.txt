@@ -28,6 +28,7 @@ add_executable(ao_core_test
     unit/utility/StringArenaTest.cpp
     unit/utility/StrongTypeTest.cpp
     unit/utility/UuidTest.cpp
+    unit/utility/YamlReflectTest.cpp
     unit/utility/YamlUtilsTest.cpp
     unit/core/AudioCodecTest.cpp
     unit/core/ExceptionTest.cpp
@@ -228,6 +229,7 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryWriterTrackCreateCommandTest.cpp
     unit/runtime/library/LibraryWriterTrackDeleteCommandTest.cpp
     unit/runtime/TrackFieldTest.cpp
+    unit/runtime/library/LibraryWriterDryRunTest.cpp
     unit/runtime/projection/TrackListProjectionGroupingTest.cpp
     unit/runtime/projection/TrackListProjectionLifecycleTest.cpp
     unit/runtime/projection/TrackListProjectionMutationTest.cpp

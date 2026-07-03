@@ -403,7 +403,7 @@ namespace ao::rt::test
     auto deleted = std::vector<ListId>{};
     auto sub = changes.onListsMutated([&](auto const& ev) { deleted = ev.deleted; });
 
-    service.deleteList(listId);
+    REQUIRE(service.deleteList(listId));
 
     REQUIRE(deleted.size() == 1);
     CHECK(deleted[0] == listId);

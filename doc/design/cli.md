@@ -28,17 +28,49 @@ Stream discipline:
 - stdout carries command payload only.
 - stderr carries domain errors and verbose scan/apply diagnostics.
 
-Machine-readable output uses stable shapes. Row-listing commands that naturally
-produce independent records may emit one JSON object per record. Summary,
-mutation, detail, scan, verify, and dump commands emit one top-level JSON/YAML
-object or sequence and may buffer enough data to close that shape correctly. YAML
-and JSON strings are emitted with double-quoted escaping for quotes, backslashes,
-and control characters.
+Machine-readable output uses stable shapes. YAML and JSON output is generated
+from aggregate DTOs through the reflected ryml emitter, so both formats expose
+the same fields. Strings are always double-quoted, numeric and boolean scalars
+are emitted as scalars, empty vectors/maps are emitted as `[]`/`{}`, and empty
+optionals are omitted. ryml JSON currently emits keys with a `": "` separator;
+callers must parse JSON rather than matching byte-exact spacing.
+
+Row-listing commands that naturally produce independent records may emit one
+JSON object per record. Summary, mutation, detail, scan, verify, and dump
+commands emit one top-level JSON/YAML object or sequence and may buffer enough
+data to close that shape correctly.
+
+## Dry-Run Contract
+
+Every mutating CLI command accepts `--dry-run`: `init`, `scan`, `track
+create/update/delete`, `tag add/remove`, `list create/update/add/remove/delete`,
+and `lib import`.
+
+Dry-run reports use the same YAML/JSON shape as the corresponding real mutation
+and set `dryRun: true`; real mutations set `dryRun: false`. For writer-backed
+commands, the preview executes the normal mutation path inside the LMDB write
+transaction, then returns before commit and suppresses change notifications. For
+`scan`, dry-run keeps the existing scan-plan preview path. For `lib import`,
+dry-run parses and applies the import in the write transaction, then aborts
+before commit and skips restore metadata updates.
+
+Field-level changes are reported where the writer can compare old and new
+values: track metadata reports `changes[].fields[]` with `field`, `oldValue`,
+and `newValue`; tag edits report actual `addedTags`/`removedTags`; list updates
+report field diffs plus `addedTrackIds` and `removedTrackIds`.
+
+Dry-run reports do not include ids allocated by the aborted transaction. Create
+previews omit `trackId` and `listId`; track creation still reports deterministic
+file-derived data such as `uri`, `title`, and `artist`, while list creation
+echoes the submitted draft fields. If a caller needs the created id, it must run
+the real command and read the committed report.
 
 ## Scanning
 
-`aobus init` initializes the library if needed and runs the same scan/apply path
-as `scan`.
+`aobus init [--dry-run]` initializes the library if needed and runs the same
+scan/apply path as `scan`. As with `scan --dry-run`, the runtime may create the
+empty `.aobus/library` container while guaranteeing no library content is
+imported.
 
 `aobus scan [--dry-run] [--verbose]` compares files under the music root with
 the manifest using `library::LibraryScanner`.
@@ -66,8 +98,9 @@ aobus track show --format '$artist + " - " + $title'
 `--format` is plain-output only and is mutually exclusive with `-O yaml/json`.
 Format parse or compile errors are domain failures.
 
-`aobus track update (<id>... | --filter <expr>) [field options]` patches track
-metadata through `rt::LibraryWriter::updateMetadata`. Supported standard fields:
+`aobus track update [--dry-run] (<id>... | --filter <expr>) [field options]`
+patches track metadata through `rt::LibraryWriter::updateMetadata`. Supported
+standard fields:
 
 - `--title`, `--artist`, `--album`, `--album-artist`
 - `--genre`, `--composer`, `--work`, `--movement`
@@ -81,10 +114,10 @@ explicit ids fail before applying. Identical-value patches succeed and report
 
 Other track commands:
 
-- `track create <path>` imports one audio file under the music root. Paths may
+- `track create [--dry-run] <path>` imports one audio file under the music root. Paths may
   be absolute or root-relative; imported track URIs use the same root-relative
   namespace as `scan`, and duplicate manifest entries fail.
-- `track delete <id>` deletes one track and removes its manifest/manual-list
+- `track delete [--dry-run] <id>` deletes one track and removes its manifest/manual-list
   references so a later `scan` can reimport a still-present file.
 - `track dump [--id <id>] [--raw]` is a plain-output debug dump only.
 
@@ -98,11 +131,11 @@ views.
 
 List mutation commands use `rt::LibraryWriter`:
 
-- `list create --name <name> [--filter <expr>] [--desc <text>] [--parent <id>]`
-- `list update <id> [--name <name>] [--desc <text>] [--filter <expr>] [--parent <id>]`
-- `list add <listId> <trackId>...`
-- `list remove <listId> <trackId>...`
-- `list delete <id>`
+- `list create [--dry-run] --name <name> [--filter <expr>] [--desc <text>] [--parent <id>]`
+- `list update [--dry-run] <id> [--name <name>] [--desc <text>] [--filter <expr>] [--parent <id>]`
+- `list add [--dry-run] <listId> <trackId>...`
+- `list remove [--dry-run] <listId> <trackId>...`
+- `list delete [--dry-run] <id>`
 
 List creates and updates validate smart filters, parent existence, self-parenting,
 and parent cycles before writing. Manual membership edits read the complete
@@ -116,8 +149,8 @@ plain output.
 
 `aobus tag list` prints every distinct tag by descending frequency, then name.
 
-`aobus tag add <tag> (<id>... | --filter <expr>)` and
-`aobus tag remove <tag> (<id>... | --filter <expr>)` batch through one
+`aobus tag add [--dry-run] <tag> (<id>... | --filter <expr>)` and
+`aobus tag remove [--dry-run] <tag> (<id>... | --filter <expr>)` batch through one
 `LibraryWriter::editTags` call. Missing explicit ids fail before applying.
 Already-present additions and missing removals are no-op successes.
 
@@ -142,7 +175,7 @@ id this is the track's tags; with multiple ids this is the intersection.
 Missing, and Error items. Missing or Error items exit with status `1`; Changed
 items are reported but do not make verification fail.
 
-`aobus lib import <path> [--mode restore|merge]` and
+`aobus lib import [--dry-run] <path> [--mode restore|merge]` and
 `aobus lib export <path> [--mode delta|metadata|full|listOnly]` read and write
 YAML library exports.
 

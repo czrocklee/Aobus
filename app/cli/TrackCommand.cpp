@@ -5,6 +5,7 @@
 
 #include "CliContext.h"
 #include "CommandError.h"
+#include "DryRunFlag.h"
 #include "DumpUtils.h"
 #include "Output.h"
 #include "TrackSelection.h"
@@ -22,6 +23,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
 #include <CLI/Option.hpp>
@@ -32,6 +34,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <optional>
 #include <print>
@@ -112,105 +115,146 @@ namespace ao::cli
       return requireTrackIds(reader, rawIds);
     }
 
-    void formatUpdateReply(rt::UpdateTrackMetadataReply const& reply, OutputFormat format, std::ostream& os)
+    struct TrackUpdateReportDto final
+    {
+      bool dryRun = false;
+      std::uint64_t updated = 0;
+      std::vector<TrackId> trackIds{};
+      std::vector<rt::TrackChangeRecord> changes{};
+    };
+  } // namespace
+
+  struct TrackCreateReportDto final
+  {
+    std::string action{};
+    bool dryRun = false;
+    std::optional<TrackId> optTrackId{};
+    std::string uri{};
+    std::string title{};
+    std::string artist{};
+  };
+} // namespace ao::cli
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::TrackCreateReportDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optTrackId")
+    {
+      return "trackId";
+    }
+
+    return memberName;
+  }
+};
+
+namespace ao::cli
+{
+  namespace
+  {
+    struct TrackDeleteReportDto final
+    {
+      std::string action{};
+      bool dryRun = false;
+      TrackId trackId{};
+      std::string uri{};
+      std::string title{};
+      std::vector<ListId> removedFromListIds{};
+    };
+
+    void formatUpdateReply(rt::UpdateTrackMetadataReply const& reply,
+                           bool dryRun,
+                           OutputFormat format,
+                           std::ostream& os)
     {
       auto const updated = reply.mutatedIds.size();
 
-      if (format == OutputFormat::Yaml)
+      if (format != OutputFormat::Plain)
       {
-        std::println(os, "updated: {}", updated);
-
-        if (reply.mutatedIds.empty())
-        {
-          std::println(os, "trackIds: []");
-          return;
-        }
-
-        std::println(os, "trackIds:");
-
-        for (auto const trackId : reply.mutatedIds)
-        {
-          std::println(os, "  - {}", trackId.raw());
-        }
-
+        emitDocument(os,
+                     format,
+                     TrackUpdateReportDto{.dryRun = dryRun,
+                                          .updated = static_cast<std::uint64_t>(updated),
+                                          .trackIds = reply.mutatedIds,
+                                          .changes = reply.changes});
         return;
       }
 
-      if (format == OutputFormat::Json)
-      {
-        auto object = JsonObject{os};
-        object.uintField("updated", static_cast<std::uint64_t>(updated));
-        object.field("trackIds");
-        auto array = JsonArray{os};
-
-        for (auto const mutatedId : reply.mutatedIds)
-        {
-          array.element();
-          std::print(os, "{}", mutatedId.raw());
-        }
-
-        array.close();
-        object.close();
-        std::println(os);
-        return;
-      }
-
-      std::println(os, "updated {} track(s)", updated);
+      std::println(os, "updated {} track(s){}", updated, dryRun ? " (dry-run)" : "");
     }
 
-    void formatTrackMutation(std::string_view action,
-                             TrackId trackId,
-                             std::string_view path,
-                             OutputFormat format,
-                             std::ostream& os)
+    void formatTrackCreate(std::optional<TrackId> optTrackId,
+                           std::string const& uri,
+                           std::string const& title,
+                           std::string const& artist,
+                           bool dryRun,
+                           OutputFormat format,
+                           std::ostream& os)
     {
-      if (format == OutputFormat::Yaml)
+      if (format != OutputFormat::Plain)
       {
-        yamlKeyValue(os, 0, "action", action);
-        yamlKeyValue(os, 0, "trackId", static_cast<std::uint64_t>(trackId.raw()));
-
-        if (!path.empty())
-        {
-          yamlKeyValue(os, 0, "path", path);
-        }
-
+        emitDocument(os,
+                     format,
+                     TrackCreateReportDto{.action = "create",
+                                          .dryRun = dryRun,
+                                          .optTrackId = optTrackId,
+                                          .uri = uri,
+                                          .title = title,
+                                          .artist = artist});
         return;
       }
 
-      if (format == OutputFormat::Json)
+      if (optTrackId)
       {
-        auto object = JsonObject{os};
-        object.stringField("action", action);
-        object.uintField("trackId", trackId.raw());
-
-        if (!path.empty())
-        {
-          object.stringField("path", path);
-        }
-
-        object.close();
-        std::println(os);
+        std::println(os, "added track: {}{}", *optTrackId, dryRun ? " (dry-run)" : "");
         return;
       }
 
-      if (action == "create")
+      std::println(os, "added track: {}{}", uri, dryRun ? " (dry-run)" : "");
+    }
+
+    void formatTrackDelete(rt::DeleteTrackReply const& reply, bool dryRun, OutputFormat format, std::ostream& os)
+    {
+      if (format != OutputFormat::Plain)
       {
-        std::println(os, "added track: {}", trackId);
+        emitDocument(os,
+                     format,
+                     TrackDeleteReportDto{.action = "delete",
+                                          .dryRun = dryRun,
+                                          .trackId = reply.trackId,
+                                          .uri = reply.uri,
+                                          .title = reply.title,
+                                          .removedFromListIds = reply.removedFromListIds});
+        return;
       }
-      else
-      {
-        std::println(os, "deleted track: {}", trackId);
-      }
+
+      std::println(os, "deleted track: {}{}", reply.trackId, dryRun ? " (dry-run)" : "");
     }
 
     void updateTracks(CliContext& context,
                       std::vector<std::uint32_t> const& rawIds,
                       std::string const& filter,
-                      rt::MetadataPatch const& patch)
+                      rt::MetadataPatch const& patch,
+                      bool dryRun)
     {
       auto& ml = context.musicLibrary();
       auto reader = context.library().reader();
       auto const targetIds = resolveUpdateTargets(ml, reader, rawIds, filter);
+
+      if (dryRun)
+      {
+        auto const replyResult = context.library().writer().previewUpdateMetadata(targetIds, patch);
+
+        if (!replyResult)
+        {
+          throwCommandError(replyResult.error());
+        }
+
+        formatUpdateReply(*replyResult, true, context.options().format, context.io().out);
+        return;
+      }
+
       auto const replyResult = context.library().writer().updateMetadata(targetIds, patch);
 
       if (!replyResult)
@@ -218,29 +262,85 @@ namespace ao::cli
         throwCommandError(replyResult.error());
       }
 
-      formatUpdateReply(*replyResult, context.options().format, context.io().out);
+      formatUpdateReply(*replyResult, false, context.options().format, context.io().out);
+    }
+  } // namespace
+
+  struct TrackRecordDto final
+  {
+    TrackId id{};
+    std::optional<std::string> optTitle{};
+    std::optional<std::string> optArtist{};
+    std::optional<std::string> optAlbum{};
+    std::optional<std::vector<std::string>> optTags{};
+    std::optional<std::uint64_t> optDuration{};
+    std::optional<std::uint32_t> optSampleRate{};
+    std::optional<std::string> optUri{};
+    std::optional<std::map<std::string, std::string>> optCustom{};
+  };
+
+  struct TrackListDto final
+  {
+    std::vector<TrackRecordDto> tracks{};
+  };
+} // namespace ao::cli
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::TrackRecordDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optTitle")
+    {
+      return "title";
     }
 
-    template<typename TRange>
-    void formatYamlStringList(std::ostream& os, std::int32_t indent, std::string_view key, TRange const& values)
+    if (memberName == "optArtist")
     {
-      if (values.empty())
-      {
-        std::println(os, "{}{}: []", std::string(static_cast<std::size_t>(indent), ' '), key);
-        return;
-      }
-
-      std::println(os, "{}{}:", std::string(static_cast<std::size_t>(indent), ' '), key);
-
-      for (auto const& value : values)
-      {
-        std::println(os, "{}- {}", std::string(static_cast<std::size_t>(indent + 2), ' '), yamlQuote(value));
-      }
+      return "artist";
     }
 
-    std::vector<std::string_view> tagNames(library::TrackView const& view, library::DictionaryStore const& dict)
+    if (memberName == "optAlbum")
     {
-      auto names = std::vector<std::string_view>{};
+      return "album";
+    }
+
+    if (memberName == "optTags")
+    {
+      return "tags";
+    }
+
+    if (memberName == "optDuration")
+    {
+      return "duration";
+    }
+
+    if (memberName == "optSampleRate")
+    {
+      return "sampleRate";
+    }
+
+    if (memberName == "optUri")
+    {
+      return "uri";
+    }
+
+    if (memberName == "optCustom")
+    {
+      return "custom";
+    }
+
+    return memberName;
+  }
+};
+
+namespace ao::cli
+{
+  namespace
+  {
+    std::vector<std::string> tagNames(library::TrackView const& view, library::DictionaryStore const& dict)
+    {
+      auto names = std::vector<std::string>{};
 
       for (auto const tagId : view.tags())
       {
@@ -250,103 +350,47 @@ namespace ao::cli
       return names;
     }
 
-    void formatYamlCustomMap(std::ostream& os,
-                             std::int32_t indent,
+    std::map<std::string, std::string> customMap(library::TrackView const& view, library::DictionaryStore const& dict)
+    {
+      auto result = std::map<std::string, std::string>{};
+
+      for (auto const& [customId, val] : view.customMetadata())
+      {
+        result.emplace(std::string{resolveDict(dict, customId)}, val);
+      }
+
+      return result;
+    }
+
+    TrackRecordDto trackRecordDto(TrackId id, library::TrackView const& view, library::DictionaryStore const& dict)
+    {
+      auto dto = TrackRecordDto{.id = id};
+
+      if (view.isHotValid())
+      {
+        dto.optTitle = view.metadata().title();
+        dto.optArtist = std::string{resolveDict(dict, view.metadata().artistId())};
+        dto.optAlbum = std::string{resolveDict(dict, view.metadata().albumId())};
+        dto.optTags = tagNames(view, dict);
+      }
+
+      if (view.isColdValid())
+      {
+        dto.optDuration = static_cast<std::uint64_t>(view.property().duration().count());
+        dto.optSampleRate = view.property().sampleRate().raw();
+        dto.optUri = view.property().uri();
+        dto.optCustom = customMap(view, dict);
+      }
+
+      return dto;
+    }
+
+    void emitJsonTrackRecord(std::ostream& os,
+                             TrackId id,
                              library::TrackView const& view,
                              library::DictionaryStore const& dict)
     {
-      if (view.customMetadata().empty())
-      {
-        std::println(os, "{}custom: {{}}", std::string(static_cast<std::size_t>(indent), ' '));
-        return;
-      }
-
-      std::println(os, "{}custom:", std::string(static_cast<std::size_t>(indent), ' '));
-
-      for (auto const& [customId, val] : view.customMetadata())
-      {
-        std::println(os,
-                     "{}{}: {}",
-                     std::string(static_cast<std::size_t>(indent + 2), ' '),
-                     yamlQuote(resolveDict(dict, customId)),
-                     yamlQuote(val));
-      }
-    }
-
-    void formatYamlTrackRecord(std::ostream& os,
-                               TrackId id,
-                               library::TrackView const& view,
-                               library::DictionaryStore const& dict)
-    {
-      std::println(os, "  - id: {}", id);
-
-      if (view.isHotValid())
-      {
-        yamlKeyValue(os, 4, "title", view.metadata().title());
-        yamlKeyValue(os, 4, "artist", resolveDict(dict, view.metadata().artistId()));
-        yamlKeyValue(os, 4, "album", resolveDict(dict, view.metadata().albumId()));
-        formatYamlStringList(os, 4, "tags", tagNames(view, dict));
-      }
-
-      if (view.isColdValid())
-      {
-        yamlKeyValue(os, 4, "duration", static_cast<std::uint64_t>(view.property().duration().count()));
-        yamlKeyValue(os, 4, "sampleRate", static_cast<std::uint64_t>(view.property().sampleRate().raw()));
-        yamlKeyValue(os, 4, "uri", view.property().uri());
-        formatYamlCustomMap(os, 4, view, dict);
-      }
-    }
-
-    void jsonStringArray(std::ostream& os, std::vector<std::string_view> const& values)
-    {
-      auto array = JsonArray{os};
-
-      for (auto const value : values)
-      {
-        array.element();
-        std::print(os, "{}", jsonQuote(value));
-      }
-    }
-
-    void formatJsonCustomMap(std::ostream& os, library::TrackView const& view, library::DictionaryStore const& dict)
-    {
-      auto object = JsonObject{os};
-
-      for (auto const& [customId, val] : view.customMetadata())
-      {
-        object.field(resolveDict(dict, customId));
-        std::print(os, "{}", jsonQuote(val));
-      }
-    }
-
-    void formatJsonTrackRecord(std::ostream& os,
-                               TrackId id,
-                               library::TrackView const& view,
-                               library::DictionaryStore const& dict)
-    {
-      auto object = JsonObject{os};
-      object.uintField("id", id.raw());
-
-      if (view.isHotValid())
-      {
-        object.stringField("title", view.metadata().title());
-        object.stringField("artist", resolveDict(dict, view.metadata().artistId()));
-        object.stringField("album", resolveDict(dict, view.metadata().albumId()));
-        object.field("tags");
-        jsonStringArray(os, tagNames(view, dict));
-      }
-
-      if (view.isColdValid())
-      {
-        object.uintField("duration", static_cast<std::uint64_t>(view.property().duration().count()));
-        object.uintField("sampleRate", view.property().sampleRate().raw());
-        object.stringField("uri", view.property().uri());
-        object.field("custom");
-        formatJsonCustomMap(os, view, dict);
-      }
-
-      object.close();
-      std::println(os);
+      emitDocument(os, OutputFormat::Json, trackRecordDto(id, view, dict));
     }
 
     void formatStructuredTracks(std::vector<TrackId> const& trackIds,
@@ -360,7 +404,7 @@ namespace ao::cli
       {
         if (format == OutputFormat::Yaml)
         {
-          std::println(os, "tracks: []");
+          emitDocument(os, format, TrackListDto{});
         }
 
         return;
@@ -373,7 +417,22 @@ namespace ao::cli
 
       if (format == OutputFormat::Yaml)
       {
-        std::println(os, "tracks:");
+        auto dto = TrackListDto{};
+
+        for (std::size_t i = offset; i < end; ++i)
+        {
+          auto const id = trackIds[i];
+          auto const optView = rt::storageValueOrNullopt(
+            reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to read track");
+
+          if (optView)
+          {
+            dto.tracks.push_back(trackRecordDto(id, *optView, dict));
+          }
+        }
+
+        emitDocument(os, format, dto);
+        return;
       }
 
       for (std::size_t i = offset; i < end; ++i)
@@ -382,18 +441,9 @@ namespace ao::cli
         auto const optView = rt::storageValueOrNullopt(
           reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to read track");
 
-        if (!optView)
+        if (optView)
         {
-          continue;
-        }
-
-        if (format == OutputFormat::Yaml)
-        {
-          formatYamlTrackRecord(os, id, *optView, dict);
-        }
-        else
-        {
-          formatJsonTrackRecord(os, id, *optView, dict);
+          emitJsonTrackRecord(os, id, *optView, dict);
         }
       }
     }
@@ -623,20 +673,48 @@ namespace ao::cli
     {
       auto* create = track.add_subcommand("create", "Create a track from a file");
       auto* path = create->add_option("path", "audio file path")->required();
+      auto* dryRun = addDryRunFlag(*create);
       create->callback(
-        [&context, path]
+        [&context, path, dryRun]
         {
-          auto const trackResult = context.library().writer().createTrackFromFile(path->as<std::string>());
+          auto const pathValue = path->as<std::string>();
+
+          if (isDryRun(dryRun))
+          {
+            auto const trackResult = context.library().writer().previewCreateTrackFromFile(pathValue);
+
+            if (!trackResult)
+            {
+              auto const& error = trackResult.error();
+              throwCommandError(error, "error adding track from: {}: {}", pathValue, error.message);
+            }
+
+            formatTrackCreate(std::nullopt,
+                              trackResult->uri,
+                              trackResult->title,
+                              trackResult->artist,
+                              true,
+                              context.options().format,
+                              context.io().out);
+            return;
+          }
+
+          auto const trackResult = context.library().writer().createTrackFromFile(pathValue);
 
           if (trackResult)
           {
-            formatTrackMutation(
-              "create", *trackResult, path->as<std::string>(), context.options().format, context.io().out);
+            formatTrackCreate(std::optional<TrackId>{trackResult->trackId},
+                              trackResult->uri,
+                              trackResult->title,
+                              trackResult->artist,
+                              false,
+                              context.options().format,
+                              context.io().out);
           }
           else
           {
             auto const& error = trackResult.error();
-            throwCommandError(error, "error adding track from: {}: {}", path->as<std::string>(), error.message);
+            throwCommandError(error, "error adding track from: {}: {}", pathValue, error.message);
           }
         });
     }
@@ -662,6 +740,7 @@ namespace ao::cli
       CLI::Option* movementTotal = nullptr;
       CLI::Option* set = nullptr;
       CLI::Option* unset = nullptr;
+      CLI::Option* dryRun = nullptr;
       std::shared_ptr<std::vector<std::string>> setsPtr;
       std::shared_ptr<std::vector<std::string>> unsetsPtr;
     };
@@ -724,7 +803,7 @@ namespace ao::cli
       auto const rawIds =
         options.ids->count() > 0 ? options.ids->as<std::vector<std::uint32_t>>() : std::vector<std::uint32_t>{};
       auto const filter = options.filter->count() > 0 ? options.filter->as<std::string>() : std::string{};
-      updateTracks(context, rawIds, filter, patch);
+      updateTracks(context, rawIds, filter, patch, isDryRun(options.dryRun));
     }
 
     void setupTrackUpdateCommand(CLI::App& track, CliContext& context)
@@ -752,6 +831,7 @@ namespace ao::cli
         .movementTotal = update->add_option("--movement-total", "movement total"),
         .set = update->add_option("--set", *updateSetsPtr, "set custom metadata key=value"),
         .unset = update->add_option("--unset", *updateUnsetsPtr, "unset custom metadata key"),
+        .dryRun = addDryRunFlag(*update),
         .setsPtr = updateSetsPtr,
         .unsetsPtr = updateUnsetsPtr,
       };
@@ -763,16 +843,34 @@ namespace ao::cli
     {
       auto* del = track.add_subcommand("delete", "Delete a track by id");
       auto* id = del->add_option("id", "track id")->required();
+      auto* dryRun = addDryRunFlag(*del);
       del->callback(
-        [&context, id]
+        [&context, id, dryRun]
         {
-          if (auto const trackId = TrackId{id->as<std::uint32_t>()}; context.library().writer().deleteTrack(trackId))
+          auto const trackId = TrackId{id->as<std::uint32_t>()};
+
+          if (isDryRun(dryRun))
           {
-            formatTrackMutation("delete", trackId, {}, context.options().format, context.io().out);
+            auto const deleteResult = context.library().writer().previewDeleteTrack(trackId);
+
+            if (!deleteResult)
+            {
+              throwCommandError(deleteResult.error());
+            }
+
+            formatTrackDelete(*deleteResult, true, context.options().format, context.io().out);
+            return;
+          }
+
+          auto const deleteResult = context.library().writer().deleteTrack(trackId);
+
+          if (deleteResult)
+          {
+            formatTrackDelete(*deleteResult, false, context.options().format, context.io().out);
           }
           else
           {
-            throwCommandError(Error::Code::NotFound, "track not found: {}", trackId);
+            throwCommandError(deleteResult.error());
           }
         });
     }

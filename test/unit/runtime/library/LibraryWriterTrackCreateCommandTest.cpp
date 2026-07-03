@@ -67,13 +67,13 @@ namespace ao::rt::test
     auto const trackIdResult = writer.createTrackFromFile(absValidFile);
     REQUIRE(trackIdResult);
     REQUIRE(mutated.size() == 1);
-    CHECK(mutated[0] == *trackIdResult);
+    CHECK(mutated[0] == trackIdResult->trackId);
     REQUIRE(inserted.size() == 1);
-    CHECK(inserted[0] == *trackIdResult);
+    CHECK(inserted[0] == trackIdResult->trackId);
 
     auto txn = testLib.library().readTransaction();
     auto const optTrackView =
-      testLib.library().tracks().reader(txn).get(*trackIdResult, library::TrackStore::Reader::LoadMode::Both);
+      testLib.library().tracks().reader(txn).get(trackIdResult->trackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optTrackView);
     CHECK(optTrackView->property().uri() == "music/song.flac");
     CHECK(testLib.library().manifest().reader(txn).get("music/song.flac"));
@@ -104,7 +104,7 @@ namespace ao::rt::test
 
     auto txn = testLib.library().readTransaction();
     auto const optTrackView =
-      testLib.library().tracks().reader(txn).get(*trackIdResult, library::TrackStore::Reader::LoadMode::Both);
+      testLib.library().tracks().reader(txn).get(trackIdResult->trackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optTrackView);
     CHECK(optTrackView->property().uri() == "relative.flac");
   }

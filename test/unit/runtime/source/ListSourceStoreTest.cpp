@@ -107,7 +107,7 @@ namespace ao::rt::test
       auto spy = TrackSourceSpy{};
       store.allTracks().attach(&spy);
 
-      CHECK(writer.deleteTrack(trackId));
+      CHECK(writer.deleteTrack(trackId).has_value());
       CHECK(store.allTracks().size() == 0);
       CHECK(spy.removed.size() == 1);
 
@@ -268,7 +268,7 @@ namespace ao::rt::test
 
       store.sourceFor(listId);
 
-      writer.deleteList(listId);
+      REQUIRE(writer.deleteList(listId));
 
       CHECK(&store.sourceFor(listId) == &store.allTracks());
     }

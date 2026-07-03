@@ -104,7 +104,7 @@ namespace ao::rt::test
     auto activeViewId = runtime.workspace().layoutState().activeViewId;
     CHECK(activeViewId != kInvalidViewId);
 
-    runtime.library().writer().deleteList(listId);
+    REQUIRE(runtime.library().writer().deleteList(listId));
 
     auto layout = runtime.workspace().layoutState();
     CHECK(!std::ranges::contains(layout.openViews, activeViewId));

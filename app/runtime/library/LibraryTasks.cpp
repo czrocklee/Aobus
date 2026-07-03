@@ -44,7 +44,13 @@ namespace ao::rt
     co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryImport");
     auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
-    auto result = importer.importFromYaml(path);
+    auto importResult = importer.importFromYaml(path);
+    auto result = Result<>{};
+
+    if (!importResult)
+    {
+      result = std::unexpected{importResult.error()};
+    }
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
     co_return result;

@@ -3,10 +3,11 @@
 
 #pragma once
 
+#include <ao/yaml/Reflect.h>
+
 #include <cstdint>
 #include <ostream>
 #include <string>
-#include <string_view>
 
 namespace ao::cli
 {
@@ -17,84 +18,29 @@ namespace ao::cli
     Json,
   };
 
-  std::string yamlQuote(std::string_view value);
-  std::string jsonQuote(std::string_view value);
-  std::string quote(OutputFormat format, std::string_view value);
-
-  class JsonObject final
+  namespace detail
   {
-  public:
-    explicit JsonObject(std::ostream& os);
-    ~JsonObject();
+    inline void emitGeneratedDocument(std::ostream& os, std::string const& text)
+    {
+      os << text;
 
-    JsonObject(JsonObject const&) = delete;
-    JsonObject& operator=(JsonObject const&) = delete;
-    JsonObject(JsonObject&&) = delete;
-    JsonObject& operator=(JsonObject&&) = delete;
+      if (text.empty() || text.back() != '\n')
+      {
+        os << '\n';
+      }
+    }
+  } // namespace detail
 
-    void field(std::string_view key);
-    void stringField(std::string_view key, std::string_view value);
-    void uintField(std::string_view key, std::uint64_t value);
-    void boolField(std::string_view key, bool value);
-    void close();
-
-  private:
-    void closeQuietly() noexcept;
-
-    std::ostream& _os;
-    bool _first = true;
-    bool _closed = false;
-  };
-
-  class JsonArray final
+  template<typename T>
+  void emitDocument(std::ostream& os, OutputFormat format, T const& dto)
   {
-  public:
-    explicit JsonArray(std::ostream& os);
-    ~JsonArray();
-
-    JsonArray(JsonArray const&) = delete;
-    JsonArray& operator=(JsonArray const&) = delete;
-    JsonArray(JsonArray&&) = delete;
-    JsonArray& operator=(JsonArray&&) = delete;
-
-    void element();
-    void close();
-
-  private:
-    void closeQuietly() noexcept;
-
-    std::ostream& _os;
-    bool _first = true;
-    bool _closed = false;
-  };
-
-  class YamlSequence final
-  {
-  public:
-    YamlSequence(std::ostream& os, std::int32_t indent, std::string_view key);
-    ~YamlSequence();
-
-    YamlSequence(YamlSequence const&) = delete;
-    YamlSequence& operator=(YamlSequence const&) = delete;
-    YamlSequence(YamlSequence&&) = delete;
-    YamlSequence& operator=(YamlSequence&&) = delete;
-
-    void itemPrefix();
-    void close();
-
-  private:
-    void ensureStarted();
-    void closeQuietly() noexcept;
-
-    std::ostream& _os;
-    std::int32_t _indent;
-    std::string_view _key;
-    bool _started = false;
-    bool _closed = false;
-  };
-
-  void yamlKeyValue(std::ostream& os, std::int32_t indent, std::string_view key, std::string_view value);
-  void yamlKeyValue(std::ostream& os, std::int32_t indent, std::string_view key, char const* value);
-  void yamlKeyValue(std::ostream& os, std::int32_t indent, std::string_view key, std::uint64_t value);
-  void yamlKeyValue(std::ostream& os, std::int32_t indent, std::string_view key, bool value);
+    if (format == OutputFormat::Yaml)
+    {
+      detail::emitGeneratedDocument(os, yaml::toYamlString(dto));
+    }
+    else if (format == OutputFormat::Json)
+    {
+      detail::emitGeneratedDocument(os, yaml::toJsonString(dto));
+    }
+  }
 } // namespace ao::cli

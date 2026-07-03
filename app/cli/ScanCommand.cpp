@@ -9,16 +9,73 @@
 #include "ScanOutput.h"
 #include <ao/library/LibraryScanner.h>
 #include <ao/library/ScanPlanExecutor.h>
+#include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <ostream>
 #include <print>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
+
+namespace ao::cli
+{
+  struct ScanItemDto final
+  {
+    std::string type{};
+    std::string uri{};
+    std::optional<std::string> optMessage{};
+  };
+
+  struct ScanReportDto final
+  {
+    bool dryRun = false;
+    std::uint64_t newCount = 0;
+    std::uint64_t changed = 0;
+    std::uint64_t missing = 0;
+    std::uint64_t unchanged = 0;
+    std::uint64_t errors = 0;
+    std::optional<std::vector<ScanItemDto>> optItems{};
+  };
+} // namespace ao::cli
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::ScanItemDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optMessage")
+    {
+      return "message";
+    }
+
+    return memberName;
+  }
+};
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::ScanReportDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "newCount")
+    {
+      return "new";
+    }
+
+    if (memberName == "optItems")
+    {
+      return "items";
+    }
+
+    return memberName;
+  }
+};
 
 namespace ao::cli
 {
@@ -34,27 +91,11 @@ namespace ao::cli
       return item.fullPath.generic_string();
     }
 
-    void printScanItemYaml(library::ScanItem const& item, std::ostream& os)
+    ScanItemDto scanItemDto(library::ScanItem const& item)
     {
-      std::println(os, "  - type: {}", yamlQuote(scanClassificationName(item.classification)));
-      yamlKeyValue(os, 4, "uri", itemLabel(item));
-
-      if (!item.errorMessage.empty())
-      {
-        yamlKeyValue(os, 4, "message", item.errorMessage);
-      }
-    }
-
-    void printScanItemJson(library::ScanItem const& item, std::ostream& os)
-    {
-      auto object = JsonObject{os};
-      object.stringField("type", scanClassificationName(item.classification));
-      object.stringField("uri", itemLabel(item));
-
-      if (!item.errorMessage.empty())
-      {
-        object.stringField("message", item.errorMessage);
-      }
+      return ScanItemDto{.type = std::string{scanClassificationName(item.classification)},
+                         .uri = itemLabel(item),
+                         .optMessage = item.errorMessage.empty() ? std::nullopt : std::optional{item.errorMessage}};
     }
 
     void printScanResult(library::ScanPlan const& plan, bool dryRun, OutputFormat format, std::ostream& os)
@@ -65,58 +106,18 @@ namespace ao::cli
       auto const unchangedCount = plan.count(library::ScanClassification::Unchanged);
       auto const errorCount = plan.count(library::ScanClassification::Error);
 
-      if (format == OutputFormat::Yaml)
+      if (format != OutputFormat::Plain)
       {
-        yamlKeyValue(os, 0, "new", static_cast<std::uint64_t>(newCount));
-        yamlKeyValue(os, 0, "changed", static_cast<std::uint64_t>(changedCount));
-        yamlKeyValue(os, 0, "missing", static_cast<std::uint64_t>(missingCount));
-        yamlKeyValue(os, 0, "unchanged", static_cast<std::uint64_t>(unchangedCount));
-        yamlKeyValue(os, 0, "errors", static_cast<std::uint64_t>(errorCount));
-
-        if (!dryRun)
-        {
-          return;
-        }
-
-        bool hasItems = false;
-
-        for (auto const& item : plan.items)
-        {
-          if (item.classification == library::ScanClassification::Unchanged)
-          {
-            continue;
-          }
-
-          if (!hasItems)
-          {
-            std::println(os, "items:");
-            hasItems = true;
-          }
-
-          printScanItemYaml(item, os);
-        }
-
-        if (!hasItems)
-        {
-          std::println(os, "items: []");
-        }
-
-        return;
-      }
-
-      if (format == OutputFormat::Json)
-      {
-        auto object = JsonObject{os};
-        object.uintField("new", static_cast<std::uint64_t>(newCount));
-        object.uintField("changed", static_cast<std::uint64_t>(changedCount));
-        object.uintField("missing", static_cast<std::uint64_t>(missingCount));
-        object.uintField("unchanged", static_cast<std::uint64_t>(unchangedCount));
-        object.uintField("errors", static_cast<std::uint64_t>(errorCount));
+        auto report = ScanReportDto{.dryRun = dryRun,
+                                    .newCount = static_cast<std::uint64_t>(newCount),
+                                    .changed = static_cast<std::uint64_t>(changedCount),
+                                    .missing = static_cast<std::uint64_t>(missingCount),
+                                    .unchanged = static_cast<std::uint64_t>(unchangedCount),
+                                    .errors = static_cast<std::uint64_t>(errorCount)};
 
         if (dryRun)
         {
-          object.field("items");
-          auto array = JsonArray{os};
+          report.optItems = std::vector<ScanItemDto>{};
 
           for (auto const& item : plan.items)
           {
@@ -125,13 +126,11 @@ namespace ao::cli
               continue;
             }
 
-            array.element();
-            printScanItemJson(item, os);
+            report.optItems->push_back(scanItemDto(item));
           }
         }
 
-        object.close();
-        std::println(os);
+        emitDocument(os, format, report);
         return;
       }
 

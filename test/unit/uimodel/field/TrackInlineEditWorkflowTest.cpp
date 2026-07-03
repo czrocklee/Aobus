@@ -62,7 +62,9 @@ namespace ao::uimodel::test
       .commitPatch = [&](rt::MetadataPatch const& patch) -> Result<rt::UpdateTrackMetadataReply>
       {
         committedPatch = patch;
-        return rt::UpdateTrackMetadataReply{.mutatedIds = {TrackId{1}}};
+        auto reply = rt::UpdateTrackMetadataReply{};
+        reply.mutatedIds = {TrackId{1}};
+        return reply;
       },
     };
 

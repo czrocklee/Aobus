@@ -6,3 +6,4 @@ add_library(ao_utility STATIC
     Uuid.cpp
 )
 target_include_directories(ao_utility PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
+target_link_libraries(ao_utility PUBLIC PkgRapidYaml Boost::headers)

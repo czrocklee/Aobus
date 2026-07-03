@@ -323,7 +323,11 @@ namespace ao::gtk
       return;
     }
 
-    _runtime.library().writer().deleteList(listId);
+    if (auto const deleteResult = _runtime.library().writer().deleteList(listId); !deleteResult)
+    {
+      APP_LOG_ERROR("Failed to delete list {}: {}", listId, deleteResult.error().message);
+      return;
+    }
 
     _pendingSelectId = rt::kAllTracksListId;
   }

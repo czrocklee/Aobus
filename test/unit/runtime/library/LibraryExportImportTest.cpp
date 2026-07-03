@@ -31,6 +31,7 @@
 #include <iterator>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -46,6 +47,47 @@ namespace ao::rt::test
       auto result = writer.create(payload);
       REQUIRE(result);
       return result->first;
+    }
+
+    std::size_t trackCount(MusicLibrary& ml)
+    {
+      std::size_t count = 0;
+      auto txn = ml.readTransaction();
+
+      for ([[maybe_unused]] auto const& item : ml.tracks().reader(txn))
+      {
+        ++count;
+      }
+
+      return count;
+    }
+
+    std::size_t listCount(MusicLibrary& ml)
+    {
+      std::size_t count = 0;
+      auto txn = ml.readTransaction();
+
+      for ([[maybe_unused]] auto const& item : ml.lists().reader(txn))
+      {
+        ++count;
+      }
+
+      return count;
+    }
+
+    std::string trackTitleForUri(MusicLibrary& ml, std::string_view uri)
+    {
+      auto txn = ml.readTransaction();
+
+      for (auto const& [id, view] : ml.tracks().reader(txn))
+      {
+        if (view.property().uri() == uri)
+        {
+          return std::string{view.metadata().title()};
+        }
+      }
+
+      return {};
     }
   } // namespace
 
@@ -349,6 +391,98 @@ library:
       // Track 2 should be added
       auto const& v2 = tracks.at(uri2);
       CHECK(std::string{v2.metadata().title()} == "New Track");
+    }
+  }
+
+  TEST_CASE("LibraryYaml import reports counts and dry-run leaves target unchanged",
+            "[runtime][workflow][import-export][yaml][dryrun]")
+  {
+    SECTION("restore into empty target")
+    {
+      auto const sourceTemp = ao::test::TempDir{};
+      auto source = MusicLibrary{sourceTemp.path(), sourceTemp.path()};
+      auto const trackId =
+        library::test::addTrack(source, library::test::TrackSpec{.title = "Source", .uri = "source.flac"});
+
+      auto listTxn = source.writeTransaction();
+      auto listBuilder = ListBuilder::createNew().name("Source List");
+      listBuilder.tracks().add(trackId);
+      createList(source.lists().writer(listTxn), listBuilder.serialize());
+      REQUIRE(listTxn.commit());
+
+      auto const yamlPath = std::filesystem::path{sourceTemp.path()} / "restore.yaml";
+      REQUIRE(LibraryYamlExporter{source}.exportToYaml(yamlPath, ExportMode::Full));
+
+      auto const targetTemp = ao::test::TempDir{};
+      auto target = MusicLibrary{targetTemp.path(), targetTemp.path()};
+      auto importer = LibraryYamlImporter{target};
+      auto const report = importer.previewImportFromYaml(yamlPath, ImportMode::Restore);
+
+      REQUIRE(report);
+      CHECK(report->tracksCreated == 1);
+      CHECK(report->tracksUpdated == 0);
+      CHECK(report->tracksDeleted == 0);
+      CHECK(report->listsCreated == 1);
+      CHECK(report->listsDeleted == 0);
+      CHECK(trackCount(target) == 0);
+      CHECK(listCount(target) == 0);
+    }
+
+    SECTION("merge reports updates and creates without committing")
+    {
+      auto const temp = ao::test::TempDir{};
+      auto ml = MusicLibrary{temp.path(), temp.path()};
+      auto const existingTrackId =
+        library::test::addTrack(ml, library::test::TrackSpec{.title = "Original", .uri = "track1.flac"});
+
+      {
+        auto txn = ml.writeTransaction();
+        auto builder = FileManifestBuilder::createNew();
+        builder.trackId(existingTrackId);
+        REQUIRE(ml.manifest().writer(txn).put("track1.flac", builder.serialize()));
+        REQUIRE(txn.commit());
+      }
+
+      auto const yamlPath = std::filesystem::path{temp.path()} / "merge-report.yaml";
+      {
+        auto yaml = std::ofstream{yamlPath};
+        yaml << R"(version: 1
+export_mode: delta
+library:
+  tracks:
+    - uri: track1.flac
+      title: "Updated"
+    - uri: track2.flac
+      title: "New"
+  lists:
+    - id: 1
+      parentId: 0
+      name: "Imported"
+      tracks:
+        - uri: track2.flac
+)";
+      }
+
+      auto importer = LibraryYamlImporter{ml};
+      auto const dryRunReport = importer.previewImportFromYaml(yamlPath, ImportMode::Merge);
+
+      REQUIRE(dryRunReport);
+      CHECK(dryRunReport->tracksCreated == 1);
+      CHECK(dryRunReport->tracksUpdated == 1);
+      CHECK(dryRunReport->tracksDeleted == 0);
+      CHECK(dryRunReport->listsCreated == 1);
+      CHECK(dryRunReport->listsDeleted == 0);
+      CHECK(trackCount(ml) == 1);
+      CHECK(listCount(ml) == 0);
+      CHECK(trackTitleForUri(ml, "track1.flac") == "Original");
+
+      auto const commitReport = importer.importFromYaml(yamlPath, ImportMode::Merge);
+      REQUIRE(commitReport);
+      CHECK(*commitReport == *dryRunReport);
+      CHECK(trackCount(ml) == 2);
+      CHECK(listCount(ml) == 1);
+      CHECK(trackTitleForUri(ml, "track1.flac") == "Updated");
+      CHECK(trackTitleForUri(ml, "track2.flac") == "New");
     }
   }
 

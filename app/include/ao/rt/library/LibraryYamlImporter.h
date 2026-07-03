@@ -25,6 +25,17 @@ namespace ao::rt
     Merge    // Additive/update import: preserves existing records outside payload scope.
   };
 
+  struct ImportReport final
+  {
+    std::uint64_t tracksCreated = 0;
+    std::uint64_t tracksUpdated = 0;
+    std::uint64_t tracksDeleted = 0;
+    std::uint64_t listsCreated = 0;
+    std::uint64_t listsDeleted = 0;
+
+    bool operator==(ImportReport const&) const = default;
+  };
+
   /**
    * LibraryYamlImporter - Logical YAML importer for library::MusicLibrary.
    */
@@ -45,7 +56,11 @@ namespace ao::rt
      * @param mode Import mode. Defaults to Restore.
      * @return Result of the operation.
      */
-    Result<> importFromYaml(std::filesystem::path const& path, ImportMode mode = ImportMode::Restore);
+    Result<ImportReport> importFromYaml(std::filesystem::path const& path, ImportMode mode = ImportMode::Restore);
+    // Runs the same import path, but returns before commit and skips metadata
+    // header updates.
+    Result<ImportReport> previewImportFromYaml(std::filesystem::path const& path,
+                                               ImportMode mode = ImportMode::Restore);
 
   private:
     struct Impl;

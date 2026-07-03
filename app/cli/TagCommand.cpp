@@ -5,14 +5,17 @@
 
 #include "CliContext.h"
 #include "CommandError.h"
+#include "DryRunFlag.h"
 #include "Output.h"
 #include "TrackSelection.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/rt/CoreRuntime.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
 
@@ -20,6 +23,8 @@
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <optional>
+#include <ostream>
 #include <print>
 #include <span>
 #include <string>
@@ -28,29 +33,47 @@
 
 namespace ao::cli
 {
+  struct TagSelectionDto final
+  {
+    std::optional<TrackId> optTrackId{};
+    std::optional<std::vector<TrackId>> optTrackIds{};
+    std::vector<std::string> tags{};
+  };
+} // namespace ao::cli
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::TagSelectionDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optTrackId")
+    {
+      return "trackId";
+    }
+
+    if (memberName == "optTrackIds")
+    {
+      return "trackIds";
+    }
+
+    return memberName;
+  }
+};
+
+namespace ao::cli
+{
   namespace
   {
-    void printJsonStringArray(std::ostream& os, std::vector<std::string> const& values)
+    struct TagFrequencyDto final
     {
-      auto array = JsonArray{os};
+      std::string name{};
+      std::uint64_t count = 0;
+    };
 
-      for (auto const& value : values)
-      {
-        array.element();
-        std::print(os, "{}", jsonQuote(value));
-      }
-    }
-
-    void printJsonTrackIdArray(std::ostream& os, std::span<TrackId const> ids)
+    struct TagFrequencyListDto final
     {
-      auto array = JsonArray{os};
-
-      for (auto const id : ids)
-      {
-        array.element();
-        std::print(os, "{}", id.raw());
-      }
-    }
+      std::vector<TagFrequencyDto> tags{};
+    };
 
     std::vector<TrackId> resolveTargets(CliContext& context,
                                         std::vector<std::uint32_t> const& rawIds,
@@ -80,58 +103,17 @@ namespace ao::cli
                    OutputFormat format,
                    std::ostream& os)
     {
-      auto const singleTrack = trackIds.size() == 1;
-
-      if (format == OutputFormat::Yaml)
+      if (format != OutputFormat::Plain)
       {
-        if (singleTrack)
-        {
-          std::println(os, "trackId: {}", trackIds[0]);
-        }
-        else
-        {
-          std::println(os, "trackIds:");
+        bool const singleTrack = trackIds.size() == 1;
 
-          for (auto const trackId : trackIds)
-          {
-            std::println(os, "  - {}", trackId.raw());
-          }
-        }
-
-        if (tagNames.empty())
-        {
-          std::println(os, "tags: []");
-          return;
-        }
-
-        std::println(os, "tags:");
-
-        for (auto const& name : tagNames)
-        {
-          std::println(os, "  - {}", yamlQuote(name));
-        }
-
-        return;
-      }
-
-      if (format == OutputFormat::Json)
-      {
-        auto object = JsonObject{os};
-
-        if (singleTrack)
-        {
-          object.uintField("trackId", trackIds[0].raw());
-        }
-        else
-        {
-          object.field("trackIds");
-          printJsonTrackIdArray(os, trackIds);
-        }
-
-        object.field("tags");
-        printJsonStringArray(os, tagNames);
-        object.close();
-        std::println(os);
+        emitDocument(os,
+                     format,
+                     TagSelectionDto{.optTrackId = singleTrack ? std::optional{trackIds[0]} : std::nullopt,
+                                     .optTrackIds = singleTrack ? std::nullopt
+                                                                : std::optional{std::vector<TrackId>{
+                                                                    trackIds.begin(), trackIds.end()}},
+                                     .tags = tagNames});
         return;
       }
 
@@ -159,63 +141,70 @@ namespace ao::cli
       printTags(trackIds, tags, context.options().format, context.io().out);
     }
 
+    struct TagMutationReportDto final
+    {
+      std::string action{};
+      std::string tag{};
+      bool dryRun = false;
+      std::uint64_t updated = 0;
+      std::vector<TrackId> trackIds{};
+      std::vector<rt::TrackTagsChange> changes{};
+    };
+
     void formatMutation(std::string_view action,
                         std::string const& tagName,
                         rt::EditTrackTagsReply const& reply,
+                        bool dryRun,
                         OutputFormat format,
                         std::ostream& os)
     {
-      if (format == OutputFormat::Yaml)
+      if (format != OutputFormat::Plain)
       {
-        yamlKeyValue(os, 0, "action", action);
-        yamlKeyValue(os, 0, "tag", tagName);
-        yamlKeyValue(os, 0, "updated", static_cast<std::uint64_t>(reply.mutatedIds.size()));
-
-        if (reply.mutatedIds.empty())
-        {
-          std::println(os, "trackIds: []");
-          return;
-        }
-
-        std::println(os, "trackIds:");
-
-        for (auto const trackId : reply.mutatedIds)
-        {
-          std::println(os, "  - {}", trackId.raw());
-        }
-
-        return;
-      }
-
-      if (format == OutputFormat::Json)
-      {
-        auto object = JsonObject{os};
-        object.stringField("action", action);
-        object.stringField("tag", tagName);
-        object.uintField("updated", static_cast<std::uint64_t>(reply.mutatedIds.size()));
-        object.field("trackIds");
-        printJsonTrackIdArray(os, reply.mutatedIds);
-        object.close();
-        std::println(os);
+        emitDocument(os,
+                     format,
+                     TagMutationReportDto{.action = std::string{action},
+                                          .tag = tagName,
+                                          .dryRun = dryRun,
+                                          .updated = static_cast<std::uint64_t>(reply.mutatedIds.size()),
+                                          .trackIds = reply.mutatedIds,
+                                          .changes = reply.changes});
         return;
       }
 
       std::println(os,
-                   "{} tag: {} {} {} track(s)",
+                   "{} tag: {} {} {} track(s){}",
                    action == "add" ? "added" : "removed",
                    tagName,
                    action == "add" ? "to" : "from",
-                   reply.mutatedIds.size());
+                   reply.mutatedIds.size(),
+                   dryRun ? " (dry-run)" : "");
     }
 
     void editTags(CliContext& context,
                   bool add,
                   std::string const& tagName,
                   std::vector<std::uint32_t> const& rawIds,
-                  std::string const& filter)
+                  std::string const& filter,
+                  bool dryRun)
     {
       auto const trackIds = resolveTargets(context, rawIds, filter);
       auto const tags = std::array{tagName};
+
+      if (dryRun)
+      {
+        auto const replyResult =
+          add ? context.library().writer().previewEditTags(trackIds, tags, std::span<std::string const>{})
+              : context.library().writer().previewEditTags(trackIds, std::span<std::string const>{}, tags);
+
+        if (!replyResult)
+        {
+          throwCommandError(replyResult.error());
+        }
+
+        formatMutation(add ? "add" : "remove", tagName, *replyResult, true, context.options().format, context.io().out);
+        return;
+      }
+
       auto const replyResult = add
                                  ? context.library().writer().editTags(trackIds, tags, std::span<std::string const>{})
                                  : context.library().writer().editTags(trackIds, std::span<std::string const>{}, tags);
@@ -225,43 +214,24 @@ namespace ao::cli
         throwCommandError(replyResult.error());
       }
 
-      formatMutation(add ? "add" : "remove", tagName, *replyResult, context.options().format, context.io().out);
+      formatMutation(add ? "add" : "remove", tagName, *replyResult, false, context.options().format, context.io().out);
     }
 
     void listTags(CliContext& context)
     {
       auto const tags = context.library().reader().allTagsByFrequency();
 
-      if (context.options().format == OutputFormat::Yaml)
+      if (context.options().format != OutputFormat::Plain)
       {
-        if (tags.empty())
-        {
-          std::println(context.io().out, "tags: []");
-          return;
-        }
-
-        std::println(context.io().out, "tags:");
+        auto report = TagFrequencyListDto{};
+        report.tags.reserve(tags.size());
 
         for (auto const& [name, count] : tags)
         {
-          std::println(context.io().out, "  - name: {}", yamlQuote(name));
-          yamlKeyValue(context.io().out, 4, "count", static_cast<std::uint64_t>(count));
+          report.tags.push_back(TagFrequencyDto{.name = name, .count = static_cast<std::uint64_t>(count)});
         }
 
-        return;
-      }
-
-      if (context.options().format == OutputFormat::Json)
-      {
-        for (auto const& [name, count] : tags)
-        {
-          auto object = JsonObject{context.io().out};
-          object.stringField("name", name);
-          object.uintField("count", static_cast<std::uint64_t>(count));
-          object.close();
-          std::println(context.io().out);
-        }
-
+        emitDocument(context.io().out, context.options().format, report);
         return;
       }
 
@@ -284,12 +254,13 @@ namespace ao::cli
     auto addIdsPtr = std::make_shared<std::vector<std::uint32_t>>();
     add->add_option("id", *addIdsPtr, "track id");
     auto* addFilter = add->add_option("-f,--filter", "track filter expression");
+    auto* addDryRun = addDryRunFlag(*add);
     add->callback(
-      [&context, addTagName, addIdsPtr, addFilter]
+      [&context, addTagName, addIdsPtr, addFilter, addDryRun]
       {
         auto const tagName = addTagName->as<std::string>();
         auto const filter = addFilter->count() > 0 ? addFilter->as<std::string>() : std::string{};
-        editTags(context, true, tagName, *addIdsPtr, filter);
+        editTags(context, true, tagName, *addIdsPtr, filter, isDryRun(addDryRun));
       });
 
     auto* remove = tag->add_subcommand("remove", "Remove a tag from tracks");
@@ -297,12 +268,13 @@ namespace ao::cli
     auto remIdsPtr = std::make_shared<std::vector<std::uint32_t>>();
     remove->add_option("id", *remIdsPtr, "track id");
     auto* remFilter = remove->add_option("-f,--filter", "track filter expression");
+    auto* remDryRun = addDryRunFlag(*remove);
     remove->callback(
-      [&context, remTagName, remIdsPtr, remFilter]
+      [&context, remTagName, remIdsPtr, remFilter, remDryRun]
       {
         auto const tagName = remTagName->as<std::string>();
         auto const filter = remFilter->count() > 0 ? remFilter->as<std::string>() : std::string{};
-        editTags(context, false, tagName, *remIdsPtr, filter);
+        editTags(context, false, tagName, *remIdsPtr, filter, isDryRun(remDryRun));
       });
 
     auto* show = tag->add_subcommand("show", "Show tags shared by selected tracks");

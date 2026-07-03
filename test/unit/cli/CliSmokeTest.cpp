@@ -63,6 +63,38 @@ namespace ao::cli::test
       REQUIRE(tree.rootref().is_map());
     }
 
+    std::size_t countJsonLinesWithField(std::string_view lines, std::string_view field, std::string_view value)
+    {
+      std::size_t count = 0;
+      std::size_t pos = 0;
+
+      while (pos < lines.size())
+      {
+        auto const end = lines.find('\n', pos);
+        auto const line = lines.substr(pos, end == std::string_view::npos ? std::string_view::npos : end - pos);
+
+        if (!line.empty())
+        {
+          auto tree = parseYaml(line);
+          REQUIRE(tree.rootref().is_map());
+
+          if (yaml::scalarView(yaml::findChild(tree.rootref(), field)) == value)
+          {
+            ++count;
+          }
+        }
+
+        if (end == std::string_view::npos)
+        {
+          break;
+        }
+
+        pos = end + 1;
+      }
+
+      return count;
+    }
+
     void checkDomainFailure(CliResult const& result, std::string_view expectedError)
     {
       CHECK(result.status == 1);
@@ -104,6 +136,14 @@ namespace ao::cli::test
       auto const idEnd = output.find(' ', idStart);
       REQUIRE(idEnd != std::string_view::npos);
       return static_cast<std::uint32_t>(std::stoul(std::string{output.substr(idStart, idEnd - idStart)}));
+    }
+
+    std::uint32_t parseJsonUintField(std::string_view output, std::string_view field)
+    {
+      auto tree = parseYaml(output);
+      auto const value = yaml::scalarView(yaml::findChild(tree.rootref(), field));
+      REQUIRE_FALSE(value.empty());
+      return static_cast<std::uint32_t>(std::stoul(std::string{value}));
     }
 
     class [[nodiscard]] EnvVarGuard final
@@ -257,7 +297,8 @@ namespace ao::cli::test
     result = fixture.run({"-O", "json", "track", "show", "--filter", "$title ~ \"Test\""});
     REQUIRE(result.status == 0);
     requireJsonLineParses(result.out);
-    CHECK(contains(result.out, "\"title\":\"Test Title\""));
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["title"]) == "Test Title");
 
     result = fixture.run({"track", "show", "--filter", "#NonExistentTag"});
     REQUIRE(result.status == 0);
@@ -377,10 +418,11 @@ namespace ao::cli::test
     result = fixture.run({"-O", "json", "lib", "stats"});
     REQUIRE(result.status == 0);
     requireJsonLineParses(result.out);
-    CHECK(contains(result.out, R"("tracks":2)"));
-    CHECK(contains(result.out, R"("resources":1)"));
-    CHECK(contains(result.out, R"("dictionary":)"));
-    CHECK(contains(result.out, R"("diskBytes":)"));
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["tracks"]) == "2");
+    CHECK(yaml::scalarView(tree.rootref()["resources"]) == "1");
+    CHECK(tree.rootref()["dictionary"].readable());
+    CHECK(tree.rootref()["diskBytes"].readable());
   }
 
   TEST_CASE("CLI - lib verify reports missing files with failing exit", "[cli][workflow][lib][verify]")
@@ -462,11 +504,47 @@ namespace ao::cli::test
     CHECK(fs::exists(exportPath));
 
     auto target = CliFixture{};
-    result = target.run({"lib", "import", exportPath.string()});
+    result = target.run({"-O", "json", "lib", "import", "--dry-run", exportPath.string()});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["action"]) == "import");
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["tracksCreated"]) == "1");
 
     result = target.run({"track", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(result.out.empty());
+
+    result = target.run({"-O", "json", "lib", "import", exportPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "false");
+
+    result = target.run({"track", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Test Title"));
+  }
+
+  TEST_CASE("CLI - init dry-run reports scan plan without importing tracks", "[cli][workflow][init][dryrun]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "track.flac");
+
+    auto result = fixture.run({"init", "--dry-run"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "new 1"));
+
+    result = fixture.run({"track", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(result.out.empty());
+
+    result = fixture.run({"init"});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"track", "show"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Test Title"));
   }
@@ -538,7 +616,10 @@ namespace ao::cli::test
     result = fixture.run({"-O", "json", "tag", "show", "1"});
     REQUIRE(result.status == 0);
     requireJsonLineParses(result.out);
-    CHECK(contains(result.out, R"("tags":["fav"])"));
+    auto tree = parseYaml(result.out);
+    REQUIRE(tree.rootref()["tags"].is_seq());
+    REQUIRE(tree.rootref()["tags"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["tags"][0]) == "fav");
 
     result = fixture.run({"tag", "remove", "fav", "1"});
     REQUIRE(result.status == 0);
@@ -588,8 +669,24 @@ namespace ao::cli::test
 
     result = fixture.run({"-O", "json", "tag", "list"});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, R"("name":"fav","count":2)"));
-    CHECK(contains(result.out, R"("name":"live","count":2)"));
+    auto tree = parseYaml(result.out);
+    bool foundFav = false;
+    bool foundLive = false;
+
+    for (auto const tagNode : tree.rootref()["tags"].children())
+    {
+      if (yaml::scalarView(tagNode["name"]) == "fav" && yaml::scalarView(tagNode["count"]) == "2")
+      {
+        foundFav = true;
+      }
+      else if (yaml::scalarView(tagNode["name"]) == "live" && yaml::scalarView(tagNode["count"]) == "2")
+      {
+        foundLive = true;
+      }
+    }
+
+    CHECK(foundFav);
+    CHECK(foundLive);
   }
 
   TEST_CASE("CLI - list create and delete round-trip through the library", "[cli][workflow][list]")
@@ -618,7 +715,15 @@ namespace ao::cli::test
     result = fixture.run({"-O", "json", "list", "show"});
     REQUIRE(result.status == 0);
     requireJsonLineParses(result.out);
-    CHECK(contains(result.out, R"("name":"My List")"));
+    auto tree = parseYaml(result.out);
+    bool foundList = false;
+
+    for (auto const listNode : tree.rootref()["lists"].children())
+    {
+      foundList = foundList || yaml::scalarView(listNode["name"]) == "My List";
+    }
+
+    CHECK(foundList);
 
     result = fixture.run({"list", "delete", std::to_string(listId)});
     REQUIRE(result.status == 0);
@@ -637,19 +742,22 @@ namespace ao::cli::test
     auto result = fixture.run({"-O", "json", "init"});
     REQUIRE(result.status == 0);
     requireJsonLineParses(result.out);
-    CHECK(contains(result.out, R"("new":1)"));
+    auto initTree = parseYaml(result.out);
+    CHECK(yaml::scalarView(initTree.rootref()["new"]) == "1");
+    CHECK(yaml::scalarView(initTree.rootref()["dryRun"]) == "false");
 
     result = fixture.run({"-O", "json", "list", "create", "--name", "Machine"});
     REQUIRE(result.status == 0);
     requireJsonLineParses(result.out);
-    CHECK(contains(result.out, R"("action":"create")"));
-    CHECK(contains(result.out, R"("name":"Machine")"));
+    auto createTree = parseYaml(result.out);
+    CHECK(yaml::scalarView(createTree.rootref()["action"]) == "create");
+    CHECK(yaml::scalarView(createTree.rootref()["name"]) == "Machine");
 
     result = fixture.run({"-O", "yaml", "track", "delete", "1"});
     REQUIRE(result.status == 0);
-    auto tree = parseYaml(result.out);
-    CHECK(yaml::scalarView(tree.rootref()["action"]) == "delete");
-    CHECK(yaml::scalarView(tree.rootref()["trackId"]) == "1");
+    auto deleteTree = parseYaml(result.out);
+    CHECK(yaml::scalarView(deleteTree.rootref()["action"]) == "delete");
+    CHECK(yaml::scalarView(deleteTree.rootref()["trackId"]) == "1");
   }
 
   TEST_CASE("CLI - list update and manual membership round-trip", "[cli][workflow][list]")
@@ -682,8 +790,9 @@ namespace ao::cli::test
     result = fixture.run({"-O", "json", "list", "show", std::to_string(listId)});
     REQUIRE(result.status == 0);
     requireJsonLineParses(result.out);
-    CHECK(contains(result.out, R"("tracks":[)"));
-    CHECK(countOccurrences(result.out, R"("title":)") == 1);
+    auto tree = parseYaml(result.out);
+    REQUIRE(tree.rootref()["tracks"].is_seq());
+    CHECK(tree.rootref()["tracks"].num_children() == 1);
 
     result = fixture.run({"list", "update", std::to_string(listId), "--name", "Pinned", "--desc", "Pinned songs"});
     REQUIRE(result.status == 0);
@@ -827,12 +936,15 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
     requireJsonLineParses(result.out);
-    CHECK(contains(result.out, R"("updated":2)"));
-    CHECK(contains(result.out, R"("trackIds":[1,2])"));
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["updated"]) == "2");
+    REQUIRE(tree.rootref()["trackIds"].is_seq());
+    CHECK(tree.rootref()["trackIds"].num_children() == 2);
+    CHECK(yaml::scalarView(tree.rootref()["changes"][0]["fields"][0]["field"]) == "artist");
 
     result = fixture.run({"-O", "json", "track", "show"});
     REQUIRE(result.status == 0);
-    CHECK(countOccurrences(result.out, R"("artist":"Unified")") == 2);
+    CHECK(countJsonLinesWithField(result.out, "artist", "Unified") == 2);
   }
 
   TEST_CASE("CLI - track update sets and unsets custom metadata", "[cli][workflow][track][update]")
@@ -850,8 +962,9 @@ namespace ao::cli::test
 
     result = fixture.run({"-O", "json", "track", "show"});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, R"("mood":"bright")"));
-    CHECK(contains(result.out, R"("energy":"high")"));
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["custom"]["mood"]) == "bright");
+    CHECK(yaml::scalarView(tree.rootref()["custom"]["energy"]) == "high");
 
     result = fixture.run({"track", "update", "1", "--unset", "mood"});
     REQUIRE(result.status == 0);
@@ -859,8 +972,206 @@ namespace ao::cli::test
 
     result = fixture.run({"-O", "json", "track", "show"});
     REQUIRE(result.status == 0);
-    CHECK_FALSE(contains(result.out, R"("mood")"));
-    CHECK(contains(result.out, R"("energy":"high")"));
+    tree = parseYaml(result.out);
+    CHECK_FALSE(tree.rootref()["custom"]["mood"].readable());
+    CHECK(yaml::scalarView(tree.rootref()["custom"]["energy"]) == "high");
+  }
+
+  TEST_CASE("CLI - track mutations support dry-run reports", "[cli][workflow][track][dryrun]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "track.flac");
+
+    auto result = fixture.run({"-O", "json", "track", "create", "--dry-run", "track.flac"});
+    REQUIRE(result.status == 0);
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["action"]) == "create");
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK_FALSE(tree.rootref()["trackId"].readable());
+    CHECK(yaml::scalarView(tree.rootref()["uri"]) == "track.flac");
+
+    result = fixture.run({"track", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(result.out.empty());
+
+    result = fixture.run({"-O", "json", "track", "create", "track.flac"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "false");
+    CHECK(yaml::scalarView(tree.rootref()["trackId"]) == "1");
+
+    result = fixture.run({"-O", "json", "track", "update", "--dry-run", "1", "--title", "Renamed"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["changes"][0]["fields"][0]["oldValue"]) == "Test Title");
+    CHECK(yaml::scalarView(tree.rootref()["changes"][0]["fields"][0]["newValue"]) == "Renamed");
+
+    result = fixture.run({"track", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Test Title"));
+    CHECK_FALSE(contains(result.out, "Renamed"));
+
+    result = fixture.run({"-O", "json", "track", "update", "1", "--title", "Renamed"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "false");
+
+    result = fixture.run({"track", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Renamed"));
+
+    result = fixture.run({"-O", "json", "track", "delete", "--dry-run", "1"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["title"]) == "Renamed");
+
+    result = fixture.run({"track", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Renamed"));
+
+    result = fixture.run({"-O", "json", "track", "delete", "1"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "false");
+
+    result = fixture.run({"track", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(result.out.empty());
+  }
+
+  TEST_CASE("CLI - tag mutations support dry-run reports", "[cli][workflow][tag][dryrun]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "track.flac");
+
+    auto result = fixture.run({"init"});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"-O", "json", "tag", "add", "--dry-run", "Favorite", "1"});
+    REQUIRE(result.status == 0);
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["changes"][0]["addedTags"][0]) == "Favorite");
+
+    result = fixture.run({"tag", "show", "1"});
+    REQUIRE(result.status == 0);
+    CHECK_FALSE(contains(result.out, "Favorite"));
+
+    result = fixture.run({"-O", "json", "tag", "add", "Favorite", "1"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "false");
+
+    result = fixture.run({"tag", "show", "1"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Favorite"));
+
+    result = fixture.run({"-O", "json", "tag", "remove", "--dry-run", "Favorite", "1"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["changes"][0]["removedTags"][0]) == "Favorite");
+
+    result = fixture.run({"tag", "show", "1"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Favorite"));
+
+    result = fixture.run({"-O", "json", "tag", "remove", "Favorite", "1"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "false");
+
+    result = fixture.run({"tag", "show", "1"});
+    REQUIRE(result.status == 0);
+    CHECK_FALSE(contains(result.out, "Favorite"));
+  }
+
+  TEST_CASE("CLI - list mutations support dry-run reports", "[cli][workflow][list][dryrun]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
+
+    auto result = fixture.run({"init"});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"-O", "json", "list", "create", "--dry-run", "--name", "Manual"});
+    REQUIRE(result.status == 0);
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK_FALSE(tree.rootref()["listId"].readable());
+    CHECK(yaml::scalarView(tree.rootref()["name"]) == "Manual");
+
+    result = fixture.run({"list", "show"});
+    REQUIRE(result.status == 0);
+    CHECK_FALSE(contains(result.out, "Manual"));
+
+    result = fixture.run({"-O", "json", "list", "create", "--name", "Manual"});
+    REQUIRE(result.status == 0);
+    auto const listId = parseJsonUintField(result.out, "listId");
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "false");
+
+    result = fixture.run({"-O", "json", "list", "update", "--dry-run", std::to_string(listId), "--name", "Pinned"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["fields"][0]["field"]) == "name");
+    CHECK(yaml::scalarView(tree.rootref()["fields"][0]["newValue"]) == "Pinned");
+
+    result = fixture.run({"list", "show", std::to_string(listId)});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Manual"));
+    CHECK_FALSE(contains(result.out, "Pinned"));
+
+    result = fixture.run({"list", "update", std::to_string(listId), "--name", "Pinned"});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"-O", "json", "list", "add", "--dry-run", std::to_string(listId), "1"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["addedTrackIds"][0]) == "1");
+
+    result = fixture.run({"list", "show", std::to_string(listId)});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Tracks: 0"));
+
+    result = fixture.run({"list", "add", std::to_string(listId), "1"});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"-O", "json", "list", "remove", "--dry-run", std::to_string(listId), "1"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["removedTrackIds"][0]) == "1");
+
+    result = fixture.run({"list", "show", std::to_string(listId)});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Tracks: 1"));
+
+    result = fixture.run({"list", "remove", std::to_string(listId), "1"});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"-O", "json", "list", "delete", "--dry-run", std::to_string(listId)});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["name"]) == "Pinned");
+
+    result = fixture.run({"list", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Pinned"));
+
+    result = fixture.run({"-O", "json", "list", "delete", std::to_string(listId)});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "false");
+
+    result = fixture.run({"list", "show"});
+    REQUIRE(result.status == 0);
+    CHECK_FALSE(contains(result.out, "Pinned"));
   }
 
   TEST_CASE("CLI - domain failures use stderr and exit non-zero", "[cli][workflow][contract]")
@@ -955,8 +1266,9 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
     requireJsonLineParses(result.out);
-    CHECK(contains(result.out, R"("title":"Quote \"Title\"\nSecond Line")"));
-    CHECK(contains(result.out, R"("custom":{"mood":"bright\nsharp"})"));
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["title"]) == title);
+    CHECK(yaml::scalarView(tree.rootref()["custom"]["mood"]) == "bright\nsharp");
   }
 
   TEST_CASE("CLI - empty YAML collections are sequences", "[cli][workflow][output]")

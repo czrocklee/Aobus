@@ -51,8 +51,9 @@ namespace ao::rt::test
       REQUIRE(txn.commit());
     }
 
-    bool const deleted = writer.deleteTrack(trackId);
-    CHECK(deleted);
+    auto const deleted = writer.deleteTrack(trackId);
+    REQUIRE(deleted);
+    CHECK(deleted->trackId == trackId);
     REQUIRE(mutated.size() == 1);
     CHECK(mutated[0] == trackId);
     REQUIRE(deletedTracks.size() == 1);
@@ -87,7 +88,7 @@ namespace ao::rt::test
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
 
-    bool const deleted = writer.deleteTrack(TrackId{99999});
+    auto const deleted = writer.deleteTrack(TrackId{99999});
     CHECK_FALSE(deleted);
     CHECK(mutated.empty());
   }
