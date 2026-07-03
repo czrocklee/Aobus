@@ -57,11 +57,18 @@ namespace ao::uimodel
       return result;
     }
 
-    auto const reply = _writer.editTags(request.selectedIds, request.tagsToAdd, request.tagsToRemove);
+    auto const replyResult = _writer.editTags(request.selectedIds, request.tagsToAdd, request.tagsToRemove);
 
-    result.applied = !reply.mutatedIds.empty();
+    if (!replyResult)
+    {
+      result.rejected = true;
+      result.notificationText = replyResult.error().message;
+      return result;
+    }
+
+    result.applied = !replyResult->mutatedIds.empty();
     result.notificationText =
-      tagChangeStatusMessage(reply.mutatedIds.size(), request.tagsToAdd.size(), request.tagsToRemove.size());
+      tagChangeStatusMessage(replyResult->mutatedIds.size(), request.tagsToAdd.size(), request.tagsToRemove.size());
     return result;
   }
 } // namespace ao::uimodel

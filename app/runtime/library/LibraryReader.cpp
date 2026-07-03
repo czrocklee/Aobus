@@ -301,6 +301,26 @@ namespace ao::rt
     return listNodeDataFromView(id, *optView);
   }
 
+  std::vector<TrackId> LibraryReader::listTrackIds(ListId id) const
+  {
+    auto const reader = _implPtr->library.lists().reader(_implPtr->transaction);
+    auto const optView = storageValueOrNullopt(reader.get(id), "Failed to load list tracks");
+
+    if (!optView)
+    {
+      return {};
+    }
+
+    auto ids = std::vector<TrackId>{};
+
+    for (auto const trackId : optView->tracks())
+    {
+      ids.push_back(trackId);
+    }
+
+    return ids;
+  }
+
   std::optional<std::vector<std::byte>> LibraryReader::loadResource(ResourceId id) const
   {
     auto const reader = _implPtr->library.resources().reader(_implPtr->transaction);

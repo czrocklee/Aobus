@@ -10,6 +10,7 @@
 #include "tag/TagEditor.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/ProjectionTypes.h>
@@ -53,9 +54,17 @@ namespace ao::gtk::layout
             else
             {
               // Fallback if controller is missing
-              if (auto const reply = _writer.editTags(_currentTrackIds, toAdd, toRemove); !reply.mutatedIds.empty())
+              auto const replyResult = _writer.editTags(_currentTrackIds, toAdd, toRemove);
+
+              if (!replyResult)
               {
-                _sources.allTracks().notifyUpdated(reply.mutatedIds);
+                APP_LOG_ERROR("Tag edit failed: {}", replyResult.error().message);
+                return;
+              }
+
+              if (!replyResult->mutatedIds.empty())
+              {
+                _sources.allTracks().notifyUpdated(replyResult->mutatedIds);
               }
             }
           });

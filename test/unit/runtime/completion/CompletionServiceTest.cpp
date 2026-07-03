@@ -131,7 +131,9 @@ namespace ao::rt::test
       library::test::addTrack(testLib.library(), library::test::TrackSpec{.title = "Two", .tags = {"Jazz"}});
     // addTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.
-    CHECK_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
+    auto const updateResult = writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two Updated"});
+    REQUIRE(updateResult);
+    CHECK_FALSE(updateResult->mutatedIds.empty());
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
                                      {"Jazz", 1},
@@ -166,7 +168,9 @@ namespace ao::rt::test
       library::test::TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"});
     // addTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.
-    CHECK_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
+    auto const updateResult = writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two Updated"});
+    REQUIRE(updateResult);
+    CHECK_FALSE(updateResult->mutatedIds.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                             {"Bach", 1},
@@ -213,7 +217,9 @@ namespace ao::rt::test
       library::test::TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"});
     // addTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.
-    CHECK_FALSE(writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two"}).mutatedIds.empty());
+    auto const updateResult = writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two Updated"});
+    REQUIRE(updateResult);
+    CHECK_FALSE(updateResult->mutatedIds.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Work)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                           {"Etudes", 1},

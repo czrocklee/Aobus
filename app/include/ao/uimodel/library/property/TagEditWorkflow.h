@@ -25,6 +25,7 @@ namespace ao::uimodel
   struct TagEditResult final
   {
     bool applied = false;
+    bool rejected = false;
     std::string notificationText;
   };
 

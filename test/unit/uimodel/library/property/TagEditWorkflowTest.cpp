@@ -98,7 +98,7 @@ namespace ao::uimodel::test
     SECTION("removing a single tag mutates every selected track and reports the count")
     {
       auto const initialTags = std::vector<std::string>{"Tag1"};
-      writer.editTags(std::vector{trackId, trackId2}, initialTags, {});
+      REQUIRE(writer.editTags(std::vector{trackId, trackId2}, initialTags, {}));
       REQUIRE(trackTagNames(testLib, trackId) == std::vector<std::string>{"Tag1"});
       REQUIRE(trackTagNames(testLib, trackId2) == std::vector<std::string>{"Tag1"});
 
@@ -123,7 +123,7 @@ namespace ao::uimodel::test
 
     SECTION("adding and removing tags mutates the library in one request")
     {
-      writer.editTags(std::vector{trackId}, std::vector<std::string>{"OldTag"}, {});
+      REQUIRE(writer.editTags(std::vector{trackId}, std::vector<std::string>{"OldTag"}, {}));
 
       auto const req = TagEditRequest{.selectedIds = {trackId}, .tagsToAdd = {"NewTag"}, .tagsToRemove = {"OldTag"}};
 

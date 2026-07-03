@@ -291,6 +291,16 @@ add_executable(ao_tui_test
 target_link_libraries(ao_tui_test PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
 add_test(NAME ao_tui_test COMMAND ao_tui_test)
 
+# ao_cli_test: command-line frontend tests
+add_executable(ao_cli_test
+    unit/cli/CommandErrorTest.cpp
+    unit/cli/CliSmokeTest.cpp
+    unit/cli/OutputTest.cpp
+)
+
+target_link_libraries(ao_cli_test PRIVATE aobus-cli-lib ao_test_options Catch2::Catch2WithMain)
+add_test(NAME ao_cli_test COMMAND ao_cli_test)
+
 # ao_council_test: council tool unit and integration tests
 add_executable(ao_council_test
     unit/council/ModelTest.cpp

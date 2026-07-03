@@ -234,7 +234,10 @@ namespace ao::gtk
   {
     if (draft.listId != kInvalidListId)
     {
-      updateList(draft);
+      if (!updateList(draft))
+      {
+        return kInvalidListId;
+      }
 
       if (_callbacks.onListPresentationSaved)
       {
@@ -256,15 +259,31 @@ namespace ao::gtk
 
   ListId ListNavigationController::createList(rt::LibraryWriter::ListDraft const& draft)
   {
-    auto listId = _runtime.library().writer().createList(draft);
+    auto const listResult = _runtime.library().writer().createList(draft);
+
+    if (!listResult)
+    {
+      APP_LOG_ERROR("Failed to create list: {}", listResult.error().message);
+      return kInvalidListId;
+    }
+
+    auto const listId = *listResult;
     _pendingSelectId = listId;
     return listId;
   }
 
-  void ListNavigationController::updateList(rt::LibraryWriter::ListDraft const& draft)
+  bool ListNavigationController::updateList(rt::LibraryWriter::ListDraft const& draft)
   {
-    _runtime.library().writer().updateList(draft);
+    auto const updateResult = _runtime.library().writer().updateList(draft);
+
+    if (!updateResult)
+    {
+      APP_LOG_ERROR("Failed to update list: {}", updateResult.error().message);
+      return false;
+    }
+
     _pendingSelectId = draft.listId;
+    return true;
   }
 
   void ListNavigationController::onEditList()

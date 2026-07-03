@@ -137,7 +137,7 @@ namespace ao::gtk::test
       auto draft = rt::LibraryWriter::ListDraft{};
       draft.name = "Recently Played";
       draft.description = "Tracks touched this week";
-      draft.expression = "$lastPlayed >= 7d";
+      draft.expression = "$title ~ \"Recent\"";
 
       auto const listId = controller.submitListDraft(draft, "compact");
 
@@ -161,7 +161,7 @@ namespace ao::gtk::test
       draft.listId = listId;
       draft.name = "High Energy";
       draft.description = "Updated description";
-      draft.expression = "$bpm >= 130";
+      draft.expression = "$title ~ \"Energy\"";
 
       auto const savedId = controller.submitListDraft(draft, "wide");
 
@@ -176,6 +176,19 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       CHECK(selectedId == listId);
+    }
+
+    SECTION("submitListDraft rejects invalid drafts without saving presentation")
+    {
+      auto draft = rt::LibraryWriter::ListDraft{};
+      draft.name = "Invalid";
+      draft.expression = "(";
+
+      auto const listId = controller.submitListDraft(draft, "wide");
+
+      CHECK(listId == kInvalidListId);
+      CHECK(savedPresentationListId == kInvalidListId);
+      CHECK(savedPresentationId.empty());
     }
 
     SECTION("delete action removes the selected leaf list")
@@ -198,7 +211,7 @@ namespace ao::gtk::test
 
       deleteActionPtr->activate();
 
-      CHECK_FALSE(findList(library, listId).has_value());
+      CHECK(!findList(library, listId));
 
       controller.rebuildTree(cache);
       drainGtkEvents();

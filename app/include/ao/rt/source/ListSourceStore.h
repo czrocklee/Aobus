@@ -51,6 +51,7 @@ namespace ao::rt
     SmartListEvaluator _smartEvaluator;
 
     Subscription _listsMutatedSubscription;
+    Subscription _trackCollectionChangedSubscription;
 
     boost::unordered_flat_map<ListId, std::unique_ptr<TrackSource>, std::hash<ListId>> _sources;
   };

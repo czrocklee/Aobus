@@ -264,6 +264,19 @@ namespace ao::rt::test
     CHECK_FALSE(optMissingNode.has_value());
   }
 
+  TEST_CASE("LibraryReader - reads stored list membership", "[runtime][unit][library][readmodel]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto runtime = makeCoreRuntime(tempDir);
+    auto const seeded = seedLibrary(runtime);
+
+    auto scope = runtime.library().reader();
+
+    CHECK(scope.listTrackIds(seeded.manualListId) == std::vector<TrackId>{seeded.trackId});
+    CHECK(scope.listTrackIds(seeded.smartListId).empty());
+    CHECK(scope.listTrackIds(ListId{999999}).empty());
+  }
+
   TEST_CASE("LibraryReader - snapshots tag DTOs", "[runtime][unit][library][readmodel]")
   {
     auto tempDir = ao::test::TempDir{};

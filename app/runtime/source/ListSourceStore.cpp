@@ -54,6 +54,20 @@ namespace ao::rt
           refreshList(id);
         }
       });
+
+    _trackCollectionChangedSubscription = changes.onTrackCollectionChanged(
+      [this](LibraryChanges::TrackCollectionChanged const& ev)
+      {
+        for (auto const id : ev.inserted)
+        {
+          _allTracks.notifyInserted(id);
+        }
+
+        for (auto const id : ev.deleted)
+        {
+          _allTracks.notifyRemoved(id);
+        }
+      });
   }
 
   ListSourceStore::~ListSourceStore() = default;

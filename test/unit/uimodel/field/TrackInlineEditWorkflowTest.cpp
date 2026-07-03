@@ -59,7 +59,7 @@ namespace ao::uimodel::test
           patch.optTitle = *text;
         }
       },
-      .commitPatch = [&](rt::MetadataPatch const& patch) -> rt::UpdateTrackMetadataReply
+      .commitPatch = [&](rt::MetadataPatch const& patch) -> Result<rt::UpdateTrackMetadataReply>
       {
         committedPatch = patch;
         return rt::UpdateTrackMetadataReply{.mutatedIds = {TrackId{1}}};
@@ -111,7 +111,7 @@ namespace ao::uimodel::test
 
     SECTION("a write that mutates nothing rolls back the optimistic edit")
     {
-      hooks.commitPatch = [](rt::MetadataPatch const&) -> rt::UpdateTrackMetadataReply
+      hooks.commitPatch = [](rt::MetadataPatch const&) -> Result<rt::UpdateTrackMetadataReply>
       { return rt::UpdateTrackMetadataReply{}; };
 
       auto const result = TrackInlineEditWorkflow::apply(
@@ -120,6 +120,20 @@ namespace ao::uimodel::test
 
       CHECK(result.outcome == TrackInlineEditOutcome::MutationRejected);
       CHECK(result.statusMessage == "Change could not be applied.");
+      CHECK(textFrom(currentValue) == "Old Title");
+    }
+
+    SECTION("a rejected write rolls back the optimistic edit and surfaces the error")
+    {
+      hooks.commitPatch = [](rt::MetadataPatch const&) -> Result<rt::UpdateTrackMetadataReply>
+      { return makeError(Error::Code::ValueTooLarge, "Metadata value is too large."); };
+
+      auto const result = TrackInlineEditWorkflow::apply(
+        TrackInlineEditRequest{.field = rt::TrackField::Title, .oldText = "Old Title", .newText = "Temporary Title"},
+        hooks);
+
+      CHECK(result.outcome == TrackInlineEditOutcome::MutationRejected);
+      CHECK(result.statusMessage == "Metadata value is too large.");
       CHECK(textFrom(currentValue) == "Old Title");
     }
   }

@@ -90,7 +90,8 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
 
-    auto const listId = runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A list"});
+    auto const listId =
+      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A list"}));
     auto const configPath = tempDir.path() / "config.yaml";
 
     {

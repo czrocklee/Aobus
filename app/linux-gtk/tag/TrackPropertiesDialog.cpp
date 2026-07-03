@@ -295,9 +295,21 @@ namespace ao::gtk
     }
 
     auto const patch = _formModel.buildPatch();
-    auto const reply = _writer.updateMetadata(_trackIds, patch);
+    auto const replyResult = _writer.updateMetadata(_trackIds, patch);
 
-    for (auto const trackId : reply.mutatedIds)
+    if (!replyResult)
+    {
+      AppDialog::presentMessage(
+        *this,
+        "Save failed",
+        replyResult.error().message,
+        {AppDialogAction{
+          .label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
+        Gtk::ResponseType::CLOSE);
+      return;
+    }
+
+    for (auto const trackId : replyResult->mutatedIds)
     {
       _rowCache.invalidate(trackId);
     }

@@ -55,6 +55,7 @@ namespace ao::rt
     // List tree
     std::vector<ListNode> lists() const;
     std::optional<ListNode> listNode(ListId id) const;
+    std::vector<TrackId> listTrackIds(ListId id) const;
 
     // Resources
     std::optional<std::vector<std::byte>> loadResource(ResourceId id) const;

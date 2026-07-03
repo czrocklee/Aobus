@@ -1,0 +1,155 @@
+# Aobus CLI
+
+Status: Current behavior.
+
+`aobus` is the scriptable command-line frontend over the shared Aobus core
+library. It is built as a thin executable over `aobus-cli-lib`, so tests can
+exercise the full CLI parse and callback path in-process.
+
+## Global Contract
+
+Global options:
+
+- `-C, --root <dir>` selects the music root. `AOBUS_ROOT` is used when the flag
+  is absent. The library database lives under `<root>/.aobus/library`.
+- `-O, --output <plain|yaml|json>` selects command output. The default is
+  `plain`.
+- `--version` prints the application version.
+
+Exit codes:
+
+- `0`: success, including legitimately empty query results and no-op updates.
+- `1`: domain failure such as an unknown id, filter/format compile error,
+  import/export failure, resource IO failure, or verification failure.
+- CLI usage errors keep CLI11's non-zero parse exit codes.
+
+Stream discipline:
+
+- stdout carries command payload only.
+- stderr carries domain errors and verbose scan/apply diagnostics.
+
+Machine-readable output uses stable shapes. Row-listing commands that naturally
+produce independent records may emit one JSON object per record. Summary,
+mutation, detail, scan, verify, and dump commands emit one top-level JSON/YAML
+object or sequence and may buffer enough data to close that shape correctly. YAML
+and JSON strings are emitted with double-quoted escaping for quotes, backslashes,
+and control characters.
+
+## Scanning
+
+`aobus init` initializes the library if needed and runs the same scan/apply path
+as `scan`.
+
+`aobus scan [--dry-run] [--verbose]` compares files under the music root with
+the manifest using `library::LibraryScanner`.
+
+- Plain output uses summary line `new N  changed C  missing M  unchanged U
+  errors E`. Structured output emits the same counts as fields.
+- `--dry-run` lists non-unchanged items and applies nothing.
+- `--verbose` prints current scan/apply paths to stderr.
+- Per-item apply failures are reported to stderr. Transaction-level failures
+  exit non-zero.
+
+## Tracks
+
+`aobus track show [--filter <expr>] [--limit N] [--offset N]` lists matching
+tracks. Structured output includes id, title, artist, album, tags, duration,
+sample rate, URI, and custom metadata.
+
+`aobus track show --format '<expr>'` formats each matching row with the query
+format-expression language, for example:
+
+```bash
+aobus track show --format '$artist + " - " + $title'
+```
+
+`--format` is plain-output only and is mutually exclusive with `-O yaml/json`.
+Format parse or compile errors are domain failures.
+
+`aobus track update (<id>... | --filter <expr>) [field options]` patches track
+metadata through `rt::LibraryWriter::updateMetadata`. Supported standard fields:
+
+- `--title`, `--artist`, `--album`, `--album-artist`
+- `--genre`, `--composer`, `--work`, `--movement`
+- `--year`, `--track-number`, `--track-total`
+- `--disc-number`, `--disc-total`
+- `--movement-number`, `--movement-total`
+
+Custom metadata uses repeatable `--set key=value` and `--unset key`. Unknown
+explicit ids fail before applying. Identical-value patches succeed and report
+`updated 0 track(s)`.
+
+Other track commands:
+
+- `track create <path>` imports one audio file under the music root. Paths may
+  be absolute or root-relative; imported track URIs use the same root-relative
+  namespace as `scan`, and duplicate manifest entries fail.
+- `track delete <id>` deletes one track and removes its manifest/manual-list
+  references so a later `scan` can reimport a still-present file.
+- `track dump [--id <id>] [--raw]` is a plain-output debug dump only.
+
+## Lists
+
+`aobus list show` prints the list tree. `aobus list show <id>` prints list
+details and resolved track rows through the runtime list-source path. Manual
+lists resolve stored track ids within their parent source; smart lists evaluate
+their filter against parent membership, so nested list results match GTK/runtime
+views.
+
+List mutation commands use `rt::LibraryWriter`:
+
+- `list create --name <name> [--filter <expr>] [--desc <text>] [--parent <id>]`
+- `list update <id> [--name <name>] [--desc <text>] [--filter <expr>] [--parent <id>]`
+- `list add <listId> <trackId>...`
+- `list remove <listId> <trackId>...`
+- `list delete <id>`
+
+List creates and updates validate smart filters, parent existence, self-parenting,
+and parent cycles before writing. Manual membership edits read the complete
+current membership and submit a full replacement draft. Adding/removing
+membership on a smart list is a domain failure.
+
+`list dump [--raw]` remains an infrastructure/debug dump. `--raw` supports only
+plain output.
+
+## Tags
+
+`aobus tag list` prints every distinct tag by descending frequency, then name.
+
+`aobus tag add <tag> (<id>... | --filter <expr>)` and
+`aobus tag remove <tag> (<id>... | --filter <expr>)` batch through one
+`LibraryWriter::editTags` call. Missing explicit ids fail before applying.
+Already-present additions and missing removals are no-op successes.
+
+`aobus tag show <id>...` reports tags shared by every selected track. With one
+id this is the track's tags; with multiple ids this is the intersection.
+
+## Library
+
+`aobus lib show` prints library metadata.
+
+`aobus lib stats` reports:
+
+- track count
+- list count
+- resource count and total resource bytes
+- manifest entry count
+- dictionary size
+- distinct tag count
+- on-disk library database size
+
+`aobus lib verify` builds a scan plan without applying it and reports Changed,
+Missing, and Error items. Missing or Error items exit with status `1`; Changed
+items are reported but do not make verification fail.
+
+`aobus lib import <path> [--mode restore|merge]` and
+`aobus lib export <path> [--mode delta|metadata|full|listOnly]` read and write
+YAML library exports.
+
+`aobus lib resource list` prints resource ids and byte sizes.
+
+`aobus lib resource export <id> --output <file>` writes the raw resource bytes
+to a file. Missing ids and file IO errors are domain failures.
+
+`lib dump [--dict] [--manifest] [--meta] [--resources] [--raw]` remains an
+infrastructure/debug dump. `--raw` supports only plain output.

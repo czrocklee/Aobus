@@ -73,7 +73,7 @@ namespace ao::gtk
     void openEditListDialog(ListId listId);
 
     ListId createList(rt::LibraryWriter::ListDraft const& draft);
-    void updateList(rt::LibraryWriter::ListDraft const& draft);
+    bool updateList(rt::LibraryWriter::ListDraft const& draft);
     void onDeleteList();
     void onEditList();
 

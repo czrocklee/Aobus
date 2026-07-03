@@ -3,16 +3,47 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/library/FileManifestStore.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
+#include <fstream>
+#include <string>
 #include <vector>
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    std::filesystem::path copyFixtureAudio(TestMusicLibrary const& testLib, std::string const& name)
+    {
+      auto const source = std::filesystem::current_path() / "test/integration/tag/test_data/empty.flac";
+
+      if (!std::filesystem::exists(source))
+      {
+        return {};
+      }
+
+      auto const destination = testLib.root() / name;
+      std::filesystem::create_directories(destination.parent_path());
+      std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing);
+      return destination;
+    }
+
+    std::filesystem::path createTextFile(TestMusicLibrary const& testLib, std::string const& name)
+    {
+      auto const destination = testLib.root() / name;
+      auto out = std::ofstream{destination};
+      out << "not audio";
+      return destination;
+    }
+  } // namespace
+
   TEST_CASE("LibraryWriter createTrackFromFile imports a valid file and publishes a mutation",
             "[runtime][unit][library][mutation][track][create]")
   {
@@ -22,34 +53,63 @@ namespace ao::rt::test
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
+    auto inserted = std::vector<TrackId>{};
+    auto collectionSub = changes.onTrackCollectionChanged([&](auto const& ev) { inserted = ev.inserted; });
 
-    // Using a test data file from the repository
-    auto const validFile = std::filesystem::path{"test/integration/tag/test_data/empty.flac"};
-
-    // Provide an absolute path if test is run from a different directory, or assume the working directory is correct
-    // Usually CTest runs from the build directory, but `ctest` runs in `build/test/` sometimes.
-    // Aobus `ao_core_test` runs with CWD = repository root or build root. We'll use absolute path resolving.
-    auto const projectRoot = std::filesystem::current_path();
-    auto const absValidFile = projectRoot / validFile;
+    auto const absValidFile = copyFixtureAudio(testLib, "music/song.flac");
 
     if (!std::filesystem::exists(absValidFile))
     {
-      SUCCEED("Skipping test because test file is missing: " + absValidFile.string());
+      SUCCEED("Skipping test because test file is missing");
       return;
     }
 
-    auto const optNewTrackId = writer.createTrackFromFile(absValidFile);
-    REQUIRE(optNewTrackId.has_value());
+    auto const trackIdResult = writer.createTrackFromFile(absValidFile);
+    REQUIRE(trackIdResult);
     REQUIRE(mutated.size() == 1);
-    CHECK(mutated[0] == *optNewTrackId);
+    CHECK(mutated[0] == *trackIdResult);
+    REQUIRE(inserted.size() == 1);
+    CHECK(inserted[0] == *trackIdResult);
 
     auto txn = testLib.library().readTransaction();
     auto const optTrackView =
-      testLib.library().tracks().reader(txn).get(*optNewTrackId, library::TrackStore::Reader::LoadMode::Hot);
-    CHECK(optTrackView.has_value());
+      testLib.library().tracks().reader(txn).get(*trackIdResult, library::TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optTrackView);
+    CHECK(optTrackView->property().uri() == "music/song.flac");
+    CHECK(testLib.library().manifest().reader(txn).get("music/song.flac"));
+
+    auto const duplicateResult = writer.createTrackFromFile(absValidFile);
+    REQUIRE(!duplicateResult);
+    CHECK(duplicateResult.error().code == Error::Code::Conflict);
+    CHECK(duplicateResult.error().message.find("already imported") != std::string::npos);
   }
 
-  TEST_CASE("LibraryWriter createTrackFromFile rejects unsupported files",
+  TEST_CASE("LibraryWriter createTrackFromFile accepts root-relative paths",
+            "[runtime][unit][library][mutation][track][create]")
+  {
+    auto testLib = TestMusicLibrary{};
+    auto changes = LibraryChanges{};
+    auto writer = LibraryWriter{testLib.library(), changes};
+
+    auto const absValidFile = copyFixtureAudio(testLib, "relative.flac");
+
+    if (!std::filesystem::exists(absValidFile))
+    {
+      SUCCEED("Skipping test because test file is missing");
+      return;
+    }
+
+    auto const trackIdResult = writer.createTrackFromFile("relative.flac");
+    REQUIRE(trackIdResult);
+
+    auto txn = testLib.library().readTransaction();
+    auto const optTrackView =
+      testLib.library().tracks().reader(txn).get(*trackIdResult, library::TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optTrackView);
+    CHECK(optTrackView->property().uri() == "relative.flac");
+  }
+
+  TEST_CASE("LibraryWriter createTrackFromFile rejects unsupported files with Result errors",
             "[runtime][unit][library][mutation][track][create]")
   {
     auto testLib = TestMusicLibrary{};
@@ -59,11 +119,35 @@ namespace ao::rt::test
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
 
-    auto const projectRoot = std::filesystem::current_path();
-    auto const absInvalidFile = projectRoot / "README.md";
+    auto const unsupportedFile = createTextFile(testLib, "unsupported.txt");
 
-    auto const optNewTrackId = writer.createTrackFromFile(absInvalidFile);
-    CHECK_FALSE(optNewTrackId.has_value());
+    auto const trackIdResult = writer.createTrackFromFile(unsupportedFile);
+    REQUIRE(!trackIdResult);
+    CHECK(trackIdResult.error().code == Error::Code::NotSupported);
     CHECK(mutated.empty());
+  }
+
+  TEST_CASE("LibraryWriter createTrackFromFile rejects invalid path boundaries",
+            "[runtime][unit][library][mutation][track][create]")
+  {
+    auto testLib = TestMusicLibrary{};
+    auto changes = LibraryChanges{};
+    auto writer = LibraryWriter{testLib.library(), changes};
+
+    SECTION("missing file")
+    {
+      auto const trackIdResult = writer.createTrackFromFile("missing.flac");
+      REQUIRE(!trackIdResult);
+      CHECK(trackIdResult.error().code == Error::Code::NotFound);
+    }
+
+    SECTION("outside root")
+    {
+      auto const outsideFile = std::filesystem::current_path() / "README.md";
+      auto const trackIdResult = writer.createTrackFromFile(outsideFile);
+      REQUIRE(!trackIdResult);
+      CHECK(trackIdResult.error().code == Error::Code::InvalidInput);
+      CHECK(trackIdResult.error().message.find("outside music root") != std::string::npos);
+    }
   }
 } // namespace ao::rt::test

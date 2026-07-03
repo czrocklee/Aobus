@@ -39,10 +39,18 @@ namespace ao::uimodel
     auto const oldEditValue = hooks.readCurrentValue();
     hooks.applyValue(*editValueResult);
 
-    // A failed write throws and is handled at the top-level boundary; reaching
-    // here with no mutated tracks means the edit did not land (e.g. the row was
-    // removed concurrently), so revert the optimistic UI change.
-    if (auto const reply = hooks.commitPatch(patch); reply.mutatedIds.empty())
+    auto const replyResult = hooks.commitPatch(patch);
+
+    if (!replyResult)
+    {
+      hooks.applyValue(oldEditValue);
+      return TrackInlineEditResult{
+        .outcome = TrackInlineEditOutcome::MutationRejected, .statusMessage = replyResult.error().message};
+    }
+
+    // Reaching here with no mutated tracks means the edit did not land (e.g. the
+    // row was removed concurrently), so revert the optimistic UI change.
+    if (replyResult->mutatedIds.empty())
     {
       hooks.applyValue(oldEditValue);
       return TrackInlineEditResult{

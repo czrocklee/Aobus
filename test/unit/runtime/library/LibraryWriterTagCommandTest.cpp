@@ -32,7 +32,8 @@ namespace ao::rt::test
     auto const favorite = std::array{std::string{"Favorite"}};
 
     auto const reply = writer.editTags(std::array{trackId}, favorite, {});
-    CHECK_FALSE(reply.mutatedIds.empty());
+    REQUIRE(reply);
+    CHECK_FALSE(reply->mutatedIds.empty());
     REQUIRE(mutated.size() == 1);
     CHECK(mutated[0] == trackId);
 
@@ -58,11 +59,12 @@ namespace ao::rt::test
 
     auto const favorite = std::array{std::string{"Favorite"}};
 
-    writer.editTags(std::array{trackId}, favorite, {});
+    REQUIRE(writer.editTags(std::array{trackId}, favorite, {}));
     mutated.clear();
 
     auto const reply = writer.editTags(std::array{trackId}, favorite, {});
-    CHECK(reply.mutatedIds.empty());
+    REQUIRE(reply);
+    CHECK(reply->mutatedIds.empty());
     CHECK(mutated.empty());
   }
 
@@ -81,7 +83,8 @@ namespace ao::rt::test
     auto const favorite = std::array{std::string{"Favorite"}};
 
     auto const reply = writer.editTags(std::array{TrackId{99999}}, favorite, {});
-    CHECK(reply.mutatedIds.empty());
+    REQUIRE(reply);
+    CHECK(reply->mutatedIds.empty());
   }
 
   TEST_CASE("LibraryWriter editTags removes an existing tag and publishes a mutation",
@@ -98,11 +101,12 @@ namespace ao::rt::test
 
     auto const favorite = std::array{std::string{"Favorite"}};
 
-    writer.editTags(std::array{trackId}, favorite, {});
+    REQUIRE(writer.editTags(std::array{trackId}, favorite, {}));
     mutated.clear();
 
     auto const reply = writer.editTags(std::array{trackId}, {}, favorite);
-    CHECK_FALSE(reply.mutatedIds.empty());
+    REQUIRE(reply);
+    CHECK_FALSE(reply->mutatedIds.empty());
     REQUIRE(mutated.size() == 1);
     CHECK(mutated[0] == trackId);
   }
@@ -120,7 +124,8 @@ namespace ao::rt::test
 
     auto const nonExistent = std::array{std::string{"NonExistent"}};
     auto const reply = writer.editTags(std::array{trackId}, {}, nonExistent);
-    CHECK(reply.mutatedIds.empty());
+    REQUIRE(reply);
+    CHECK(reply->mutatedIds.empty());
     CHECK(mutated.empty());
   }
 
@@ -139,6 +144,7 @@ namespace ao::rt::test
     auto const favorite = std::array{std::string{"Favorite"}};
 
     auto const reply = writer.editTags(std::array{TrackId{99999}}, {}, favorite);
-    CHECK(reply.mutatedIds.empty());
+    REQUIRE(reply);
+    CHECK(reply->mutatedIds.empty());
   }
 } // namespace ao::rt::test

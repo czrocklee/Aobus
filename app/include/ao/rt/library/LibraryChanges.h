@@ -26,6 +26,12 @@ namespace ao::rt
       std::vector<ListId> deleted{};
     };
 
+    struct TrackCollectionChanged final
+    {
+      std::vector<TrackId> inserted{};
+      std::vector<TrackId> deleted{};
+    };
+
     struct LibraryTaskProgressUpdated final
     {
       double fraction = 0.0;
@@ -41,6 +47,7 @@ namespace ao::rt
     LibraryChanges& operator=(LibraryChanges&&) = delete;
 
     Subscription onTracksMutated(std::move_only_function<void(std::vector<TrackId> const&)> handler) const;
+    Subscription onTrackCollectionChanged(std::move_only_function<void(TrackCollectionChanged const&)> handler) const;
     Subscription onListsMutated(std::move_only_function<void(ListsMutated const&)> handler) const;
     Subscription onLibraryTaskCompleted(std::move_only_function<void(std::size_t)> handler) const;
     Subscription onLibraryTaskProgress(std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const;
@@ -50,6 +57,7 @@ namespace ao::rt
     friend class LibraryWriter;
 
     void notifyTracksMutated(std::vector<TrackId> trackIds);
+    void notifyTrackCollectionChanged(std::vector<TrackId> inserted, std::vector<TrackId> deleted);
     void notifyListsMutated(std::vector<ListId> upserted, std::vector<ListId> deleted);
     void notifyLibraryTaskCompleted(std::size_t count);
     void notifyLibraryTaskProgress(LibraryTaskProgressUpdated progress);

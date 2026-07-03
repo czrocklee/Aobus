@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
@@ -12,12 +12,27 @@
 #include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/ManualListSource.h>
 #include <ao/rt/source/SmartListSource.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
+
+#include <cstddef>
+#include <utility>
+#include <vector>
 
 namespace ao::rt::test
 {
   using namespace ao::library;
+
+  struct TrackSourceSpy final : TrackSourceObserver
+  {
+    std::vector<std::pair<TrackId, std::size_t>> removed{};
+
+    void onReset() override {}
+    void onInserted(TrackId /*id*/, std::size_t /*index*/) override {}
+    void onUpdated(TrackId /*id*/, std::size_t /*index*/) override {}
+    void onRemoved(TrackId id, std::size_t index) override { removed.emplace_back(id, index); }
+  };
 
   TEST_CASE("ListSourceStore - source lookup and list refresh maintain source state",
             "[runtime][unit][source][list-source-store]")
@@ -82,6 +97,26 @@ namespace ao::rt::test
 
       store.reloadAllTracks();
       CHECK(store.allTracks().size() == 2);
+    }
+
+    SECTION("track delete notifications remove allTracks membership")
+    {
+      auto const trackId = testLib.addTrack("Track 1");
+      store.reloadAllTracks();
+      REQUIRE(store.allTracks().size() == 1);
+      auto spy = TrackSourceSpy{};
+      store.allTracks().attach(&spy);
+
+      CHECK(writer.deleteTrack(trackId));
+      CHECK(store.allTracks().size() == 0);
+      CHECK(spy.removed.size() == 1);
+
+      if (!spy.removed.empty())
+      {
+        CHECK(spy.removed[0] == std::pair{trackId, std::size_t{0}});
+      }
+
+      store.allTracks().detach(&spy);
     }
 
     SECTION("refreshList updates manual list source")

@@ -4,12 +4,12 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/rt/TrackMutation.h>
 
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -58,22 +58,28 @@ namespace ao::rt
 
     // Applies a metadata patch to each resolved track. Tracks that do not exist
     // or whose values are unchanged are skipped; the reply's mutatedIds lists
-    // only the tracks that genuinely changed (empty = nothing applied).
-    UpdateTrackMetadataReply updateMetadata(std::span<TrackId const> trackIds, MetadataPatch const& patch);
-    EditTrackTagsReply editTags(std::span<TrackId const> trackIds,
-                                std::span<std::string const> tagsToAdd,
-                                std::span<std::string const> tagsToRemove);
+    // only the tracks that genuinely changed (empty = nothing applied). Storage
+    // and serialization failures are returned as Result errors.
+    Result<UpdateTrackMetadataReply> updateMetadata(std::span<TrackId const> trackIds, MetadataPatch const& patch);
+    Result<EditTrackTagsReply> editTags(std::span<TrackId const> trackIds,
+                                        std::span<std::string const> tagsToAdd,
+                                        std::span<std::string const> tagsToRemove);
 
-    ListId createList(ListDraft const& draft);
-    // Returns false if no list with draft.listId exists (e.g. a stale id).
-    bool updateList(ListDraft const& draft);
+    // Returns an error when the draft is invalid, such as a malformed smart
+    // filter or an invalid parent relationship.
+    Result<ListId> createList(ListDraft const& draft);
+    // Returns NotFound if no list with draft.listId exists (e.g. a stale id), or
+    // another error when the draft is invalid.
+    Result<> updateList(ListDraft const& draft);
     // Returns false if no list with listId exists.
     bool deleteList(ListId listId);
 
     // Returns false if no track with trackId exists.
     bool deleteTrack(TrackId trackId);
-    // Returns nullopt if the file cannot be opened or parsed as a track.
-    std::optional<TrackId> createTrackFromFile(std::filesystem::path const& path);
+    // Imports one audio file under the music root. Recoverable failures include
+    // missing/out-of-root files, unsupported or malformed media, and duplicate
+    // manifest entries.
+    Result<TrackId> createTrackFromFile(std::filesystem::path const& path);
 
     LibraryWriter(LibraryWriter const&) = delete;
     LibraryWriter& operator=(LibraryWriter const&) = delete;

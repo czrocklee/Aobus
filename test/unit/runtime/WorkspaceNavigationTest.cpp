@@ -97,7 +97,8 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);
 
-    auto listId = runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Test List"});
+    auto listId =
+      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Test List"}));
     runtime.workspace().navigateTo(listId);
 
     auto activeViewId = runtime.workspace().layoutState().activeViewId;

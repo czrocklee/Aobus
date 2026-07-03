@@ -81,6 +81,9 @@ class CliParseTest(unittest.TestCase):
         self.assertTrue(args.clang)
         self.assertTrue(args.asan)
 
+        args = self.parse(["test", "--cli"])
+        self.assertEqual(args.suite, "cli")
+
     def test_test_defaults_to_default_suite_group(self):
         args = self.parse(["test"])
         self.assertEqual(args.suite, "default")
@@ -91,6 +94,7 @@ class CliParseTest(unittest.TestCase):
             {
                 "core": ["ao_core_test"],
                 "tui": ["ao_tui_test"],
+                "cli": ["ao_cli_test"],
                 "gtk": ["ao_gtk_test"],
                 "integration": ["ao_integration_test"],
                 "council": ["ao_council_test"],
@@ -104,7 +108,7 @@ class CliParseTest(unittest.TestCase):
             self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core", "tui", "gtk", "integration", "council", "tooling", "lint"),
+            ("core", "tui", "cli", "gtk", "integration", "council", "tooling", "lint"),
             Path("/tmp/aobus-test-build"),
             test_filter="",
             list_only=False,
@@ -118,7 +122,8 @@ class CliParseTest(unittest.TestCase):
                 self.assertEqual(test_command.run_suites(test_command.SUITE_GROUPS["all"], build_dir), 0)
 
         self.assertEqual(
-            [call.args[0] for call in run_suite.call_args_list], ["core", "tui", "gtk", "integration", "council"]
+            [call.args[0] for call in run_suite.call_args_list],
+            ["core", "tui", "cli", "gtk", "integration", "council"],
         )
         self.assertEqual([call.args[0] for call in run_non_catch2.call_args_list], ["tooling", "lint"])
 

@@ -263,6 +263,12 @@ namespace ao::gtk
     auto workflow = ao::uimodel::TagEditWorkflow{_runtime.library().writer()};
     auto const result = workflow.apply(request);
 
+    if (result.rejected)
+    {
+      _runtime.notifications().post(rt::NotificationSeverity::Error, result.notificationText);
+      return;
+    }
+
     if (!result.applied)
     {
       return;

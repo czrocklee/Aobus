@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -171,6 +171,7 @@ namespace ao::rt::test
 
     library::MusicLibrary& library() { return _library; }
     library::MusicLibrary const& library() const { return _library; }
+    std::filesystem::path const& root() const { return _tempDir.path(); }
 
     TrackId addTrack(library::test::TrackSpec const& spec) { return library::test::addTrack(_library, spec); }
 

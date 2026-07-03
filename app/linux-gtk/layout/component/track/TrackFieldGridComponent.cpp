@@ -11,6 +11,7 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "track/TrackFieldUi.h"
+#include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
@@ -457,7 +458,10 @@ namespace ao::gtk::layout
         auto patch = rt::MetadataPatch{};
         patch.customUpdates[optPendingUndo->key] = optPendingUndo->value;
 
-        _writer.updateMetadata(optPendingUndo->trackIds, patch);
+        if (auto const replyResult = _writer.updateMetadata(optPendingUndo->trackIds, patch); !replyResult)
+        {
+          APP_LOG_ERROR("Metadata undo failed: {}", replyResult.error().message);
+        }
       }
 
       void onSnapshot(rt::TrackDetailSnapshot const& snap)
@@ -644,7 +648,7 @@ namespace ao::gtk::layout
             },
             .writePatch = [field](rt::MetadataPatch& patch, uimodel::TrackFieldEditValue const& value)
             { std::ignore = uimodel::writeTrackFieldPatch(patch, field, value); },
-            .commitPatch = [this, &snap](rt::MetadataPatch const& patch) -> rt::UpdateTrackMetadataReply
+            .commitPatch = [this, &snap](rt::MetadataPatch const& patch) -> Result<rt::UpdateTrackMetadataReply>
             { return _writer.updateMetadata(snap.trackIds, patch); },
           });
 
@@ -838,7 +842,12 @@ namespace ao::gtk::layout
           return;
         }
 
-        _writer.updateMetadata(snap.trackIds, uimodel::makeCustomPropertyUpdatePatch(key, newValue));
+        if (auto const replyResult =
+              _writer.updateMetadata(snap.trackIds, uimodel::makeCustomPropertyUpdatePatch(key, newValue));
+            !replyResult)
+        {
+          APP_LOG_ERROR("Custom metadata update failed: {}", replyResult.error().message);
+        }
       }
 
       void onCustomDeleted(std::string const& key)
@@ -851,9 +860,16 @@ namespace ao::gtk::layout
         auto const snap = _scope->snapshot();
 
         auto const optPrevValue = uimodel::undoValueForDeletedTrackCustomProperty(snap, key);
-        auto const reply = _writer.updateMetadata(snap.trackIds, uimodel::makeTrackCustomPropertyDeletePatch(key));
+        auto const replyResult =
+          _writer.updateMetadata(snap.trackIds, uimodel::makeTrackCustomPropertyDeletePatch(key));
 
-        if (!reply.mutatedIds.empty() && optPrevValue)
+        if (!replyResult)
+        {
+          APP_LOG_ERROR("Custom metadata delete failed: {}", replyResult.error().message);
+          return;
+        }
+
+        if (!replyResult->mutatedIds.empty() && optPrevValue)
         {
           _undoBar.show(key, snap.trackIds, *optPrevValue);
         }
@@ -874,7 +890,13 @@ namespace ao::gtk::layout
           return;
         }
 
-        _writer.updateMetadata(snap.trackIds, uimodel::makeCustomPropertyUpdatePatch(key, value));
+        if (auto const replyResult =
+              _writer.updateMetadata(snap.trackIds, uimodel::makeCustomPropertyUpdatePatch(key, value));
+            !replyResult)
+        {
+          APP_LOG_ERROR("Custom metadata add failed: {}", replyResult.error().message);
+          return;
+        }
 
         _addPropertyRow.clearInputs();
       }

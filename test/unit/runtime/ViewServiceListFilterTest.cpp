@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ViewServiceTestSupport.h"
 #include <ao/CoreIds.h>
@@ -21,11 +22,11 @@ namespace ao::rt::test
     auto env = ViewServiceTestEnv{};
     auto service = env.makeService();
     auto const trackId = env.library.addTrack(library::test::TrackSpec{.title = "List Track"});
-    auto const listId = env.writer.createList(LibraryWriter::ListDraft{
+    auto const listId = ao::test::requireValue(env.writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Manual",
       .trackIds = {trackId},
-    });
+    }));
 
     auto const result = service.createView({}, true);
 
@@ -134,11 +135,11 @@ namespace ao::rt::test
     auto const newTrackId = env.library.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
     env.storePtr->reloadAllTracks();
 
-    auto const oldListId = env.writer.createList(LibraryWriter::ListDraft{
+    auto const oldListId = ao::test::requireValue(env.writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Old only",
       .trackIds = {oldTrackId},
-    });
+    }));
 
     auto service = env.makeService();
     auto const result = service.createView({.filterExpression = "$year > 2000"}, true);

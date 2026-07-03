@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -12,5 +12,7 @@ namespace ao::rt
 
 namespace ao::cli
 {
-  void setupInitCommand(CLI::App& app, rt::CoreRuntime& runtime);
+  class CliContext;
+
+  void setupInitCommand(CLI::App& app, CliContext& context);
 }

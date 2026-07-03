@@ -285,8 +285,10 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
 
-    auto const listA = runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A"});
-    auto const listB = runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "B"});
+    auto const listA =
+      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A"}));
+    auto const listB =
+      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "B"}));
 
     runtime.workspace().navigateTo(listA, {.recordHistory = true});
     auto const viewA = runtime.workspace().layoutState().activeViewId;

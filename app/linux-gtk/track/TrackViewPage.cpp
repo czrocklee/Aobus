@@ -564,7 +564,7 @@ namespace ao::gtk
         { uiDef->applyRowEditValue(*row, value, field); },
         .writePatch = [field](rt::MetadataPatch& patch, uimodel::TrackFieldEditValue const& value)
         { uimodel::writeTrackFieldPatch(patch, field, value); },
-        .commitPatch = [this, row](rt::MetadataPatch const& patch) -> rt::UpdateTrackMetadataReply
+        .commitPatch = [this, row](rt::MetadataPatch const& patch) -> Result<rt::UpdateTrackMetadataReply>
         {
           auto const trackIds = std::array{row->trackId()};
           return _runtime.library().writer().updateMetadata(trackIds, patch);
