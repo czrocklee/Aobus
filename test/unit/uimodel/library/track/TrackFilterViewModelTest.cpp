@@ -4,6 +4,7 @@
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -16,8 +17,6 @@
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
-
-#include <functional>
 
 namespace ao::uimodel::test
 {
@@ -33,7 +32,8 @@ namespace ao::uimodel::test
       LibraryChanges changes;
       ListSourceStore listSourceStore{testLib.library(), changes};
       ViewService viewService{executor, testLib.library(), listSourceStore};
-      PlaybackService playback{executor, viewService, testLib.library()};
+      NotificationService notifications;
+      PlaybackService playback{executor, viewService, testLib.library(), notifications};
       WorkspaceService workspaceService{viewService, playback, changes, testLib.library()};
       ao::test::RenderLog<TrackFilterViewState> renderLog;
       TrackFilterViewModel viewModel{viewService,

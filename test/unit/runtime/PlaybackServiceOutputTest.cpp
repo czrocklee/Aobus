@@ -92,8 +92,8 @@ namespace ao::rt::test
     auto fixture = PlaybackFixture<MockExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
 
-    auto const desc =
-      playbackRequest(TrackId{1}, "/fake/path.flac", "Fake Track", "Fake Artist", std::chrono::minutes{2});
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const desc = playbackRequest(TrackId{1}, fixturePath, "Fake Track", "Fake Artist", std::chrono::minutes{2});
 
     CHECK(fixture.playbackService.play(desc, ListId{1}));
     CHECK(fixture.playbackService.state().trackId == TrackId{1});

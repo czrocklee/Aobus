@@ -62,7 +62,7 @@ namespace ao::gtk::test
 
       auto desc = playbackRequest(TrackId{1}, "Test Song", "Test Artist");
 
-      playback.play(desc, ListId{7});
+      REQUIRE(playback.play(desc, ListId{7}));
       drainGtkEvents();
 
       CHECK(gtkLabel->get_text() != idleText);
@@ -78,7 +78,7 @@ namespace ao::gtk::test
 
       auto desc = playbackRequest(TrackId{2}, "Another Song", "Known Artist");
 
-      playback.play(desc, ListId{8});
+      REQUIRE(playback.play(desc, ListId{8}));
       drainGtkEvents();
 
       CHECK(gtkLabel->get_text() != idleText);
@@ -94,7 +94,7 @@ namespace ao::gtk::test
 
       auto desc = playbackRequest(TrackId{3}, "Dated Song");
 
-      playback.play(desc, ListId{9});
+      REQUIRE(playback.play(desc, ListId{9}));
       drainGtkEvents();
 
       CHECK(gtkLabel->get_text().empty());
@@ -119,7 +119,7 @@ namespace ao::gtk::test
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
 
-      runtime.playback().play(playbackRequest(TrackId{11}, "Filtered Song", "Filter Artist"), ListId{12});
+      REQUIRE(runtime.playback().play(playbackRequest(TrackId{11}, "Filtered Song", "Filter Artist"), ListId{12}));
       drainGtkEvents();
 
       CHECK(gtkLabel->has_css_class("ao-clickable"));
@@ -140,7 +140,7 @@ namespace ao::gtk::test
       auto optRequest = std::optional<rt::PlaybackService::RevealTrackRequested>{};
       auto sub = runtime.playback().onRevealTrackRequested([&](auto const& ev) { optRequest = ev; });
 
-      runtime.playback().play(playbackRequest(TrackId{21}, "Reveal Song", "Reveal Artist"), ListId{22});
+      REQUIRE(runtime.playback().play(playbackRequest(TrackId{21}, "Reveal Song", "Reveal Artist"), ListId{22}));
       drainGtkEvents();
 
       REQUIRE(emitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
@@ -157,7 +157,7 @@ namespace ao::gtk::test
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
 
-      runtime.playback().play(playbackRequest(TrackId{31}, "Toggle Song", "Toggle Artist"), ListId{32});
+      REQUIRE(runtime.playback().play(playbackRequest(TrackId{31}, "Toggle Song", "Toggle Artist"), ListId{32}));
       drainGtkEvents();
 
       bool started = false;

@@ -40,7 +40,7 @@ namespace ao::gtk::test
       .artist = "Artist",
     };
 
-    playback.play(desc, ListId{1});
+    REQUIRE(playback.play(desc, ListId{1}));
     drainGtkEvents();
     CHECK_FALSE(gtkLabel->get_text().empty());
 

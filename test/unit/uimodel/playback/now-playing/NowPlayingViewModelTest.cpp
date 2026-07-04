@@ -3,11 +3,13 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Transport.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
@@ -19,7 +21,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
-#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -33,9 +34,10 @@ namespace ao::uimodel::test
   {
     PlaybackService::PlaybackRequest playbackRequest(TrackId trackId, std::string title, std::string artist = {})
     {
+      auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       return PlaybackService::PlaybackRequest{
         .trackId = trackId,
-        .input = audio::PlaybackInput{.duration = std::chrono::seconds{1}},
+        .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{1}},
         .title = std::move(title),
         .artist = std::move(artist),
       };
@@ -49,7 +51,8 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playback = PlaybackService{executor, viewService, testLib.library()};
+    auto notificationService = NotificationService{};
+    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
     addReadyAudioProvider(playback);
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
@@ -67,7 +70,7 @@ namespace ao::uimodel::test
     {
       auto desc = playbackRequest(TrackId{1}, "Song", "Artist");
 
-      playback.play(desc, ListId{1});
+      REQUIRE(playback.play(desc, ListId{1}));
       REQUIRE(!log.empty());
       CHECK(log.last().title == "Song");
       CHECK(log.last().artist == "Artist");
@@ -80,7 +83,7 @@ namespace ao::uimodel::test
     SECTION("Metadata with empty artist shows Unknown Artist")
     {
       auto desc = playbackRequest(TrackId{1}, "Instrumental");
-      playback.play(desc, ListId{1});
+      REQUIRE(playback.play(desc, ListId{1}));
       CHECK(log.last().title == "Instrumental");
       CHECK(log.last().artist == "Unknown Artist");
       CHECK(log.last().combinedStatus == "Instrumental");
@@ -89,7 +92,7 @@ namespace ao::uimodel::test
     SECTION("fieldText returns empty for unrelated field")
     {
       auto desc = playbackRequest(TrackId{1}, "Song");
-      playback.play(desc, ListId{1});
+      REQUIRE(playback.play(desc, ListId{1}));
       CHECK(NowPlayingViewModel::fieldText(log.last(), rt::TrackField::Year).empty());
     }
 
@@ -115,7 +118,7 @@ namespace ao::uimodel::test
     SECTION("FilterByField with Title")
     {
       auto desc = playbackRequest(TrackId{1}, "Song");
-      playback.play(desc, ListId{1});
+      REQUIRE(playback.play(desc, ListId{1}));
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Title);
       CHECK(cmd.type == NowPlayingActionCommand::Type::Navigate);
@@ -131,7 +134,7 @@ namespace ao::uimodel::test
     SECTION("FilterByField preserves titles containing both quote types")
     {
       auto desc = playbackRequest(TrackId{1}, "A \"Song\" 'Name'");
-      playback.play(desc, ListId{1});
+      REQUIRE(playback.play(desc, ListId{1}));
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Title);
       CHECK(cmd.type == NowPlayingActionCommand::Type::Navigate);
@@ -144,7 +147,7 @@ namespace ao::uimodel::test
     SECTION("Action resolution")
     {
       auto desc = playbackRequest(TrackId{1}, "Song", "Artist");
-      playback.play(desc, ListId{1});
+      REQUIRE(playback.play(desc, ListId{1}));
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Artist);
       CHECK(cmd.type == NowPlayingActionCommand::Type::Navigate);
@@ -154,7 +157,7 @@ namespace ao::uimodel::test
     SECTION("Quoting and escaping in actions")
     {
       auto desc = playbackRequest(TrackId{1}, "A \"Song\"");
-      playback.play(desc, ListId{1});
+      REQUIRE(playback.play(desc, ListId{1}));
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Title);
       CHECK(cmd.navigateQuery == R"($title = "A \"Song\"")");
@@ -169,7 +172,8 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playback = PlaybackService{executor, viewService, testLib.library()};
+    auto notificationService = NotificationService{};
+    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
     auto const viewModel = NowPlayingViewModel{playback, [&log](auto const& view) { log.render(view); }};
@@ -185,7 +189,8 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playback = PlaybackService{executor, viewService, testLib.library()};
+    auto notificationService = NotificationService{};
+    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
     addReadyAudioProvider(playback);
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
@@ -195,7 +200,7 @@ namespace ao::uimodel::test
     log.clear();
 
     auto const trackId = testLib.addTrack({.title = "Event Song", .artist = "Event Artist", .album = "Event Album"});
-    playback.play(playbackRequest(trackId, "Event Song", "Event Artist"), ListId{1});
+    REQUIRE(playback.play(playbackRequest(trackId, "Event Song", "Event Artist"), ListId{1}));
 
     REQUIRE(!log.empty());
     CHECK(log.last().title == "Event Song");
@@ -204,7 +209,7 @@ namespace ao::uimodel::test
     log.clear();
     viewModelPtr.reset();
 
-    playback.play(playbackRequest(trackId, "After Destroy", "Event Artist"), ListId{1});
+    REQUIRE(playback.play(playbackRequest(trackId, "After Destroy", "Event Artist"), ListId{1}));
     CHECK(log.empty());
   }
 } // namespace ao::uimodel::test

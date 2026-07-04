@@ -98,6 +98,7 @@ namespace ao::audio
 
     void setOnTrackEnded(std::function<void()> callback);
     void setOnTrackAdvanced(std::function<void(Engine::TrackAdvanced const&)> callback);
+    void setOnPlaybackFailure(std::function<void(Engine::PlaybackFailure const&)> callback);
     void setOnStateChanged(std::function<void()> callback);
 
     /// Called when available output devices change; receives per-provider status snapshots.

@@ -8,6 +8,7 @@
 #include <ao/utility/ScopedRegistration.h>
 #include <ao/utility/StrongType.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -40,24 +41,25 @@ namespace ao::rt
   public:
     Subscription connect(std::move_only_function<void(Args...)> handler)
     {
-      _handlers.push_back(std::move(handler));
-      std::size_t const index = _handlers.size() - 1;
+      auto const id = _nextId++;
+      _handlers.push_back(Slot{.id = id, .handler = std::move(handler)});
 
-      return Subscription{[this, index] { _handlers[index] = {}; }};
+      return Subscription{[this, id] { disconnect(id); }};
     }
 
     void emit(Args... args)
     {
       // Index loop over a snapshotted size: a handler may connect new handlers while we
-      // emit. Storage is a deque so push_back never relocates the handler currently
-      // executing; the new handlers only take part starting with the next emission.
+      // emit. Unsubscribe only tombstones slots during emission so the active
+      // callable stays alive until the outermost emit returns.
+      auto const guard = EmitGuard{*this};
       auto const count = _handlers.size();
 
       for (std::size_t index = 0; index < count; ++index)
       {
-        if (_handlers[index])
+        if (auto& slot = _handlers[index]; slot.connected && slot.handler)
         {
-          _handlers[index](args...);
+          slot.handler(args...);
         }
       }
     }
@@ -67,7 +69,85 @@ namespace ao::rt
       executor.defer([this, ... args = std::move(args)] mutable { emit(args...); });
     }
 
+    bool hasConnectedHandlers() const
+    {
+      return std::ranges::any_of(_handlers, [](auto const& slot) { return slot.connected; });
+    }
+
   private:
-    std::deque<std::move_only_function<void(Args...)>> _handlers;
+    struct Slot final
+    {
+      std::size_t id = 0;
+      std::move_only_function<void(Args...)> handler;
+      bool connected = true;
+    };
+
+    class [[nodiscard]] EmitGuard final
+    {
+    public:
+      explicit EmitGuard(Signal& owner)
+        : _owner{owner}
+      {
+        ++_owner._emitDepth;
+      }
+
+      ~EmitGuard()
+      {
+        --_owner._emitDepth;
+
+        if (_owner._emitDepth == 0 && _owner._needsCompact)
+        {
+          _owner.compactDisconnected();
+        }
+      }
+
+      EmitGuard(EmitGuard const&) = delete;
+      EmitGuard& operator=(EmitGuard const&) = delete;
+      EmitGuard(EmitGuard&&) = delete;
+      EmitGuard& operator=(EmitGuard&&) = delete;
+
+    private:
+      Signal& _owner;
+    };
+
+    void disconnect(std::size_t id)
+    {
+      for (auto& slot : _handlers)
+      {
+        if (slot.id == id)
+        {
+          slot.connected = false;
+          _needsCompact = true;
+          break;
+        }
+      }
+
+      if (_emitDepth == 0 && _needsCompact)
+      {
+        compactDisconnected();
+      }
+    }
+
+    void compactDisconnected()
+    {
+      for (auto it = _handlers.begin(); it != _handlers.end();)
+      {
+        if (!it->connected)
+        {
+          it = _handlers.erase(it);
+        }
+        else
+        {
+          ++it;
+        }
+      }
+
+      _needsCompact = false;
+    }
+
+    std::deque<Slot> _handlers;
+    std::size_t _nextId = 1;
+    std::size_t _emitDepth = 0;
+    bool _needsCompact = false;
   };
 } // namespace ao::rt

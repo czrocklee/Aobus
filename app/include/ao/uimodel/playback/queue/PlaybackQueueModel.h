@@ -4,7 +4,9 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <cstddef>
@@ -14,6 +16,7 @@
 
 namespace ao::rt
 {
+  class NotificationService;
   class PlaybackService;
 }
 
@@ -30,7 +33,7 @@ namespace ao::uimodel
   class PlaybackQueueModel final
   {
   public:
-    explicit PlaybackQueueModel(rt::PlaybackService& playback);
+    PlaybackQueueModel(rt::PlaybackService& playback, rt::NotificationService& notifications);
     ~PlaybackQueueModel();
 
     PlaybackQueueModel(PlaybackQueueModel const&) = delete;
@@ -62,20 +65,27 @@ namespace ao::uimodel
   private:
     void clear();
     std::optional<std::size_t> peekNextIndex();
-    bool playIndex(std::size_t index);
+    Result<> playIndex(std::size_t index);
+    bool tryAdvanceToIndex(std::size_t index);
     void prepareNext();
     void commitNowPlaying(TrackId trackId, ListId sourceListId);
+    void handlePlaybackFailure(rt::PlaybackFailure const& failure);
     void advanceToNext();
     void subscribeEvents();
     void unsubscribeEvents();
 
     rt::PlaybackService& _playback;
+    rt::NotificationService& _notifications;
     std::unique_ptr<PlaybackQueueState> _queueStatePtr;
     rt::Subscription _idleSub;
     rt::Subscription _nowPlayingSub;
+    rt::Subscription _failureSub;
     rt::Subscription _outputDeviceChangedSub;
     rt::Subscription _seekSub;
     rt::Subscription _stoppedSub;
+    rt::NotificationId _skipNotificationId = rt::kInvalidNotificationId;
+    std::size_t _skippedFailureCount = 0;
+    std::size_t _consecutivePlaybackFailures = 0;
     bool _ignoreNowPlayingChange = false;
   };
 } // namespace ao::uimodel

@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -12,8 +13,6 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-
-#include <functional>
 
 namespace ao::uimodel::test
 {
@@ -27,7 +26,8 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playback = PlaybackService{executor, viewService, testLib.library()};
+    auto notificationService = NotificationService{};
+    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
 
     auto log = ao::test::RenderLog<VolumeViewState>{};
     auto viewModel = VolumeViewModel{playback, [&log](auto const& view) { log.render(view); }};

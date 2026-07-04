@@ -201,6 +201,50 @@ must first call `ao::async::rethrowIfOperationCancelled(...)`; only the
 for a cancelled UI operation belongs to the cancellation initiator or owner
 teardown path, not to the cancelled coroutine.
 
+### Playback Failure Events
+
+Playback uses two recoverable channels with different ownership. Synchronous
+command rejection returns through the command result: `PlaybackService::play`
+returns `Result<>` when playback cannot even be accepted, such as no selected or
+ready output route. Asynchronous lifecycle failures that happen after a command
+has been accepted are not retrofitted into that return value; `audio::Engine`
+emits a typed playback failure, `audio::Player` marshals it under the existing
+executor callback contract, and `rt::PlaybackService` exposes it through
+`onPlaybackFailure`.
+
+The failure taxonomy is deliberately small and policy-oriented:
+
+| Kind | Meaning | Queue policy |
+| --- | --- | --- |
+| `TrackOpen` | The input could not be opened, probed, or prepared. | Skip-eligible. |
+| `Decode` | The current track failed while decoding after playback had started. | Skip-eligible. |
+| `RouteActivation` | The output route could not be opened or configured for playback. | Stop playback. |
+| `DeviceLost` | The active backend/device disappeared or entered an unrecoverable stream state. | Stop playback. |
+
+The audio layer owns detection only. `Engine::PlaybackFailure` carries the kind,
+the caller-supplied playback item id, the narrow `PlaybackInput`, the engine
+generation, the original `Error`, and a recoverability flag. It never branches
+on user-facing message text. Runtime owns reporting: `PlaybackService` maps the
+item id back to the current or prepared request, attaches `TrackId`,
+`sourceListId`, and display title where available, refreshes transport state,
+and emits the service signal. If no subscriber handles a `TrackOpen`/`Decode`
+failure, the service posts or updates one default error notification keyed by
+kind and track. When a subscriber is present, recoverable track failures are left
+to that policy owner so an active queue can publish one "Skipped N unplayable
+tracks" summary instead of one toast per bad file. Output failures
+(`RouteActivation`/`DeviceLost`) always keep the service-level sticky
+notification. The service does not decide whether a queue should advance.
+
+Queue recovery belongs to `uimodel::PlaybackQueueModel`, because it already owns
+queue successor semantics. During active queue playback, `TrackOpen` and
+`Decode` failures advance to the next queue item and update a warning
+notification such as "Skipped 2 unplayable tracks". Three consecutive
+skip-eligible failures stop playback and post a sticky error so a broken folder
+cannot loop indefinitely. A successful now-playing commit or natural idle
+advance resets the consecutive-failure count. `RouteActivation` and
+`DeviceLost` stop the queue immediately; skipping tracks cannot repair an output
+route.
+
 `linux-gtk` is an application leaf: it consumes lower-layer `Result`, value, and
 exception contracts into notifications, dialogs, and logs. It does not convert a
 recoverable `Result` into `ao::Exception` merely because the operation crossed an

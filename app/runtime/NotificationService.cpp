@@ -94,6 +94,22 @@ namespace ao::rt
     return id;
   }
 
+  bool NotificationService::updateMessage(NotificationId const id, std::string message)
+  {
+    auto const it = std::ranges::find(_implPtr->state.entries, id, &NotificationEntry::id);
+
+    if (it != _implPtr->state.entries.end())
+    {
+      it->message = std::move(message);
+      ++_implPtr->state.revision;
+      _implPtr->updatedSignal.emit(id);
+      _implPtr->changedSignal.emit();
+      return true;
+    }
+
+    return false;
+  }
+
   void NotificationService::updateContent(NotificationId const id, NotificationContentState content)
   {
     auto const it = std::ranges::find(_implPtr->state.entries, id, &NotificationEntry::id);

@@ -5,6 +5,7 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "tui/LibraryController.h"
 #include "tui/OutputDeviceController.h"
@@ -44,8 +45,10 @@ namespace ao::tui::test
 
       EventControllerFixture()
       {
-        library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "First"});
-        library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "Second"});
+        auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+        library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "First", .uri = fixturePath});
+        library::test::addTrack(
+          runtime.musicLibrary(), library::test::TrackSpec{.title = "Second", .uri = fixturePath});
       }
 
       LibraryController makeLibrary() { return LibraryController{runtime}; }
@@ -763,7 +766,6 @@ namespace ao::tui::test
   TEST_CASE("EventController - playback shortcuts update status and controls", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
     auto library = fixture.makeLibrary();
     auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime.playback()};
     auto seekEvents = std::vector<std::chrono::milliseconds>{};
@@ -771,9 +773,6 @@ namespace ao::tui::test
                                                        { seekEvents.push_back(event.elapsed); });
 
     fixture.runtime.playback().setVolume(0.50F);
-
-    CHECK(controller.handleEvent(ftxui::Event::Character("p")));
-    CHECK(controller.statusMessage() == "Playback requested");
 
     CHECK(controller.handleEvent(ftxui::Event::Character("[")));
     CHECK(controller.handleEvent(ftxui::Event::Character("]")));

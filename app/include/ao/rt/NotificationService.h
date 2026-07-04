@@ -33,6 +33,7 @@ namespace ao::rt
                         std::optional<std::chrono::milliseconds> optTimeout = std::nullopt);
     NotificationId post(NotificationRequest request);
 
+    bool updateMessage(NotificationId id, std::string message);
     void updateContent(NotificationId id, NotificationContentState content);
     void updateProgress(NotificationId id, NotificationProgressState progress);
     void clearProgress(NotificationId id);

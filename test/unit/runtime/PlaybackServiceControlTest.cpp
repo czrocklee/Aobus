@@ -2,8 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/rt/NotificationState.h>
+#include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -84,10 +88,10 @@ namespace ao::rt::test
         }
       });
 
-    auto const desc =
-      playbackRequest(TrackId{1}, "/fake/path.flac", "Fake Track", "Fake Artist", std::chrono::minutes{2});
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const desc = playbackRequest(TrackId{1}, fixturePath, "Fake Track", "Fake Artist", std::chrono::minutes{2});
 
-    fixture.playbackService.play(desc, ListId{1});
+    REQUIRE(fixture.playbackService.play(desc, ListId{1}));
 
     CHECK(preparingFired);
     CHECK(startedFired);
@@ -178,10 +182,11 @@ namespace ao::rt::test
 
     bool startedFired = false;
     auto subStarted = fixture.playbackService.onStarted([&] { startedFired = true; });
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const desc =
-      playbackRequest(TrackId{77}, "/fake/path.flac", "Deferred Track", "Deferred Artist", std::chrono::minutes{4});
+      playbackRequest(TrackId{77}, fixturePath, "Deferred Track", "Deferred Artist", std::chrono::minutes{4});
 
-    fixture.playbackService.play(desc, ListId{9});
+    REQUIRE(fixture.playbackService.play(desc, ListId{9}));
 
     // Control commands run on the executor thread (affinity contract), so they
     // refresh the state snapshot and emit their signals synchronously - no
@@ -204,7 +209,8 @@ namespace ao::rt::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playbackService = PlaybackService{executor, viewService, testLib.library()};
+    auto notificationService = NotificationService{};
+    auto playbackService = PlaybackService{executor, viewService, testLib.library(), notificationService};
 
     bool preparingFired = false;
     auto subPreparing = playbackService.onPreparing([&] { preparingFired = true; });
@@ -216,16 +222,25 @@ namespace ao::rt::test
     auto subNowPlaying =
       playbackService.onNowPlayingChanged([&](PlaybackService::NowPlayingChanged const&) { nowPlayingFired = true; });
 
+    bool failureFired = false;
+    auto subFailure = playbackService.onPlaybackFailure([&](PlaybackFailure const&) { failureFired = true; });
+
     auto const desc =
       playbackRequest(TrackId{12}, "/not/started.flac", "Rejected Track", "Rejected Artist", std::chrono::minutes{5});
 
-    CHECK_FALSE(playbackService.play(desc, ListId{3}));
+    auto const result = playbackService.play(desc, ListId{3});
 
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidState);
     CHECK(preparingFired);
     CHECK_FALSE(startedFired);
     CHECK_FALSE(nowPlayingFired);
+    CHECK_FALSE(failureFired);
     CHECK(playbackService.state().trackId == kInvalidTrackId);
     CHECK(playbackService.state().sourceListId == kInvalidListId);
     CHECK(playbackService.state().trackTitle.empty());
+    auto const feed = notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().severity == NotificationSeverity::Error);
   }
 } // namespace ao::rt::test

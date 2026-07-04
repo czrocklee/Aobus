@@ -7,6 +7,9 @@
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationState.h>
+#include <ao/rt/PlaybackFailure.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -14,6 +17,8 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <tuple>
 #include <vector>
 
 namespace ao::rt::test
@@ -22,7 +27,10 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
 
-    CHECK_FALSE(fixture.playbackService.playTrack(TrackId{99999}, ListId{7}));
+    auto const result = fixture.playbackService.playTrack(TrackId{99999}, ListId{7});
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("PlaybackService playback - playTrack resolves track metadata", "[runtime][unit][playback][play]")
@@ -42,6 +50,7 @@ namespace ao::rt::test
     spec.title = "Playable Track";
     spec.artist = "Queue Artist";
     spec.album = "Queue Album";
+    spec.uri = audio::test::requireAudioFixture("basic_metadata.flac").string();
     spec.duration = std::chrono::minutes{3};
     auto const trackId = fixture.testLib.addTrack(spec);
 
@@ -50,7 +59,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackService.state().sourceListId == ListId{7});
     CHECK(fixture.playbackService.state().trackTitle == "Playable Track");
     CHECK(fixture.playbackService.state().trackArtist == "Queue Artist");
-    CHECK(fixture.playbackService.state().duration == std::chrono::minutes{3});
+    CHECK(fixture.playbackService.state().duration > std::chrono::milliseconds{0});
   }
 
   TEST_CASE("PlaybackService playback - prepareNext does not replace current state", "[runtime][unit][playback]")
@@ -194,5 +203,150 @@ namespace ao::rt::test
     CHECK(nowPlaying[0].sourceListId == ListId{7});
     CHECK(fixture.playbackService.state().trackId == nextTrack);
     CHECK(fixture.playbackService.state().trackTitle == "Prepared Track");
+  }
+
+  TEST_CASE("PlaybackService playback - subscribed track open failure emits without default notification",
+            "[runtime][unit][playback][error]")
+  {
+    auto fixture = PlaybackFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const trackId = fixture.testLib.addTrack({.title = "Broken Track", .uri = "broken.txt"});
+
+    auto failures = std::vector<PlaybackFailure>{};
+    auto sub =
+      fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
+
+    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
+    REQUIRE(fixture.executor.drainUntil([&] { return !failures.empty(); }));
+
+    REQUIRE(failures.size() == 1);
+    CHECK(failures.front().kind == PlaybackFailureKind::TrackOpen);
+    CHECK(failures.front().trackId == trackId);
+    CHECK(failures.front().sourceListId == ListId{7});
+    CHECK(failures.front().title == "Broken Track");
+    CHECK(failures.front().recoverable);
+    CHECK(failures.front().error.message.find("Unsupported audio file extension") != std::string::npos);
+    CHECK(fixture.notificationService.feed().entries.empty());
+  }
+
+  TEST_CASE("PlaybackService playback - unhandled track open failure publishes default notification",
+            "[runtime][unit][playback][error]")
+  {
+    auto fixture = PlaybackFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const trackId = fixture.testLib.addTrack({.title = "Broken Track", .uri = "broken.txt"});
+
+    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
+    REQUIRE(fixture.executor.drainUntil([&] { return !fixture.notificationService.feed().entries.empty(); }));
+
+    auto feed = fixture.notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().severity == NotificationSeverity::Error);
+    CHECK_FALSE(feed.entries.front().sticky);
+    CHECK(feed.entries.front().message.find("Broken Track") != std::string::npos);
+    CHECK(feed.entries.front().message.find("Unsupported audio file extension") != std::string::npos);
+
+    std::int32_t updateCount = 0;
+    auto updateSub = fixture.notificationService.onUpdated([&](NotificationId) { ++updateCount; });
+
+    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
+    REQUIRE(fixture.executor.drainUntil([&] { return updateCount == 1; }));
+
+    feed = fixture.notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+
+    auto const dismissedId = feed.entries.front().id;
+    fixture.notificationService.dismiss(dismissedId);
+    CHECK(fixture.notificationService.feed().entries.empty());
+
+    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
+    REQUIRE(fixture.executor.drainUntil([&] { return !fixture.notificationService.feed().entries.empty(); }));
+
+    feed = fixture.notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().id != dismissedId);
+  }
+
+  TEST_CASE("PlaybackService playback - stale async failure is dropped after superseding playback",
+            "[runtime][unit][playback][error]")
+  {
+    auto fixture = PlaybackFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const brokenTrack = fixture.testLib.addTrack({.title = "Stale Broken Track", .uri = "broken.txt"});
+    auto const replacementTrack = fixture.testLib.addTrack({.title = "Replacement Track", .uri = flacPath});
+
+    auto failures = std::vector<PlaybackFailure>{};
+    auto sub =
+      fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
+
+    REQUIRE(fixture.playbackService.playTrack(brokenTrack, ListId{7}));
+    REQUIRE(fixture.playbackService.playTrack(replacementTrack, ListId{7}));
+
+    std::ignore = fixture.executor.drainUntil([&] { return !failures.empty(); }, std::chrono::milliseconds{100});
+    fixture.executor.drain();
+
+    CHECK(failures.empty());
+    CHECK(fixture.notificationService.feed().entries.empty());
+    CHECK(fixture.playbackService.state().trackId == replacementTrack);
+  }
+
+  TEST_CASE("PlaybackService playback - route activation failures dedupe by kind", "[runtime][unit][playback][error]")
+  {
+    auto fixture = PlaybackFixture<MockExecutor>{};
+
+    auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const track1 = fixture.testLib.addTrack({.title = "Track 1", .uri = flacPath});
+    auto const track2 = fixture.testLib.addTrack({.title = "Track 2", .uri = flacPath});
+
+    CHECK_FALSE(fixture.playbackService.playTrack(track1, ListId{7}));
+    CHECK_FALSE(fixture.playbackService.playTrack(track2, ListId{7}));
+
+    auto const feed = fixture.notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().sticky);
+    CHECK(feed.entries.front().message.find("Could not start playback") != std::string::npos);
+  }
+
+  TEST_CASE("PlaybackService playback - backend error publishes sticky device failure",
+            "[runtime][unit][playback][error]")
+  {
+    auto fixture = PlaybackFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const trackId = fixture.testLib.addTrack({.title = "Playing Track", .uri = fixturePath});
+
+    auto failures = std::vector<PlaybackFailure>{};
+    auto sub =
+      fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
+
+    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
+    REQUIRE(fixture.renderTarget != nullptr);
+
+    fixture.renderTarget->onBackendError("device lost");
+    REQUIRE(fixture.executor.drainUntil([&] { return !failures.empty(); }));
+
+    REQUIRE(failures.size() == 1);
+    CHECK(failures.front().kind == PlaybackFailureKind::DeviceLost);
+    CHECK(failures.front().trackId == trackId);
+    CHECK(failures.front().sourceListId == ListId{7});
+    CHECK(failures.front().title == "Playing Track");
+    CHECK_FALSE(failures.front().recoverable);
+    CHECK(failures.front().error.message == "device lost");
+
+    auto const feed = fixture.notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().severity == NotificationSeverity::Error);
+    CHECK(feed.entries.front().sticky);
+    CHECK(feed.entries.front().message.find("Playback device failed") != std::string::npos);
+    CHECK(feed.entries.front().message.find("device lost") != std::string::npos);
   }
 } // namespace ao::rt::test

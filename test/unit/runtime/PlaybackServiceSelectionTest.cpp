@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/IRenderTarget.h>
@@ -73,7 +74,8 @@ namespace ao::rt::test
     emptyStatus.devices.clear();
     fixture.onDevicesChangedCb(emptyStatus.devices);
 
-    auto const trackId = fixture.testLib.addTrack("A Track");
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const trackId = fixture.testLib.addTrack({.title = "A Track", .uri = fixturePath});
     auto const result = fixture.viewService.createView({.listId = kInvalidListId}, true);
     fixture.viewService.setSelection(result.viewId, {trackId});
 

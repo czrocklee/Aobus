@@ -37,7 +37,7 @@ namespace ao::tui
     }
 
     auto const index = clampSelection(static_cast<std::size_t>(std::max(0, selected)), tracks.size());
-    return playback.playTrack(tracks[index].id, sourceListId);
+    return static_cast<bool>(playback.playTrack(tracks[index].id, sourceListId));
   }
 
   bool togglePlayback(rt::PlaybackService& playback,

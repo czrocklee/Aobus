@@ -4,6 +4,7 @@
 #pragma once
 
 #include "test/unit/RuntimeTestUtils.h"
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -21,7 +22,8 @@ namespace ao::uimodel::test
     rt::LibraryChanges changes{};
     rt::ListSourceStore listSourceStore{testLib.library(), changes};
     rt::ViewService viewService{executor, testLib.library(), listSourceStore};
-    rt::PlaybackService playbackService{executor, viewService, testLib.library()};
+    rt::NotificationService notifications;
+    rt::PlaybackService playbackService{executor, viewService, testLib.library(), notifications};
     rt::WorkspaceService workspace{viewService, playbackService, changes, testLib.library()};
     TrackPresentationCatalog catalog{workspace};
     ListPresentationPreferenceStore preferences{catalog};

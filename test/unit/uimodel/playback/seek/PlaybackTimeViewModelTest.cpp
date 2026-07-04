@@ -3,8 +3,10 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -15,7 +17,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
-#include <functional>
 
 namespace ao::uimodel::test
 {
@@ -29,7 +30,9 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playback = PlaybackService{executor, viewService, testLib.library()};
+    auto notificationService = NotificationService{};
+    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
+    addReadyAudioProvider(playback);
 
     auto log = ao::test::RenderLog<PlaybackTimeViewState>{};
     auto const viewModel = PlaybackTimeViewModel{playback, [&log](auto const& view) { log.render(view); }};
@@ -44,13 +47,14 @@ namespace ao::uimodel::test
     SECTION("onSeekUpdate triggers refresh with Preview and Final modes")
     {
       auto const trackId = testLib.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
+      auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       auto desc = PlaybackService::PlaybackRequest{
         .trackId = trackId,
-        .input = audio::PlaybackInput{.filePath = "test.flac", .duration = std::chrono::seconds{30}},
+        .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{30}},
         .title = "Seek Test",
         .artist = "Artist",
       };
-      playback.play(desc, kInvalidListId);
+      REQUIRE(playback.play(desc, kInvalidListId));
 
       log.clear();
       playback.seek(std::chrono::seconds{5}, PlaybackService::SeekMode::Final);

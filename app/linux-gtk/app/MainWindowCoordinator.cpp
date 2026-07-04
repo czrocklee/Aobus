@@ -56,7 +56,7 @@ namespace ao::gtk
       : layoutConfig{runtime.musicLibrary().rootPath() / ".aobus"}
       , trackRowCache{runtime.library()}
       , imageCache{100}
-      , playbackQueueModel{runtime.playback()}
+      , playbackQueueModel{runtime.playback(), runtime.notifications()}
       , trackPresentationCatalog{runtime.workspace()}
       , trackPresentationPreferences{trackPresentationCatalog}
       , tagEditController{window, runtime, TagEditController::Callbacks{.onTagsMutated = [] {}}, themeController}

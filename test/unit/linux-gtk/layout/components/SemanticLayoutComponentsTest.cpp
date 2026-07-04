@@ -534,7 +534,7 @@ namespace ao::gtk::layout::test
     auto navCallbacks = ListNavigationController::Callbacks{};
     auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
-    auto queueModel = uimodel::PlaybackQueueModel{runtime.playback()};
+    auto queueModel = uimodel::PlaybackQueueModel{runtime.playback(), runtime.notifications()};
     auto pageHost = TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, layoutStore};
 
     runtime.workspace().navigateTo(rt::kAllTracksListId);

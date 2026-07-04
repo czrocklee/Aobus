@@ -45,8 +45,8 @@ namespace ao::audio
      * snapshots, but they are not linearized with in-flight control commands.
      *
      * User callbacks registered through setOnStateChanged(), setOnTrackEnded(),
-     * setOnTrackAdvanced(), and setOnRouteChanged() are delivered from Engine's
-     * internal event worker, not from backend or decoder callback stacks.
+     * setOnTrackAdvanced(), setOnPlaybackFailure(), and setOnRouteChanged() are
+     * delivered from Engine's internal event worker, not from backend or decoder callback stacks.
      * setOnStateChanged() reports asynchronous backend/source state changes;
      * synchronous control commands publish their result by returning. Callbacks
      * may call back into Engine control methods. They must return promptly;
@@ -100,6 +100,14 @@ namespace ao::audio
       DrainFallback,
     };
 
+    enum class PlaybackFailureKind : std::uint8_t
+    {
+      TrackOpen,
+      Decode,
+      RouteActivation,
+      DeviceLost,
+    };
+
     struct PreparedNextResult final
     {
       PlaybackItemId itemId;
@@ -112,8 +120,19 @@ namespace ao::audio
       PlaybackInput input;
     };
 
+    struct PlaybackFailure final
+    {
+      PlaybackFailureKind kind = PlaybackFailureKind::TrackOpen;
+      PlaybackItemId itemId;
+      PlaybackInput input;
+      std::uint64_t generation = 0;
+      Error error;
+      bool recoverable = false;
+    };
+
     using OnRouteChanged = std::function<void(RouteStatus const&)>;
     using OnTrackAdvanced = std::function<void(TrackAdvanced const&)>;
+    using OnPlaybackFailure = std::function<void(PlaybackFailure const&)>;
 
     Engine(std::unique_ptr<IBackend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory = nullptr);
     ~Engine();
@@ -128,6 +147,7 @@ namespace ao::audio
 
     void setOnTrackEnded(std::function<void()> callback);
     void setOnTrackAdvanced(OnTrackAdvanced callback);
+    void setOnPlaybackFailure(OnPlaybackFailure callback);
     void setOnRouteChanged(OnRouteChanged callback);
     void setOnStateChanged(std::function<void()> callback);
 

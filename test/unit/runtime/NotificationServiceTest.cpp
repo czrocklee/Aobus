@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/NotificationService.h>
@@ -124,6 +124,38 @@ namespace ao::rt::test
     REQUIRE(entry.content.optProgress);
     CHECK(entry.content.optProgress->fraction == Catch::Approx{0.5});
     CHECK(entry.content.optProgress->label == "Halfway");
+  }
+
+  TEST_CASE("NotificationService - updateMessage stores message and publishes update", "[runtime][unit][notification]")
+  {
+    auto service = NotificationService{};
+    auto const id = service.post(NotificationSeverity::Warning, "old message");
+
+    auto updatedId = kInvalidNotificationId;
+    auto sub1 = service.onUpdated([&](auto incomingId) { updatedId = incomingId; });
+
+    bool changedFired = false;
+    auto sub2 = service.onChanged([&] { changedFired = true; });
+
+    CHECK(service.updateMessage(id, "new message"));
+
+    auto const feed = service.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(updatedId == id);
+    CHECK(changedFired);
+    CHECK(feed.entries.front().message == "new message");
+  }
+
+  TEST_CASE("NotificationService - updateMessage reports missing notification", "[runtime][unit][notification]")
+  {
+    auto service = NotificationService{};
+
+    std::int32_t updatedCount = 0;
+    auto sub = service.onUpdated([&](auto const&) { ++updatedCount; });
+
+    CHECK_FALSE(service.updateMessage(NotificationId{999}, "missing"));
+    CHECK(updatedCount == 0);
+    CHECK(service.feed().entries.empty());
   }
 
   TEST_CASE("NotificationService - clearProgress publishes only when progress exists", "[runtime][unit][notification]")

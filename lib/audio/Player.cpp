@@ -117,6 +117,7 @@ namespace ao::audio
     QualityResult qualityResult;
     std::function<void()> onTrackEnded;
     std::function<void(Engine::TrackAdvanced const&)> onTrackAdvanced;
+    std::function<void(Engine::PlaybackFailure const&)> onPlaybackFailure;
     std::function<void()> onStateChanged;
     std::function<void(std::vector<IBackendProvider::Status> const&)> onOutputDevicesChanged;
     std::function<void(Quality, bool)> onQualityChanged;
@@ -369,6 +370,20 @@ namespace ao::audio
                                });
       });
 
+    _implPtr->enginePtr->setOnPlaybackFailure(
+      [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor](Engine::PlaybackFailure const& failure)
+      {
+        Impl::dispatchInternal(executor,
+                               gatePtr,
+                               [this, failure]
+                               {
+                                 if (auto callback = _implPtr->onPlaybackFailure; callback)
+                                 {
+                                   callback(failure);
+                                 }
+                               });
+      });
+
     _implPtr->enginePtr->setOnStateChanged([this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor]
                                            { _implPtr->dispatchOutward(&Impl::onStateChanged); });
 
@@ -391,6 +406,11 @@ namespace ao::audio
   void Player::setOnTrackAdvanced(std::function<void(Engine::TrackAdvanced const&)> callback)
   {
     _implPtr->onTrackAdvanced = std::move(callback);
+  }
+
+  void Player::setOnPlaybackFailure(std::function<void(Engine::PlaybackFailure const&)> callback)
+  {
+    _implPtr->onPlaybackFailure = std::move(callback);
   }
 
   void Player::setOnStateChanged(std::function<void()> callback)

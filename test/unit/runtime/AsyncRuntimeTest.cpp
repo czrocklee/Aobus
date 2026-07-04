@@ -14,7 +14,9 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <memory>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -209,5 +211,53 @@ namespace ao::rt::test
     REQUIRE(order.size() == 1 + 1 + 16);
     CHECK(order[1] == 2);
     CHECK(order.back() == 102);
+  }
+
+  TEST_CASE("Signal - self-unsubscribe keeps the active handler alive", "[runtime][unit][async][signal]")
+  {
+    auto signal = Signal<std::int32_t>{};
+    auto order = std::vector<std::int32_t>{};
+    auto selfSubscription = Subscription{};
+
+    selfSubscription = signal.connect(
+      [&](std::int32_t value)
+      {
+        order.push_back(value);
+        selfSubscription.reset();
+        order.push_back(-value);
+      });
+
+    auto otherSubscription = signal.connect([&](std::int32_t value) { order.push_back(100 + value); });
+
+    signal.emit(1);
+    signal.emit(2);
+
+    CHECK(order == std::vector<std::int32_t>{1, -1, 101, 102});
+  }
+
+  TEST_CASE("Signal - throwing handler does not pin disconnected slots", "[runtime][unit][async][signal]")
+  {
+    auto signal = Signal<std::int32_t>{};
+    auto selfSubscription = Subscription{};
+    auto tokenPtr = std::make_shared<std::int32_t>(1);
+    auto weakTokenPtr = std::weak_ptr<std::int32_t>{tokenPtr};
+
+    selfSubscription = signal.connect(
+      [&, tokenPtr = std::move(tokenPtr)](std::int32_t)
+      {
+        [[maybe_unused]] auto const& retainedTokenPtr = tokenPtr;
+        selfSubscription.reset();
+        throwException<Exception>("boom");
+      });
+
+    CHECK_THROWS_AS(signal.emit(1), Exception);
+    CHECK(weakTokenPtr.expired());
+
+    std::int32_t calls = 0;
+    auto nextSubscription = signal.connect([&](std::int32_t) { ++calls; });
+
+    signal.emit(2);
+
+    CHECK(calls == 1);
   }
 } // namespace ao::rt::test

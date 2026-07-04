@@ -24,6 +24,26 @@
 
 namespace ao::audio::test
 {
+  namespace
+  {
+    std::future<Engine::PlaybackFailure> captureNextFailure(Engine& engine)
+    {
+      auto promisePtr = std::make_shared<std::promise<Engine::PlaybackFailure>>();
+      auto future = promisePtr->get_future();
+
+      engine.setOnPlaybackFailure([promisePtr](Engine::PlaybackFailure const& failure)
+                                  { promisePtr->set_value(failure); });
+
+      return future;
+    }
+
+    Engine::PlaybackFailure requireFailure(std::future<Engine::PlaybackFailure>& future)
+    {
+      REQUIRE(future.wait_for(std::chrono::seconds{15}) == std::future_status::ready);
+      return future.get();
+    }
+  } // namespace
+
   TEST_CASE("Engine - play reports decoder and backend setup failures", "[audio][unit][engine][error]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
@@ -36,8 +56,18 @@ namespace ao::audio::test
     {
       auto engine = Engine{std::make_unique<CapturingBackend>(), device};
       auto const desc = PlaybackInput{.filePath = "song.txt"};
+      auto failureFuture = captureNextFailure(engine);
 
-      engine.play(makePlaybackItem(desc));
+      auto const item = makePlaybackItem(desc);
+      engine.play(item);
+
+      auto const failure = requireFailure(failureFuture);
+      CHECK(failure.kind == Engine::PlaybackFailureKind::TrackOpen);
+      CHECK(failure.itemId == item.id);
+      CHECK(failure.input.filePath == desc.filePath);
+      CHECK(failure.generation > 0);
+      CHECK(failure.recoverable);
+      CHECK(failure.error.message.find("Unsupported audio file extension") != std::string::npos);
 
       CHECK(engine.status().transport == Transport::Error);
       CHECK(engine.status().statusText.find("Unsupported audio file extension") != std::string::npos);
@@ -56,8 +86,18 @@ namespace ao::audio::test
 
       auto engine = Engine{std::make_unique<CapturingBackend>(), device, factory};
       auto const desc = PlaybackInput{.filePath = "song.flac"};
+      auto failureFuture = captureNextFailure(engine);
 
-      engine.play(makePlaybackItem(desc));
+      auto const item = makePlaybackItem(desc);
+      engine.play(item);
+
+      auto const failure = requireFailure(failureFuture);
+      CHECK(failure.kind == Engine::PlaybackFailureKind::TrackOpen);
+      CHECK(failure.itemId == item.id);
+      CHECK(failure.input.filePath == desc.filePath);
+      CHECK(failure.generation > 0);
+      CHECK(failure.recoverable);
+      CHECK(failure.error.message == "open failed");
 
       CHECK(engine.status().transport == Transport::Error);
       CHECK(engine.status().statusText == "open failed");
@@ -83,8 +123,18 @@ namespace ao::audio::test
 
       auto engine = Engine{std::move(backendPtr), device, factory};
       auto const desc = PlaybackInput{.filePath = "song.flac"};
+      auto failureFuture = captureNextFailure(engine);
 
-      engine.play(makePlaybackItem(desc));
+      auto const item = makePlaybackItem(desc);
+      engine.play(item);
+
+      auto const failure = requireFailure(failureFuture);
+      CHECK(failure.kind == Engine::PlaybackFailureKind::RouteActivation);
+      CHECK(failure.itemId == item.id);
+      CHECK(failure.input.filePath == desc.filePath);
+      CHECK(failure.generation > 0);
+      CHECK_FALSE(failure.recoverable);
+      CHECK(failure.error.message == "hw init failed");
 
       CHECK(engine.status().transport == Transport::Error);
       CHECK(engine.status().statusText == "hw init failed");
@@ -116,20 +166,59 @@ namespace ao::audio::test
 
     auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = PlaybackInput{.filePath = "fail.flac"};
+    auto failureFuture = captureNextFailure(engine);
 
     auto errorPromise = std::promise<void>{};
     auto errorFuture = errorPromise.get_future();
     engine.setOnTrackEnded([&errorPromise] { errorPromise.set_value(); });
 
-    engine.play(makePlaybackItem(desc));
+    auto const item = makePlaybackItem(desc);
+    engine.play(item);
 
     // The StreamingSource decode loop runs in a background thread.
     // It should hit the error and call handleSourceError, which now
     // fires onTrackEnded so we can synchronize without polling.
     CHECK(errorFuture.wait_for(std::chrono::seconds{15}) == std::future_status::ready);
 
+    auto const failure = requireFailure(failureFuture);
+    CHECK(failure.kind == Engine::PlaybackFailureKind::Decode);
+    CHECK(failure.itemId == item.id);
+    CHECK(failure.input.filePath == desc.filePath);
+    CHECK(failure.generation > 0);
+    CHECK(failure.recoverable);
+    CHECK(failure.error.message == "decode failed");
+
     auto const snap = engine.status();
     CHECK(snap.transport == Transport::Error);
     CHECK(snap.statusText == "decode failed");
+  }
+
+  TEST_CASE("Engine - backend runtime error reports device failure", "[audio][unit][engine][error]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto* backend = backendPtr.get();
+    auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
+    auto const desc = PlaybackInput{.filePath = "song.flac"};
+    auto failureFuture = captureNextFailure(engine);
+
+    auto const item = makePlaybackItem(desc);
+    engine.play(item);
+    REQUIRE(backend->target() != nullptr);
+
+    backend->fireBackendError("device disappeared");
+
+    auto const failure = requireFailure(failureFuture);
+    CHECK(failure.kind == Engine::PlaybackFailureKind::DeviceLost);
+    CHECK(failure.itemId == item.id);
+    CHECK(failure.input.filePath == desc.filePath);
+    CHECK(failure.generation > 0);
+    CHECK_FALSE(failure.recoverable);
+    CHECK(failure.error.code == Error::Code::IoError);
+    CHECK(failure.error.message == "device disappeared");
+
+    auto const snap = engine.status();
+    CHECK(snap.transport == Transport::Error);
+    CHECK(snap.statusText == "device disappeared");
   }
 } // namespace ao::audio::test

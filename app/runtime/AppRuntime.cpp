@@ -28,7 +28,10 @@ namespace ao::rt
 
     Impl(AppRuntime& runtime, std::unique_ptr<ConfigStore> workspaceConfigPtr)
       : viewService{runtime.async().callbackExecutor(), runtime.musicLibrary(), runtime.sources()}
-      , playbackService{runtime.async().callbackExecutor(), viewService, runtime.musicLibrary()}
+      , playbackService{runtime.async().callbackExecutor(),
+                        viewService,
+                        runtime.musicLibrary(),
+                        runtime.notifications()}
       , workspaceService{viewService, playbackService, runtime.library().changes(), runtime.musicLibrary()}
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
     {

@@ -7,6 +7,7 @@
 #include <ao/async/Runtime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -56,17 +57,19 @@ namespace ao::rt::test
       ListSourceStore sources;
       ViewService views;
       ConfigStore config;
+      NotificationService notifications;
       PlaybackService playback;
       WorkspaceService workspace;
 
       Env()
-        : runtime{executor}
+        : lib{}
+        , runtime{executor}
         , changes{}
         , writer{lib.library(), changes}
         , sources{lib.library(), changes}
         , views{executor, lib.library(), sources}
         , config{lib.library().rootPath() / "config.json"}
-        , playback{executor, views, lib.library()}
+        , playback{executor, views, lib.library(), notifications}
         , workspace{views, playback, changes, lib.library()}
       {
       }

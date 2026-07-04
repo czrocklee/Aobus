@@ -2,7 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
+#include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
@@ -15,6 +20,7 @@
 #include <optional>
 #include <random>
 #include <ranges>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -25,14 +31,32 @@ namespace ao::uimodel
   {
     constexpr auto kRestartThreshold = std::chrono::seconds{3};
 
-    bool isTerminalTrackTransport(audio::Transport transport) noexcept
-    {
-      return transport == audio::Transport::Idle || transport == audio::Transport::Error;
-    }
-  }
+    constexpr std::size_t kMaxConsecutivePlaybackFailures = 3;
 
-  PlaybackQueueModel::PlaybackQueueModel(rt::PlaybackService& playback)
-    : _playback{playback}
+    bool isSkipEligible(rt::PlaybackFailureKind kind) noexcept
+    {
+      return kind == rt::PlaybackFailureKind::TrackOpen || kind == rt::PlaybackFailureKind::Decode;
+    }
+
+    bool canContinueAfterPlayFailure(Error const& error) noexcept
+    {
+      return error.code == Error::Code::NotFound;
+    }
+
+    std::string skippedTracksMessage(std::size_t count)
+    {
+      return count == 1 ? std::string{"Skipped 1 unplayable track"}
+                        : "Skipped " + std::to_string(count) + " unplayable tracks";
+    }
+
+    std::string playbackStoppedMessage()
+    {
+      return "Playback stopped after " + std::to_string(kMaxConsecutivePlaybackFailures) + " unplayable tracks";
+    }
+  } // namespace
+
+  PlaybackQueueModel::PlaybackQueueModel(rt::PlaybackService& playback, rt::NotificationService& notifications)
+    : _playback{playback}, _notifications{notifications}
   {
   }
 
@@ -70,6 +94,9 @@ namespace ao::uimodel
       .optPendingNextIndex = std::nullopt,
       .sourceListId = sourceListId,
     });
+    _skipNotificationId = rt::kInvalidNotificationId;
+    _skippedFailureCount = 0;
+    _consecutivePlaybackFailures = 0;
 
     subscribeEvents();
     prepareNext();
@@ -139,6 +166,12 @@ namespace ao::uimodel
 
   void PlaybackQueueModel::next()
   {
+    if (!_queueStatePtr)
+    {
+      return;
+    }
+
+    _consecutivePlaybackFailures = 0;
     advanceToNext();
   }
 
@@ -149,13 +182,23 @@ namespace ao::uimodel
       return;
     }
 
+    _consecutivePlaybackFailures = 0;
     auto const& state = _playback.state();
 
     // If we are more than 3 seconds into the song, just restart it
     if (state.elapsed > kRestartThreshold)
     {
-      if (playIndex(_queueStatePtr->currentIndex))
+      auto const played = playIndex(_queueStatePtr->currentIndex);
+
+      if (played)
       {
+        return;
+      }
+
+      if (!canContinueAfterPlayFailure(played.error()))
+      {
+        clear();
+        _playback.stop();
         return;
       }
     }
@@ -169,8 +212,17 @@ namespace ao::uimodel
       {
         std::ignore = trackId;
 
-        if (playIndex(static_cast<std::size_t>(idx)))
+        auto const played = playIndex(static_cast<std::size_t>(idx));
+
+        if (played)
         {
+          return;
+        }
+
+        if (!canContinueAfterPlayFailure(played.error()))
+        {
+          clear();
+          _playback.stop();
           return;
         }
       }
@@ -181,8 +233,17 @@ namespace ao::uimodel
       {
         std::ignore = trackId;
 
-        if (playIndex(static_cast<std::size_t>(idx)))
+        auto const played = playIndex(static_cast<std::size_t>(idx));
+
+        if (played)
         {
+          return;
+        }
+
+        if (!canContinueAfterPlayFailure(played.error()))
+        {
+          clear();
+          _playback.stop();
           return;
         }
       }
@@ -245,6 +306,9 @@ namespace ao::uimodel
   {
     _playback.clearPreparedNext();
     _queueStatePtr.reset();
+    _skipNotificationId = rt::kInvalidNotificationId;
+    _skippedFailureCount = 0;
+    _consecutivePlaybackFailures = 0;
     unsubscribeEvents();
   }
 
@@ -298,25 +362,44 @@ namespace ao::uimodel
     return optNextIndex;
   }
 
-  bool PlaybackQueueModel::playIndex(std::size_t index)
+  Result<> PlaybackQueueModel::playIndex(std::size_t index)
   {
     if (!_queueStatePtr || index >= _queueStatePtr->trackIds.size())
     {
-      return false;
+      return makeError(Error::Code::NotFound, "queue index not found");
     }
 
     _ignoreNowPlayingChange = true;
-    auto const played = _playback.playTrack(_queueStatePtr->trackIds[index], _queueStatePtr->sourceListId);
+    auto played = _playback.playTrack(_queueStatePtr->trackIds[index], _queueStatePtr->sourceListId);
     _ignoreNowPlayingChange = false;
 
     if (!played)
     {
-      return false;
+      return played;
     }
 
     _queueStatePtr->currentIndex = index;
     _queueStatePtr->optPendingNextIndex.reset();
     prepareNext();
+    return {};
+  }
+
+  bool PlaybackQueueModel::tryAdvanceToIndex(std::size_t index)
+  {
+    auto const played = playIndex(index);
+
+    if (played)
+    {
+      return true;
+    }
+
+    if (canContinueAfterPlayFailure(played.error()))
+    {
+      return false;
+    }
+
+    clear();
+    _playback.stop();
     return true;
   }
 
@@ -360,6 +443,7 @@ namespace ao::uimodel
     {
       _queueStatePtr->currentIndex = *_queueStatePtr->optPendingNextIndex;
       _queueStatePtr->optPendingNextIndex.reset();
+      _consecutivePlaybackFailures = 0;
       prepareNext();
       return;
     }
@@ -373,6 +457,7 @@ namespace ao::uimodel
 
     _queueStatePtr->currentIndex = static_cast<std::size_t>(std::distance(_queueStatePtr->trackIds.begin(), it));
     _queueStatePtr->optPendingNextIndex.reset();
+    _consecutivePlaybackFailures = 0;
     prepareNext();
   }
 
@@ -387,7 +472,7 @@ namespace ao::uimodel
 
     if (state.repeatMode == rt::RepeatMode::One)
     {
-      if (playIndex(_queueStatePtr->currentIndex))
+      if (tryAdvanceToIndex(_queueStatePtr->currentIndex))
       {
         return;
       }
@@ -398,7 +483,7 @@ namespace ao::uimodel
       auto const nextIndex = *_queueStatePtr->optPendingNextIndex;
       _queueStatePtr->optPendingNextIndex.reset();
 
-      if (playIndex(nextIndex))
+      if (tryAdvanceToIndex(nextIndex))
       {
         return;
       }
@@ -406,9 +491,12 @@ namespace ao::uimodel
 
     if (state.shuffleMode == rt::ShuffleMode::On && _queueStatePtr->trackIds.size() > 1)
     {
-      if (auto const optNextIndex = peekNextIndex(); optNextIndex && playIndex(*optNextIndex))
+      if (auto const optNextIndex = peekNextIndex(); optNextIndex)
       {
-        return;
+        if (tryAdvanceToIndex(*optNextIndex))
+        {
+          return;
+        }
       }
     }
 
@@ -418,7 +506,7 @@ namespace ao::uimodel
     {
       std::ignore = trackId;
 
-      if (playIndex(static_cast<std::size_t>(idx)))
+      if (tryAdvanceToIndex(static_cast<std::size_t>(idx)))
       {
         return;
       }
@@ -430,7 +518,7 @@ namespace ao::uimodel
       {
         std::ignore = trackId;
 
-        if (playIndex(static_cast<std::size_t>(idx)))
+        if (tryAdvanceToIndex(static_cast<std::size_t>(idx)))
         {
           return;
         }
@@ -441,18 +529,82 @@ namespace ao::uimodel
     _playback.stop();
   }
 
+  void PlaybackQueueModel::handlePlaybackFailure(rt::PlaybackFailure const& failure)
+  {
+    if (!_queueStatePtr)
+    {
+      return;
+    }
+
+    if (failure.sourceListId != _queueStatePtr->sourceListId)
+    {
+      return;
+    }
+
+    if (_queueStatePtr->currentIndex >= _queueStatePtr->trackIds.size() ||
+        _queueStatePtr->trackIds[_queueStatePtr->currentIndex] != failure.trackId)
+    {
+      return;
+    }
+
+    if (!isSkipEligible(failure.kind))
+    {
+      clear();
+      _playback.stop();
+      return;
+    }
+
+    ++_consecutivePlaybackFailures;
+
+    if (_consecutivePlaybackFailures >= kMaxConsecutivePlaybackFailures)
+    {
+      _notifications.post(rt::NotificationSeverity::Error, playbackStoppedMessage(), true);
+      clear();
+      _playback.stop();
+      return;
+    }
+
+    ++_skippedFailureCount;
+    auto const message = skippedTracksMessage(_skippedFailureCount);
+
+    if (_skipNotificationId == rt::kInvalidNotificationId)
+    {
+      _skipNotificationId = _notifications.post(rt::NotificationRequest{
+        .severity = rt::NotificationSeverity::Warning,
+        .message = message,
+        .content = rt::NotificationContentState{.title = "Playback queue", .iconName = "media-skip-forward-symbolic"},
+      });
+    }
+    else
+    {
+      if (!_notifications.updateMessage(_skipNotificationId, message))
+      {
+        _skipNotificationId = _notifications.post(rt::NotificationRequest{
+          .severity = rt::NotificationSeverity::Warning,
+          .message = message,
+          .content = rt::NotificationContentState{.title = "Playback queue", .iconName = "media-skip-forward-symbolic"},
+        });
+      }
+    }
+
+    advanceToNext();
+  }
+
   void PlaybackQueueModel::subscribeEvents()
   {
     _idleSub = _playback.onIdle(
       [this]
       {
-        if (isTerminalTrackTransport(_playback.state().transport))
+        if (_playback.state().transport == audio::Transport::Idle)
         {
+          _consecutivePlaybackFailures = 0;
           advanceToNext();
         }
       });
     _nowPlayingSub = _playback.onNowPlayingChanged([this](rt::PlaybackService::NowPlayingChanged const& event)
                                                    { commitNowPlaying(event.trackId, event.sourceListId); });
+    _failureSub =
+      _playback.onPlaybackFailure([this](rt::PlaybackFailure const& failure) { handlePlaybackFailure(failure); });
     _outputDeviceChangedSub = _playback.onOutputDeviceChanged([this](auto const&) { prepareNext(); });
     _seekSub = _playback.onSeekUpdate(
       [this](rt::PlaybackService::SeekUpdate const& event)
@@ -469,6 +621,7 @@ namespace ao::uimodel
   {
     _idleSub.reset();
     _nowPlayingSub.reset();
+    _failureSub.reset();
     _outputDeviceChangedSub.reset();
     _seekSub.reset();
     _stoppedSub.reset();

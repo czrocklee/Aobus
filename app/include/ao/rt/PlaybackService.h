@@ -4,8 +4,10 @@
 #pragma once
 
 #include "CorePrimitives.h"
+#include "PlaybackFailure.h"
 #include "PlaybackState.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/PlaybackInput.h>
 
@@ -32,6 +34,7 @@ namespace ao::audio
 
 namespace ao::rt
 {
+  class NotificationService;
   class ViewService;
 
   class PlaybackService final
@@ -86,7 +89,10 @@ namespace ao::rt
       std::string artist{};
     };
 
-    PlaybackService(async::IExecutor& executor, ViewService& views, library::MusicLibrary& library);
+    PlaybackService(async::IExecutor& executor,
+                    ViewService& views,
+                    library::MusicLibrary& library,
+                    NotificationService& notifications);
     ~PlaybackService();
 
     PlaybackService(PlaybackService const&) = delete;
@@ -122,14 +128,16 @@ namespace ao::rt
     Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler);
     Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
     Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);
+    Subscription onPlaybackFailure(std::move_only_function<void(PlaybackFailure const&)> handler);
 
-    bool playTrack(TrackId trackId, ListId sourceListId);
+    Result<> playTrack(TrackId trackId, ListId sourceListId);
     TrackId playSelectionInView(ViewId viewId);
 
     // Lower-level playback entry point: start a fully-resolved request.
     // playTrack() resolves a TrackId via the library and forwards here.
-    // Returns false when playback is rejected before the engine starts.
-    bool play(PlaybackRequest const& request, ListId sourceListId);
+    // Returns a failure when the track cannot be resolved or playback is
+    // rejected before the engine starts.
+    Result<> play(PlaybackRequest const& request, ListId sourceListId);
     bool prepareNext(PlaybackRequest const& request, ListId sourceListId);
     bool prepareNext(TrackId trackId, ListId sourceListId);
     void clearPreparedNext();

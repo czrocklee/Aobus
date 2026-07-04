@@ -5,7 +5,9 @@
 #include "test/unit/audio/AudioFixtureUtils.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/IRenderTarget.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewService.h>
@@ -20,12 +22,41 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::uimodel::test
 {
   using namespace ao::rt::test;
   using namespace ao::rt;
+
+  namespace
+  {
+    std::size_t notificationCount(NotificationService const& notifications,
+                                  NotificationSeverity severity,
+                                  std::string_view messageFragment)
+    {
+      std::size_t count = 0;
+
+      for (auto const& entry : notifications.feed().entries)
+      {
+        if (entry.severity == severity && entry.message.find(messageFragment) != std::string::npos)
+        {
+          ++count;
+        }
+      }
+
+      return count;
+    }
+
+    bool hasNotification(NotificationService const& notifications,
+                         NotificationSeverity severity,
+                         std::string_view messageFragment)
+    {
+      return notificationCount(notifications, severity, messageFragment) != 0;
+    }
+  } // namespace
 
   TEST_CASE("PlaybackQueueModel - basic controls", "[uimodel][unit][playback]")
   {
@@ -34,16 +65,18 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
+    auto notificationService = NotificationService{};
 
-    auto playbackService = PlaybackService{executor, viewService, testLib.library()};
+    auto playbackService = PlaybackService{executor, viewService, testLib.library(), notificationService};
     addReadyAudioProvider(playbackService);
 
-    auto const track1 = testLib.addTrack({.title = "Track 1"});
-    auto const track2 = testLib.addTrack({.title = "Track 2"});
-    auto const track3 = testLib.addTrack({.title = "Track 3"});
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const track1 = testLib.addTrack({.title = "Track 1", .uri = fixturePath});
+    auto const track2 = testLib.addTrack({.title = "Track 2", .uri = fixturePath});
+    auto const track3 = testLib.addTrack({.title = "Track 3", .uri = fixturePath});
     auto const missingTrack = TrackId{999};
 
-    auto queueModel = PlaybackQueueModel{playbackService};
+    auto queueModel = PlaybackQueueModel{playbackService, notificationService};
 
     SECTION("initial state is inactive")
     {
@@ -267,7 +300,7 @@ namespace ao::uimodel::test
     auto const currentTrack = fixture.testLib.addTrack({.title = "Current FLAC", .uri = flacPath});
     auto const nextTrack = fixture.testLib.addTrack({.title = "Fallback MP3", .uri = mp3Path});
 
-    auto queueModel = PlaybackQueueModel{fixture.playbackService};
+    auto queueModel = PlaybackQueueModel{fixture.playbackService, fixture.notificationService};
     REQUIRE(queueModel.playQueue({currentTrack, nextTrack}, currentTrack, ListId{10}));
     REQUIRE(queueModel.nowPlayingTrackId() == currentTrack);
     REQUIRE(fixture.renderTarget != nullptr);
@@ -293,5 +326,130 @@ namespace ao::uimodel::test
     CHECK(fixture.playbackService.state().trackId == nextTrack);
     CHECK(fixture.playbackService.state().trackTitle == "Fallback MP3");
     CHECK(queueModel.isActive());
+  }
+
+  TEST_CASE("PlaybackQueueModel - recoverable playback failure skips to next track",
+            "[uimodel][unit][playback][queue][error]")
+  {
+    auto fixture = PlaybackFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const brokenTrack = fixture.testLib.addTrack({.title = "Broken Track", .uri = "broken.txt"});
+    auto const playableTrack = fixture.testLib.addTrack({.title = "Playable Track", .uri = flacPath});
+
+    auto queueModel = PlaybackQueueModel{fixture.playbackService, fixture.notificationService};
+    REQUIRE(queueModel.playQueue({brokenTrack, playableTrack}, brokenTrack, ListId{10}));
+
+    REQUIRE(fixture.executor.drainUntil([&] { return queueModel.nowPlayingTrackId() == playableTrack; }));
+
+    CHECK(queueModel.isActive());
+    CHECK(fixture.playbackService.state().trackId == playableTrack);
+    CHECK(fixture.playbackService.state().trackTitle == "Playable Track");
+    CHECK(hasNotification(fixture.notificationService, NotificationSeverity::Warning, "Skipped 1 unplayable track"));
+    CHECK(notificationCount(fixture.notificationService, NotificationSeverity::Error, "Could not play") == 0);
+  }
+
+  TEST_CASE("PlaybackQueueModel - repeated recoverable playback failures stop the queue",
+            "[uimodel][unit][playback][queue][error]")
+  {
+    auto fixture = PlaybackFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const broken1 = fixture.testLib.addTrack({.title = "Broken 1", .uri = "broken1.txt"});
+    auto const broken2 = fixture.testLib.addTrack({.title = "Broken 2", .uri = "broken2.txt"});
+    auto const broken3 = fixture.testLib.addTrack({.title = "Broken 3", .uri = "broken3.txt"});
+
+    auto queueModel = PlaybackQueueModel{fixture.playbackService, fixture.notificationService};
+    REQUIRE(queueModel.playQueue({broken1, broken2, broken3}, broken1, ListId{10}));
+
+    REQUIRE(fixture.executor.drainUntil([&] { return !queueModel.isActive(); }));
+
+    CHECK_FALSE(queueModel.nowPlayingTrackId());
+    CHECK(fixture.playbackService.state().trackId == kInvalidTrackId);
+    CHECK(hasNotification(fixture.notificationService, NotificationSeverity::Warning, "Skipped 2 unplayable tracks"));
+    CHECK(notificationCount(fixture.notificationService, NotificationSeverity::Error, "Could not play") == 0);
+    CHECK(hasNotification(
+      fixture.notificationService, NotificationSeverity::Error, "Playback stopped after 3 unplayable tracks"));
+  }
+
+  TEST_CASE("PlaybackQueueModel - explicit skip resets recoverable failure streak",
+            "[uimodel][unit][playback][queue][error]")
+  {
+    auto fixture = PlaybackFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const broken1 = fixture.testLib.addTrack({.title = "Broken 1", .uri = "broken1.txt"});
+    auto const playable1 = fixture.testLib.addTrack({.title = "Playable 1", .uri = flacPath});
+    auto const broken2 = fixture.testLib.addTrack({.title = "Broken 2", .uri = "broken2.txt"});
+    auto const broken3 = fixture.testLib.addTrack({.title = "Broken 3", .uri = "broken3.txt"});
+    auto const playable2 = fixture.testLib.addTrack({.title = "Playable 2", .uri = flacPath});
+
+    auto queueModel = PlaybackQueueModel{fixture.playbackService, fixture.notificationService};
+    REQUIRE(queueModel.playQueue({broken1, playable1, broken2, broken3, playable2}, broken1, ListId{10}));
+
+    REQUIRE(fixture.executor.drainUntil([&] { return queueModel.nowPlayingTrackId() == playable1; }));
+
+    queueModel.next();
+
+    REQUIRE(fixture.executor.drainUntil([&] { return queueModel.nowPlayingTrackId() == playable2; }));
+
+    CHECK(queueModel.isActive());
+    CHECK_FALSE(hasNotification(
+      fixture.notificationService, NotificationSeverity::Error, "Playback stopped after 3 unplayable tracks"));
+  }
+
+  TEST_CASE("PlaybackQueueModel - global synchronous playback failure stops without scanning queue",
+            "[uimodel][unit][playback][queue][error]")
+  {
+    auto fixture = PlaybackFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const track1 = fixture.testLib.addTrack({.title = "Track 1", .uri = flacPath});
+    auto const track2 = fixture.testLib.addTrack({.title = "Track 2", .uri = flacPath});
+    auto const track3 = fixture.testLib.addTrack({.title = "Track 3", .uri = flacPath});
+
+    auto queueModel = PlaybackQueueModel{fixture.playbackService, fixture.notificationService};
+    REQUIRE(queueModel.playQueue({track1, track2, track3}, track1, ListId{10}));
+
+    fixture.onDevicesChangedCb({});
+    fixture.executor.drain();
+    fixture.playbackService.setOutputDevice(
+      audio::BackendId{"mock_backend"}, audio::DeviceId{"missing_device"}, audio::ProfileId{audio::kProfileShared});
+    REQUIRE_FALSE(fixture.playbackService.state().ready);
+
+    queueModel.next();
+
+    CHECK_FALSE(queueModel.isActive());
+    CHECK(notificationCount(fixture.notificationService, NotificationSeverity::Error, "Could not start playback") == 1);
+  }
+
+  TEST_CASE("PlaybackQueueModel - device playback failure stops the queue", "[uimodel][unit][playback][queue][error]")
+  {
+    auto fixture = PlaybackFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const currentTrack = fixture.testLib.addTrack({.title = "Current Track", .uri = flacPath});
+    auto const nextTrack = fixture.testLib.addTrack({.title = "Next Track", .uri = flacPath});
+
+    auto queueModel = PlaybackQueueModel{fixture.playbackService, fixture.notificationService};
+    REQUIRE(queueModel.playQueue({currentTrack, nextTrack}, currentTrack, ListId{10}));
+    REQUIRE(fixture.renderTarget != nullptr);
+
+    fixture.renderTarget->onBackendError("device lost");
+
+    REQUIRE(fixture.executor.drainUntil([&] { return !queueModel.isActive(); }));
+
+    CHECK_FALSE(queueModel.nowPlayingTrackId());
+    CHECK(fixture.playbackService.state().trackId == kInvalidTrackId);
+    CHECK(hasNotification(fixture.notificationService, NotificationSeverity::Error, "Playback device failed"));
   }
 } // namespace ao::uimodel::test

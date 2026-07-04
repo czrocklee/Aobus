@@ -40,7 +40,7 @@ namespace ao::gtk::test
     auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
 
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
-    auto queueModel = uimodel::PlaybackQueueModel{runtime.playback()};
+    auto queueModel = uimodel::PlaybackQueueModel{runtime.playback(), runtime.notifications()};
 
     auto host = TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, layoutStore};
 

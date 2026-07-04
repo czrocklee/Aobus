@@ -12,6 +12,7 @@
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -155,6 +156,7 @@ namespace ao::rt::test
     LibraryChanges changes;
     ListSourceStore listSourceStore{testLib.library(), changes};
     ViewService viewService{executor, testLib.library(), listSourceStore};
+    NotificationService notificationService;
 
     std::shared_ptr<audio::test::SpyBackend<>> spyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();
     fakeit::Mock<audio::IBackendProvider> mockProvider;
@@ -164,6 +166,6 @@ namespace ao::rt::test
     audio::IBackendProvider::OnGraphChangedCallback onGraphChangedCb;
     audio::IRenderTarget* renderTarget = nullptr;
 
-    PlaybackService playbackService{executor, viewService, testLib.library()};
+    PlaybackService playbackService{executor, viewService, testLib.library(), notificationService};
   };
 } // namespace ao::rt::test

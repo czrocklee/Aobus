@@ -200,6 +200,7 @@ namespace ao::audio
     Status status;
     std::function<void()> onTrackEnded;
     OnTrackAdvanced onTrackAdvanced;
+    OnPlaybackFailure onPlaybackFailure;
     std::function<void()> onStateChanged;
     OnRouteChanged onRouteChanged;
     detail::RouteTracker routeTracker;
@@ -839,6 +840,8 @@ namespace ao::audio
     Notifications handleBackendError(std::uint64_t generation, std::string_view message)
     {
       auto stateChanged = std::function<void()>{};
+      auto failureCallback = OnPlaybackFailure{};
+      auto optFailedItem = std::optional<PlaybackItem>{};
       bool shouldQuiesce = false;
       {
         auto const lock = std::scoped_lock{stateMutex};
@@ -848,10 +851,12 @@ namespace ao::audio
           return {};
         }
 
+        optFailedItem = optCurrentItem;
         retireRenderSession();
         resetPlaybackStatePreservingOutput();
         status.transport = Transport::Error;
         status.statusText = std::string{message};
+        failureCallback = onPlaybackFailure;
         stateChanged = onStateChanged;
         shouldQuiesce = true;
       }
@@ -867,6 +872,22 @@ namespace ao::audio
       }
 
       auto notifications = Notifications{};
+
+      if (optFailedItem)
+      {
+        appendPlaybackFailureNotification(
+          notifications,
+          std::move(failureCallback),
+          PlaybackFailure{
+            .kind = PlaybackFailureKind::DeviceLost,
+            .itemId = optFailedItem->id,
+            .input = optFailedItem->input,
+            .generation = generation,
+            .error = Error{.code = Error::Code::IoError, .message = std::string{message}},
+            .recoverable = false,
+          });
+      }
+
       appendStateChangedNotification(notifications, std::move(stateChanged));
       return notifications;
     }
@@ -880,6 +901,8 @@ namespace ao::audio
 
       auto const message = error.message.empty() ? std::string{"PCM source failed"} : error.message;
       auto endedCallback = std::function<void()>{};
+      auto failureCallback = OnPlaybackFailure{};
+      auto optFailedItem = std::optional<PlaybackItem>{};
       auto stateChanged = std::function<void()>{};
 
       bool shouldQuiesce = false;
@@ -896,11 +919,13 @@ namespace ao::audio
           return {};
         }
 
+        optFailedItem = optCurrentItem;
         retireRenderSession();
         resetPlaybackStatePreservingOutput();
         status.transport = Transport::Error;
         status.statusText = message;
         endedCallback = onTrackEnded;
+        failureCallback = onPlaybackFailure;
         stateChanged = onStateChanged;
         shouldQuiesce = true;
       }
@@ -916,6 +941,28 @@ namespace ao::audio
       }
 
       auto notifications = Notifications{};
+
+      if (optFailedItem)
+      {
+        auto failureError = error;
+
+        if (failureError.message.empty())
+        {
+          failureError.message = message;
+        }
+
+        appendPlaybackFailureNotification(notifications,
+                                          std::move(failureCallback),
+                                          PlaybackFailure{
+                                            .kind = PlaybackFailureKind::Decode,
+                                            .itemId = optFailedItem->id,
+                                            .input = optFailedItem->input,
+                                            .generation = sourceGeneration,
+                                            .error = std::move(failureError),
+                                            .recoverable = true,
+                                          });
+      }
+
       appendStateChangedNotification(notifications, std::move(stateChanged));
 
       if (endedCallback)
@@ -942,6 +989,17 @@ namespace ao::audio
       if (callback)
       {
         notifications.emplace_back([callback = std::move(callback), event = std::move(event)] { callback(event); });
+      }
+    }
+
+    static void appendPlaybackFailureNotification(Notifications& notifications,
+                                                  OnPlaybackFailure callback,
+                                                  PlaybackFailure failure)
+    {
+      if (callback)
+      {
+        notifications.emplace_back([callback = std::move(callback), failure = std::move(failure)]
+                                   { callback(failure); });
       }
     }
 
@@ -1299,11 +1357,30 @@ namespace ao::audio
 
     if (!openedTrack)
     {
-      auto const lock = std::scoped_lock{stateMutex};
-      status.transport = Transport::Error;
-      status.statusText = openedTrack.error().message;
-      timeline.retireCursor();
-      optCurrentItem.reset();
+      auto notifications = Notifications{};
+      {
+        auto const lock = std::scoped_lock{stateMutex};
+        status.transport = Transport::Error;
+        status.statusText = openedTrack.error().message;
+        timeline.retireCursor();
+        optCurrentItem.reset();
+        appendPlaybackFailureNotification(notifications,
+                                          onPlaybackFailure,
+                                          PlaybackFailure{
+                                            .kind = PlaybackFailureKind::TrackOpen,
+                                            .itemId = item.id,
+                                            .input = item.input,
+                                            .generation = sourceGeneration,
+                                            .error = openedTrack.error(),
+                                            .recoverable = true,
+                                          });
+      }
+
+      if (!notifications.empty())
+      {
+        enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
+      }
+
       return;
     }
 
@@ -1325,15 +1402,32 @@ namespace ao::audio
       retireRenderSession();
       backendPtr->close();
       resetRenderSession();
+      auto notifications = Notifications{};
       {
         auto const lock = std::scoped_lock{stateMutex};
         optCurrentItem.reset();
         timeline.retireCursor();
         status.transport = Transport::Error;
         status.statusText = openResult.error().message;
+        appendPlaybackFailureNotification(notifications,
+                                          onPlaybackFailure,
+                                          PlaybackFailure{
+                                            .kind = PlaybackFailureKind::RouteActivation,
+                                            .itemId = item.id,
+                                            .input = item.input,
+                                            .generation = sourceGeneration,
+                                            .error = openResult.error(),
+                                            .recoverable = false,
+                                          });
       }
       timeline.clear();
       resetTransitionState();
+
+      if (!notifications.empty())
+      {
+        enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
+      }
+
       return;
     }
 
@@ -1656,6 +1750,12 @@ namespace ao::audio
   {
     auto const lock = std::scoped_lock{_implPtr->stateMutex};
     _implPtr->onTrackAdvanced = std::move(callback);
+  }
+
+  void Engine::setOnPlaybackFailure(OnPlaybackFailure callback)
+  {
+    auto const lock = std::scoped_lock{_implPtr->stateMutex};
+    _implPtr->onPlaybackFailure = std::move(callback);
   }
 
   void Engine::setOnRouteChanged(OnRouteChanged callback)

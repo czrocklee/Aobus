@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
@@ -13,9 +14,11 @@
 #include <ao/library/TrackStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
+#include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/rt/StorageResult.h>
 #include <ao/rt/ViewService.h>
 
 #include <algorithm>
@@ -23,6 +26,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -156,6 +160,71 @@ namespace ao::rt
                                        : std::string_view{status.statusText};
     }
 
+    PlaybackFailureKind toPlaybackFailureKind(audio::Engine::PlaybackFailureKind const kind) noexcept
+    {
+      switch (kind)
+      {
+        case audio::Engine::PlaybackFailureKind::TrackOpen: return PlaybackFailureKind::TrackOpen;
+        case audio::Engine::PlaybackFailureKind::Decode: return PlaybackFailureKind::Decode;
+        case audio::Engine::PlaybackFailureKind::RouteActivation: return PlaybackFailureKind::RouteActivation;
+        case audio::Engine::PlaybackFailureKind::DeviceLost: return PlaybackFailureKind::DeviceLost;
+      }
+
+      return PlaybackFailureKind::RouteActivation;
+    }
+
+    bool isOutputFailureKind(PlaybackFailureKind kind) noexcept
+    {
+      return kind == PlaybackFailureKind::RouteActivation || kind == PlaybackFailureKind::DeviceLost;
+    }
+
+    bool isTrackFailureKind(PlaybackFailureKind kind) noexcept
+    {
+      return kind == PlaybackFailureKind::TrackOpen || kind == PlaybackFailureKind::Decode;
+    }
+
+    bool shouldPostDefaultFailureNotification(PlaybackFailure const& failure, bool const hasFailureSubscriber) noexcept
+    {
+      return !hasFailureSubscriber || !isTrackFailureKind(failure.kind);
+    }
+
+    std::string playbackFailureReason(Error const& error)
+    {
+      return error.message.empty() ? std::string{"unknown error"} : error.message;
+    }
+
+    std::string playbackFailureTrackLabel(PlaybackFailure const& failure)
+    {
+      if (!failure.title.empty())
+      {
+        return failure.title;
+      }
+
+      if (failure.trackId != kInvalidTrackId)
+      {
+        return "track " + std::to_string(failure.trackId.raw());
+      }
+
+      return "playback";
+    }
+
+    std::string playbackFailureNotificationMessage(PlaybackFailure const& failure)
+    {
+      auto const reason = playbackFailureReason(failure.error);
+
+      switch (failure.kind)
+      {
+        case PlaybackFailureKind::TrackOpen:
+          return "Could not play " + playbackFailureTrackLabel(failure) + ": " + reason;
+        case PlaybackFailureKind::Decode:
+          return "Playback failed for " + playbackFailureTrackLabel(failure) + ": " + reason;
+        case PlaybackFailureKind::RouteActivation: return "Could not start playback: " + reason;
+        case PlaybackFailureKind::DeviceLost: return "Playback device failed: " + reason;
+      }
+
+      return "Playback failed: " + reason;
+    }
+
     void logOutputDeviceSelected(OutputDeviceSelection const& outputDevice)
     {
       APP_LOG_INFO("Audio output device selected: backend={} device={} profile={}",
@@ -203,17 +272,15 @@ namespace ao::rt
       }
     }
 
-    std::optional<PlaybackService::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary& library,
-                                                                            TrackId trackId)
+    Result<PlaybackService::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary& library, TrackId trackId)
     {
       auto const txn = library.readTransaction();
       auto reader = library.tracks().reader(txn);
-      auto const optView = storageValueOrNullopt(
-        reader.get(trackId, library::TrackStore::Reader::LoadMode::Both), "Failed to build playback request");
+      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
       if (!optView)
       {
-        return std::nullopt;
+        return makeError(Error::Code::NotFound, "track not found");
       }
 
       auto const& view = *optView;
@@ -271,6 +338,19 @@ namespace ao::rt
       audio::Engine::PlaybackItemId itemId;
     };
 
+    struct PlaybackFailureNotification final
+    {
+      PlaybackFailureKind kind = PlaybackFailureKind::TrackOpen;
+      TrackId trackId = kInvalidTrackId;
+      NotificationId notificationId = kInvalidNotificationId;
+    };
+
+    struct PlaybackRequestContext final
+    {
+      PlaybackService::PlaybackRequest request;
+      ListId sourceListId = kInvalidListId;
+    };
+
     Impl(Impl const&) = delete;
     Impl& operator=(Impl const&) = delete;
     Impl(Impl&&) = delete;
@@ -281,14 +361,17 @@ namespace ao::rt
     std::unique_ptr<audio::Player> playerPtr;
     ViewService& views;
     library::MusicLibrary& library;
+    NotificationService& notifications;
     TrackId currentTrackId = kInvalidTrackId;
     ListId currentSourceListId = kInvalidListId;
+    audio::Engine::PlaybackItemId currentPlaybackItemId;
     ShuffleMode shuffleMode = ShuffleMode::Off;
     RepeatMode repeatMode = RepeatMode::Off;
     std::string currentTrackTitle{};
     std::string currentTrackArtist{};
     std::chrono::milliseconds currentTrackDuration{0};
     std::string lastPlaybackError{};
+    std::optional<PlaybackFailureNotification> optLastPlaybackFailureNotification;
     std::vector<PreparedPlaybackRequest> preparedRequests;
     std::uint64_t nextPlaybackItemId = 1;
     Signal<> preparingSignal;
@@ -306,6 +389,7 @@ namespace ao::rt
     Signal<PlaybackService::SeekUpdate const&> seekUpdateSignal;
     Signal<PlaybackService::ShuffleModeChanged const&> shuffleModeChangedSignal;
     Signal<PlaybackService::RepeatModeChanged const&> repeatModeChangedSignal;
+    Signal<PlaybackFailure const&> playbackFailureSignal;
 
     // Facade affinity contract: every public mutator and state() must run on the
     // executor's owning thread. `state` is written only here (control commands)
@@ -413,10 +497,13 @@ namespace ao::rt
                     lastPlaybackError);
     }
 
-    void publishCurrentRequest(PlaybackService::PlaybackRequest const& request, ListId sourceListId)
+    void publishCurrentRequest(PlaybackService::PlaybackRequest const& request,
+                               ListId sourceListId,
+                               audio::Engine::PlaybackItemId itemId)
     {
       currentTrackId = request.trackId;
       currentSourceListId = sourceListId;
+      currentPlaybackItemId = itemId;
       currentTrackTitle = request.title;
       currentTrackArtist = request.artist;
       currentTrackDuration = request.input.duration;
@@ -459,6 +546,102 @@ namespace ao::rt
 
     void discardPreparedRequests() { preparedRequests.clear(); }
 
+    std::optional<PlaybackRequestContext> contextForPlaybackItem(audio::Engine::PlaybackItemId itemId) const
+    {
+      if (itemId == currentPlaybackItemId && currentTrackId != kInvalidTrackId)
+      {
+        return PlaybackRequestContext{
+          .request =
+            PlaybackService::PlaybackRequest{
+              .trackId = currentTrackId,
+              .input = audio::PlaybackInput{.duration = currentTrackDuration},
+              .title = currentTrackTitle,
+              .artist = currentTrackArtist,
+            },
+          .sourceListId = currentSourceListId,
+        };
+      }
+
+      auto const it = std::ranges::find_if(
+        preparedRequests, [&](PreparedPlaybackRequest const& request) { return request.itemId == itemId; });
+
+      if (it == preparedRequests.end())
+      {
+        return std::nullopt;
+      }
+
+      return PlaybackRequestContext{.request = it->request, .sourceListId = it->sourceListId};
+    }
+
+    void postOrUpdateFailureNotification(PlaybackFailure const& failure)
+    {
+      auto const message = playbackFailureNotificationMessage(failure);
+
+      if (optLastPlaybackFailureNotification && optLastPlaybackFailureNotification->kind == failure.kind &&
+          (isOutputFailureKind(failure.kind) || optLastPlaybackFailureNotification->trackId == failure.trackId) &&
+          notifications.updateMessage(optLastPlaybackFailureNotification->notificationId, message))
+      {
+        return;
+      }
+
+      auto const notificationId = notifications.post(NotificationRequest{
+        .severity = NotificationSeverity::Error,
+        .message = message,
+        .sticky = !failure.recoverable,
+        .content = NotificationContentState{.title = "Playback error", .iconName = "dialog-error-symbolic"},
+      });
+      optLastPlaybackFailureNotification =
+        PlaybackFailureNotification{.kind = failure.kind, .trackId = failure.trackId, .notificationId = notificationId};
+    }
+
+    void publishPlaybackFailure(PlaybackFailure failure)
+    {
+      lastPlaybackError = playbackFailureReason(failure.error);
+      APP_LOG_ERROR("Playback failure kind={} track={} source_list={} recoverable={} reason={}",
+                    static_cast<std::uint32_t>(failure.kind),
+                    failure.trackId,
+                    failure.sourceListId,
+                    failure.recoverable,
+                    lastPlaybackError);
+
+      auto const hasFailureSubscriber = playbackFailureSignal.hasConnectedHandlers();
+      playbackFailureSignal.emit(failure);
+
+      if (shouldPostDefaultFailureNotification(failure, hasFailureSubscriber))
+      {
+        postOrUpdateFailureNotification(failure);
+      }
+    }
+
+    void handlePlaybackFailure(audio::Engine::PlaybackFailure const& failure)
+    {
+      refreshState();
+
+      auto translated = PlaybackFailure{
+        .kind = toPlaybackFailureKind(failure.kind),
+        .generation = failure.generation,
+        .error = failure.error,
+        .recoverable = failure.recoverable,
+      };
+
+      auto const optContext = contextForPlaybackItem(failure.itemId);
+
+      if (!optContext)
+      {
+        APP_LOG_WARN("Dropping stale playback failure kind={} item={} generation={} reason={}",
+                     static_cast<std::uint32_t>(translated.kind),
+                     failure.itemId.value,
+                     failure.generation,
+                     playbackFailureReason(translated.error));
+        return;
+      }
+
+      translated.trackId = optContext->request.trackId;
+      translated.sourceListId = optContext->sourceListId;
+      translated.title = optContext->request.title;
+      publishPlaybackFailure(std::move(translated));
+    }
+
     void clearPreparedNext()
     {
       if (auto const optDisarmedItemId = playerPtr->clearPreparedNext(); optDisarmedItemId)
@@ -471,7 +654,7 @@ namespace ao::rt
     {
       if (auto const optPrepared = takePreparedRequest(event.itemId); optPrepared)
       {
-        publishCurrentRequest(optPrepared->request, optPrepared->sourceListId);
+        publishCurrentRequest(optPrepared->request, optPrepared->sourceListId, optPrepared->itemId);
         refreshState();
         nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
           .trackId = optPrepared->request.trackId,
@@ -493,11 +676,15 @@ namespace ao::rt
       }
     }
 
-    explicit Impl(async::IExecutor& callbackExecutor, ViewService& viewService, library::MusicLibrary& musicLibrary)
+    explicit Impl(async::IExecutor& callbackExecutor,
+                  ViewService& viewService,
+                  library::MusicLibrary& musicLibrary,
+                  NotificationService& notificationService)
       : executor{callbackExecutor}
       , playerPtr{std::make_unique<audio::Player>(callbackExecutor)}
       , views{viewService}
       , library{musicLibrary}
+      , notifications{notificationService}
     {
       // Player marshals these callbacks onto the executor thread, so they run on
       // the same thread as the control commands below and can refresh state and
@@ -505,6 +692,9 @@ namespace ao::rt
       playerPtr->setOnTrackEnded([this] { handleTrackEnded(); });
 
       playerPtr->setOnTrackAdvanced([this](audio::Engine::TrackAdvanced const& event) { handleTrackAdvanced(event); });
+
+      playerPtr->setOnPlaybackFailure([this](audio::Engine::PlaybackFailure const& failure)
+                                      { handlePlaybackFailure(failure); });
 
       playerPtr->setOnStateChanged([this] { refreshState(); });
 
@@ -565,8 +755,11 @@ namespace ao::rt
     }
   };
 
-  PlaybackService::PlaybackService(async::IExecutor& executor, ViewService& views, library::MusicLibrary& library)
-    : _implPtr{std::make_unique<Impl>(executor, views, library)}
+  PlaybackService::PlaybackService(async::IExecutor& executor,
+                                   ViewService& views,
+                                   library::MusicLibrary& library,
+                                   NotificationService& notifications)
+    : _implPtr{std::make_unique<Impl>(executor, views, library, notifications)}
   {
   }
 
@@ -664,13 +857,19 @@ namespace ao::rt
     return _implPtr->repeatModeChangedSignal.connect(std::move(handler));
   }
 
+  Subscription PlaybackService::onPlaybackFailure(std::move_only_function<void(PlaybackFailure const&)> handler)
+  {
+    _implPtr->ensureOnExecutor();
+    return _implPtr->playbackFailureSignal.connect(std::move(handler));
+  }
+
   PlaybackState const& PlaybackService::state() const
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->state;
   }
 
-  bool PlaybackService::play(PlaybackRequest const& request, ListId const sourceListId)
+  Result<> PlaybackService::play(PlaybackRequest const& request, ListId const sourceListId)
   {
     auto& impl = *_implPtr;
     impl.ensureOnExecutor();
@@ -682,39 +881,49 @@ namespace ao::rt
     impl.clearPreparedNext();
     impl.preparingSignal.emit();
 
-    if (auto const result = impl.playerPtr->play(impl.makePlaybackItem(request.input)); !result)
+    auto item = impl.makePlaybackItem(request.input);
+
+    if (auto const result = impl.playerPtr->play(item); !result)
     {
       APP_LOG_WARN("Playback not started: {}", result.error().message);
       impl.refreshState();
-      return false;
+      impl.postOrUpdateFailureNotification(PlaybackFailure{
+        .kind = PlaybackFailureKind::RouteActivation,
+        .trackId = request.trackId,
+        .sourceListId = sourceListId,
+        .error = result.error(),
+        .recoverable = false,
+        .title = request.title,
+      });
+      return std::unexpected{result.error()};
     }
 
-    impl.publishCurrentRequest(request, sourceListId);
+    impl.publishCurrentRequest(request, sourceListId, item.id);
     impl.refreshState();
     impl.startedSignal.emit();
     impl.nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
       .trackId = request.trackId,
       .sourceListId = sourceListId,
     });
-    return true;
+    return {};
   }
 
-  bool PlaybackService::playTrack(TrackId const trackId, ListId const sourceListId)
+  Result<> PlaybackService::playTrack(TrackId const trackId, ListId const sourceListId)
   {
     try
     {
-      auto const optRequest = playbackRequestForTrack(_implPtr->library, trackId);
+      auto const requestResult = playbackRequestForTrack(_implPtr->library, trackId);
 
-      if (!optRequest)
+      if (!requestResult)
       {
-        return false;
+        return std::unexpected{requestResult.error()};
       }
 
-      return play(*optRequest, sourceListId);
+      return play(*requestResult, sourceListId);
     }
-    catch (std::exception const&)
+    catch (std::exception const& ex)
     {
-      return false;
+      return makeError(Error::Code::Generic, ex.what());
     }
   }
 
@@ -745,15 +954,15 @@ namespace ao::rt
 
     try
     {
-      auto const optRequest = playbackRequestForTrack(_implPtr->library, trackId);
+      auto const requestResult = playbackRequestForTrack(_implPtr->library, trackId);
 
-      if (!optRequest)
+      if (!requestResult)
       {
         _implPtr->clearPreparedNext();
         return false;
       }
 
-      return prepareNext(*optRequest, sourceListId);
+      return prepareNext(*requestResult, sourceListId);
     }
     catch (std::exception const&)
     {
@@ -810,6 +1019,7 @@ namespace ao::rt
     _implPtr->ensureOnExecutor();
     _implPtr->currentTrackId = {};
     _implPtr->currentSourceListId = {};
+    _implPtr->currentPlaybackItemId = {};
     _implPtr->currentTrackTitle.clear();
     _implPtr->currentTrackArtist.clear();
     _implPtr->currentTrackDuration = std::chrono::milliseconds{0};

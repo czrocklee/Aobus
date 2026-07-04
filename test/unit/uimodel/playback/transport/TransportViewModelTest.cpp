@@ -3,9 +3,11 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewService.h>
@@ -33,7 +35,8 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playback = PlaybackService{executor, viewService, testLib.library()};
+    auto notificationService = NotificationService{};
+    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
 
     SECTION("Play action - disabled when not ready")
     {
@@ -183,7 +186,8 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playback = PlaybackService{executor, viewService, testLib.library()};
+    auto notificationService = NotificationService{};
+    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
     addReadyAudioProvider(playback);
 
     bool playSelectionCalled = false;
@@ -270,10 +274,14 @@ namespace ao::uimodel::test
 
     SECTION("Next/Previous/Shuffle/CycleRepeat with queue")
     {
-      auto const firstTrackId = testLib.addTrack({.title = "Q Test 1", .artist = "Artist", .album = "Album"});
-      auto const secondTrackId = testLib.addTrack({.title = "Q Test 2", .artist = "Artist", .album = "Album"});
-      auto const thirdTrackId = testLib.addTrack({.title = "Q Test 3", .artist = "Artist", .album = "Album"});
-      auto queueModel = PlaybackQueueModel{playback};
+      auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+      auto const firstTrackId =
+        testLib.addTrack({.title = "Q Test 1", .artist = "Artist", .album = "Album", .uri = fixturePath});
+      auto const secondTrackId =
+        testLib.addTrack({.title = "Q Test 2", .artist = "Artist", .album = "Album", .uri = fixturePath});
+      auto const thirdTrackId =
+        testLib.addTrack({.title = "Q Test 3", .artist = "Artist", .album = "Album", .uri = fixturePath});
+      auto queueModel = PlaybackQueueModel{playback, notificationService};
 
       auto const trackIds = std::vector{firstTrackId, secondTrackId, thirdTrackId};
       REQUIRE(queueModel.playQueue(trackIds, firstTrackId, kInvalidListId));
@@ -354,10 +362,12 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playback = PlaybackService{executor, viewService, testLib.library()};
+    auto notificationService = NotificationService{};
+    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
     addReadyAudioProvider(playback);
 
     auto const trackId = testLib.addTrack({.title = "Sub Test", .artist = "Sub Artist", .album = "Sub Album"});
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
 
     auto log = ao::test::RenderLog<TransportViewState>{};
     auto vm = TransportViewModel{
@@ -365,11 +375,11 @@ namespace ao::uimodel::test
 
     auto const initialCount = log.states.size();
 
-    SECTION("onPreparing triggers refresh")
+    SECTION("playback callbacks trigger refresh")
     {
       auto desc = PlaybackService::PlaybackRequest{
         .trackId = trackId,
-        .input = audio::PlaybackInput{.duration = std::chrono::seconds{5}},
+        .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{5}},
         .title = "Sub Test",
         .artist = "Sub Artist",
       };
@@ -377,9 +387,9 @@ namespace ao::uimodel::test
 
       CHECK(log.states.size() > initialCount);
       CHECK(log.last().enabled == true);
-      CHECK(log.last().icon == TransportIcon::Play);
-      CHECK(log.last().tooltip == "Play");
-      CHECK(log.last().playing == false);
+      CHECK(log.last().icon == TransportIcon::Pause);
+      CHECK(log.last().tooltip == "Pause");
+      CHECK(log.last().playing == true);
       CHECK(playback.state().ready == true);
       CHECK(playback.state().trackId == trackId);
     }
@@ -392,7 +402,8 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playback = PlaybackService{executor, viewService, testLib.library()};
+    auto notificationService = NotificationService{};
+    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
     addReadyAudioProvider(playback);
 
     auto log = ao::test::RenderLog<TransportViewState>{};

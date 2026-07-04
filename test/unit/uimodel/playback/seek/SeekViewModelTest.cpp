@@ -3,8 +3,10 @@
 
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -13,8 +15,6 @@
 #include <ao/uimodel/playback/seek/SeekViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
-
-#include <functional>
 
 namespace ao::uimodel::test
 {
@@ -28,7 +28,8 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{};
     auto listSourceStore = ListSourceStore{testLib.library(), changes};
     auto viewService = ViewService{executor, testLib.library(), listSourceStore};
-    auto playback = PlaybackService{executor, viewService, testLib.library()};
+    auto notificationService = NotificationService{};
+    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
     addReadyAudioProvider(playback);
 
     auto log = ao::test::RenderLog<SeekViewState>{};
@@ -54,33 +55,36 @@ namespace ao::uimodel::test
     SECTION("seekPreview/Final")
     {
       auto const trackId = testLib.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
+      auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       auto const desc = PlaybackService::PlaybackRequest{
         .trackId = trackId,
-        .input = audio::PlaybackInput{.duration = std::chrono::seconds{5}},
+        .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{5}},
         .title = "Seek Test",
         .artist = "Artist",
       };
       REQUIRE(playback.play(desc, kInvalidListId));
+      auto const expectedDuration = playback.state().duration;
+      REQUIRE(expectedDuration > std::chrono::milliseconds{0});
 
       log.clear();
-      viewModel.seekPreview(std::chrono::seconds{1});
+      viewModel.seekPreview(std::chrono::milliseconds{250});
 
       REQUIRE(!log.empty());
-      CHECK(log.last().duration == std::chrono::seconds{5});
-      CHECK(log.last().elapsed == std::chrono::seconds{1});
-      CHECK(log.last().isPlaying == false);
+      CHECK(log.last().duration == expectedDuration);
+      CHECK(log.last().elapsed == std::chrono::milliseconds{250});
+      CHECK(log.last().isPlaying == true);
       CHECK(log.last().enabled == true);
       CHECK(log.last().immediateUpdate == false);
       CHECK(playback.state().elapsed == std::chrono::milliseconds{0});
 
-      viewModel.seekFinal(std::chrono::seconds{2});
+      viewModel.seekFinal(std::chrono::milliseconds{500});
 
-      CHECK(log.last().duration == std::chrono::seconds{5});
-      CHECK(log.last().elapsed == std::chrono::seconds{2});
-      CHECK(log.last().isPlaying == false);
+      CHECK(log.last().duration == expectedDuration);
+      CHECK(log.last().elapsed == std::chrono::milliseconds{500});
+      CHECK(log.last().isPlaying == true);
       CHECK(log.last().enabled == true);
       CHECK(log.last().immediateUpdate == true);
-      CHECK(playback.state().duration == std::chrono::seconds{5});
+      CHECK(playback.state().duration == expectedDuration);
     }
   }
 } // namespace ao::uimodel::test
