@@ -1,34 +1,43 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "detail/RenderPath.h"
+#include "detail/RenderTimeline.h"
 #include "detail/TrackSession.h"
+#include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
+#include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IRenderTarget.h>
 #include <ao/audio/ISource.h>
-#include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/detail/RouteTracker.h>
 
+#include <boost/lockfree/policies.hpp>
+#include <boost/lockfree/spsc_queue.hpp>
+
 #include <atomic>
+#include <cassert>
 #include <chrono>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <semaphore>
 #include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -44,6 +53,8 @@ namespace ao::audio
   struct Engine::Impl final
   {
     struct RenderSession;
+    using RenderTimeline = detail::RenderTimeline;
+    using TrackNode = RenderTimeline::Node;
     struct BackendErrorEvent;
     struct SourceErrorEvent;
     struct DrainCompleteEvent;
@@ -63,9 +74,29 @@ namespace ao::audio
       Error error;
     };
 
+    // Wait-free render-thread -> event-thread notification. Posted by the RT
+    // render callback at a gapless boundary (Spliced) or when the current source
+    // finishes with no gapless successor (Drained). Spliced carries a non-owning
+    // pointer to the Engine-owned lookahead node; the consumer promotes that
+    // node to current before publishing callbacks.
+    enum class RtSignalKind : std::uint8_t
+    {
+      Spliced,
+      Drained,
+    };
+
+    struct RtSignal final
+    {
+      RtSignalKind kind = RtSignalKind::Drained;
+      std::uint64_t generation = 0;
+      TrackNode* splicedNode = nullptr;
+      std::uint64_t drainEpoch = 0;
+    };
+
     struct DrainCompleteEvent final
     {
       std::uint64_t generation = 0;
+      std::uint64_t drainEpoch = 0;
     };
 
     struct RouteReadyEvent final
@@ -89,70 +120,27 @@ namespace ao::audio
       PropertyInfo volumeInfo;
     };
 
+    // Notifications already materialized by a control thread that settled a
+    // splice signal at command entry (see lockControl). The event worker just
+    // runs them, so user callbacks keep originating from the worker thread in
+    // application order.
+    struct DeferredNotifications final
+    {
+      std::vector<std::function<void()>> notifications;
+    };
+
     using PlaybackEvent = std::variant<BackendErrorEvent,
                                        SourceErrorEvent,
                                        DrainCompleteEvent,
                                        RouteReadyEvent,
                                        FormatChangedEvent,
-                                       PropertyChangedEvent>;
+                                       PropertyChangedEvent,
+                                       DeferredNotifications>;
     using Notification = std::function<void()>;
     using Notifications = std::vector<Notification>;
 
     Device currentDevice;
-
-    class RenderSourceSlot final
-    {
-    public:
-      ISource* active() const noexcept { return _active.load(std::memory_order_acquire); }
-
-      std::uint64_t generation() const noexcept { return _generation.load(std::memory_order_acquire); }
-
-      void setGeneration(std::uint64_t generation) noexcept
-      {
-        _generation.store(generation, std::memory_order_release);
-      }
-
-      void retireGeneration() noexcept { _generation.store(0, std::memory_order_release); }
-
-      // Publish `next` as the active source for the render thread and retire the
-      // previous owner. MUST be called only with the backend quiesced (after
-      // backendPtr->stop()/close(), or before the first start()), so destroying
-      // the retired source — which may join its decode thread — cannot race the
-      // RT render thread.
-      void publish(std::shared_ptr<ISource> nextPtr)
-      {
-        auto retiredPtr = std::shared_ptr<ISource>{};
-        {
-          auto const lock = std::scoped_lock{_mutex};
-          _active.store(nextPtr.get(), std::memory_order_release);
-          retiredPtr = std::move(_ownerPtr);
-          _ownerPtr = std::move(nextPtr);
-        }
-        // `retired` is destroyed here, outside the lock.
-      }
-
-      // Copy the owning source pointer for non-RT callers (status / seek /
-      // resume), keeping it alive for the duration of their use.
-      std::shared_ptr<ISource> current() const
-      {
-        auto const lock = std::scoped_lock{_mutex};
-
-        if (_generation.load(std::memory_order_acquire) == 0)
-        {
-          return {};
-        }
-
-        return _ownerPtr;
-      }
-
-    private:
-      std::atomic<ISource*> _active{nullptr};
-      std::atomic<std::uint64_t> _generation{0};
-      mutable std::mutex _mutex;
-      std::shared_ptr<ISource> _ownerPtr;
-    };
-
-    RenderSourceSlot sourceSlot;
+    RenderTimeline timeline;
 
     // Serializes external control commands that coordinate backend lifecycle,
     // source ownership, and status publication. Backend callbacks deliberately
@@ -160,28 +148,74 @@ namespace ao::audio
     // waits for that thread to quiesce.
     mutable std::mutex controlMutex;
 
+    class [[nodiscard]] ControlLock final
+    {
+    public:
+      explicit ControlLock(Impl& owner)
+        : _lock{owner.controlMutex}
+      {
+        owner.waitForSpliceHandoff();
+        owner.settlePendingRtSignals();
+      }
+
+      ~ControlLock();
+
+      ControlLock(ControlLock const&) = delete;
+      ControlLock& operator=(ControlLock const&) = delete;
+      ControlLock(ControlLock&&) = delete;
+      ControlLock& operator=(ControlLock&&) = delete;
+
+    private:
+      std::scoped_lock<std::mutex> _lock;
+    };
+
     std::atomic<bool> backendStarted{false};
     std::atomic<bool> playbackDrainPending{false};
+    std::atomic<std::uint64_t> drainEpoch{1};
     std::atomic<std::uint32_t> underrunCount{0};
     std::atomic<std::uint64_t> accumulatedFrames{0};
     std::atomic<std::uint32_t> engineSampleRate{0};
+    std::atomic<std::uint32_t> engineFrameBytes{0};
     std::atomic<std::uint64_t> activeRenderGeneration{0};
+
+    // Guards the current-track format snapshot the control thread reads when it
+    // decides, at arm time, whether the next track can be gaplessly spliced. The
+    // render thread never takes this lock: it is written only by the control
+    // thread (initial publish) and the event thread (after a splice) and read
+    // only by the control thread (setNext gate).
+    mutable std::mutex transitionMutex;
+    std::optional<Format> optCurrentBackendFormat;
+    std::optional<DecodedStreamInfo> optCurrentStreamInfo;
+
+    // Marks the tiny window where the RT thread has consumed the lookahead
+    // cursor and is about to publish the splice signal. Timeline ownership is
+    // already stable, but control commands still wait so status/callback
+    // publication is linearly settled before command bodies run.
+    std::atomic<bool> spliceHandoffInProgress{false};
 
     mutable std::mutex stateMutex;
     std::uint64_t nextRenderGeneration = 1;
     std::uint64_t nextSourceGeneration = 1;
-    std::optional<PlaybackInput> optCurrentTrack;
-    Engine::Status status;
+    std::optional<PlaybackItem> optCurrentItem;
+    Status status;
     std::function<void()> onTrackEnded;
+    OnTrackAdvanced onTrackAdvanced;
     std::function<void()> onStateChanged;
-    Engine::OnRouteChanged onRouteChanged;
+    OnRouteChanged onRouteChanged;
     detail::RouteTracker routeTracker;
     DecoderFactoryFn decoderFactory;
     std::unique_ptr<RenderSession> renderSessionPtr;
 
+    // The event thread is woken by a counting semaphore rather than a condition
+    // variable so the render thread can signal it without a mutex (a mutex-free
+    // release avoids the lost-wakeup a lock-free ring would otherwise have with a
+    // condition variable). Every producer releases once per item; the consumer
+    // drains both the wait-free rtSignalRing and the mutex-guarded eventQueue.
+    static constexpr std::size_t kRtSignalCapacity = 64;
     mutable std::mutex eventMutex;
-    std::condition_variable_any eventCv;
     std::deque<PlaybackEvent> eventQueue;
+    boost::lockfree::spsc_queue<RtSignal, boost::lockfree::capacity<kRtSignalCapacity>> rtSignalRing;
+    std::counting_semaphore<> eventSignal{0};
     std::jthread eventThread;
 
     // Must be declared last so the PipeWire thread loop is stopped
@@ -208,7 +242,13 @@ namespace ao::audio
         resetRenderSession();
       }
 
-      publishSource(nullptr);
+      timeline.clear();
+
+      // The render thread is now stopped. Drain the signal ring once more to free
+      // any splice signal it posted after stopEventLoop's drain but before the
+      // backend stopped, then free any armed-but-never-spliced lookahead node.
+      drainRtSignalRing();
+      clearPreparedNext();
     }
 
     Impl(Impl const&) = delete;
@@ -216,9 +256,108 @@ namespace ao::audio
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    // ── Source publication ────────────────────────────────────────
-    void publishSource(std::shared_ptr<ISource> nextPtr) { sourceSlot.publish(std::move(nextPtr)); }
-    std::shared_ptr<ISource> currentSource() const { return sourceSlot.current(); }
+    // ── Timeline publication ─────────────────────────────────────
+    void publishCurrentNode(std::unique_ptr<TrackNode> nodePtr) { timeline.publishCurrent(std::move(nodePtr)); }
+    std::shared_ptr<ISource> currentSource() const { return timeline.current(); }
+
+    // ── Transition state ──────────────────────────────────────────
+    static bool isGaplessCapable(DecodedStreamInfo const& info) noexcept
+    {
+      return !info.isLossy && (info.codec == AudioCodec::Flac || info.codec == AudioCodec::Alac);
+    }
+
+    static bool canSplice(DecodedStreamInfo const& currentInfo,
+                          Format const& currentBackendFormat,
+                          TrackNode const& preparedNext) noexcept
+    {
+      return isGaplessCapable(currentInfo) && isGaplessCapable(preparedNext.info) &&
+             currentBackendFormat == preparedNext.backendFormat;
+    }
+
+    void waitForSpliceHandoff() const noexcept
+    {
+      while (spliceHandoffInProgress.load(std::memory_order_acquire))
+      {
+        std::this_thread::yield();
+      }
+    }
+
+    TrackNode* takeSplicedNode(TrackNode* node) const noexcept
+    {
+      return (node != nullptr && timeline.activeNode() == node) ? node : nullptr;
+    }
+
+    void discardSpliceSignalNode(TrackNode* node) noexcept { timeline.dropDisarmedLookahead(node); }
+
+    // Arm `session` as the gapless successor. Control thread only. Any previous
+    // successor is first disarmed or, if the render thread has already consumed
+    // it, settled through the splice signal path before the new node is
+    // published.
+    void armPreparedNext(TrackNode&& session)
+    {
+      clearPreparedNext();
+      timeline.armLookahead(std::make_unique<TrackNode>(std::move(session)));
+    }
+
+    void resetTransitionState()
+    {
+      {
+        auto const lock = std::scoped_lock{transitionMutex};
+        optCurrentBackendFormat.reset();
+        optCurrentStreamInfo.reset();
+      }
+      clearPreparedNext();
+    }
+
+    // Drop the lookahead successor if it is still armed in the timeline. If the
+    // render thread has already consumed the lookahead cursor and is between
+    // active-node publish and signal enqueue, wait until the signal is visible
+    // and settle it before the caller can act on currentSource()/status.
+    // Requires controlMutex when render callbacks may still be active.
+    std::optional<PlaybackItemId> clearPreparedNext()
+    {
+      auto* const disarmed = timeline.disarmLookahead();
+      waitForSpliceHandoff();
+      settlePendingRtSignals();
+
+      auto optDisarmedItemId = std::optional<PlaybackItemId>{};
+
+      if (disarmed != nullptr)
+      {
+        optDisarmedItemId = disarmed->item.id;
+      }
+
+      timeline.dropDisarmedLookahead(disarmed);
+      return optDisarmedItemId;
+    }
+
+    bool clearPreparedNextForGeneration(std::uint64_t sourceGeneration)
+    {
+      waitForSpliceHandoff();
+      settlePendingRtSignals();
+
+      auto* const session = timeline.lookaheadNode();
+
+      if (session == nullptr || session->sourceGeneration != sourceGeneration)
+      {
+        return false;
+      }
+
+      if (auto* const disarmed = timeline.disarmLookahead(); disarmed == session)
+      {
+        timeline.dropDisarmedLookahead(disarmed);
+        return true;
+      }
+
+      return false;
+    }
+
+    void publishCurrentTransitionState(TrackNode const& session)
+    {
+      auto const lock = std::scoped_lock{transitionMutex};
+      optCurrentBackendFormat = session.backendFormat;
+      optCurrentStreamInfo = session.info;
+    }
 
     // ── Helpers ────────────────────────────────────────────────────
     void syncBackendIdentity()
@@ -245,19 +384,30 @@ namespace ao::audio
       status.volumeIsHardwareAssisted = volProp.isHardwareAssisted;
     }
 
+    void cancelPendingDrainSignal() noexcept
+    {
+      playbackDrainPending.store(false, std::memory_order_release);
+      drainEpoch.fetch_add(1, std::memory_order_acq_rel);
+    }
+
     void resetEngine()
     {
-      optCurrentTrack.reset();
-      sourceSlot.retireGeneration();
+      optCurrentItem.reset();
+      timeline.retireCursor();
       backendStarted = false;
-      playbackDrainPending = false;
+      cancelPendingDrainSignal();
       status = {};
       syncBackendIdentity();
       syncBackendStatus();
       accumulatedFrames.store(0, std::memory_order_relaxed);
+      engineSampleRate.store(0, std::memory_order_relaxed);
+      engineFrameBytes.store(0, std::memory_order_relaxed);
       routeTracker.clear();
     }
 
+    // Non-RT event producers (backend / route / format / property / source
+    // errors). Allowed to allocate and lock; must never be called from the RT
+    // render thread.
     void enqueuePlaybackEvent(PlaybackEvent event)
     {
       if (eventThread.get_stop_token().stop_requested())
@@ -276,7 +426,61 @@ namespace ao::audio
         eventQueue.push_back(std::move(event));
       }
 
-      eventCv.notify_one();
+      eventSignal.release();
+    }
+
+    // Wait-free producer for the render thread. Pushes a trivially copyable
+    // signal onto the lock-free ring and releases the semaphore; no lock, no
+    // allocation, no unbounded work. Returns false only if the ring is full,
+    // which cannot happen in practice (the event thread drains on every wake and
+    // the render thread posts at most one signal per track).
+    bool enqueueRtSignal(RtSignal signal) noexcept
+    {
+      if (!rtSignalRing.push(signal))
+      {
+        assert(false && "RT signal ring overflow: event thread is not draining");
+        return false;
+      }
+
+      eventSignal.release();
+      return true;
+    }
+
+    // Control-command entry point: acquires controlMutex and settles every
+    // pending splice signal still in the ring before the command body runs.
+    // Between the render thread's raw-pointer publish and the splice signal
+    // application, currentSource(), the status fields, and the transition-format
+    // snapshot still describe the retired track; settling first closes that
+    // window, so a command like seek can never act on the wrong source. Pending
+    // drain completions are forwarded to the normal event queue instead: a
+    // control command may retire or reposition the render session, and the drain
+    // must be checked after that command has applied.
+    ControlLock lockControl() { return ControlLock{*this}; }
+
+    // Requires controlMutex; every ring consumer holds it, which serializes the
+    // pops the SPSC ring needs and makes splice settlement atomic for control
+    // commands. The notifications a settled splice produces are forwarded to
+    // the event worker instead of running here: user callbacks must keep
+    // originating from the worker thread, and running them under controlMutex
+    // would deadlock on a reentrant Engine call.
+    void settlePendingRtSignals()
+    {
+      auto signal = RtSignal{};
+
+      while (rtSignalRing.pop(signal))
+      {
+        if (signal.kind == RtSignalKind::Drained)
+        {
+          assert(signal.splicedNode == nullptr);
+          enqueuePlaybackEvent(DrainCompleteEvent{.generation = signal.generation, .drainEpoch = signal.drainEpoch});
+          continue;
+        }
+
+        if (auto notifications = applyRtSignal(signal); !notifications.empty())
+        {
+          enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
+        }
+      }
     }
 
     void stopEventLoop() noexcept
@@ -284,47 +488,112 @@ namespace ao::audio
       if (eventThread.joinable())
       {
         eventThread.request_stop();
-        eventCv.notify_all();
+        eventSignal.release();
         eventThread.join();
       }
 
-      auto const lock = std::scoped_lock{eventMutex};
-      eventQueue.clear();
+      {
+        auto const lock = std::scoped_lock{eventMutex};
+        eventQueue.clear();
+      }
+
+      drainRtSignalRing();
+    }
+
+    // Free any sessions still owned by unprocessed splice signals. Consumer side
+    // only (event thread, or the destructor after the event thread has joined).
+    void drainRtSignalRing() noexcept
+    {
+      auto signal = RtSignal{};
+
+      while (rtSignalRing.pop(signal))
+      {
+        discardSpliceSignalNode(signal.splicedNode);
+      }
+    }
+
+    static void runNotifications(Notifications& notifications)
+    {
+      for (auto& notification : notifications)
+      {
+        if (notification)
+        {
+          notification();
+        }
+      }
     }
 
     void runEventLoop(std::stop_token stopToken)
     {
       while (true)
       {
-        auto optEvent = std::optional<PlaybackEvent>{};
+        eventSignal.acquire();
+
+        if (stopToken.stop_requested())
         {
-          auto lock = std::unique_lock{eventMutex};
-          eventCv.wait(lock, stopToken, [this] { return !eventQueue.empty(); });
-
-          if (stopToken.stop_requested())
-          {
-            eventQueue.clear();
-            return;
-          }
-
-          optEvent = std::move(eventQueue.front());
-          eventQueue.pop_front();
+          return;
         }
 
-        auto notifications = Notifications{};
+        // Drain the wait-free render-thread ring first so a gapless advance is
+        // published before any queued non-RT events. The pop itself happens
+        // under controlMutex: control threads also consume this ring at command
+        // entry (lockControl), settling splice signals and forwarding drain
+        // signals, so a control command can never observe a
+        // spliced-but-unapplied state.
+        while (true)
         {
-          auto const lock = std::scoped_lock{controlMutex};
-          notifications = applyPlaybackEvent(*optEvent);
+          auto notifications = Notifications{};
+          {
+            auto const lock = std::scoped_lock{controlMutex};
+            auto signal = RtSignal{};
+
+            if (!rtSignalRing.pop(signal))
+            {
+              break;
+            }
+
+            notifications = applyRtSignal(signal);
+          }
+          runNotifications(notifications);
         }
 
-        for (auto& notification : notifications)
+        while (true)
         {
-          if (notification)
+          auto optEvent = std::optional<PlaybackEvent>{};
           {
-            notification();
+            auto const lock = std::scoped_lock{eventMutex};
+
+            if (eventQueue.empty())
+            {
+              break;
+            }
+
+            optEvent = std::move(eventQueue.front());
+            eventQueue.pop_front();
           }
+
+          auto notifications = Notifications{};
+          {
+            auto const lock = std::scoped_lock{controlMutex};
+            notifications = applyPlaybackEvent(*optEvent);
+          }
+          runNotifications(notifications);
         }
       }
+    }
+
+    // Dispatch a render-thread signal. Spliced signals carry a non-owning
+    // TrackNode pointer; timeline ownership is already stable. Runs on the
+    // event thread under controlMutex.
+    Notifications applyRtSignal(RtSignal const& signal)
+    {
+      switch (signal.kind)
+      {
+        case RtSignalKind::Spliced: return handleSpliceAdvanced(takeSplicedNode(signal.splicedNode), signal.generation);
+        case RtSignalKind::Drained: return handleDrainComplete(signal.generation, signal.drainEpoch);
+      }
+
+      return {};
     }
 
     struct RenderSession final : public IRenderTarget
@@ -334,9 +603,11 @@ namespace ao::audio
       {
       }
 
-      std::size_t readPcm(std::span<std::byte> output) noexcept override { return owner.readPcm(generation, output); }
+      RenderPcmResult renderPcm(std::span<std::byte> output) noexcept override
+      {
+        return owner.renderPcm(generation, output);
+      }
 
-      bool isSourceDrained() noexcept override { return owner.isSourceDrained(generation); }
       void onUnderrun() noexcept override { owner.onUnderrun(generation); }
       void onPositionAdvanced(std::uint32_t frames) noexcept override { owner.onPositionAdvanced(generation, frames); }
       void onDrainComplete() noexcept override { owner.onDrainComplete(generation); }
@@ -358,12 +629,35 @@ namespace ao::audio
       return activeRenderGeneration.load(std::memory_order_acquire) == generation;
     }
 
+    // Wait-free gapless splice, executed on the RT render thread at a drain
+    // boundary. No lock, no allocation, no unbounded work: consume the lookahead
+    // cursor, publish its node as active, and post a non-owning signal. Engine's
+    // timeline keeps both current and lookahead nodes alive.
+    bool trySplicePreparedNext(std::uint64_t generation) noexcept
+    {
+      return detail::trySplicePreparedNext(
+        timeline,
+        spliceHandoffInProgress,
+        generation,
+        [this](std::uint64_t signalGeneration) noexcept { return isActiveRenderSession(signalGeneration); },
+        accumulatedFrames,
+        engineSampleRate,
+        engineFrameBytes,
+        underrunCount,
+        playbackDrainPending,
+        [this](std::uint64_t signalGeneration, TrackNode* session) noexcept
+        {
+          std::ignore = enqueueRtSignal(
+            RtSignal{.kind = RtSignalKind::Spliced, .generation = signalGeneration, .splicedNode = session});
+        });
+    }
+
     void retireRenderSession() noexcept { activeRenderGeneration.store(0, std::memory_order_release); }
 
     void retireSessions() noexcept
     {
       activeRenderGeneration.store(0, std::memory_order_release);
-      sourceSlot.retireGeneration();
+      timeline.retireCursor();
     }
 
     void resetRenderSession() noexcept { renderSessionPtr.reset(); }
@@ -377,38 +671,16 @@ namespace ao::audio
     }
 
     // ── IRenderTarget session entrypoints ─────────────────────────
-    std::size_t readPcm(std::uint64_t generation, std::span<std::byte> output) const noexcept
+    RenderPcmResult renderPcm(std::uint64_t generation, std::span<std::byte> output) noexcept
     {
-      if (!isActiveRenderSession(generation))
-      {
-        return 0;
-      }
-
-      auto* const src = sourceSlot.active();
-      return src != nullptr ? src->read(output) : 0;
-    }
-
-    bool isSourceDrained(std::uint64_t generation) noexcept
-    {
-      if (!isActiveRenderSession(generation))
-      {
-        return true;
-      }
-
-      auto* const src = sourceSlot.active();
-
-      if (src == nullptr)
-      {
-        return true;
-      }
-
-      if (src->isDrained())
-      {
-        playbackDrainPending = true;
-        return true;
-      }
-
-      return false;
+      return detail::renderPcm(
+        timeline,
+        engineFrameBytes,
+        playbackDrainPending,
+        generation,
+        output,
+        [this](std::uint64_t signalGeneration) noexcept { return isActiveRenderSession(signalGeneration); },
+        [this](std::uint64_t signalGeneration) noexcept { return trySplicePreparedNext(signalGeneration); });
     }
 
     void onUnderrun(std::uint64_t generation) noexcept
@@ -434,12 +706,15 @@ namespace ao::audio
         return;
       }
 
-      if (!playbackDrainPending.exchange(false, std::memory_order_relaxed))
+      auto const signalDrainEpoch = drainEpoch.load(std::memory_order_acquire);
+
+      if (!playbackDrainPending.exchange(false, std::memory_order_acq_rel))
       {
         return;
       }
 
-      enqueuePlaybackEvent(DrainCompleteEvent{.generation = generation});
+      std::ignore = enqueueRtSignal(
+        RtSignal{.kind = RtSignalKind::Drained, .generation = generation, .drainEpoch = signalDrainEpoch});
     }
 
     void onRouteReady(std::uint64_t generation, IBackend& backend, std::string_view routeAnchor) noexcept
@@ -500,10 +775,10 @@ namespace ao::audio
       auto const volumeAvailable = status.volumeAvailable;
       auto const volumeIsHardwareAssisted = status.volumeIsHardwareAssisted;
 
-      optCurrentTrack.reset();
-      sourceSlot.retireGeneration();
+      optCurrentItem.reset();
+      timeline.retireCursor();
       backendStarted = false;
-      playbackDrainPending = false;
+      cancelPendingDrainSignal();
       status = {};
       status.backendId = backendId;
       status.profileId = profileId;
@@ -513,12 +788,15 @@ namespace ao::audio
       status.volumeAvailable = volumeAvailable;
       status.volumeIsHardwareAssisted = volumeIsHardwareAssisted;
       accumulatedFrames.store(0, std::memory_order_relaxed);
+      engineSampleRate.store(0, std::memory_order_relaxed);
+      engineFrameBytes.store(0, std::memory_order_relaxed);
       routeTracker.clear();
     }
 
-    Notifications applyPlaybackEvent(PlaybackEvent const& event)
+    // Non-const: DeferredNotifications hands its payload out by move.
+    Notifications applyPlaybackEvent(PlaybackEvent& event)
     {
-      return std::visit([this](auto const& typedEvent) { return applyPlaybackEvent(typedEvent); }, event);
+      return std::visit([this](auto& typedEvent) { return applyPlaybackEvent(typedEvent); }, event);
     }
 
     Notifications applyPlaybackEvent(BackendErrorEvent const& event)
@@ -531,7 +809,10 @@ namespace ao::audio
       return handleSourceError(event.sourceGeneration, event.error);
     }
 
-    Notifications applyPlaybackEvent(DrainCompleteEvent const& event) { return handleDrainComplete(event.generation); }
+    Notifications applyPlaybackEvent(DrainCompleteEvent const& event)
+    {
+      return handleDrainComplete(event.generation, event.drainEpoch);
+    }
 
     Notifications applyPlaybackEvent(RouteReadyEvent const& event)
     {
@@ -544,6 +825,8 @@ namespace ao::audio
     }
 
     Notifications applyPlaybackEvent(PropertyChangedEvent const& event) { return handlePropertyChanged(event); }
+
+    Notifications applyPlaybackEvent(DeferredNotifications& event) { return std::move(event.notifications); }
 
     static void appendStateChangedNotification(Notifications& notifications, std::function<void()> callback)
     {
@@ -573,12 +856,14 @@ namespace ao::audio
         shouldQuiesce = true;
       }
 
+      resetTransitionState();
+
       if (shouldQuiesce)
       {
         backendPtr->stop();
         backendPtr->close();
         resetRenderSession();
-        publishSource(nullptr);
+        timeline.clear();
       }
 
       auto notifications = Notifications{};
@@ -588,6 +873,11 @@ namespace ao::audio
 
     Notifications handleSourceError(std::uint64_t sourceGeneration, Error const& error)
     {
+      if (clearPreparedNextForGeneration(sourceGeneration))
+      {
+        return {};
+      }
+
       auto const message = error.message.empty() ? std::string{"PCM source failed"} : error.message;
       auto endedCallback = std::function<void()>{};
       auto stateChanged = std::function<void()>{};
@@ -596,7 +886,7 @@ namespace ao::audio
       {
         auto const lock = std::scoped_lock{stateMutex};
 
-        if (sourceGeneration != sourceSlot.generation())
+        if (sourceGeneration != timeline.activeSourceGeneration())
         {
           return {};
         }
@@ -615,12 +905,14 @@ namespace ao::audio
         shouldQuiesce = true;
       }
 
+      resetTransitionState();
+
       if (shouldQuiesce)
       {
         backendPtr->stop();
         backendPtr->close();
         resetRenderSession();
-        publishSource(nullptr);
+        timeline.clear();
       }
 
       auto notifications = Notifications{};
@@ -634,9 +926,7 @@ namespace ao::audio
       return notifications;
     }
 
-    static void appendRouteNotification(Notifications& notifications,
-                                        Engine::OnRouteChanged callback,
-                                        Engine::RouteStatus snapshot)
+    static void appendRouteNotification(Notifications& notifications, OnRouteChanged callback, RouteStatus snapshot)
     {
       if (callback)
       {
@@ -645,12 +935,86 @@ namespace ao::audio
       }
     }
 
+    static void appendTrackAdvancedNotification(Notifications& notifications,
+                                                OnTrackAdvanced callback,
+                                                TrackAdvanced event)
+    {
+      if (callback)
+      {
+        notifications.emplace_back([callback = std::move(callback), event = std::move(event)] { callback(event); });
+      }
+    }
+
+    // Complete a gapless splice on the event thread. The render thread already
+    // made `session`'s source active; here we install the owning shared_ptr,
+    // retire the previous source (destroying it — and joining its decode thread —
+    // off the RT thread), refresh the current-track format the next arm gates
+    // against, and surface the advance to observers. If the render session was
+    // retired between the splice and now, the session is simply dropped (its
+    // source is destroyed here, still off the RT thread).
+    Notifications handleSpliceAdvanced(TrackNode* session, std::uint64_t generation)
+    {
+      if (session == nullptr)
+      {
+        return {};
+      }
+
+      auto notifications = Notifications{};
+      auto trackAdvanced = OnTrackAdvanced{};
+      auto stateChanged = std::function<void()>{};
+      auto routeChanged = OnRouteChanged{};
+      auto routeSnapshot = RouteStatus{};
+
+      {
+        auto const lock = std::scoped_lock{stateMutex};
+
+        if (!isActiveRenderSession(generation))
+        {
+          return {};
+        }
+
+        auto const& info = session->info;
+        optCurrentItem = session->item;
+        status.duration = info.duration;
+        status.elapsed = std::chrono::milliseconds{0};
+        status.statusText.clear();
+        status.transport = Transport::Playing;
+        routeTracker.setDecoder(info.sourceFormat, info.outputFormat, info.isLossy, info.codec);
+        routeTracker.setEngineFormat(info.outputFormat);
+        status.routeState = routeTracker.state();
+
+        trackAdvanced = onTrackAdvanced;
+        stateChanged = onStateChanged;
+        routeChanged = onRouteChanged;
+        routeSnapshot = RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
+      }
+
+      // Refresh the current-track format so the next armed successor is gated
+      // against the track that is now playing.
+      {
+        auto const lock = std::scoped_lock{transitionMutex};
+        optCurrentBackendFormat = session->backendFormat;
+        optCurrentStreamInfo = session->info;
+      }
+
+      // Promote the lookahead node to current; the retired node is destroyed
+      // when `retired` leaves scope, after all locks are released.
+      auto const retiredPtr = timeline.promoteSplicedLookahead(session);
+
+      appendTrackAdvancedNotification(notifications,
+                                      std::move(trackAdvanced),
+                                      TrackAdvanced{.itemId = session->item.id, .input = session->item.input});
+      appendStateChangedNotification(notifications, std::move(stateChanged));
+      appendRouteNotification(notifications, std::move(routeChanged), std::move(routeSnapshot));
+      return notifications;
+    }
+
     Notifications handleRouteReady(std::uint64_t generation, BackendId const& backendId, std::string_view routeAnchor)
     {
       auto notifications = Notifications{};
       auto stateChanged = std::function<void()>{};
-      auto callback = Engine::OnRouteChanged{};
-      auto snapshot = Engine::RouteStatus{};
+      auto callback = OnRouteChanged{};
+      auto snapshot = RouteStatus{};
       {
         auto const lock = std::scoped_lock{stateMutex};
 
@@ -662,7 +1026,7 @@ namespace ao::audio
         routeTracker.setAnchor(backendId, std::string{routeAnchor});
         stateChanged = onStateChanged;
         callback = onRouteChanged;
-        snapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
+        snapshot = RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
       }
 
       appendStateChangedNotification(notifications, std::move(stateChanged));
@@ -674,8 +1038,8 @@ namespace ao::audio
     {
       auto notifications = Notifications{};
       auto stateChanged = std::function<void()>{};
-      auto callback = Engine::OnRouteChanged{};
-      auto snapshot = Engine::RouteStatus{};
+      auto callback = OnRouteChanged{};
+      auto snapshot = RouteStatus{};
       {
         auto const lock = std::scoped_lock{stateMutex};
 
@@ -688,7 +1052,7 @@ namespace ao::audio
         status.routeState.engineOutputFormat = format;
         stateChanged = onStateChanged;
         callback = onRouteChanged;
-        snapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
+        snapshot = RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
       }
 
       appendStateChangedNotification(notifications, std::move(stateChanged));
@@ -700,8 +1064,8 @@ namespace ao::audio
     {
       auto notifications = Notifications{};
       auto stateChanged = std::function<void()>{};
-      auto callback = Engine::OnRouteChanged{};
-      auto snapshot = Engine::RouteStatus{};
+      auto callback = OnRouteChanged{};
+      auto snapshot = RouteStatus{};
       {
         auto const lock = std::scoped_lock{stateMutex};
 
@@ -735,7 +1099,7 @@ namespace ao::audio
         status.volumeIsHardwareAssisted = event.volumeInfo.isHardwareAssisted;
         stateChanged = onStateChanged;
         callback = onRouteChanged;
-        snapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
+        snapshot = RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
       }
 
       appendStateChangedNotification(notifications, std::move(stateChanged));
@@ -743,17 +1107,17 @@ namespace ao::audio
       return notifications;
     }
 
-    Notifications handleDrainComplete(std::uint64_t generation)
+    Notifications handleDrainComplete(std::uint64_t generation, std::uint64_t signalDrainEpoch)
     {
       auto onTrackEndedCallback = std::function<void()>{};
-      auto onRouteChangedCallback = Engine::OnRouteChanged{};
+      auto onRouteChangedCallback = OnRouteChanged{};
       auto stateChanged = std::function<void()>{};
       bool shouldQuiesce = false;
 
       {
         auto const lock = std::scoped_lock{stateMutex};
 
-        if (!isActiveRenderSession(generation))
+        if (!isActiveRenderSession(generation) || drainEpoch.load(std::memory_order_acquire) != signalDrainEpoch)
         {
           return {};
         }
@@ -766,12 +1130,14 @@ namespace ao::audio
         shouldQuiesce = true;
       }
 
+      resetTransitionState();
+
       if (shouldQuiesce)
       {
         backendPtr->stop();
         backendPtr->close();
         resetRenderSession();
-        publishSource(nullptr);
+        timeline.clear();
       }
 
       auto notifications = Notifications{};
@@ -791,13 +1157,10 @@ namespace ao::audio
     }
 
     // ── Track opening ──────────────────────────────────────────────
-    bool openTrack(PlaybackInput const& input,
-                   std::shared_ptr<ISource>& source,
-                   Format& backendFormat,
-                   std::uint64_t sourceGeneration)
+    Result<TrackNode> openTrackSession(PlaybackItem const& item, std::uint64_t sourceGeneration)
     {
       auto session = detail::TrackSession::create(
-        input,
+        item.input,
         currentDevice,
         backendPtr->backendId(),
         backendPtr->profileId(),
@@ -807,33 +1170,40 @@ namespace ao::audio
 
       if (!session)
       {
-        auto const lock = std::scoped_lock{stateMutex};
-        status.statusText = session.error().message;
-        return false;
+        return std::unexpected{session.error()};
       }
 
-      source = std::move(session->sourcePtr);
-      backendFormat = session->backendFormat;
+      return TrackNode{.item = item,
+                       .sourcePtr = std::move(session->sourcePtr),
+                       .backendFormat = session->backendFormat,
+                       .info = session->info,
+                       .sourceGeneration = sourceGeneration};
+    }
 
+    void publishCurrentTrackState(TrackNode const& session)
+    {
       // TrackSession::create() ran lock-free above; only the status/routeTracker
       // publication needs the lock, which status() also takes when it reads them
       // concurrently from the UI thread.
       auto const lock = std::scoped_lock{stateMutex};
-      status.duration = session->info.duration;
+      optCurrentItem = session.item;
+      status.duration = session.info.duration;
       status.elapsed = std::chrono::milliseconds{0};
       accumulatedFrames.store(0, std::memory_order_relaxed);
       routeTracker.setDecoder(
-        session->info.sourceFormat, session->info.outputFormat, session->info.isLossy, session->info.codec);
-      routeTracker.setEngineFormat(session->info.outputFormat);
+        session.info.sourceFormat, session.info.outputFormat, session.info.isLossy, session.info.codec);
+      routeTracker.setEngineFormat(session.info.outputFormat);
       status.routeState = routeTracker.state();
-      engineSampleRate.store(session->info.outputFormat.sampleRate, std::memory_order_relaxed);
-
-      return true;
+      engineSampleRate.store(session.info.outputFormat.sampleRate, std::memory_order_relaxed);
+      engineFrameBytes.store(
+        static_cast<std::uint32_t>(frameBytes(session.info.outputFormat)), std::memory_order_relaxed);
     }
 
     void setBackendUnlocked(std::unique_ptr<IBackend> nextBackendPtr, Device const& device);
     void updateDeviceUnlocked(Device const& device);
-    void playUnlocked(PlaybackInput const& input);
+    void playUnlocked(PlaybackItem const& item);
+    Result<PreparedNextResult> setNextUnlocked(PlaybackItem const& item);
+    std::optional<PlaybackItemId> clearNextUnlocked();
     void pauseUnlocked();
     void resumeUnlocked();
     void stopUnlocked();
@@ -842,11 +1212,13 @@ namespace ao::audio
     Result<> setMutedUnlocked(bool muted);
   };
 
+  Engine::Impl::ControlLock::~ControlLock() = default;
+
   void Engine::Impl::setBackendUnlocked(std::unique_ptr<IBackend> nextBackendPtr, Device const& device)
   {
     struct State
     {
-      std::optional<PlaybackInput> optTrack;
+      std::optional<PlaybackItem> optItem;
       std::chrono::milliseconds elapsed{0};
       bool wasPlaying = false;
     };
@@ -855,7 +1227,7 @@ namespace ao::audio
     {
       auto const lock = std::scoped_lock{stateMutex};
       return State{
-        .optTrack = optCurrentTrack,
+        .optItem = optCurrentItem,
         .elapsed =
           [this]
         {
@@ -877,9 +1249,9 @@ namespace ao::audio
       syncBackendStatus();
     }
 
-    if (state.optTrack)
+    if (state.optItem)
     {
-      playUnlocked(*state.optTrack);
+      playUnlocked(*state.optItem);
       seekUnlocked(state.elapsed);
 
       if (!state.wasPlaying)
@@ -892,67 +1264,76 @@ namespace ao::audio
   void Engine::Impl::updateDeviceUnlocked(Device const& device)
   {
     currentDevice = device;
+    clearPreparedNext();
   }
 
-  void Engine::Impl::playUnlocked(PlaybackInput const& input)
+  void Engine::Impl::playUnlocked(PlaybackItem const& item)
   {
+    resetTransitionState();
+
     {
       auto const lock = std::scoped_lock{stateMutex};
       retireRenderSession();
-      sourceSlot.retireGeneration();
+      timeline.retireCursor();
     }
 
     backendPtr->stop();
     backendPtr->close();
     resetRenderSession();
-    publishSource(nullptr);
+    timeline.clear();
 
-    auto sourcePtr = std::shared_ptr<ISource>{};
-    auto backendFormat = Format{};
     auto const sourceGeneration = nextSourceGeneration++;
 
     {
       auto const lock = std::scoped_lock{stateMutex};
       underrunCount = 0;
       routeTracker.clear();
-      sourceSlot.setGeneration(sourceGeneration);
       backendStarted = false;
-      playbackDrainPending = false;
+      cancelPendingDrainSignal();
       status.transport = Transport::Opening;
-      optCurrentTrack = input;
+      optCurrentItem = item;
       syncBackendIdentity();
     }
 
-    if (!openTrack(input, sourcePtr, backendFormat, sourceGeneration))
+    auto openedTrack = openTrackSession(item, sourceGeneration);
+
+    if (!openedTrack)
     {
       auto const lock = std::scoped_lock{stateMutex};
       status.transport = Transport::Error;
-      sourceSlot.retireGeneration();
-      optCurrentTrack.reset();
+      status.statusText = openedTrack.error().message;
+      timeline.retireCursor();
+      optCurrentItem.reset();
       return;
     }
+
+    publishCurrentTransitionState(*openedTrack);
+    publishCurrentTrackState(*openedTrack);
 
     {
       auto const lock = std::scoped_lock{stateMutex};
       status.transport = Transport::Buffering;
     }
 
-    publishSource(sourcePtr);
+    auto openedNodePtr = std::make_unique<TrackNode>(std::move(*openedTrack));
+    auto* const currentNode = openedNodePtr.get();
+    publishCurrentNode(std::move(openedNodePtr));
     auto* renderTarget = createRenderSession(*backendPtr);
 
-    if (auto const openResult = backendPtr->open(backendFormat, renderTarget); !openResult)
+    if (auto const openResult = backendPtr->open(currentNode->backendFormat, renderTarget); !openResult)
     {
       retireRenderSession();
       backendPtr->close();
       resetRenderSession();
       {
         auto const lock = std::scoped_lock{stateMutex};
-        optCurrentTrack.reset();
-        sourceSlot.retireGeneration();
+        optCurrentItem.reset();
+        timeline.retireCursor();
         status.transport = Transport::Error;
         status.statusText = openResult.error().message;
       }
-      publishSource(nullptr);
+      timeline.clear();
+      resetTransitionState();
       return;
     }
 
@@ -961,16 +1342,18 @@ namespace ao::audio
       syncBackendStatus();
     }
 
-    auto const bufferedDuration = sourcePtr ? sourcePtr->bufferedDuration() : std::chrono::milliseconds{0};
+    auto const bufferedDuration =
+      currentNode->sourcePtr ? currentNode->sourcePtr->bufferedDuration() : std::chrono::milliseconds{0};
 
-    if (auto const drained = !sourcePtr || sourcePtr->isDrained();
+    if (auto const drained = !currentNode->sourcePtr || currentNode->sourcePtr->isDrained();
         drained && bufferedDuration == std::chrono::milliseconds{0})
     {
       retireRenderSession();
       backendPtr->stop();
       backendPtr->close();
       resetRenderSession();
-      publishSource(nullptr);
+      timeline.clear();
+      resetTransitionState();
       auto const lock = std::scoped_lock{stateMutex};
       resetEngine();
       return;
@@ -993,6 +1376,76 @@ namespace ao::audio
     }
 
     backendPtr->start();
+  }
+
+  Result<Engine::PreparedNextResult> Engine::Impl::setNextUnlocked(PlaybackItem const& item)
+  {
+    bool haveActive = false;
+    {
+      auto const lock = std::scoped_lock{transitionMutex};
+      haveActive = optCurrentBackendFormat && optCurrentStreamInfo;
+    }
+
+    if (!haveActive)
+    {
+      clearPreparedNext();
+      return makeError(Error::Code::InvalidState, "No active playback to prepare next track");
+    }
+
+    auto const sourceGeneration = nextSourceGeneration++;
+    auto openedTrack = openTrackSession(item, sourceGeneration);
+
+    if (!openedTrack)
+    {
+      clearPreparedNext();
+      return std::unexpected{openedTrack.error()};
+    }
+
+    // Decide gapless capability now, on the control thread, against the track
+    // that is currently playing. The current format only changes on a splice
+    // (which consumes the lookahead cursor) or a control command (which clears
+    // it), so this verdict stays valid until the render thread consumes the
+    // successor.
+    bool stillActive = false;
+    bool capable = false;
+    {
+      auto const lock = std::scoped_lock{transitionMutex};
+      stillActive = optCurrentBackendFormat && optCurrentStreamInfo;
+
+      if (stillActive)
+      {
+        capable = canSplice(*optCurrentStreamInfo, *optCurrentBackendFormat, *openedTrack);
+      }
+    }
+
+    if (!stillActive)
+    {
+      clearPreparedNext();
+      return makeError(Error::Code::InvalidState, "Active playback changed before the next track was prepared");
+    }
+
+    if (capable)
+    {
+      armPreparedNext(std::move(*openedTrack));
+    }
+    else
+    {
+      // Not gapless-capable (lossy source, or a format the current route cannot
+      // hold): leave the lookahead cursor empty so the render thread drains and the
+      // caller performs an ordinary (re-opening) transition. The item id is still
+      // returned so the caller knows the successor is playable.
+      clearPreparedNext();
+    }
+
+    return PreparedNextResult{
+      .itemId = item.id,
+      .transition = capable ? PreparedTransitionMode::Gapless : PreparedTransitionMode::DrainFallback,
+    };
+  }
+
+  std::optional<Engine::PlaybackItemId> Engine::Impl::clearNextUnlocked()
+  {
+    return clearPreparedNext();
   }
 
   void Engine::Impl::pauseUnlocked()
@@ -1038,7 +1491,7 @@ namespace ao::audio
       retireRenderSession();
       resetEngine();
       lock.unlock();
-      publishSource(nullptr);
+      timeline.clear();
       return;
     }
 
@@ -1050,10 +1503,12 @@ namespace ao::audio
 
   void Engine::Impl::stopUnlocked()
   {
+    resetTransitionState();
+
     {
       auto const lock = std::scoped_lock{stateMutex};
       retireRenderSession();
-      sourceSlot.retireGeneration();
+      timeline.retireCursor();
     }
 
     backendPtr->stop();
@@ -1065,17 +1520,21 @@ namespace ao::audio
       resetEngine();
     }
 
-    publishSource(nullptr);
+    timeline.clear();
   }
 
   void Engine::Impl::seekUnlocked(std::chrono::milliseconds offset)
   {
+    clearPreparedNext();
+
     auto const sourcePtr = currentSource();
 
     if (!sourcePtr)
     {
       return;
     }
+
+    cancelPendingDrainSignal();
 
     bool wasPaused = false;
     {
@@ -1091,7 +1550,6 @@ namespace ao::audio
     backendPtr->stop();
     backendPtr->flush();
     backendStarted = false;
-    playbackDrainPending = false;
 
     if (auto const seekResult = sourcePtr->seek(offset); !seekResult)
     {
@@ -1105,10 +1563,15 @@ namespace ao::audio
 
     if (auto const drained = sourcePtr->isDrained(); drained && bufferedDuration == std::chrono::milliseconds{0})
     {
+      // Retire before stopping: a drain callback still in flight from this
+      // (about to be closed) session must not be applied later and resurrect
+      // or re-quiesce engine state the reset below already settled.
+      retireRenderSession();
       backendPtr->stop();
       backendPtr->close();
       resetRenderSession();
-      publishSource(nullptr);
+      timeline.clear();
+      resetTransitionState();
       auto const lock = std::scoped_lock{stateMutex};
       resetEngine();
       return;
@@ -1173,13 +1636,13 @@ namespace ao::audio
 
   void Engine::setBackend(std::unique_ptr<IBackend> backendPtr, Device const& device)
   {
-    auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
+    auto const controlLock = _implPtr->lockControl();
     _implPtr->setBackendUnlocked(std::move(backendPtr), device);
   }
 
   void Engine::updateDevice(Device const& device)
   {
-    auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
+    auto const controlLock = _implPtr->lockControl();
     _implPtr->updateDeviceUnlocked(device);
   }
 
@@ -1187,6 +1650,12 @@ namespace ao::audio
   {
     auto const lock = std::scoped_lock{_implPtr->stateMutex};
     _implPtr->onTrackEnded = std::move(callback);
+  }
+
+  void Engine::setOnTrackAdvanced(OnTrackAdvanced callback)
+  {
+    auto const lock = std::scoped_lock{_implPtr->stateMutex};
+    _implPtr->onTrackAdvanced = std::move(callback);
   }
 
   void Engine::setOnRouteChanged(OnRouteChanged callback)
@@ -1223,7 +1692,7 @@ namespace ao::audio
   {
     auto const sourcePtr = _implPtr->currentSource();
     auto const lock = std::scoped_lock{_implPtr->stateMutex};
-    auto snap = Engine::Status{_implPtr->status};
+    auto snap = Status{_implPtr->status};
     auto const totalFrames = _implPtr->accumulatedFrames.load(std::memory_order_relaxed);
     auto const sampleRate = _implPtr->engineSampleRate.load(std::memory_order_relaxed);
     snap.elapsed = samplesToDuration(totalFrames, sampleRate);
@@ -1233,39 +1702,51 @@ namespace ao::audio
     return snap;
   }
 
-  void Engine::play(PlaybackInput const& input)
+  void Engine::play(PlaybackItem const& item)
   {
-    auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
-    _implPtr->playUnlocked(input);
+    auto const controlLock = _implPtr->lockControl();
+    _implPtr->playUnlocked(item);
+  }
+
+  Result<Engine::PreparedNextResult> Engine::setNext(PlaybackItem const& item)
+  {
+    auto const controlLock = _implPtr->lockControl();
+    return _implPtr->setNextUnlocked(item);
+  }
+
+  std::optional<Engine::PlaybackItemId> Engine::clearNext()
+  {
+    auto const controlLock = _implPtr->lockControl();
+    return _implPtr->clearNextUnlocked();
   }
 
   void Engine::pause()
   {
-    auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
+    auto const controlLock = _implPtr->lockControl();
     _implPtr->pauseUnlocked();
   }
 
   void Engine::resume()
   {
-    auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
+    auto const controlLock = _implPtr->lockControl();
     _implPtr->resumeUnlocked();
   }
 
   void Engine::stop()
   {
-    auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
+    auto const controlLock = _implPtr->lockControl();
     _implPtr->stopUnlocked();
   }
 
   void Engine::seek(std::chrono::milliseconds offset)
   {
-    auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
+    auto const controlLock = _implPtr->lockControl();
     _implPtr->seekUnlocked(offset);
   }
 
   Result<> Engine::setVolume(float volume)
   {
-    auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
+    auto const controlLock = _implPtr->lockControl();
     return _implPtr->setVolumeUnlocked(volume);
   }
 
@@ -1277,7 +1758,7 @@ namespace ao::audio
 
   Result<> Engine::setMuted(bool muted)
   {
-    auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
+    auto const controlLock = _implPtr->lockControl();
     return _implPtr->setMutedUnlocked(muted);
   }
 

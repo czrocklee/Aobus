@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace ao::async
@@ -75,7 +76,9 @@ namespace ao::audio
 
     /// @brief Starts playback. Returns `InvalidState` when the backend is not
     /// yet ready (device discovery pending); the request is dropped in that case.
-    Result<> play(PlaybackInput const& input);
+    Result<> play(Engine::PlaybackItem const& item);
+    Result<Engine::PreparedNextResult> prepareNext(Engine::PlaybackItem const& item);
+    std::optional<Engine::PlaybackItemId> clearPreparedNext();
     /// @brief Selects the output device. Returns `NotFound` when no provider is
     /// registered for `backend`. A not-yet-discovered device is stored as pending
     /// and reported as success.
@@ -94,6 +97,7 @@ namespace ao::audio
     bool isReady() const;
 
     void setOnTrackEnded(std::function<void()> callback);
+    void setOnTrackAdvanced(std::function<void(Engine::TrackAdvanced const&)> callback);
     void setOnStateChanged(std::function<void()> callback);
 
     /// Called when available output devices change; receives per-provider status snapshots.

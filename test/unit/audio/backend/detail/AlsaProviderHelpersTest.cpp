@@ -31,4 +31,17 @@ namespace ao::audio::backend::detail::test
     // NOTE: doAlsaEnumerate() hits real ALSA hardware and is tested in
     // test/integration/audio/backend/ instead.
   }
+
+  TEST_CASE("AlsaProviderHelpers - committedPositionFrames handles partial cross-boundary commits",
+            "[audio][unit][alsa][monitor]")
+  {
+    CHECK(committedPositionFrames(0, 2, 2) == 0);
+    CHECK(committedPositionFrames(1, 2, 2) == 0);
+    CHECK(committedPositionFrames(2, 2, 2) == 0);
+    CHECK(committedPositionFrames(3, 2, 2) == 1);
+    CHECK(committedPositionFrames(4, 2, 2) == 2);
+    CHECK(committedPositionFrames(5, 2, 2) == 2);
+
+    CHECK(committedPositionFrames(3, 0, 4) == 3);
+  }
 } // namespace ao::audio::backend::detail::test

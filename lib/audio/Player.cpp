@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
@@ -8,7 +8,6 @@
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/NullBackend.h>
-#include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Player.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Subscription.h>
@@ -117,6 +116,7 @@ namespace ao::audio
     flow::Graph mergedGraph;
     QualityResult qualityResult;
     std::function<void()> onTrackEnded;
+    std::function<void(Engine::TrackAdvanced const&)> onTrackAdvanced;
     std::function<void()> onStateChanged;
     std::function<void(std::vector<IBackendProvider::Status> const&)> onOutputDevicesChanged;
     std::function<void(Quality, bool)> onQualityChanged;
@@ -334,14 +334,44 @@ namespace ao::audio
                                                           .backendId = kBackendNone,
                                                           .capabilities = {}});
 
+    auto* const gen = &_implPtr->playbackGeneration;
     _implPtr->enginePtr->setOnTrackEnded(
       [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor]
       { Impl::dispatchInternal(executor, gatePtr, [this] { _implPtr->dispatchOutward(&Impl::onTrackEnded); }); });
 
+    _implPtr->enginePtr->setOnTrackAdvanced(
+      [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor, gen](Engine::TrackAdvanced const& event)
+      {
+        auto const advancedGeneration = gen->fetch_add(1, std::memory_order_acq_rel) + 1;
+        Impl::dispatchInternal(executor,
+                               gatePtr,
+                               [this, event, advancedGeneration]
+                               {
+                                 if (advancedGeneration != _implPtr->playbackGeneration.load(std::memory_order_acquire))
+                                 {
+                                   return;
+                                 }
+
+                                 {
+                                   auto const lock = std::scoped_lock{_implPtr->graphMutex};
+                                   _implPtr->cachedRouteStatus = {};
+                                   _implPtr->cachedSystemGraph = {};
+                                   _implPtr->mergedGraph = {};
+                                   _implPtr->qualityResult = {};
+                                 }
+
+                                 _implPtr->graphSubscription.reset();
+
+                                 if (auto callback = _implPtr->onTrackAdvanced; callback)
+                                 {
+                                   callback(event);
+                                 }
+                               });
+      });
+
     _implPtr->enginePtr->setOnStateChanged([this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor]
                                            { _implPtr->dispatchOutward(&Impl::onStateChanged); });
 
-    auto* const gen = &_implPtr->playbackGeneration;
     _implPtr->enginePtr->setOnRouteChanged(
       [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor, gen](Engine::RouteStatus const& status)
       {
@@ -356,6 +386,11 @@ namespace ao::audio
   void Player::setOnTrackEnded(std::function<void()> callback)
   {
     _implPtr->onTrackEnded = std::move(callback);
+  }
+
+  void Player::setOnTrackAdvanced(std::function<void(Engine::TrackAdvanced const&)> callback)
+  {
+    _implPtr->onTrackAdvanced = std::move(callback);
   }
 
   void Player::setOnStateChanged(std::function<void()> callback)
@@ -400,7 +435,7 @@ namespace ao::audio
       });
   }
 
-  Result<> Player::play(PlaybackInput const& input)
+  Result<> Player::play(Engine::PlaybackItem const& item)
   {
     if (!isReady())
     {
@@ -419,8 +454,24 @@ namespace ao::audio
       _implPtr->qualityResult = {};
     }
     _implPtr->graphSubscription.reset();
-    _implPtr->enginePtr->play(input);
+    _implPtr->enginePtr->play(item);
     return {};
+  }
+
+  Result<Engine::PreparedNextResult> Player::prepareNext(Engine::PlaybackItem const& item)
+  {
+    if (!isReady())
+    {
+      return makeError(
+        Error::Code::InvalidState, "Prepared playback ignored: audio backend is not ready (pending device discovery)");
+    }
+
+    return _implPtr->enginePtr->setNext(item);
+  }
+
+  std::optional<Engine::PlaybackItemId> Player::clearPreparedNext()
+  {
+    return _implPtr->enginePtr->clearNext();
   }
 
   Result<> Player::setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)

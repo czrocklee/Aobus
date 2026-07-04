@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
@@ -14,6 +15,7 @@
 #include <optional>
 #include <random>
 #include <ranges>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -22,6 +24,11 @@ namespace ao::uimodel
   namespace
   {
     constexpr auto kRestartThreshold = std::chrono::seconds{3};
+
+    bool isTerminalTrackTransport(audio::Transport transport) noexcept
+    {
+      return transport == audio::Transport::Idle || transport == audio::Transport::Error;
+    }
   }
 
   PlaybackQueueModel::PlaybackQueueModel(rt::PlaybackService& playback)
@@ -60,10 +67,12 @@ namespace ao::uimodel
     _queueStatePtr = std::make_unique<PlaybackQueueState>(PlaybackQueueState{
       .trackIds = std::move(trackIds),
       .currentIndex = startIndex,
+      .optPendingNextIndex = std::nullopt,
       .sourceListId = sourceListId,
     });
 
     subscribeEvents();
+    prepareNext();
     return true;
   }
 
@@ -116,6 +125,18 @@ namespace ao::uimodel
     return false;
   }
 
+  std::optional<TrackId> PlaybackQueueModel::peekNext()
+  {
+    auto const optNextIndex = peekNextIndex();
+
+    if (!optNextIndex || !_queueStatePtr)
+    {
+      return std::nullopt;
+    }
+
+    return _queueStatePtr->trackIds[*optNextIndex];
+  }
+
   void PlaybackQueueModel::next()
   {
     advanceToNext();
@@ -133,7 +154,7 @@ namespace ao::uimodel
     // If we are more than 3 seconds into the song, just restart it
     if (state.elapsed > kRestartThreshold)
     {
-      if (_playback.playTrack(_queueStatePtr->trackIds[_queueStatePtr->currentIndex], _queueStatePtr->sourceListId))
+      if (playIndex(_queueStatePtr->currentIndex))
       {
         return;
       }
@@ -146,9 +167,10 @@ namespace ao::uimodel
       for (auto [idx, trackId] :
            _queueStatePtr->trackIds | std::views::take(prevIndex + 1) | std::views::enumerate | std::views::reverse)
       {
-        if (_playback.playTrack(trackId, _queueStatePtr->sourceListId))
+        std::ignore = trackId;
+
+        if (playIndex(static_cast<std::size_t>(idx)))
         {
-          _queueStatePtr->currentIndex = static_cast<std::size_t>(idx);
           return;
         }
       }
@@ -157,9 +179,10 @@ namespace ao::uimodel
     {
       for (auto [idx, trackId] : _queueStatePtr->trackIds | std::views::enumerate | std::views::reverse)
       {
-        if (_playback.playTrack(trackId, _queueStatePtr->sourceListId))
+        std::ignore = trackId;
+
+        if (playIndex(static_cast<std::size_t>(idx)))
         {
-          _queueStatePtr->currentIndex = static_cast<std::size_t>(idx);
           return;
         }
       }
@@ -169,11 +192,23 @@ namespace ao::uimodel
   void PlaybackQueueModel::setShuffleMode(rt::ShuffleMode mode)
   {
     _playback.setShuffleMode(mode);
+
+    if (_queueStatePtr)
+    {
+      _queueStatePtr->optPendingNextIndex.reset();
+      prepareNext();
+    }
   }
 
   void PlaybackQueueModel::setRepeatMode(rt::RepeatMode mode)
   {
     _playback.setRepeatMode(mode);
+
+    if (_queueStatePtr)
+    {
+      _queueStatePtr->optPendingNextIndex.reset();
+      prepareNext();
+    }
   }
 
   void PlaybackQueueModel::resume()
@@ -208,8 +243,137 @@ namespace ao::uimodel
 
   void PlaybackQueueModel::clear()
   {
+    _playback.clearPreparedNext();
     _queueStatePtr.reset();
     unsubscribeEvents();
+  }
+
+  std::optional<std::size_t> PlaybackQueueModel::peekNextIndex()
+  {
+    if (!_queueStatePtr || _queueStatePtr->trackIds.empty() ||
+        _queueStatePtr->currentIndex >= _queueStatePtr->trackIds.size())
+    {
+      return std::nullopt;
+    }
+
+    if (_queueStatePtr->optPendingNextIndex && *_queueStatePtr->optPendingNextIndex < _queueStatePtr->trackIds.size())
+    {
+      return _queueStatePtr->optPendingNextIndex;
+    }
+
+    auto const& state = _playback.state();
+    auto optNextIndex = std::optional<std::size_t>{};
+
+    if (state.repeatMode == rt::RepeatMode::One)
+    {
+      optNextIndex = _queueStatePtr->currentIndex;
+    }
+    else if (state.shuffleMode == rt::ShuffleMode::On && _queueStatePtr->trackIds.size() > 1)
+    {
+      static std::mt19937 gen(std::random_device{}());
+      auto dist = std::uniform_int_distribution<std::size_t>{0, _queueStatePtr->trackIds.size() - 1};
+      auto nextIndex = dist(gen);
+
+      if (nextIndex == _queueStatePtr->currentIndex)
+      {
+        nextIndex = (nextIndex + 1) % _queueStatePtr->trackIds.size();
+      }
+
+      optNextIndex = nextIndex;
+    }
+    else if (_queueStatePtr->currentIndex + 1 < _queueStatePtr->trackIds.size())
+    {
+      optNextIndex = _queueStatePtr->currentIndex + 1;
+    }
+    else if (state.repeatMode == rt::RepeatMode::All)
+    {
+      optNextIndex = 0;
+    }
+
+    if (optNextIndex)
+    {
+      _queueStatePtr->optPendingNextIndex = optNextIndex;
+    }
+
+    return optNextIndex;
+  }
+
+  bool PlaybackQueueModel::playIndex(std::size_t index)
+  {
+    if (!_queueStatePtr || index >= _queueStatePtr->trackIds.size())
+    {
+      return false;
+    }
+
+    _ignoreNowPlayingChange = true;
+    auto const played = _playback.playTrack(_queueStatePtr->trackIds[index], _queueStatePtr->sourceListId);
+    _ignoreNowPlayingChange = false;
+
+    if (!played)
+    {
+      return false;
+    }
+
+    _queueStatePtr->currentIndex = index;
+    _queueStatePtr->optPendingNextIndex.reset();
+    prepareNext();
+    return true;
+  }
+
+  void PlaybackQueueModel::prepareNext()
+  {
+    if (!_queueStatePtr)
+    {
+      _playback.clearPreparedNext();
+      return;
+    }
+
+    auto const optNextIndex = peekNextIndex();
+
+    if (!optNextIndex)
+    {
+      _playback.clearPreparedNext();
+      return;
+    }
+
+    if (!_playback.prepareNext(_queueStatePtr->trackIds[*optNextIndex], _queueStatePtr->sourceListId))
+    {
+      _queueStatePtr->optPendingNextIndex.reset();
+      _playback.clearPreparedNext();
+    }
+  }
+
+  void PlaybackQueueModel::commitNowPlaying(TrackId trackId, ListId sourceListId)
+  {
+    if (_ignoreNowPlayingChange || !_queueStatePtr)
+    {
+      return;
+    }
+
+    if (_queueStatePtr->sourceListId != sourceListId)
+    {
+      return;
+    }
+
+    if (_queueStatePtr->optPendingNextIndex && *_queueStatePtr->optPendingNextIndex < _queueStatePtr->trackIds.size() &&
+        _queueStatePtr->trackIds[*_queueStatePtr->optPendingNextIndex] == trackId)
+    {
+      _queueStatePtr->currentIndex = *_queueStatePtr->optPendingNextIndex;
+      _queueStatePtr->optPendingNextIndex.reset();
+      prepareNext();
+      return;
+    }
+
+    auto const it = std::ranges::find(_queueStatePtr->trackIds, trackId);
+
+    if (it == _queueStatePtr->trackIds.end())
+    {
+      return;
+    }
+
+    _queueStatePtr->currentIndex = static_cast<std::size_t>(std::distance(_queueStatePtr->trackIds.begin(), it));
+    _queueStatePtr->optPendingNextIndex.reset();
+    prepareNext();
   }
 
   void PlaybackQueueModel::advanceToNext()
@@ -223,7 +387,18 @@ namespace ao::uimodel
 
     if (state.repeatMode == rt::RepeatMode::One)
     {
-      if (_playback.playTrack(_queueStatePtr->trackIds[_queueStatePtr->currentIndex], _queueStatePtr->sourceListId))
+      if (playIndex(_queueStatePtr->currentIndex))
+      {
+        return;
+      }
+    }
+
+    if (_queueStatePtr->optPendingNextIndex)
+    {
+      auto const nextIndex = *_queueStatePtr->optPendingNextIndex;
+      _queueStatePtr->optPendingNextIndex.reset();
+
+      if (playIndex(nextIndex))
       {
         return;
       }
@@ -231,20 +406,8 @@ namespace ao::uimodel
 
     if (state.shuffleMode == rt::ShuffleMode::On && _queueStatePtr->trackIds.size() > 1)
     {
-      static std::mt19937 gen(std::random_device{}());
-      auto dist = std::uniform_int_distribution<std::size_t>{0, _queueStatePtr->trackIds.size() - 1};
-
-      // Simple random pick that isn't the current track
-      auto nextIdx = dist(gen);
-
-      if (nextIdx == _queueStatePtr->currentIndex)
+      if (auto const optNextIndex = peekNextIndex(); optNextIndex && playIndex(*optNextIndex))
       {
-        nextIdx = (nextIdx + 1) % _queueStatePtr->trackIds.size();
-      }
-
-      if (_playback.playTrack(_queueStatePtr->trackIds[nextIdx], _queueStatePtr->sourceListId))
-      {
-        _queueStatePtr->currentIndex = nextIdx;
         return;
       }
     }
@@ -253,9 +416,10 @@ namespace ao::uimodel
 
     for (auto [idx, trackId] : _queueStatePtr->trackIds | std::views::enumerate | std::views::drop(nextIndex))
     {
-      if (_playback.playTrack(trackId, _queueStatePtr->sourceListId))
+      std::ignore = trackId;
+
+      if (playIndex(static_cast<std::size_t>(idx)))
       {
-        _queueStatePtr->currentIndex = static_cast<std::size_t>(idx);
         return;
       }
     }
@@ -264,9 +428,10 @@ namespace ao::uimodel
     {
       for (auto [idx, trackId] : _queueStatePtr->trackIds | std::views::enumerate)
       {
-        if (_playback.playTrack(trackId, _queueStatePtr->sourceListId))
+        std::ignore = trackId;
+
+        if (playIndex(static_cast<std::size_t>(idx)))
         {
-          _queueStatePtr->currentIndex = static_cast<std::size_t>(idx);
           return;
         }
       }
@@ -278,13 +443,34 @@ namespace ao::uimodel
 
   void PlaybackQueueModel::subscribeEvents()
   {
-    _idleSub = _playback.onIdle([this] { advanceToNext(); });
+    _idleSub = _playback.onIdle(
+      [this]
+      {
+        if (isTerminalTrackTransport(_playback.state().transport))
+        {
+          advanceToNext();
+        }
+      });
+    _nowPlayingSub = _playback.onNowPlayingChanged([this](rt::PlaybackService::NowPlayingChanged const& event)
+                                                   { commitNowPlaying(event.trackId, event.sourceListId); });
+    _outputDeviceChangedSub = _playback.onOutputDeviceChanged([this](auto const&) { prepareNext(); });
+    _seekSub = _playback.onSeekUpdate(
+      [this](rt::PlaybackService::SeekUpdate const& event)
+      {
+        if (event.mode == rt::PlaybackService::SeekMode::Final)
+        {
+          prepareNext();
+        }
+      });
     _stoppedSub = _playback.onStopped([this] { clear(); });
   }
 
   void PlaybackQueueModel::unsubscribeEvents()
   {
     _idleSub.reset();
+    _nowPlayingSub.reset();
+    _outputDeviceChangedSub.reset();
+    _seekSub.reset();
     _stoppedSub.reset();
   }
 } // namespace ao::uimodel

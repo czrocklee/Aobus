@@ -147,6 +147,9 @@ add_executable(ao_core_test
     unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
     unit/audio/PcmConverterTest.cpp
     unit/audio/PlayerTest.cpp
+    unit/audio/EngineDrainTest.cpp
+    unit/audio/EngineErrorTest.cpp
+    unit/audio/EngineGaplessTest.cpp
     unit/audio/EngineTest.cpp
     unit/audio/EngineBackendSwapTest.cpp
     unit/audio/EngineCallbackTest.cpp

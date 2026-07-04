@@ -10,6 +10,7 @@
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
 #include <ao/audio/backend/detail/AlsaPcmError.h>
 #include <ao/audio/backend/detail/AlsaPcmVolume.h>
+#include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/utility/ThreadUtils.h>
 
 #include <poll.h>
@@ -490,7 +491,9 @@ namespace ao::audio::backend
 
     bool waitForFrames(::snd_pcm_uframes_t periodSize) const;
     void handleXrun(std::int32_t err) const;
-    void commitFrames(::snd_pcm_uframes_t offset, ::snd_pcm_uframes_t framesRead) const;
+    void commitFrames(::snd_pcm_uframes_t offset,
+                      ::snd_pcm_uframes_t framesRead,
+                      RenderPcmResult const& renderResult) const;
   };
 
   void AlsaExclusiveBackend::Impl::playbackLoop(std::stop_token const& stopToken) const
@@ -550,9 +553,10 @@ namespace ao::audio::backend
       auto* const dst = static_cast<std::byte*>(areas[0].addr) + ((areas[0].first + offset * areas[0].step) / 8);
       auto const bytesToRead = static_cast<std::size_t>(frames) * bytesPerFrame;
 
-      std::size_t const bytesRead = renderTarget->readPcm({dst, bytesToRead});
+      auto const renderResult = renderTarget->renderPcm({dst, bytesToRead});
+      std::size_t const bytesRead = renderResult.bytesWritten;
 
-      // Per the IRenderTarget contract readPcm returns whole frames; commit only
+      // Per the IRenderTarget contract renderPcm returns whole frames; commit only
       // the whole-frame portion defensively. A partial frame must never be
       // committed (it would desync channel alignment) nor gain-scaled.
       auto const framesRead = static_cast<::snd_pcm_uframes_t>(bytesRead / bytesPerFrame);
@@ -570,13 +574,13 @@ namespace ao::audio::backend
                                         mixer.softwareMuted() ? 0.0F : mixer.softwareVolume());
         }
 
-        commitFrames(offset, framesRead);
+        commitFrames(offset, framesRead, renderResult);
       }
       else
       {
         ::snd_pcm_mmap_commit(pcmPtr.get(), offset, 0); // Release back to ALSA
 
-        if (renderTarget->isSourceDrained())
+        if (renderResult.drained)
         {
           ::snd_pcm_drain(pcmPtr.get());
           renderTarget->onDrainComplete();
@@ -615,7 +619,9 @@ namespace ao::audio::backend
     }
   }
 
-  void AlsaExclusiveBackend::Impl::commitFrames(::snd_pcm_uframes_t offset, ::snd_pcm_uframes_t framesRead) const
+  void AlsaExclusiveBackend::Impl::commitFrames(::snd_pcm_uframes_t offset,
+                                                ::snd_pcm_uframes_t framesRead,
+                                                RenderPcmResult const& renderResult) const
   {
     auto const committed = ::snd_pcm_mmap_commit(pcmPtr.get(), offset, framesRead);
 
@@ -633,7 +639,9 @@ namespace ao::audio::backend
         ::snd_pcm_start(pcmPtr.get());
       }
 
-      renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(committed));
+      auto const committedPositionFrames = detail::committedPositionFrames(
+        static_cast<std::uint64_t>(committed), renderResult.positionFrameOffset, renderResult.positionFrames);
+      renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(committedPositionFrames));
     }
   }
 

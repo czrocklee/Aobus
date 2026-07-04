@@ -2,7 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/audio/IRenderTarget.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewService.h>
@@ -13,6 +16,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -112,6 +118,46 @@ namespace ao::uimodel::test
       CHECK(queueModel.isActive() == false);
     }
 
+    SECTION("peekNext does not move the current cursor")
+    {
+      auto const tracks = std::vector{track1, track2, track3};
+      queueModel.playQueue(tracks, track1, ListId{10});
+
+      auto const optFirstPeek = queueModel.peekNext();
+      auto const optSecondPeek = queueModel.peekNext();
+
+      REQUIRE(optFirstPeek);
+      CHECK(*optFirstPeek == track2);
+      CHECK(optSecondPeek == optFirstPeek);
+      CHECK(queueModel.nowPlayingTrackId() == track1);
+      CHECK(playbackService.state().trackId == track1);
+    }
+
+    SECTION("now-playing change commits pending successor")
+    {
+      auto const tracks = std::vector{track1, track2, track3};
+      queueModel.playQueue(tracks, track1, ListId{10});
+
+      REQUIRE(queueModel.peekNext() == track2);
+      REQUIRE(playbackService.playTrack(track2, ListId{10}));
+
+      CHECK(queueModel.nowPlayingTrackId() == track2);
+      CHECK(queueModel.peekNext() == track3);
+    }
+
+    SECTION("now-playing change from another source list does not commit pending successor")
+    {
+      auto const tracks = std::vector{track1, track2, track3};
+      queueModel.playQueue(tracks, track1, ListId{10});
+
+      REQUIRE(queueModel.peekNext() == track2);
+      REQUIRE(playbackService.playTrack(track2, ListId{99}));
+
+      CHECK(queueModel.nowPlayingTrackId() == track1);
+      CHECK(queueModel.peekNext() == track2);
+      CHECK(queueModel.sourceListId() == ListId{10});
+    }
+
     SECTION("previous when active")
     {
       auto const tracks = std::vector{track1, track2, track3};
@@ -194,5 +240,58 @@ namespace ao::uimodel::test
       queueModel.next();
       CHECK(queueModel.isActive() == true);
     }
+
+    SECTION("Shuffle mode next commits the optPeeked successor")
+    {
+      queueModel.setShuffleMode(rt::ShuffleMode::On);
+      auto const tracks = std::vector{track1, track2, track3};
+      queueModel.playQueue(tracks, track1, ListId{10});
+
+      auto const optPeeked = queueModel.peekNext();
+      REQUIRE(optPeeked);
+
+      queueModel.next();
+      CHECK(queueModel.nowPlayingTrackId() == optPeeked);
+    }
+  }
+
+  TEST_CASE("PlaybackQueueModel - non-gapless prepared successor advances through idle fallback",
+            "[uimodel][unit][playback][queue][gapless]")
+  {
+    auto fixture = PlaybackFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const mp3Path = audio::test::requireAudioFixture("basic_metadata.mp3").string();
+    auto const currentTrack = fixture.testLib.addTrack({.title = "Current FLAC", .uri = flacPath});
+    auto const nextTrack = fixture.testLib.addTrack({.title = "Fallback MP3", .uri = mp3Path});
+
+    auto queueModel = PlaybackQueueModel{fixture.playbackService};
+    REQUIRE(queueModel.playQueue({currentTrack, nextTrack}, currentTrack, ListId{10}));
+    REQUIRE(queueModel.nowPlayingTrackId() == currentTrack);
+    REQUIRE(fixture.renderTarget != nullptr);
+
+    auto buffer = std::array<std::byte, 4096>{};
+    bool isDrained = false;
+
+    for (std::int32_t i = 0; i < 100000 && !isDrained; ++i)
+    {
+      isDrained = fixture.renderTarget->renderPcm(buffer).drained;
+      fixture.executor.drain();
+    }
+
+    REQUIRE(isDrained);
+    fixture.renderTarget->onDrainComplete();
+
+    for (std::int32_t i = 0; i < 100000 && queueModel.nowPlayingTrackId() != nextTrack; ++i)
+    {
+      fixture.executor.drain();
+    }
+
+    REQUIRE(queueModel.nowPlayingTrackId() == nextTrack);
+    CHECK(fixture.playbackService.state().trackId == nextTrack);
+    CHECK(fixture.playbackService.state().trackTitle == "Fallback MP3");
+    CHECK(queueModel.isActive());
   }
 } // namespace ao::uimodel::test

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "EngineTestSupport.h"
 #include "ScriptedDecoderSession.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
@@ -136,8 +137,7 @@ namespace ao::audio::test
                                  {
                                    if (auto* const t = _target.load(std::memory_order_relaxed); t != nullptr)
                                    {
-                                     std::ignore = t->readPcm(buffer);
-                                     std::ignore = t->isSourceDrained();
+                                     std::ignore = t->renderPcm(buffer);
                                    }
                                  }
                                }};
@@ -267,7 +267,7 @@ namespace ao::audio::test
 
     for (std::int32_t i = 0; i < 50; ++i)
     {
-      engine.play(desc);
+      engine.play(makePlaybackItem(desc));
       engine.seek(std::chrono::milliseconds{10});
       engine.stop();
     }

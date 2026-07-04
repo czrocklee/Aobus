@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
 #include <ao/audio/Backend.h>
@@ -18,7 +18,9 @@
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/ViewService.h>
 
+#include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -35,6 +37,11 @@ namespace ao::rt
 {
   namespace
   {
+    bool isTerminalTrackTransport(audio::Transport transport) noexcept
+    {
+      return transport == audio::Transport::Idle || transport == audio::Transport::Error;
+    }
+
     OutputProfileSnapshot toOutputProfileSnapshot(audio::IBackendProvider::ProfileMetadata const& src)
     {
       return OutputProfileSnapshot{.id = src.id, .name = src.name, .description = src.description};
@@ -257,6 +264,13 @@ namespace ao::rt
 
   struct PlaybackService::Impl final
   {
+    struct PreparedPlaybackRequest final
+    {
+      PlaybackService::PlaybackRequest request;
+      ListId sourceListId = kInvalidListId;
+      audio::Engine::PlaybackItemId itemId;
+    };
+
     Impl(Impl const&) = delete;
     Impl& operator=(Impl const&) = delete;
     Impl(Impl&&) = delete;
@@ -275,6 +289,8 @@ namespace ao::rt
     std::string currentTrackArtist{};
     std::chrono::milliseconds currentTrackDuration{0};
     std::string lastPlaybackError{};
+    std::vector<PreparedPlaybackRequest> preparedRequests;
+    std::uint64_t nextPlaybackItemId = 1;
     Signal<> preparingSignal;
     Signal<> startedSignal;
     Signal<> pausedSignal;
@@ -397,6 +413,86 @@ namespace ao::rt
                     lastPlaybackError);
     }
 
+    void publishCurrentRequest(PlaybackService::PlaybackRequest const& request, ListId sourceListId)
+    {
+      currentTrackId = request.trackId;
+      currentSourceListId = sourceListId;
+      currentTrackTitle = request.title;
+      currentTrackArtist = request.artist;
+      currentTrackDuration = request.input.duration;
+    }
+
+    audio::Engine::PlaybackItem makePlaybackItem(audio::PlaybackInput input)
+    {
+      return audio::Engine::PlaybackItem{
+        .id = audio::Engine::PlaybackItemId{.value = nextPlaybackItemId++},
+        .input = std::move(input),
+      };
+    }
+
+    void rememberPreparedRequest(PreparedPlaybackRequest request)
+    {
+      std::erase_if(
+        preparedRequests, [&](PreparedPlaybackRequest const& existing) { return existing.itemId == request.itemId; });
+      preparedRequests.push_back(std::move(request));
+    }
+
+    void forgetPreparedRequest(audio::Engine::PlaybackItemId itemId)
+    {
+      std::erase_if(preparedRequests, [&](PreparedPlaybackRequest const& request) { return request.itemId == itemId; });
+    }
+
+    std::optional<PreparedPlaybackRequest> takePreparedRequest(audio::Engine::PlaybackItemId itemId)
+    {
+      auto const it = std::ranges::find_if(
+        preparedRequests, [&](PreparedPlaybackRequest const& request) { return request.itemId == itemId; });
+
+      if (it == preparedRequests.end())
+      {
+        return std::nullopt;
+      }
+
+      auto request = std::move(*it);
+      preparedRequests.erase(it);
+      return request;
+    }
+
+    void discardPreparedRequests() { preparedRequests.clear(); }
+
+    void clearPreparedNext()
+    {
+      if (auto const optDisarmedItemId = playerPtr->clearPreparedNext(); optDisarmedItemId)
+      {
+        forgetPreparedRequest(*optDisarmedItemId);
+      }
+    }
+
+    void handleTrackAdvanced(audio::Engine::TrackAdvanced const& event)
+    {
+      if (auto const optPrepared = takePreparedRequest(event.itemId); optPrepared)
+      {
+        publishCurrentRequest(optPrepared->request, optPrepared->sourceListId);
+        refreshState();
+        nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
+          .trackId = optPrepared->request.trackId,
+          .sourceListId = optPrepared->sourceListId,
+        });
+        return;
+      }
+
+      refreshState();
+    }
+
+    void handleTrackEnded()
+    {
+      refreshState();
+
+      if (isTerminalTrackTransport(state.transport))
+      {
+        idleSignal.emit();
+      }
+    }
+
     explicit Impl(async::IExecutor& callbackExecutor, ViewService& viewService, library::MusicLibrary& musicLibrary)
       : executor{callbackExecutor}
       , playerPtr{std::make_unique<audio::Player>(callbackExecutor)}
@@ -406,12 +502,9 @@ namespace ao::rt
       // Player marshals these callbacks onto the executor thread, so they run on
       // the same thread as the control commands below and can refresh state and
       // emit synchronously without any gate or further dispatch.
-      playerPtr->setOnTrackEnded(
-        [this]
-        {
-          refreshState();
-          idleSignal.emit();
-        });
+      playerPtr->setOnTrackEnded([this] { handleTrackEnded(); });
+
+      playerPtr->setOnTrackAdvanced([this](audio::Engine::TrackAdvanced const& event) { handleTrackAdvanced(event); });
 
       playerPtr->setOnStateChanged([this] { refreshState(); });
 
@@ -585,20 +678,18 @@ namespace ao::rt
 
     // Signal "about to play" so the UI resets the seekbar before the
     // blocking Engine::play call freezes the main thread.
+    impl.discardPreparedRequests();
+    impl.clearPreparedNext();
     impl.preparingSignal.emit();
 
-    if (auto const result = impl.playerPtr->play(request.input); !result)
+    if (auto const result = impl.playerPtr->play(impl.makePlaybackItem(request.input)); !result)
     {
       APP_LOG_WARN("Playback not started: {}", result.error().message);
       impl.refreshState();
       return false;
     }
 
-    impl.currentTrackId = request.trackId;
-    impl.currentSourceListId = sourceListId;
-    impl.currentTrackTitle = request.title;
-    impl.currentTrackArtist = request.artist;
-    impl.currentTrackDuration = request.input.duration;
+    impl.publishCurrentRequest(request, sourceListId);
     impl.refreshState();
     impl.startedSignal.emit();
     impl.nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
@@ -625,6 +716,56 @@ namespace ao::rt
     {
       return false;
     }
+  }
+
+  bool PlaybackService::prepareNext(PlaybackRequest const& request, ListId const sourceListId)
+  {
+    auto& impl = *_implPtr;
+    impl.ensureOnExecutor();
+    impl.ensureReady();
+
+    impl.clearPreparedNext();
+    auto item = impl.makePlaybackItem(request.input);
+    auto const result = impl.playerPtr->prepareNext(item);
+
+    if (!result)
+    {
+      APP_LOG_WARN("Playback not prepared: {}", result.error().message);
+      return false;
+    }
+
+    impl.rememberPreparedRequest(
+      Impl::PreparedPlaybackRequest{.request = request, .sourceListId = sourceListId, .itemId = result->itemId});
+    return true;
+  }
+
+  bool PlaybackService::prepareNext(TrackId const trackId, ListId const sourceListId)
+  {
+    _implPtr->ensureOnExecutor();
+
+    try
+    {
+      auto const optRequest = playbackRequestForTrack(_implPtr->library, trackId);
+
+      if (!optRequest)
+      {
+        _implPtr->clearPreparedNext();
+        return false;
+      }
+
+      return prepareNext(*optRequest, sourceListId);
+    }
+    catch (std::exception const&)
+    {
+      _implPtr->clearPreparedNext();
+      return false;
+    }
+  }
+
+  void PlaybackService::clearPreparedNext()
+  {
+    _implPtr->ensureOnExecutor();
+    _implPtr->clearPreparedNext();
   }
 
   TrackId PlaybackService::playSelectionInView(ViewId const viewId)
@@ -672,6 +813,8 @@ namespace ao::rt
     _implPtr->currentTrackTitle.clear();
     _implPtr->currentTrackArtist.clear();
     _implPtr->currentTrackDuration = std::chrono::milliseconds{0};
+    _implPtr->discardPreparedRequests();
+    _implPtr->clearPreparedNext();
     _implPtr->playerPtr->stop();
     _implPtr->refreshState();
     _implPtr->stoppedSignal.emit();
@@ -704,6 +847,7 @@ namespace ao::rt
 
     if (mode == SeekMode::Final)
     {
+      _implPtr->clearPreparedNext();
       _implPtr->playerPtr->seek(elapsed);
       // seek() does stop/flush/start with no open(), so it fires no async
       // onStateChanged; refresh the snapshot explicitly to pick up the new
@@ -719,6 +863,7 @@ namespace ao::rt
                                         audio::ProfileId const& profileId)
   {
     _implPtr->ensureOnExecutor();
+    _implPtr->clearPreparedNext();
 
     if (auto const result = _implPtr->playerPtr->setOutputDevice(backendId, deviceId, profileId); !result)
     {

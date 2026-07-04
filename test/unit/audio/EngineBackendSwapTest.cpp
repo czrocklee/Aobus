@@ -21,7 +21,7 @@ namespace ao::audio::test
     auto backendPtr = std::make_unique<CapturingBackend>();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
-    engine.play(PlaybackInput{.filePath = "test.flac"});
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "test.flac"}));
     CHECK(engine.status().transport == Transport::Playing);
 
     auto newBackendPtr = std::make_unique<CapturingBackend>();

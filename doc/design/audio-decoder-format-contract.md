@@ -21,4 +21,18 @@ Current behavior:
 
 MP3 is a lossy source. Its compressed stream has native rate and channel metadata, while decoded PCM bit depth describes the decoder output representation rather than a lossless source depth.
 
+## Gapless Capability
+
+`DecodedStreamInfo::codec` and `DecodedStreamInfo::isLossy` are part of the
+engine splice gate. In the current gapless phase, only sessions reported as
+lossless FLAC or lossless ALAC are splice-capable. Unknown codecs and every
+lossy session are not splice-capable even when their decoded PCM format matches
+the next track.
+
+Decoders must keep these fields conservative: a lossy format must set
+`isLossy`, and a decoder that cannot identify its codec must leave the codec as
+`Unknown` rather than borrowing a lossless identity. Optional lossy delay/padding
+trim support can widen the gate later, but until that metadata is parsed and
+fixture-tested, lossy streams must take the drain path.
+
 Decoder blocks that contain PCM data must be consumable before the decoder reports an empty end-of-stream block. `firstFrameIndex` identifies the actual PCM frame offset for the returned block, including after decoder-level seek adjustment.

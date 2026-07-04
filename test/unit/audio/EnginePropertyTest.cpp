@@ -149,7 +149,7 @@ namespace ao::audio::test
                                       });
 
       // Play must be called so the backend target is initialized
-      engine.play(desc);
+      engine.play(makePlaybackItem(desc));
 
       auto stateChanged = CallbackLatch{};
       engine.setOnStateChanged([&] { stateChanged.notify(); });
@@ -191,7 +191,7 @@ namespace ao::audio::test
 
     SECTION("Backend callbacks update engine state correctly")
     {
-      engine.play(desc);
+      engine.play(makePlaybackItem(desc));
       auto stateChanged = CallbackLatch{};
       engine.setOnStateChanged([&] { stateChanged.notify(); });
 
@@ -199,7 +199,7 @@ namespace ao::audio::test
       CHECK(stateChanged.waitForCount(1));
       CHECK(engine.status().transport == Transport::Error);
 
-      engine.play(desc);
+      engine.play(makePlaybackItem(desc));
       auto routeChanged = CallbackLatch{};
       engine.setOnRouteChanged([&](auto const&) { routeChanged.notify(); });
       backendRaw->fireRouteReady("test-anchor");
@@ -235,7 +235,7 @@ namespace ao::audio::test
       CHECK(engine.setVolume(0.37F));
       CHECK(engine.setMuted(true));
 
-      engine.play(desc);
+      engine.play(makePlaybackItem(desc));
 
       CHECK(engine.status().volume == Catch::Approx{0.37F});
       CHECK(engine.status().muted == true);

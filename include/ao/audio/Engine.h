@@ -7,6 +7,7 @@
 #include <ao/audio/AudioRouteFormatState.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Transport.h>
 
 #include <chrono>
@@ -44,12 +45,12 @@ namespace ao::audio
      * snapshots, but they are not linearized with in-flight control commands.
      *
      * User callbacks registered through setOnStateChanged(), setOnTrackEnded(),
-     * and setOnRouteChanged() are delivered from Engine's internal event worker,
-     * not from backend or decoder callback stacks. setOnStateChanged() reports
-     * asynchronous backend/source state changes; synchronous control commands
-     * publish their result by returning. Callbacks may call back into Engine
-     * control methods. They must return promptly; blocking a user callback
-     * blocks subsequent Engine event delivery.
+     * setOnTrackAdvanced(), and setOnRouteChanged() are delivered from Engine's
+     * internal event worker, not from backend or decoder callback stacks.
+     * setOnStateChanged() reports asynchronous backend/source state changes;
+     * synchronous control commands publish their result by returning. Callbacks
+     * may call back into Engine control methods. They must return promptly;
+     * blocking a user callback blocks subsequent Engine event delivery.
      */
     struct Status final
     {
@@ -80,7 +81,39 @@ namespace ao::audio
       bool operator==(RouteStatus const&) const = default;
     };
 
+    struct PlaybackItemId final
+    {
+      std::uint64_t value = 0;
+
+      bool operator==(PlaybackItemId const&) const = default;
+    };
+
+    struct PlaybackItem final
+    {
+      PlaybackItemId id;
+      PlaybackInput input;
+    };
+
+    enum class PreparedTransitionMode : std::uint8_t
+    {
+      Gapless,
+      DrainFallback,
+    };
+
+    struct PreparedNextResult final
+    {
+      PlaybackItemId itemId;
+      PreparedTransitionMode transition = PreparedTransitionMode::DrainFallback;
+    };
+
+    struct TrackAdvanced final
+    {
+      PlaybackItemId itemId;
+      PlaybackInput input;
+    };
+
     using OnRouteChanged = std::function<void(RouteStatus const&)>;
+    using OnTrackAdvanced = std::function<void(TrackAdvanced const&)>;
 
     Engine(std::unique_ptr<IBackend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory = nullptr);
     ~Engine();
@@ -94,12 +127,15 @@ namespace ao::audio
     void updateDevice(Device const& device);
 
     void setOnTrackEnded(std::function<void()> callback);
+    void setOnTrackAdvanced(OnTrackAdvanced callback);
     void setOnRouteChanged(OnRouteChanged callback);
     void setOnStateChanged(std::function<void()> callback);
 
     RouteStatus routeStatus() const;
 
-    void play(PlaybackInput const& input);
+    void play(PlaybackItem const& item);
+    Result<PreparedNextResult> setNext(PlaybackItem const& item);
+    std::optional<PlaybackItemId> clearNext();
     void pause();
     void resume();
     void stop();

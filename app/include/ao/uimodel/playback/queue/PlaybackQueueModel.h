@@ -23,6 +23,7 @@ namespace ao::uimodel
   {
     std::vector<TrackId> trackIds;
     std::size_t currentIndex = 0;
+    std::optional<std::size_t> optPendingNextIndex;
     ListId sourceListId{kInvalidListId};
   };
 
@@ -45,6 +46,7 @@ namespace ao::uimodel
     // Transport controls
     bool hasNext() const;
     bool hasPrevious() const;
+    std::optional<TrackId> peekNext();
     void next();
     void previous();
     void resume();
@@ -59,6 +61,10 @@ namespace ao::uimodel
 
   private:
     void clear();
+    std::optional<std::size_t> peekNextIndex();
+    bool playIndex(std::size_t index);
+    void prepareNext();
+    void commitNowPlaying(TrackId trackId, ListId sourceListId);
     void advanceToNext();
     void subscribeEvents();
     void unsubscribeEvents();
@@ -66,6 +72,10 @@ namespace ao::uimodel
     rt::PlaybackService& _playback;
     std::unique_ptr<PlaybackQueueState> _queueStatePtr;
     rt::Subscription _idleSub;
+    rt::Subscription _nowPlayingSub;
+    rt::Subscription _outputDeviceChangedSub;
+    rt::Subscription _seekSub;
     rt::Subscription _stoppedSub;
+    bool _ignoreNowPlayingChange = false;
   };
 } // namespace ao::uimodel

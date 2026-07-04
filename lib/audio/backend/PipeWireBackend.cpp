@@ -192,28 +192,39 @@ namespace ao::audio::backend
     // whole multiple of the frame stride.
     auto const strideBytes = static_cast<std::size_t>(stride);
     auto const requestBytes = (static_cast<std::size_t>(maxSize) / strideBytes) * strideBytes;
-    auto const bytesRead = renderTarget->readPcm({static_cast<std::byte*>(data), requestBytes});
-
-    if (auto const framesRead = bytesRead / strideBytes; framesRead > 0)
+    auto commitPcm = [&](RenderPcmResult const& result) -> bool
     {
+      auto const bytesRead = result.bytesWritten;
+      auto const framesRead = bytesRead / strideBytes;
+
+      if (framesRead == 0)
+      {
+        return false;
+      }
+
       auto const committedBytes = framesRead * strideBytes;
       buffer->buffer->datas[0].chunk->offset = 0;
       buffer->buffer->datas[0].chunk->size = static_cast<std::uint32_t>(committedBytes);
       buffer->buffer->datas[0].chunk->stride = static_cast<std::int32_t>(stride);
       ::pw_stream_queue_buffer(streamPtr.get(), buffer);
-      renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(framesRead));
+      renderTarget->onPositionAdvanced(result.positionFrames);
+      return true;
+    };
+
+    auto const renderResult = renderTarget->renderPcm({static_cast<std::byte*>(data), requestBytes});
+
+    if (commitPcm(renderResult))
+    {
+      return;
     }
 
-    else
-    {
-      buffer->buffer->datas[0].chunk->offset = 0;
-      buffer->buffer->datas[0].chunk->size = 0;
-      ::pw_stream_queue_buffer(streamPtr.get(), buffer);
+    buffer->buffer->datas[0].chunk->offset = 0;
+    buffer->buffer->datas[0].chunk->size = 0;
+    ::pw_stream_queue_buffer(streamPtr.get(), buffer);
 
-      if (renderTarget->isSourceDrained())
-      {
-        ::pw_stream_flush(streamPtr.get(), true);
-      }
+    if (renderResult.drained)
+    {
+      ::pw_stream_flush(streamPtr.get(), true);
     }
   }
 

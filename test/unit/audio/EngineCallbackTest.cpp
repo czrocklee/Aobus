@@ -141,7 +141,7 @@ namespace ao::audio::test
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
-    engine.play(PlaybackInput{.filePath = "song.flac"});
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "song.flac"}));
 
     auto* const target = backendRaw->target();
     auto stateChanged = CallbackLatch{};
@@ -163,7 +163,7 @@ namespace ao::audio::test
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
-    engine.play(PlaybackInput{.filePath = "song.flac"});
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "song.flac"}));
 
     auto* const target = backendRaw->target();
     auto callbackThreadPromise = std::promise<std::thread::id>{};
@@ -187,11 +187,16 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<CapturingBackend>();
     auto* const backendRaw = backendPtr.get();
+
+    // The latch must outlive the engine: the event thread keeps invoking
+    // callbacks until the engine is destroyed (which joins it), and this test
+    // fires several state-changing events while only waiting for the first
+    // notification, so later notifications are still in flight at scope exit.
+    auto stateChanged = CallbackLatch{};
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
-    engine.play(PlaybackInput{.filePath = "song.flac"});
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "song.flac"}));
     auto* const target = backendRaw->target();
-    auto stateChanged = CallbackLatch{};
     engine.setOnStateChanged([&] { stateChanged.notify(); });
 
     target->onUnderrun();
@@ -211,7 +216,7 @@ namespace ao::audio::test
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
-    engine.play(PlaybackInput{.filePath = "song.flac"});
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "song.flac"}));
     auto* const target = backendRaw->target();
     CHECK(target != nullptr);
 
@@ -233,7 +238,7 @@ namespace ao::audio::test
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
-    engine.play(PlaybackInput{.filePath = "song.flac"});
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "song.flac"}));
 
     auto callbackThreadPromise = std::promise<std::thread::id>{};
     auto callbackThread = callbackThreadPromise.get_future();
@@ -265,7 +270,7 @@ namespace ao::audio::test
     blockingEngine.setOnRouteChanged([&](Engine::RouteStatus const&)
                                      { routeChanged.store(true, std::memory_order_release); });
 
-    blockingEngine.play(PlaybackInput{.filePath = "song.flac"});
+    blockingEngine.play(makePlaybackItem(PlaybackInput{.filePath = "song.flac"}));
     CHECK(blockingEngine.status().transport == Transport::Playing);
 
     blockingBackendRaw->blockStop();

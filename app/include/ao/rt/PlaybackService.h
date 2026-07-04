@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -130,6 +130,9 @@ namespace ao::rt
     // playTrack() resolves a TrackId via the library and forwards here.
     // Returns false when playback is rejected before the engine starts.
     bool play(PlaybackRequest const& request, ListId sourceListId);
+    bool prepareNext(PlaybackRequest const& request, ListId sourceListId);
+    bool prepareNext(TrackId trackId, ListId sourceListId);
+    void clearPreparedNext();
 
     // Register an audio backend provider. Called by the composition root
     // (via AppRuntime::addAudioProvider) during bootstrap.

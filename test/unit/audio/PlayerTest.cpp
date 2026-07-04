@@ -259,7 +259,10 @@ namespace ao::audio::test
     CHECK(snapBefore.engine.currentDeviceId == "null");
 
     // 1b. Call play while pending - should be ignored
-    CHECK_FALSE(player.play(PlaybackInput{.filePath = "song.flac"}));
+    CHECK_FALSE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 1},
+      .input = PlaybackInput{.filePath = "song.flac"},
+    }));
     CHECK(player.status().engine.transport == Transport::Idle);
 
     // 2. Simulate devices being discovered
