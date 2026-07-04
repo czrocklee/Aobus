@@ -59,7 +59,8 @@ Recommended broad check from the project root:
 ./ao check
 ```
 
-Focused iteration after the test binary already exists:
+Focused filters are debugging tools, not routine validation. Use them only when
+a concrete failure or hypothesis needs a tighter feedback loop:
 
 ```bash
 ./ao test --core "Component - behavior"
@@ -68,7 +69,7 @@ Focused iteration after the test binary already exists:
 ./ao test --council "Component - behavior"
 ```
 
-Run the narrowest useful filter first, then the normal project test target when practical.
+Do not run a ladder of suite filters as a substitute for `./ao check`.
 
 Do not run clang-tidy for ordinary test changes unless the user explicitly asks for linting, clang-tidy, tidy cleanup, or lint findings in the current session. If requested, use:
 

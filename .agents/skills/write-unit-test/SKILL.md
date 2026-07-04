@@ -49,7 +49,7 @@ Read only the development doc that matches the task. Do not load every reference
 6. Assert observable outcomes and postconditions.
 7. Before adding shared helpers, search existing `*TestSupport.h` files and layer utilities such as `test/unit/RuntimeTestUtils.h`.
 8. Add new test files to `test/CMakeLists.txt`.
-9. Run the narrowest useful test filter first when practical.
+9. Validate according to `doc/dev/testing/validation-and-review.md`.
 
 ## Layer quick map
 
@@ -121,20 +121,7 @@ For callbacks, assert payloads, ordering, and non-emission when relevant. `calle
 
 ## Validation
 
-Recommended broad check from the project root:
-
-```bash
-./ao check
-```
-
-Focused iteration examples:
-
-```bash
-./ao test --core "Component - behavior"
-./ao test --gtk "Component - behavior"
-./ao test --integration "Component - behavior"
-./ao test --council "Component - behavior"
-```
+Use `doc/dev/testing/validation-and-review.md` as the source of truth for validation commands and scope.
 
 Do not run clang-tidy for ordinary test changes unless the user explicitly asks for linting, clang-tidy, tidy cleanup, or lint findings. If requested, use:
 

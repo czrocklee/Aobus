@@ -16,14 +16,16 @@ Stay focused on the failing behavior. Do not start documentation updates, format
 
 When the fix touches C++ files, follow the repository's local style directly and keep the edit scoped to the failing path. Use `use-clang-tidy` only when the user explicitly asks to diagnose linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session; otherwise do not run lint validation.
 
+Follow the project validation policy in `doc/dev/testing/validation-and-review.md`. While diagnosing, focused commands are allowed only to reproduce a known failure or prove one concrete hypothesis.
+
 ## Debugging Loop
 
 1. Capture the exact failing command, test filter, input, log excerpt, signal, assertion, or stack trace.
-2. Reproduce with the narrowest command possible from the repo root. Prefer preserving existing `/tmp/build/...` trees.
+2. Reproduce with the command that actually fails from the repo root. If `./ao check` is the reliable reproducer, use it. Prefer preserving existing `/tmp/build/...` trees.
 3. Read only the files on the failing path: the diagnostic location, the called API, the closest test, and nearby helpers.
 4. Form one concrete hypothesis. Verify it with one focused command, trace, assertion, log, debugger session, or source read.
 5. Make the smallest behavioral change that addresses the root cause.
-6. Re-run the narrow failing command. Widen validation only after the narrow check passes.
+6. Re-run a focused command only if it was needed to debug the concrete failure; otherwise run `./ao check`.
 7. Report the cause, the fix, and the validation result. Mention deferred nonfunctional work only if it remains necessary.
 
 ## Useful Commands
@@ -91,13 +93,14 @@ Use `rg` for code search. Search narrowly by symbol, error text, test name, or a
 
 ## Validation Scope
 
-Use the narrowest passing check first, then widen according to risk:
+Focused commands are diagnosis tools:
 
 - Compile error: rebuild the failing target.
-- Unit failure: rerun the exact failing test, then the affected test binary if needed.
+- Unit failure: rerun the exact failing test only when it materially speeds root-cause diagnosis.
 - Crash: rerun the crashing command under the same build mode.
 - Threading fix: rerun the reproducer repeatedly or under the relevant sanitizer when available.
-- Shared core behavior: run `./ao check` after the focused check passes.
+
+After the focused diagnosis is done, return to the project validation policy.
 
 Run formatting, docs, or broad coverage only after the functional issue is fixed, and only when required by the user's requested deliverable. Run clang-tidy only when the user explicitly asks for linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session.
 

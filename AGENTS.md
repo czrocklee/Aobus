@@ -30,7 +30,9 @@ Read the human docs for project policy instead of duplicating them here:
 6. **Tests:** All changes include appropriate test coverage.
 7. **Scratch files:** Agent throwaway artifacts go to `/tmp`, never into the repo.
 8. **Hygiene:** Do not run format or lint tools mid-session unless the user
-   explicitly asks for linting. Use builds and targeted tests while developing.
+   explicitly asks for linting.
+9. **Validation:** Follow `doc/dev/testing/validation-and-review.md`; completed
+   work normally uses one full `./ao check`.
 
 > [!TIP]
 > Heavy development, no compatibility/migration constraints. Propose the best approach without historical baggage.
