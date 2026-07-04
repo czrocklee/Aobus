@@ -12,12 +12,14 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackSessionState.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewService.h>
 
@@ -34,6 +36,7 @@
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -186,6 +189,22 @@ namespace ao::rt
     bool shouldPostDefaultFailureNotification(PlaybackFailure const& failure, bool const hasFailureSubscriber) noexcept
     {
       return !hasFailureSubscriber || !isTrackFailureKind(failure.kind);
+    }
+
+    std::chrono::milliseconds clampSessionElapsed(std::chrono::milliseconds elapsed,
+                                                  std::chrono::milliseconds duration) noexcept
+    {
+      if (elapsed <= std::chrono::milliseconds{0})
+      {
+        return std::chrono::milliseconds{0};
+      }
+
+      if (duration > std::chrono::milliseconds{0} && elapsed > duration)
+      {
+        return duration;
+      }
+
+      return elapsed;
     }
 
     std::string playbackFailureReason(Error const& error)
@@ -351,6 +370,13 @@ namespace ao::rt
       ListId sourceListId = kInvalidListId;
     };
 
+    struct DeferredResumeRequest final
+    {
+      PlaybackService::PlaybackRequest request;
+      ListId sourceListId = kInvalidListId;
+      std::chrono::milliseconds elapsed{0};
+    };
+
     Impl(Impl const&) = delete;
     Impl& operator=(Impl const&) = delete;
     Impl(Impl&&) = delete;
@@ -373,6 +399,8 @@ namespace ao::rt
     std::string lastPlaybackError{};
     std::optional<PlaybackFailureNotification> optLastPlaybackFailureNotification;
     std::vector<PreparedPlaybackRequest> preparedRequests;
+    std::optional<DeferredResumeRequest> optDeferredResume;
+    std::optional<PlaybackSessionState> optLastRestorableSession;
     std::uint64_t nextPlaybackItemId = 1;
     Signal<> preparingSignal;
     Signal<> startedSignal;
@@ -457,6 +485,12 @@ namespace ao::rt
       state.trackArtist = currentTrackArtist;
       state.shuffleMode = shuffleMode;
       state.repeatMode = repeatMode;
+
+      if (optDeferredResume && state.transport == audio::Transport::Idle)
+      {
+        state.elapsed = optDeferredResume->elapsed;
+        state.duration = optDeferredResume->request.input.duration;
+      }
 
       if (state.duration == std::chrono::milliseconds{0})
       {
@@ -545,6 +579,105 @@ namespace ao::rt
     }
 
     void discardPreparedRequests() { preparedRequests.clear(); }
+
+    PlaybackSessionState currentSessionState() const
+    {
+      auto elapsed = state.elapsed < std::chrono::milliseconds{0} ? std::chrono::milliseconds{0} : state.elapsed;
+      auto const duration = state.duration > std::chrono::milliseconds{0} ? state.duration : currentTrackDuration;
+
+      if (duration > std::chrono::milliseconds{0} && elapsed >= duration)
+      {
+        elapsed = std::chrono::milliseconds{0};
+      }
+
+      return PlaybackSessionState{
+        .sourceListId = currentSourceListId,
+        .trackId = currentTrackId,
+        .positionMs = static_cast<std::uint64_t>(elapsed.count()),
+        .shuffleMode = shuffleMode,
+        .repeatMode = repeatMode,
+        .volume = normalizePlaybackVolume(state.volume),
+        .muted = state.muted,
+      };
+    }
+
+    void rememberRestorableSession()
+    {
+      if (currentTrackId != kInvalidTrackId)
+      {
+        optLastRestorableSession = currentSessionState();
+      }
+    }
+
+    PlaybackSessionState snapshotSessionState() const
+    {
+      if (currentTrackId == kInvalidTrackId)
+      {
+        return optLastRestorableSession.value_or(PlaybackSessionState{});
+      }
+
+      return currentSessionState();
+    }
+
+    void restoreDeferredPlayback(PlaybackService::PlaybackRequest request, PlaybackSessionState const& session)
+    {
+      discardPreparedRequests();
+      clearPreparedNext();
+      auto const restoredElapsed =
+        clampSessionElapsed(std::chrono::milliseconds{static_cast<std::chrono::milliseconds::rep>(session.positionMs)},
+                            request.input.duration);
+      optDeferredResume = DeferredResumeRequest{
+        .request = request,
+        .sourceListId = session.sourceListId,
+        .elapsed = restoredElapsed,
+      };
+
+      shuffleMode = session.shuffleMode;
+      repeatMode = session.repeatMode;
+      applySessionVolumeAndMute(session);
+
+      publishCurrentRequest(request, session.sourceListId, audio::Engine::PlaybackItemId{});
+      refreshState();
+      state.elapsed = restoredElapsed;
+      state.duration = request.input.duration;
+      state.transport = audio::Transport::Idle;
+      rememberRestorableSession();
+
+      announceNowPlaying(request, session.sourceListId);
+      seekUpdateSignal.emit(PlaybackService::SeekUpdate{
+        .elapsed = restoredElapsed,
+        .mode = PlaybackService::SeekMode::Final,
+      });
+      shuffleModeChangedSignal.emit(PlaybackService::ShuffleModeChanged{.mode = shuffleMode});
+      repeatModeChangedSignal.emit(PlaybackService::RepeatModeChanged{.mode = repeatMode});
+      volumeChangedSignal.emit(state.volume);
+      mutedChangedSignal.emit(state.muted);
+    }
+
+    // Restored volume/mute intents come from disk, so surface application
+    // failures instead of dropping them silently: the public setVolume path
+    // logs the same error and the user-visible state reflects the player's
+    // actual state, not the requested value.
+    void applySessionVolumeAndMute(PlaybackSessionState const& session) const
+    {
+      if (auto const volumeResult = playerPtr->setVolume(session.volume); !volumeResult)
+      {
+        APP_LOG_WARN("PlaybackService: Restored volume apply failed - {}", volumeResult.error().message);
+      }
+
+      if (auto const muteResult = playerPtr->setMuted(session.muted); !muteResult)
+      {
+        APP_LOG_WARN("PlaybackService: Restored mute apply failed - {}", muteResult.error().message);
+      }
+    }
+
+    void announceNowPlaying(PlaybackService::PlaybackRequest const& request, ListId sourceListId)
+    {
+      nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
+        .trackId = request.trackId,
+        .sourceListId = sourceListId,
+      });
+    }
 
     std::optional<PlaybackRequestContext> contextForPlaybackItem(audio::Engine::PlaybackItemId itemId) const
     {
@@ -869,7 +1002,9 @@ namespace ao::rt
     return _implPtr->state;
   }
 
-  Result<> PlaybackService::play(PlaybackRequest const& request, ListId const sourceListId)
+  Result<> PlaybackService::play(PlaybackRequest const& request,
+                                 ListId const sourceListId,
+                                 std::chrono::milliseconds const initialOffset)
   {
     auto& impl = *_implPtr;
     impl.ensureOnExecutor();
@@ -879,11 +1014,12 @@ namespace ao::rt
     // blocking Engine::play call freezes the main thread.
     impl.discardPreparedRequests();
     impl.clearPreparedNext();
+    impl.optDeferredResume.reset();
     impl.preparingSignal.emit();
 
     auto item = impl.makePlaybackItem(request.input);
 
-    if (auto const result = impl.playerPtr->play(item); !result)
+    if (auto const result = impl.playerPtr->play(item, initialOffset); !result)
     {
       APP_LOG_WARN("Playback not started: {}", result.error().message);
       impl.refreshState();
@@ -901,10 +1037,7 @@ namespace ao::rt
     impl.publishCurrentRequest(request, sourceListId, item.id);
     impl.refreshState();
     impl.startedSignal.emit();
-    impl.nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
-      .trackId = request.trackId,
-      .sourceListId = sourceListId,
-    });
+    impl.announceNowPlaying(request, sourceListId);
     return {};
   }
 
@@ -1008,15 +1141,31 @@ namespace ao::rt
 
   void PlaybackService::resume()
   {
-    _implPtr->ensureOnExecutor();
-    _implPtr->playerPtr->resume();
-    _implPtr->refreshState();
-    _implPtr->startedSignal.emit();
+    auto& impl = *_implPtr;
+    impl.ensureOnExecutor();
+
+    // A deferred resume token only fires when we still own the idle state it
+    // was armed against; an intervening player transition (e.g. an async
+    // backend ready callback) means resume() should just hand control back to
+    // the player rather than restart the restored track from scratch.
+    if (impl.optDeferredResume && impl.state.transport == audio::Transport::Idle)
+    {
+      auto deferred = std::move(*impl.optDeferredResume);
+      impl.optDeferredResume.reset();
+      std::ignore = play(deferred.request, deferred.sourceListId, deferred.elapsed);
+      return;
+    }
+
+    impl.playerPtr->resume();
+    impl.refreshState();
+    impl.startedSignal.emit();
   }
 
   void PlaybackService::stop()
   {
     _implPtr->ensureOnExecutor();
+    _implPtr->refreshState();
+    _implPtr->rememberRestorableSession();
     _implPtr->currentTrackId = {};
     _implPtr->currentSourceListId = {};
     _implPtr->currentPlaybackItemId = {};
@@ -1024,6 +1173,7 @@ namespace ao::rt
     _implPtr->currentTrackArtist.clear();
     _implPtr->currentTrackDuration = std::chrono::milliseconds{0};
     _implPtr->discardPreparedRequests();
+    _implPtr->optDeferredResume.reset();
     _implPtr->clearPreparedNext();
     _implPtr->playerPtr->stop();
     _implPtr->refreshState();
@@ -1057,6 +1207,19 @@ namespace ao::rt
 
     if (mode == SeekMode::Final)
     {
+      if (_implPtr->optDeferredResume && _implPtr->state.transport == audio::Transport::Idle)
+      {
+        // While armed with a deferred resume token, redirect seeks into the
+        // token so the engine starts at the user's chosen position when resume
+        // finally consumes it. Avoids opening the audio route just to seek an
+        // idle pipeline.
+        auto const clampedElapsed = clampSessionElapsed(elapsed, _implPtr->optDeferredResume->request.input.duration);
+        _implPtr->optDeferredResume->elapsed = clampedElapsed;
+        _implPtr->state.elapsed = clampedElapsed;
+        _implPtr->seekUpdateSignal.emit(SeekUpdate{.elapsed = clampedElapsed, .mode = mode});
+        return;
+      }
+
       _implPtr->clearPreparedNext();
       _implPtr->playerPtr->seek(elapsed);
       // seek() does stop/flush/start with no open(), so it fires no async
@@ -1092,14 +1255,15 @@ namespace ao::rt
   void PlaybackService::setVolume(float const volume)
   {
     _implPtr->ensureOnExecutor();
+    auto const normalizedVolume = normalizePlaybackVolume(volume);
 
-    if (auto const result = _implPtr->playerPtr->setVolume(volume); !result)
+    if (auto const result = _implPtr->playerPtr->setVolume(normalizedVolume); !result)
     {
       APP_LOG_ERROR("Failed to set volume: {}", result.error().message);
     }
 
     _implPtr->refreshState();
-    _implPtr->volumeChangedSignal.emit(volume);
+    _implPtr->volumeChangedSignal.emit(_implPtr->state.volume);
   }
 
   void PlaybackService::setMuted(bool const muted)
@@ -1125,6 +1289,70 @@ namespace ao::rt
     _implPtr->ensureOnExecutor();
     _implPtr->revealTrackRequestedSignal.emit(PlaybackService::RevealTrackRequested{
       .trackId = trackId, .preferredListId = preferredListId, .preferredViewId = preferredViewId});
+  }
+
+  PlaybackSessionState PlaybackService::sessionState() const
+  {
+    _implPtr->ensureOnExecutor();
+    return _implPtr->snapshotSessionState();
+  }
+
+  void PlaybackService::saveSession(ConfigStore& store)
+  {
+    _implPtr->ensureOnExecutor();
+    // refreshState picks up the latest elapsed/volume from the player so the
+    // saved snapshot reflects reality. rememberRestorableSession is not needed
+    // here: snapshotSessionState reads a live currentSessionState() when a
+    // track is active, and falls back to optLastRestorableSession otherwise,
+    // which stop() is responsible for capturing before clearing currentTrackId.
+    _implPtr->refreshState();
+    auto const session = _implPtr->snapshotSessionState();
+
+    if (session.trackId == kInvalidTrackId)
+    {
+      return;
+    }
+
+    store.save(kPlaybackSessionConfigGroup, session);
+
+    if (auto const res = store.flush(); !res)
+    {
+      APP_LOG_ERROR("PlaybackService: Failed to flush session - {}", res.error().message);
+    }
+  }
+
+  Result<> PlaybackService::restoreSession(PlaybackSessionState const& session)
+  {
+    auto& impl = *_implPtr;
+    impl.ensureOnExecutor();
+    auto const normalizedSession = normalizePlaybackSessionState(session);
+
+    if (normalizedSession.schemaVersion != kPlaybackSessionSchemaVersion)
+    {
+      return makeError(Error::Code::FormatRejected, "Unsupported playback session schema version");
+    }
+
+    if (normalizedSession.trackId == kInvalidTrackId)
+    {
+      return makeError(Error::Code::NotFound, "No track available for playback session restore");
+    }
+
+    try
+    {
+      auto requestResult = playbackRequestForTrack(impl.library, normalizedSession.trackId);
+
+      if (!requestResult)
+      {
+        return std::unexpected{requestResult.error()};
+      }
+
+      impl.restoreDeferredPlayback(std::move(*requestResult), normalizedSession);
+      return {};
+    }
+    catch (std::exception const& ex)
+    {
+      return makeError(Error::Code::Generic, ex.what());
+    }
   }
 
   void PlaybackService::addProvider(std::unique_ptr<audio::IBackendProvider> providerPtr)

@@ -14,6 +14,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <expected>
@@ -138,6 +139,50 @@ namespace ao::audio::test
 
       CHECK(engine.status().transport == Transport::Error);
       CHECK(engine.status().statusText == "hw init failed");
+    }
+
+    SECTION("Initial offset seek failure")
+    {
+      auto backendPtr = std::make_unique<CapturingBackend>();
+      auto* const backend = backendPtr.get();
+
+      auto const factory = [](auto const&, auto const& fmt)
+      {
+        auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+          .sourceFormat = fmt,
+          .outputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true},
+          .duration = std::chrono::seconds{1},
+          .isLossy = false});
+
+        decPtr->setReadScript({{{}, true}});
+        decPtr->setSeekResult(
+          std::unexpected(Error{.code = Error::Code::SeekFailed, .message = "restore seek failed"}));
+        return decPtr;
+      };
+
+      auto engine = Engine{std::move(backendPtr), device, factory};
+      auto const desc = PlaybackInput{.filePath = "song.flac"};
+      auto failureFuture = captureNextFailure(engine);
+
+      auto const item = makePlaybackItem(desc);
+      engine.play(item, std::chrono::milliseconds{50});
+
+      auto const failure = requireFailure(failureFuture);
+      CHECK(failure.kind == Engine::PlaybackFailureKind::RouteActivation);
+      CHECK(failure.itemId == item.id);
+      CHECK(failure.input.filePath == desc.filePath);
+      CHECK(failure.generation > 0);
+      CHECK_FALSE(failure.recoverable);
+      CHECK(failure.error.code == Error::Code::SeekFailed);
+      CHECK(failure.error.message == "restore seek failed");
+
+      auto const snap = engine.status();
+      CHECK(snap.transport == Transport::Error);
+      CHECK(snap.statusText == "restore seek failed");
+
+      auto const events = backend->events();
+      CHECK(std::ranges::none_of(events, [](CapturingBackend::Event const& event) { return event.name == "open"; }));
+      CHECK(std::ranges::none_of(events, [](CapturingBackend::Event const& event) { return event.name == "start"; }));
     }
   }
 

@@ -11,11 +11,13 @@
 #include <ao/audio/Property.h>
 
 #include <expected>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::test
@@ -32,7 +34,7 @@ namespace ao::audio::test
     Result<> open(Format const& format, IRenderTarget* target) override
     {
       auto const lock = std::scoped_lock{_mutex};
-      _events.push_back({"open", format});
+      recordEvent("open", format);
       _target = target;
       _format = format;
       return _openResult;
@@ -41,32 +43,32 @@ namespace ao::audio::test
     void start() override
     {
       auto const lock = std::scoped_lock{_mutex};
-      _events.push_back({"start", {}});
+      recordEvent("start", {});
     }
     void pause() override
     {
       auto const lock = std::scoped_lock{_mutex};
-      _events.push_back({"pause", {}});
+      recordEvent("pause", {});
     }
     void resume() override
     {
       auto const lock = std::scoped_lock{_mutex};
-      _events.push_back({"resume", {}});
+      recordEvent("resume", {});
     }
     void flush() override
     {
       auto const lock = std::scoped_lock{_mutex};
-      _events.push_back({"flush", {}});
+      recordEvent("flush", {});
     }
     void stop() override
     {
       auto const lock = std::scoped_lock{_mutex};
-      _events.push_back({"stop", {}});
+      recordEvent("stop", {});
     }
     void close() override
     {
       auto const lock = std::scoped_lock{_mutex};
-      _events.push_back({"close", {}});
+      recordEvent("close", {});
       _target = nullptr;
     }
 
@@ -157,6 +159,11 @@ namespace ao::audio::test
       auto const lock = std::scoped_lock{_mutex};
       _events.clear();
     }
+    void setEventObserver(std::function<void(std::string_view)> observer)
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _eventObserver = std::move(observer);
+    }
     IRenderTarget* target() const
     {
       auto const lock = std::scoped_lock{_mutex};
@@ -241,8 +248,19 @@ namespace ao::audio::test
     }
 
   private:
+    void recordEvent(std::string_view name, Format const& format)
+    {
+      _events.push_back({std::string{name}, format});
+
+      if (_eventObserver)
+      {
+        _eventObserver(name);
+      }
+    }
+
     mutable std::mutex _mutex;
     std::vector<Event> _events;
+    std::function<void(std::string_view)> _eventObserver;
     IRenderTarget* _target = nullptr;
     Format _format{};
     Result<> _openResult{};

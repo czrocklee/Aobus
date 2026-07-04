@@ -17,10 +17,15 @@
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -333,5 +338,59 @@ namespace ao::audio::test
       CHECK(engine.status().elapsed == std::chrono::milliseconds{50});
       CHECK(engine.status().transport == Transport::Playing);
     }
+  }
+
+  TEST_CASE("Engine - play with initial offset seeks before publishing elapsed", "[audio][unit][engine][seek]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto orderedEvents = std::vector<std::string>{};
+    backendRaw->setEventObserver([&orderedEvents](std::string_view name) { orderedEvents.emplace_back(name); });
+    auto registryPtr = std::make_shared<std::map<std::filesystem::path, ScriptedDecoderSession*>>();
+    auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const data = std::vector(200, std::byte{0});
+    auto const path = std::filesystem::path{"offset.flac"};
+    auto info = makeScriptedStreamInfo(fmt);
+    info.duration = std::chrono::milliseconds{100};
+    auto factory = [info, data, path, registryPtr, &orderedEvents](
+                     std::filesystem::path const& requestedPath, Format const&)
+    {
+      if (requestedPath != path)
+      {
+        return std::unique_ptr<ScriptedDecoderSession>{};
+      }
+
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
+      decPtr->setReadScript({{data, false}, {{}, true}});
+      decPtr->setSeekObserver([&orderedEvents](std::chrono::milliseconds) { orderedEvents.emplace_back("seek"); });
+      (*registryPtr)[path] = decPtr.get();
+      return decPtr;
+    };
+
+    auto engine = Engine{std::move(backendPtr), device, std::move(factory)};
+
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = path}), std::chrono::milliseconds{50});
+
+    REQUIRE(registryPtr->contains(path));
+    auto* const decoder = registryPtr->at(path);
+    REQUIRE(decoder != nullptr);
+    CHECK(decoder->seekCount() == 1);
+    CHECK(decoder->lastSeekOffset() == std::chrono::milliseconds{50});
+    CHECK(engine.status().elapsed == std::chrono::milliseconds{50});
+    CHECK(engine.status().transport == Transport::Playing);
+
+    auto const events = backendRaw->events();
+    REQUIRE(!events.empty());
+    CHECK(events.back().name == "start");
+
+    auto const seekIt = std::ranges::find(orderedEvents, std::string_view{"seek"});
+    auto const openIt = std::ranges::find(orderedEvents, std::string_view{"open"});
+    auto const startIt = std::ranges::find(orderedEvents, std::string_view{"start"});
+    REQUIRE(seekIt != orderedEvents.end());
+    REQUIRE(openIt != orderedEvents.end());
+    REQUIRE(startIt != orderedEvents.end());
+    CHECK(seekIt < openIt);
+    CHECK(seekIt < startIt);
   }
 } // namespace ao::audio::test

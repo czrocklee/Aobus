@@ -5,6 +5,7 @@
 
 #include "CorePrimitives.h"
 #include "PlaybackFailure.h"
+#include "PlaybackSessionState.h"
 #include "PlaybackState.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -36,6 +37,7 @@ namespace ao::rt
 {
   class NotificationService;
   class ViewService;
+  class ConfigStore;
 
   class PlaybackService final
   {
@@ -137,7 +139,7 @@ namespace ao::rt
     // playTrack() resolves a TrackId via the library and forwards here.
     // Returns a failure when the track cannot be resolved or playback is
     // rejected before the engine starts.
-    Result<> play(PlaybackRequest const& request, ListId sourceListId);
+    Result<> play(PlaybackRequest const& request, ListId sourceListId, std::chrono::milliseconds initialOffset = {});
     bool prepareNext(PlaybackRequest const& request, ListId sourceListId);
     bool prepareNext(TrackId trackId, ListId sourceListId);
     void clearPreparedNext();
@@ -158,6 +160,17 @@ namespace ao::rt
     void setMuted(bool muted);
     void revealPlayingTrack();
     void revealTrack(TrackId trackId, ViewId preferredViewId = kInvalidViewId, ListId preferredListId = kInvalidListId);
+
+    PlaybackSessionState sessionState() const;
+    void saveSession(ConfigStore& store);
+
+    // Restores a sanitized session as an idle now-playing state and arms a
+    // deferred resume token consumed on the next explicit play/resume.
+    // Returns FormatRejected for unsupported schema versions (caller should
+    // discard the persisted session), NotFound when the saved track id is
+    // invalid or no longer resolves in the library (caller may fall back to
+    // a different candidate), or Generic on unexpected I/O failures.
+    Result<> restoreSession(PlaybackSessionState const& session);
 
   private:
     struct Impl;

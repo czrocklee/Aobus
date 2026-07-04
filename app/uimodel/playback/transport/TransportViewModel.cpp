@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
@@ -118,10 +119,12 @@ namespace ao::uimodel
 
     TransportCommand resolveTransportButtonClick(TransportAction action, rt::PlaybackState const& state)
     {
+      auto const hasIdleCurrentTrack = state.transport == audio::Transport::Idle && state.trackId != kInvalidTrackId;
+
       switch (action)
       {
         case TransportAction::Play:
-          if (state.transport == audio::Transport::Paused)
+          if (state.transport == audio::Transport::Paused || hasIdleCurrentTrack)
           {
             return TransportCommand::Resume;
           }
@@ -138,7 +141,7 @@ namespace ao::uimodel
         case TransportAction::Stop: return TransportCommand::Stop;
 
         case TransportAction::PlayPause:
-          if (state.transport == audio::Transport::Paused)
+          if (state.transport == audio::Transport::Paused || hasIdleCurrentTrack)
           {
             return TransportCommand::Resume;
           }

@@ -1259,7 +1259,8 @@ namespace ao::audio
 
     void setBackendUnlocked(std::unique_ptr<IBackend> nextBackendPtr, Device const& device);
     void updateDeviceUnlocked(Device const& device);
-    void playUnlocked(PlaybackItem const& item);
+    Result<> applyInitialOffset(TrackNode& node, std::chrono::milliseconds initialOffset);
+    void playUnlocked(PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
     Result<PreparedNextResult> setNextUnlocked(PlaybackItem const& item);
     std::optional<PlaybackItemId> clearNextUnlocked();
     void pauseUnlocked();
@@ -1268,6 +1269,15 @@ namespace ao::audio
     void seekUnlocked(std::chrono::milliseconds offset);
     Result<> setVolumeUnlocked(float volume);
     Result<> setMutedUnlocked(bool muted);
+
+    // Marks the route-activation attempt failed with a terminal Error state
+    // and a non-recoverable RouteActivation failure notification. Caller must
+    // hold stateMutex and own any side cleanup (render session teardown,
+    // transition reset) before invoking.
+    void markRouteActivationFailureUnlocked(Notifications& notifications,
+                                            PlaybackItem const& item,
+                                            std::uint64_t sourceGeneration,
+                                            Error error);
   };
 
   Engine::Impl::ControlLock::~ControlLock() = default;
@@ -1309,8 +1319,7 @@ namespace ao::audio
 
     if (state.optItem)
     {
-      playUnlocked(*state.optItem);
-      seekUnlocked(state.elapsed);
+      playUnlocked(*state.optItem, state.elapsed);
 
       if (!state.wasPlaying)
       {
@@ -1325,7 +1334,50 @@ namespace ao::audio
     clearPreparedNext();
   }
 
-  void Engine::Impl::playUnlocked(PlaybackItem const& item)
+  Result<> Engine::Impl::applyInitialOffset(TrackNode& node, std::chrono::milliseconds const initialOffset)
+  {
+    if (initialOffset <= std::chrono::milliseconds{0})
+    {
+      return {};
+    }
+
+    if (!node.sourcePtr)
+    {
+      return makeError(Error::Code::InvalidState, "Cannot seek restored playback without an active source");
+    }
+
+    if (auto const seekResult = node.sourcePtr->seek(initialOffset); !seekResult)
+    {
+      return std::unexpected{seekResult.error()};
+    }
+
+    auto const sr = engineSampleRate.load(std::memory_order_relaxed);
+    accumulatedFrames.store(durationToSamples(initialOffset, sr), std::memory_order_relaxed);
+    return {};
+  }
+
+  void Engine::Impl::markRouteActivationFailureUnlocked(Notifications& notifications,
+                                                        PlaybackItem const& item,
+                                                        std::uint64_t const sourceGeneration,
+                                                        Error error)
+  {
+    status.transport = Transport::Error;
+    status.statusText = error.message;
+    timeline.retireCursor();
+    optCurrentItem.reset();
+    appendPlaybackFailureNotification(notifications,
+                                      onPlaybackFailure,
+                                      PlaybackFailure{
+                                        .kind = PlaybackFailureKind::RouteActivation,
+                                        .itemId = item.id,
+                                        .input = item.input,
+                                        .generation = sourceGeneration,
+                                        .error = std::move(error),
+                                        .recoverable = false,
+                                      });
+  }
+
+  void Engine::Impl::playUnlocked(PlaybackItem const& item, std::chrono::milliseconds const initialOffset)
   {
     resetTransitionState();
 
@@ -1394,6 +1446,25 @@ namespace ao::audio
 
     auto openedNodePtr = std::make_unique<TrackNode>(std::move(*openedTrack));
     auto* const currentNode = openedNodePtr.get();
+
+    if (auto const seekResult = applyInitialOffset(*currentNode, initialOffset); !seekResult)
+    {
+      auto notifications = Notifications{};
+      {
+        auto const lock = std::scoped_lock{stateMutex};
+        markRouteActivationFailureUnlocked(notifications, item, sourceGeneration, seekResult.error());
+      }
+      timeline.clear();
+      resetTransitionState();
+
+      if (!notifications.empty())
+      {
+        enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
+      }
+
+      return;
+    }
+
     publishCurrentNode(std::move(openedNodePtr));
     auto* renderTarget = createRenderSession(*backendPtr);
 
@@ -1405,20 +1476,7 @@ namespace ao::audio
       auto notifications = Notifications{};
       {
         auto const lock = std::scoped_lock{stateMutex};
-        optCurrentItem.reset();
-        timeline.retireCursor();
-        status.transport = Transport::Error;
-        status.statusText = openResult.error().message;
-        appendPlaybackFailureNotification(notifications,
-                                          onPlaybackFailure,
-                                          PlaybackFailure{
-                                            .kind = PlaybackFailureKind::RouteActivation,
-                                            .itemId = item.id,
-                                            .input = item.input,
-                                            .generation = sourceGeneration,
-                                            .error = openResult.error(),
-                                            .recoverable = false,
-                                          });
+        markRouteActivationFailureUnlocked(notifications, item, sourceGeneration, openResult.error());
       }
       timeline.clear();
       resetTransitionState();
@@ -1802,10 +1860,10 @@ namespace ao::audio
     return snap;
   }
 
-  void Engine::play(PlaybackItem const& item)
+  void Engine::play(PlaybackItem const& item, std::chrono::milliseconds const initialOffset)
   {
     auto const controlLock = _implPtr->lockControl();
-    _implPtr->playUnlocked(item);
+    _implPtr->playUnlocked(item, initialOffset);
   }
 
   Result<Engine::PreparedNextResult> Engine::setNext(PlaybackItem const& item)

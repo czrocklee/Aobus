@@ -76,7 +76,7 @@ namespace ao::audio
 
     /// @brief Starts playback. Returns `InvalidState` when the backend is not
     /// yet ready (device discovery pending); the request is dropped in that case.
-    Result<> play(Engine::PlaybackItem const& item);
+    Result<> play(Engine::PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
     Result<Engine::PreparedNextResult> prepareNext(Engine::PlaybackItem const& item);
     std::optional<Engine::PlaybackItemId> clearPreparedNext();
     /// @brief Selects the output device. Returns `NotFound` when no provider is

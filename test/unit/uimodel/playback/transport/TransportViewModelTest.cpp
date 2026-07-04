@@ -9,6 +9,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackSessionState.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -217,6 +218,32 @@ namespace ao::uimodel::test
       playSelectionCalled = false;
       vm.handleClick();
       CHECK(playSelectionCalled);
+    }
+
+    SECTION("PlayPause resumes restored idle now-playing instead of playing selection")
+    {
+      auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+      auto const trackId = testLib.addTrack({.title = "Restored", .uri = fixturePath});
+      REQUIRE(playback.restoreSession(PlaybackSessionState{
+        .sourceListId = kInvalidListId,
+        .trackId = trackId,
+        .positionMs = 50,
+      }));
+
+      auto log = ao::test::RenderLog<TransportViewState>{};
+      auto vm = TransportViewModel{playback,
+                                   nullptr,
+                                   TransportAction::PlayPause,
+                                   onPlaySelection,
+                                   false,
+                                   [&log](auto const& v) { log.render(v); }};
+
+      playSelectionCalled = false;
+      vm.handleClick();
+
+      CHECK(!playSelectionCalled);
+      CHECK(playback.state().transport == audio::Transport::Playing);
+      CHECK(playback.state().trackId == trackId);
     }
 
     SECTION("Stop does nothing when already idle")

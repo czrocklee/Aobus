@@ -348,12 +348,27 @@ namespace ao::gtk
     append(_scrolledWindow);
   }
 
-  TrackViewPage::~TrackViewPage() = default;
+  TrackViewPage::~TrackViewPage()
+  {
+    _viewHostPtr->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
+    _contextPopover.unparent();
+    _scrolledWindow.unset_child();
+  }
 
   void TrackViewPage::on_map()
   {
     Gtk::Box::on_map();
     _layoutStore.setActiveListId(_listId);
+
+    Glib::signal_idle().connect_once(
+      [this]
+      {
+        if (auto const primaryId = _viewHostPtr->selectionController().primarySelectedTrackId();
+            primaryId != kInvalidTrackId)
+        {
+          _viewHostPtr->selectionController().scrollToTrack(primaryId);
+        }
+      });
   }
 
   void TrackViewPage::setupHeaderFactory()

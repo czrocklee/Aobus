@@ -18,6 +18,7 @@ namespace ao::rt
 {
   class NotificationService;
   class PlaybackService;
+  struct PlaybackSessionState;
 }
 
 namespace ao::uimodel
@@ -45,6 +46,7 @@ namespace ao::uimodel
     // Builds the queue, resolves the descriptor for startTrackId,
     // dispatches PlayTrack, and subscribes to transport events.
     bool playQueue(std::vector<TrackId> trackIds, TrackId startTrackId, ListId sourceListId);
+    bool restoreQueue(std::vector<TrackId> trackIds, rt::PlaybackSessionState const& session, ListId sourceListId);
 
     // Transport controls
     bool hasNext() const;

@@ -373,6 +373,11 @@ namespace ao::gtk
     auto const pos = static_cast<guint>(*optIndex);
     _selectionModelPtr->select_item(pos, true);
 
+    if (!_columnView.get_mapped())
+    {
+      return;
+    }
+
     // Always try to scroll the group header into view for context
     auto scrollPos = pos;
 

@@ -17,30 +17,40 @@
 #include "track/TrackPageHost.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/audio/Transport.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ConfigStore.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackSessionState.h>
+#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 
+#include <glibmm/main.h>
 #include <gtkmm/stack.h>
+#include <sigc++/scoped_connection.h>
 
+#include <chrono>
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -50,6 +60,11 @@
 
 namespace ao::gtk
 {
+  namespace
+  {
+    constexpr auto kPlaybackSessionAutosaveInterval = std::chrono::seconds{10};
+  } // namespace
+
   struct MainWindowCoordinator::Impl final
   {
     Impl(MainWindowCoordinator* coordinator, MainWindow& window, rt::AppRuntime& runtime)
@@ -149,6 +164,124 @@ namespace ao::gtk
       }
     }
 
+    std::vector<TrackId> trackIdsFrom(rt::TrackSource const& source) const
+    {
+      auto trackIds = std::vector<TrackId>{};
+      trackIds.reserve(source.size());
+
+      for (std::size_t index = 0; index < source.size(); ++index)
+      {
+        trackIds.push_back(source.trackIdAt(index));
+      }
+
+      return trackIds;
+    }
+
+    void restorePlaybackSession(rt::AppRuntime& runtime)
+    {
+      auto session = rt::PlaybackSessionState{};
+
+      if (auto const res = runtime.configStore().load(rt::kPlaybackSessionConfigGroup, session); !res)
+      {
+        if (res.error().code != Error::Code::NotFound)
+        {
+          APP_LOG_WARN("MainWindowCoordinator: Failed to restore playback session - {}", res.error().message);
+        }
+
+        return;
+      }
+
+      if (session.trackId == kInvalidTrackId)
+      {
+        return;
+      }
+
+      // ListSourceStore::sourceFor silently falls back to the all-tracks source
+      // when a list id no longer exists. Resolve the saved list id explicitly so
+      // the queue receives the list id we actually want restored, instead of a
+      // fallback we inferred from a pointer comparison.
+      auto const sourceListId = resolveRestoreSourceListId(runtime, session.sourceListId);
+
+      if (auto& source = runtime.sources().sourceFor(sourceListId);
+          !playbackQueueModel.restoreQueue(trackIdsFrom(source), session, sourceListId))
+      {
+        APP_LOG_DEBUG("MainWindowCoordinator: Playback session restore skipped");
+        return;
+      }
+
+      if (auto const optRestoredTrackId = playbackQueueModel.nowPlayingTrackId(); optRestoredTrackId)
+      {
+        auto const spec = presentationForList(sourceListId, runtime);
+        runtime.workspace().navigateTo(sourceListId, {.optPresentation = spec});
+        runtime.playback().revealTrack(*optRestoredTrackId, rt::kInvalidViewId, sourceListId);
+      }
+    }
+
+    ListId resolveRestoreSourceListId(rt::AppRuntime& runtime, ListId savedListId) const
+    {
+      if (savedListId == kInvalidListId || savedListId == rt::kAllTracksListId)
+      {
+        return rt::kAllTracksListId;
+      }
+
+      auto const txn = runtime.musicLibrary().readTransaction();
+      auto const optView = rt::storageValueOrNullopt(
+        runtime.musicLibrary().lists().reader(txn).get(savedListId), "Restored playback session list lookup");
+
+      if (!optView)
+      {
+        APP_LOG_DEBUG(
+          "MainWindowCoordinator: Saved source list {} no longer exists, restoring from All Tracks", savedListId.raw());
+        return rt::kAllTracksListId;
+      }
+
+      return savedListId;
+    }
+
+    void savePlaybackSession(rt::AppRuntime& runtime)
+    {
+      if (runtime.playback().sessionState().trackId == kInvalidTrackId)
+      {
+        return;
+      }
+
+      runtime.playback().saveSession(runtime.configStore());
+    }
+
+    void startPlaybackSessionPersistence(rt::AppRuntime& runtime)
+    {
+      playbackPausedSub.reset();
+      playbackStoppedSub.reset();
+      playbackNowPlayingSub.reset();
+      playbackSeekSub.reset();
+      playbackSessionAutosaveConn.disconnect();
+
+      playbackPausedSub = runtime.playback().onPaused([this, &runtime] { savePlaybackSession(runtime); });
+      playbackStoppedSub = runtime.playback().onStopped([this, &runtime] { savePlaybackSession(runtime); });
+      playbackNowPlayingSub = runtime.playback().onNowPlayingChanged(
+        [this, &runtime](rt::PlaybackService::NowPlayingChanged const&) { savePlaybackSession(runtime); });
+      playbackSeekSub = runtime.playback().onSeekUpdate(
+        [this, &runtime](rt::PlaybackService::SeekUpdate const& event)
+        {
+          if (event.mode == rt::PlaybackService::SeekMode::Final)
+          {
+            savePlaybackSession(runtime);
+          }
+        });
+
+      playbackSessionAutosaveConn = Glib::signal_timeout().connect(
+        [this, &runtime]
+        {
+          if (runtime.playback().state().transport == audio::Transport::Playing)
+          {
+            savePlaybackSession(runtime);
+          }
+
+          return true;
+        },
+        std::chrono::duration_cast<std::chrono::milliseconds>(kPlaybackSessionAutosaveInterval).count());
+    }
+
     GtkLayoutConfig layoutConfig;
     ThemeCoordinator themeController;
     TrackRowCache trackRowCache;
@@ -162,6 +295,11 @@ namespace ao::gtk
     Gtk::Stack stack;
     TrackPageHost trackPageHost;
     portal::ImportExportCoordinator importExportCoordinator;
+    rt::Subscription playbackPausedSub;
+    rt::Subscription playbackStoppedSub;
+    rt::Subscription playbackNowPlayingSub;
+    rt::Subscription playbackSeekSub;
+    sigc::scoped_connection playbackSessionAutosaveConn;
   };
 
   MainWindowCoordinator::MainWindowCoordinator(MainWindow& window,
@@ -238,6 +376,9 @@ namespace ao::gtk
       _runtime.workspace().navigateTo(rt::kAllTracksListId, {.optPresentation = spec});
       _runtime.workspace().saveSession(_runtime.configStore());
     }
+
+    _implPtr->restorePlaybackSession(_runtime);
+    _implPtr->startPlaybackSessionPersistence(_runtime);
   }
 
   void MainWindowCoordinator::saveSession()
@@ -272,6 +413,7 @@ namespace ao::gtk
 
     _configPtr->saveAppSession(session);
 
+    _implPtr->savePlaybackSession(_runtime);
     _runtime.workspace().saveSession(_runtime.configStore());
   }
 

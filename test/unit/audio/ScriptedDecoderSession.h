@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -57,6 +58,10 @@ namespace ao::audio::test
     // post-seek stream independently of initial playback (e.g. an empty script
     // makes every seek land at end-of-stream).
     void setSeekReadScript(std::vector<ReadScriptEntry> script) { _optSeekScript = std::move(script); }
+    void setSeekObserver(std::function<void(std::chrono::milliseconds)> observer)
+    {
+      _seekObserver = std::move(observer);
+    }
 
     void setDestroyCounter(std::shared_ptr<std::atomic<std::size_t>> counterPtr)
     {
@@ -77,6 +82,11 @@ namespace ao::audio::test
     {
       _lastSeekOffset = offset;
       ++_seekCount;
+
+      if (_seekObserver)
+      {
+        _seekObserver(offset);
+      }
 
       if (_optSeekScript)
       {
@@ -129,6 +139,7 @@ namespace ao::audio::test
     DecodedStreamInfo _info;
     std::vector<ReadScriptEntry> _script;
     std::optional<std::vector<ReadScriptEntry>> _optSeekScript;
+    std::function<void(std::chrono::milliseconds)> _seekObserver;
     std::size_t _scriptIdx = 0;
     std::size_t _seekCount = 0;
 

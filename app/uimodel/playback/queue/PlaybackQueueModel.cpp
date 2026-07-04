@@ -9,12 +9,14 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackSessionState.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -52,6 +54,51 @@ namespace ao::uimodel
     std::string playbackStoppedMessage()
     {
       return "Playback stopped after " + std::to_string(kMaxConsecutivePlaybackFailures) + " unplayable tracks";
+    }
+
+    // Restore candidate for a queue rebuild: the saved track id at its queue
+    // position, or the queue head at position 0 when the saved track is gone.
+    struct RestoreCandidate final
+    {
+      TrackId trackId;
+      std::uint64_t positionMs = 0;
+      std::size_t queueIndex = 0;
+    };
+
+    // Primary candidate: the saved track id at its saved position, but only if
+    // it still appears in the rebuilt queue. Fallback candidate: the queue head
+    // at position 0, used when the saved track id is gone or no longer resolves
+    // in the library. The fallback is also queued up when the saved track is at
+    // the head, so a position-related restore failure can still be retried.
+    std::vector<RestoreCandidate> buildRestoreCandidates(std::vector<TrackId> const& trackIds,
+                                                         rt::PlaybackSessionState const& session)
+    {
+      auto candidates = std::vector<RestoreCandidate>{};
+      candidates.reserve(2);
+
+      if (auto const it = std::ranges::find(trackIds, session.trackId); it != trackIds.end())
+      {
+        candidates.push_back(RestoreCandidate{
+          .trackId = session.trackId,
+          .positionMs = session.positionMs,
+          .queueIndex = static_cast<std::size_t>(std::distance(trackIds.begin(), it)),
+        });
+      }
+
+      candidates.push_back(
+        RestoreCandidate{.trackId = trackIds.front(), .positionMs = std::uint64_t{0}, .queueIndex = std::size_t{0}});
+      return candidates;
+    }
+
+    rt::PlaybackSessionState makeRestoreAttempt(rt::PlaybackSessionState const& base,
+                                                RestoreCandidate const& candidate,
+                                                ListId sourceListId)
+    {
+      auto attempt = base;
+      attempt.sourceListId = sourceListId;
+      attempt.trackId = candidate.trackId;
+      attempt.positionMs = candidate.positionMs;
+      return attempt;
     }
   } // namespace
 
@@ -100,6 +147,58 @@ namespace ao::uimodel
 
     subscribeEvents();
     prepareNext();
+    return true;
+  }
+
+  bool PlaybackQueueModel::restoreQueue(std::vector<TrackId> trackIds,
+                                        rt::PlaybackSessionState const& session,
+                                        ListId const sourceListId)
+  {
+    if (trackIds.empty())
+    {
+      return false;
+    }
+
+    auto const wasActive = static_cast<bool>(_queueStatePtr);
+    unsubscribeEvents();
+
+    auto const candidates = buildRestoreCandidates(trackIds, session);
+    bool restored = false;
+    std::size_t restoredIndex = 0;
+
+    for (auto const& candidate : candidates)
+    {
+      auto attempt = makeRestoreAttempt(session, candidate, sourceListId);
+
+      if (auto const result = _playback.restoreSession(attempt); result)
+      {
+        restored = true;
+        restoredIndex = candidate.queueIndex;
+        break;
+      }
+    }
+
+    if (!restored)
+    {
+      if (wasActive)
+      {
+        subscribeEvents();
+      }
+
+      return false;
+    }
+
+    _queueStatePtr = std::make_unique<PlaybackQueueState>(PlaybackQueueState{
+      .trackIds = std::move(trackIds),
+      .currentIndex = restoredIndex,
+      .optPendingNextIndex = std::nullopt,
+      .sourceListId = sourceListId,
+    });
+    _skipNotificationId = rt::kInvalidNotificationId;
+    _skippedFailureCount = 0;
+    _consecutivePlaybackFailures = 0;
+
+    subscribeEvents();
     return true;
   }
 

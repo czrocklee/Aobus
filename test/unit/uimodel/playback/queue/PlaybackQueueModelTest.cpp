@@ -7,6 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/IRenderTarget.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
@@ -19,6 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -286,6 +288,113 @@ namespace ao::uimodel::test
       queueModel.next();
       CHECK(queueModel.nowPlayingTrackId() == optPeeked);
     }
+
+    SECTION("restoreQueue builds an idle queue at the saved track and position")
+    {
+      auto const tracks = std::vector{track1, track2, track3};
+      auto const session = rt::PlaybackSessionState{
+        .sourceListId = ListId{10},
+        .trackId = track2,
+        .positionMs = 4321,
+        .shuffleMode = rt::ShuffleMode::On,
+        .repeatMode = rt::RepeatMode::All,
+      };
+
+      REQUIRE(queueModel.restoreQueue(tracks, session, ListId{10}));
+
+      CHECK(queueModel.isActive());
+      CHECK(queueModel.nowPlayingTrackId() == track2);
+      CHECK(queueModel.sourceListId() == ListId{10});
+      CHECK(playbackService.state().transport == audio::Transport::Idle);
+      CHECK(playbackService.state().trackId == track2);
+      CHECK(playbackService.state().elapsed == std::chrono::milliseconds{4321});
+      CHECK(playbackService.state().shuffleMode == rt::ShuffleMode::On);
+      CHECK(playbackService.state().repeatMode == rt::RepeatMode::All);
+    }
+
+    SECTION("restoreQueue falls back to the queue head when the saved track was evicted")
+    {
+      auto const tracks = std::vector{track1, track2, track3};
+      auto const session = rt::PlaybackSessionState{
+        .sourceListId = ListId{10},
+        .trackId = missingTrack,
+        .positionMs = 4321,
+      };
+
+      REQUIRE(queueModel.restoreQueue(tracks, session, ListId{10}));
+
+      CHECK(queueModel.nowPlayingTrackId() == track1);
+      CHECK(playbackService.state().trackId == track1);
+      CHECK(playbackService.state().elapsed == std::chrono::milliseconds{0});
+    }
+
+    SECTION("restoreQueue falls back to the queue head when the saved track no longer resolves")
+    {
+      auto const tracks = std::vector{track1, missingTrack, track3};
+      auto const session = rt::PlaybackSessionState{
+        .sourceListId = ListId{10},
+        .trackId = missingTrack,
+        .positionMs = 4321,
+      };
+
+      REQUIRE(queueModel.restoreQueue(tracks, session, ListId{10}));
+
+      CHECK(queueModel.nowPlayingTrackId() == track1);
+      CHECK(playbackService.state().trackId == track1);
+      CHECK(playbackService.state().elapsed == std::chrono::milliseconds{0});
+    }
+
+    SECTION("restoreQueue preserves the active queue when restore cannot resolve any candidate")
+    {
+      auto const tracks = std::vector{track1, track2, track3};
+      queueModel.playQueue(tracks, track2, ListId{10});
+      REQUIRE(queueModel.nowPlayingTrackId() == track2);
+
+      auto const session = rt::PlaybackSessionState{
+        .sourceListId = ListId{11},
+        .trackId = missingTrack,
+        .positionMs = 4321,
+      };
+
+      CHECK_FALSE(queueModel.restoreQueue({missingTrack}, session, ListId{11}));
+
+      CHECK(queueModel.isActive());
+      CHECK(queueModel.nowPlayingTrackId() == track2);
+      CHECK(queueModel.sourceListId() == ListId{10});
+      CHECK(playbackService.state().trackId == track2);
+    }
+  }
+
+  TEST_CASE("PlaybackQueueModel - restored queue resumes playback on explicit play",
+            "[uimodel][unit][playback][queue][session]")
+  {
+    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const firstTrack = fixture.testLib.addTrack({.title = "First", .uri = flacPath});
+    auto const restoredTrack = fixture.testLib.addTrack({.title = "Restored", .uri = flacPath});
+    auto const session = rt::PlaybackSessionState{
+      .sourceListId = ListId{10},
+      .trackId = restoredTrack,
+      .positionMs = 50,
+    };
+
+    auto queueModel = PlaybackQueueModel{fixture.playbackService, fixture.notificationService};
+    REQUIRE(queueModel.restoreQueue({firstTrack, restoredTrack}, session, ListId{10}));
+
+    CHECK(queueModel.isActive());
+    CHECK(queueModel.nowPlayingTrackId() == restoredTrack);
+    CHECK(fixture.playbackService.state().transport == audio::Transport::Idle);
+    CHECK(fixture.renderTarget == nullptr);
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    CHECK(fixture.renderTarget == nullptr);
+
+    queueModel.resume();
+
+    CHECK(fixture.renderTarget != nullptr);
+    CHECK(fixture.playbackService.state().transport == audio::Transport::Playing);
+    CHECK(fixture.playbackService.state().trackId == restoredTrack);
+    CHECK(fixture.playbackService.state().elapsed == std::chrono::milliseconds{50});
   }
 
   TEST_CASE("PlaybackQueueModel - non-gapless prepared successor advances through idle fallback",

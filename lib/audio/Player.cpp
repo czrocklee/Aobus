@@ -455,7 +455,7 @@ namespace ao::audio
       });
   }
 
-  Result<> Player::play(Engine::PlaybackItem const& item)
+  Result<> Player::play(Engine::PlaybackItem const& item, std::chrono::milliseconds const initialOffset)
   {
     if (!isReady())
     {
@@ -474,7 +474,7 @@ namespace ao::audio
       _implPtr->qualityResult = {};
     }
     _implPtr->graphSubscription.reset();
-    _implPtr->enginePtr->play(item);
+    _implPtr->enginePtr->play(item, initialOffset);
     return {};
   }
 

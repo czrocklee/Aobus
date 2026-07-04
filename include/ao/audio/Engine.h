@@ -153,7 +153,7 @@ namespace ao::audio
 
     RouteStatus routeStatus() const;
 
-    void play(PlaybackItem const& item);
+    void play(PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
     Result<PreparedNextResult> setNext(PlaybackItem const& item);
     std::optional<PlaybackItemId> clearNext();
     void pause();

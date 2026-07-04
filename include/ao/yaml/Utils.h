@@ -279,7 +279,7 @@ namespace ao::yaml
       return false;
     }
 
-    auto parsed = T{};
+    T parsed = {};
     auto const [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), parsed);
 
     if (ec != std::errc{} || ptr != text.data() + text.size())
