@@ -13,7 +13,9 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWrite.h>
 #include <ao/tag/TagFile.h>
+#include <ao/utility/Fnv1a.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -28,6 +30,11 @@
 
 namespace ao::library
 {
+  namespace
+  {
+    constexpr std::size_t kFingerprintChunkSize = 4ULL * 1024ULL * 1024ULL;
+  }
+
   ScanPlanExecutor::ScanPlanExecutor(MusicLibrary& ml,
                                      ScanPlan plan,
                                      ProgressCallback progress,
@@ -69,13 +76,38 @@ namespace ao::library
         break;
       }
 
-      processItem(i, txn, trackWriter, manifestWriter, dict);
+      processItem(i, txn, trackWriter, manifestWriter, dict, stopToken);
+
+      if (_abortTransaction)
+      {
+        break;
+      }
+    }
+
+    if (_result.cancelled || stopToken.stop_requested())
+    {
+      _result.cancelled = true;
+      _result.processedIds.clear();
+      _result.relinkedCount = 0;
+      _result.missingCount = 0;
+      _result.failureCount = 0;
+      return _result;
+    }
+
+    if (_abortTransaction)
+    {
+      _result.processedIds.clear();
+      _result.relinkedCount = 0;
+      _result.missingCount = 0;
+      return _result;
     }
 
     if (auto result = txn.commit(); !result)
     {
       // The transaction did not persist, so nothing was actually processed.
       _result.processedIds.clear();
+      _result.relinkedCount = 0;
+      _result.missingCount = 0;
       return std::unexpected{result.error()};
     }
 
@@ -86,14 +118,12 @@ namespace ao::library
                                      ao::lmdb::WriteTransaction& txn,
                                      TrackStore::Writer& trackWriter,
                                      FileManifestStore::Writer& manifestWriter,
-                                     DictionaryStore& dict)
+                                     DictionaryStore& dict,
+                                     std::stop_token stopToken)
   {
     auto const& item = _planPtr->items[itemIndex];
 
-    if (_progressCallback)
-    {
-      _progressCallback(item.fullPath, static_cast<std::int32_t>(itemIndex));
-    }
+    reportProgress(item, itemIndex, ProgressStage::Updating, 0.0);
 
     if (processSkips(item))
     {
@@ -114,19 +144,39 @@ namespace ao::library
     }
 
     auto& [tagFilePtr, builder] = *optLoad;
-    std::ignore = tagFilePtr;
+    auto optFingerprint = cachedAudioFingerprint(item);
+
+    if (!optFingerprint)
+    {
+      optFingerprint = fingerprintAudioPayload(item, *tagFilePtr, itemIndex, stopToken);
+    }
+
+    if (!optFingerprint)
+    {
+      return;
+    }
 
     builder.property().uri(item.uri);
 
     if (item.classification == ScanClassification::Changed && item.trackId != kInvalidTrackId)
     {
-      if (processChanged(item, txn, trackWriter, manifestWriter, dict, builder))
+      if (processChanged(item, txn, trackWriter, manifestWriter, dict, builder, *optFingerprint))
       {
         return;
       }
     }
 
-    processNew(item, txn, trackWriter, manifestWriter, dict, builder);
+    if (item.classification == ScanClassification::Moved)
+    {
+      if (!processMoved(item, txn, trackWriter, manifestWriter, dict, builder, *optFingerprint))
+      {
+        _abortTransaction = true;
+      }
+
+      return;
+    }
+
+    processNew(item, txn, trackWriter, manifestWriter, dict, builder, *optFingerprint);
   }
 
   bool ScanPlanExecutor::processSkips(ScanItem const& item)
@@ -144,6 +194,20 @@ namespace ao::library
     }
 
     return false;
+  }
+
+  void ScanPlanExecutor::reportProgress(ScanItem const& item,
+                                        std::size_t itemIndex,
+                                        ProgressStage stage,
+                                        double itemFraction)
+  {
+    if (_progressCallback)
+    {
+      _progressCallback(Progress{.path = item.fullPath,
+                                 .itemIndex = static_cast<std::int32_t>(itemIndex),
+                                 .stage = stage,
+                                 .itemFraction = itemFraction});
+    }
   }
 
   void ScanPlanExecutor::processMissing(ScanItem const& item,
@@ -166,7 +230,10 @@ namespace ao::library
     auto builder = FileManifestBuilder::fromView(*manifestResult);
     builder.status(FileStatus::Missing);
 
-    writeManifest(manifestWriter, item.uri, builder);
+    if (writeManifest(manifestWriter, item.uri, builder))
+    {
+      ++_result.missingCount;
+    }
   }
 
   std::optional<std::pair<std::unique_ptr<tag::TagFile>, TrackBuilder>> ScanPlanExecutor::loadTrackBuilder(
@@ -194,12 +261,75 @@ namespace ao::library
     return std::make_pair(std::move(tagFilePtr), *builderResult);
   }
 
+  std::optional<ScanPlanExecutor::AudioFingerprint> ScanPlanExecutor::cachedAudioFingerprint(
+    ScanItem const& item) const noexcept
+  {
+    if (item.classification != ScanClassification::New || !hasAudioIdentity(item))
+    {
+      return std::nullopt;
+    }
+
+    return AudioFingerprint{.signature = item.audioSignature, .payloadLength = item.audioPayloadLength};
+  }
+
+  std::optional<ScanPlanExecutor::AudioFingerprint> ScanPlanExecutor::fingerprintAudioPayload(
+    ScanItem const& item,
+    tag::TagFile const& tagFile,
+    std::size_t itemIndex,
+    std::stop_token stopToken)
+  {
+    auto payloadResult = tagFile.audioPayload();
+
+    if (!payloadResult)
+    {
+      reportFailure(item.uri, "fingerprint", payloadResult.error().message);
+      return std::nullopt;
+    }
+
+    auto const bytes = payloadResult->bytes;
+    auto accumulator = utility::Fnv1a128Accumulator{};
+    std::size_t processed = 0;
+
+    reportProgress(item, itemIndex, ProgressStage::Fingerprinting, 0.0);
+
+    while (processed < bytes.size())
+    {
+      if (stopToken.stop_requested())
+      {
+        _result.cancelled = true;
+        return std::nullopt;
+      }
+
+      auto const remaining = bytes.size() - processed;
+      auto const chunkSize = std::min(kFingerprintChunkSize, remaining);
+      accumulator.mix(bytes.subspan(processed, chunkSize));
+      processed += chunkSize;
+
+      auto const fraction = bytes.empty() ? 1.0 : static_cast<double>(processed) / static_cast<double>(bytes.size());
+      reportProgress(item, itemIndex, ProgressStage::Fingerprinting, fraction);
+
+      if (stopToken.stop_requested())
+      {
+        _result.cancelled = true;
+        return std::nullopt;
+      }
+    }
+
+    if (bytes.empty())
+    {
+      reportProgress(item, itemIndex, ProgressStage::Fingerprinting, 1.0);
+    }
+
+    return AudioFingerprint{.signature = accumulator.value(), .payloadLength = bytes.size()};
+  }
+
   bool ScanPlanExecutor::processChanged(ScanItem const& item,
                                         ao::lmdb::WriteTransaction& txn,
                                         TrackStore::Writer& trackWriter,
                                         FileManifestStore::Writer& manifestWriter,
                                         DictionaryStore& dict,
-                                        TrackBuilder& builder)
+                                        TrackBuilder& builder,
+                                        AudioFingerprint const& fingerprint)
   {
     auto optExisting = trackWriter.get(item.trackId, TrackStore::Reader::LoadMode::Both);
 
@@ -232,7 +362,12 @@ namespace ao::library
     }
 
     auto manifestBuilder = FileManifestBuilder::createNew();
-    manifestBuilder.trackId(item.trackId).status(FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
+    manifestBuilder.trackId(item.trackId)
+      .status(FileStatus::Available)
+      .fileSize(item.fileSize)
+      .mtime(item.mtime)
+      .audioPayloadLength(fingerprint.payloadLength)
+      .audioSignature(fingerprint.signature);
 
     if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
     {
@@ -243,12 +378,95 @@ namespace ao::library
     return true;
   }
 
+  bool ScanPlanExecutor::processMoved(ScanItem const& item,
+                                      ao::lmdb::WriteTransaction& txn,
+                                      TrackStore::Writer& trackWriter,
+                                      FileManifestStore::Writer& manifestWriter,
+                                      DictionaryStore& dict,
+                                      TrackBuilder& builder,
+                                      AudioFingerprint const& fingerprint)
+  {
+    if (item.trackId == kInvalidTrackId || item.oldUri.empty())
+    {
+      reportFailure(item.uri, "relink", "moved scan item is missing its previous track identity");
+      return false;
+    }
+
+    if (!hasAudioIdentity(item))
+    {
+      reportFailure(item.uri, "relink", "moved scan item is missing its planned audio identity");
+      return false;
+    }
+
+    if (item.audioPayloadLength != fingerprint.payloadLength || item.audioSignature != fingerprint.signature)
+    {
+      reportFailure(item.uri, "relink", "audio identity changed before apply");
+      return false;
+    }
+
+    auto optExisting = trackWriter.get(item.trackId, TrackStore::Reader::LoadMode::Both);
+
+    if (!optExisting)
+    {
+      reportFailure(item.uri, "read existing track for", "track record was not found");
+      return false;
+    }
+
+    auto merged = TrackBuilder::fromView(*optExisting, dict);
+    merged.property()
+      .uri(item.uri)
+      .duration(builder.property().duration())
+      .bitrate(builder.property().bitrate())
+      .sampleRate(builder.property().sampleRate())
+      .channels(builder.property().channels())
+      .codec(builder.property().codec())
+      .bitDepth(builder.property().bitDepth());
+
+    auto optPrepared = prepareTrack(merged, txn, dict, item.uri);
+
+    if (!optPrepared)
+    {
+      return false;
+    }
+
+    auto const& [preparedHot, preparedCold] = *optPrepared;
+
+    if (!updateTrack(trackWriter, item.trackId, item.uri, preparedHot, preparedCold))
+    {
+      return false;
+    }
+
+    if (auto removeResult = manifestWriter.remove(item.oldUri); !removeResult)
+    {
+      reportFailure(item.uri, "remove old manifest for", removeResult.error().message);
+      return false;
+    }
+
+    auto manifestBuilder = FileManifestBuilder::createNew();
+    manifestBuilder.trackId(item.trackId)
+      .status(FileStatus::Available)
+      .fileSize(item.fileSize)
+      .mtime(item.mtime)
+      .audioPayloadLength(fingerprint.payloadLength)
+      .audioSignature(fingerprint.signature);
+
+    if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
+    {
+      return false;
+    }
+
+    _result.processedIds.push_back(item.trackId);
+    ++_result.relinkedCount;
+    return true;
+  }
+
   void ScanPlanExecutor::processNew(ScanItem const& item,
                                     ao::lmdb::WriteTransaction& txn,
                                     TrackStore::Writer& trackWriter,
                                     FileManifestStore::Writer& manifestWriter,
                                     DictionaryStore& dict,
-                                    TrackBuilder& builder)
+                                    TrackBuilder& builder,
+                                    AudioFingerprint const& fingerprint)
   {
     auto optPrepared = prepareTrack(builder, txn, dict, item.uri);
 
@@ -267,7 +485,12 @@ namespace ao::library
     }
 
     auto manifestBuilder = FileManifestBuilder::createNew();
-    manifestBuilder.trackId(*optNewTrackId).status(FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
+    manifestBuilder.trackId(*optNewTrackId)
+      .status(FileStatus::Available)
+      .fileSize(item.fileSize)
+      .mtime(item.mtime)
+      .audioPayloadLength(fingerprint.payloadLength)
+      .audioSignature(fingerprint.signature);
 
     if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
     {

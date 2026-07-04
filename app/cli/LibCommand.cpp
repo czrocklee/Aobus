@@ -19,11 +19,14 @@
 #include <ao/library/Meta.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/library/ScanPlanExecutor.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/tag/TagFile.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/Fnv1a.h>
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/Reflect.h>
 
@@ -391,6 +394,7 @@ namespace ao::cli
     bool isVerifyIssue(library::ScanClassification classification)
     {
       return classification == library::ScanClassification::Changed ||
+             classification == library::ScanClassification::Moved ||
              classification == library::ScanClassification::Missing ||
              classification == library::ScanClassification::Error;
     }
@@ -510,6 +514,369 @@ namespace ao::cli
       {
         throwCommandError(Error::Code::CorruptData, "library verification failed");
       }
+    }
+
+    struct RelinkIdentity final
+    {
+      std::uint64_t payloadLength = 0;
+      utility::Hash128 signature = {};
+    };
+
+    struct RelinkCandidateDto final
+    {
+      std::string oldUri{};
+      std::string newUri{};
+      TrackId trackId{};
+      std::uint64_t audioPayloadLength = 0;
+    };
+
+    struct RelinkListDto final
+    {
+      std::vector<std::string> missing{};
+      std::vector<std::string> newFiles{};
+      std::vector<RelinkCandidateDto> candidates{};
+    };
+
+    struct RelinkApplyDto final
+    {
+      bool dryRun = false;
+      std::string oldUri{};
+      std::string newUri{};
+      TrackId trackId{};
+    };
+
+    RelinkIdentity relinkIdentityFromItem(library::ScanItem const& item)
+    {
+      return RelinkIdentity{.payloadLength = item.audioPayloadLength, .signature = item.audioSignature};
+    }
+
+    RelinkIdentity readAudioIdentity(std::filesystem::path const& path)
+    {
+      auto tagFileResult = tag::TagFile::open(path);
+
+      if (!tagFileResult)
+      {
+        auto const& error = tagFileResult.error();
+        throwCommandError(error, "failed to open relink candidate: {}", error.message);
+      }
+
+      auto payloadResult = (*tagFileResult)->audioPayload();
+
+      if (!payloadResult)
+      {
+        auto const& error = payloadResult.error();
+        throwCommandError(error, "failed to fingerprint relink candidate: {}", error.message);
+      }
+
+      return RelinkIdentity{.payloadLength = static_cast<std::uint64_t>(payloadResult->bytes.size()),
+                            .signature = utility::fnv1a128(payloadResult->bytes)};
+    }
+
+    bool sameRelinkIdentity(RelinkIdentity const& left, RelinkIdentity const& right)
+    {
+      return left.payloadLength == right.payloadLength && left.signature == right.signature;
+    }
+
+    std::string normalizeRelinkUri(library::MusicLibrary& ml, std::string const& input)
+    {
+      auto path = std::filesystem::path{input};
+
+      if (path.is_absolute())
+      {
+        auto ec = std::error_code{};
+        path = std::filesystem::relative(path, ml.rootPath(), ec);
+
+        if (ec)
+        {
+          throwCommandError(Error::Code::InvalidInput, "failed to make path root-relative: {}", ec.message());
+        }
+      }
+
+      path = path.lexically_normal();
+      auto const uri = path.generic_string();
+
+      if (uri.empty() || uri == "." || path.is_absolute())
+      {
+        throwCommandError(Error::Code::InvalidInput, "invalid library URI '{}'", input);
+      }
+
+      for (auto const& part : path)
+      {
+        if (part == "..")
+        {
+          throwCommandError(Error::Code::InvalidInput, "path is outside the music root: {}", input);
+        }
+      }
+
+      return uri;
+    }
+
+    std::vector<RelinkCandidateDto> relinkCandidates(library::ScanPlan const& plan)
+    {
+      auto missingIndexes = std::vector<std::size_t>{};
+      auto newIdentities = std::vector<std::pair<std::size_t, RelinkIdentity>>{};
+
+      for (std::size_t index = 0; index < plan.items.size(); ++index)
+      {
+        if (auto const& item = plan.items[index];
+            item.classification == library::ScanClassification::Missing && library::hasAudioIdentity(item))
+        {
+          missingIndexes.push_back(index);
+        }
+      }
+
+      for (std::size_t index = 0; index < plan.items.size(); ++index)
+      {
+        auto const& item = plan.items[index];
+
+        if (item.classification != library::ScanClassification::New)
+        {
+          continue;
+        }
+
+        if (library::hasAudioIdentity(item))
+        {
+          newIdentities.emplace_back(index, relinkIdentityFromItem(item));
+        }
+      }
+
+      auto candidates = std::vector<RelinkCandidateDto>{};
+
+      for (auto const missingIndex : missingIndexes)
+      {
+        auto const& missingItem = plan.items[missingIndex];
+        auto const missingIdentity = relinkIdentityFromItem(missingItem);
+
+        for (auto const& [newIndex, newIdentity] : newIdentities)
+        {
+          if (!sameRelinkIdentity(missingIdentity, newIdentity))
+          {
+            continue;
+          }
+
+          auto const& newItem = plan.items[newIndex];
+          candidates.push_back(RelinkCandidateDto{.oldUri = missingItem.uri,
+                                                  .newUri = newItem.uri,
+                                                  .trackId = missingItem.trackId,
+                                                  .audioPayloadLength = missingIdentity.payloadLength});
+        }
+      }
+
+      return candidates;
+    }
+
+    RelinkListDto relinkListDto(library::ScanPlan const& plan)
+    {
+      auto dto = RelinkListDto{.candidates = relinkCandidates(plan)};
+
+      for (auto const& item : plan.items)
+      {
+        if (item.classification == library::ScanClassification::Missing)
+        {
+          dto.missing.push_back(item.uri);
+        }
+        else if (item.classification == library::ScanClassification::New)
+        {
+          dto.newFiles.push_back(item.uri);
+        }
+      }
+
+      return dto;
+    }
+
+    void printRelinkList(library::ScanPlan const& plan, OutputFormat format, std::ostream& os)
+    {
+      auto const dto = relinkListDto(plan);
+
+      if (format != OutputFormat::Plain)
+      {
+        emitDocument(os, format, dto);
+        return;
+      }
+
+      if (dto.missing.empty() && dto.newFiles.empty())
+      {
+        std::println(os, "No unresolved relink candidates");
+        return;
+      }
+
+      for (auto const& uri : dto.missing)
+      {
+        std::println(os, "missing {}", uri);
+      }
+
+      for (auto const& uri : dto.newFiles)
+      {
+        std::println(os, "new {}", uri);
+      }
+
+      for (auto const& candidate : dto.candidates)
+      {
+        std::println(os, "candidate {} -> {}", candidate.oldUri, candidate.newUri);
+      }
+    }
+
+    library::ScanItem const* findPlanItem(library::ScanPlan const& plan,
+                                          library::ScanClassification classification,
+                                          std::string_view uri)
+    {
+      for (auto const& item : plan.items)
+      {
+        if (item.classification == classification && item.uri == uri)
+        {
+          return &item;
+        }
+      }
+
+      return nullptr;
+    }
+
+    RelinkCandidateDto validateRelink(library::ScanPlan const& plan,
+                                      std::string const& oldUri,
+                                      std::string const& newUri)
+    {
+      auto const* const missingItem = findPlanItem(plan, library::ScanClassification::Missing, oldUri);
+
+      if (missingItem == nullptr)
+      {
+        throwCommandError(Error::Code::InvalidInput, "missing manifest row is not unresolved: {}", oldUri);
+      }
+
+      if (!library::hasAudioIdentity(*missingItem))
+      {
+        throwCommandError(Error::Code::InvalidInput, "missing manifest row has no audio signature: {}", oldUri);
+      }
+
+      auto const* const newItem = findPlanItem(plan, library::ScanClassification::New, newUri);
+
+      if (newItem == nullptr)
+      {
+        throwCommandError(Error::Code::InvalidInput, "new file is not unresolved: {}", newUri);
+      }
+
+      auto const missingIdentity = relinkIdentityFromItem(*missingItem);
+      auto const newIdentity = readAudioIdentity(newItem->fullPath);
+
+      if (!sameRelinkIdentity(missingIdentity, newIdentity))
+      {
+        throwCommandError(Error::Code::InvalidInput, "audio identity mismatch: {} -> {}", oldUri, newUri);
+      }
+
+      return RelinkCandidateDto{.oldUri = oldUri,
+                                .newUri = newUri,
+                                .trackId = missingItem->trackId,
+                                .audioPayloadLength = missingIdentity.payloadLength};
+    }
+
+    void printRelinkApply(RelinkCandidateDto const& candidate, bool dryRun, OutputFormat format, std::ostream& os)
+    {
+      if (format != OutputFormat::Plain)
+      {
+        emitDocument(
+          os,
+          format,
+          RelinkApplyDto{
+            .dryRun = dryRun, .oldUri = candidate.oldUri, .newUri = candidate.newUri, .trackId = candidate.trackId});
+        return;
+      }
+
+      std::println(os, "relinked {} -> {}{}", candidate.oldUri, candidate.newUri, dryRun ? " (dry-run)" : "");
+    }
+
+    library::ScanItem makeMovedRelinkItem(library::ScanPlan const& plan, RelinkCandidateDto const& candidate)
+    {
+      auto const* const newItem = findPlanItem(plan, library::ScanClassification::New, candidate.newUri);
+
+      if (newItem == nullptr)
+      {
+        throwCommandError(Error::Code::InvalidInput, "new file is not unresolved: {}", candidate.newUri);
+      }
+
+      auto item = *newItem;
+      item.classification = library::ScanClassification::Moved;
+      item.oldUri = candidate.oldUri;
+      item.trackId = candidate.trackId;
+      return item;
+    }
+
+    void applyRelink(library::MusicLibrary& ml,
+                     library::ScanPlan const& plan,
+                     RelinkCandidateDto const& candidate,
+                     bool dryRun,
+                     OutputFormat format,
+                     std::ostream& os)
+    {
+      if (dryRun)
+      {
+        printRelinkApply(candidate, true, format, os);
+        return;
+      }
+
+      auto relinkPlan = library::ScanPlan{};
+      relinkPlan.items.push_back(makeMovedRelinkItem(plan, candidate));
+
+      auto failures = std::vector<std::string>{};
+      auto executor = library::ScanPlanExecutor{
+        ml,
+        std::move(relinkPlan),
+        nullptr,
+        [&failures](library::ScanFailure const& failure)
+        {
+          failures.push_back(failure.uri.empty()
+                               ? std::format("failed to {}: {}", failure.stage, failure.message)
+                               : std::format("failed to {} {}: {}", failure.stage, failure.uri, failure.message));
+        }};
+
+      auto result = executor.run();
+
+      if (!result)
+      {
+        auto const& error = result.error();
+        throwCommandError(error, "relink failed: {}", error.message);
+      }
+
+      if (result->failureCount != 0 || result->relinkedCount != 1)
+      {
+        auto const message = failures.empty() ? "relink did not update the library" : failures.front();
+        throwCommandError(Error::Code::IoError, "relink failed: {}", message);
+      }
+
+      printRelinkApply(candidate, false, format, os);
+    }
+
+    void relinkLibrary(library::MusicLibrary& ml,
+                       std::optional<std::string> const& optOldUri,
+                       std::optional<std::string> const& optNewUri,
+                       bool dryRun,
+                       OutputFormat format,
+                       std::ostream& os)
+    {
+      auto scanner = library::LibraryScanner{ml};
+      auto planResult = scanner.buildPlan();
+
+      if (!planResult)
+      {
+        auto const& error = planResult.error();
+        throwCommandError(error, "relink scan failed: {}", error.message);
+      }
+
+      auto const& plan = *planResult;
+
+      if (!optOldUri && !optNewUri)
+      {
+        printRelinkList(plan, format, os);
+        return;
+      }
+
+      if (!optOldUri || !optNewUri)
+      {
+        throwCommandError(Error::Code::InvalidInput, "lib relink requires both --from and --to");
+      }
+
+      auto const oldUri = normalizeRelinkUri(ml, *optOldUri);
+      auto const newUri = normalizeRelinkUri(ml, *optNewUri);
+      auto const candidate = validateRelink(plan, oldUri, newUri);
+      applyRelink(ml, plan, candidate, dryRun, format, os);
     }
 
     struct ResourceRecordDto final
@@ -898,6 +1265,30 @@ namespace ao::cli
 
     lib->add_subcommand("verify", "Verify library files against the manifest")
       ->callback([&context] { verifyLibrary(context.musicLibrary(), context.options().format, context.io().out); });
+
+    auto* relinkCmd = lib->add_subcommand("relink", "List or apply explicit file relinks");
+    auto* relinkFrom = relinkCmd->add_option("--from", "missing manifest URI or path");
+    auto* relinkTo = relinkCmd->add_option("--to", "new file URI or path");
+    auto* relinkDryRun = addDryRunFlag(*relinkCmd);
+    relinkCmd->callback(
+      [&context, relinkFrom, relinkTo, relinkDryRun]
+      {
+        auto optFrom = std::optional<std::string>{};
+        auto optTo = std::optional<std::string>{};
+
+        if (relinkFrom->count() != 0)
+        {
+          optFrom = relinkFrom->as<std::string>();
+        }
+
+        if (relinkTo->count() != 0)
+        {
+          optTo = relinkTo->as<std::string>();
+        }
+
+        relinkLibrary(
+          context.musicLibrary(), optFrom, optTo, isDryRun(relinkDryRun), context.options().format, context.io().out);
+      });
 
     auto* exportCmd = lib->add_subcommand("export", "Export library to YAML");
     auto* exportPath = exportCmd->add_option("output,-o,--output", "Output YAML file path")->required();

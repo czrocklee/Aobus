@@ -262,12 +262,12 @@ namespace ao::cli::test
     auto result = fixture.run({"init"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, "new 2  changed 0  missing 0  unchanged 0  errors 0"));
+    CHECK(contains(result.out, "new 2  changed 0  moved 0  missing 0  unchanged 0  errors 0"));
 
     result = fixture.run({"init"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, "new 0  changed 0  missing 0  unchanged 2  errors 0"));
+    CHECK(contains(result.out, "new 0  changed 0  moved 0  missing 0  unchanged 2  errors 0"));
 
     result = fixture.run({"-O", "json", "track", "show"});
     REQUIRE(result.status == 0);
@@ -476,6 +476,104 @@ namespace ao::cli::test
     CHECK(contains(result.err, "library verification failed"));
   }
 
+  TEST_CASE("CLI - lib verify reports moved files without failing", "[cli][workflow][lib][verify]")
+  {
+    auto fixture = CliFixture{};
+    auto const originalPath = fixture.root() / "track.flac";
+    auto const movedPath = fixture.root() / "renamed.flac";
+    fixture.copyAudio("basic_metadata.flac", originalPath.filename().string());
+
+    auto result = fixture.run({"init"});
+    REQUIRE(result.status == 0);
+
+    fs::rename(originalPath, movedPath);
+
+    result = fixture.run({"lib", "verify"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "moved renamed.flac"));
+  }
+
+  TEST_CASE("CLI - lib relink lists, previews, and applies explicit moved-file bindings",
+            "[cli][workflow][lib][relink]")
+  {
+    auto fixture = CliFixture{};
+    auto const firstPath = fixture.root() / "first.flac";
+    auto const secondPath = fixture.root() / "second.flac";
+    auto const movedFirstPath = fixture.root() / "moved-first.flac";
+    auto const movedSecondPath = fixture.root() / "moved-second.flac";
+    fixture.copyAudio("basic_metadata.flac", firstPath.filename().string());
+    fixture.copyAudio("basic_metadata.flac", secondPath.filename().string());
+
+    auto result = fixture.run({"init"});
+    REQUIRE(result.status == 0);
+
+    fs::rename(firstPath, movedFirstPath);
+    fs::rename(secondPath, movedSecondPath);
+
+    result = fixture.run({"lib", "relink"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "missing first.flac"));
+    CHECK(contains(result.out, "new moved-first.flac"));
+    CHECK(contains(result.out, "candidate first.flac -> moved-first.flac"));
+
+    result = fixture.run({"lib", "relink", "--dry-run", "--from", "first.flac", "--to", "moved-first.flac"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "relinked first.flac -> moved-first.flac (dry-run)"));
+
+    result = fixture.run({"-O", "json", "track", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, R"("uri": "first.flac")"));
+    CHECK_FALSE(contains(result.out, R"("uri": "moved-first.flac")"));
+
+    result = fixture.run({"lib", "relink", "--from", "first.flac", "--to", "moved-first.flac"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "relinked first.flac -> moved-first.flac"));
+
+    result = fixture.run({"-O", "json", "track", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, R"("uri": "moved-first.flac")"));
+  }
+
+  TEST_CASE("CLI - lib relink rejects incomplete and invalid bindings", "[cli][workflow][lib][relink]")
+  {
+    {
+      auto fixture = CliFixture{};
+      auto result = fixture.run({"lib", "relink", "--from", "missing.flac"});
+      checkDomainFailure(result, "lib relink requires both --from and --to");
+    }
+
+    {
+      auto fixture = CliFixture{};
+      fixture.copyAudio("basic_metadata.flac", "track.flac");
+
+      auto result = fixture.run({"init"});
+      REQUIRE(result.status == 0);
+
+      result = fixture.run({"lib", "relink", "--from", "track.flac", "--to", "track.flac"});
+      checkDomainFailure(result, "missing manifest row is not unresolved: track.flac");
+    }
+
+    {
+      auto fixture = CliFixture{};
+      auto const missingPath = fixture.root() / "missing.flac";
+      auto const mismatchPath = fixture.root() / "mismatch.flac";
+      fixture.copyAudio("basic_metadata.flac", missingPath.filename().string());
+
+      auto result = fixture.run({"init"});
+      REQUIRE(result.status == 0);
+
+      fs::remove(missingPath);
+      fixture.copyAudio("hires.flac", mismatchPath.filename().string());
+
+      result = fixture.run({"lib", "relink", "--from", "missing.flac", "--to", "mismatch.flac"});
+      checkDomainFailure(result, "audio identity mismatch: missing.flac -> mismatch.flac");
+    }
+  }
+
   TEST_CASE("CLI - lib resource list and export preserve raw bytes", "[cli][workflow][lib][resource]")
   {
     auto fixture = CliFixture{};
@@ -579,7 +677,7 @@ namespace ao::cli::test
     auto result = fixture.run({"scan", "--dry-run"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, "new 1  changed 0  missing 0  unchanged 0  errors 0"));
+    CHECK(contains(result.out, "new 1  changed 0  moved 0  missing 0  unchanged 0  errors 0"));
     CHECK(contains(result.out, "new track.flac"));
 
     result = fixture.run({"track", "show"});
@@ -590,7 +688,8 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     CHECK(contains(result.err, "scan:"));
     CHECK(contains(result.err, "apply:"));
-    CHECK(contains(result.out, "new 1  changed 0  missing 0  unchanged 0  errors 0"));
+    CHECK(contains(result.err, "fingerprint:"));
+    CHECK(contains(result.out, "new 1  changed 0  moved 0  missing 0  unchanged 0  errors 0"));
 
     result = fixture.run({"track", "show"});
     REQUIRE(result.status == 0);
@@ -602,20 +701,53 @@ namespace ao::cli::test
     result = fixture.run({"scan", "--dry-run"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, "new 0  changed 1  missing 0  unchanged 0  errors 0"));
+    CHECK(contains(result.out, "new 0  changed 1  moved 0  missing 0  unchanged 0  errors 0"));
     CHECK(contains(result.out, "changed track.flac"));
 
     result = fixture.run({"scan", "--dry-run"});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "new 0  changed 1  missing 0  unchanged 0  errors 0"));
+    CHECK(contains(result.out, "new 0  changed 1  moved 0  missing 0  unchanged 0  errors 0"));
 
     fs::remove(trackPath);
 
     result = fixture.run({"scan", "--dry-run"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, "new 0  changed 0  missing 1  unchanged 0  errors 0"));
+    CHECK(contains(result.out, "new 0  changed 0  moved 0  missing 1  unchanged 0  errors 0"));
     CHECK(contains(result.out, "missing track.flac"));
+
+    result = fixture.run({"scan"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "new 0  changed 0  moved 0  missing 1  unchanged 0  errors 0"));
+    CHECK(contains(result.out, "1 missing file needs review"));
+  }
+
+  TEST_CASE("CLI - scan reports moved files", "[cli][workflow][scan]")
+  {
+    auto fixture = CliFixture{};
+    auto const originalPath = fixture.root() / "track.flac";
+    auto const movedPath = fixture.root() / "renamed.flac";
+    fixture.copyAudio("basic_metadata.flac", originalPath.filename().string());
+
+    auto result = fixture.run({"init"});
+    REQUIRE(result.status == 0);
+
+    fs::rename(originalPath, movedPath);
+
+    result = fixture.run({"scan", "--dry-run"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "new 0  changed 0  moved 1  missing 0  unchanged 0  errors 0"));
+    CHECK(contains(result.out, "moved renamed.flac"));
+
+    result = fixture.run({"scan"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "new 0  changed 0  moved 1  missing 0  unchanged 0  errors 0"));
+    CHECK(contains(result.out, "Relinked 1 moved file"));
+
+    result = fixture.run({"scan", "--dry-run"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "new 0  changed 0  moved 0  missing 0  unchanged 1  errors 0"));
   }
 
   TEST_CASE("CLI - tag commands mutate track tags", "[cli][workflow][tag]")

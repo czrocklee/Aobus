@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/Error.h>
 #include <ao/library/Meta.h>
 #include <ao/library/MetaStore.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 
@@ -14,11 +13,30 @@
 #include <lmdb.h>
 
 #include <chrono>
+#include <cstdint>
+#include <filesystem>
 
 namespace ao::library::test
 {
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
+
+  namespace
+  {
+    void createLibraryMetaHeader(std::filesystem::path const& path, std::uint32_t libraryVersion)
+    {
+      auto env = lmdb::test::openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
+      auto txn = lmdb::test::beginWriteTransaction(env);
+      auto metaStore = MetaStore{lmdb::test::openDatabase(txn, "meta")};
+      auto header = MetaHeader{.magic = kLibraryMetaMagic,
+                               .libraryVersion = libraryVersion,
+                               .flags = 0,
+                               .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1}},
+                               .libraryId = {}};
+      metaStore.create(txn, header);
+      REQUIRE(txn.commit());
+    }
+  } // namespace
 
   TEST_CASE("MusicLibrary - initializes metadata header", "[library][unit][music-library]")
   {
@@ -42,21 +60,26 @@ namespace ao::library::test
   TEST_CASE("MusicLibrary - reports unsupported library versions as CorruptData", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8});
+    constexpr std::uint32_t kLegacyV1LibraryVersion = 1;
 
-    auto txn = lmdb::test::beginWriteTransaction(env);
-    auto metaStore = MetaStore{lmdb::test::openDatabase(txn, "meta")};
-    auto header = MetaHeader{.magic = kLibraryMetaMagic,
-                             .libraryVersion = kLibraryVersion + 1,
-                             .flags = 0,
-                             .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1}},
-                             .libraryId = {}};
-    metaStore.create(txn, header);
-    REQUIRE(txn.commit());
+    SECTION("future version")
+    {
+      createLibraryMetaHeader(temp.path(), kLibraryVersion + 1);
 
-    auto const result = MusicLibrary::open(temp.path(), temp.path());
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
+      auto const result = MusicLibrary::open(temp.path(), temp.path());
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
+    }
+
+    SECTION("old version")
+    {
+      static_assert(kLegacyV1LibraryVersion != kLibraryVersion);
+      createLibraryMetaHeader(temp.path(), kLegacyV1LibraryVersion);
+
+      auto const result = MusicLibrary::open(temp.path(), temp.path());
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
+    }
   }
 
   TEST_CASE("MusicLibrary - accessors return valid references", "[library][unit][music-library]")

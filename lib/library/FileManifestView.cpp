@@ -6,6 +6,7 @@
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -35,6 +36,16 @@ namespace ao::library
   std::uint64_t FileManifestView::mtime() const noexcept
   {
     return header().mtime();
+  }
+
+  std::uint64_t FileManifestView::audioPayloadLength() const noexcept
+  {
+    return header().audioPayloadLength();
+  }
+
+  utility::Hash128 FileManifestView::audioSignature() const noexcept
+  {
+    return header().audioSignature();
   }
 
   FileStatus FileManifestView::status() const noexcept

@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -28,6 +29,12 @@ namespace ao::tag::detail
 
 namespace ao::tag
 {
+  struct AudioPayload final
+  {
+    std::span<std::byte const> bytes;
+    std::size_t offset = 0;
+  };
+
   class TagFile
   {
   public:
@@ -58,6 +65,13 @@ namespace ao::tag
     Result<library::TrackBuilder> loadTrack() const;
 
     /**
+     * Return the byte range that carries encoded audio payload, excluding tag
+     * regions known to the container reader. The returned span borrows from the
+     * mmap'd file and is valid for this TagFile instance's lifetime.
+     */
+    Result<AudioPayload> audioPayload() const;
+
+    /**
      * Open a tag file by path, auto-detecting format from extension.
      * Unsupported extensions return Error::Code::NotSupported.
      */
@@ -76,8 +90,10 @@ namespace ao::tag
 
     void const* address() const noexcept { return _address; }
     std::size_t size() const noexcept { return _size; }
+    AudioPayload payloadRange(std::size_t offset, std::size_t length) const noexcept;
 
     virtual Result<library::TrackBuilder> loadTrackImpl() const = 0;
+    virtual Result<AudioPayload> audioPayloadImpl() const = 0;
 
   private:
     friend std::string_view detail::stashOwnedString(TagFile const& owner, std::string value);

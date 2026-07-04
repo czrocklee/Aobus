@@ -2,16 +2,22 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryScanner.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryTasks.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <exception>
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -131,5 +137,74 @@ namespace ao::rt::test
       CHECK(event.fraction <= 1.0);
       CHECK_FALSE(event.message.empty());
     }
+  }
+
+  TEST_CASE("LibraryTasks - applyScanPlanAsync forwards cancellation to scan executor",
+            "[runtime][unit][library][task][scan][cancellation]")
+  {
+    auto testLib = TestMusicLibrary{};
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    std::filesystem::copy_file(sourceFile, testLib.root() / "song.flac");
+
+    auto executor = MockExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{};
+    auto service = LibraryTasks{runtime, testLib.library(), changes};
+
+    auto scanner = library::LibraryScanner{testLib.library()};
+    auto plan = scanner.buildPlan().value();
+    REQUIRE(plan.count(library::ScanClassification::New) == 1);
+
+    auto signal = async::CancellationSignal{};
+    auto sawFingerprinting = AsyncTestState<bool>::create(false);
+    auto sawCancellation = AsyncTestState<bool>::create(false);
+    auto sub = changes.onLibraryTaskProgress(
+      [&](LibraryChanges::LibraryTaskProgressUpdated const& event)
+      {
+        if (event.message == "Fingerprinting: song.flac" && !sawFingerprinting.get())
+        {
+          sawFingerprinting.set(true);
+          signal.emit(async::CancellationType::all);
+        }
+      });
+
+    auto task = [](LibraryTasks* tasks, library::ScanPlan scanPlan) -> async::Task<void>
+    { [[maybe_unused]] auto result = co_await tasks->applyScanPlanAsync(std::move(scanPlan)); };
+
+    runtime.spawn(task(&service, std::move(plan)),
+                  signal.slot(),
+                  [sawCancellation](std::exception_ptr exPtr) mutable
+                  {
+                    try
+                    {
+                      if (exPtr)
+                      {
+                        std::rethrow_exception(exPtr);
+                      }
+                    }
+                    catch (async::OperationCancelled const&)
+                    {
+                      sawCancellation.set(true);
+                    }
+                    catch (std::exception const& e)
+                    {
+                      if (async::isOperationCancelled(e))
+                      {
+                        sawCancellation.set(true);
+                      }
+                    }
+                  });
+
+    REQUIRE(sawCancellation.waitUntil(true));
+    CHECK(sawFingerprinting.get());
+
+    auto txn = testLib.library().readTransaction();
+    auto trackReader = testLib.library().tracks().reader(txn);
+    auto manifestReader = testLib.library().manifest().reader(txn);
+    CHECK(trackReader.begin() == trackReader.end());
+    CHECK(manifestReader.begin() == manifestReader.end());
+
+    runtime.requestStop();
+    runtime.join();
   }
 } // namespace ao::rt::test

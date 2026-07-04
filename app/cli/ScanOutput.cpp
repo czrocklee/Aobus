@@ -15,6 +15,7 @@ namespace ao::cli
     {
       case library::ScanClassification::New: return "new";
       case library::ScanClassification::Changed: return "changed";
+      case library::ScanClassification::Moved: return "moved";
       case library::ScanClassification::Missing: return "missing";
       case library::ScanClassification::Unchanged: return "unchanged";
       case library::ScanClassification::Error: return "error";

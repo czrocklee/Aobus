@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -23,6 +24,8 @@ namespace ao::library
     TrackId trackId() const noexcept;
     std::uint64_t fileSize() const noexcept;
     std::uint64_t mtime() const noexcept;
+    std::uint64_t audioPayloadLength() const noexcept;
+    utility::Hash128 audioSignature() const noexcept;
     FileStatus status() const noexcept;
 
   private:

@@ -8,6 +8,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -181,6 +182,51 @@ namespace ao::tag::mpeg::test
       return data;
     }
 
+    std::vector<std::uint8_t> createValidMpegFrame()
+    {
+      auto frame = std::vector<std::uint8_t>(417, 0);
+      frame[0] = 0xFF;
+      frame[1] = 0xFB;
+      frame[2] = 0x90;
+      frame[3] = 0x44;
+      return frame;
+    }
+
+    void appendId3v1Tag(std::vector<std::uint8_t>& data)
+    {
+      auto tag = std::vector<std::uint8_t>(128, 0);
+      std::memcpy(tag.data(), "TAG", 3);
+      data.insert(data.end(), tag.begin(), tag.end());
+    }
+
+    void appendApeV2Footer(std::vector<std::uint8_t>& data)
+    {
+      auto footer = std::vector<std::uint8_t>(32, 0);
+      std::memcpy(footer.data(), "APETAGEX", 8);
+      footer[8] = 0xD0;
+      footer[9] = 0x07;
+      footer[12] = 32;
+      data.insert(data.end(), footer.begin(), footer.end());
+    }
+
+    void appendApeV2HeaderAndFooter(std::vector<std::uint8_t>& data)
+    {
+      auto header = std::vector<std::uint8_t>(32, 0);
+      std::memcpy(header.data(), "APETAGEX", 8);
+      header[8] = 0xD0;
+      header[9] = 0x07;
+      header[12] = 32;
+      data.insert(data.end(), header.begin(), header.end());
+
+      auto footer = std::vector<std::uint8_t>(32, 0);
+      std::memcpy(footer.data(), "APETAGEX", 8);
+      footer[8] = 0xD0;
+      footer[9] = 0x07;
+      footer[12] = 32;
+      footer[23] = 0x80;
+      data.insert(data.end(), footer.begin(), footer.end());
+    }
+
     library::TrackBuilder loadTrack(File const& file)
     {
       auto result = file.loadTrack();
@@ -226,6 +272,104 @@ namespace ao::tag::mpeg::test
     auto const prop = builder.property();
     CHECK(prop.codec() == AudioCodec::Mp3);
     CHECK(prop.bitDepth() == 16);
+  }
+
+  TEST_CASE("MPEG File - audio payload range trims leading and trailing tags", "[tag][unit][mpeg][file]")
+  {
+    auto data = wrapId3v2(3, {});
+    std::size_t const expectedOffset = data.size();
+    auto const frame = createValidMpegFrame();
+    data.insert(data.end(), frame.begin(), frame.end());
+    appendApeV2Footer(data);
+    appendId3v1Tag(data);
+
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = File{temp.path};
+    auto rangeResult = file.audioPayload();
+
+    REQUIRE(rangeResult);
+    auto const range = *rangeResult;
+    CHECK(range.offset == expectedOffset);
+    REQUIRE(range.bytes.size() == frame.size());
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[0]) == frame[0]);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[1]) == frame[1]);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[2]) == frame[2]);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[3]) == frame[3]);
+  }
+
+  TEST_CASE("MPEG File - audio payload range skips junk between ID3v2 and first frame", "[tag][unit][mpeg][file]")
+  {
+    auto data = wrapId3v2(3, {});
+    data.insert(data.end(), {0x00, 0x11, 0x22, 0x33, 0x7F});
+    std::size_t const expectedOffset = data.size();
+    auto const frame = createValidMpegFrame();
+    data.insert(data.end(), frame.begin(), frame.end());
+    appendApeV2HeaderAndFooter(data);
+    appendId3v1Tag(data);
+
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = File{temp.path};
+    auto rangeResult = file.audioPayload();
+
+    REQUIRE(rangeResult);
+    auto const range = *rangeResult;
+    CHECK(range.offset == expectedOffset);
+    REQUIRE(range.bytes.size() == frame.size());
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[0]) == frame[0]);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[1]) == frame[1]);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[2]) == frame[2]);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[3]) == frame[3]);
+  }
+
+  TEST_CASE("MPEG File - audio payload range trims APEv2 header advertised by footer", "[tag][unit][mpeg][file]")
+  {
+    auto data = std::vector<std::uint8_t>{};
+    auto const frame = createValidMpegFrame();
+    data.insert(data.end(), frame.begin(), frame.end());
+    appendApeV2HeaderAndFooter(data);
+
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = File{temp.path};
+    auto rangeResult = file.audioPayload();
+
+    REQUIRE(rangeResult);
+    auto const range = *rangeResult;
+    CHECK(range.offset == 0);
+    REQUIRE(range.bytes.size() == frame.size());
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[0]) == frame[0]);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[1]) == frame[1]);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[2]) == frame[2]);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[3]) == frame[3]);
+  }
+
+  TEST_CASE("MPEG File - audio payload signature ignores tag changes", "[tag][unit][mpeg][file]")
+  {
+    auto firstBody = std::vector<std::uint8_t>{};
+    addTextFrame(firstBody, "TIT2", "Before");
+    auto secondBody = std::vector<std::uint8_t>{};
+    addTextFrame(secondBody, "TIT2", "After Retag");
+
+    auto firstData = wrapId3v2(3, firstBody);
+    auto secondData = wrapId3v2(3, secondBody);
+    auto const frame = createValidMpegFrame();
+    firstData.insert(firstData.end(), frame.begin(), frame.end());
+    secondData.insert(secondData.end(), frame.begin(), frame.end());
+    appendId3v1Tag(firstData);
+    appendId3v1Tag(secondData);
+
+    auto const firstTemp = TempFile{firstData, ".mp3"};
+    auto const secondTemp = TempFile{secondData, ".mp3"};
+    auto const firstFile = File{firstTemp.path};
+    auto const secondFile = File{secondTemp.path};
+
+    auto const firstPayloadResult = firstFile.audioPayload();
+    auto const secondPayloadResult = secondFile.audioPayload();
+    REQUIRE(firstPayloadResult);
+    REQUIRE(secondPayloadResult);
+
+    CHECK(firstPayloadResult->bytes.size() == frame.size());
+    CHECK(secondPayloadResult->bytes.size() == frame.size());
+    CHECK(utility::fnv1a128(firstPayloadResult->bytes) == utility::fnv1a128(secondPayloadResult->bytes));
   }
 
   TEST_CASE("MPEG File - derives CBR audio properties", "[tag][unit][mpeg][file]")

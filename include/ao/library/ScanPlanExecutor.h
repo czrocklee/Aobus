@@ -11,6 +11,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -59,7 +60,21 @@ namespace ao::library
   class ScanPlanExecutor final
   {
   public:
-    using ProgressCallback = std::move_only_function<void(std::filesystem::path const& path, std::int32_t itemIndex)>;
+    enum class ProgressStage : std::uint8_t
+    {
+      Updating,
+      Fingerprinting
+    };
+
+    struct Progress final
+    {
+      std::filesystem::path path{};
+      std::int32_t itemIndex = 0;
+      ProgressStage stage = ProgressStage::Updating;
+      double itemFraction = 0.0;
+    };
+
+    using ProgressCallback = std::move_only_function<void(Progress const& progress)>;
     using ItemFailureCallback = std::move_only_function<void(ScanFailure const& failure)>;
 
     ScanPlanExecutor(MusicLibrary& ml,
@@ -81,13 +96,22 @@ namespace ao::library
     std::size_t fileCount() const;
 
   private:
+    struct AudioFingerprint final
+    {
+      utility::Hash128 signature;
+      std::uint64_t payloadLength = 0;
+    };
+
     void processItem(std::size_t itemIndex,
                      lmdb::WriteTransaction& txn,
                      TrackStore::Writer& trackWriter,
                      FileManifestStore::Writer& manifestWriter,
-                     DictionaryStore& dict);
+                     DictionaryStore& dict,
+                     std::stop_token stopToken);
 
     bool processSkips(ScanItem const& item);
+
+    void reportProgress(ScanItem const& item, std::size_t itemIndex, ProgressStage stage, double itemFraction);
 
     void reportFailure(std::string_view uri, std::string_view stage, std::string_view message);
 
@@ -98,16 +122,33 @@ namespace ao::library
                         TrackStore::Writer& trackWriter,
                         FileManifestStore::Writer& manifestWriter,
                         DictionaryStore& dict,
-                        TrackBuilder& builder);
+                        TrackBuilder& builder,
+                        AudioFingerprint const& fingerprint);
+
+    bool processMoved(ScanItem const& item,
+                      lmdb::WriteTransaction& txn,
+                      TrackStore::Writer& trackWriter,
+                      FileManifestStore::Writer& manifestWriter,
+                      DictionaryStore& dict,
+                      TrackBuilder& builder,
+                      AudioFingerprint const& fingerprint);
 
     void processNew(ScanItem const& item,
                     lmdb::WriteTransaction& txn,
                     TrackStore::Writer& trackWriter,
                     FileManifestStore::Writer& manifestWriter,
                     DictionaryStore& dict,
-                    TrackBuilder& builder);
+                    TrackBuilder& builder,
+                    AudioFingerprint const& fingerprint);
 
     std::optional<std::pair<std::unique_ptr<tag::TagFile>, TrackBuilder>> loadTrackBuilder(ScanItem const& item);
+
+    std::optional<AudioFingerprint> cachedAudioFingerprint(ScanItem const& item) const noexcept;
+
+    std::optional<AudioFingerprint> fingerprintAudioPayload(ScanItem const& item,
+                                                            tag::TagFile const& tagFile,
+                                                            std::size_t itemIndex,
+                                                            std::stop_token stopToken);
 
     std::optional<std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold>> prepareTrack(
       TrackBuilder const& builder,
@@ -134,5 +175,6 @@ namespace ao::library
     ItemFailureCallback _itemFailureCallback;
 
     ScanApplyResult _result;
+    bool _abortTransaction = false;
   };
 } // namespace ao::library

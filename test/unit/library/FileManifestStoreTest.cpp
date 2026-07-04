@@ -9,6 +9,7 @@
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
@@ -47,8 +48,14 @@ namespace ao::library::test
     auto db = openDatabase(wtxn, "manifests");
     auto store = FileManifestStore{db};
 
+    auto const signature = utility::fnv1a128("stored payload");
     auto builder = FileManifestBuilder::createNew();
-    builder.trackId(TrackId{42}).fileSize(12345).mtime(67890).status(FileStatus::Available);
+    builder.trackId(TrackId{42})
+      .fileSize(12345)
+      .mtime(67890)
+      .audioPayloadLength(55555)
+      .audioSignature(signature)
+      .status(FileStatus::Available);
     auto const payload = builder.serialize();
 
     REQUIRE(store.writer(wtxn).put("song.flac", payload));
@@ -60,6 +67,8 @@ namespace ao::library::test
     CHECK(viewResult->trackId() == TrackId{42});
     CHECK(viewResult->fileSize() == 12345);
     CHECK(viewResult->mtime() == 67890);
+    CHECK(viewResult->audioPayloadLength() == 55555);
+    CHECK(viewResult->audioSignature() == signature);
     CHECK(viewResult->status() == FileStatus::Available);
   }
 

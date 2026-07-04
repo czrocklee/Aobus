@@ -5,6 +5,7 @@
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -21,7 +22,12 @@ namespace ao::library
   FileManifestBuilder FileManifestBuilder::fromView(FileManifestView const& view)
   {
     auto builder = FileManifestBuilder{};
-    builder.trackId(view.trackId()).fileSize(view.fileSize()).mtime(view.mtime()).status(view.status());
+    builder.trackId(view.trackId())
+      .fileSize(view.fileSize())
+      .mtime(view.mtime())
+      .audioPayloadLength(view.audioPayloadLength())
+      .audioSignature(view.audioSignature())
+      .status(view.status());
     return builder;
   }
 
@@ -40,6 +46,18 @@ namespace ao::library
   FileManifestBuilder& FileManifestBuilder::mtime(std::uint64_t val)
   {
     _header.mtime(val);
+    return *this;
+  }
+
+  FileManifestBuilder& FileManifestBuilder::audioPayloadLength(std::uint64_t val)
+  {
+    _header.audioPayloadLength(val);
+    return *this;
+  }
+
+  FileManifestBuilder& FileManifestBuilder::audioSignature(utility::Hash128 val)
+  {
+    _header.audioSignature(val);
     return *this;
   }
 

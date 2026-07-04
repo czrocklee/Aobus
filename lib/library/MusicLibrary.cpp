@@ -73,11 +73,11 @@ namespace ao::library
           std::format("Invalid library metadata magic 0x{:08x} (expected 0x{:08x})", header.magic, kLibraryMetaMagic));
       }
 
-      if (header.libraryVersion > kLibraryVersion)
+      if (header.libraryVersion != kLibraryVersion)
       {
         return makeError(
           Error::Code::CorruptData,
-          std::format("Unsupported library version {} (maximum supported {})", header.libraryVersion, kLibraryVersion));
+          std::format("Unsupported library version {} (current {})", header.libraryVersion, kLibraryVersion));
       }
 
       return {};

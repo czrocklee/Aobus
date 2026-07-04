@@ -6,20 +6,52 @@
 #include <ao/library/LibraryScanner.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/tag/TagFile.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <system_error>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace ao::library
 {
   namespace
   {
+    struct AudioIdentityKey final
+    {
+      std::uint64_t payloadLength = 0;
+      utility::Hash128 signature = {};
+
+      bool operator==(AudioIdentityKey const&) const noexcept = default;
+    };
+
+    struct AudioIdentityKeyHasher final
+    {
+      std::size_t operator()(AudioIdentityKey const& key) const noexcept
+      {
+        auto seed = std::hash<std::uint64_t>{}(key.payloadLength);
+        constexpr std::uint32_t kGoldenRatio = 0x9e3779b9U;
+        constexpr std::size_t kShiftLeft = 6U;
+        constexpr std::size_t kShiftRight = 2U;
+
+        for (auto const byte : key.signature.bytes)
+        {
+          seed ^= std::hash<std::size_t>{}(std::to_integer<std::size_t>(byte)) + kGoldenRatio + (seed << kShiftLeft) +
+                  (seed >> kShiftRight);
+        }
+
+        return seed;
+      }
+    };
+
     void processEntry(std::filesystem::directory_entry const& entry,
                       std::filesystem::path const& root,
                       FileManifestStore::Reader const& manifestReader,
@@ -43,6 +75,7 @@ namespace ao::library
       {
         auto const uri = std::filesystem::relative(entry.path(), root, entryEc).generic_string();
         auto item = ScanItem{.uri = uri,
+                             .oldUri = {},
                              .fullPath = entry.path(),
                              .classification = ScanClassification::Error,
                              .errorMessage = entryEc.message()};
@@ -68,7 +101,7 @@ namespace ao::library
       auto const uri = std::filesystem::relative(path, root, entryEc).generic_string();
       seenUris.insert(uri);
 
-      auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
+      auto item = ScanItem{.uri = uri, .oldUri = {}, .fullPath = path, .classification = ScanClassification::Error};
 
       try
       {
@@ -98,6 +131,8 @@ namespace ao::library
         {
           auto const& view = *manifestResult;
           item.trackId = view.trackId();
+          item.audioPayloadLength = view.audioPayloadLength();
+          item.audioSignature = view.audioSignature();
 
           if (view.fileSize() == item.fileSize && view.mtime() == item.mtime)
           {
@@ -126,15 +161,124 @@ namespace ao::library
         if (auto const uri = std::string{uriView}; !seenUris.contains(uri))
         {
           auto item = ScanItem{.uri = uri,
+                               .oldUri = {},
                                .fullPath = {},
                                .classification = ScanClassification::Missing,
                                .fileSize = view.fileSize(),
                                .mtime = view.mtime(),
+                               .audioPayloadLength = view.audioPayloadLength(),
+                               .audioSignature = view.audioSignature(),
                                .trackId = view.trackId(),
                                .errorMessage = {}};
           plan.items.push_back(std::move(item));
         }
       }
+    }
+
+    void classifyMovedEntries(ScanPlan& plan)
+    {
+      auto missingByLength = std::unordered_map<std::uint64_t, std::vector<std::size_t>>{};
+      auto missingByIdentity = std::unordered_map<AudioIdentityKey, std::vector<std::size_t>, AudioIdentityKeyHasher>{};
+
+      for (std::size_t index = 0; index < plan.items.size(); ++index)
+      {
+        auto const& item = plan.items[index];
+
+        if (item.classification != ScanClassification::Missing || !hasAudioIdentity(item))
+        {
+          continue;
+        }
+
+        auto const key = AudioIdentityKey{.payloadLength = item.audioPayloadLength, .signature = item.audioSignature};
+        missingByLength[item.audioPayloadLength].push_back(index);
+        missingByIdentity[key].push_back(index);
+      }
+
+      if (missingByLength.empty())
+      {
+        return;
+      }
+
+      auto newByIdentity = std::unordered_map<AudioIdentityKey, std::vector<std::size_t>, AudioIdentityKeyHasher>{};
+
+      for (std::size_t index = 0; index < plan.items.size(); ++index)
+      {
+        auto& item = plan.items[index];
+
+        if (item.classification != ScanClassification::New)
+        {
+          continue;
+        }
+
+        auto tagFileResult = tag::TagFile::open(item.fullPath);
+
+        if (!tagFileResult)
+        {
+          continue;
+        }
+
+        auto payloadResult = (*tagFileResult)->audioPayload();
+
+        if (!payloadResult)
+        {
+          continue;
+        }
+
+        item.audioPayloadLength = static_cast<std::uint64_t>(payloadResult->bytes.size());
+
+        if (!missingByLength.contains(item.audioPayloadLength))
+        {
+          continue;
+        }
+
+        item.audioSignature = utility::fnv1a128(payloadResult->bytes);
+        auto const key = AudioIdentityKey{.payloadLength = item.audioPayloadLength, .signature = item.audioSignature};
+        newByIdentity[key].push_back(index);
+      }
+
+      auto matchedMissingIndexes = std::unordered_set<std::size_t>{};
+
+      for (auto const& [key, newIndexes] : newByIdentity)
+      {
+        auto const missingIt = missingByIdentity.find(key);
+
+        if (missingIt == missingByIdentity.end())
+        {
+          continue;
+        }
+
+        auto const& missingIndexes = missingIt->second;
+
+        if (newIndexes.size() != 1 || missingIndexes.size() != 1)
+        {
+          continue;
+        }
+
+        auto& newItem = plan.items[newIndexes.front()];
+        auto const& missingItem = plan.items[missingIndexes.front()];
+        newItem.classification = ScanClassification::Moved;
+        newItem.oldUri = missingItem.uri;
+        newItem.trackId = missingItem.trackId;
+        matchedMissingIndexes.insert(missingIndexes.front());
+      }
+
+      if (matchedMissingIndexes.empty())
+      {
+        return;
+      }
+
+      auto items = std::vector<ScanItem>{};
+      items.reserve(plan.items.size() - matchedMissingIndexes.size());
+
+      for (std::size_t index = 0; index < plan.items.size(); ++index)
+      {
+        if (!matchedMissingIndexes.contains(index))
+        {
+          items.push_back(std::move(plan.items[index]));
+        }
+      }
+
+      plan.items = std::move(items);
     }
   } // namespace
 
@@ -198,6 +342,7 @@ namespace ao::library
         {
           auto const uri = std::filesystem::relative(entry.path(), root, entryEc).generic_string();
           auto item = ScanItem{.uri = uri,
+                               .oldUri = {},
                                .fullPath = entry.path(),
                                .classification = ScanClassification::Error,
                                .errorMessage = testEc.message()};
@@ -227,6 +372,7 @@ namespace ao::library
 
     // 2. Identify MISSING (In manifest but not on disk)
     addMissingEntries(plan, manifestReader, seenUris);
+    classifyMovedEntries(plan);
 
     return plan;
   }

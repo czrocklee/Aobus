@@ -6,10 +6,13 @@
 #include <ao/AudioCodec.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -35,7 +38,7 @@ namespace ao::tag::flac::test
       data.push_back(size & 0xFF);
     }
 
-    std::vector<std::uint8_t> createMinimalFlac()
+    std::vector<std::uint8_t> createMinimalFlac(std::string_view title = "Title")
     {
       auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};
 
@@ -63,7 +66,9 @@ namespace ao::tag::flac::test
       vc.push_back((count >> 8) & 0xFF);
       vc.push_back((count >> 16) & 0xFF);
       vc.push_back((count >> 24) & 0xFF);
-      addString("TITLE=Title");
+      auto titleComment = std::string{"TITLE="};
+      titleComment += title;
+      addString(titleComment);
       addString("ARTIST=Artist");
       addString("ALBUMARTIST=AlbumArtist");
       addString("COMPOSER=Composer");
@@ -125,6 +130,59 @@ namespace ao::tag::flac::test
     CHECK(prop.bitDepth() == 16);
     CHECK(prop.codec() == AudioCodec::Flac);
     CHECK(prop.duration() == std::chrono::seconds{1});
+  }
+
+  TEST_CASE("FLAC File - audio payload range starts after metadata blocks", "[tag][unit][flac][file]")
+  {
+    auto data = createMinimalFlac();
+    std::size_t const expectedOffset = data.size();
+    data.insert(data.end(), {0xA0, 0xA1, 0xA2});
+
+    auto const temp = TempFile{data};
+    auto const file = File{temp.path};
+    auto rangeResult = file.audioPayload();
+
+    REQUIRE(rangeResult);
+    auto const range = *rangeResult;
+    CHECK(range.offset == expectedOffset);
+    REQUIRE(range.bytes.size() == 3);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[0]) == 0xA0);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[1]) == 0xA1);
+    CHECK(std::to_integer<std::uint8_t>(range.bytes[2]) == 0xA2);
+  }
+
+  TEST_CASE("FLAC File - rejects empty audio payload", "[tag][unit][flac][file]")
+  {
+    auto const data = createMinimalFlac();
+    auto const temp = TempFile{data};
+    auto const file = File{temp.path};
+    auto rangeResult = file.audioPayload();
+
+    REQUIRE_FALSE(rangeResult);
+    CHECK(rangeResult.error().code == Error::Code::CorruptData);
+  }
+
+  TEST_CASE("FLAC File - audio payload signature ignores metadata changes", "[tag][unit][flac][file]")
+  {
+    auto firstData = createMinimalFlac("Short");
+    auto secondData = createMinimalFlac("A Longer Retagged Title");
+    auto const audioPayload = std::vector<std::uint8_t>{0xC0, 0xC1, 0xC2, 0xC3};
+    firstData.insert(firstData.end(), audioPayload.begin(), audioPayload.end());
+    secondData.insert(secondData.end(), audioPayload.begin(), audioPayload.end());
+
+    auto const firstTemp = TempFile{firstData, ".flac"};
+    auto const secondTemp = TempFile{secondData, ".flac"};
+    auto const firstFile = File{firstTemp.path};
+    auto const secondFile = File{secondTemp.path};
+
+    auto const firstPayloadResult = firstFile.audioPayload();
+    auto const secondPayloadResult = secondFile.audioPayload();
+    REQUIRE(firstPayloadResult);
+    REQUIRE(secondPayloadResult);
+
+    CHECK(firstPayloadResult->bytes.size() == audioPayload.size());
+    CHECK(secondPayloadResult->bytes.size() == audioPayload.size());
+    CHECK(utility::fnv1a128(firstPayloadResult->bytes) == utility::fnv1a128(secondPayloadResult->bytes));
   }
 
   TEST_CASE("FLAC File - rejects malformed input", "[tag][unit][flac][file]")

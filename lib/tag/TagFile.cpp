@@ -4,7 +4,9 @@
 #include <ao/Error.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/tag/TagFile.h>
+#include <ao/utility/ByteView.h>
 
+#include <cstddef>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -34,6 +36,22 @@ namespace ao::tag
     }
 
     return loadTrackImpl();
+  }
+
+  Result<AudioPayload> TagFile::audioPayload() const
+  {
+    if (auto const result = mappedResult(); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    return audioPayloadImpl();
+  }
+
+  AudioPayload TagFile::payloadRange(std::size_t offset, std::size_t length) const noexcept
+  {
+    auto const* const start = static_cast<std::byte const*>(address()) + offset;
+    return {.bytes = utility::bytes::view(start, length), .offset = offset};
   }
 
   Result<> TagFile::mappedResult() const

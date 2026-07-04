@@ -78,12 +78,15 @@ imported.
 `aobus scan [--dry-run] [--verbose]` compares files under the music root with
 the manifest using `library::LibraryScanner`.
 
-- Plain output uses summary line `new N  changed C  missing M  unchanged U
-  errors E`. Structured output emits the same counts as fields.
+- Plain output uses summary line `new N  changed C  moved R  missing M
+  unchanged U  errors E`. Structured output emits the same counts as fields.
 - `--dry-run` lists non-unchanged items and applies nothing.
-- `--verbose` prints current scan/apply paths to stderr.
+- `--verbose` prints current scan, apply, and fingerprint paths to stderr.
 - Per-item apply failures are reported to stderr. Transaction-level failures
   exit non-zero.
+- Real scan apply reports committed relinks and unresolved missing files after
+  the summary, for example `Relinked 1 moved file` or
+  `2 missing files need review`.
 
 ## Tracks
 
@@ -191,8 +194,20 @@ id this is the track's tags; with multiple ids this is the intersection.
 - on-disk library database size
 
 `aobus lib verify` builds a scan plan without applying it and reports Changed,
-Missing, and Error items. Missing or Error items exit with status `1`; Changed
-items are reported but do not make verification fail.
+Moved, Missing, and Error items. Missing or Error items exit with status `1`;
+Changed and Moved items are reported but do not make verification fail.
+
+`aobus lib relink` lists unresolved Missing/New manifest pairs and exact
+audio-identity candidates. With no `--from`/`--to`, plain output prints
+`missing <uri>`, `new <uri>`, and `candidate <old> -> <new>` rows. Structured
+output includes `missing`, `newFiles`, and `candidates`.
+
+`aobus lib relink --from <old-uri> --to <new-uri> [--dry-run]` explicitly binds
+one missing manifest URI to one new file URI. The command validates that the
+old row is unresolved, the new file is unresolved, and the audio payload
+signature plus payload length match. Dry-run validates and reports without
+mutating; real apply uses the normal scan executor so the track cold URI and
+manifest row are rebound together.
 
 `aobus lib import [--dry-run] <path> [--mode restore|merge]` and
 `aobus lib export <path> [--mode delta|metadata|full|listOnly]` read and write

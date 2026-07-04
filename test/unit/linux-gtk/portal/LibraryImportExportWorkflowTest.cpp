@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -89,6 +90,21 @@ namespace ao::gtk::test
       return std::ranges::any_of(titles, [&](std::string const& title) { return title == expectedTitle; });
     }
 
+    std::vector<std::string> trackUris(GtkRuntimeFixture& fixture)
+    {
+      auto uris = std::vector<std::string>{};
+      auto txn = fixture.runtime().musicLibrary().readTransaction();
+      auto reader = fixture.runtime().musicLibrary().tracks().reader(txn);
+
+      for (auto const& [id, view] : reader)
+      {
+        std::ignore = id;
+        uris.emplace_back(view.property().uri());
+      }
+
+      return uris;
+    }
+
     void copyMetadataFixtureToLibrary(GtkRuntimeFixture& fixture)
     {
       auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
@@ -149,16 +165,20 @@ namespace ao::gtk::test
     REQUIRE(pumpGtkEventsUntil(
       [&fixture, &mutationCallbackCount, &optCompletedCount, &progressEvents]
       {
-        return progressEvents.size() == 2 && optCompletedCount.has_value() && mutationCallbackCount == 1 &&
+        return progressEvents.size() == 4 && optCompletedCount.has_value() && mutationCallbackCount == 1 &&
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete");
       }));
     CHECK(optCompletedCount == 1U);
     CHECK(mutationCallbackCount == 1);
-    REQUIRE(progressEvents.size() == 2);
+    REQUIRE(progressEvents.size() == 4);
     CHECK(progressEvents[0].message == "Scanning: song.flac");
     CHECK(progressEvents[0].fraction == 0.0);
     CHECK(progressEvents[1].message == "Updating: song.flac");
     CHECK(progressEvents[1].fraction == 0.0);
+    CHECK(progressEvents[2].message == "Fingerprinting: song.flac");
+    CHECK(progressEvents[2].fraction == 0.0);
+    CHECK(progressEvents[3].message == "Fingerprinting: song.flac");
+    CHECK(progressEvents[3].fraction == 1.0);
     CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
 
     optCompletedCount.reset();
@@ -179,6 +199,104 @@ namespace ao::gtk::test
     REQUIRE(progressEvents.size() == 1);
     CHECK(progressEvents[0].message == "Scanning: song.flac");
     CHECK(progressEvents[0].fraction == 0.0);
+  }
+
+  TEST_CASE("LibraryImportExportWorkflow - scan reports relinked moved files", "[gtk][unit][workflow]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    std::int32_t mutationCallbackCount = 0;
+    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
+
+    copyMetadataFixtureToLibrary(fixture);
+    workflow.scan();
+    REQUIRE(pumpGtkEventsUntil(
+      [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
+
+    fixture.runtime().notifications().dismissAll();
+    auto optCompletedCount = std::optional<std::size_t>{};
+    auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
+      [&optCompletedCount](std::size_t count) { optCompletedCount = count; });
+
+    auto const movedPath = fixture.runtime().musicRoot() / "renamed.flac";
+    std::filesystem::rename(fixture.runtime().musicRoot() / "song.flac", movedPath);
+
+    workflow.scan();
+
+    REQUIRE(pumpGtkEventsUntil(
+      [&fixture, &optCompletedCount]
+      {
+        return optCompletedCount == 1U &&
+               hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 moved file");
+      }));
+
+    CHECK(mutationCallbackCount == 2);
+    CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
+  }
+
+  TEST_CASE("LibraryImportExportWorkflow - scan reports missing files needing review", "[gtk][unit][workflow]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    std::int32_t mutationCallbackCount = 0;
+    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
+
+    copyMetadataFixtureToLibrary(fixture);
+    workflow.scan();
+    REQUIRE(pumpGtkEventsUntil(
+      [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
+
+    fixture.runtime().notifications().dismissAll();
+    auto optCompletedCount = std::optional<std::size_t>{};
+    auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
+      [&optCompletedCount](std::size_t count) { optCompletedCount = count; });
+
+    std::filesystem::remove(fixture.runtime().musicRoot() / "song.flac");
+
+    workflow.scan();
+
+    REQUIRE(pumpGtkEventsUntil(
+      [&fixture, &optCompletedCount]
+      {
+        return optCompletedCount == 0U &&
+               hasNotification(fixture, rt::NotificationSeverity::Warning, "1 missing file needs review");
+      }));
+
+    CHECK(mutationCallbackCount == 1);
+  }
+
+  TEST_CASE("LibraryImportExportWorkflow - scan reports missing files even when errors occur", "[gtk][unit][workflow]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    std::int32_t mutationCallbackCount = 0;
+    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
+
+    copyMetadataFixtureToLibrary(fixture);
+    workflow.scan();
+    REQUIRE(pumpGtkEventsUntil(
+      [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
+
+    fixture.runtime().notifications().dismissAll();
+    std::filesystem::remove(fixture.runtime().musicRoot() / "song.flac");
+    {
+      auto out = std::ofstream{fixture.runtime().musicRoot() / "corrupted.flac", std::ios::binary};
+      out << "NOT A FLAC FILE";
+    }
+
+    workflow.scan();
+
+    REQUIRE(pumpGtkEventsUntil(
+      [&fixture]
+      {
+        return hasNotification(
+          fixture, rt::NotificationSeverity::Warning, "Scan completed with errors; 1 missing file needs review");
+      }));
+
+    CHECK(mutationCallbackCount == 1);
   }
 
   TEST_CASE("LibraryImportExportWorkflow - scan reports error-only plans without up-to-date success",

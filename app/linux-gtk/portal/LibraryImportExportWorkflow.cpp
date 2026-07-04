@@ -19,6 +19,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryTasks.h>
 
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <format>
@@ -39,6 +40,38 @@ namespace ao::gtk::portal
                     error.message,
                     error.location.file_name(),
                     error.location.line());
+    }
+
+    std::string relinkedScanMessage(std::int32_t relinkedCount)
+    {
+      return std::format("Relinked {} moved file{}", relinkedCount, relinkedCount == 1 ? "" : "s");
+    }
+
+    std::string missingScanMessage(std::int32_t missingCount)
+    {
+      return std::format(
+        "{} missing file{} need{} review", missingCount, missingCount == 1 ? "" : "s", missingCount == 1 ? "s" : "");
+    }
+
+    std::string scanCompletionSummary(library::ScanApplyResult const& result)
+    {
+      if (result.relinkedCount > 0 && result.missingCount > 0)
+      {
+        return std::format(
+          "{}; {}", relinkedScanMessage(result.relinkedCount), missingScanMessage(result.missingCount));
+      }
+
+      if (result.relinkedCount > 0)
+      {
+        return relinkedScanMessage(result.relinkedCount);
+      }
+
+      if (result.missingCount > 0)
+      {
+        return missingScanMessage(result.missingCount);
+      }
+
+      return "Library scan complete";
     }
   } // namespace
 
@@ -105,9 +138,10 @@ namespace ao::gtk::portal
       co_return;
     }
 
-    APP_LOG_INFO("Scan plan: {} new, {} changed, {} missing, {} errors",
+    APP_LOG_INFO("Scan plan: {} new, {} changed, {} moved, {} missing, {} errors",
                  optPlan->count(library::ScanClassification::New),
                  optPlan->count(library::ScanClassification::Changed),
+                 optPlan->count(library::ScanClassification::Moved),
                  optPlan->count(library::ScanClassification::Missing),
                  optPlan->count(library::ScanClassification::Error));
 
@@ -162,7 +196,7 @@ namespace ao::gtk::portal
   bool LibraryImportExportWorkflow::reportIfNoActionableWork(library::ScanPlan const& plan)
   {
     if (plan.count(library::ScanClassification::New) != 0 || plan.count(library::ScanClassification::Changed) != 0 ||
-        plan.count(library::ScanClassification::Missing) != 0)
+        plan.count(library::ScanClassification::Moved) != 0 || plan.count(library::ScanClassification::Missing) != 0)
     {
       return false;
     }
@@ -208,11 +242,22 @@ namespace ao::gtk::portal
         }
         else if (result->failureCount > 0)
         {
-          _runtime.notifications().post(rt::NotificationSeverity::Warning, "Scan completed with errors");
+          auto message = std::string{"Scan completed with errors"};
+
+          if (result->missingCount > 0 || result->relinkedCount > 0)
+          {
+            message += std::format("; {}", scanCompletionSummary(*result));
+          }
+
+          _runtime.notifications().post(rt::NotificationSeverity::Warning, std::move(message));
+        }
+        else if (result->missingCount > 0)
+        {
+          _runtime.notifications().post(rt::NotificationSeverity::Warning, scanCompletionSummary(*result));
         }
         else
         {
-          _runtime.notifications().post(rt::NotificationSeverity::Info, "Library scan complete");
+          _runtime.notifications().post(rt::NotificationSeverity::Info, scanCompletionSummary(*result));
         }
       }
     }

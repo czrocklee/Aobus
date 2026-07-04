@@ -11,6 +11,7 @@
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/media/mp4/TrackSelection.h>
+#include <ao/tag/TagFile.h>
 #include <ao/tag/detail/TagError.h>
 #include <ao/utility/ByteView.h>
 
@@ -402,6 +403,60 @@ namespace ao::tag::mp4
       extractAudioProperties(builder, root, size());
 
       return builder;
+    }
+    catch (detail::TagException const& ex)
+    {
+      return std::unexpected{ex.error()};
+    }
+  }
+
+  Result<AudioPayload> File::audioPayloadImpl() const
+  {
+    try
+    {
+      RootAtom const root = media::mp4::fromBuffer(utility::bytes::view(address(), size()));
+      auto optPayload = std::optional<AudioPayload>{};
+      bool hasMultipleMdatAtoms = false;
+
+      root.visitChildren(
+        [&](Atom const& atom)
+        {
+          if (atom.type() != "mdat")
+          {
+            return true;
+          }
+
+          if (optPayload)
+          {
+            hasMultipleMdatAtoms = true;
+            return false;
+          }
+
+          auto const& view = utility::unsafeDowncast<AtomView const>(atom);
+          auto const atomBytes = view.bytes();
+
+          if (atomBytes.size() < sizeof(AtomLayout))
+          {
+            return true;
+          }
+
+          auto const atomOffset = static_cast<std::size_t>(atomBytes.data() - static_cast<std::byte const*>(address()));
+          auto const offset = atomOffset + sizeof(AtomLayout);
+          optPayload = payloadRange(offset, atomBytes.size() - sizeof(AtomLayout));
+          return true;
+        });
+
+      if (hasMultipleMdatAtoms)
+      {
+        return makeError(Error::Code::FormatRejected, "mp4 audio payload range requires a single mdat atom");
+      }
+
+      if (!optPayload)
+      {
+        return makeError(Error::Code::CorruptData, "mp4 file has no mdat audio payload");
+      }
+
+      return *optPayload;
     }
     catch (detail::TagException const& ex)
     {

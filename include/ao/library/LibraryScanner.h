@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -21,6 +22,7 @@ namespace ao::library
   {
     New,
     Changed,
+    Moved,
     Missing,
     Unchanged,
     Error
@@ -29,13 +31,21 @@ namespace ao::library
   struct ScanItem final
   {
     std::string uri;
+    std::string oldUri;
     std::filesystem::path fullPath;
     ScanClassification classification = ScanClassification::Error;
     std::uint64_t fileSize = 0;
     std::uint64_t mtime = 0;
+    std::uint64_t audioPayloadLength = 0;
+    utility::Hash128 audioSignature = {};
     TrackId trackId = kInvalidTrackId;
     std::string errorMessage = {};
   };
+
+  inline bool hasAudioIdentity(ScanItem const& item) noexcept
+  {
+    return item.audioPayloadLength != 0 && item.audioSignature != utility::Hash128{};
+  }
 
   struct ScanPlan final
   {
@@ -67,6 +77,8 @@ namespace ao::library
   struct ScanApplyResult final
   {
     std::vector<TrackId> processedIds;
+    std::int32_t relinkedCount = 0;
+    std::int32_t missingCount = 0;
     std::int32_t failureCount = 0;
     bool cancelled = false;
   };

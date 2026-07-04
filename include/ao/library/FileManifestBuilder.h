@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -26,6 +27,8 @@ namespace ao::library
     FileManifestBuilder& trackId(TrackId val);
     FileManifestBuilder& fileSize(std::uint64_t val);
     FileManifestBuilder& mtime(std::uint64_t val);
+    FileManifestBuilder& audioPayloadLength(std::uint64_t val);
+    FileManifestBuilder& audioSignature(utility::Hash128 val);
     FileManifestBuilder& status(FileStatus val);
 
     std::vector<std::byte> serialize() const;

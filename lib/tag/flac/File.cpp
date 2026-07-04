@@ -11,6 +11,7 @@
 #include <ao/media/detail/MediaError.h>
 #include <ao/media/flac/MetadataBlock.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
+#include <ao/tag/TagFile.h>
 #include <ao/tag/detail/TagError.h>
 
 #include <chrono>
@@ -151,6 +152,49 @@ namespace ao::tag::flac
     catch (detail::TagException const& ex)
     {
       return std::unexpected{ex.error()};
+    }
+    catch (media::detail::MediaException const& ex)
+    {
+      return std::unexpected{ex.error()};
+    }
+  }
+
+  Result<AudioPayload> File::audioPayloadImpl() const
+  {
+    if (size() < 4 || std::memcmp(address(), "fLaC", 4) != 0)
+    {
+      return makeError(Error::Code::CorruptData, "unrecognized flac file content");
+    }
+
+    try
+    {
+      std::size_t offset = 4;
+      auto iter = MetadataBlockViewIterator{static_cast<char const*>(address()) + offset, size() - offset};
+      auto const end = MetadataBlockViewIterator{};
+
+      for (; iter != end; ++iter)
+      {
+        auto const blockSize = iter->size();
+
+        if (blockSize > size() - offset)
+        {
+          return makeError(Error::Code::CorruptData, "invalid flac metadata blocks size, exceeding the file boundary");
+        }
+
+        offset += blockSize;
+
+        if (iter->layout<MetadataBlockLayout>().isLastBlock)
+        {
+          if (offset == size())
+          {
+            return makeError(Error::Code::CorruptData, "flac file has no audio payload");
+          }
+
+          return payloadRange(offset, size() - offset);
+        }
+      }
+
+      return makeError(Error::Code::CorruptData, "invalid flac metadata blocks, missing last metadata block");
     }
     catch (media::detail::MediaException const& ex)
     {

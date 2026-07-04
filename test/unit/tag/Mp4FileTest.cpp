@@ -8,6 +8,7 @@
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/mp4/AtomLayout.h>
+#include <ao/utility/Fnv1a.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -290,6 +291,18 @@ namespace ao::tag::mp4::test
       ao::test::mp4::addAtom(data, "moov", moovBody);
       return data;
     }
+
+    std::vector<std::uint8_t> createMinimalM4aWithMdat(std::vector<std::uint8_t> const& payload)
+    {
+      auto data = std::vector<std::uint8_t>{};
+      ao::test::mp4::addAtom(data, "mdat", payload);
+
+      auto const track = ao::test::mp4::makeCompleteAudioTrackAtom(
+        "alac", {}, 44100, 44100, static_cast<std::uint32_t>(payload.size()), 1024, sizeof(AtomLayout));
+      auto const moov = ao::test::mp4::makeAtom("moov", track);
+      data.insert(data.end(), moov.begin(), moov.end());
+      return data;
+    }
   } // namespace
 
   TEST_CASE("MP4 File - parses a complete tagged file", "[tag][unit][mp4][file]")
@@ -336,6 +349,48 @@ namespace ao::tag::mp4::test
     CHECK(builder.property().channels() == 2);
     CHECK(builder.property().bitDepth() == 16);
     CHECK(builder.property().codec() == AudioCodec::Aac);
+  }
+
+  TEST_CASE("MP4 File - audio payload range exposes mdat payload", "[tag][unit][mp4][file]")
+  {
+    auto const payload = std::vector<std::uint8_t>{0x11, 0x22, 0x33, 0x44};
+    auto const data = createMinimalM4aWithMdat(payload);
+    auto const temp = TempFile{data, ".m4a"};
+
+    auto const file = File{temp.path};
+    auto rangeResult = file.audioPayload();
+
+    REQUIRE(rangeResult);
+    auto const range = *rangeResult;
+    CHECK(range.offset == sizeof(AtomLayout));
+    REQUIRE(range.bytes.size() == payload.size());
+
+    for (std::size_t i = 0; i < payload.size(); ++i)
+    {
+      CHECK(std::to_integer<std::uint8_t>(range.bytes[i]) == payload[i]);
+    }
+  }
+
+  TEST_CASE("MP4 File - audio payload signature ignores non-mdat atoms", "[tag][unit][mp4][file]")
+  {
+    auto const payload = std::vector<std::uint8_t>{0x21, 0x22, 0x23, 0x24};
+    auto const baselineData = createMinimalM4aWithMdat(payload);
+    auto retaggedData = createMinimalM4aWithMdat(payload);
+    ao::test::mp4::addAtom(retaggedData, "free", {0xAA, 0xBB, 0xCC});
+
+    auto const baselineTemp = TempFile{baselineData, ".m4a"};
+    auto const retaggedTemp = TempFile{retaggedData, ".m4a"};
+    auto const baselineFile = File{baselineTemp.path};
+    auto const retaggedFile = File{retaggedTemp.path};
+
+    auto const baselinePayloadResult = baselineFile.audioPayload();
+    auto const retaggedPayloadResult = retaggedFile.audioPayload();
+    REQUIRE(baselinePayloadResult);
+    REQUIRE(retaggedPayloadResult);
+
+    CHECK(baselinePayloadResult->bytes.size() == payload.size());
+    CHECK(retaggedPayloadResult->bytes.size() == payload.size());
+    CHECK(utility::fnv1a128(baselinePayloadResult->bytes) == utility::fnv1a128(retaggedPayloadResult->bytes));
   }
 
   TEST_CASE("MP4 File - single covr with two data boxes", "[tag][unit][mp4][file][cover]")

@@ -16,5 +16,6 @@ namespace ao::tag::mp4
 
   private:
     Result<library::TrackBuilder> loadTrackImpl() const override;
+    Result<AudioPayload> audioPayloadImpl() const override;
   };
 } // namespace ao::tag::mp4

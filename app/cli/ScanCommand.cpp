@@ -37,6 +37,7 @@ namespace ao::cli
     bool dryRun = false;
     std::uint64_t newCount = 0;
     std::uint64_t changed = 0;
+    std::uint64_t moved = 0;
     std::uint64_t missing = 0;
     std::uint64_t unchanged = 0;
     std::uint64_t errors = 0;
@@ -102,6 +103,7 @@ namespace ao::cli
     {
       auto const newCount = plan.count(library::ScanClassification::New);
       auto const changedCount = plan.count(library::ScanClassification::Changed);
+      auto const movedCount = plan.count(library::ScanClassification::Moved);
       auto const missingCount = plan.count(library::ScanClassification::Missing);
       auto const unchangedCount = plan.count(library::ScanClassification::Unchanged);
       auto const errorCount = plan.count(library::ScanClassification::Error);
@@ -111,6 +113,7 @@ namespace ao::cli
         auto report = ScanReportDto{.dryRun = dryRun,
                                     .newCount = static_cast<std::uint64_t>(newCount),
                                     .changed = static_cast<std::uint64_t>(changedCount),
+                                    .moved = static_cast<std::uint64_t>(movedCount),
                                     .missing = static_cast<std::uint64_t>(missingCount),
                                     .unchanged = static_cast<std::uint64_t>(unchangedCount),
                                     .errors = static_cast<std::uint64_t>(errorCount)};
@@ -135,9 +138,10 @@ namespace ao::cli
       }
 
       std::println(os,
-                   "new {}  changed {}  missing {}  unchanged {}  errors {}",
+                   "new {}  changed {}  moved {}  missing {}  unchanged {}  errors {}",
                    newCount,
                    changedCount,
+                   movedCount,
                    missingCount,
                    unchangedCount,
                    errorCount);
@@ -175,6 +179,34 @@ namespace ao::cli
 
       std::println(err, "failed to {} {}: {}", failure.stage, failure.uri, failure.message);
     }
+
+    void printApplySummary(library::ScanApplyResult const& result, std::ostream& os)
+    {
+      if (result.relinkedCount > 0)
+      {
+        std::println(os, "Relinked {} moved file{}", result.relinkedCount, result.relinkedCount == 1 ? "" : "s");
+      }
+
+      if (result.missingCount > 0)
+      {
+        std::println(os,
+                     "{} missing file{} need{} review",
+                     result.missingCount,
+                     result.missingCount == 1 ? "" : "s",
+                     result.missingCount == 1 ? "s" : "");
+      }
+    }
+
+    std::string_view applyProgressName(library::ScanPlanExecutor::ProgressStage stage)
+    {
+      switch (stage)
+      {
+        case library::ScanPlanExecutor::ProgressStage::Updating: return "apply";
+        case library::ScanPlanExecutor::ProgressStage::Fingerprinting: return "fingerprint";
+      }
+
+      return "apply";
+    }
   } // namespace
 
   void runScan(CliContext& context, bool dryRun, bool verbose)
@@ -206,21 +238,28 @@ namespace ao::cli
     auto executor = library::ScanPlanExecutor{
       ml,
       std::move(plan),
-      verbose ? library::ScanPlanExecutor::ProgressCallback{[&context](std::filesystem::path const& path, std::int32_t)
-                                                            {
-                                                              if (!path.empty())
-                                                              {
-                                                                std::println(
-                                                                  context.io().err, "apply: {}", path.generic_string());
-                                                              }
-                                                            }}
-              : nullptr,
+      verbose
+        ? library::ScanPlanExecutor::ProgressCallback{[&context](library::ScanPlanExecutor::Progress const& progress)
+                                                      {
+                                                        if (!progress.path.empty())
+                                                        {
+                                                          std::println(context.io().err,
+                                                                       "{}: {}",
+                                                                       applyProgressName(progress.stage),
+                                                                       progress.path.generic_string());
+                                                        }
+                                                      }}
+        : nullptr,
       [&context](library::ScanFailure const& failure) { printFailure(failure, context.io().err); }};
 
     if (auto const applyResult = executor.run(); !applyResult)
     {
       auto const& error = applyResult.error();
       throwCommandError(error, "scan apply failed: {}", error.message);
+    }
+    else if (context.options().format == OutputFormat::Plain)
+    {
+      printApplySummary(*applyResult, context.io().out);
     }
   }
 

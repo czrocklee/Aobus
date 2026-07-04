@@ -20,6 +20,7 @@ namespace ao::tag::mpeg
 
   private:
     Result<library::TrackBuilder> loadTrackImpl() const override;
+    Result<AudioPayload> audioPayloadImpl() const override;
 
     std::chrono::milliseconds calculateDuration(FrameView const& frame, bool hasId3v1) const;
   };
