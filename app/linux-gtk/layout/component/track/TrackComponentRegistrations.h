@@ -14,6 +14,7 @@ namespace ao::gtk::layout
   void registerTrackSelectionRegionComponent(ComponentRegistry& registry);
   void registerTrackCoverArtComponent(ComponentRegistry& registry);
   void registerTrackFieldGridComponent(ComponentRegistry& registry);
+  void registerTrackDetailUndoBarComponent(ComponentRegistry& registry);
 
   void registerTrackTagEditorComponent(ComponentRegistry& registry);
 } // namespace ao::gtk::layout

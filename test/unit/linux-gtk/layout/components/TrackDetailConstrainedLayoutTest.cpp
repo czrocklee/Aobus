@@ -3,6 +3,7 @@
 
 #include "../../GtkTestSupport.h"
 #include "layout/component/track/TrackDetailSizing.h"
+#include "layout/component/track/TrackFieldGridCustomControls.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/CoreIds.h>
@@ -18,6 +19,7 @@
 #include <gtkmm/grid.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
+#include <gtkmm/popover.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
@@ -28,12 +30,15 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk::layout::test
 {
   using namespace uimodel;
+  using ao::gtk::test::collectAll;
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::emitGesturePressed;
+  using ao::gtk::test::findButtonByLabel;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::findWidgetByClass;
   using ao::gtk::test::walkWidgets;
@@ -151,6 +156,38 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(secondEntry.get_child_visible());
   }
 
+  TEST_CASE("AddCustomMetadataButton submits popover values", "[gtk][unit][track]")
+  {
+    auto windowFixture = ao::gtk::test::GtkWindowFixture{};
+    auto addButton = track_field_grid::AddCustomMetadataButton{};
+    auto submissions = std::vector<std::pair<std::string, std::string>>{};
+    addButton.signalAddRequested().connect([&submissions](std::string key, std::string value)
+                                           { submissions.emplace_back(std::move(key), std::move(value)); });
+
+    windowFixture.mount(addButton.button());
+    windowFixture.present();
+
+    emitClicked(addButton.button());
+    ao::gtk::test::drainGtkEvents();
+
+    auto* const popover = findWidget<Gtk::Popover>(addButton.button());
+    REQUIRE(popover != nullptr);
+    auto entries = collectAll<Gtk::Entry>(*popover);
+    REQUIRE(entries.size() == 2);
+    entries[0]->set_text("  Mood  ");
+    entries[1]->set_text("Energetic");
+
+    auto* const submitButton = findButtonByLabel(*popover, "Add");
+    REQUIRE(submitButton != nullptr);
+    emitClicked(*submitButton);
+
+    REQUIRE(submissions.size() == 1);
+    CHECK(submissions[0].first == "Mood");
+    CHECK(submissions[0].second == "Energetic");
+
+    windowFixture.unmount();
+  }
+
   TEST_CASE("TrackFieldGrid maintains constrained value-column geometry", "[gtk][unit][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
@@ -164,13 +201,9 @@ namespace ao::gtk::layout::test
     REQUIRE(compPtr != nullptr);
     auto& root = compPtr->widget();
 
-    auto* const viewport = root.get_first_child();
-    REQUIRE(viewport != nullptr);
-    auto* const scrolled = findWidget<Gtk::ScrolledWindow>(root);
-    REQUIRE(scrolled != nullptr);
     auto* grid = findWidget<Gtk::Grid>(root);
     REQUIRE(grid != nullptr);
-    auto* wrapper = grid->get_parent();
+    auto* const wrapper = &root;
     REQUIRE(wrapper != nullptr);
 
     auto getGridStats = [&]
@@ -239,7 +272,6 @@ namespace ao::gtk::layout::test
     SECTION("Horizontal measure is clamped to panel allocation")
     {
       CHECK(root.get_request_mode() == Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH);
-      CHECK(viewport->get_request_mode() == Gtk::SizeRequestMode::HEIGHT_FOR_WIDTH);
       CHECK(wrapper->get_overflow() == Gtk::Overflow::HIDDEN);
 
       auto const [initialMinWidth, initialNatWidth] = measureWidth();
@@ -335,7 +367,9 @@ namespace ao::gtk::layout::test
     {
       auto* const showButton = findWidgetByClass<Gtk::Button>(*grid, "ao-detail-show-all-button");
       REQUIRE(showButton != nullptr);
-      auto* const showSlot = showButton->get_parent();
+      auto* const actionBox = showButton->get_parent();
+      REQUIRE(actionBox != nullptr);
+      auto* const showSlot = actionBox->get_parent();
       REQUIRE(showSlot != nullptr);
       CHECK(dynamic_cast<Gtk::Button*>(showSlot) == nullptr);
       CHECK(showSlot->get_overflow() == Gtk::Overflow::HIDDEN);
@@ -358,30 +392,17 @@ namespace ao::gtk::layout::test
       CHECK(grid->get_width() > 0);
     }
 
-    SECTION("Field grid uses a fixed-height scroll viewport")
+    SECTION("Field grid leaves scrolling to the layout parent")
     {
-      auto hpolicy = Gtk::PolicyType::AUTOMATIC;
-      auto vpolicy = Gtk::PolicyType::NEVER;
-      scrolled->get_policy(hpolicy, vpolicy);
-
-      CHECK(hpolicy == Gtk::PolicyType::NEVER);
-      CHECK(vpolicy == Gtk::PolicyType::AUTOMATIC);
+      CHECK(dynamic_cast<Gtk::ScrolledWindow*>(&root) == nullptr);
+      CHECK(dynamic_cast<Gtk::ScrolledWindow*>(grid->get_parent()) == nullptr);
       CHECK(root.get_vexpand());
-      CHECK(viewport->get_vexpand());
-      CHECK(scrolled->get_vexpand());
       CHECK(wrapper->get_vexpand());
       CHECK(grid->get_vexpand());
-      CHECK(scrolled->get_propagate_natural_width() == false);
-      CHECK(scrolled->get_propagate_natural_height() == false);
-
-      int const expectedViewportHeight = 280;
-      auto const [viewportMinHeight, viewportNatHeight] = measureHeight(*viewport, 320);
-      CHECK(viewportMinHeight == 0);
-      CHECK(viewportNatHeight == expectedViewportHeight);
 
       auto const [rootMinHeight, rootNatHeight] = measureHeight(root, 320);
-      CHECK(rootMinHeight == 0);
-      CHECK(rootNatHeight == expectedViewportHeight);
+      CHECK(rootMinHeight >= 0);
+      CHECK(rootNatHeight > 0);
 
       auto const [wrapperOverallMinHeight, wrapperOverallNatHeight] = measureHeight(*wrapper, -1);
       CHECK(wrapperOverallMinHeight == 0);
@@ -389,8 +410,9 @@ namespace ao::gtk::layout::test
 
       int const expandedHeight = 600;
       allocate(320, expandedHeight);
-      CHECK(viewport->get_height() == expandedHeight);
-      CHECK(scrolled->get_height() == expandedHeight);
+      CHECK(root.get_height() == expandedHeight);
+      CHECK(grid->get_height() > 0);
+      CHECK(grid->get_height() <= expandedHeight);
     }
 
     SECTION("Value cells do not drive content-based horizontal width")

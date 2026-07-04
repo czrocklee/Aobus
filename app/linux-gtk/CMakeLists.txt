@@ -113,9 +113,11 @@ add_library(aobus-gtk-lib STATIC
     layout/component/track/TrackRegistry.cpp
     layout/component/track/TrackQuickFilterComponent.cpp
     layout/component/track/TrackPresentationButtonComponent.cpp
+    layout/component/track/TrackDetailUndo.cpp
     layout/component/track/TrackDetailScope.cpp
     layout/component/track/TrackSelectionRegionComponent.cpp
     layout/component/track/TrackCoverArtComponent.cpp
+    layout/component/track/TrackDetailUndoBarComponent.cpp
     layout/component/track/TrackFieldGridCustomControls.cpp
     layout/component/track/TrackFieldGridComponent.cpp
     layout/component/track/TrackFieldGridRows.cpp

@@ -174,6 +174,44 @@ button.ao-track-detail-section-header:focus-within image {
   margin-bottom: var(--ao-detail-empty-field-margin-bottom);
 }
 
+.ao-detail-field-action-row {
+  min-width: 0;
+}
+
+.ao-detail-add-custom-metadata-button {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+}
+
+.ao-detail-add-custom-metadata-button image {
+  -gtk-icon-size: 13px;
+}
+
+.ao-detail-custom-metadata-popover-box {
+  min-width: var(--ao-detail-custom-metadata-popover-min-width);
+  padding: var(--ao-detail-custom-metadata-popover-padding);
+}
+
+.ao-detail-custom-metadata-popover-title {
+  font-size: var(--ao-font-size-sm);
+  font-weight: 600;
+}
+
+.ao-detail-custom-metadata-popover-entry {
+  min-height: 26px;
+}
+
+.ao-detail-custom-metadata-popover-actions {
+  margin-top: var(--ao-spacing-xs);
+}
+
+.ao-detail-custom-metadata-popover-submit {
+  min-height: 26px;
+  padding: 2px var(--ao-spacing-md);
+  font-weight: 600;
+}
+
 /* Visual Differentiation between sections */
 .ao-track-detail-section-tech {
   opacity: 0.35;

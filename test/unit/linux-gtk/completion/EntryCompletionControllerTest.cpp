@@ -14,8 +14,6 @@
 #include <glibmm/ustring.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/eventcontroller.h>
-#include <gtkmm/eventcontrollerfocus.h>
-#include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listview.h>
 #include <gtkmm/popover.h>
@@ -41,15 +39,7 @@ namespace ao::gtk::test
 
     Gtk::Popover* findCompletionPopover(Gtk::Entry& entry)
     {
-      for (auto* child = entry.get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        if (auto* const popover = dynamic_cast<Gtk::Popover*>(child); popover != nullptr)
-        {
-          return popover;
-        }
-      }
-
-      return nullptr;
+      return findWidget<Gtk::Popover>(entry);
     }
   } // namespace
 

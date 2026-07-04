@@ -190,7 +190,7 @@ Tags follow `[uimodel][unit][feature][component]`, e.g.
 - **`library/track`** — the main track-list surface: filtering, selection summary,
   selection region policy, page routing. No Gtk::ColumnView / row widgets.
 - **`library/detail`** — track detail panel: field grid schema, field grid
-  visibility policy, custom property add/edit/delete workflow. No GTK grid rows.
+  visibility policy, custom metadata add/edit/delete workflow. No GTK grid rows.
 - **`library/property`** — track properties form: row spec, mixed-state model,
   patch generation from edited values. No GTK dialogs.
 - **`playback`** — now-playing view model and action policy (`now-playing/`),

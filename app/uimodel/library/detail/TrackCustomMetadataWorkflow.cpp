@@ -5,7 +5,7 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/library/detail/TrackCustomPropertyWorkflow.h>
+#include <ao/uimodel/library/detail/TrackCustomMetadataWorkflow.h>
 
 #include <algorithm>
 #include <optional>
@@ -14,7 +14,7 @@
 
 namespace ao::uimodel
 {
-  std::string displayTextForTrackCustomProperty(rt::CustomMetadataItem const& item)
+  std::string displayTextForTrackCustomMetadata(rt::CustomMetadataItem const& item)
   {
     if (item.value.mixed)
     {
@@ -24,29 +24,29 @@ namespace ao::uimodel
     return item.value.optValue.value_or("");
   }
 
-  bool isProtectedTrackCustomPropertyEditText(std::string_view const newText)
+  bool isProtectedTrackCustomMetadataEditText(std::string_view const newText)
   {
     return newText == kMultipleTrackValuesText;
   }
 
-  CustomPropertyAddValidation validateCustomPropertyAddition(rt::TrackDetailSnapshot const& snap,
+  CustomMetadataAddValidation validateCustomMetadataAddition(rt::TrackDetailSnapshot const& snap,
                                                              std::string_view const key)
   {
     if (std::ranges::any_of(
           snap.customMetadata, [key](rt::CustomMetadataItem const& item) { return std::string_view{item.key} == key; }))
     {
-      return CustomPropertyAddValidation::DuplicateCustomProperty;
+      return CustomMetadataAddValidation::DuplicateCustomMetadata;
     }
 
     if (rt::trackFieldFromId(key))
     {
-      return CustomPropertyAddValidation::ReservedTrackField;
+      return CustomMetadataAddValidation::ReservedTrackField;
     }
 
-    return CustomPropertyAddValidation::Accepted;
+    return CustomMetadataAddValidation::Accepted;
   }
 
-  std::optional<std::string> undoValueForDeletedTrackCustomProperty(rt::TrackDetailSnapshot const& snap,
+  std::optional<std::string> undoValueForDeletedTrackCustomMetadata(rt::TrackDetailSnapshot const& snap,
                                                                     std::string_view const key)
   {
     for (auto const& item : snap.customMetadata)
@@ -60,14 +60,14 @@ namespace ao::uimodel
     return std::nullopt;
   }
 
-  rt::MetadataPatch makeCustomPropertyUpdatePatch(std::string_view const key, std::string_view const value)
+  rt::MetadataPatch makeCustomMetadataUpdatePatch(std::string_view const key, std::string_view const value)
   {
     auto patch = rt::MetadataPatch{};
     patch.customUpdates[std::string{key}] = std::string{value};
     return patch;
   }
 
-  rt::MetadataPatch makeTrackCustomPropertyDeletePatch(std::string_view const key)
+  rt::MetadataPatch makeCustomMetadataDeletePatch(std::string_view const key)
   {
     auto patch = rt::MetadataPatch{};
     patch.customUpdates[std::string{key}] = std::nullopt;

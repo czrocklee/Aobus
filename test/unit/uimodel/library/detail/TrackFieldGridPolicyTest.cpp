@@ -10,15 +10,25 @@ namespace ao::uimodel::test
   TEST_CASE("TrackFieldGridPolicy renders sections from available rows and selection state",
             "[uimodel][unit][library][detail]")
   {
-    CHECK_FALSE(shouldRenderMetadataSection(TrackFieldGridSectionAvailability{
+    CHECK(shouldRenderMetadataSection(TrackFieldGridSectionAvailability{
       .hasMetadataFields = false, .hasSelectedTracks = true, .hasTechnicalFields = true}));
     CHECK(shouldRenderMetadataSection(TrackFieldGridSectionAvailability{
       .hasMetadataFields = true, .hasSelectedTracks = false, .hasTechnicalFields = false}));
+    CHECK_FALSE(shouldRenderMetadataSection(TrackFieldGridSectionAvailability{
+      .hasMetadataFields = false, .hasSelectedTracks = false, .hasTechnicalFields = true}));
+    CHECK_FALSE(shouldRenderMetadataSection(TrackFieldGridSectionAvailability{.metadataCategoryEnabled = false,
+                                                                              .hasMetadataFields = true,
+                                                                              .hasSelectedTracks = true,
+                                                                              .hasTechnicalFields = true}));
 
-    CHECK_FALSE(shouldRenderCustomSection(TrackFieldGridSectionAvailability{
+    CHECK_FALSE(shouldRenderCustomMetadataArea(TrackFieldGridSectionAvailability{
       .hasMetadataFields = true, .hasSelectedTracks = false, .hasTechnicalFields = true}));
-    CHECK(shouldRenderCustomSection(TrackFieldGridSectionAvailability{
+    CHECK(shouldRenderCustomMetadataArea(TrackFieldGridSectionAvailability{
       .hasMetadataFields = false, .hasSelectedTracks = true, .hasTechnicalFields = false}));
+    CHECK_FALSE(shouldRenderCustomMetadataArea(TrackFieldGridSectionAvailability{.metadataCategoryEnabled = false,
+                                                                                 .hasMetadataFields = true,
+                                                                                 .hasSelectedTracks = true,
+                                                                                 .hasTechnicalFields = true}));
 
     CHECK_FALSE(shouldRenderTechnicalSection(TrackFieldGridSectionAvailability{
       .hasMetadataFields = true, .hasSelectedTracks = true, .hasTechnicalFields = false}));

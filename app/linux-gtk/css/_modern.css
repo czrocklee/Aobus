@@ -24,6 +24,8 @@
   --ao-detail-empty-field-margin-left: 16px;
   --ao-detail-empty-field-margin-top: 4px;
   --ao-detail-empty-field-margin-bottom: 4px;
+  --ao-detail-custom-metadata-popover-min-width: 260px;
+  --ao-detail-custom-metadata-popover-padding: var(--ao-spacing-xl);
 
   --ao-control-radius: 100px;
   --ao-control-hover-scale: 1.05;
@@ -1017,6 +1019,52 @@ listview>row:first-child .ao-track-section-box {
 .ao-theme-modern .ao-detail-show-all-button:hover {
   opacity: 1.0;
   text-decoration: underline;
+}
+
+.ao-theme-modern .ao-detail-add-custom-metadata-button {
+  opacity: 0.72;
+  border-radius: 8px;
+  color: @accent_color;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.ao-theme-modern .ao-detail-add-custom-metadata-button:hover,
+.ao-theme-modern .ao-detail-add-custom-metadata-button:focus-visible {
+  opacity: 1.0;
+  background: alpha(@accent_color, 0.10);
+}
+
+.ao-theme-modern .ao-detail-custom-metadata-popover > contents {
+  border-radius: 14px;
+  background: alpha(@theme_base_color, 0.96);
+  border: 1px solid alpha(currentColor, 0.08);
+  box-shadow: 0 10px 30px alpha(black, 0.16);
+}
+
+.ao-theme-modern .ao-detail-custom-metadata-popover-title {
+  color: alpha(@theme_fg_color, 0.88);
+}
+
+.ao-theme-modern .ao-detail-custom-metadata-popover-entry {
+  border-radius: 8px;
+  background: alpha(currentColor, 0.04);
+  border: 1px solid alpha(currentColor, 0.07);
+  padding: 4px 8px;
+}
+
+.ao-theme-modern .ao-detail-custom-metadata-popover-entry:focus {
+  background: @theme_base_color;
+  border-color: alpha(@accent_color, 0.5);
+  box-shadow: 0 4px 12px alpha(black, 0.10);
+}
+
+.ao-theme-modern .ao-detail-custom-metadata-popover-actions {
+  padding-top: 2px;
+}
+
+.ao-theme-modern .ao-detail-custom-metadata-popover-submit {
+  border-radius: 8px;
+  padding: 4px 12px;
 }
 
 /* Ensure the last column cells are padded inward to stay inside the row pill rounded corners */

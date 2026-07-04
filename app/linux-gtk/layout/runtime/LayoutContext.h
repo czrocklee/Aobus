@@ -62,6 +62,7 @@ namespace ao::gtk
 namespace ao::gtk::layout
 {
   class ITrackDetailScope;
+  class TrackDetailUndoController;
   class ComponentRegistry;
   class ActionRegistry;
 
@@ -72,6 +73,7 @@ namespace ao::gtk::layout
     uimodel::ListPresentationPreferenceStore* presentationPreferences = nullptr;
     TrackRowCache* trackRowCache = nullptr;
     ITrackDetailScope* detailScope = nullptr;
+    TrackDetailUndoController* detailUndo = nullptr;
   };
 
   struct ListUiContext final

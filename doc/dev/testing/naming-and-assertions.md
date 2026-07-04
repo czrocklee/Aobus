@@ -26,7 +26,7 @@ TEST_CASE("ActivityStatusModel - detail-only notification does not replace compa
 TEST_CASE("TrackPresentationButton - selecting preset updates active list presentation",
           "[gtk][unit][track-presentation]")
 
-TEST_CASE("TrackFieldGrid - collapsed custom section keeps value column stable",
+TEST_CASE("TrackFieldGrid - collapsed metadata keeps custom rows hidden",
           "[gtk][regression][track-field-grid]")
 ```
 

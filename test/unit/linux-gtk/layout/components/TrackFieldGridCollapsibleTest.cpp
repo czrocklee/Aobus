@@ -11,11 +11,14 @@
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/grid.h>
+#include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
 
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk::layout::test
 {
@@ -27,7 +30,6 @@ namespace ao::gtk::layout::test
   enum class TrackFieldGridSection : std::uint8_t
   {
     Metadata,
-    Custom,
     Technical
   };
 
@@ -50,7 +52,6 @@ namespace ao::gtk::layout::test
       switch (section)
       {
         case TrackFieldGridSection::Metadata: return findWidgetByClass<Gtk::Button>("ao-track-detail-section-meta");
-        case TrackFieldGridSection::Custom: return findWidgetByClass<Gtk::Button>("ao-track-detail-section-custom");
         case TrackFieldGridSection::Technical: return findWidgetByClass<Gtk::Button>("ao-track-detail-section-tech");
       }
 
@@ -58,6 +59,23 @@ namespace ao::gtk::layout::test
     }
 
     Gtk::Button* showEmptyFieldsButton() const { return findWidgetByClass<Gtk::Button>("ao-detail-show-all-button"); }
+
+    Gtk::Button* addCustomMetadataButton() const
+    {
+      return findWidgetByClass<Gtk::Button>("ao-detail-add-custom-metadata-button");
+    }
+
+    Gtk::Popover* addCustomMetadataPopover() const
+    {
+      auto* const button = addCustomMetadataButton();
+
+      if (button == nullptr)
+      {
+        return nullptr;
+      }
+
+      return ao::gtk::test::findWidget<Gtk::Popover>(*button);
+    }
 
     TrackFieldGridRowSlots fieldRow(rt::TrackField const field) const
     {
@@ -69,6 +87,16 @@ namespace ao::gtk::layout::test
     {
       return {.label = findWidgetByClass<Gtk::Widget>("ao-track-field-grid-custom-label-slot"),
               .value = findWidgetByClass<Gtk::Widget>("ao-track-field-grid-custom-value-slot")};
+    }
+
+    std::int32_t topRowOf(Gtk::Widget& child) const
+    {
+      std::int32_t left = 0;
+      std::int32_t top = -1;
+      std::int32_t width = 0;
+      std::int32_t height = 0;
+      _grid.query_child(child, left, top, width, height);
+      return top;
     }
 
   private:
@@ -146,6 +174,8 @@ namespace ao::gtk::layout::test
       REQUIRE(sampleRateRow.label != nullptr);
       CHECK(titleRow.label->get_visible());
       CHECK_FALSE(sampleRateRow.label->get_visible());
+      CHECK(probe.addCustomMetadataButton() != nullptr);
+      CHECK(probe.addCustomMetadataButton()->get_visible());
     }
 
     SECTION("Empty metadata rows are hidden until requested")
@@ -216,38 +246,35 @@ namespace ao::gtk::layout::test
       CHECK(titleRow.value->get_width() == collapsedValueWidth);
     }
 
-    SECTION("Section separators keep the panel width when all sections are collapsed")
+    SECTION("Section separators keep the panel width when top-level sections are collapsed")
     {
       auto* const metaHeader = probe.header(TrackFieldGridSection::Metadata);
-      auto* const customHeader = probe.header(TrackFieldGridSection::Custom);
       auto* const techHeader = probe.header(TrackFieldGridSection::Technical);
       REQUIRE(metaHeader != nullptr);
-      REQUIRE(customHeader != nullptr);
       REQUIRE(techHeader != nullptr);
 
       allocate(320, 1000);
       auto const expandedMetaWidth = metaHeader->get_width();
-      auto const expandedCustomWidth = customHeader->get_width();
       auto const expandedTechWidth = techHeader->get_width();
       REQUIRE(expandedMetaWidth > 0);
-      REQUIRE(expandedCustomWidth > 0);
       REQUIRE(expandedTechWidth > 0);
 
       emitClicked(*metaHeader);
-      emitClicked(*customHeader);
       ao::gtk::test::drainGtkEvents();
       allocate(320, 1000);
 
       CHECK(metaHeader->get_width() == expandedMetaWidth);
-      CHECK(customHeader->get_width() == expandedCustomWidth);
       CHECK(techHeader->get_width() == expandedTechWidth);
     }
 
-    SECTION("Custom section behavior")
+    SECTION("Custom metadata follows metadata section visibility")
     {
       auto customSnap = rt::TrackDetailSnapshot{};
       customSnap.trackIds = {TrackId{1}};
-      customSnap.customMetadata.push_back({.key = "A Much Longer Custom Metadata Key", .presentOnAll = true});
+      customSnap.customMetadata.push_back(rt::CustomMetadataItem{.key = "A Much Longer Custom Metadata Key",
+                                                                 .value = {.optValue = std::string{"Bright"}},
+                                                                 .presentOnAll = true,
+                                                                 .presentOnAny = true});
       scope.setSnapshot(customSnap);
 
       auto* const wrapper = grid->get_parent();
@@ -274,21 +301,24 @@ namespace ao::gtk::layout::test
       REQUIRE(titleRow.value->translate_coordinates(*grid, 0.0, 0.0, valueLeftBeforeCollapse, valueTopBeforeCollapse));
       auto const valueWidthBeforeCollapse = titleRow.value->get_width();
 
-      auto* customHeader = probe.header(TrackFieldGridSection::Custom);
-      REQUIRE(customHeader != nullptr);
-      CHECK(customHeader->get_visible());
-
       auto const customRow = probe.customRow();
       REQUIRE(customRow.label != nullptr);
       CHECK(customRow.label->get_visible());
 
-      // Collapse custom
-      emitClicked(*customHeader);
+      auto* const metaHeader = probe.header(TrackFieldGridSection::Metadata);
+      REQUIRE(metaHeader != nullptr);
+
+      emitClicked(*metaHeader);
       ao::gtk::test::drainGtkEvents();
       allocate(316, 320);
       CHECK(measureMinimumHeight(*wrapper, -1) == 0);
 
       CHECK_FALSE(customRow.label->get_visible());
+      auto* const addButton = probe.addCustomMetadataButton();
+      REQUIRE(addButton != nullptr);
+      REQUIRE(addButton->get_parent() != nullptr);
+      REQUIRE(addButton->get_parent()->get_parent() != nullptr);
+      CHECK_FALSE(addButton->get_parent()->get_parent()->get_visible());
       CHECK(titleRow.label->get_width() == keyWidthBeforeCollapse);
       double valueLeftAfterCollapse = 0.0;
       double valueTopAfterCollapse = 0.0;
@@ -296,9 +326,49 @@ namespace ao::gtk::layout::test
       CHECK(valueLeftAfterCollapse == valueLeftBeforeCollapse);
       CHECK(titleRow.value->get_width() == valueWidthBeforeCollapse);
     }
+
+    SECTION("Empty custom metadata follows show empty fields visibility")
+    {
+      auto customSnap = rt::TrackDetailSnapshot{};
+      customSnap.trackIds = {TrackId{1}};
+      customSnap.customMetadata.push_back(rt::CustomMetadataItem{
+        .key = "Mood", .value = {.optValue = std::string{}}, .presentOnAll = true, .presentOnAny = true});
+      scope.setSnapshot(std::move(customSnap));
+
+      auto const customRow = probe.customRow();
+      REQUIRE(customRow.label != nullptr);
+      CHECK_FALSE(customRow.label->get_visible());
+
+      auto* const showButton = probe.showEmptyFieldsButton();
+      REQUIRE(showButton != nullptr);
+      emitClicked(*showButton);
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK(customRow.label->get_visible());
+      CHECK(showButton->get_label() == "Hide empty fields");
+    }
+
+    SECTION("Custom metadata rows appear above the add action row")
+    {
+      auto customSnap = rt::TrackDetailSnapshot{};
+      customSnap.trackIds = {TrackId{1}};
+      customSnap.customMetadata.push_back(rt::CustomMetadataItem{
+        .key = "Mood", .value = {.optValue = std::string{"Bright"}}, .presentOnAll = true, .presentOnAny = true});
+      scope.setSnapshot(std::move(customSnap));
+
+      auto const customRow = probe.customRow();
+      REQUIRE(customRow.label != nullptr);
+      auto* const addButton = probe.addCustomMetadataButton();
+      REQUIRE(addButton != nullptr);
+      REQUIRE(addButton->get_parent() != nullptr);
+      auto* const actionSlot = addButton->get_parent()->get_parent();
+      REQUIRE(actionSlot != nullptr);
+
+      CHECK(probe.topRowOf(*customRow.label) < probe.topRowOf(*actionSlot));
+    }
   }
 
-  TEST_CASE("TrackFieldGrid shows custom section when an empty custom selection appears", "[gtk][unit][regression]")
+  TEST_CASE("TrackFieldGrid shows custom add action when an empty custom selection appears", "[gtk][unit][regression]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.custom_section_regression_test"};
     auto& scope = fixture.attachTrackDetailScope();
@@ -311,14 +381,94 @@ namespace ao::gtk::layout::test
     REQUIRE(grid != nullptr);
     auto probe = TrackFieldGridProbe{*grid};
 
-    CHECK(probe.header(TrackFieldGridSection::Custom) == nullptr);
+    auto* const addButtonBeforeSelection = probe.addCustomMetadataButton();
+    REQUIRE(addButtonBeforeSelection != nullptr);
+    CHECK_FALSE(addButtonBeforeSelection->get_visible());
 
     auto snap = rt::TrackDetailSnapshot{};
     snap.trackIds = {TrackId{1}};
     scope.setSnapshot(snap);
 
-    auto* const customHeader = probe.header(TrackFieldGridSection::Custom);
-    REQUIRE(customHeader != nullptr);
-    CHECK(customHeader->get_visible());
+    auto* const addButton = probe.addCustomMetadataButton();
+    REQUIRE(addButton != nullptr);
+    CHECK(addButton->get_visible());
+
+    fixture.window().set_child(root);
+    emitClicked(*addButton);
+    ao::gtk::test::drainGtkEvents();
+
+    auto* const popover = probe.addCustomMetadataPopover();
+    REQUIRE(popover != nullptr);
+    CHECK(popover->get_visible());
+    fixture.window().unset_child();
+  }
+
+  TEST_CASE("TrackFieldGrid closes custom add popover before rebuilding the action row", "[gtk][unit][regression]")
+  {
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.custom_add_popover_rebuild_test"};
+    auto& scope = fixture.attachTrackDetailScope();
+
+    auto snap = rt::TrackDetailSnapshot{};
+    snap.trackIds = {TrackId{1}};
+    scope.setSnapshot(snap);
+
+    auto const node = LayoutNode{.type = "track.fieldGrid"};
+    auto const compPtr = fixture.create(node);
+    REQUIRE(compPtr != nullptr);
+    auto& root = compPtr->widget();
+    auto* const grid = findWidget<Gtk::Grid>(root);
+    REQUIRE(grid != nullptr);
+    auto probe = TrackFieldGridProbe{*grid};
+
+    fixture.window().set_child(root);
+    fixture.window().present();
+    ao::gtk::test::drainGtkEvents();
+
+    auto* const addButton = probe.addCustomMetadataButton();
+    REQUIRE(addButton != nullptr);
+    REQUIRE(addButton->get_visible());
+    emitClicked(*addButton);
+    ao::gtk::test::drainGtkEvents();
+
+    auto* const popover = probe.addCustomMetadataPopover();
+    REQUIRE(popover != nullptr);
+    REQUIRE(popover->get_visible());
+
+    auto customSnap = rt::TrackDetailSnapshot{};
+    customSnap.trackIds = {TrackId{1}};
+    customSnap.customMetadata.push_back(rt::CustomMetadataItem{
+      .key = "Mood", .value = {.optValue = std::string{"Bright"}}, .presentOnAll = true, .presentOnAny = true});
+    scope.setSnapshot(std::move(customSnap));
+    ao::gtk::test::drainGtkEvents();
+
+    CHECK_FALSE(popover->get_visible());
+    fixture.window().unset_child();
+  }
+
+  TEST_CASE("TrackFieldGrid hides metadata and custom controls for technical-only category", "[gtk][unit][regression]")
+  {
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.technical_only_field_grid_test"};
+    auto& scope = fixture.attachTrackDetailScope();
+
+    auto snap = rt::TrackDetailSnapshot{};
+    snap.trackIds = {TrackId{1}};
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::SampleRate).optValue = std::uint32_t{44100};
+    snap.customMetadata.push_back(rt::CustomMetadataItem{
+      .key = "Mood", .value = {.optValue = std::string{"Bright"}}, .presentOnAll = true, .presentOnAny = true});
+    scope.setSnapshot(std::move(snap));
+
+    auto node = LayoutNode{.type = "track.fieldGrid"};
+    node.props["categories"] = LayoutValue{std::vector<std::string>{"technical"}};
+
+    auto const compPtr = fixture.create(node);
+    REQUIRE(compPtr != nullptr);
+    auto* const grid = findWidget<Gtk::Grid>(compPtr->widget());
+    REQUIRE(grid != nullptr);
+    auto probe = TrackFieldGridProbe{*grid};
+
+    CHECK(probe.header(TrackFieldGridSection::Metadata) == nullptr);
+    CHECK(probe.addCustomMetadataButton() == nullptr);
+    CHECK(probe.customRow().label == nullptr);
+    CHECK(probe.header(TrackFieldGridSection::Technical) != nullptr);
   }
 } // namespace ao::gtk::layout::test

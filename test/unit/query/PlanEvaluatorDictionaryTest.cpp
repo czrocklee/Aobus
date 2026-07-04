@@ -255,7 +255,7 @@ namespace ao::query::test
       CHECK(evaluator.evaluateFull(plan, track.view()) == true);
     }
 
-    SECTION("Custom Property")
+    SECTION("Custom Metadata")
     {
       auto spec2 = TrackSpec{};
       spec2.customPairs.emplace_back("customName", "customValue");

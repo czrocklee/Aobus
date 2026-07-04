@@ -24,6 +24,7 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel;
+  using ao::gtk::test::findWidget;
 
   namespace
   {
@@ -40,19 +41,6 @@ namespace ao::gtk::layout::test
     private:
       Gtk::Widget& _widget;
     };
-
-    Gtk::Popover* findPopoverChild(Gtk::Widget& widget)
-    {
-      for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        if (auto* const popover = dynamic_cast<Gtk::Popover*>(child); popover != nullptr)
-        {
-          return popover;
-        }
-      }
-
-      return nullptr;
-    }
   } // namespace
 
   TEST_CASE("playback.image applies declarative image properties", "[gtk][unit][image]")
@@ -151,7 +139,7 @@ namespace ao::gtk::layout::test
     auto controller = ComponentTooltipController{};
     controller.attach(target, tooltipComponent);
 
-    auto* const popover = findPopoverChild(target);
+    auto* const popover = findWidget<Gtk::Popover>(target);
     REQUIRE(popover != nullptr);
     CHECK(popover->has_css_class("ao-popover-transparent"));
     CHECK_FALSE(popover->has_css_class("ao-opacity-80"));

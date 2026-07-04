@@ -5,7 +5,6 @@
 
 #include "gtkmm/enums.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
-#include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 
 #include <gtkmm/box.h>
@@ -17,7 +16,6 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace ao::gtk::layout::track_field_grid
 {
@@ -84,12 +82,5 @@ namespace ao::gtk::layout::track_field_grid
     explicit SectionHeaderRow(std::string_view title);
     void setExpanded(bool expanded);
     void addCssClass(std::string_view className);
-  };
-
-  struct UndoState final
-  {
-    std::string key;
-    std::vector<TrackId> trackIds;
-    std::string value;
   };
 } // namespace ao::gtk::layout::track_field_grid

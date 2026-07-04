@@ -140,19 +140,19 @@ namespace ao::gtk::layout::editor::test
       CHECK(bottomEnd.children[0].getProp<std::string>("idleBehavior", "") == "hidden");
     }
 
-    SECTION("track.selectionDetailPane contains field grid")
+    SECTION("track.selectionDetailPane keeps field grid scroll at layout level")
     {
       auto const templates = getBuiltInTemplates();
       auto const& pane = templates.at("track.selectionDetailPane");
 
-      bool hasFieldGrid = false;
+      LayoutNode const* detailContent = nullptr;
 
       auto visit = std::function<void(LayoutNode const&)>{};
       visit = [&](LayoutNode const& node)
       {
-        if (node.type == "track.fieldGrid")
+        if (std::ranges::any_of(node.children, [](LayoutNode const& child) { return child.type == "track.coverArt"; }))
         {
-          hasFieldGrid = true;
+          detailContent = &node;
         }
 
         for (auto const& child : node.children)
@@ -163,7 +163,14 @@ namespace ao::gtk::layout::editor::test
 
       visit(pane);
 
-      CHECK(hasFieldGrid);
+      REQUIRE(detailContent != nullptr);
+      REQUIRE(detailContent->children.size() == 4);
+      CHECK(detailContent->children[0].type == "track.coverArt");
+      CHECK(detailContent->children[1].type == "scroll");
+      REQUIRE(detailContent->children[1].children.size() == 1);
+      CHECK(detailContent->children[1].children[0].type == "track.fieldGrid");
+      CHECK(detailContent->children[2].type == "track.detailUndoBar");
+      CHECK(detailContent->children[3].type == "track.tagEditor");
     }
 
     SECTION("template expansion via expandNode in build")

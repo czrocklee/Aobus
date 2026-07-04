@@ -4,6 +4,7 @@
 #include "TrackDetailScope.h"
 
 #include "TrackComponentRegistrations.h"
+#include "layout/component/track/TrackDetailUndo.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
@@ -60,6 +61,7 @@ namespace ao::gtk::layout
     public:
       TrackDetailScopeComponent(LayoutContext& ctx, LayoutNode const& node)
         : _box{Gtk::Orientation::VERTICAL, 0}
+        , _undoController{ctx.runtime.library().writer(), ctx.timeoutScheduler}
         , _projectionPtr{ctx.runtime.views().detailProjection(rt::FocusedViewTarget{},
                                                               ctx.runtime.workspace(),
                                                               ctx.runtime.library().changes())}
@@ -68,7 +70,9 @@ namespace ao::gtk::layout
 
         // Intercept context
         auto* previousScope = ctx.track.detailScope;
+        auto* previousUndo = ctx.track.detailUndo;
         ctx.track.detailScope = this;
+        ctx.track.detailUndo = &_undoController;
 
         // Build children
         for (auto const& childNode : node.children)
@@ -80,6 +84,7 @@ namespace ao::gtk::layout
 
         // Restore context
         ctx.track.detailScope = previousScope;
+        ctx.track.detailUndo = previousUndo;
 
         // Apply styles
         if (auto const it = node.layout.find("cssClasses"); it != node.layout.end())
@@ -101,6 +106,17 @@ namespace ao::gtk::layout
         _sub = _projectionPtr->subscribe([this](auto const& snap) { onSnapshot(snap); });
       }
 
+      TrackDetailScopeComponent(TrackDetailScopeComponent const&) = delete;
+      TrackDetailScopeComponent& operator=(TrackDetailScopeComponent const&) = delete;
+      TrackDetailScopeComponent(TrackDetailScopeComponent&&) = delete;
+      TrackDetailScopeComponent& operator=(TrackDetailScopeComponent&&) = delete;
+
+      ~TrackDetailScopeComponent() override
+      {
+        _sub.reset();
+        _children.clear();
+      }
+
       Gtk::Widget& widget() override { return _box; }
 
       rt::TrackDetailSnapshot const& snapshot() const override { return _currentSnap; }
@@ -115,6 +131,12 @@ namespace ao::gtk::layout
       {
         bool const selectionChanged = _currentSnap.trackIds != snap.trackIds;
         _currentSnap = snap;
+
+        if (selectionChanged)
+        {
+          _undoController.clear();
+        }
+
         _signalSnapshotChanged.emit(snap);
 
         if (selectionChanged)
@@ -124,6 +146,7 @@ namespace ao::gtk::layout
       }
 
       Gtk::Box _box;
+      TrackDetailUndoController _undoController;
       std::vector<std::unique_ptr<ILayoutComponent>> _children;
 
       std::unique_ptr<rt::ITrackDetailProjection> _projectionPtr;

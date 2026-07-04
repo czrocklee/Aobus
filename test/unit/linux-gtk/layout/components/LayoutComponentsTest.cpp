@@ -19,7 +19,7 @@ namespace ao::gtk::layout::test
   {
     auto fixture = LayoutRuntimeFixture{};
 
-    SECTION("all 20 status and semantic types")
+    SECTION("all registered status and semantic types")
     {
       auto const types = std::to_array<std::string_view>({"status.messageLabel",
                                                           "library.listTree",
@@ -35,6 +35,7 @@ namespace ao::gtk::layout::test
                                                           "track.selectionRegion",
                                                           "track.coverArt",
                                                           "track.fieldGrid",
+                                                          "track.detailUndoBar",
                                                           "track.tagEditor",
                                                           "track.quickFilter"});
 

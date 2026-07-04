@@ -7,6 +7,7 @@ namespace ao::uimodel
 {
   struct TrackFieldGridSectionAvailability final
   {
+    bool metadataCategoryEnabled = true;
     bool hasMetadataFields = false;
     bool hasSelectedTracks = false;
     bool hasTechnicalFields = false;
@@ -14,12 +15,12 @@ namespace ao::uimodel
 
   constexpr bool shouldRenderMetadataSection(TrackFieldGridSectionAvailability const availability)
   {
-    return availability.hasMetadataFields;
+    return availability.metadataCategoryEnabled && (availability.hasMetadataFields || availability.hasSelectedTracks);
   }
 
-  constexpr bool shouldRenderCustomSection(TrackFieldGridSectionAvailability const availability)
+  constexpr bool shouldRenderCustomMetadataArea(TrackFieldGridSectionAvailability const availability)
   {
-    return availability.hasSelectedTracks;
+    return availability.metadataCategoryEnabled && availability.hasSelectedTracks;
   }
 
   constexpr bool shouldRenderTechnicalSection(TrackFieldGridSectionAvailability const availability)

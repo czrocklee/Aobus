@@ -6,6 +6,7 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
+#include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
@@ -26,6 +27,7 @@
 namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel;
+  using ao::gtk::test::findWidget;
 
   // ---------------------------------------------------------------------------
   // LayoutEditorDialog
@@ -42,24 +44,6 @@ namespace ao::gtk::layout::editor::test
     auto const doc = createDefaultLayout();
     auto const stubLoader = [](std::string_view) { return uimodel::LayoutDocument{}; };
 
-    auto const findTreeView = [](auto& self, Gtk::Widget& widget) -> Gtk::TreeView*
-    {
-      if (auto* const tv = dynamic_cast<Gtk::TreeView*>(&widget); tv != nullptr)
-      {
-        return tv;
-      }
-
-      for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        if (auto* const found = self(self, *child); found != nullptr)
-        {
-          return found;
-        }
-      }
-
-      return nullptr;
-    };
-
     SECTION("Dialog initializes selectors and tree")
     {
       auto dialogPtr =
@@ -68,7 +52,7 @@ namespace ao::gtk::layout::editor::test
       CHECK(dialogPtr->selectedPresetId() == "classic");
       CHECK(dialogPtr->selectedThemeId() == "modern");
 
-      auto* const treeView = findTreeView(findTreeView, *dialogPtr);
+      auto* const treeView = findWidget<Gtk::TreeView>(*dialogPtr);
       REQUIRE(treeView != nullptr);
       auto const modelPtr = treeView->get_model();
       REQUIRE(modelPtr);
@@ -113,7 +97,7 @@ namespace ao::gtk::layout::editor::test
 
       dialogPtr->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });
 
-      auto* const treeView = findTreeView(findTreeView, *dialogPtr);
+      auto* const treeView = findWidget<Gtk::TreeView>(*dialogPtr);
       REQUIRE(treeView != nullptr);
 
       if (auto const modelPtr = treeView->get_model(); modelPtr && !modelPtr->children().empty())
@@ -132,7 +116,7 @@ namespace ao::gtk::layout::editor::test
     {
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", stubLoader};
 
-      auto* const treeView = findTreeView(findTreeView, dialog);
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
       REQUIRE(treeView != nullptr);
 
       auto const selectRoot = [treeView]
@@ -183,7 +167,7 @@ namespace ao::gtk::layout::editor::test
     {
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, doc, "classic", "modern", stubLoader};
 
-      auto* const treeView = findTreeView(findTreeView, dialog);
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
       REQUIRE(treeView != nullptr);
       auto const modelPtr = treeView->get_model();
       REQUIRE(modelPtr);

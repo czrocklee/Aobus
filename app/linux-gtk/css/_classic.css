@@ -13,6 +13,8 @@
   --ao-detail-empty-field-margin-left: var(--ao-spacing-lg);
   --ao-detail-empty-field-margin-top: 1px;
   --ao-detail-empty-field-margin-bottom: 1px;
+  --ao-detail-custom-metadata-popover-min-width: 240px;
+  --ao-detail-custom-metadata-popover-padding: var(--ao-spacing-sm);
 
   /* Crisp control edges. */
   --ao-control-radius: 2px;
@@ -328,6 +330,40 @@
   background: alpha(@theme_selected_bg_color, 0.12);
   color: @theme_fg_color;
   text-decoration: none;
+}
+
+.ao-theme-classic .ao-detail-add-custom-metadata-button {
+  border-radius: 0;
+  color: alpha(@theme_fg_color, 0.82);
+}
+
+.ao-theme-classic .ao-detail-add-custom-metadata-button:hover,
+.ao-theme-classic .ao-detail-add-custom-metadata-button:focus-visible {
+  background: alpha(@theme_selected_bg_color, 0.12);
+  color: @theme_fg_color;
+}
+
+.ao-theme-classic .ao-detail-custom-metadata-popover > contents {
+  border-radius: 0;
+  border: 1px solid alpha(@theme_fg_color, 0.22);
+  box-shadow: none;
+}
+
+.ao-theme-classic .ao-detail-custom-metadata-popover-title {
+  font-size: 0.78rem;
+  color: alpha(@theme_fg_color, 0.86);
+}
+
+.ao-theme-classic .ao-detail-custom-metadata-popover-entry {
+  border-radius: 0;
+  min-height: 22px;
+  padding: 1px 4px;
+}
+
+.ao-theme-classic .ao-detail-custom-metadata-popover-submit {
+  border-radius: 0;
+  min-height: 22px;
+  padding: 1px 8px;
 }
 
 /* ===== Query Completion (Classic) ===== */

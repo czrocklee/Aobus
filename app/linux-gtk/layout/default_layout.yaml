@@ -158,6 +158,9 @@ templates:
                   - type: track.fieldGrid
                     props:
                       categories: ["metadata", "technical"]
+                    layout:
+                      vexpand: true
+              - type: track.detailUndoBar
               - type: track.tagEditor
   status.defaultBar:
     type: box

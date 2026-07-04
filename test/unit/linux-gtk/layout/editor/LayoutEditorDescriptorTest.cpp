@@ -170,7 +170,7 @@ namespace ao::gtk::layout::editor::test
       CHECK(categories.contains("Tracks"));
     }
 
-    SECTION("all 20 types individually retrievable")
+    SECTION("representative component types are individually retrievable")
     {
       auto const types = std::to_array<std::string_view>({"box",
                                                           "split",
@@ -198,6 +198,7 @@ namespace ao::gtk::layout::editor::test
                                                           "track.selectionRegion",
                                                           "track.coverArt",
                                                           "track.fieldGrid",
+                                                          "track.detailUndoBar",
                                                           "track.tagEditor"});
 
       for (auto const& type : types)

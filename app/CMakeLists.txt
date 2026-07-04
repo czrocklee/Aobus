@@ -57,7 +57,7 @@ add_library(ao_app_uimodel STATIC
      uimodel/field/TrackFieldEditPolicy.cpp
      uimodel/field/TrackFieldFormatter.cpp
      uimodel/field/TrackInlineEditWorkflow.cpp
-    uimodel/library/detail/TrackCustomPropertyWorkflow.cpp
+    uimodel/library/detail/TrackCustomMetadataWorkflow.cpp
     uimodel/library/detail/TrackFieldGridSchema.cpp
     uimodel/library/list/ListActionPolicy.cpp
     uimodel/library/list/ListTreeProjection.cpp

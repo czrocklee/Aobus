@@ -17,8 +17,8 @@ The grid is driven by the `TrackDetailSnapshot`, which aggregates field values a
 
 - Custom metadata fields are aggregated across the selection.
 - **Partial Presence**: A custom field may be present on some tracks but missing on others. This is indicated in the UI with a warning icon.
-- **Multi-select Updates**: Updating a custom field value applies the change to all selected tracks, ensuring the property is present on all of them.
-- **Deletion**: Deleting a custom property removes it from all selected tracks.
+- **Multi-select Updates**: Updating a custom metadata value applies the change to all selected tracks, ensuring the key is present on all of them.
+- **Deletion**: Deleting custom metadata removes it from all selected tracks.
 
 ## UI Behavior
 
@@ -32,9 +32,11 @@ The grid is driven by the `TrackDetailSnapshot`, which aggregates field values a
 - **Unknown Values**: For technical fields, missing data is displayed as `Unknown`. For metadata fields, missing data is displayed as an empty string.
 - **Empty Metadata**: Metadata rows whose current display value is empty are
   hidden by default. Mixed values and any non-empty formatted value remain
-  visible. The Metadata section includes a fixed-height "Show empty fields"
-  control that reveals empty rows for editing and toggles back to "Hide empty
-  fields" while they are visible.
+  visible. The Metadata section includes a fixed-height action row with a
+  "Show empty fields" control that reveals empty rows for editing and toggles
+  back to "Hide empty fields" while they are visible. Custom metadata rows use
+  the same empty-value visibility rule because they are part of the Metadata
+  section.
 
 ### Editing and Interaction
 
@@ -45,12 +47,21 @@ The Track Details panel uses an invisible interaction model. Editable controls a
 - **Technical Fields**: Objective read-only properties (e.g., Sample Rate, Bitrate, File Path). They are styled slightly dimmer than editable fields and have no hover, focus, or cursor affordances.
 - **Inline Editing**: Metadata and custom fields use a detail-field inline editor that displays as an ellipsizing label and switches to an entry while editing. Pressing `Enter` or clicking outside the active entry commits the change, while `Esc` cancels it. Outside-click handling does not depend on the clicked widget accepting keyboard focus. The UI refuses to save literal `<Multiple Values>`.
 - **Single Edit Session**: Detail field editors are standard GTK compositions (`Gtk::Box`, `Gtk::Stack`, `Gtk::Label`, `Gtk::Entry`, and `Gtk::Button`). A shared coordinator allows only one active editor in the detail grid; activating another field commits the previous field before opening the next one.
-- **Add Property**: An "Add Property" button allows users to define new custom metadata keys and values. Duplicate keys already present in the selection are rejected.
-- **Delete Undo**: Deleting a custom metadata property shows a temporary (5-second) snackbar/undo bar at the bottom of the grid. Clicking "Undo" restores the property. Currently, this is only fully supported and presented when the deleted property had the same value across all selected tracks (not mixed).
+- **Add Custom Metadata**: An add button in the Metadata action row opens a popover
+  where users define new custom metadata keys and values. Duplicate keys
+  already present in the selection are rejected.
+- **Delete Undo**: Deleting custom metadata shows a temporary
+  (5-second) undo bar through `track.detailUndoBar`. Clicking "Undo" restores
+  the key and value. Currently, this is only fully supported and presented when
+  the deleted key had the same value across all selected tracks (not mixed).
+  Pending undo is cleared when the detail selection changes, because the undo
+  bar is scoped to the current detail pane rather than a global notification
+  queue. Pending undo is also cleared when the same custom metadata key is written
+  again for any overlapping track in the same detail selection.
 
 ### Import Boundary
 
-Custom metadata represents properties created by the user inside Aobus, or explicitly provided through Aobus library import data. File tag readers do not promote unknown or vendor-specific MP4, ID3, or Vorbis fields into custom metadata; they only map fields that Aobus explicitly understands.
+Custom metadata represents key/value metadata created by the user inside Aobus, or explicitly provided through Aobus library import data. File tag readers do not promote unknown or vendor-specific MP4, ID3, or Vorbis fields into custom metadata; they only map fields that Aobus explicitly understands.
 
 Custom keys are queryable regardless of their first character. ASCII alphanumeric/underscore keys
 use the compact `%key` form, including numeric names such as `%123`; other keys use a quoted form
@@ -60,13 +71,30 @@ identifiers and must begin with an ASCII letter or underscore. See
 
 ## Layout Configuration
 
-The component is registered as `track.fieldGrid`. It supports a `categories` property to filter which field types to display.
+The component is registered as `track.fieldGrid`. It supports a `categories`
+property to filter metadata and technical field rows. Custom metadata is part
+of the Metadata section, so a technical-only grid (`categories: ["technical"]`)
+does not render the custom metadata rows or add button.
+
+Custom metadata deletion undo is exposed by the sibling
+`track.detailUndoBar` component. The default detail pane wraps
+`track.fieldGrid` in a layout-owned `scroll` component and places
+`track.detailUndoBar` outside that scroll, so the undo bar stays visible while
+the field list scrolls.
 
 Example:
 ```yaml
-- type: track.fieldGrid
+- type: scroll
   props:
-    categories: ["metadata", "technical"]
+    hscrollPolicy: never
+    vscrollPolicy: automatic
+  layout:
+    vexpand: true
+  children:
+    - type: track.fieldGrid
+      props:
+        categories: ["metadata", "technical"]
+- type: track.detailUndoBar
 ```
 
 ## Constrained Layout Behavior
@@ -75,31 +103,35 @@ The field grid uses a fixed one-field-per-row layout at every panel width.
 Selecting a different track or resizing the split pane never changes the
 structural row layout.
 
-All rows use a 4-column `Gtk::Grid` so labels, values, warning icons, delete
-buttons, section headers, and add-property rows have stable coordinates.
+All field rows use a 4-column `Gtk::Grid` so labels, values, section headers,
+and metadata action rows have stable coordinates.
 
-The grid is hosted in a scroll viewport with a fixed natural height. The
-viewport shows eight field rows by default and uses a vertical scrollbar when
-more fields are present. The field grid is vertically expandable, so it can use
-extra space that the parent layout assigns to it, but adding or removing custom
-metadata changes only the scrollable grid content. It does not change the
-field section's requested height and therefore does not push cover art or
-sibling detail widgets.
+The grid itself does not create a scroll boundary. The default detail layout
+owns scrolling by wrapping `track.fieldGrid` in a `scroll` component. Adding or
+removing custom metadata changes the scrollable content while sibling detail
+widgets, including the undo bar and tag editor, stay outside the field-list
+scroll area.
 
 ### Rows
 
 Built-in rows are side-by-side: label occupies column 0, value occupies columns 1–3. Each row consumes 1 grid row.
 
-Custom rows are single-row: label at column 0, editable value at column 1, partial-presence icon at column 2, delete button at column 3.
+Custom rows are single-row: label at column 0 and a clipped value cell spanning
+columns 1-3. The value cell contains the editable value, partial-presence icon,
+and delete button.
 
-The add-property row mirrors the key/value split: the key entry occupies column
-0, while the value entry and add action occupy columns 1–3.
+The Metadata action row spans the full grid width. It places the
+Show/Hide empty fields control on the left and the custom metadata add button on
+the right. The add button opens a popover for the key/value inputs instead of
+keeping a permanent form row in the grid.
 
-Metadata, custom metadata, and technical fields are grouped under collapsible
-section headers. Metadata and custom metadata are expanded by default; technical
-audio properties are collapsed by default. Collapsing a section hides its field
-rows but keeps the section header in the grid, so users can restore the section
-without changing the surrounding layout.
+Metadata and technical fields are grouped under top-level collapsible section
+headers. Custom metadata is part of the Metadata section rather than a separate
+top-level section. Metadata is expanded by default; technical audio properties
+are collapsed by default. Collapsing Metadata hides built-in metadata rows, the
+Metadata action row, and custom metadata rows. Collapsing a section hides its
+field rows but keeps the section header in the grid, so users can restore the
+section without changing the surrounding layout.
 
 A section header is a borderless full-width button with a full-bleed hairline
 rule, an overlaid text label, and a disclosure chevron (`pan-down` when
@@ -123,9 +155,9 @@ changing the row rhythm.
 
 ### Ordering
 
-Content is always ordered: metadata header and rows, custom header with custom
-rows and add-property row when tracks are selected, then the technical header and
-technical rows.
+Content is always ordered: Metadata header, built-in metadata rows, Metadata
+action row, custom metadata rows when tracks are selected, then the Audio
+Properties header and technical rows.
 
 ## Text Stability
 
@@ -152,14 +184,14 @@ left untouched unless the user edits and saves the value.
 All value widgets expose their full display text via tooltip.
 
 Column expansion is managed through `hexpand` rules that are stable across track changes, preventing value length changes from resizing columns or shifting layout.
-Key-column slots do not request horizontal expansion, and the add-property key
+Key-column slots do not request horizontal expansion, and the add metadata key
 entry uses only a one-character natural-width hint so it fills the existing key
 column without making that column compete with values during split-pane resize.
 
 The key and value columns include zero-minimum width anchors that measure row
 content from every section, including collapsed sections, and contribute only
 natural widths to GTK's grid allocation. This keeps both columns from jumping
-when metadata, custom properties, or technical audio properties are expanded or
+when metadata, custom metadata, or technical audio properties are expanded or
 collapsed, while preserving the panel's ability to report a zero horizontal
 minimum and fit extremely narrow split-pane widths.
 
@@ -171,7 +203,7 @@ detail pane. Field labels keep their natural-width preference, but their GTK
 minimum width is allowed to shrink so the grid can be allocated to the panel
 width without pushing action controls outside the clipped area.
 Key labels and action rows are hosted by zero-minimum clipped wrappers. The
-labels, add-property button, warning icon, and delete action can keep their own
+labels, custom metadata add button, warning icon, and delete action can keep their own
 internal minimums, but those minimums do not raise the grid's minimum width or
 force the grid to be allocated wider than the panel.
 

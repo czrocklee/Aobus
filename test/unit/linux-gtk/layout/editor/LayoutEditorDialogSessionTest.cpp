@@ -29,6 +29,7 @@ namespace ao::gtk::layout::editor::test
   using namespace uimodel;
   using ao::gtk::test::collectAll;
   using ao::gtk::test::emitClicked;
+  using ao::gtk::test::findWidget;
 
   namespace
   {
@@ -43,41 +44,9 @@ namespace ao::gtk::layout::editor::test
       LayoutDocument doc = createDefaultLayout();
     };
 
-    Gtk::TreeView* findTreeView(Gtk::Widget& widget)
-    {
-      if (auto* const treeView = dynamic_cast<Gtk::TreeView*>(&widget); treeView != nullptr)
-      {
-        return treeView;
-      }
-
-      for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        if (auto* const found = findTreeView(*child); found != nullptr)
-        {
-          return found;
-        }
-      }
-
-      return nullptr;
-    }
-
-    void collectComboBoxes(Gtk::Widget& widget, std::vector<Gtk::ComboBoxText*>& combos)
-    {
-      if (auto* const combo = dynamic_cast<Gtk::ComboBoxText*>(&widget); combo != nullptr)
-      {
-        combos.push_back(combo);
-      }
-
-      for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        collectComboBoxes(*child, combos);
-      }
-    }
-
     Gtk::ComboBoxText* presetCombo(LayoutEditorDialog& dialog)
     {
-      auto combos = std::vector<Gtk::ComboBoxText*>{};
-      collectComboBoxes(dialog, combos);
+      auto combos = collectAll<Gtk::ComboBoxText>(dialog);
       REQUIRE(combos.size() == 2);
 
       auto* const combo = combos[0]->get_active_id() == "classic" ? combos[0] : combos[1];
@@ -100,7 +69,7 @@ namespace ao::gtk::layout::editor::test
 
     void selectRoot(LayoutEditorDialog& dialog)
     {
-      auto* const treeView = findTreeView(dialog);
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
       REQUIRE(treeView != nullptr);
 
       if (auto const modelPtr = treeView->get_model(); modelPtr && !modelPtr->children().empty())

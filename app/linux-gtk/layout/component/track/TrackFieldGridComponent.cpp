@@ -3,6 +3,7 @@
 
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
+#include "layout/component/track/TrackDetailUndo.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
 #include "layout/component/track/TrackFieldGridRows.h"
 #include "layout/component/track/TrackFieldGridTextUtils.h"
@@ -27,7 +28,7 @@
 #include <ao/uimodel/field/TrackInlineEditWorkflow.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/library/detail/TrackCustomPropertyWorkflow.h>
+#include <ao/uimodel/library/detail/TrackCustomMetadataWorkflow.h>
 #include <ao/uimodel/library/detail/TrackFieldGridPolicy.h>
 #include <ao/uimodel/library/detail/TrackFieldGridSchema.h>
 
@@ -35,7 +36,6 @@
 #include <gtkmm/enums.h>
 #include <gtkmm/grid.h>
 #include <gtkmm/label.h>
-#include <gtkmm/scrolledwindow.h>
 #include <gtkmm/sizegroup.h>
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
@@ -131,22 +131,10 @@ namespace ao::gtk::layout
         , _writer{ctx.runtime.library().writer()}
         , _completion{ctx.runtime.completion()}
         , _scope{ctx.track.detailScope}
-        , _mainBox{Gtk::Orientation::VERTICAL, 0}
+        , _detailUndo{ctx.track.detailUndo}
         , _compositePrimarySizeGroupPtr{Gtk::SizeGroup::create(Gtk::SizeGroup::Mode::HORIZONTAL)}
         , _compositeSecondarySizeGroupPtr{Gtk::SizeGroup::create(Gtk::SizeGroup::Mode::HORIZONTAL)}
       {
-        _mainBox.set_vexpand(true);
-        _fieldScroll.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
-        _fieldScroll.set_vexpand(true);
-        _fieldScroll.set_propagate_natural_width(false);
-        _fieldScroll.set_propagate_natural_height(false);
-        _fieldScroll.set_child(_wrapper);
-
-        _fieldViewport.set_vexpand(true);
-        _mainBox.append(_fieldViewport);
-        _undoBar.signalUndoRequested().connect([this] { onUndo(); });
-        _mainBox.append(_undoBar.widget());
-
         _showAllFieldsButton.set_has_frame(false);
         _showAllFieldsButton.add_css_class("ao-detail-show-all-button");
         _showAllFieldsButton.add_css_class("ao-clickable");
@@ -165,12 +153,18 @@ namespace ao::gtk::layout
         _showAllFieldsButton.signal_clicked().connect([this] { onToggleShowEmptyMetadata(); });
 
         _metadataHeader.button.signal_clicked().connect([this] { onToggleMetadata(); });
-        _customHeader.button.signal_clicked().connect([this] { onToggleCustom(); });
         _technicalHeader.button.signal_clicked().connect([this] { onToggleTechnical(); });
 
         _metadataHeader.addCssClass("ao-track-detail-section-meta");
-        _customHeader.addCssClass("ao-track-detail-section-custom");
         _technicalHeader.addCssClass("ao-track-detail-section-tech");
+
+        _metadataActionBox.set_hexpand(true);
+        _metadataActionBox.add_css_class("ao-detail-field-action-row");
+        _metadataActionSpacer.set_hexpand(true);
+        _metadataActionSpacer.set_size_request(0, -1);
+        _metadataActionBox.append(_showAllFieldsButton);
+        _metadataActionBox.append(_metadataActionSpacer);
+        _metadataActionBox.append(_addMetadataButton.button());
 
         updateHeaderStyles();
 
@@ -191,8 +185,10 @@ namespace ao::gtk::layout
             requestedCategories, [category](std::string const& item) { return item == category; });
         };
 
+        _metadataCategoryEnabled = includesCategory("metadata");
+
         auto const projection = uimodel::buildTrackFieldGridSchema(uimodel::TrackFieldGridSchemaRequest{
-          .includeMetadata = includesCategory("metadata"),
+          .includeMetadata = _metadataCategoryEnabled,
           .includeTechnical = includesCategory("technical"),
         });
 
@@ -214,7 +210,7 @@ namespace ao::gtk::layout
           setupBuiltInRow(_technicalRows.back(), true);
         }
 
-        setupAddPropertyUi();
+        setupAddMetadataUi();
         buildGrid();
 
         if (_scope != nullptr)
@@ -231,16 +227,12 @@ namespace ao::gtk::layout
       TrackFieldGridComponent(TrackFieldGridComponent&&) = delete;
       TrackFieldGridComponent& operator=(TrackFieldGridComponent&&) = delete;
 
-      Gtk::Widget& widget() override { return _mainBox; }
+      Gtk::Widget& widget() override { return _wrapper; }
 
     private:
       static constexpr std::int32_t kGridColumnSpacing = 12;
       static constexpr std::int32_t kValueColWidth = 3;
       static constexpr std::int32_t kFieldRowHeight = 28;
-      static constexpr std::int32_t kVisibleFieldRows = 8;
-      static constexpr std::int32_t kGridRowSpacing = 8;
-      static constexpr std::int32_t kGridViewportHeight =
-        (kVisibleFieldRows * kFieldRowHeight) + ((kVisibleFieldRows - 1) * kGridRowSpacing);
 
       static uimodel::TrackFieldEditValue editValueFromSnapshot(rt::TrackField field,
                                                                 rt::TrackDetailSnapshot const& snap)
@@ -337,7 +329,14 @@ namespace ao::gtk::layout
           row.valueSlot.set_visible(_metadataExpanded);
         }
 
-        _showAllFieldsButtonSlot.set_visible(_metadataExpanded);
+        _metadataActionSlot.set_visible(_metadataExpanded);
+
+        for (auto& row : _customRows)
+        {
+          row.labelSlot.set_visible(_metadataExpanded);
+          row.valueSlot.set_visible(_metadataExpanded);
+        }
+
         _metadataHeader.label.set_text("Metadata");
       }
 
@@ -357,7 +356,12 @@ namespace ao::gtk::layout
           row.valueSlot.set_visible(show);
         }
 
-        _showAllFieldsButtonSlot.set_visible(_metadataExpanded);
+        _metadataActionSlot.set_visible(_metadataExpanded);
+
+        for (std::uint32_t i = 0U; i < snap.customMetadata.size() && i < _customRows.size(); ++i)
+        {
+          updateCustomRow(_customRows[i], snap.customMetadata[i]);
+        }
 
         updateHeaderLabels(snap);
       }
@@ -393,22 +397,6 @@ namespace ao::gtk::layout
         }
       }
 
-      void onToggleCustom()
-      {
-        _customExpanded = !_customExpanded;
-        _customHeader.setExpanded(_customExpanded);
-        updateHeaderStyles();
-
-        for (auto& row : _customRows)
-        {
-          row.labelSlot.set_visible(_customExpanded);
-          row.valueSlot.set_visible(_customExpanded);
-        }
-
-        _addPropertyRow.keySlot().set_visible(_customExpanded);
-        _addPropertyRow.valueSlot().set_visible(_customExpanded);
-      }
-
       void onToggleTechnical()
       {
         _technicalExpanded = !_technicalExpanded;
@@ -442,26 +430,7 @@ namespace ao::gtk::layout
         };
 
         toggleClass(_metadataHeader, _metadataExpanded);
-        toggleClass(_customHeader, _customExpanded);
         toggleClass(_technicalHeader, _technicalExpanded);
-      }
-
-      void onUndo()
-      {
-        auto optPendingUndo = _undoBar.takePendingUndo();
-
-        if (!optPendingUndo)
-        {
-          return;
-        }
-
-        auto patch = rt::MetadataPatch{};
-        patch.customUpdates[optPendingUndo->key] = optPendingUndo->value;
-
-        if (auto const replyResult = _writer.updateMetadata(optPendingUndo->trackIds, patch); !replyResult)
-        {
-          APP_LOG_ERROR("Metadata undo failed: {}", replyResult.error().message);
-        }
       }
 
       void onSnapshot(rt::TrackDetailSnapshot const& snap)
@@ -804,7 +773,7 @@ namespace ao::gtk::layout
         row.deleteButton.set_has_frame(false);
         row.deleteButton.add_css_class("ao-icon-button");
         row.deleteButton.add_css_class("ao-detail-field-delete");
-        row.deleteButton.set_tooltip_text("Delete Property");
+        row.deleteButton.set_tooltip_text("Delete Custom Metadata");
         row.deleteButton.signal_clicked().connect([this, key = row.key] { onCustomDeleted(key); });
 
         row.partialIcon.set_from_icon_name("dialog-warning-symbolic");
@@ -814,18 +783,26 @@ namespace ao::gtk::layout
 
       void updateCustomRow(CustomRow& row, rt::CustomMetadataItem const& item)
       {
+        auto const displayText = validUtf8Text(uimodel::displayTextForTrackCustomMetadata(item));
+        auto const show = shouldShowTrackFieldGridMetadataFieldRow(
+          TrackFieldGridMetadataFieldVisibility{.metadataExpanded = _metadataExpanded,
+                                                .showEmptyMetadata = _showEmptyMetadata,
+                                                .editorEditing = row.editor.getEditing(),
+                                                .hasDisplayText = !displayText.empty()});
+        row.labelSlot.set_visible(show);
+        row.valueSlot.set_visible(show);
+
         if (row.editor.getEditing())
         {
           return;
         }
 
-        auto const displayText = validUtf8Text(uimodel::displayTextForTrackCustomProperty(item));
         row.editor.setText(displayText);
         row.editor.set_tooltip_text(displayText);
         row.partialIcon.set_visible(!item.presentOnAll);
       }
 
-      void onCustomEdited(std::string const& key)
+      void onCustomEdited(std::string key)
       {
         auto* row = findCustomRow(key);
 
@@ -837,20 +814,27 @@ namespace ao::gtk::layout
         auto const snap = _scope->snapshot();
         auto const newValue = row->editor.getText().raw();
 
-        if (uimodel::isProtectedTrackCustomPropertyEditText(newValue))
+        if (uimodel::isProtectedTrackCustomMetadataEditText(newValue))
         {
           return;
         }
 
-        if (auto const replyResult =
-              _writer.updateMetadata(snap.trackIds, uimodel::makeCustomPropertyUpdatePatch(key, newValue));
-            !replyResult)
+        auto const replyResult =
+          _writer.updateMetadata(snap.trackIds, uimodel::makeCustomMetadataUpdatePatch(key, newValue));
+
+        if (!replyResult)
         {
           APP_LOG_ERROR("Custom metadata update failed: {}", replyResult.error().message);
+          return;
+        }
+
+        if (!replyResult->mutatedIds.empty() && _detailUndo != nullptr)
+        {
+          _detailUndo->clearIfAffectsCustomMetadata(key, snap.trackIds);
         }
       }
 
-      void onCustomDeleted(std::string const& key)
+      void onCustomDeleted(std::string key)
       {
         if (_scope == nullptr)
         {
@@ -859,9 +843,8 @@ namespace ao::gtk::layout
 
         auto const snap = _scope->snapshot();
 
-        auto const optPrevValue = uimodel::undoValueForDeletedTrackCustomProperty(snap, key);
-        auto const replyResult =
-          _writer.updateMetadata(snap.trackIds, uimodel::makeTrackCustomPropertyDeletePatch(key));
+        auto const optPrevValue = uimodel::undoValueForDeletedTrackCustomMetadata(snap, key);
+        auto const replyResult = _writer.updateMetadata(snap.trackIds, uimodel::makeCustomMetadataDeletePatch(key));
 
         if (!replyResult)
         {
@@ -869,9 +852,9 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (!replyResult->mutatedIds.empty() && optPrevValue)
+        if (!replyResult->mutatedIds.empty() && optPrevValue && _detailUndo != nullptr)
         {
-          _undoBar.show(key, snap.trackIds, *optPrevValue);
+          _detailUndo->showCustomMetadataDeleted(std::move(key), snap.trackIds, *optPrevValue);
         }
       }
 
@@ -884,25 +867,34 @@ namespace ao::gtk::layout
 
         auto const& snap = _scope->snapshot();
 
-        if (uimodel::validateCustomPropertyAddition(snap, key) != uimodel::CustomPropertyAddValidation::Accepted)
+        if (uimodel::validateCustomMetadataAddition(snap, key) != uimodel::CustomMetadataAddValidation::Accepted)
         {
-          _addPropertyRow.markKeyError();
+          _addMetadataButton.markKeyError();
           return;
         }
 
-        if (auto const replyResult =
-              _writer.updateMetadata(snap.trackIds, uimodel::makeCustomPropertyUpdatePatch(key, value));
-            !replyResult)
+        _addMetadataButton.popdown();
+
+        auto const replyResult =
+          _writer.updateMetadata(snap.trackIds, uimodel::makeCustomMetadataUpdatePatch(key, value));
+
+        if (!replyResult)
         {
           APP_LOG_ERROR("Custom metadata add failed: {}", replyResult.error().message);
           return;
         }
 
-        _addPropertyRow.clearInputs();
+        if (!replyResult->mutatedIds.empty() && _detailUndo != nullptr)
+        {
+          _detailUndo->clearIfAffectsCustomMetadata(key, snap.trackIds);
+        }
+
+        _addMetadataButton.clearInputs();
       }
 
       void buildGrid()
       {
+        _addMetadataButton.popdown();
         clearGrid();
         std::int32_t rowIdx = 0;
 
@@ -911,11 +903,12 @@ namespace ao::gtk::layout
         _grid.attach(_valueColumnWidthAnchor, 1, 0, kValueColWidth, 1);
 
         auto const sectionAvailability = TrackFieldGridSectionAvailability{
+          .metadataCategoryEnabled = _metadataCategoryEnabled,
           .hasMetadataFields = !_metadataRows.empty() || !_compositeRows.empty(),
           .hasSelectedTracks = (_scope != nullptr && !_scope->snapshot().trackIds.empty()),
           .hasTechnicalFields = !_technicalRows.empty(),
         };
-        _customSectionHasSelectedTracks = sectionAvailability.hasSelectedTracks;
+        _customSectionHasSelectedTracks = shouldRenderCustomMetadataArea(sectionAvailability);
 
         if (shouldRenderMetadataSection(sectionAvailability))
         {
@@ -931,27 +924,19 @@ namespace ao::gtk::layout
             row.valueSlot.set_visible(_metadataExpanded);
           }
 
-          _grid.attach(_showAllFieldsButtonSlot, 0, rowIdx++, 1 + kValueColWidth, 1);
-          _showAllFieldsButtonSlot.set_visible(_metadataExpanded);
-        }
-
-        if (shouldRenderCustomSection(sectionAvailability))
-        {
-          _customHeader.setExpanded(_customExpanded);
-          _grid.attach(_customHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
-
           for (auto& row : _customRows)
           {
             _grid.attach(row.labelSlot, 0, rowIdx, 1, 1);
             _grid.attach(row.valueSlot, 1, rowIdx, kValueColWidth, 1);
-            row.labelSlot.set_visible(_customExpanded);
-            row.valueSlot.set_visible(_customExpanded);
+            row.labelSlot.set_visible(_metadataExpanded);
+            row.valueSlot.set_visible(_metadataExpanded);
             rowIdx++;
           }
 
-          attachAddPropertyRow(rowIdx++);
-          _addPropertyRow.keySlot().set_visible(_customExpanded);
-          _addPropertyRow.valueSlot().set_visible(_customExpanded);
+          _showAllFieldsButton.set_visible(sectionAvailability.hasMetadataFields);
+          _addMetadataButton.button().set_visible(shouldRenderCustomMetadataArea(sectionAvailability));
+          _grid.attach(_metadataActionSlot, 0, rowIdx++, 1 + kValueColWidth, 1);
+          _metadataActionSlot.set_visible(_metadataExpanded);
         }
 
         if (shouldRenderTechnicalSection(sectionAvailability))
@@ -992,13 +977,6 @@ namespace ao::gtk::layout
         }
       }
 
-      void attachAddPropertyRow(std::int32_t const rowIdx)
-      {
-        configureValueBox(_addPropertyRow.valueSlot());
-        _grid.attach(_addPropertyRow.keySlot(), 0, rowIdx, 1, 1);
-        _grid.attach(_addPropertyRow.valueSlot(), 1, rowIdx, kValueColWidth, 1);
-      }
-
       void refreshColumnWidthAnchors()
       {
         auto keyWidgets = std::vector<Gtk::Widget*>{};
@@ -1031,7 +1009,6 @@ namespace ao::gtk::layout
           valueWidgets.push_back(&row.valueBox);
         }
 
-        valueWidgets.push_back(_addPropertyRow.valueSlot().get_first_child());
         _keyColumnWidthAnchor.setWidgets(std::move(keyWidgets));
         _valueColumnWidthAnchor.setWidgets(std::move(valueWidgets));
       }
@@ -1064,10 +1041,10 @@ namespace ao::gtk::layout
         editor.set_size_request(0, -1);
       }
 
-      void setupAddPropertyUi()
+      void setupAddMetadataUi()
       {
-        _addPropertyRow.signalAddRequested().connect([this](std::string key, std::string value)
-                                                     { onCustomAdded(std::move(key), std::move(value)); });
+        _addMetadataButton.signalAddRequested().connect([this](std::string key, std::string value)
+                                                        { onCustomAdded(std::move(key), std::move(value)); });
       }
 
       BuiltInRow* findBuiltInRow(rt::TrackField field)
@@ -1122,31 +1099,29 @@ namespace ao::gtk::layout
       rt::LibraryWriter& _writer;
       rt::CompletionService& _completion;
       ITrackDetailScope* _scope;
+      TrackDetailUndoController* _detailUndo;
       std::deque<BuiltInRow> _metadataRows;
       std::deque<CompositeBuiltInRow> _compositeRows;
       std::deque<BuiltInRow> _technicalRows;
       std::deque<CustomRow> _customRows;
 
       bool _metadataExpanded = true;
-      bool _customExpanded = true;
       bool _technicalExpanded = false;
+      bool _metadataCategoryEnabled = true;
       bool _customSectionHasSelectedTracks = false;
 
       SectionHeaderRow _metadataHeader{"Metadata"};
-      SectionHeaderRow _customHeader{"Custom Properties"};
       SectionHeaderRow _technicalHeader{"Audio Properties"};
 
       Gtk::Button _showAllFieldsButton{"Show empty fields"};
-      FixedHeightWidgetSlot _showAllFieldsButtonSlot{_showAllFieldsButton, false, false, kFieldRowHeight};
+      Gtk::Label _metadataActionSpacer;
+      AddCustomMetadataButton _addMetadataButton;
+      Gtk::Box _metadataActionBox{Gtk::Orientation::HORIZONTAL, 4};
+      FixedHeightWidgetSlot _metadataActionSlot{_metadataActionBox, false, false, kFieldRowHeight};
       bool _showEmptyMetadata = false;
-
-      Gtk::Box _mainBox;
-      CustomPropertyUndoBar _undoBar;
 
       Glib::RefPtr<Gtk::SizeGroup> _compositePrimarySizeGroupPtr;
       Glib::RefPtr<Gtk::SizeGroup> _compositeSecondarySizeGroupPtr;
-
-      AddCustomPropertyRow _addPropertyRow{kGridColumnSpacing};
 
       ColumnWidthAnchor _keyColumnWidthAnchor{"ao-key-column-width-anchor"};
       ColumnWidthAnchor _valueColumnWidthAnchor{"ao-value-column-width-anchor"};
@@ -1154,8 +1129,6 @@ namespace ao::gtk::layout
       sigc::connection _scopeConn;
 
       ConstrainedGridBox _wrapper;
-      Gtk::ScrolledWindow _fieldScroll;
-      FixedHeightWidgetSlot _fieldViewport{_fieldScroll, true, false, kGridViewportHeight, FixedHeightMinimum::Zero};
     };
 
     std::unique_ptr<ILayoutComponent> createTrackFieldGrid(LayoutContext& ctx, LayoutNode const& node)
