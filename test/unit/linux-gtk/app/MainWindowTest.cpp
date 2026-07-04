@@ -48,7 +48,7 @@ namespace ao::gtk::test
     CHECK(actionMap->lookup_action("edit-layout") != nullptr);
     CHECK(actionMap->lookup_action("reset-runtime-layout-state") != nullptr);
     CHECK(actionMap->lookup_action("save-panel-sizes-as-layout-defaults") != nullptr);
-CHECK(actionMap->lookup_action("keyboard-shortcuts") == nullptr);
+    CHECK(actionMap->lookup_action("keyboard-shortcuts") == nullptr);
     CHECK(actionMap->lookup_action("list-new-smart-list") != nullptr);
     CHECK(actionMap->lookup_action("list-edit") != nullptr);
     CHECK(actionMap->lookup_action("list-delete") != nullptr);

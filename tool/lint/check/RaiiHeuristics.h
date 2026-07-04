@@ -24,7 +24,7 @@ namespace clang::tidy::aobus
   {
     inline constexpr std::string_view kRaiiSuffixPattern =
       "::.*(Guard|Subscription|Scope|Session|Lock|Transaction|Timer|Writer|Reader|Changes|Tasks|Handle|TempDir|"
-      "TempFile|Token|Raii)$";
+      "TempFile|Token|Raii|Blocker)$";
 
     inline constexpr auto kRaiiSuffixes = std::to_array<std::string_view>({"Guard",
                                                                            "Subscription",
@@ -41,7 +41,8 @@ namespace clang::tidy::aobus
                                                                            "TempDir",
                                                                            "TempFile",
                                                                            "Token",
-                                                                           "Raii"});
+                                                                           "Raii",
+                                                                           "Blocker"});
 
     struct IsRAIIMatcher final : public ast_matchers::internal::MatcherInterface<CXXRecordDecl>
     {

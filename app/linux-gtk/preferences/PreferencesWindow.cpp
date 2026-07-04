@@ -22,9 +22,12 @@
 #include <gtkmm/label.h>
 #include <gtkmm/menubutton.h>
 #include <gtkmm/object.h>
+#include <gtkmm/scrolledwindow.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/stacksidebar.h>
 #include <gtkmm/window.h>
+#include <sigc++/connection.h>
+#include <sigc++/functors/mem_fun.h>
 
 #include <functional>
 #include <memory>
@@ -60,6 +63,23 @@ namespace ao::gtk
 
       return std::string{kClassicLayoutPresetId};
     }
+
+    struct [[nodiscard]] ConnectionBlocker final
+    {
+      explicit ConnectionBlocker(sigc::connection& targetConn)
+        : conn{targetConn}
+      {
+        conn.block();
+      }
+      ~ConnectionBlocker() { conn.unblock(); }
+
+      ConnectionBlocker(ConnectionBlocker const&) = delete;
+      ConnectionBlocker& operator=(ConnectionBlocker const&) = delete;
+      ConnectionBlocker(ConnectionBlocker&&) = delete;
+      ConnectionBlocker& operator=(ConnectionBlocker&&) = delete;
+
+      sigc::connection& conn;
+    };
   } // namespace
 
   PreferencesWindow::PreferencesWindow(Callbacks callbacks)
@@ -140,7 +160,13 @@ namespace ao::gtk
 
     page->set_margin(kPageMargin);
     page->set_vexpand(true);
-    _stack.add(*page, std::string{name}, std::string{title});
+
+    auto* const scroller = Gtk::make_managed<Gtk::ScrolledWindow>();
+    scroller->set_child(*page);
+    scroller->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
+    scroller->set_propagate_natural_width(true);
+
+    _stack.add(*scroller, std::string{name}, std::string{title});
     return *page;
   }
 
@@ -148,7 +174,7 @@ namespace ao::gtk
   {
     _themeCombo.append(std::string{rt::themePresetToString(rt::ThemePresetId::Classic)}, "Classic");
     _themeCombo.append(std::string{rt::themePresetToString(rt::ThemePresetId::Modern)}, "Modern");
-    _themeCombo.signal_changed().connect([this] { onThemeChanged(); });
+    _themeComboConn = _themeCombo.signal_changed().connect([this] { onThemeChanged(); });
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
     list->addRow("Theme", _themeCombo);
@@ -171,10 +197,21 @@ namespace ao::gtk
 
     _layoutPresetCombo.append(std::string{kClassicLayoutPresetId}, "Classic");
     _layoutPresetCombo.append(std::string{kModernLayoutPresetId}, "Modern");
-    _layoutPresetCombo.signal_changed().connect([this] { onLayoutPresetChanged(); });
+    _layoutPresetComboConn = _layoutPresetCombo.signal_changed().connect([this] { onLayoutPresetChanged(); });
     list->addRow("Default preset", _layoutPresetCombo);
 
+    _layoutPage.append(*list);
+
+    auto* const actionsLabel = Gtk::make_managed<Gtk::Label>("Actions");
+    actionsLabel->set_xalign(0.0F);
+    actionsLabel->add_css_class("title-4");
+    actionsLabel->set_margin_top(16);
+    _layoutPage.append(*actionsLabel);
+
+    auto* const actionsBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
+
     auto* const editLayoutButton = Gtk::make_managed<Gtk::Button>("Edit Layout...");
+    editLayoutButton->set_halign(Gtk::Align::START);
     editLayoutButton->signal_clicked().connect(
       [this]
       {
@@ -183,9 +220,10 @@ namespace ao::gtk
           _callbacks.onEditLayout();
         }
       });
-    list->addRow("Editor", *editLayoutButton);
+    actionsBox->append(*editLayoutButton);
 
     auto* const savePanelsButton = Gtk::make_managed<Gtk::Button>("Save Current Panel Sizes as Layout Defaults");
+    savePanelsButton->set_halign(Gtk::Align::START);
     savePanelsButton->signal_clicked().connect(
       [this]
       {
@@ -194,9 +232,10 @@ namespace ao::gtk
           _callbacks.onSaveCurrentPanelSizesAsLayoutDefaults();
         }
       });
-    list->addRow("Panel sizes", *savePanelsButton);
+    actionsBox->append(*savePanelsButton);
 
     auto* const resetRuntimeButton = Gtk::make_managed<Gtk::Button>("Reset Runtime Layout State");
+    resetRuntimeButton->set_halign(Gtk::Align::START);
     resetRuntimeButton->signal_clicked().connect(
       [this]
       {
@@ -205,9 +244,9 @@ namespace ao::gtk
           _callbacks.onResetRuntimeLayoutState();
         }
       });
-    list->addRow("Runtime state", *resetRuntimeButton);
+    actionsBox->append(*resetRuntimeButton);
 
-    _layoutPage.append(*list);
+    _layoutPage.append(*actionsBox);
   }
 
   void PreferencesWindow::refreshKeyboardPage(uimodel::LayoutActionCatalog const& catalog,
@@ -231,11 +270,12 @@ namespace ao::gtk
                                                             _callbacks.onApplyTheme,
                                                             uimodel::PreferencesModel::OutputApplyCallback{});
 
-    _refreshing = true;
+    auto const blockTheme = ConnectionBlocker{_themeComboConn};
+    auto const blockLayout = ConnectionBlocker{_layoutPresetComboConn};
+
     _themeCombo.set_active_id(
       std::string{rt::themePresetToString(rt::themePresetFromString(_modelPtr->preferences().lastThemePreset))});
     _layoutPresetCombo.set_active_id(normalizedLayoutPresetId(_modelPtr->preferences().lastLayoutPreset));
-    _refreshing = false;
 
     rebuildOutputSelector(playback, targetWindow);
   }
@@ -255,6 +295,7 @@ namespace ao::gtk
   void PreferencesWindow::clearWindowScopedState()
   {
     _targetHideConn.disconnect();
+    _outputDeviceViewModelPtr.reset();
     _outputDeviceButton.unset_popover();
     _outputDeviceLabel.set_text("Unavailable");
     _outputDeviceButton.set_tooltip_text({});
@@ -281,7 +322,7 @@ namespace ao::gtk
 
   void PreferencesWindow::onLayoutPresetChanged()
   {
-    if (_refreshing || !_modelPtr)
+    if (!_modelPtr)
     {
       return;
     }
@@ -298,7 +339,7 @@ namespace ao::gtk
 
   void PreferencesWindow::onThemeChanged()
   {
-    if (_refreshing || !_modelPtr)
+    if (!_modelPtr)
     {
       return;
     }
@@ -315,15 +356,15 @@ namespace ao::gtk
 
   void PreferencesWindow::refreshOutputSummary(rt::PlaybackService& playback)
   {
-    auto viewModel = uimodel::OutputDeviceViewModel{playback,
-                                                    [this](uimodel::OutputDeviceViewState const& view)
-                                                    {
-                                                      _outputDeviceLabel.set_text(view.outputBackendSummary.empty()
-                                                                                    ? "Choose Output Device..."
-                                                                                    : view.outputBackendSummary);
-                                                      _outputDeviceButton.set_tooltip_text(view.outputDeviceStatus);
-                                                    }};
-    viewModel.refresh();
+    _outputDeviceViewModelPtr = std::make_unique<uimodel::OutputDeviceViewModel>(
+      playback,
+      [this](uimodel::OutputDeviceViewState const& view)
+      {
+        _outputDeviceLabel.set_text(view.outputBackendSummary.empty() ? "Choose Output Device..."
+                                                                      : view.outputBackendSummary);
+        _outputDeviceButton.set_tooltip_text(view.outputDeviceStatus);
+      });
+    _outputDeviceViewModelPtr->refresh();
   }
 
   void PreferencesWindow::rebuildOutputSelector(rt::PlaybackService* playback, Gtk::Window* targetWindow)
@@ -337,7 +378,7 @@ namespace ao::gtk
 
     if (targetWindow != nullptr)
     {
-      _targetHideConn = targetWindow->signal_hide().connect([this] { dismiss(); });
+      _targetHideConn = targetWindow->signal_hide().connect(sigc::mem_fun(*this, &PreferencesWindow::dismiss));
     }
 
     refreshOutputSummary(*playback);

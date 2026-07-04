@@ -27,6 +27,7 @@
 namespace ao::uimodel
 {
   class LayoutActionCatalog;
+  class OutputDeviceViewModel;
 }
 namespace ao::rt
 {
@@ -87,8 +88,9 @@ namespace ao::gtk
 
     Callbacks _callbacks;
     std::unique_ptr<uimodel::PreferencesModel> _modelPtr;
-    bool _refreshing = false;
-    sigc::connection _targetHideConn;
+    sigc::scoped_connection _targetHideConn; // NOLINT(misc-include-cleaner)
+    sigc::connection _themeComboConn;
+    sigc::connection _layoutPresetComboConn;
 
     static constexpr int kPageSpacing = 12;
 
@@ -106,5 +108,6 @@ namespace ao::gtk
     Gtk::MenuButton _outputDeviceButton;
     Gtk::Label _outputDeviceLabel;
     std::unique_ptr<ShortcutEditorWidget> _shortcutEditorPtr;
+    std::unique_ptr<uimodel::OutputDeviceViewModel> _outputDeviceViewModelPtr;
   };
 } // namespace ao::gtk

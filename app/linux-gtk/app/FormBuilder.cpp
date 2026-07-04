@@ -35,13 +35,15 @@ namespace ao::gtk
     auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kRowSpacing);
 
     auto* const label = Gtk::make_managed<Gtk::Label>(labelText);
-    label->set_halign(Gtk::Align::START);
+    label->set_halign(Gtk::Align::FILL);
+    label->set_xalign(0.0F);
+    label->set_hexpand(true);
     _labelSizeGroupPtr->add_widget(*label);
 
     box->append(*label);
 
-    widget.set_hexpand(true);
-    widget.set_halign(Gtk::Align::FILL);
+    widget.set_halign(Gtk::Align::END);
+    widget.set_valign(Gtk::Align::CENTER);
     box->append(widget);
 
     row->set_child(*box);
