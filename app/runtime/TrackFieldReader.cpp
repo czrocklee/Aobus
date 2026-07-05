@@ -49,10 +49,16 @@ namespace ao::rt
         return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().genreId())};
       case TrackField::Composer:
         return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().composerId())};
+      case TrackField::Conductor:
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.classical().conductorId())};
+      case TrackField::Ensemble:
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.classical().ensembleId())};
       case TrackField::Work:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().workId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.classical().workId())};
       case TrackField::Movement:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().movementId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.classical().movementId())};
+      case TrackField::Soloist:
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.classical().soloistId())};
 
       case TrackField::Year: return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().year()};
       case TrackField::DiscNumber:
@@ -64,9 +70,9 @@ namespace ao::rt
       case TrackField::TrackTotal:
         return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().trackTotal()};
       case TrackField::MovementNumber:
-        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().movementNumber()};
+        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.classical().movementNumber()};
       case TrackField::MovementTotal:
-        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().movementTotal()};
+        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.classical().movementTotal()};
 
       case TrackField::Duration:
         return TrackFieldRawValue{std::in_place_type<TrackFieldDuration>, view.property().duration()};

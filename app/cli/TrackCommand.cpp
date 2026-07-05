@@ -17,6 +17,8 @@
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/library/detail/TrackColdReader.h>
+#include <ao/library/detail/TrackViewRawAccess.h>
 #include <ao/query/FormatExpression.h>
 #include <ao/query/Parser.h>
 #include <ao/rt/CoreRuntime.h>
@@ -40,6 +42,7 @@
 #include <memory>
 #include <optional>
 #include <print>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -300,8 +303,11 @@ namespace ao::cli
     std::optional<std::string> optAlbumArtist{};
     std::optional<std::string> optGenre{};
     std::optional<std::string> optComposer{};
+    std::optional<std::string> optConductor{};
+    std::optional<std::string> optEnsemble{};
     std::optional<std::string> optWork{};
     std::optional<std::string> optMovement{};
+    std::optional<std::string> optSoloist{};
     std::optional<std::uint16_t> optYear{};
     std::optional<std::uint16_t> optTrackNumber{};
     std::optional<std::uint16_t> optTrackTotal{};
@@ -357,6 +363,16 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::TrackRecordDto>
       return "composer";
     }
 
+    if (memberName == "optConductor")
+    {
+      return "conductor";
+    }
+
+    if (memberName == "optEnsemble")
+    {
+      return "ensemble";
+    }
+
     if (memberName == "optWork")
     {
       return "work";
@@ -365,6 +381,11 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::TrackRecordDto>
     if (memberName == "optMovement")
     {
       return "movement";
+    }
+
+    if (memberName == "optSoloist")
+    {
+      return "soloist";
     }
 
     if (memberName == "optYear")
@@ -527,14 +548,17 @@ namespace ao::cli
 
       if (view.isColdValid())
       {
-        dto.optWork = optionalDictName(dict, view.metadata().workId());
-        dto.optMovement = optionalDictName(dict, view.metadata().movementId());
+        dto.optConductor = optionalDictName(dict, view.classical().conductorId());
+        dto.optEnsemble = optionalDictName(dict, view.classical().ensembleId());
+        dto.optWork = optionalDictName(dict, view.classical().workId());
+        dto.optMovement = optionalDictName(dict, view.classical().movementId());
+        dto.optSoloist = optionalDictName(dict, view.classical().soloistId());
         dto.optTrackNumber = optionalNumber(view.metadata().trackNumber());
         dto.optTrackTotal = optionalNumber(view.metadata().trackTotal());
         dto.optDiscNumber = optionalNumber(view.metadata().discNumber());
         dto.optDiscTotal = optionalNumber(view.metadata().discTotal());
-        dto.optMovementNumber = optionalNumber(view.metadata().movementNumber());
-        dto.optMovementTotal = optionalNumber(view.metadata().movementTotal());
+        dto.optMovementNumber = optionalNumber(view.classical().movementNumber());
+        dto.optMovementTotal = optionalNumber(view.classical().movementTotal());
         dto.optDuration = optionalDuration(view.property().duration());
         dto.optSampleRate = optionalSampleRate(view.property().sampleRate());
         dto.optUri = optionalString(view.property().uri());
@@ -706,6 +730,142 @@ namespace ao::cli
       }
     }
 
+    void dumpRawHot(library::TrackView const& view, std::span<std::byte const> hotData, std::ostream& os)
+    {
+      if (!view.isHotValid())
+      {
+        return;
+      }
+
+      std::println(os, "Hot Header:");
+      hexDump(hotData.subspan(0, sizeof(library::TrackHotHeader)), os);
+      std::println(os, "Hot Payload:");
+
+      if (hotData.size() > sizeof(library::TrackHotHeader))
+      {
+        hexDump(hotData.subspan(sizeof(library::TrackHotHeader)), os);
+      }
+    }
+
+    void dumpRawColdSections(std::span<std::byte const> coldData,
+                             library::detail::TrackColdReader const& coldReader,
+                             std::ostream& os)
+    {
+      auto const& header = coldReader.header();
+      auto const blockOffset = sizeof(library::TrackColdHeader);
+      auto const uriOffset = static_cast<std::size_t>(header.uriOffset);
+      auto const blockLength = uriOffset - blockOffset;
+      auto const uriLength = static_cast<std::size_t>(header.uriLength);
+      auto const paddingOffset = uriOffset + uriLength;
+
+      std::println(os, "Cold Blocks:");
+
+      if (blockLength > 0)
+      {
+        hexDump(coldData.subspan(blockOffset, blockLength), os);
+      }
+
+      std::println(os, "Cold URI:");
+
+      if (uriLength > 0)
+      {
+        hexDump(coldData.subspan(uriOffset, uriLength), os);
+      }
+
+      std::println(os, "Cold Padding:");
+
+      if (paddingOffset < coldData.size())
+      {
+        hexDump(coldData.subspan(paddingOffset), os);
+      }
+    }
+
+    void dumpRawCold(library::TrackView const& view, std::span<std::byte const> coldData, std::ostream& os)
+    {
+      if (!view.isColdValid())
+      {
+        return;
+      }
+
+      auto const coldReader = library::detail::TrackColdReader{coldData};
+
+      std::println(os, "Cold Header:");
+      hexDump(coldData.subspan(0, sizeof(library::TrackColdHeader)), os);
+
+      if (coldReader.valid())
+      {
+        dumpRawColdSections(coldData, coldReader, os);
+        return;
+      }
+
+      if (coldData.size() > sizeof(library::TrackColdHeader))
+      {
+        std::println(os, "Cold Blocks/URI/Padding (invalid layout):");
+        hexDump(coldData.subspan(sizeof(library::TrackColdHeader)), os);
+      }
+    }
+
+    void dumpRawTrack(TrackId id, library::TrackView const& view, std::ostream& os)
+    {
+      std::println(os, "Track ID: {}", id);
+
+      auto const hotData = library::detail::TrackViewRawAccess::hotData(view);
+      auto const coldData = library::detail::TrackViewRawAccess::coldData(view);
+
+      dumpRawHot(view, hotData, os);
+      dumpRawCold(view, coldData, os);
+    }
+
+    void dumpPlainHot(library::TrackView const& view, library::DictionaryStore const& dict, std::ostream& os)
+    {
+      if (!view.isHotValid())
+      {
+        return;
+      }
+
+      std::println(os, "  Title: {}", view.metadata().title());
+      std::println(
+        os, "  Artist: {} (ID: {})", resolveDict(dict, view.metadata().artistId()), view.metadata().artistId());
+      std::println(os, "  Album: {} (ID: {})", resolveDict(dict, view.metadata().albumId()), view.metadata().albumId());
+      std::println(os, "  Tag Bloom: 0x{:08x}", view.tags().bloom());
+      std::print(os, "  Tags: ");
+
+      for (auto const tagId : view.tags())
+      {
+        std::print(os, "{} (ID: {}) ", resolveDict(dict, tagId), tagId);
+      }
+
+      std::println(os);
+    }
+
+    void dumpPlainCold(library::TrackView const& view, library::DictionaryStore const& dict, std::ostream& os)
+    {
+      if (!view.isColdValid())
+      {
+        return;
+      }
+
+      std::println(os, "  Duration: {}ms", view.property().duration().count());
+      std::println(os, "  Sample Rate: {}Hz", view.property().sampleRate());
+      std::println(os, "  URI: {}", view.property().uri());
+
+      for (auto const& [customId, val] : view.customMetadata())
+      {
+        std::println(os, "  Custom [{}]: {}", resolveDict(dict, customId), val);
+      }
+    }
+
+    void dumpPlainTrack(TrackId id,
+                        library::TrackView const& view,
+                        library::DictionaryStore const& dict,
+                        std::ostream& os)
+    {
+      std::println(os, "Track ID: {}", id);
+
+      dumpPlainHot(view, dict, os);
+      dumpPlainCold(view, dict, os);
+    }
+
     void processTrackDump(TrackId id,
                           library::TrackView const& view,
                           library::DictionaryStore const& dict,
@@ -714,66 +874,11 @@ namespace ao::cli
     {
       if (raw)
       {
-        std::println(os, "Track ID: {}", id);
-
-        if (view.isHotValid())
-        {
-          std::println(os, "Hot Header:");
-          hexDump(view.hotData().subspan(0, sizeof(library::TrackHotHeader)), os);
-          std::println(os, "Hot Payload:");
-
-          if (view.hotData().size() > sizeof(library::TrackHotHeader))
-          {
-            hexDump(view.hotData().subspan(sizeof(library::TrackHotHeader)), os);
-          }
-        }
-
-        if (view.isColdValid())
-        {
-          std::println(os, "Cold Header:");
-          hexDump(view.coldData().subspan(0, sizeof(library::TrackColdHeader)), os);
-          std::println(os, "Cold Payload:");
-
-          if (view.coldData().size() > sizeof(library::TrackColdHeader))
-          {
-            hexDump(view.coldData().subspan(sizeof(library::TrackColdHeader)), os);
-          }
-        }
+        dumpRawTrack(id, view, os);
+        return;
       }
-      else
-      {
-        std::println(os, "Track ID: {}", id);
 
-        if (view.isHotValid())
-        {
-          std::println(os, "  Title: {}", view.metadata().title());
-          std::println(
-            os, "  Artist: {} (ID: {})", resolveDict(dict, view.metadata().artistId()), view.metadata().artistId());
-          std::println(
-            os, "  Album: {} (ID: {})", resolveDict(dict, view.metadata().albumId()), view.metadata().albumId());
-          std::println(os, "  Tag Bloom: 0x{:08x}", view.tags().bloom());
-          std::print(os, "  Tags: ");
-
-          for (auto const tagId : view.tags())
-          {
-            std::print(os, "{} (ID: {}) ", resolveDict(dict, tagId), tagId);
-          }
-
-          std::println(os);
-        }
-
-        if (view.isColdValid())
-        {
-          std::println(os, "  Duration: {}ms", view.property().duration().count());
-          std::println(os, "  Sample Rate: {}Hz", view.property().sampleRate());
-          std::println(os, "  URI: {}", view.property().uri());
-
-          for (auto const& [customId, val] : view.customMetadata())
-          {
-            std::println(os, "  Custom [{}]: {}", resolveDict(dict, customId), val);
-          }
-        }
-      }
+      dumpPlainTrack(id, view, dict, os);
     }
 
     void dumpTracks(library::MusicLibrary& ml, std::uint32_t targetId, bool raw, std::ostream& os)
@@ -892,8 +997,11 @@ namespace ao::cli
       CLI::Option* albumArtist = nullptr;
       CLI::Option* genre = nullptr;
       CLI::Option* composer = nullptr;
+      CLI::Option* conductor = nullptr;
+      CLI::Option* ensemble = nullptr;
       CLI::Option* work = nullptr;
       CLI::Option* movement = nullptr;
+      CLI::Option* soloist = nullptr;
       CLI::Option* year = nullptr;
       CLI::Option* trackNumber = nullptr;
       CLI::Option* trackTotal = nullptr;
@@ -917,8 +1025,11 @@ namespace ao::cli
       hasPatch = assignStringOption(options.albumArtist, patch.optAlbumArtist) || hasPatch;
       hasPatch = assignStringOption(options.genre, patch.optGenre) || hasPatch;
       hasPatch = assignStringOption(options.composer, patch.optComposer) || hasPatch;
+      hasPatch = assignStringOption(options.conductor, patch.optConductor) || hasPatch;
+      hasPatch = assignStringOption(options.ensemble, patch.optEnsemble) || hasPatch;
       hasPatch = assignStringOption(options.work, patch.optWork) || hasPatch;
       hasPatch = assignStringOption(options.movement, patch.optMovement) || hasPatch;
+      hasPatch = assignStringOption(options.soloist, patch.optSoloist) || hasPatch;
       hasPatch = assignUint16Option(options.year, patch.optYear) || hasPatch;
       hasPatch = assignUint16Option(options.trackNumber, patch.optTrackNumber) || hasPatch;
       hasPatch = assignUint16Option(options.trackTotal, patch.optTrackTotal) || hasPatch;
@@ -984,8 +1095,11 @@ namespace ao::cli
         .albumArtist = update->add_option("--album-artist", "album artist"),
         .genre = update->add_option("--genre", "genre"),
         .composer = update->add_option("--composer", "composer"),
+        .conductor = update->add_option("--conductor", "conductor"),
+        .ensemble = update->add_option("--ensemble", "ensemble"),
         .work = update->add_option("--work", "work"),
         .movement = update->add_option("--movement", "movement"),
+        .soloist = update->add_option("--soloist", "soloist"),
         .year = update->add_option("--year", "year"),
         .trackNumber = update->add_option("--track-number", "track number"),
         .trackTotal = update->add_option("--track-total", "track total"),

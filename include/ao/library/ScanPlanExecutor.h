@@ -156,6 +156,10 @@ namespace ao::library
       DictionaryStore& dict,
       std::string const& uri);
 
+    static FileManifestBuilder makeAvailableManifest(ScanItem const& item,
+                                                     TrackId trackId,
+                                                     AudioFingerprint const& fingerprint);
+
     bool writeManifest(FileManifestStore::Writer& writer, std::string const& uri, FileManifestBuilder& builder);
 
     bool updateTrack(TrackStore::Writer& trackWriter,

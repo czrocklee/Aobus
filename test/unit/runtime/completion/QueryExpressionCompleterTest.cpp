@@ -30,6 +30,9 @@ namespace ao::rt::test
                               library::test::TrackSpec{.title = "Completion Track",
                                                        .artist = "Artist",
                                                        .album = "Album",
+                                                       .conductor = "Conductor",
+                                                       .ensemble = "Ensemble",
+                                                       .soloist = "Soloist",
                                                        .uri = "/tmp/query-completion.flac",
                                                        .tags = {tags.begin(), tags.end()},
                                                        .customMetadata = {custom.begin(), custom.end()},
@@ -160,6 +163,12 @@ namespace ao::rt::test
     CHECK(optList->replaceBegin == 12);
     CHECK(optList->replaceEnd == 14);
     CHECK(insertTexts(optList->items) == std::vector<std::string>{R"("Artist")"});
+
+    auto optConductor = completer.complete("$conductor = Con", 16);
+    REQUIRE(optConductor);
+    CHECK(optConductor->replaceBegin == 13);
+    CHECK(optConductor->replaceEnd == 16);
+    CHECK(insertTexts(optConductor->items) == std::vector<std::string>{R"("Conductor")"});
 
     CHECK_FALSE(completer.complete(R"(%"Mood" = Br)", 12));
   }

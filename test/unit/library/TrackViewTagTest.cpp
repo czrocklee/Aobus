@@ -84,6 +84,28 @@ namespace ao::library::test
     CHECK(view.tags().count() == 2);
   }
 
+  TEST_CASE("TrackView - tag counts beyond 255 are not truncated", "[library][unit][track][tag]")
+  {
+    constexpr std::uint16_t kTagCount = 300;
+
+    auto h = TrackHotHeader{};
+    h.tagLength = static_cast<std::uint16_t>(kTagCount * sizeof(DictionaryId));
+
+    auto data = serializeHeader(h);
+
+    for (std::uint32_t i = 0; i < kTagCount; ++i)
+    {
+      auto const tagId = i + 1;
+      data.insert_range(data.end(), utility::bytes::view(tagId));
+    }
+
+    auto const view = TrackView{data, std::span<std::byte const>{}};
+    CHECK(view.tags().count() == kTagCount);
+    CHECK(view.tags().id(0) == DictionaryId{1});
+    CHECK(view.tags().id(kTagCount - 1) == DictionaryId{kTagCount});
+    CHECK(view.tags().has(DictionaryId{256}));
+  }
+
   TEST_CASE("TrackView - iterates tag IDs", "[library][unit][track][tag]")
   {
     auto h = TrackHotHeader{};

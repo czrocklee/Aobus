@@ -5,6 +5,7 @@
 #include "lib/tag/mpeg/FrameLayout.h"
 #include "lib/tag/mpeg/id3v2/Layout.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
@@ -125,6 +126,7 @@ namespace ao::tag::mpeg::test
       auto body = std::vector<std::uint8_t>{};
       addTextFrame(body, "TIT2", "Title");
       addTextFrame(body, "TPE1", "Artist");
+      addTextFrame(body, "TPE3", "Conductor");
       addTextFrame(body, "TALB", "Album");
       addTextFrame(body, "TYER", "2024");
       addTextFrame(body, "TRCK", "1/10");
@@ -133,6 +135,9 @@ namespace ao::tag::mpeg::test
       addTextFrame(body, "MVIN", "2/4");
 
       addTxxxFrame(body, "work", "WorkName");
+      addTxxxFrame(body, "ensemble", "Ensemble");
+      addTxxxFrame(body, "orchestra", "Orchestra Fallback");
+      addTxxxFrame(body, "soloist", "Soloist");
       addTxxxFrame(body, "CustomKey", "CustomValue");
 
       addPictureFrame(body, 3, {0xAA, 0xBB}); // Front cover
@@ -247,12 +252,15 @@ namespace ao::tag::mpeg::test
     CHECK(meta.title() == "Title");
     CHECK(meta.artist() == "Artist");
     CHECK(meta.album() == "Album");
+    CHECK(meta.conductor() == "Conductor");
     CHECK(meta.year() == 2024);
     CHECK(meta.trackNumber() == 1);
     CHECK(meta.trackTotal() == 10);
     CHECK(meta.genre() == "Genre");
     CHECK(meta.work() == "WorkName");
     CHECK(meta.movement() == "MovementName");
+    CHECK(meta.ensemble() == "Ensemble");
+    CHECK(meta.soloist() == "Soloist");
     CHECK(meta.movementNumber() == 2);
     CHECK(meta.movementTotal() == 4);
 
@@ -272,6 +280,15 @@ namespace ao::tag::mpeg::test
     auto const prop = builder.property();
     CHECK(prop.codec() == AudioCodec::Mp3);
     CHECK(prop.bitDepth() == 16);
+  }
+
+  TEST_CASE("MPEG File - maps orchestra fallback when ensemble is absent", "[tag][unit][mpeg][file]")
+  {
+    auto const file = File{audio::test::requireAudioFixture("classical_fallback.mp3")};
+    auto const builder = loadTrack(file);
+
+    CHECK(builder.metadata().title() == "Classical Fallback");
+    CHECK(builder.metadata().ensemble() == "Fixture Fallback Ensemble");
   }
 
   TEST_CASE("MPEG File - audio payload range trims leading and trailing tags", "[tag][unit][mpeg][file]")

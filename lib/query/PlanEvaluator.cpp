@@ -98,8 +98,11 @@ namespace ao::query
         case Field::GenreId: return static_cast<std::int64_t>(track.metadata().genreId().raw());
         case Field::AlbumArtistId: return static_cast<std::int64_t>(track.metadata().albumArtistId().raw());
         case Field::ComposerId: return static_cast<std::int64_t>(track.metadata().composerId().raw());
-        case Field::WorkId: return static_cast<std::int64_t>(track.metadata().workId().raw());
-        case Field::MovementId: return static_cast<std::int64_t>(track.metadata().movementId().raw());
+        case Field::ConductorId: return static_cast<std::int64_t>(track.classical().conductorId().raw());
+        case Field::EnsembleId: return static_cast<std::int64_t>(track.classical().ensembleId().raw());
+        case Field::WorkId: return static_cast<std::int64_t>(track.classical().workId().raw());
+        case Field::MovementId: return static_cast<std::int64_t>(track.classical().movementId().raw());
+        case Field::SoloistId: return static_cast<std::int64_t>(track.classical().soloistId().raw());
         case Field::CoverArtId:
           return static_cast<std::int64_t>(track.coverArt().primary().value_or(library::CoverArt{}).resourceId.raw());
 
@@ -109,8 +112,8 @@ namespace ao::query
         case Field::TrackTotal: return static_cast<std::int64_t>(track.metadata().trackTotal());
         case Field::DiscNumber: return static_cast<std::int64_t>(track.metadata().discNumber());
         case Field::DiscTotal: return static_cast<std::int64_t>(track.metadata().discTotal());
-        case Field::MovementNumber: return static_cast<std::int64_t>(track.metadata().movementNumber());
-        case Field::MovementTotal: return static_cast<std::int64_t>(track.metadata().movementTotal());
+        case Field::MovementNumber: return static_cast<std::int64_t>(track.classical().movementNumber());
+        case Field::MovementTotal: return static_cast<std::int64_t>(track.classical().movementTotal());
 
         // Tag fields
         case Field::TagBloom: return static_cast<std::int64_t>(track.tags().bloom());
@@ -229,8 +232,11 @@ namespace ao::query
         case Field::GenreId:
         case Field::AlbumArtistId:
         case Field::ComposerId:
+        case Field::ConductorId:
+        case Field::EnsembleId:
         case Field::WorkId:
         case Field::MovementId:
+        case Field::SoloistId:
           return loadFieldValue(track, field) != static_cast<std::int64_t>(kInvalidDictionaryId.raw());
 
         case Field::CoverArtId:

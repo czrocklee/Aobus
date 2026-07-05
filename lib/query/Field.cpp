@@ -236,6 +236,9 @@ namespace ao::query
       case Field::CoverArtId:
       case Field::WorkId:
       case Field::MovementId:
+      case Field::ConductorId:
+      case Field::EnsembleId:
+      case Field::SoloistId:
       case Field::TrackNumber:
       case Field::TrackTotal:
       case Field::DiscNumber:
@@ -260,7 +263,10 @@ namespace ao::query
       case Field::AlbumArtistId:
       case Field::ComposerId:
       case Field::WorkId:
-      case Field::MovementId: return true;
+      case Field::MovementId:
+      case Field::ConductorId:
+      case Field::EnsembleId:
+      case Field::SoloistId: return true;
       default: return false;
     }
   }
@@ -302,8 +308,11 @@ namespace ao::query
       case Field::GenreId: return "genre";
       case Field::AlbumArtistId: return "albumArtist";
       case Field::ComposerId: return "composer";
+      case Field::ConductorId: return "conductor";
+      case Field::EnsembleId: return "ensemble";
       case Field::WorkId: return "work";
       case Field::MovementId: return "movement";
+      case Field::SoloistId: return "soloist";
       default: return "field";
     }
   }
@@ -366,8 +375,11 @@ namespace ao::query
       case Field::GenreId: dictionaryId = track.metadata().genreId(); break;
       case Field::AlbumArtistId: dictionaryId = track.metadata().albumArtistId(); break;
       case Field::ComposerId: dictionaryId = track.metadata().composerId(); break;
-      case Field::WorkId: dictionaryId = track.metadata().workId(); break;
-      case Field::MovementId: dictionaryId = track.metadata().movementId(); break;
+      case Field::ConductorId: dictionaryId = track.classical().conductorId(); break;
+      case Field::EnsembleId: dictionaryId = track.classical().ensembleId(); break;
+      case Field::WorkId: dictionaryId = track.classical().workId(); break;
+      case Field::MovementId: dictionaryId = track.classical().movementId(); break;
+      case Field::SoloistId: dictionaryId = track.classical().soloistId(); break;
       default: return {};
     }
 

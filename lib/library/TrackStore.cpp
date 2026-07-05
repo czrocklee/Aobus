@@ -8,8 +8,6 @@
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
 #include <cstddef>
 #include <expected>
 #include <optional>
@@ -201,8 +199,15 @@ namespace ao::library
   Result<std::pair<TrackId, TrackView>> TrackStore::Writer::createHotCold(std::span<std::byte const> hotData,
                                                                           std::span<std::byte const> coldData)
   {
-    gsl_Expects((hotData.size() % 4) == 0);
-    gsl_Expects((coldData.size() % 4) == 0);
+    if (auto validation = detail::validateSerializedTrackBytes(hotData, "hot"); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
+    if (auto validation = detail::validateSerializedTrackBytes(coldData, "cold"); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
 
     auto idResult = _hotWriter.append(hotData);
 
@@ -223,15 +228,34 @@ namespace ao::library
 
   Result<> TrackStore::Writer::updateHot(TrackId id, std::span<std::byte const> hotData)
   {
-    gsl_Expects((hotData.size() % 4) == 0);
+    if (auto validation = detail::validateSerializedTrackBytes(hotData, "hot"); !validation)
+    {
+      return validation;
+    }
 
     return _hotWriter.update(id.raw(), hotData);
   }
 
   Result<std::span<std::byte>> TrackStore::Writer::updateCold(TrackId id, std::size_t size)
   {
-    gsl_Expects((size % 4) == 0);
-    return _coldWriter.update(id.raw(), size);
+    if (auto validation = detail::validateSerializedTrackSize(size, "cold"); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
+    auto spanResult = _coldWriter.update(id.raw(), size);
+
+    if (!spanResult)
+    {
+      return spanResult;
+    }
+
+    if (auto validation = detail::validateSerializedTrackBytes(*spanResult, "cold"); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
+    return spanResult;
   }
 
   bool TrackStore::Writer::remove(TrackId id)

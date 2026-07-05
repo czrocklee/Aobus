@@ -36,6 +36,11 @@ namespace ao::utility
   namespace bytes
   {
     // ByteView centralizes audited byte-layout reinterpretation for callers.
+    inline bool isAligned(void const* ptr, std::size_t alignment) noexcept
+    {
+      return detail::isAligned(ptr, alignment);
+    }
+
     inline std::span<std::byte const> view(void const* data, std::size_t size) noexcept
     {
       return {static_cast<std::byte const*>(data), size};

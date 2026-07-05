@@ -28,7 +28,7 @@ namespace ao::library::test
   namespace
   {
 #if defined(__GNUC__) && !defined(__clang__)
-    static_assert(std::ranges::view<TrackView::CoverArtProxy>);
+    static_assert(std::ranges::view<CoverArtProxy>);
 #endif
 
     using namespace ao::lmdb::test;
@@ -91,6 +91,9 @@ namespace ao::library::test
     builder.metadata()
       .work("Symphony No. 9 in D minor, Op. 125")
       .movement("II. Molto vivace")
+      .conductor("Carlos Kleiber")
+      .ensemble("Vienna Philharmonic")
+      .soloist("Yo-Yo Ma")
       .movementNumber(2)
       .movementTotal(4);
 
@@ -104,12 +107,15 @@ namespace ao::library::test
     auto const& coldData = *coldDataResult;
     auto const view = makeColdTrackView(coldData);
 
-    CHECK(view.metadata().workId().raw() > 0);
-    CHECK(view.metadata().movementId().raw() > 0);
-    CHECK(dict.get(view.metadata().workId()) == "Symphony No. 9 in D minor, Op. 125");
-    CHECK(dict.get(view.metadata().movementId()) == "II. Molto vivace");
-    CHECK(view.metadata().movementNumber() == 2);
-    CHECK(view.metadata().movementTotal() == 4);
+    CHECK(view.classical().workId().raw() > 0);
+    CHECK(view.classical().movementId().raw() > 0);
+    CHECK(dict.get(view.classical().workId()) == "Symphony No. 9 in D minor, Op. 125");
+    CHECK(dict.get(view.classical().movementId()) == "II. Molto vivace");
+    CHECK(dict.get(view.classical().conductorId()) == "Carlos Kleiber");
+    CHECK(dict.get(view.classical().ensembleId()) == "Vienna Philharmonic");
+    CHECK(dict.get(view.classical().soloistId()) == "Yo-Yo Ma");
+    CHECK(view.classical().movementNumber() == 2);
+    CHECK(view.classical().movementTotal() == 4);
   }
 
   TEST_CASE("TrackView - returns cover art entries from cold data", "[library][unit][track]")

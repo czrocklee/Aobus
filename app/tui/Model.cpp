@@ -354,13 +354,16 @@ namespace ao::tui
   std::vector<TrackDetailLine> trackDetailLines(rt::TrackRow const& row)
   {
     auto lines = std::vector<TrackDetailLine>{};
-    constexpr std::size_t kTrackDetailLineCount = 12;
+    constexpr std::size_t kTrackDetailLineCount = 16;
     lines.reserve(kTrackDetailLineCount);
     lines.push_back({"Title", trackDisplayTitle(row)});
     lines.push_back({"Artist", blankFallback(row.artist)});
     lines.push_back({"Album", blankFallback(row.album)});
     lines.push_back({"Album Artist", blankFallback(row.albumArtist)});
     lines.push_back({"Composer", blankFallback(row.composer)});
+    lines.push_back({"Conductor", blankFallback(row.conductor)});
+    lines.push_back({"Ensemble", blankFallback(row.ensemble)});
+    lines.push_back({"Soloist", blankFallback(row.soloist)});
     lines.push_back({"Genre", blankFallback(row.genre)});
     lines.push_back({"Year", numberFallback(row.year)});
     lines.push_back(

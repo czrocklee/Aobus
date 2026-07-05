@@ -19,7 +19,7 @@ namespace ao::library::test
   namespace
   {
 #if defined(__GNUC__) && !defined(__clang__)
-    static_assert(std::ranges::view<TrackView::CustomMetadataProxy>);
+    static_assert(std::ranges::view<CustomMetadataProxy>);
 #endif
   } // namespace
 

@@ -37,6 +37,22 @@ namespace ao::tag::flac
       (builder.metadata().*Setter)(value);
     }
 
+    [[maybe_unused]] void handleEnsembleFallback(library::TrackBuilder& builder, std::string_view value)
+    {
+      if (builder.metadata().ensemble().empty())
+      {
+        builder.metadata().ensemble(value);
+      }
+    }
+
+    [[maybe_unused]] void handleSoloistFallback(library::TrackBuilder& builder, std::string_view value)
+    {
+      if (builder.metadata().soloist().empty())
+      {
+        builder.metadata().soloist(value);
+      }
+    }
+
     template<NumberSetter Setter>
     void handleNumber(library::TrackBuilder& builder, std::string_view value)
     {

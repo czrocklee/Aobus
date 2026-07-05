@@ -35,8 +35,11 @@ namespace ao::library::test
     std::string albumArtist{};
     std::string genre{};
     std::string composer{};
+    std::string conductor{};
+    std::string ensemble{};
     std::string work{};
     std::string movement{};
+    std::string soloist{};
     std::string uri = "/tmp/test.flac";
     std::vector<std::string> tags{};
     std::vector<std::pair<std::string, std::string>> customMetadata{};
@@ -86,8 +89,11 @@ namespace ao::library::test
       .albumArtist(spec.albumArtist)
       .genre(spec.genre)
       .composer(spec.composer)
+      .conductor(spec.conductor)
+      .ensemble(spec.ensemble)
       .work(spec.work)
       .movement(spec.movement)
+      .soloist(spec.soloist)
       .year(spec.year)
       .discNumber(spec.discNumber)
       .discTotal(spec.discTotal)
@@ -135,16 +141,19 @@ namespace ao::library::test
                 .albumArtist = std::string{library.dictionary().getOrDefault(view.metadata().albumArtistId())},
                 .genre = std::string{library.dictionary().getOrDefault(view.metadata().genreId())},
                 .composer = std::string{library.dictionary().getOrDefault(view.metadata().composerId())},
-                .work = std::string{library.dictionary().getOrDefault(view.metadata().workId())},
-                .movement = std::string{library.dictionary().getOrDefault(view.metadata().movementId())},
+                .conductor = std::string{library.dictionary().getOrDefault(view.classical().conductorId())},
+                .ensemble = std::string{library.dictionary().getOrDefault(view.classical().ensembleId())},
+                .work = std::string{library.dictionary().getOrDefault(view.classical().workId())},
+                .movement = std::string{library.dictionary().getOrDefault(view.classical().movementId())},
+                .soloist = std::string{library.dictionary().getOrDefault(view.classical().soloistId())},
                 .uri = std::string{view.property().uri()},
                 .year = view.metadata().year(),
                 .discNumber = view.metadata().discNumber(),
                 .discTotal = view.metadata().discTotal(),
                 .trackNumber = view.metadata().trackNumber(),
                 .trackTotal = view.metadata().trackTotal(),
-                .movementNumber = view.metadata().movementNumber(),
-                .movementTotal = view.metadata().movementTotal(),
+                .movementNumber = view.classical().movementNumber(),
+                .movementTotal = view.classical().movementTotal(),
                 .duration = view.property().duration(),
                 .bitrate = view.property().bitrate(),
                 .sampleRate = view.property().sampleRate(),

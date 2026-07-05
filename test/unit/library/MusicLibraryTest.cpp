@@ -61,6 +61,7 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
     constexpr std::uint32_t kLegacyV1LibraryVersion = 1;
+    constexpr std::uint32_t kPreviousColdLayoutLibraryVersion = 2;
 
     SECTION("future version")
     {
@@ -75,6 +76,16 @@ namespace ao::library::test
     {
       static_assert(kLegacyV1LibraryVersion != kLibraryVersion);
       createLibraryMetaHeader(temp.path(), kLegacyV1LibraryVersion);
+
+      auto const result = MusicLibrary::open(temp.path(), temp.path());
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
+    }
+
+    SECTION("previous cold layout version")
+    {
+      static_assert(kPreviousColdLayoutLibraryVersion != kLibraryVersion);
+      createLibraryMetaHeader(temp.path(), kPreviousColdLayoutLibraryVersion);
 
       auto const result = MusicLibrary::open(temp.path(), temp.path());
       REQUIRE_FALSE(result);

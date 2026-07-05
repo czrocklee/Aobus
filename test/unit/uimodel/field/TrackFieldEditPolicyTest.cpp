@@ -54,8 +54,11 @@ namespace ao::uimodel::test
     checkStringField(rt::TrackField::AlbumArtist, &rt::MetadataPatch::optAlbumArtist);
     checkStringField(rt::TrackField::Genre, &rt::MetadataPatch::optGenre);
     checkStringField(rt::TrackField::Composer, &rt::MetadataPatch::optComposer);
+    checkStringField(rt::TrackField::Conductor, &rt::MetadataPatch::optConductor);
+    checkStringField(rt::TrackField::Ensemble, &rt::MetadataPatch::optEnsemble);
     checkStringField(rt::TrackField::Work, &rt::MetadataPatch::optWork);
     checkStringField(rt::TrackField::Movement, &rt::MetadataPatch::optMovement);
+    checkStringField(rt::TrackField::Soloist, &rt::MetadataPatch::optSoloist);
 
     checkUint16Field(rt::TrackField::Year, &rt::MetadataPatch::optYear);
     checkUint16Field(rt::TrackField::DiscNumber, &rt::MetadataPatch::optDiscNumber);

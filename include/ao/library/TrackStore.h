@@ -8,8 +8,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
-
-#include <gsl-lite/gsl-lite.hpp>
+#include <ao/utility/ByteView.h>
 
 #include <concepts>
 #include <cstddef>
@@ -20,16 +19,56 @@
 #include <optional>
 #include <ranges>
 #include <span>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::library
 {
+  namespace detail
+  {
+    inline bool is4ByteAligned(std::span<std::byte const> bytes) noexcept
+    {
+      return utility::bytes::isAligned(bytes.data(), 4U);
+    }
+
+    // Write-side gate only. The size%4 invariant is load-bearing: together
+    // with the 4-byte integer keys and LMDB's node layout it keeps every
+    // value in the track databases 4-byte aligned, so read paths can map
+    // records with typed views. Read paths do not re-check it; a record that
+    // fails TrackView's structural gate reads as an invalid view instead.
+    inline Result<> validateSerializedTrackSize(std::size_t size, std::string_view label)
+    {
+      if ((size % 4U) != 0)
+      {
+        return makeError(Error::Code::CorruptData, std::string{label} + " track record size is not 4-byte aligned");
+      }
+
+      return {};
+    }
+
+    inline Result<> validateSerializedTrackBytes(std::span<std::byte const> bytes, std::string_view label)
+    {
+      if (auto sizeResult = validateSerializedTrackSize(bytes.size(), label); !sizeResult)
+      {
+        return sizeResult;
+      }
+
+      if (!is4ByteAligned(bytes))
+      {
+        return makeError(Error::Code::CorruptData, std::string{label} + " track record pointer is not 4-byte aligned");
+      }
+
+      return {};
+    }
+  } // namespace detail
+
   /**
    * TrackStore - Binary storage for tracks using hot/cold separation.
    *
    * Uses two LMDB databases:
    * - tracks_hot: TrackHotHeader + payload (hot fields for fast filtering)
-   * - tracks_cold: TrackColdHeader + custom KV + uri (cold fields)
+   * - tracks_cold: TrackColdHeader + optional cold payloads + uri (cold fields)
    * - Key: uint32_t track ID (same ID links hot and cold)
    */
   class TrackStore final
@@ -77,7 +116,9 @@ namespace ao::library
     /**
      * Get a track by ID.
      * @return TrackView, or std::nullopt if the track is missing. Storage
-     *         faults throw (see lmdb).
+     *         faults throw (see lmdb). A structurally corrupt record is
+     *         still returned; it reads as an invalid view side
+     *         (isHotValid()/isColdValid() false, accessors yield defaults).
      */
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
@@ -159,7 +200,7 @@ namespace ao::library
     /**
      * Create a new track with hot and cold data.
      * @param hotData TrackHotHeader + payload
-     * @param coldData TrackColdHeader + custom KV + uri
+     * @param coldData TrackColdHeader + optional cold payloads + uri
      * @return Pair of (track ID, TrackView)
      */
     Result<std::pair<TrackId, TrackView>> createHotCold(std::span<std::byte const> hotData,
@@ -236,8 +277,15 @@ namespace ao::library
                                                                           std::size_t coldSize,
                                                                           F&& fill)
   {
-    gsl_Expects((hotSize % 4) == 0);
-    gsl_Expects((coldSize % 4) == 0);
+    if (auto validation = detail::validateSerializedTrackSize(hotSize, "hot"); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
+    if (auto validation = detail::validateSerializedTrackSize(coldSize, "cold"); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
 
     // Reserve hot span and get auto-increment ID
     auto hotResult = _hotWriter.append(hotSize);
@@ -249,6 +297,11 @@ namespace ao::library
 
     auto [id, hotSpan] = *hotResult;
 
+    if (auto validation = detail::validateSerializedTrackBytes(hotSpan, "hot"); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
     // Reserve cold at the SAME explicit ID (not append)
     auto coldResult = _coldWriter.create(id, coldSize);
 
@@ -258,6 +311,11 @@ namespace ao::library
     }
 
     auto coldSpan = *coldResult;
+
+    if (auto validation = detail::validateSerializedTrackBytes(coldSpan, "cold"); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
 
     // Populate both spans via callback
     std::invoke(std::forward<F>(fill), TrackId{id}, hotSpan, coldSpan);
@@ -269,7 +327,10 @@ namespace ao::library
     requires std::invocable<F, std::span<std::byte>>
   Result<> TrackStore::Writer::updateHot(TrackId id, std::size_t size, F&& fill)
   {
-    gsl_Expects((size % 4) == 0);
+    if (auto validation = detail::validateSerializedTrackSize(size, "hot"); !validation)
+    {
+      return validation;
+    }
 
     auto spanResult = _hotWriter.update(id.raw(), size);
 
@@ -279,6 +340,12 @@ namespace ao::library
     }
 
     auto span = *spanResult;
+
+    if (auto validation = detail::validateSerializedTrackBytes(span, "hot"); !validation)
+    {
+      return validation;
+    }
+
     std::invoke(std::forward<F>(fill), span);
     return {};
   }
@@ -287,7 +354,10 @@ namespace ao::library
     requires std::invocable<F, std::span<std::byte>>
   Result<> TrackStore::Writer::updateCold(TrackId id, std::size_t size, F&& fill)
   {
-    gsl_Expects((size % 4) == 0);
+    if (auto validation = detail::validateSerializedTrackSize(size, "cold"); !validation)
+    {
+      return validation;
+    }
 
     auto spanResult = _coldWriter.update(id.raw(), size);
 
@@ -297,6 +367,12 @@ namespace ao::library
     }
 
     auto span = *spanResult;
+
+    if (auto validation = detail::validateSerializedTrackBytes(span, "cold"); !validation)
+    {
+      return validation;
+    }
+
     std::invoke(std::forward<F>(fill), span);
     return {};
   }

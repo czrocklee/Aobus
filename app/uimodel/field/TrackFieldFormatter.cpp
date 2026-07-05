@@ -261,8 +261,11 @@ namespace ao::uimodel
       case F::AlbumArtist:
       case F::Genre:
       case F::Composer:
+      case F::Conductor:
+      case F::Ensemble:
       case F::Work:
       case F::Movement:
+      case F::Soloist:
       case F::Tags:
       case F::FilePath:
       case F::Codec:

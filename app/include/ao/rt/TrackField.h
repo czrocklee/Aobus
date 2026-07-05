@@ -20,9 +20,13 @@ namespace ao::rt
     AlbumArtist,
     Genre,
     Composer,
+    Conductor,
+    Ensemble,
     Work,
     Year,
   };
+
+  constexpr auto kTrackGroupKeyCount = static_cast<std::size_t>(TrackGroupKey::Year) + 1;
 
   enum class TrackSortField : std::uint8_t
   {
@@ -31,8 +35,11 @@ namespace ao::rt
     AlbumArtist,
     Genre,
     Composer,
+    Conductor,
+    Ensemble,
     Work,
     Movement,
+    Soloist,
     Year,
     DiscNumber,
     TrackNumber,
@@ -58,8 +65,11 @@ namespace ao::rt
     AlbumArtist,
     Genre,
     Composer,
+    Conductor,
+    Ensemble,
     Work,
     Movement,
+    Soloist,
 
     Year,
     DiscNumber,

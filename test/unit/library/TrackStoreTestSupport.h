@@ -71,6 +71,10 @@ namespace ao::library::test
 
   inline std::vector<std::byte> makeColdData(TrackColdHeader header = {})
   {
+    header.blockOffsets = {};
+    header.uriOffset = sizeof(TrackColdHeader);
+    header.uriLength = 0;
+
     auto data = std::vector<std::byte>(sizeof(TrackColdHeader), std::byte{0});
     std::memcpy(data.data(), &header, sizeof(TrackColdHeader));
     return data;

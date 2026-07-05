@@ -29,3 +29,4 @@ aART, &handleText<&library::TrackBuilder::MetadataBuilder::albumArtist>
 "\251gen", &handleText<&library::TrackBuilder::MetadataBuilder::genre>
 "\251day", &handleNumber<&library::TrackBuilder::MetadataBuilder::year>
 covr, &handleCoverArt
+"----", &handleFreeform

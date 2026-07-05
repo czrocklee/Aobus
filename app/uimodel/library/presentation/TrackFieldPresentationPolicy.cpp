@@ -48,8 +48,11 @@ namespace ao::uimodel
       case rt::TrackField::AlbumArtist: return kWidthAlbumArtist;
       case rt::TrackField::Genre:
       case rt::TrackField::Composer:
+      case rt::TrackField::Conductor:
+      case rt::TrackField::Ensemble:
       case rt::TrackField::Work:
-      case rt::TrackField::Movement: return kWidthGenre;
+      case rt::TrackField::Movement:
+      case rt::TrackField::Soloist: return kWidthGenre;
       case rt::TrackField::Year: return kWidthYear;
       case rt::TrackField::DiscNumber:
       case rt::TrackField::DiscTotal: return kWidthDisc;
@@ -91,8 +94,11 @@ namespace ao::uimodel
       case rt::TrackField::Tags: return kWeightTags;
       case rt::TrackField::Genre:
       case rt::TrackField::Composer:
+      case rt::TrackField::Conductor:
+      case rt::TrackField::Ensemble:
       case rt::TrackField::Work:
-      case rt::TrackField::Movement: return kWeightSecondaryText;
+      case rt::TrackField::Movement:
+      case rt::TrackField::Soloist: return kWeightSecondaryText;
       default: return kWeightFallback;
     }
   }
@@ -107,8 +113,11 @@ namespace ao::uimodel
       case rt::TrackField::AlbumArtist:
       case rt::TrackField::Genre:
       case rt::TrackField::Composer:
+      case rt::TrackField::Conductor:
+      case rt::TrackField::Ensemble:
       case rt::TrackField::Work:
       case rt::TrackField::Movement:
+      case rt::TrackField::Soloist:
       case rt::TrackField::Tags:
       case rt::TrackField::FilePath: return TrackColumnSizing::Flexible;
       default: return TrackColumnSizing::Fixed;

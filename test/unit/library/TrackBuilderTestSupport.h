@@ -37,6 +37,8 @@ namespace ao::library::test
       return *result;
     }
 
+    Result<std::vector<std::byte>> trySerializeHot(TrackBuilder& builder) { return builder.serializeHot(_txn, _dict); }
+
     Result<std::vector<std::byte>> trySerializeCold(TrackBuilder& builder)
     {
       return builder.serializeCold(_txn, _dict, _resources);

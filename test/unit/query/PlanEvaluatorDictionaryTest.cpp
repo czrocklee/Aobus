@@ -163,6 +163,9 @@ namespace ao::query::test
     spec.album = "Test Album";
     spec.genre = "Test Genre";
     spec.albumArtist = "Test Album Artist";
+    spec.conductor = "Test Conductor";
+    spec.ensemble = "Test Ensemble";
+    spec.soloist = "Test Soloist";
     auto track = TestTrack{spec};
 
     auto& dict = track.dictionary();
@@ -194,6 +197,14 @@ namespace ao::query::test
 
       auto planLike = compileOk(compiler, parseOk("$albumArtist ~ 'Album Artist'"));
       CHECK(evaluator.evaluateFull(planLike, track.view()) == true);
+    }
+
+    SECTION("Classical role fields")
+    {
+      CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("$conductor = 'Test Conductor'")), track.view()) ==
+            true);
+      CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("$ensemble ~ 'Ensemble'")), track.view()) == true);
+      CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("$soloist = 'Test Soloist'")), track.view()) == true);
     }
 
     SECTION("Uri")

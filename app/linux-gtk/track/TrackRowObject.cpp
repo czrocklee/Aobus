@@ -33,8 +33,11 @@ namespace ao::gtk
         case rt::TrackField::AlbumArtist:
         case rt::TrackField::Genre:
         case rt::TrackField::Composer:
+        case rt::TrackField::Conductor:
+        case rt::TrackField::Ensemble:
         case rt::TrackField::Work:
-        case rt::TrackField::Movement: return true;
+        case rt::TrackField::Movement:
+        case rt::TrackField::Soloist: return true;
 
         default: return false;
       }
@@ -85,8 +88,11 @@ namespace ao::gtk
                                 Glib::ustring albumArtist,
                                 Glib::ustring genre,
                                 Glib::ustring composer,
+                                Glib::ustring conductor,
+                                Glib::ustring ensemble,
                                 Glib::ustring work,
                                 Glib::ustring movement,
+                                Glib::ustring soloist,
                                 Glib::ustring tags,
                                 std::chrono::milliseconds duration,
                                 std::uint16_t year,
@@ -112,8 +118,11 @@ namespace ao::gtk
     _text[static_cast<std::size_t>(rt::TrackField::AlbumArtist)] = std::move(albumArtist);
     _text[static_cast<std::size_t>(rt::TrackField::Genre)] = std::move(genre);
     _text[static_cast<std::size_t>(rt::TrackField::Composer)] = std::move(composer);
+    _text[static_cast<std::size_t>(rt::TrackField::Conductor)] = std::move(conductor);
+    _text[static_cast<std::size_t>(rt::TrackField::Ensemble)] = std::move(ensemble);
     _text[static_cast<std::size_t>(rt::TrackField::Work)] = std::move(work);
     _text[static_cast<std::size_t>(rt::TrackField::Movement)] = std::move(movement);
+    _text[static_cast<std::size_t>(rt::TrackField::Soloist)] = std::move(soloist);
 
     _tags = std::move(tags);
     _duration = duration;

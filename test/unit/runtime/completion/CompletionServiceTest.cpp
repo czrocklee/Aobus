@@ -72,8 +72,11 @@ namespace ao::rt::test
                                                      .albumArtist = "Glenn Gould",
                                                      .genre = "Classical",
                                                      .composer = "Bach",
+                                                     .conductor = "Carlos Kleiber",
+                                                     .ensemble = "Vienna Philharmonic",
                                                      .work = "Variations",
-                                                     .movement = "Aria"});
+                                                     .movement = "Aria",
+                                                     .soloist = "Glenn Gould"});
     library::test::addTrack(testLib.library(),
                             library::test::TrackSpec{.title = "Two",
                                                      .artist = "Bach",
@@ -81,8 +84,11 @@ namespace ao::rt::test
                                                      .albumArtist = "Yo-Yo Ma",
                                                      .genre = "Classical",
                                                      .composer = "Bach",
+                                                     .conductor = "Carlos Kleiber",
+                                                     .ensemble = "Staatskapelle Dresden",
                                                      .work = "Suites",
-                                                     .movement = "Prelude"});
+                                                     .movement = "Prelude",
+                                                     .soloist = "Yo-Yo Ma"});
     library::test::addTrack(testLib.library(),
                             library::test::TrackSpec{.title = "Three",
                                                      .artist = "Glass",
@@ -90,8 +96,11 @@ namespace ao::rt::test
                                                      .albumArtist = "Philip Glass",
                                                      .genre = "Minimal",
                                                      .composer = "Glass",
+                                                     .conductor = "Michael Riesman",
+                                                     .ensemble = "Philip Glass Ensemble",
                                                      .work = "Glassworks",
-                                                     .movement = "Opening"});
+                                                     .movement = "Opening",
+                                                     .soloist = "Philip Glass"});
 
     auto changes = LibraryChanges{};
     auto service = CompletionService{testLib.library(), changes};
@@ -110,14 +119,31 @@ namespace ao::rt::test
                                                           {"Suites", 1},
                                                           {"Variations", 1},
                                                         });
+    CHECK(pairs(service.valuesFor(TrackField::Conductor)) == std::vector<std::pair<std::string, std::uint32_t>>{
+                                                               {"Carlos Kleiber", 2},
+                                                               {"Michael Riesman", 1},
+                                                             });
+    CHECK(pairs(service.valuesFor(TrackField::Ensemble)) == std::vector<std::pair<std::string, std::uint32_t>>{
+                                                              {"Philip Glass Ensemble", 1},
+                                                              {"Staatskapelle Dresden", 1},
+                                                              {"Vienna Philharmonic", 1},
+                                                            });
     CHECK(pairs(service.valuesFor(TrackField::Movement)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                               {"Aria", 1},
                                                               {"Opening", 1},
                                                               {"Prelude", 1},
                                                             });
+    CHECK(pairs(service.valuesFor(TrackField::Soloist)) == std::vector<std::pair<std::string, std::uint32_t>>{
+                                                             {"Glenn Gould", 1},
+                                                             {"Philip Glass", 1},
+                                                             {"Yo-Yo Ma", 1},
+                                                           });
 
     CHECK(trackFieldSupportsValueCompletion(TrackField::Composer));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Conductor));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Ensemble));
     CHECK(trackFieldSupportsValueCompletion(TrackField::Movement));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Soloist));
     CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Title));
     CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Year));
     CHECK(service.valuesFor(TrackField::Title).empty());
@@ -155,7 +181,8 @@ namespace ao::rt::test
     auto testLib = TestMusicLibrary{};
     library::test::addTrack(
       testLib.library(),
-      library::test::TrackSpec{.title = "One", .artist = "Bach", .album = "Goldberg", .work = "Variations"});
+      library::test::TrackSpec{
+        .title = "One", .artist = "Bach", .album = "Goldberg", .conductor = "Carlos Kleiber", .work = "Variations"});
 
     auto changes = LibraryChanges{};
     auto writer = LibraryWriter{testLib.library(), changes};
@@ -170,10 +197,14 @@ namespace ao::rt::test
     CHECK(pairs(service.valuesFor(TrackField::Work)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                           {"Variations", 1},
                                                         });
+    CHECK(pairs(service.valuesFor(TrackField::Conductor)) == std::vector<std::pair<std::string, std::uint32_t>>{
+                                                               {"Carlos Kleiber", 1},
+                                                             });
 
     auto const trackId = library::test::addTrack(
       testLib.library(),
-      library::test::TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"});
+      library::test::TrackSpec{
+        .title = "Two", .artist = "Glass", .album = "Glassworks", .conductor = "Michael Riesman", .work = "Etudes"});
     // addTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.
     auto const updateResult = writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two Updated"});
@@ -192,6 +223,10 @@ namespace ao::rt::test
                                                           {"Etudes", 1},
                                                           {"Variations", 1},
                                                         });
+    CHECK(pairs(service.valuesFor(TrackField::Conductor)) == std::vector<std::pair<std::string, std::uint32_t>>{
+                                                               {"Carlos Kleiber", 1},
+                                                               {"Michael Riesman", 1},
+                                                             });
   }
 
   TEST_CASE("CompletionService - lazily rebuilds dirty value vocabularies",

@@ -157,6 +157,9 @@ namespace ao::tui::test
                             .albumArtist = "Various",
                             .genre = "Rock",
                             .composer = "Composer",
+                            .conductor = "Conductor",
+                            .ensemble = "Ensemble",
+                            .soloist = "Soloist",
                             .duration = std::chrono::seconds{299},
                             .year = 2014,
                             .trackNumber = 7,
@@ -167,15 +170,21 @@ namespace ao::tui::test
 
     auto lines = trackDetailLines(row);
 
-    REQUIRE(lines.size() >= 11);
+    REQUIRE(lines.size() >= 15);
     CHECK(lines[0].label == "Title");
     CHECK(lines[0].value == "Seven");
     CHECK(lines[1].value == "Aimer");
-    CHECK(lines[6].value == "2014");
-    CHECK(lines[7].value == "7");
-    CHECK(lines[8].value == "4:59");
-    CHECK(lines[10].value == "44100 Hz");
-    CHECK(lines[11].value == "16-bit");
+    CHECK(lines[5].label == "Conductor");
+    CHECK(lines[5].value == "Conductor");
+    CHECK(lines[6].label == "Ensemble");
+    CHECK(lines[6].value == "Ensemble");
+    CHECK(lines[7].label == "Soloist");
+    CHECK(lines[7].value == "Soloist");
+    CHECK(lines[9].value == "2014");
+    CHECK(lines[10].value == "7");
+    CHECK(lines[11].value == "4:59");
+    CHECK(lines[13].value == "44100 Hz");
+    CHECK(lines[14].value == "16-bit");
   }
 
   TEST_CASE("Model - selection clamps to available items", "[tui][unit][model]")

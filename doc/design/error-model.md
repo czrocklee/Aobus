@@ -96,6 +96,61 @@ Third-party libraries may still throw at their own boundaries. Catch those
 exceptions at the narrow wrapper boundary and translate them to `Result` unless
 the exception represents a true invariant failure in our code.
 
+## Persisted Binary Layouts
+
+The LMDB-backed binary layouts (`TrackView`, `ListView`, `FileManifestView`
+over `TrackLayout`/`ListLayout`/`FileManifestLayout`) have their own read-side
+containment rules, tuned to what LMDB actually guarantees and to the fact that
+these records are app-private: the only producers are our builders
+(`TrackBuilder`, `ListBuilder`, `FileManifestBuilder`), unlike `ao/tag` and
+`ao/media` inputs, which stay fully defensive because they parse foreign
+files.
+
+**The write side is the single validation boundary.** Builders enforce every
+layout invariant when serializing, and the store write paths gate record size
+and alignment. The zero-copy path preserves this: `prepare*()` returns an
+immutable snapshot that owns every byte it will write with all header fields
+overflow-checked and frozen, so mutating or destroying the builder between
+prepare and write cannot produce a record the boundary never validated. The `size % 4 == 0` write gate is load-bearing, not cosmetic:
+together with the 4-byte integer keys and LMDB's node layout it keeps every
+value in these databases 4-byte aligned, which is what lets read paths map
+records with typed views at all.
+
+**LMDB's guarantees bound what read-side checking can buy.** A committed
+transaction returns byte-identical data (copy-on-write pages, snapshot
+isolation), and the default read-only mmap means in-process stray writes
+cannot corrupt the database. But LMDB does not checksum pages - external file
+corruption arrives silently, and a truncated file surfaces as `SIGBUS` that no
+validation intercepts. Deep read-side validation therefore cannot deliver
+crash-proof reads; it only converts one rare failure shape into another at a
+per-row cost.
+
+**The read side runs one O(1) structural gate per record.** The gate
+establishes memory safety only: the fixed header fits and is aligned, and
+every derived slice (title/tag extents, URI range, extension block slots)
+stays inside the record span. It runs once per view - eagerly for hot data,
+lazily cached for cold data - and accessors trust the gated slices afterward.
+Ranges that are data-driven per element (custom metadata value offsets) get a
+per-access clamp instead of a pre-scan. Accessors never throw and never read
+out of bounds.
+
+**Corruption is record-granular and non-silent.** A record that fails its
+gate poisons that whole record side: the validity query (`isHotValid()`/
+`isColdValid()` on `TrackView`, `isValid()` on `ListView` and
+`FileManifestView`) reports false and every accessor returns a zero/empty
+value. There
+are no field-level silent fallbacks that could mask writer bugs, and no
+per-field throw that would turn one bad row into an application fault.
+`FileManifestStore::Reader::get` additionally reports a short record as
+`CorruptData` at its store boundary because it already returns `Result`.
+
+**Semantic corruption within bounds is tolerated at read time.** Unsorted
+custom keys, nonzero padding or reserved fields, out-of-range enum values, and
+similar in-bounds garbage read back as garbage values, memory-safely. The
+deep verifier (`detail::TrackColdReader`) re-checks every write-side
+invariant and is the diagnostic tool for these cases; it serves the CLI
+record dump and serialization tests and must never sit on the row read path.
+
 A subsystem may also use a private exception as short-range internal control
 flow, to collapse repeated `if (!result) return std::unexpected{...}` plumbing,
 provided it is translated back to `Result` at the subsystem boundary and never
@@ -324,7 +379,7 @@ changed or still have local containment rules:
 | `ao/tag` | Public entry points return `Result`: `TagFile::open` reports mapping errors as `IoError`, unsupported extensions as `NotSupported`, and successful opens as non-null owners; `TagFile::loadTrack` reports malformed metadata as `CorruptData`. Per-format `loadTrackImpl()` parsers return `Result<TrackBuilder>` and translate contained corruption-detection exceptions at the format boundary. Parsers raise `CorruptData` through `detail::throwTagError`, and the shared `ao::media` parsing layer through `throwMediaError`; each format boundary catches those leaves and converts them to `Result` — flac catches both `detail::TagException` and `media::detail::MediaException`, while mp4/mpeg catch only `TagException` (their paths raise nothing else). `mpeg::FrameView` table accesses use `operator[]` because the field-encoding ranges match the table dimensions. MP4 audio-property extraction is best-effort: malformed or non-version-0 `mdhd` atoms are skipped, while required metadata still reports corruption through the normal boundary. |
 | `ao/media` byte views | Public decode/tag entry points return `Result`; `mp4::Demuxer::parseTrack` catches `detail::MediaException` and translates it to `Result`. MP4 sample-table/timing helpers raise `FormatRejected` via `throwMediaError` (rather than returning `bool`) to keep specific diagnostics for malformed container data. FLAC block iteration validates the current block size before honoring the last-block marker, so a truncated final block reports `CorruptData`. |
 | `ao/lmdb` | Fallible setup/write factories return `Result`: duplicate create is `Conflict`, exhausted integer append key space is `ResourceExhausted`, other failures are `IoError`. Point reads collapse to their narrowest shape because absence is their only recoverable outcome: `get` returns `std::optional<std::span<...>>` (empty means absent), `maxKey` returns the largest key or `0`, and `Writer::del` returns `bool`. They never surface a recoverable code — a non-`MDB_NOTFOUND` failure throws, because the corruption that would produce `MDB_CORRUPTED` equally surfaces as `SIGBUS` through the mmap, which no `Result` can intercept. Use the factory functions (public constructor bridges are not kept). Cursor EOF is normal; unexpected cursor failures throw, as does writer use after its transaction commits. |
-| `ao/library` persisted views/stores | Read shapes follow the actual failure surface: absence-only lookups return `std::optional<T>` (`ListStore`/`TrackStore`/`ResourceStore::get`); lookups that also validate the persisted record return `Result<T>` (`MetaStore::load`, `FileManifestStore::Reader::get`). Misses are `NotFound`, corrupt or unsupported-version records are `CorruptData`, oversized manifest URIs are `ValueTooLarge`, exhausted resource IDs are `ResourceExhausted`; `MusicLibrary::open` reports setup failures without throwing. Create/update/clear commands return `Result<>`/`Result<T>` (never `.value()`); deletes return `bool` because corruption throws at the LMDB layer and absence is not an error, except idempotent manifest removal (`Result<>`, since URI validation can reject the key first). Once a session is open, `read/writeTransaction()` treat begin failure as severe and throw. `TrackBuilder` serialization raises its `ValueTooLarge` overflow checks via `detail::throwLibraryError`, translated to `Result` at the `prepare*`/`serialize*` boundaries. View constructors and at-style accessors may still throw on internal precondition misuse. `LibraryScanner::buildPlan` returns `Result<ScanPlan>`: per-file problems stay in-band as `ScanClassification::Error` items so the rest of the plan still applies, but a failure that prevents any plan at all - a missing music root (`NotFound`) or a filesystem walk that cannot start (`IoError`) - fails the whole call, so the caller reports it instead of mistaking an unscannable root for an empty, up-to-date library. |
+| `ao/library` persisted views/stores | Read shapes follow the actual failure surface: absence-only lookups return `std::optional<T>` (`ListStore`/`TrackStore`/`ResourceStore::get`); lookups that also validate the persisted record return `Result<T>` (`MetaStore::load`, `FileManifestStore::Reader::get`). Misses are `NotFound`, corrupt or unsupported-version records are `CorruptData`, oversized manifest URIs are `ValueTooLarge`, exhausted resource IDs are `ResourceExhausted`; `MusicLibrary::open` reports setup failures without throwing. Create/update/clear commands return `Result<>`/`Result<T>` (never `.value()`); deletes return `bool` because corruption throws at the LMDB layer and absence is not an error, except idempotent manifest removal (`Result<>`, since URI validation can reject the key first). Once a session is open, `read/writeTransaction()` treat begin failure as severe and throw. `TrackBuilder` serialization raises its `ValueTooLarge` overflow checks via `detail::throwLibraryError`, translated to `Result` at the `prepare*`/`serialize*` boundaries. Binary layout views follow [Persisted Binary Layouts](#persisted-binary-layouts): constructors run an O(1) structural gate and poison the view instead of throwing, accessors are non-throwing and return zero/empty values for a poisoned side, and at-style accessors guard preconditions with contracts (`gsl_Expects`). `LibraryScanner::buildPlan` returns `Result<ScanPlan>`: per-file problems stay in-band as `ScanClassification::Error` items so the rest of the plan still applies, but a failure that prevents any plan at all - a missing music root (`NotFound`) or a filesystem walk that cannot start (`IoError`) - fails the whole call, so the caller reports it instead of mistaking an unscannable root for an empty, up-to-date library. |
 | `ao/yaml` | Ryml callback exceptions are containment only: they may be used to satisfy ryml's callback API, but runtime/config/import boundaries convert them to `Result`. File reads use `IoError`; malformed YAML syntax, unsupported schema, wrong node kind, malformed scalar text, and out-of-range numeric values use `FormatRejected`. Scalar helpers are non-throwing and strict: numeric reads require full consumption and range fit, and bool reads accept canonical `true`/`false` text. A YAML tree that may outlive parsing owns a `CallbackContext` so later ryml diagnostics never point at a dangling filename. |
 | `ao/rt` runtime layer | Governed by [Runtime Layer](#runtime-layer-aort). The runtime *re-classifies* core `Result`/`std::optional` outcomes rather than originating failures. External-data and user-facing validated operations (`ConfigStore`, `LibraryYaml{Importer,Exporter}`, `LibraryWriter::createTrackFromFile`, `updateMetadata`, `editTags`, `createList`, `updateList`) return `Result` and propagate every code; `updateList` uses `Result<>` with `NotFound` for a stale list id. Internal-state reads (`LibraryReader`) and no-`Result` mutations (`LibraryWriter::deleteList`/`deleteTrack`) treat only `NotFound` as a value (`std::optional`/`false`/sentinel) and throw `ao::Exception` on every other fault. `LibraryTasks` returns `async::Task<Result<T>>` for recoverable async failures and uses exception transport only for unexpected faults rethrown on the callback executor. Conversions forward `error.location`; `storageValueOrNullopt` is the read-side helper. |
 | `ao/uimodel` UI model layer | Governed by [UI Model Layer](#ui-model-layer-aouimodel). Pure presentation APIs return values/fallbacks; explicit text-parse boundaries return `Result` with user-facing validation messages; config-backed preference helpers either propagate `rt::ConfigStore` results unchanged or are explicitly best-effort defaults with logging. Internal shipped-policy violations may throw `ao::Exception`; ordinary value coercion uses non-throwing parsing and never catches broad exceptions to produce defaults. |

@@ -16,6 +16,7 @@
 #include <ao/utility/ByteView.h>
 
 #include <array>
+#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +25,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace ao::tag::mp4
 {
@@ -71,6 +73,33 @@ namespace ao::tag::mp4
     {
       return static_cast<std::uint16_t>((static_cast<std::uint16_t>(byteValue(bytes[offset])) << 8U) |
                                         static_cast<std::uint16_t>(byteValue(bytes[offset + 1])));
+    }
+
+    std::uint32_t readBigEndianU32(std::span<std::byte const> bytes, std::size_t offset) noexcept
+    {
+      return (static_cast<std::uint32_t>(byteValue(bytes[offset])) << 24U) |
+             (static_cast<std::uint32_t>(byteValue(bytes[offset + 1])) << 16U) |
+             (static_cast<std::uint32_t>(byteValue(bytes[offset + 2])) << 8U) |
+             static_cast<std::uint32_t>(byteValue(bytes[offset + 3]));
+    }
+
+    bool equalsAsciiCaseInsensitive(std::string_view lhs, std::string_view rhs) noexcept
+    {
+      if (lhs.size() != rhs.size())
+      {
+        return false;
+      }
+
+      for (std::size_t index = 0; index < lhs.size(); ++index)
+      {
+        if (std::tolower(static_cast<unsigned char>(lhs[index])) !=
+            std::tolower(static_cast<unsigned char>(rhs[index])))
+        {
+          return false;
+        }
+      }
+
+      return true;
     }
 
     struct NumberPair final
@@ -131,12 +160,111 @@ namespace ao::tag::mp4
       (builder.metadata().*Setter)(atomTextView(view));
     }
 
+    [[maybe_unused]] std::string_view atomPayloadAfter(std::span<std::byte const> bytes, std::size_t offset)
+    {
+      if (bytes.size() <= offset)
+      {
+        return {};
+      }
+
+      return utility::bytes::stringView(bytes.subspan(offset));
+    }
+
+    [[maybe_unused]] void handleFreeform(library::TrackBuilder& builder, AtomView const& view)
+    {
+      auto remaining = view.bytes();
+
+      if (remaining.size() <= sizeof(AtomLayout))
+      {
+        return;
+      }
+
+      remaining = remaining.subspan(sizeof(AtomLayout));
+
+      auto mean = std::string_view{};
+      auto name = std::string_view{};
+      auto value = std::string_view{};
+
+      while (remaining.size() >= sizeof(AtomLayout))
+      {
+        auto const* const layout = utility::layout::view<AtomLayout>(remaining);
+        auto const length = static_cast<std::size_t>(layout->length.value());
+
+        if (length < sizeof(AtomLayout) || length > remaining.size())
+        {
+          break;
+        }
+
+        auto const childBytes = remaining.subspan(0, length);
+        auto const type = utility::bytes::stringView(utility::bytes::view(layout->type));
+
+        if (type == "mean")
+        {
+          mean = atomPayloadAfter(childBytes, sizeof(AtomLayout) + sizeof(std::uint32_t));
+        }
+        else if (type == "name")
+        {
+          name = atomPayloadAfter(childBytes, sizeof(AtomLayout) + sizeof(std::uint32_t));
+        }
+        else if (type == "data")
+        {
+          value = atomPayloadAfter(childBytes, sizeof(DataAtomLayout));
+        }
+
+        remaining = remaining.subspan(length);
+      }
+
+      if (mean != "com.apple.iTunes" || name.empty())
+      {
+        return;
+      }
+
+      if (equalsAsciiCaseInsensitive(name, "conductor"))
+      {
+        builder.metadata().conductor(value);
+      }
+      else if (equalsAsciiCaseInsensitive(name, "ensemble") ||
+               (equalsAsciiCaseInsensitive(name, "orchestra") && builder.metadata().ensemble().empty()))
+      {
+        builder.metadata().ensemble(value);
+      }
+      else if (equalsAsciiCaseInsensitive(name, "soloist"))
+      {
+        builder.metadata().soloist(value);
+      }
+    }
+
     template<NumberSetter Setter>
     void handleNumber(library::TrackBuilder& builder, AtomView const& view)
     {
       if (auto optYear = decodeUint16(atomTextView(view)); optYear)
       {
         (builder.metadata().*Setter)(*optYear);
+      }
+    }
+
+    template<NumberSetter Setter>
+    void handleTextNumber(library::TrackBuilder& builder, std::string_view value)
+    {
+      if (auto optNumber = decodeUint16(value); optNumber)
+      {
+        (builder.metadata().*Setter)(*optNumber);
+      }
+    }
+
+    template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
+    void handleSlashNumber(library::TrackBuilder& builder, std::string_view value)
+    {
+      auto const pair = parseSlashPair(value);
+
+      if (pair.optPrimary)
+      {
+        (builder.metadata().*PrimarySetter)(*pair.optPrimary);
+      }
+
+      if (pair.optSecondary)
+      {
+        (builder.metadata().*SecondarySetter)(*pair.optSecondary);
       }
     }
 
@@ -232,6 +360,173 @@ namespace ao::tag::mp4
       }
     }
 
+    std::vector<std::string_view> readMdtaKeys(Atom const* keysNode)
+    {
+      auto keys = std::vector<std::string_view>{};
+
+      if (keysNode == nullptr)
+      {
+        return keys;
+      }
+
+      auto const& view = utility::unsafeDowncast<AtomView const>(*keysNode);
+      auto const bytes = view.bytes();
+      constexpr std::size_t kFullBoxHeaderSize = 4;
+      constexpr std::size_t kEntryCountSize = 4;
+      constexpr std::size_t kKeyEntryHeaderSize = 8;
+      constexpr std::size_t kKeyNamespaceSize = 4;
+
+      if (bytes.size() < sizeof(AtomLayout) + kFullBoxHeaderSize + kEntryCountSize)
+      {
+        return keys;
+      }
+
+      auto offset = sizeof(AtomLayout) + kFullBoxHeaderSize;
+      auto const keyCount = readBigEndianU32(bytes, offset);
+      offset += kEntryCountSize;
+
+      for (std::uint32_t keyIndex = 0; keyIndex < keyCount; ++keyIndex)
+      {
+        if (bytes.size() < offset + kKeyEntryHeaderSize)
+        {
+          break;
+        }
+
+        auto const entrySize = static_cast<std::size_t>(readBigEndianU32(bytes, offset));
+
+        if (entrySize < kKeyEntryHeaderSize || entrySize > bytes.size() - offset)
+        {
+          break;
+        }
+
+        auto const keyNamespace =
+          utility::bytes::stringView(bytes.subspan(offset + sizeof(std::uint32_t), kKeyNamespaceSize));
+
+        if (keyNamespace == "mdta")
+        {
+          keys.push_back(
+            utility::bytes::stringView(bytes.subspan(offset + kKeyEntryHeaderSize, entrySize - kKeyEntryHeaderSize)));
+        }
+        else
+        {
+          keys.emplace_back();
+        }
+
+        offset += entrySize;
+      }
+
+      return keys;
+    }
+
+    std::optional<std::size_t> mdtaKeyIndex(AtomView const& view)
+    {
+      auto const bytes = view.bytes();
+
+      if (bytes.size() < sizeof(AtomLayout))
+      {
+        return std::nullopt;
+      }
+
+      auto const keyIndex = readBigEndianU32(bytes, sizeof(std::uint32_t));
+
+      if (keyIndex == 0)
+      {
+        return std::nullopt;
+      }
+
+      return static_cast<std::size_t>(keyIndex - 1);
+    }
+
+    void handleMdtaMetadata(library::TrackBuilder& builder, std::string_view key, AtomView const& view)
+    {
+      if (auto const value = atomTextView(view); equalsAsciiCaseInsensitive(key, "title"))
+      {
+        builder.metadata().title(value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "artist"))
+      {
+        builder.metadata().artist(value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "album"))
+      {
+        builder.metadata().album(value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "album_artist") || equalsAsciiCaseInsensitive(key, "albumartist"))
+      {
+        builder.metadata().albumArtist(value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "genre"))
+      {
+        builder.metadata().genre(value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "composer"))
+      {
+        builder.metadata().composer(value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "conductor"))
+      {
+        builder.metadata().conductor(value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "ensemble") ||
+               (equalsAsciiCaseInsensitive(key, "orchestra") && builder.metadata().ensemble().empty()))
+      {
+        builder.metadata().ensemble(value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "soloist"))
+      {
+        builder.metadata().soloist(value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "work") || equalsAsciiCaseInsensitive(key, "grouping"))
+      {
+        builder.metadata().work(value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "movementname") || equalsAsciiCaseInsensitive(key, "movement_name") ||
+               equalsAsciiCaseInsensitive(key, "mvnm"))
+      {
+        builder.metadata().movement(value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "movement") || equalsAsciiCaseInsensitive(key, "mvin"))
+      {
+        handleSlashNumber<&library::TrackBuilder::MetadataBuilder::movementNumber,
+                          &library::TrackBuilder::MetadataBuilder::movementTotal>(builder, value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "movementnumber") || equalsAsciiCaseInsensitive(key, "movement_number"))
+      {
+        handleTextNumber<&library::TrackBuilder::MetadataBuilder::movementNumber>(builder, value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "movementtotal") || equalsAsciiCaseInsensitive(key, "movement_total"))
+      {
+        handleTextNumber<&library::TrackBuilder::MetadataBuilder::movementTotal>(builder, value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "track") || equalsAsciiCaseInsensitive(key, "tracknumber"))
+      {
+        handleSlashNumber<&library::TrackBuilder::MetadataBuilder::trackNumber,
+                          &library::TrackBuilder::MetadataBuilder::trackTotal>(builder, value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "disc") || equalsAsciiCaseInsensitive(key, "disk") ||
+               equalsAsciiCaseInsensitive(key, "discnumber"))
+      {
+        handleSlashNumber<&library::TrackBuilder::MetadataBuilder::discNumber,
+                          &library::TrackBuilder::MetadataBuilder::discTotal>(builder, value);
+      }
+      else if (equalsAsciiCaseInsensitive(key, "date") || equalsAsciiCaseInsensitive(key, "year"))
+      {
+        handleTextNumber<&library::TrackBuilder::MetadataBuilder::year>(builder, value);
+      }
+    }
+
+    void handleMdtaAtom(library::TrackBuilder& builder, std::span<std::string_view const> keys, AtomView const& view)
+    {
+      auto const optKeyIndex = mdtaKeyIndex(view);
+
+      if (!optKeyIndex || *optKeyIndex >= keys.size() || keys[*optKeyIndex].empty())
+      {
+        return;
+      }
+
+      handleMdtaMetadata(builder, keys[*optKeyIndex], view);
+    }
+
     using AtomHandler = void (*)(library::TrackBuilder&, AtomView const&);
 
 #pragma GCC diagnostic push
@@ -247,6 +542,14 @@ namespace ao::tag::mp4
       "udta",
       "meta",
       "ilst",
+    });
+
+    constexpr auto kMdtaKeysPath = std::to_array<std::string_view>({
+      "root",
+      "moov",
+      "udta",
+      "meta",
+      "keys",
     });
 
     constexpr auto kTrackMdhdPath = std::to_array<std::string_view>({
@@ -378,6 +681,7 @@ namespace ao::tag::mp4
     {
       RootAtom const root = media::mp4::fromBuffer(utility::bytes::view(address(), size()));
       Atom const* const ilstNode = root.find(kIlstPath);
+      auto const mdtaKeys = readMdtaKeys(root.find(kMdtaKeysPath));
 
       clearOwnedStrings();
       auto builder = library::TrackBuilder::createNew();
@@ -394,6 +698,10 @@ namespace ao::tag::mp4
                 entry != nullptr)
             {
               entry->handler(builder, view);
+            }
+            else
+            {
+              handleMdtaAtom(builder, mdtaKeys, view);
             }
 
             return true;

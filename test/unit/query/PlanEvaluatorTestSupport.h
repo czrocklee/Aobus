@@ -70,8 +70,11 @@ namespace ao::query::test
     std::string album = "Test Album";
     std::string albumArtist = {};
     std::string composer = {};
+    std::string conductor = {};
+    std::string ensemble = {};
     std::string work = {};
     std::string movement = {};
+    std::string soloist = {};
     std::string genre = {};
     std::string uri = "/path/to/track.flac";
     std::uint16_t year = 2020;
@@ -93,8 +96,11 @@ namespace ao::query::test
     std::uint32_t genreId = 0;
     std::uint32_t albumArtistId = 0;
     std::uint32_t composerId = 0;
+    std::uint32_t conductorId = 0;
+    std::uint32_t ensembleId = 0;
     std::uint32_t workId = 0;
     std::uint32_t movementId = 0;
+    std::uint32_t soloistId = 0;
     std::vector<std::string> tags = {};
     std::vector<std::pair<std::string, std::string>> customPairs = {};
   };
@@ -177,8 +183,11 @@ namespace ao::query::test
       builder.metadata().album(spec.album);
       builder.metadata().albumArtist(spec.albumArtist);
       builder.metadata().composer(spec.composer);
+      builder.metadata().conductor(spec.conductor);
+      builder.metadata().ensemble(spec.ensemble);
       builder.metadata().work(spec.work);
       builder.metadata().movement(spec.movement);
+      builder.metadata().soloist(spec.soloist);
       builder.metadata().genre(spec.genre);
       builder.metadata().year(spec.year);
       builder.metadata().trackNumber(spec.trackNumber);
@@ -243,18 +252,6 @@ namespace ao::query::test
       if (spec.composerId != 0)
       {
         header->composerId = DictionaryId{spec.composerId};
-      }
-
-      auto* coldHeader = utility::layout::asMutablePtr<library::TrackColdHeader>(_coldData);
-
-      if (spec.workId != 0)
-      {
-        coldHeader->workId = DictionaryId{spec.workId};
-      }
-
-      if (spec.movementId != 0)
-      {
-        coldHeader->movementId = DictionaryId{spec.movementId};
       }
     }
 

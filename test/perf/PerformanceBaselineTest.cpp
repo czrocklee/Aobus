@@ -76,7 +76,10 @@ namespace ao::rt::test
       std::string_view albumArtistKey{};
       std::string_view genreKey{};
       std::string_view composerKey{};
+      std::string_view conductorKey{};
+      std::string_view ensembleKey{};
       std::string_view workKey{};
+      std::string_view soloistKey{};
     };
 
     struct SortCacheOrderEntry final
@@ -103,7 +106,10 @@ namespace ao::rt::test
       std::uint32_t albumArtistRank = 0;
       std::uint32_t genreRank = 0;
       std::uint32_t composerRank = 0;
+      std::uint32_t conductorRank = 0;
+      std::uint32_t ensembleRank = 0;
       std::uint32_t workRank = 0;
+      std::uint32_t soloistRank = 0;
     };
 
     struct RankedSortCacheOrderEntry final
@@ -418,12 +424,15 @@ namespace ao::rt::test
               .albumArtistKey = pool[poolIdx(scrambled / 75, 4)],
               .genreKey = pool[poolIdx(scrambled % 20, 5)],
               .composerKey = pool[poolIdx(scrambled / 400, 6)],
-              .workKey = pool[poolIdx(scrambled / 500, 7)],
+              .conductorKey = pool[poolIdx(scrambled / 450, 7)],
+              .ensembleKey = pool[poolIdx(scrambled / 300, 8)],
+              .workKey = pool[poolIdx(scrambled / 500, 9)],
+              .soloistKey = pool[poolIdx(scrambled / 350, 10)],
             },
-          .groupKey = pool[poolIdx(scrambled / 50, 8)],
-          .primaryText = pool[poolIdx(scrambled, 9)],
-          .secondaryText = pool[poolIdx(scrambled / 200, 10)],
-          .tertiaryText = pool[poolIdx(scrambled / 400, 11)],
+          .groupKey = pool[poolIdx(scrambled / 50, 11)],
+          .primaryText = pool[poolIdx(scrambled, 12)],
+          .secondaryText = pool[poolIdx(scrambled / 200, 13)],
+          .tertiaryText = pool[poolIdx(scrambled / 400, 14)],
           .imageId = ResourceId{static_cast<std::uint32_t>(scrambled % 1024)},
         });
       }
@@ -462,7 +471,10 @@ namespace ao::rt::test
         case TrackSortField::AlbumArtist: return lhs.albumArtistKey.compare(rhs.albumArtistKey);
         case TrackSortField::Genre: return lhs.genreKey.compare(rhs.genreKey);
         case TrackSortField::Composer: return lhs.composerKey.compare(rhs.composerKey);
+        case TrackSortField::Conductor: return lhs.conductorKey.compare(rhs.conductorKey);
+        case TrackSortField::Ensemble: return lhs.ensembleKey.compare(rhs.ensembleKey);
         case TrackSortField::Work: return lhs.workKey.compare(rhs.workKey);
+        case TrackSortField::Soloist: return lhs.soloistKey.compare(rhs.soloistKey);
       }
 
       return 0;
@@ -595,7 +607,10 @@ namespace ao::rt::test
               .albumArtistRank = rankOf(ranks, entry.keys.albumArtistKey),
               .genreRank = rankOf(ranks, entry.keys.genreKey),
               .composerRank = rankOf(ranks, entry.keys.composerKey),
+              .conductorRank = rankOf(ranks, entry.keys.conductorKey),
+              .ensembleRank = rankOf(ranks, entry.keys.ensembleKey),
               .workRank = rankOf(ranks, entry.keys.workKey),
+              .soloistRank = rankOf(ranks, entry.keys.soloistKey),
             },
           .groupRank = rankOf(ranks, entry.groupKey),
           .primaryRank = rankOf(ranks, entry.primaryText),

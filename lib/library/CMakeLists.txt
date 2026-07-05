@@ -10,6 +10,7 @@ add_library(ao_library STATIC
     TrackStore.cpp
     TrackBuilder.cpp
     TrackView.cpp
+    TrackColdReader.cpp
     ListView.cpp
     ListStore.cpp
     ListBuilder.cpp

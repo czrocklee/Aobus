@@ -84,8 +84,11 @@ namespace ao::rt::test
         .albumArtist("Album Artist")
         .genre("Rock")
         .composer("Composer")
+        .conductor("Conductor")
+        .ensemble("Ensemble")
         .work("Work")
         .movement("Movement")
+        .soloist("Soloist")
         .year(2026)
         .discNumber(2)
         .discTotal(3)
@@ -178,8 +181,11 @@ namespace ao::rt::test
     CHECK(row.albumArtist == "Album Artist");
     CHECK(row.genre == "Rock");
     CHECK(row.composer == "Composer");
+    CHECK(row.conductor == "Conductor");
+    CHECK(row.ensemble == "Ensemble");
     CHECK(row.work == "Work");
     CHECK(row.movement == "Movement");
+    CHECK(row.soloist == "Soloist");
     CHECK(row.tags == "Favorite, Live");
     CHECK(row.duration == 245s); // NOLINT(misc-include-cleaner)
     CHECK(row.year == 2026);
@@ -206,6 +212,10 @@ namespace ao::rt::test
     auto const title = scope.trackField(seeded.trackId, TrackField::Title);
     REQUIRE(std::holds_alternative<std::string>(title));
     CHECK(std::get<std::string>(title) == "A Song");
+
+    auto const conductor = scope.trackField(seeded.trackId, TrackField::Conductor);
+    REQUIRE(std::holds_alternative<std::string>(conductor));
+    CHECK(std::get<std::string>(conductor) == "Conductor");
 
     auto const fileSize = scope.trackField(seeded.trackId, TrackField::FileSize);
     REQUIRE(std::holds_alternative<std::uint64_t>(fileSize));

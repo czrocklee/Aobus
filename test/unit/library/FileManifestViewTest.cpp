@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/utility/Fnv1a.h>
@@ -35,10 +36,14 @@ namespace ao::library::test
     CHECK(view.audioSignature() == signature);
   }
 
-  TEST_CASE("FileManifestView - throws on small buffer", "[library][unit][manifest]")
+  TEST_CASE("FileManifestView - poisons a small buffer", "[library][unit][manifest]")
   {
     auto buffer = std::array<std::byte, kFileManifestHeaderSize - 1>{};
 
-    CHECK_THROWS(FileManifestView{buffer});
+    auto const view = FileManifestView{buffer};
+    CHECK_FALSE(view.isValid());
+    CHECK(view.trackId() == kInvalidTrackId);
+    CHECK(view.fileSize() == 0);
+    CHECK(view.status() == FileStatus::Available);
   }
 } // namespace ao::library::test

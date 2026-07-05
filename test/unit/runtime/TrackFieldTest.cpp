@@ -118,7 +118,7 @@ namespace ao::rt::test
     auto const syntheticCount =
       countIf(defs, [](auto const& d) { return d.category == TrackFieldCategory::Synthetic; });
 
-    CHECK(metadataCount == 15);
+    CHECK(metadataCount == 18);
     CHECK(tagCount == 1);
     CHECK(technicalCount == 9);
     CHECK(syntheticCount == 3);
@@ -185,7 +185,7 @@ namespace ao::rt::test
       if (def.groupable)
       {
         REQUIRE(static_cast<bool>(def.optGroupKey));
-        CHECK(static_cast<std::size_t>(*def.optGroupKey) < 9);
+        CHECK(static_cast<std::size_t>(*def.optGroupKey) < kTrackGroupKeyCount);
       }
       else
       {
@@ -223,8 +223,11 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::AlbumArtist)->optSortField == TrackSortField::AlbumArtist);
     CHECK(trackFieldDefinition(TrackField::Genre)->optSortField == TrackSortField::Genre);
     CHECK(trackFieldDefinition(TrackField::Composer)->optSortField == TrackSortField::Composer);
+    CHECK(trackFieldDefinition(TrackField::Conductor)->optSortField == TrackSortField::Conductor);
+    CHECK(trackFieldDefinition(TrackField::Ensemble)->optSortField == TrackSortField::Ensemble);
     CHECK(trackFieldDefinition(TrackField::Work)->optSortField == TrackSortField::Work);
     CHECK(trackFieldDefinition(TrackField::Movement)->optSortField == TrackSortField::Movement);
+    CHECK(trackFieldDefinition(TrackField::Soloist)->optSortField == TrackSortField::Soloist);
     CHECK(trackFieldDefinition(TrackField::MovementNumber)->optSortField == TrackSortField::Movement);
     CHECK(trackFieldDefinition(TrackField::Year)->optSortField == TrackSortField::Year);
     CHECK(trackFieldDefinition(TrackField::DiscNumber)->optSortField == TrackSortField::DiscNumber);
@@ -239,7 +242,10 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::AlbumArtist)->optGroupKey == TrackGroupKey::AlbumArtist);
     CHECK(trackFieldDefinition(TrackField::Genre)->optGroupKey == TrackGroupKey::Genre);
     CHECK(trackFieldDefinition(TrackField::Composer)->optGroupKey == TrackGroupKey::Composer);
+    CHECK(trackFieldDefinition(TrackField::Conductor)->optGroupKey == TrackGroupKey::Conductor);
+    CHECK(trackFieldDefinition(TrackField::Ensemble)->optGroupKey == TrackGroupKey::Ensemble);
     CHECK(trackFieldDefinition(TrackField::Work)->optGroupKey == TrackGroupKey::Work);
+    CHECK_FALSE(trackFieldDefinition(TrackField::Soloist)->optGroupKey);
     CHECK(trackFieldDefinition(TrackField::Year)->optGroupKey == TrackGroupKey::Year);
   }
 
@@ -251,8 +257,11 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::AlbumArtist)->label == "Album Artist");
     CHECK(trackFieldDefinition(TrackField::Genre)->label == "Genre");
     CHECK(trackFieldDefinition(TrackField::Composer)->label == "Composer");
+    CHECK(trackFieldDefinition(TrackField::Conductor)->label == "Conductor");
+    CHECK(trackFieldDefinition(TrackField::Ensemble)->label == "Ensemble");
     CHECK(trackFieldDefinition(TrackField::Work)->label == "Work");
     CHECK(trackFieldDefinition(TrackField::Movement)->label == "Movement");
+    CHECK(trackFieldDefinition(TrackField::Soloist)->label == "Soloist");
     CHECK(trackFieldDefinition(TrackField::MovementNumber)->label == "Movement No.");
     CHECK(trackFieldDefinition(TrackField::MovementTotal)->label == "Total Movements");
     CHECK(trackFieldDefinition(TrackField::Year)->label == "Year");
@@ -283,7 +292,11 @@ namespace ao::rt::test
     CHECK(trackFieldFilterExpressionVariable(TrackField::AlbumArtist) == "$albumArtist");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Genre) == "$genre");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Composer) == "$composer");
+    CHECK(trackFieldFilterExpressionVariable(TrackField::Conductor) == "$conductor");
+    CHECK(trackFieldFilterExpressionVariable(TrackField::Ensemble) == "$ensemble");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Work) == "$work");
+    CHECK(trackFieldFilterExpressionVariable(TrackField::Movement) == "$movement");
+    CHECK(trackFieldFilterExpressionVariable(TrackField::Soloist) == "$soloist");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Year) == "$year");
     CHECK(trackFieldFilterExpressionVariable(TrackField::DiscNumber) == "$discNumber");
     CHECK(trackFieldFilterExpressionVariable(TrackField::DiscTotal) == "$discTotal");
@@ -314,8 +327,11 @@ namespace ao::rt::test
     CHECK(trackFieldSupportsValueCompletion(TrackField::AlbumArtist));
     CHECK(trackFieldSupportsValueCompletion(TrackField::Genre));
     CHECK(trackFieldSupportsValueCompletion(TrackField::Composer));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Conductor));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Ensemble));
     CHECK(trackFieldSupportsValueCompletion(TrackField::Work));
     CHECK(trackFieldSupportsValueCompletion(TrackField::Movement));
+    CHECK(trackFieldSupportsValueCompletion(TrackField::Soloist));
 
     CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Title));
     CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Year));

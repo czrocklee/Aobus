@@ -118,8 +118,11 @@ namespace ao::gtk::test
       spec.albumArtist = "Sigur Rós";
       spec.genre = "Électronique";
       spec.composer = "久石譲";
+      spec.conductor = "指揮者";
+      spec.ensemble = "東京交響楽団";
       spec.work = "作品一";
       spec.movement = "第一楽章";
+      spec.soloist = "独奏者";
       spec.tags = {"夜", "ライブ"};
 
       auto const id = library::test::addTrack(musicLibrary, spec);
@@ -134,8 +137,11 @@ namespace ao::gtk::test
       CHECK(rowPtr->fieldText(rt::TrackField::AlbumArtist) == "Sigur Rós");
       CHECK(rowPtr->fieldText(rt::TrackField::Genre) == "Électronique");
       CHECK(rowPtr->fieldText(rt::TrackField::Composer) == "久石譲");
+      CHECK(rowPtr->fieldText(rt::TrackField::Conductor) == "指揮者");
+      CHECK(rowPtr->fieldText(rt::TrackField::Ensemble) == "東京交響楽団");
       CHECK(rowPtr->fieldText(rt::TrackField::Work) == "作品一");
       CHECK(rowPtr->fieldText(rt::TrackField::Movement) == "第一楽章");
+      CHECK(rowPtr->fieldText(rt::TrackField::Soloist) == "独奏者");
       CHECK(rowPtr->tags() == "夜, ライブ");
     }
 

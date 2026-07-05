@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListView.h>
 #include <ao/utility/ByteView.h>
@@ -14,50 +13,54 @@
 
 namespace ao::library
 {
-  ListView::ListView(std::span<std::byte const> data)
+  ListView::ListView(std::span<std::byte const> data) noexcept
     : _payload{data}
   {
-    if (_payload.data() == nullptr || _payload.size() < kListHeaderSize)
-    {
-      ao::throwException<Exception>("Invalid data for ListView");
-    }
-  }
+    auto const* header = utility::bytes::tryLayout<ListHeader>(data);
 
-  std::string_view ListView::getString(std::uint16_t offset, std::uint16_t length) const
-  {
-    if (length == 0)
+    if (header == nullptr)
     {
-      return {};
+      return;
     }
 
-    auto const start = kListHeaderSize + offset;
+    auto const size = data.size();
+    auto const trackIdBytes = static_cast<std::size_t>(header->trackIdsCount) * sizeof(TrackId);
 
-    if (start + length > _payload.size())
+    auto fieldFits = [size](std::uint16_t offset, std::uint16_t length) noexcept
+    { return kListHeaderSize + static_cast<std::size_t>(offset) + static_cast<std::size_t>(length) <= size; };
+
+    if (trackIdBytes > size - kListHeaderSize || !fieldFits(header->nameOffset, header->nameLength) ||
+        !fieldFits(header->descOffset, header->descLength) || !fieldFits(header->filterOffset, header->filterLength))
     {
-      ao::throwException<Exception>("Invalid string field");
+      return;
     }
 
-    return utility::bytes::stringView(_payload.subspan(start, length));
+    _header = header;
   }
 
-  std::string_view ListView::name() const
+  std::string_view ListView::getString(std::uint16_t offset, std::uint16_t length) const noexcept
   {
-    return getString(header()->nameOffset, header()->nameLength);
+    return utility::bytes::stringView(_payload.subspan(kListHeaderSize + offset, length));
   }
 
-  std::string_view ListView::description() const
+  std::string_view ListView::name() const noexcept
   {
-    return getString(header()->descOffset, header()->descLength);
+    return _header == nullptr ? std::string_view{} : getString(_header->nameOffset, _header->nameLength);
   }
 
-  std::string_view ListView::filter() const
+  std::string_view ListView::description() const noexcept
   {
-    return getString(header()->filterOffset, header()->filterLength);
+    return _header == nullptr ? std::string_view{} : getString(_header->descOffset, _header->descLength);
+  }
+
+  std::string_view ListView::filter() const noexcept
+  {
+    return _header == nullptr ? std::string_view{} : getString(_header->filterOffset, _header->filterLength);
   }
 
   ListId ListView::parentId() const noexcept
   {
-    return ListId{header()->parentId};
+    return _header == nullptr ? kInvalidListId : ListId{_header->parentId};
   }
 
   bool ListView::isRootParent() const noexcept
@@ -65,31 +68,14 @@ namespace ao::library
     return parentId() == kInvalidListId;
   }
 
-  ListView::TrackProxy ListView::tracks() const
+  ListView::TrackProxy ListView::tracks() const noexcept
   {
-    auto const offset = kListHeaderSize;
-    auto const count = static_cast<std::size_t>(header()->trackIdsCount);
-
-    if (offset + (count * sizeof(TrackId)) > _payload.size())
+    if (_header == nullptr)
     {
-      ao::throwException<Exception>("Invalid trackIds field");
+      return TrackProxy{};
     }
 
-    return TrackProxy{utility::layout::viewArray<TrackId>(_payload.subspan(offset, count * sizeof(TrackId)))};
-  }
-
-  ListView::TrackProxy::TrackProxy(std::span<TrackId const> trackIds)
-    : _trackIds{trackIds}
-  {
-  }
-
-  TrackId ListView::TrackProxy::at(std::size_t index) const
-  {
-    if (index >= _trackIds.size())
-    {
-      ao::throwException<Exception>("Index out of range");
-    }
-
-    return _trackIds[index];
+    auto const trackIdBytes = static_cast<std::size_t>(_header->trackIdsCount) * sizeof(TrackId);
+    return TrackProxy{utility::layout::viewArray<TrackId>(_payload.subspan(kListHeaderSize, trackIdBytes))};
   }
 } // namespace ao::library

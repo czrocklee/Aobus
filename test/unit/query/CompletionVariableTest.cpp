@@ -127,15 +127,18 @@ namespace ao::query::test
   TEST_CASE("Completion - lists query variable specs in UI catalog order", "[query][unit][completion]")
   {
     auto const metadata = detail::queryVariableCompletionSpecs(VariableType::Metadata);
-    REQUIRE(metadata.size() == 16);
+    REQUIRE(metadata.size() == 19);
     CHECK(metadata[0].canonicalName == "title");
     CHECK(metadata[1].canonicalName == "artist");
     CHECK(metadata[2].canonicalName == "album");
     CHECK(metadata[3].canonicalName == "albumArtist");
-    CHECK(metadata[6].canonicalName == "movement");
-    CHECK(metadata[7].canonicalName == "genre");
-    CHECK(metadata[13].canonicalName == "movementNumber");
-    CHECK(metadata[15].canonicalName == "coverArt");
+    CHECK(metadata[5].canonicalName == "conductor");
+    CHECK(metadata[6].canonicalName == "ensemble");
+    CHECK(metadata[8].canonicalName == "movement");
+    CHECK(metadata[9].canonicalName == "soloist");
+    CHECK(metadata[10].canonicalName == "genre");
+    CHECK(metadata[16].canonicalName == "movementNumber");
+    CHECK(metadata[18].canonicalName == "coverArt");
 
     auto const properties = detail::queryVariableCompletionSpecs(VariableType::Property);
     REQUIRE(properties.size() == 6);
@@ -286,11 +289,23 @@ namespace ao::query::test
            .canonicalName = "composer",
            .field = Field::ComposerId,
            .aliases = std::span{kC}},
+      Case{.type = VariableType::Metadata,
+           .canonicalName = "conductor",
+           .field = Field::ConductorId,
+           .aliases = std::span{kNoAliases}},
+      Case{.type = VariableType::Metadata,
+           .canonicalName = "ensemble",
+           .field = Field::EnsembleId,
+           .aliases = std::span{kNoAliases}},
       Case{.type = VariableType::Metadata, .canonicalName = "work", .field = Field::WorkId, .aliases = std::span{kW}},
       Case{.type = VariableType::Metadata,
            .canonicalName = "movement",
            .field = Field::MovementId,
            .aliases = std::span{kM}},
+      Case{.type = VariableType::Metadata,
+           .canonicalName = "soloist",
+           .field = Field::SoloistId,
+           .aliases = std::span{kNoAliases}},
       Case{.type = VariableType::Metadata, .canonicalName = "genre", .field = Field::GenreId, .aliases = std::span{kG}},
       Case{.type = VariableType::Metadata, .canonicalName = "year", .field = Field::Year, .aliases = std::span{kY}},
       Case{.type = VariableType::Metadata,

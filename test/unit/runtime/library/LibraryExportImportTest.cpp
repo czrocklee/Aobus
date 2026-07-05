@@ -253,8 +253,11 @@ namespace ao::rt::test
                                                                             .artist = "Test Artist",
                                                                             .album = "",
                                                                             .composer = "Test Composer",
+                                                                            .conductor = "Test Conductor",
+                                                                            .ensemble = "Test Ensemble",
                                                                             .work = "Test Work",
                                                                             .movement = "Test Movement",
+                                                                            .soloist = "Test Soloist",
                                                                             .uri = "full-fields.flac",
                                                                             .year = 0,
                                                                             .discNumber = 0,
@@ -312,10 +315,13 @@ namespace ao::rt::test
       CHECK(std::string{view.metadata().title()} == "Test Title");
       CHECK(std::string{dict.get(view.metadata().artistId())} == "Test Artist");
       CHECK(std::string{dict.get(view.metadata().composerId())} == "Test Composer");
-      CHECK(std::string{dict.get(view.metadata().workId())} == "Test Work");
-      CHECK(std::string{dict.get(view.metadata().movementId())} == "Test Movement");
-      CHECK(view.metadata().movementNumber() == 2);
-      CHECK(view.metadata().movementTotal() == 4);
+      CHECK(std::string{dict.get(view.classical().conductorId())} == "Test Conductor");
+      CHECK(std::string{dict.get(view.classical().ensembleId())} == "Test Ensemble");
+      CHECK(std::string{dict.get(view.classical().workId())} == "Test Work");
+      CHECK(std::string{dict.get(view.classical().movementId())} == "Test Movement");
+      CHECK(std::string{dict.get(view.classical().soloistId())} == "Test Soloist");
+      CHECK(view.classical().movementNumber() == 2);
+      CHECK(view.classical().movementTotal() == 4);
     }
   }
 
@@ -629,5 +635,41 @@ library:
 
     auto resultDelta = importer.importFromYaml(yamlPathDelta, ImportMode::Merge);
     REQUIRE(resultDelta);
+  }
+
+  TEST_CASE("LibraryYaml metadata import clears absent classical fields from file tags",
+            "[runtime][regression][import-export][yaml]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto const uri = std::string{"tagged.flac"};
+    auto const songPath = std::filesystem::path{temp.path()} / uri;
+    std::filesystem::copy_file(std::filesystem::path{TAG_TEST_DATA_DIR} / "classical_metadata.flac", songPath);
+
+    auto const yamlPath = std::filesystem::path{temp.path()} / "metadata.yaml";
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << "version: 1\n";
+      yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
+      yaml << "export_mode: metadata\n";
+      yaml << "library:\n";
+      yaml << "  tracks:\n";
+      yaml << "    - uri: \"tagged.flac\"\n";
+      yaml << "      title: \"YAML Title\"\n";
+    }
+
+    auto importer = LibraryYamlImporter{ml};
+    auto result = importer.importFromYaml(yamlPath);
+    REQUIRE(result);
+
+    auto txn = ml.readTransaction();
+    auto reader = ml.tracks().reader(txn);
+    auto const optView = reader.get(TrackId{1}, TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optView);
+    CHECK(optView->property().uri() == uri);
+    CHECK(optView->metadata().title() == "YAML Title");
+    CHECK(optView->classical().conductorId() == kInvalidDictionaryId);
+    CHECK(optView->classical().ensembleId() == kInvalidDictionaryId);
+    CHECK(optView->classical().soloistId() == kInvalidDictionaryId);
   }
 } // namespace ao::rt::test

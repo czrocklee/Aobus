@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -107,7 +108,11 @@ namespace ao::rt::test
                                      .optAlbumArtist = "Album Artist",
                                      .optGenre = "Rock",
                                      .optComposer = "Composer",
+                                     .optConductor = "Conductor",
+                                     .optEnsemble = "Ensemble",
                                      .optWork = "Work",
+                                     .optMovement = "Movement",
+                                     .optSoloist = "Soloist",
                                      .optYear = 2024,
                                      .optTrackNumber = 1,
                                      .optTrackTotal = 10,
@@ -117,6 +122,16 @@ namespace ao::rt::test
     auto const result = service.updateMetadata(targetIds, patch);
     REQUIRE(result);
     CHECK_FALSE(result->mutatedIds.empty());
+
+    auto const txn = testLib.library().readTransaction();
+    auto const optView =
+      testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optView);
+    auto const& dict = testLib.library().dictionary();
+    CHECK(dict.get(optView->classical().conductorId()) == "Conductor");
+    CHECK(dict.get(optView->classical().ensembleId()) == "Ensemble");
+    CHECK(dict.get(optView->classical().movementId()) == "Movement");
+    CHECK(dict.get(optView->classical().soloistId()) == "Soloist");
   }
 
   TEST_CASE("LibraryWriter - updateMetadata applies and removes custom metadata", "[runtime][unit][library][mutation]")

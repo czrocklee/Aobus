@@ -59,10 +59,9 @@ namespace ao::rt
       return "unknown";
     }
 
-    using MetadataStringGetter = std::string_view (*)(library::TrackView::MetadataProxy const&,
-                                                      library::DictionaryStore&);
+    using MetadataStringGetter = std::string_view (*)(library::TrackView const&, library::DictionaryStore&);
     using MetadataStringBaseGetter = std::string_view (*)(library::TrackBuilder::MetadataBuilder const&);
-    using MetadataNumberGetter = std::uint16_t (*)(library::TrackView::MetadataProxy const&);
+    using MetadataNumberGetter = std::uint16_t (*)(library::TrackView const&);
     using MetadataNumberBaseGetter = std::uint16_t (*)(library::TrackBuilder::MetadataBuilder const&);
 
     struct MetadataDispatch final
@@ -76,56 +75,108 @@ namespace ao::rt
 
     constexpr auto kMetadataDispatch = std::to_array<MetadataDispatch>({
       {.field = TrackField::Title,
-       .strGet = [](auto const& meta, auto&) { return meta.title(); },
+       .strGet = [](auto const& view, auto&) { return view.metadata().title(); },
        .strBaseGet = [](auto const& base) { return base.title(); }},
       {.field = TrackField::Artist,
-       .strGet = [](auto const& meta, auto& dict)
-       { return meta.artistId() != kInvalidDictionaryId ? dict.get(meta.artistId()) : std::string_view{}; },
+       .strGet =
+         [](auto const& view, auto& dict)
+       {
+         auto const id = view.metadata().artistId();
+         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+       },
        .strBaseGet = [](auto const& base) { return base.artist(); }},
       {.field = TrackField::Album,
-       .strGet = [](auto const& meta, auto& dict)
-       { return meta.albumId() != kInvalidDictionaryId ? dict.get(meta.albumId()) : std::string_view{}; },
+       .strGet =
+         [](auto const& view, auto& dict)
+       {
+         auto const id = view.metadata().albumId();
+         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+       },
        .strBaseGet = [](auto const& base) { return base.album(); }},
       {.field = TrackField::AlbumArtist,
-       .strGet = [](auto const& meta, auto& dict)
-       { return meta.albumArtistId() != kInvalidDictionaryId ? dict.get(meta.albumArtistId()) : std::string_view{}; },
+       .strGet =
+         [](auto const& view, auto& dict)
+       {
+         auto const id = view.metadata().albumArtistId();
+         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+       },
        .strBaseGet = [](auto const& base) { return base.albumArtist(); }},
       {.field = TrackField::Composer,
-       .strGet = [](auto const& meta, auto& dict)
-       { return meta.composerId() != kInvalidDictionaryId ? dict.get(meta.composerId()) : std::string_view{}; },
+       .strGet =
+         [](auto const& view, auto& dict)
+       {
+         auto const id = view.metadata().composerId();
+         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+       },
        .strBaseGet = [](auto const& base) { return base.composer(); }},
+      {.field = TrackField::Conductor,
+       .strGet =
+         [](auto const& view, auto& dict)
+       {
+         auto const id = view.classical().conductorId();
+         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+       },
+       .strBaseGet = [](auto const& base) { return base.conductor(); }},
+      {.field = TrackField::Ensemble,
+       .strGet =
+         [](auto const& view, auto& dict)
+       {
+         auto const id = view.classical().ensembleId();
+         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+       },
+       .strBaseGet = [](auto const& base) { return base.ensemble(); }},
       {.field = TrackField::Genre,
-       .strGet = [](auto const& meta, auto& dict)
-       { return meta.genreId() != kInvalidDictionaryId ? dict.get(meta.genreId()) : std::string_view{}; },
+       .strGet =
+         [](auto const& view, auto& dict)
+       {
+         auto const id = view.metadata().genreId();
+         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+       },
        .strBaseGet = [](auto const& base) { return base.genre(); }},
       {.field = TrackField::Work,
-       .strGet = [](auto const& meta, auto& dict)
-       { return meta.workId() != kInvalidDictionaryId ? dict.get(meta.workId()) : std::string_view{}; },
+       .strGet =
+         [](auto const& view, auto& dict)
+       {
+         auto const id = view.classical().workId();
+         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+       },
        .strBaseGet = [](auto const& base) { return base.work(); }},
       {.field = TrackField::Movement,
-       .strGet = [](auto const& meta, auto& dict)
-       { return meta.movementId() != kInvalidDictionaryId ? dict.get(meta.movementId()) : std::string_view{}; },
+       .strGet =
+         [](auto const& view, auto& dict)
+       {
+         auto const id = view.classical().movementId();
+         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+       },
        .strBaseGet = [](auto const& base) { return base.movement(); }},
+      {.field = TrackField::Soloist,
+       .strGet =
+         [](auto const& view, auto& dict)
+       {
+         auto const id = view.classical().soloistId();
+         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+       },
+       .strBaseGet = [](auto const& base) { return base.soloist(); }},
       {.field = TrackField::Year,
-       .numGet = [](auto const& meta) { return meta.year(); },
+       .numGet = [](auto const& view) { return view.metadata().year(); },
        .numBaseGet = [](auto const& base) { return base.year(); }},
       {.field = TrackField::TrackNumber,
-       .numGet = [](auto const& meta) { return meta.trackNumber(); },
+       .numGet = [](auto const& view) { return view.metadata().trackNumber(); },
        .numBaseGet = [](auto const& base) { return base.trackNumber(); }},
       {.field = TrackField::TrackTotal,
-       .numGet = [](auto const& meta) { return meta.trackTotal(); },
+       .numGet = [](auto const& view) { return view.metadata().trackTotal(); },
        .numBaseGet = [](auto const& base) { return base.trackTotal(); }},
       {.field = TrackField::DiscNumber,
-       .numGet = [](auto const& meta) { return meta.discNumber(); },
+       .numGet = [](auto const& view) { return view.metadata().discNumber(); },
        .numBaseGet = [](auto const& base) { return base.discNumber(); }},
       {.field = TrackField::DiscTotal,
-       .numGet = [](auto const& meta) { return meta.discTotal(); },
+       .numGet = [](auto const& view) { return view.metadata().discTotal(); },
        .numBaseGet = [](auto const& base) { return base.discTotal(); }},
       {.field = TrackField::MovementNumber,
-       .numGet = [](auto const& meta) { return meta.movementNumber(); },
+       .numGet = [](auto const& view) { return view.classical().movementNumber(); },
        .numBaseGet = [](auto const& base) { return base.movementNumber(); }},
       {.field = TrackField::MovementTotal,
-       .numGet = [](auto const& meta) { return meta.movementTotal(); },
+       .numGet = [](auto const& view) { return view.classical().movementTotal(); },
        .numBaseGet = [](auto const& base) { return base.movementTotal(); }},
     });
 
@@ -141,7 +192,6 @@ namespace ao::rt
                            library::DictionaryStore& dict,
                            std::optional<library::TrackBuilder> const& optBaseline)
     {
-      auto const metadata = view.metadata();
       auto const optBaselineMeta = optBaseline ? std::optional{optBaseline->metadata()} : std::nullopt;
       auto const hasBaseline = static_cast<bool>(optBaselineMeta);
 
@@ -149,7 +199,7 @@ namespace ao::rt
       {
         if (auto const key = trackFieldId(map.field); map.strGet != nullptr)
         {
-          auto const current = map.strGet(metadata, dict);
+          auto const current = map.strGet(view, dict);
           bool const shouldEmit = hasBaseline ? (current != map.strBaseGet(*optBaselineMeta)) : !current.empty();
 
           if (shouldEmit)
@@ -159,7 +209,7 @@ namespace ao::rt
         }
         else if (map.numGet != nullptr)
         {
-          auto const current = map.numGet(metadata);
+          auto const current = map.numGet(view);
           bool const shouldEmit = hasBaseline ? (current != map.numBaseGet(*optBaselineMeta)) : (current != 0);
 
           if (shouldEmit)

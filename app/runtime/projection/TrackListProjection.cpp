@@ -58,7 +58,10 @@ namespace ao::rt
       std::string_view albumArtistKey{};
       std::string_view genreKey{};
       std::string_view composerKey{};
+      std::string_view conductorKey{};
+      std::string_view ensembleKey{};
       std::string_view workKey{};
+      std::string_view soloistKey{};
     };
 
     struct GroupSection final
@@ -207,15 +210,19 @@ namespace ao::rt
         case TrackSortField::Duration:
         case TrackSortField::DiscNumber:
         case TrackSortField::TrackNumber:
+        case TrackSortField::Conductor:
+        case TrackSortField::Ensemble:
         case TrackSortField::Work:
-        case TrackSortField::Movement: return true;
+        case TrackSortField::Movement:
+        case TrackSortField::Soloist: return true;
         default: return false;
       }
     }
 
     bool groupByNeedsCold(TrackGroupKey groupBy)
     {
-      return groupBy == TrackGroupKey::Work || groupBy == TrackGroupKey::Album;
+      return groupBy == TrackGroupKey::Work || groupBy == TrackGroupKey::Album || groupBy == TrackGroupKey::Conductor ||
+             groupBy == TrackGroupKey::Ensemble;
     }
 
     library::TrackStore::Reader::LoadMode computeLoadMode(std::vector<TrackSortTerm> const& sortBy,
@@ -284,7 +291,10 @@ namespace ao::rt
         case TrackSortField::AlbumArtist: return lhs.albumArtistKey.compare(rhs.albumArtistKey);
         case TrackSortField::Genre: return lhs.genreKey.compare(rhs.genreKey);
         case TrackSortField::Composer: return lhs.composerKey.compare(rhs.composerKey);
+        case TrackSortField::Conductor: return lhs.conductorKey.compare(rhs.conductorKey);
+        case TrackSortField::Ensemble: return lhs.ensembleKey.compare(rhs.ensembleKey);
         case TrackSortField::Work: return lhs.workKey.compare(rhs.workKey);
+        case TrackSortField::Soloist: return lhs.soloistKey.compare(rhs.soloistKey);
       }
 
       return 0;
@@ -351,7 +361,7 @@ namespace ao::rt
           case TrackSortField::Year: keys.year = view.metadata().year(); break;
           case TrackSortField::DiscNumber: keys.discNumber = view.metadata().discNumber(); break;
           case TrackSortField::TrackNumber: keys.trackNumber = view.metadata().trackNumber(); break;
-          case TrackSortField::Movement: keys.movementNumber = view.metadata().movementNumber(); break;
+          case TrackSortField::Movement: keys.movementNumber = view.classical().movementNumber(); break;
           case TrackSortField::Duration: keys.duration = view.property().duration(); break;
           case TrackSortField::Title:
             normalizeInto(scratch, view.metadata().title());
@@ -362,7 +372,10 @@ namespace ao::rt
           case TrackSortField::AlbumArtist: keys.albumArtistKey = getNorm(view.metadata().albumArtistId()); break;
           case TrackSortField::Genre: keys.genreKey = getNorm(view.metadata().genreId()); break;
           case TrackSortField::Composer: keys.composerKey = getNorm(view.metadata().composerId()); break;
-          case TrackSortField::Work: keys.workKey = getNorm(view.metadata().workId()); break;
+          case TrackSortField::Conductor: keys.conductorKey = getNorm(view.classical().conductorId()); break;
+          case TrackSortField::Ensemble: keys.ensembleKey = getNorm(view.classical().ensembleId()); break;
+          case TrackSortField::Work: keys.workKey = getNorm(view.classical().workId()); break;
+          case TrackSortField::Soloist: keys.soloistKey = getNorm(view.classical().soloistId()); break;
         }
       }
     }
@@ -420,10 +433,24 @@ namespace ao::rt
           }
 
           break;
+        case TrackGroupKey::Conductor:
+          if (keys.conductorKey.empty())
+          {
+            keys.conductorKey = getNorm(view.classical().conductorId());
+          }
+
+          break;
+        case TrackGroupKey::Ensemble:
+          if (keys.ensembleKey.empty())
+          {
+            keys.ensembleKey = getNorm(view.classical().ensembleId());
+          }
+
+          break;
         case TrackGroupKey::Work:
           if (keys.workKey.empty())
           {
-            keys.workKey = getNorm(view.metadata().workId());
+            keys.workKey = getNorm(view.classical().workId());
           }
 
           if (keys.composerKey.empty())
@@ -531,9 +558,17 @@ namespace ao::rt
           entry.groupKey = entry.keys.composerKey;
           entry.primaryText = dict.getOrDefault(view.metadata().composerId(), "Unknown Composer");
           break;
+        case TrackGroupKey::Conductor:
+          entry.groupKey = entry.keys.conductorKey;
+          entry.primaryText = dict.getOrDefault(view.classical().conductorId(), "Unknown Conductor");
+          break;
+        case TrackGroupKey::Ensemble:
+          entry.groupKey = entry.keys.ensembleKey;
+          entry.primaryText = dict.getOrDefault(view.classical().ensembleId(), "Unknown Ensemble");
+          break;
         case TrackGroupKey::Work:
           entry.groupKey = internCompoundKey(arena, scratch, entry.keys.composerKey, entry.keys.workKey);
-          entry.primaryText = dict.getOrDefault(view.metadata().workId(), "Unknown Work");
+          entry.primaryText = dict.getOrDefault(view.classical().workId(), "Unknown Work");
           entry.secondaryText = dict.getOrDefault(view.metadata().composerId(), "Unknown Composer");
           break;
         case TrackGroupKey::Year:

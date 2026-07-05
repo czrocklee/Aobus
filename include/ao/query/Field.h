@@ -69,6 +69,9 @@ namespace ao::query
     MovementId = 25,
     MovementNumber = 26,
     MovementTotal = 27,
+    ConductorId = 28,
+    EnsembleId = 29,
+    SoloistId = 30,
   };
 
   /**

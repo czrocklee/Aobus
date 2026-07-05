@@ -71,6 +71,32 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -y "$OUTPUT_DIR/hires.flac" 2>/dev/null
 echo "  Created hires.flac (24-bit/96kHz stereo)"
 
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=Classical Fixture" \
+    -metadata "artist=Classical Artist" \
+    -metadata "album=Classical Album" \
+    -metadata "genre=Classical" \
+    -metadata "composer=Fixture Composer" \
+    -metadata "conductor=Fixture Conductor" \
+    -metadata "ensemble=Fixture Ensemble" \
+    -metadata "soloist=Fixture Soloist" \
+    -metadata "work=Fixture Work" \
+    -metadata "movementname=Fixture Movement" \
+    -metadata "movement=2/4" \
+    -metadata "track=3/9" \
+    -metadata "date=2026" \
+    -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
+    -y "$OUTPUT_DIR/classical_metadata.flac" 2>/dev/null
+echo "  Created classical_metadata.flac"
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=Classical Fallback" \
+    -metadata "orchestra=Fixture Fallback Ensemble" \
+    -metadata "performer=Fixture Fallback Soloist" \
+    -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
+    -y "$OUTPUT_DIR/classical_fallback.flac" 2>/dev/null
+echo "  Created classical_fallback.flac"
+
 # ============================================================================
 # MP4/M4A files (AAC/ALAC, 44.1kHz stereo)
 # ============================================================================
@@ -139,6 +165,33 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -y "$OUTPUT_DIR/alac16.m4a" 2>/dev/null
 echo "  Created alac16.m4a (ALAC 16-bit/44.1kHz stereo)"
 
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=Classical Fixture" \
+    -metadata "artist=Classical Artist" \
+    -metadata "album=Classical Album" \
+    -metadata "genre=Classical" \
+    -metadata "composer=Fixture Composer" \
+    -metadata "conductor=Fixture Conductor" \
+    -metadata "ensemble=Fixture Ensemble" \
+    -metadata "soloist=Fixture Soloist" \
+    -metadata "work=Fixture Work" \
+    -metadata "movementname=Fixture Movement" \
+    -metadata "movement=2/4" \
+    -metadata "track=3/9" \
+    -metadata "date=2026" \
+    -movflags use_metadata_tags \
+    -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
+    -y "$OUTPUT_DIR/classical_metadata.m4a" 2>/dev/null
+echo "  Created classical_metadata.m4a"
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=Classical Fallback" \
+    -metadata "orchestra=Fixture Fallback Ensemble" \
+    -movflags use_metadata_tags \
+    -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
+    -y "$OUTPUT_DIR/classical_fallback.m4a" 2>/dev/null
+echo "  Created classical_fallback.m4a"
+
 # ============================================================================
 # MP3 files (uses ID3v2, 128kbps/44.1kHz stereo)
 # ============================================================================
@@ -195,7 +248,34 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -y "$OUTPUT_DIR/hires.mp3" 2>/dev/null
 echo "  Created hires.mp3 (320kbps/48kHz stereo)"
 
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=Classical Fixture" \
+    -metadata "artist=Classical Artist" \
+    -metadata "album=Classical Album" \
+    -metadata "genre=Classical" \
+    -metadata "composer=Fixture Composer" \
+    -metadata "conductor=Fixture Conductor" \
+    -metadata "ensemble=Fixture Ensemble" \
+    -metadata "soloist=Fixture Soloist" \
+    -metadata "work=Fixture Work" \
+    -metadata "movementname=Fixture Movement" \
+    -metadata "movement=2/4" \
+    -metadata "track=3/9" \
+    -metadata "date=2026" \
+    -id3v2_version 3 \
+    -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
+    -y "$OUTPUT_DIR/classical_metadata.mp3" 2>/dev/null
+echo "  Created classical_metadata.mp3"
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "title=Classical Fallback" \
+    -metadata "orchestra=Fixture Fallback Ensemble" \
+    -id3v2_version 3 \
+    -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
+    -y "$OUTPUT_DIR/classical_fallback.mp3" 2>/dev/null
+echo "  Created classical_fallback.mp3"
+
 # Cleanup cover image
 rm -f "$COVER_PNG"
 
-echo "Done. Generated 12 test audio files."
+echo "Done. Generated 19 test audio files."

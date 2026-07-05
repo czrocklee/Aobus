@@ -7,10 +7,13 @@ correctly.
 
 ## The model
 
-A track carries four classical fields, all in the cold record (`TrackColdHeader`):
+A track may carry seven classical fields in the optional classical cold extension block:
 
 - `workId` — the work, e.g. *Symphony No. 9 in D minor, Op. 125* (interned `DictionaryId`).
 - `movementId` — the movement name, e.g. *II. Molto vivace* (interned `DictionaryId`).
+- `conductorId` — the conductor, e.g. *Carlos Kleiber* (interned `DictionaryId`).
+- `ensembleId` — the ensemble/orchestra/band, e.g. *Vienna Philharmonic* (interned `DictionaryId`).
+- `soloistId` — the principal soloist credit for the v1 model (interned `DictionaryId`).
 - `movementNumber` — the movement's ordinal within the work (`std::uint16_t`).
 - `movementTotal` — the number of movements in the work (`std::uint16_t`).
 
@@ -24,6 +27,12 @@ Movement is a **leaf, not a collection**. It is a `TrackSortField` and a `TrackF
 Movement. `movementNumber` / `movementTotal` are also full `TrackField`s
 (`Movement No.` / `Total Movements`), editable like track/disc numbers, so a user can
 correct the sort key.
+
+Core credits v1 adds `Conductor`, `Ensemble`, and `Soloist` without making them hot
+fields. `Conductor` and `Ensemble` are group keys and sort fields; `Soloist` is a
+sort/display/edit field but not a group key. All three can be filtered with
+`$conductor`, `$ensemble`, and `$soloist`, and value completion scans their cold
+dictionary ids.
 
 ## Tag sources
 
@@ -78,10 +87,14 @@ Both built-in classical presets use the Movement **name** as the per-row label i
 
 ## Storage / compatibility
 
-`TrackColdHeader` grew from 32 to 40 bytes to hold the new fields (descending-size layout,
-4-byte alignment preserved). The unreleased on-disk format starts at `kLibraryVersion = 1`.
-Per project policy there is no migration path — a rescan rebuilds the library from the source
-files' tags.
+The fixed cold header stays small: `TrackColdHeader` is 32 bytes and carries audio properties,
+track/disc numbers, five cold payload offset slots, and the URI tail offsets. Classical metadata is
+stored in the classical slot payload containing the five dictionary IDs plus `movementNumber` and
+`movementTotal`; no payload is written when all seven fields are empty/default. Each cold record and
+each payload start is four-byte aligned.
+
+The unreleased on-disk format is gated by the centralized `kLibraryVersion`. Per project policy there
+is no migration path — a rescan rebuilds the library from the source files' tags.
 
 ## Out of scope
 
@@ -91,5 +104,6 @@ files' tags.
 - **Movement display fallback when untagged.** A track with no `movementId` shows a blank
   movement label in the classical views; movements tagged with a number but no name still
   sort correctly.
-- **Smart-list filtering on movement.** No `$movement` query variable yet; the movement
-  fields carry no filter expression variable until query support is added.
+- **Multi-credit performer ontology.** v1 keeps one `Soloist` string and one `Ensemble`
+  string. Instrument-specific performers, multiple soloists, choir/quartet membership, and
+  structured performer roles remain future work.

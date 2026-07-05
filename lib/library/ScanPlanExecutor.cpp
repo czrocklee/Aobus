@@ -361,13 +361,7 @@ namespace ao::library
       return true;
     }
 
-    auto manifestBuilder = FileManifestBuilder::createNew();
-    manifestBuilder.trackId(item.trackId)
-      .status(FileStatus::Available)
-      .fileSize(item.fileSize)
-      .mtime(item.mtime)
-      .audioPayloadLength(fingerprint.payloadLength)
-      .audioSignature(fingerprint.signature);
+    auto manifestBuilder = makeAvailableManifest(item, item.trackId, fingerprint);
 
     if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
     {
@@ -442,13 +436,7 @@ namespace ao::library
       return false;
     }
 
-    auto manifestBuilder = FileManifestBuilder::createNew();
-    manifestBuilder.trackId(item.trackId)
-      .status(FileStatus::Available)
-      .fileSize(item.fileSize)
-      .mtime(item.mtime)
-      .audioPayloadLength(fingerprint.payloadLength)
-      .audioSignature(fingerprint.signature);
+    auto manifestBuilder = makeAvailableManifest(item, item.trackId, fingerprint);
 
     if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
     {
@@ -484,13 +472,7 @@ namespace ao::library
       return;
     }
 
-    auto manifestBuilder = FileManifestBuilder::createNew();
-    manifestBuilder.trackId(*optNewTrackId)
-      .status(FileStatus::Available)
-      .fileSize(item.fileSize)
-      .mtime(item.mtime)
-      .audioPayloadLength(fingerprint.payloadLength)
-      .audioSignature(fingerprint.signature);
+    auto manifestBuilder = makeAvailableManifest(item, *optNewTrackId, fingerprint);
 
     if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
     {
@@ -515,6 +497,20 @@ namespace ao::library
     }
 
     return *preparedResult;
+  }
+
+  FileManifestBuilder ScanPlanExecutor::makeAvailableManifest(ScanItem const& item,
+                                                              TrackId trackId,
+                                                              AudioFingerprint const& fingerprint)
+  {
+    auto builder = FileManifestBuilder::createNew();
+    builder.trackId(trackId)
+      .status(FileStatus::Available)
+      .fileSize(item.fileSize)
+      .mtime(item.mtime)
+      .audioPayloadLength(fingerprint.payloadLength)
+      .audioSignature(fingerprint.signature);
+    return builder;
   }
 
   bool ScanPlanExecutor::updateTrack(TrackStore::Writer& trackWriter,

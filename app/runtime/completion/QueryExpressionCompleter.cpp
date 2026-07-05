@@ -87,8 +87,11 @@ namespace ao::rt
         case query::Field::AlbumArtistId: return TrackField::AlbumArtist;
         case query::Field::GenreId: return TrackField::Genre;
         case query::Field::ComposerId: return TrackField::Composer;
+        case query::Field::ConductorId: return TrackField::Conductor;
+        case query::Field::EnsembleId: return TrackField::Ensemble;
         case query::Field::WorkId: return TrackField::Work;
         case query::Field::MovementId: return TrackField::Movement;
+        case query::Field::SoloistId: return TrackField::Soloist;
         default: return std::nullopt;
       }
     }

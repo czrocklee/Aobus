@@ -24,10 +24,12 @@ clearing the complete set. Cover art is not part of `MetadataBuilder`.
 
 ## Storage
 
-The cold track record stores an ordered table of eight-byte cover entries immediately after
-`TrackColdHeader`, before the custom metadata table.
-The table is four-byte aligned and contains the resource ID, picture type, and reserved bytes.
-Image data remains deduplicated in `ResourceStore`.
+The cold track record stores cover entries in the optional cover-art slot payload after the 32-byte
+`TrackColdHeader`. Cold payload slots are written in deterministic order: cover art, classical
+metadata, then custom metadata. The cover-art payload is omitted when the track has no covers.
+
+Each cover entry is eight bytes, four-byte aligned, and contains the resource ID, picture type, and
+reserved bytes. Image data remains deduplicated in `ResourceStore`.
 
 The primary image used by existing single-image UI surfaces is the first `FrontCover` entry. If
 there is no front cover, the first stored entry is used. An empty table has no primary image.

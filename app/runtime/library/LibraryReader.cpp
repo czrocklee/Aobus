@@ -99,6 +99,7 @@ namespace ao::rt
       auto const& dict = library.dictionary();
       auto const metadata = view.metadata();
       auto const property = view.property();
+      auto const classical = view.classical();
 
       std::uint64_t fileSize = 0;
       std::uint64_t modifiedTime = 0;
@@ -131,8 +132,11 @@ namespace ao::rt
         .albumArtist = resolveDictionaryId(dict, metadata.albumArtistId()),
         .genre = resolveDictionaryId(dict, metadata.genreId()),
         .composer = resolveDictionaryId(dict, metadata.composerId()),
-        .work = resolveDictionaryId(dict, metadata.workId()),
-        .movement = resolveDictionaryId(dict, metadata.movementId()),
+        .conductor = resolveDictionaryId(dict, classical.conductorId()),
+        .ensemble = resolveDictionaryId(dict, classical.ensembleId()),
+        .work = resolveDictionaryId(dict, classical.workId()),
+        .movement = resolveDictionaryId(dict, classical.movementId()),
+        .soloist = resolveDictionaryId(dict, classical.soloistId()),
         .tags = joinResolvedTags(view.tags(), dict),
         .duration = property.duration(),
         .year = metadata.year(),
@@ -140,8 +144,8 @@ namespace ao::rt
         .discTotal = metadata.discTotal(),
         .trackNumber = metadata.trackNumber(),
         .trackTotal = metadata.trackTotal(),
-        .movementNumber = metadata.movementNumber(),
-        .movementTotal = metadata.movementTotal(),
+        .movementNumber = classical.movementNumber(),
+        .movementTotal = classical.movementTotal(),
         .sampleRate = property.sampleRate().raw(),
         .channels = property.channels().raw(),
         .bitDepth = property.bitDepth().raw(),

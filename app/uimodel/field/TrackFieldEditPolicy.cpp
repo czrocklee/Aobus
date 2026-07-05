@@ -50,8 +50,11 @@ namespace ao::uimodel
       case F::AlbumArtist:
       case F::Genre:
       case F::Composer:
+      case F::Conductor:
+      case F::Ensemble:
       case F::Work:
       case F::Movement:
+      case F::Soloist:
       case F::Year:
       case F::DiscNumber:
       case F::DiscTotal:
@@ -90,8 +93,11 @@ namespace ao::uimodel
       case F::AlbumArtist: return writeStringPatch(value, patch.optAlbumArtist);
       case F::Genre: return writeStringPatch(value, patch.optGenre);
       case F::Composer: return writeStringPatch(value, patch.optComposer);
+      case F::Conductor: return writeStringPatch(value, patch.optConductor);
+      case F::Ensemble: return writeStringPatch(value, patch.optEnsemble);
       case F::Work: return writeStringPatch(value, patch.optWork);
       case F::Movement: return writeStringPatch(value, patch.optMovement);
+      case F::Soloist: return writeStringPatch(value, patch.optSoloist);
 
       case F::Year: return writeUint16Patch(value, patch.optYear);
       case F::DiscNumber: return writeUint16Patch(value, patch.optDiscNumber);

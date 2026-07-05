@@ -88,14 +88,54 @@ namespace ao::library
   static_assert(sizeof(CoverArtEntry) == 8, "CoverArtEntry must be exactly 8 bytes");
   static_assert(alignof(CoverArtEntry) == 4, "CoverArtEntry must have 4-byte alignment");
 
+  enum class TrackColdBlockSlot : std::uint8_t
+  {
+    CoverArt = 0,
+    Classical = 1,
+    CustomMetadata = 2,
+  };
+
+  constexpr std::size_t kTrackColdKnownBlockSlotCount = 3;
+  constexpr std::size_t kTrackColdBlockSlotCount = 5;
+
+  constexpr std::size_t trackColdBlockSlotIndex(TrackColdBlockSlot slot) noexcept
+  {
+    return static_cast<std::size_t>(slot);
+  }
+
+  struct TrackClassicalBlock final
+  {
+    DictionaryId workId{};
+    DictionaryId movementId{};
+    DictionaryId conductorId{};
+    DictionaryId ensembleId{};
+    DictionaryId soloistId{};
+    std::uint16_t movementNumber{};
+    std::uint16_t movementTotal{};
+  };
+
+  static_assert(sizeof(TrackClassicalBlock) == 24, "TrackClassicalBlock must be exactly 24 bytes");
+  static_assert(alignof(TrackClassicalBlock) == 4, "TrackClassicalBlock must have 4-byte alignment");
+
+  struct CustomMetadataBlockHeader final
+  {
+    std::uint16_t entryCount{};
+    std::uint16_t valueOffset{};
+    std::uint16_t payloadLength{};
+    std::uint16_t reserved{};
+  };
+
+  static_assert(sizeof(CustomMetadataBlockHeader) == 8, "CustomMetadataBlockHeader must be exactly 8 bytes");
+  static_assert(alignof(CustomMetadataBlockHeader) <= 4, "CustomMetadataBlockHeader must fit cold record alignment");
+
   /**
-   * CustomMetadataEntry - Binary entry for custom key-value metadata in TrackColdHeader.
+   * CustomMetadataEntry - Binary entry for custom key-value metadata in the custom block payload.
    * 8 bytes total, 4-byte aligned.
    */
   struct CustomMetadataEntry final
   {
     DictionaryId keyId{};          // 4 bytes - Links to the key string in DictionaryStore
-    std::uint16_t valueOffset = 0; // 2 bytes - byte offset from header start to value
+    std::uint16_t valueOffset = 0; // 2 bytes - byte offset from custom payload start to value
     std::uint16_t valueLength = 0; // 2 bytes - value length in bytes
   };
 
@@ -103,76 +143,67 @@ namespace ao::library
   static_assert(alignof(CustomMetadataEntry) == 4, "CustomMetadataEntry must have 4-byte alignment");
 
   /**
-   * TrackColdHeader - POD struct for cold track fixed fields.
+   * TrackColdHeader - POD struct for cold track fixed fields and extension block offsets.
    * Layout uses strictly descending member sizes (4→2→1) for natural alignment.
    *
    * Cold fixed fields are those not used in high-frequency filter/sort operations:
    *   - duration, bitrate, channels: audio properties
    *   - trackNumber, trackTotal, discNumber, discTotal: display only
-   *   - workId, movementId, movementNumber, movementTotal: classical metadata
-   *   - uri: playback path, not filtered
-   *   - covers: ordered list of typed cover art ResourceStore references
+   *   - extension block area: cover art, classical metadata, custom metadata
+   *   - uri: playback path, stored after the block area
    *
-   * Total size: 40 bytes with 4-byte alignment.
-   *
-   * Cover entries are 8 bytes each: [resourceId(4), type(1), reserved(3)].
-   * The primary cover is the first front cover, or entry 0 when no front cover exists.
+   * Total size: 32 bytes with 4-byte alignment.
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← cold data begin
-   *   │        TrackColdHeader (40B)        │
+   *   │        TrackColdHeader (32B)        │
    *   │  duration, bitrate,                 │
-   *   │  workId, movementId                 │
    *   │  trackNumber, trackTotal,           │
-   *   │  discNumber, discTotal              │
-   *   │  movementNumber, movementTotal      │
-   *   │  customCount, uriOffset, uriLength  │
-   *   │  coverCount, customOffset           │
-   *   │  channels, padding                  │
-   *   ├─────────────────────────────────────┤  ← coverCount * 8 bytes
-   *   │  [id(4), type(1), rsv(3)] × M       │
-   *   ├─────────────────────────────────────┤  ← customOffset
-   *   │  [keyId(4), off(2), len(2)] × N     │
-   *   ├─────────────────────────────────────┤  ← values start
-   *   │  value 1                            │
-   *   │  value 2                            │
+   *   │  discNumber, discTotal,             │
+   *   │  blockOffsets[5], uriOffset,        │
+   *   │  uriLength, channels, reserved8     │
+   *   ├─────────────────────────────────────┤  ← first present block offset
+   *   │  block payload                      │
    *   │  ...                                │
-   *   ├─────────────────────────────────────┤  ← uri starts at uriOffset
+   *   ├─────────────────────────────────────┤  ← uriOffset
    *   │  uri data... (uriLength bytes)      │
    *   └─────────────────────────────────────┘  ← cold data end
    */
   struct TrackColdHeader final
   {
     // 4-byte section
-    TrackDuration duration{};  // Track duration (millisecond span)
-    Bitrate bitrate{};         // Bitrate in bps
-    DictionaryId workId{};     // Dictionary ID for work
-    DictionaryId movementId{}; // Dictionary ID for movement name
+    TrackDuration duration{}; // Track duration (millisecond span)
+    Bitrate bitrate{};        // Bitrate in bps
 
     // 2-byte section
-    std::uint16_t trackNumber{};    // Track number
-    std::uint16_t trackTotal{};     // Total tracks in album
-    std::uint16_t discNumber{};     // Disc number
-    std::uint16_t discTotal{};      // Total discs in album
-    std::uint16_t movementNumber{}; // Movement ordinal within the work
-    std::uint16_t movementTotal{};  // Total movements in the work
-    std::uint16_t customCount{};    // Number of custom key-value entries
-    std::uint16_t uriOffset{};      // Byte offset from header start to uri string
-    std::uint16_t uriLength{};      // Length of URI string
-    std::uint16_t coverCount{};     // Number of cover art entries
-    std::uint16_t customOffset{};   // Byte offset from header start to custom table
+    std::uint16_t trackNumber{};                                        // Track number
+    std::uint16_t trackTotal{};                                         // Total tracks in album
+    std::uint16_t discNumber{};                                         // Disc number
+    std::uint16_t discTotal{};                                          // Total discs in album
+    std::array<std::uint16_t, kTrackColdBlockSlotCount> blockOffsets{}; // 0 means absent
+    std::uint16_t uriOffset{};                                          // Byte offset from header start to uri string
+    std::uint16_t uriLength{};                                          // Length of URI string
 
     // 1-byte section
     Channels channels{}; // Number of audio channels
-
-    // 1 byte padding to reach 40 bytes total
-    std::array<std::byte, 1> padding{};
+    std::uint8_t reserved8{};
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackColdHeaderSize = 40;
+  constexpr std::size_t kTrackColdHeaderSize = 32;
   constexpr std::size_t kTrackColdHeaderAlignment = 4;
 
-  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 40 bytes");
+  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 32 bytes");
   static_assert(alignof(TrackColdHeader) == kTrackColdHeaderAlignment, "TrackColdHeader must have 4-byte alignment");
+
+  static_assert(sizeof(DictionaryId) == 4, "DictionaryId must stay 4 bytes");
+  static_assert(alignof(DictionaryId) == 4, "DictionaryId must stay 4-byte aligned");
+  static_assert(sizeof(ResourceId) == 4, "ResourceId must stay 4 bytes");
+  static_assert(alignof(ResourceId) == 4, "ResourceId must stay 4-byte aligned");
+  static_assert(sizeof(Bitrate) == 4, "Bitrate must stay 4 bytes");
+  static_assert(alignof(Bitrate) == 4, "Bitrate must stay 4-byte aligned");
+  static_assert(sizeof(Channels) == 1, "Channels must stay 1 byte");
+  static_assert(alignof(Channels) == 1, "Channels must stay 1-byte aligned");
+  static_assert(sizeof(TrackDuration) == 4, "TrackDuration must stay 4 bytes");
+  static_assert(alignof(TrackDuration) == 4, "TrackDuration must stay 4-byte aligned");
 } // namespace ao::library

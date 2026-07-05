@@ -36,8 +36,11 @@ namespace ao::uimodel::test
                                                        rt::TrackField::AlbumArtist,
                                                        rt::TrackField::Genre,
                                                        rt::TrackField::Composer,
+                                                       rt::TrackField::Conductor,
+                                                       rt::TrackField::Ensemble,
                                                        rt::TrackField::Work,
                                                        rt::TrackField::Movement,
+                                                       rt::TrackField::Soloist,
                                                        rt::TrackField::Year,
                                                        rt::TrackField::DiscNumber,
                                                        rt::TrackField::DiscTotal,
@@ -49,9 +52,9 @@ namespace ao::uimodel::test
     REQUIRE(spec.metadataRows.size() > 9U);
     CHECK(spec.metadataRows[0].label == "Title");
     CHECK(spec.metadataRows[0].editorKind == TrackPropertiesFormEditorKind::Text);
-    CHECK(spec.metadataRows[8].field == rt::TrackField::Year);
-    CHECK(spec.metadataRows[8].label == "Year");
-    CHECK(spec.metadataRows[8].editorKind == TrackPropertiesFormEditorKind::Number);
+    CHECK(spec.metadataRows[11].field == rt::TrackField::Year);
+    CHECK(spec.metadataRows[11].label == "Year");
+    CHECK(spec.metadataRows[11].editorKind == TrackPropertiesFormEditorKind::Number);
   }
 
   TEST_CASE("TrackPropertiesFormSpec projects readonly technical property rows", "[uimodel][unit][library][property]")

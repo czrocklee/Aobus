@@ -122,8 +122,11 @@ namespace ao::tui
         case F::AlbumArtist: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.albumArtist};
         case F::Genre: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.genre};
         case F::Composer: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.composer};
+        case F::Conductor: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.conductor};
+        case F::Ensemble: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.ensemble};
         case F::Work: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.work};
         case F::Movement: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.movement};
+        case F::Soloist: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.soloist};
         case F::Year: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.year};
         case F::DiscNumber: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.discNumber};
         case F::DiscTotal: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.discTotal};

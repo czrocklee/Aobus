@@ -17,6 +17,11 @@ ARTIST, &handleText<&library::TrackBuilder::MetadataBuilder::artist>
 ALBUM, &handleText<&library::TrackBuilder::MetadataBuilder::album>
 ALBUMARTIST, &handleText<&library::TrackBuilder::MetadataBuilder::albumArtist>
 COMPOSER, &handleText<&library::TrackBuilder::MetadataBuilder::composer>
+CONDUCTOR, &handleText<&library::TrackBuilder::MetadataBuilder::conductor>
+ENSEMBLE, &handleText<&library::TrackBuilder::MetadataBuilder::ensemble>
+ORCHESTRA, &handleEnsembleFallback
+SOLOIST, &handleText<&library::TrackBuilder::MetadataBuilder::soloist>
+PERFORMER, &handleSoloistFallback
 TRACKNUMBER, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::trackNumber, &library::TrackBuilder::MetadataBuilder::trackTotal>
 TRACKTOTAL, &handleNumber<&library::TrackBuilder::MetadataBuilder::trackTotal>
 TOTALTRACKS, &handleNumber<&library::TrackBuilder::MetadataBuilder::trackTotal>

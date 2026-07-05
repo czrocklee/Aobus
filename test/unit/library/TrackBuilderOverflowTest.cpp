@@ -14,9 +14,53 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace ao::library::test
 {
+  TEST_CASE("TrackBuilder - hot serialization rejects values that exceed header fields",
+            "[library][unit][track][builder][serialization][overflow][error]")
+  {
+    constexpr std::size_t kUint16Max = std::numeric_limits<std::uint16_t>::max();
+
+    auto context = TrackSerializationContext{};
+
+    SECTION("Title length")
+    {
+      auto builder = TrackBuilder::createNew();
+      auto const title = std::string(kUint16Max + 1, 't');
+      builder.metadata().title(title);
+
+      auto const result = context.trySerializeHot(builder);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::ValueTooLarge);
+    }
+
+    SECTION("Tag payload length")
+    {
+      constexpr std::size_t kOverflowTagCount = (kUint16Max / sizeof(DictionaryId)) + 1;
+
+      auto tagNames = std::vector<std::string>{};
+      tagNames.reserve(kOverflowTagCount);
+
+      for (std::size_t i = 0; i < kOverflowTagCount; ++i)
+      {
+        tagNames.push_back("tag" + std::to_string(i));
+      }
+
+      auto builder = TrackBuilder::createNew();
+
+      for (auto const& tagName : tagNames)
+      {
+        builder.tags().add(tagName);
+      }
+
+      auto const result = context.trySerializeHot(builder);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::ValueTooLarge);
+    }
+  }
+
   TEST_CASE("TrackBuilder - cold serialization rejects values that exceed header fields",
             "[library][unit][track][builder][serialization][overflow][error]")
   {
@@ -47,11 +91,13 @@ namespace ao::library::test
       CHECK(result.error().code == Error::Code::ValueTooLarge);
     }
 
-    SECTION("Cover art count")
+    SECTION("Cover art payload length")
     {
+      constexpr std::size_t kOverflowCount = (kUint16Max / sizeof(CoverArtEntry)) + 1;
+
       auto builder = TrackBuilder::createNew();
 
-      for (std::size_t i = 0; i < kUint16Overflow; ++i)
+      for (std::size_t i = 0; i < kOverflowCount; ++i)
       {
         builder.coverArt().add(PictureType::Other, ResourceId{static_cast<std::uint32_t>(i + 1)});
       }
@@ -77,14 +123,26 @@ namespace ao::library::test
 
     SECTION("Custom metadata table offset")
     {
-      constexpr std::size_t kOverflowCount = (kUint16Overflow / sizeof(CoverArtEntry));
+      constexpr std::size_t kOverflowCount = (kUint16Max / sizeof(CustomMetadataEntry)) + 1;
 
       auto builder = TrackBuilder::createNew();
 
       for (std::size_t i = 0; i < kOverflowCount; ++i)
       {
-        builder.coverArt().add(PictureType::Other, ResourceId{static_cast<std::uint32_t>(i + 1)});
+        builder.customMetadata().add("key", {});
       }
+
+      auto const result = context.trySerializeCold(builder);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::ValueTooLarge);
+    }
+
+    SECTION("URI offset after aligned custom payload")
+    {
+      constexpr std::size_t kValueSize = kUint16Max - sizeof(CustomMetadataBlockHeader) - sizeof(CustomMetadataEntry);
+
+      auto builder = TrackBuilder::createNew();
+      builder.customMetadata().add("key", std::string(kValueSize, 'v'));
 
       auto const result = context.trySerializeCold(builder);
       REQUIRE_FALSE(result);
@@ -101,6 +159,23 @@ namespace ao::library::test
       auto const value = std::string(kValueSize, 'v');
 
       builder.customMetadata().add("first", value).add("second", value);
+
+      auto const result = context.trySerializeCold(builder);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::ValueTooLarge);
+    }
+
+    SECTION("URI offset after multiple aligned payloads")
+    {
+      constexpr std::size_t kCoverCount = kUint16Max / sizeof(CoverArtEntry);
+
+      auto builder = TrackBuilder::createNew();
+      builder.metadata().movementNumber(1);
+
+      for (std::size_t i = 0; i < kCoverCount; ++i)
+      {
+        builder.coverArt().add(PictureType::Other, ResourceId{static_cast<std::uint32_t>(i + 1)});
+      }
 
       auto const result = context.trySerializeCold(builder);
       REQUIRE_FALSE(result);

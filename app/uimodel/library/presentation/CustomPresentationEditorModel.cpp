@@ -28,6 +28,8 @@ namespace ao::uimodel
         case rt::TrackGroupKey::AlbumArtist: return "Album Artist";
         case rt::TrackGroupKey::Genre: return "Genre";
         case rt::TrackGroupKey::Composer: return "Composer";
+        case rt::TrackGroupKey::Conductor: return "Conductor";
+        case rt::TrackGroupKey::Ensemble: return "Ensemble";
         case rt::TrackGroupKey::Work: return "Work";
         case rt::TrackGroupKey::Year: return "Year";
       }
@@ -244,6 +246,8 @@ namespace ao::uimodel
       rt::TrackGroupKey::AlbumArtist,
       rt::TrackGroupKey::Genre,
       rt::TrackGroupKey::Composer,
+      rt::TrackGroupKey::Conductor,
+      rt::TrackGroupKey::Ensemble,
       rt::TrackGroupKey::Work,
       rt::TrackGroupKey::Year,
     };

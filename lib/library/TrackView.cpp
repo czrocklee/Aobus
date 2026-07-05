@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
 #include <ao/library/CoverArt.h>
@@ -7,105 +7,132 @@
 #include <ao/library/TrackView.h>
 #include <ao/utility/ByteView.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
 #include <algorithm>
+#include <array>
 #include <cstddef>
-#include <cstdint>
-#include <cstring>
 #include <optional>
+#include <span>
 #include <string_view>
-#include <utility>
 
 namespace ao::library
 {
-  // TrackView member implementations
-  TrackHotHeader const& TrackView::hotHeader() const
+  namespace
   {
-    gsl_Expects(isHotValid());
+    constexpr std::size_t kSerializedAlignmentBytes = 4;
+  } // namespace
 
-    auto const* header = utility::layout::view<TrackHotHeader>(_hotData);
-    gsl_Assert(header != nullptr);
+  /**
+   * O(1) cold gate: header fits and is aligned, the URI range stays inside
+   * the record, and present known block slots are aligned, strictly
+   * increasing, and end before the URI. Slot payloads get one size check
+   * each so the proxies can trust their slices. Unknown trailing slots and
+   * bytes beyond the URI are ignored; semantic invariants (no gaps, zeroed
+   * padding, sorted custom keys) are the write side's job and are only
+   * re-checked by detail::TrackColdReader.
+   */
+  TrackView::ColdIndex const& TrackView::scanColdIndex() const noexcept
+  {
+    auto& index = _coldIndex;
+    index.scanned = true;
+
+    auto const* header = utility::bytes::tryLayout<TrackColdHeader>(_coldData);
 
     if (header == nullptr)
     {
-      std::unreachable();
+      return index;
     }
 
-    return *header;
-  }
+    auto const recordSize = _coldData.size();
+    auto const uriOffset = static_cast<std::size_t>(header->uriOffset);
+    auto const uriLength = static_cast<std::size_t>(header->uriLength);
 
-  TrackColdHeader const& TrackView::coldHeader() const
-  {
-    gsl_Expects(isColdValid());
-
-    auto const* header = utility::layout::view<TrackColdHeader>(_coldData);
-    gsl_Assert(header != nullptr);
-
-    if (header == nullptr)
+    if (uriOffset < sizeof(TrackColdHeader) || uriOffset > recordSize || uriLength > recordSize - uriOffset)
     {
-      std::unreachable();
+      return index;
     }
 
-    return *header;
-  }
+    auto begins = std::array<std::size_t, kTrackColdKnownBlockSlotCount>{};
+    std::size_t previousBegin = 0;
 
-  std::string_view TrackView::hotTitle() const
-  {
-    auto const& hdr = hotHeader();
-    auto titleOffset = hdr.tagLength; // title comes after tags
-    return hotGetString(titleOffset, hdr.titleLength);
-  }
-
-  DictionaryId TrackView::hotTagId(std::uint8_t index) const
-  {
-    auto const& hdr = hotHeader();
-    gsl_Expects(index < hdr.tagLength / sizeof(DictionaryId));
-    auto tagIds = utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), hdr.tagLength));
-    return tagIds[index];
-  }
-
-  std::string_view TrackView::hotGetString(std::uint16_t offset, std::uint16_t length) const
-  {
-    auto const start = sizeof(TrackHotHeader) + offset;
-    gsl_Expects(start + length <= _hotData.size());
-    return utility::bytes::stringView(_hotData.subspan(start, length));
-  }
-
-  std::string_view TrackView::coldUri() const
-  {
-    auto const& hdr = coldHeader();
-    return coldGetString(hdr.uriOffset, hdr.uriLength);
-  }
-
-  std::string_view TrackView::coldGetString(std::uint16_t offset, std::uint16_t len) const
-  {
-    gsl_Expects(offset + len <= _coldData.size());
-    return utility::bytes::stringView(_coldData.subspan(offset, len));
-  }
-
-  // TrackView proxy implementations
-  TrackHotHeader const& TrackView::TagProxy::hotHeader() const
-  {
-    gsl_Expects(_hotData.size() >= sizeof(TrackHotHeader));
-
-    auto const* header = utility::layout::view<TrackHotHeader>(_hotData);
-    gsl_Assert(header != nullptr);
-
-    if (header == nullptr)
+    for (std::size_t i = 0; i < kTrackColdKnownBlockSlotCount; ++i)
     {
-      std::unreachable();
+      auto const offset = static_cast<std::size_t>(header->blockOffsets[i]);
+      begins[i] = offset;
+
+      if (offset == 0)
+      {
+        continue;
+      }
+
+      if (offset < sizeof(TrackColdHeader) || offset >= uriOffset || offset % kSerializedAlignmentBytes != 0 ||
+          offset <= previousBegin)
+      {
+        return index;
+      }
+
+      previousBegin = offset;
     }
 
-    return *header;
+    auto payloadForSlot = [&](TrackColdBlockSlot slot) noexcept
+    {
+      auto const slotIndex = trackColdBlockSlotIndex(slot);
+
+      if (begins[slotIndex] == 0)
+      {
+        return std::span<std::byte const>{};
+      }
+
+      std::size_t endOffset = uriOffset;
+
+      for (auto nextIndex = slotIndex + 1; nextIndex < kTrackColdKnownBlockSlotCount; ++nextIndex)
+      {
+        if (begins[nextIndex] != 0)
+        {
+          endOffset = begins[nextIndex];
+          break;
+        }
+      }
+
+      return _coldData.subspan(begins[slotIndex], endOffset - begins[slotIndex]);
+    };
+
+    auto classicalPayload = payloadForSlot(TrackColdBlockSlot::Classical);
+
+    if (!classicalPayload.empty())
+    {
+      if (classicalPayload.size() < sizeof(TrackClassicalBlock))
+      {
+        return index;
+      }
+
+      classicalPayload = classicalPayload.first(sizeof(TrackClassicalBlock));
+    }
+
+    auto const customPayload = payloadForSlot(TrackColdBlockSlot::CustomMetadata);
+
+    if (!customPayload.empty())
+    {
+      auto const* customHeader = utility::bytes::tryLayout<CustomMetadataBlockHeader>(customPayload);
+
+      if (customHeader == nullptr || static_cast<std::size_t>(customHeader->entryCount) * sizeof(CustomMetadataEntry) >
+                                       customPayload.size() - sizeof(CustomMetadataBlockHeader))
+      {
+        return index;
+      }
+    }
+
+    auto coverPayload = payloadForSlot(TrackColdBlockSlot::CoverArt);
+    coverPayload = coverPayload.first(coverPayload.size() - (coverPayload.size() % sizeof(CoverArtEntry)));
+
+    index.uri = _coldData.subspan(uriOffset, uriLength);
+    index.cover = coverPayload;
+    index.classical = classicalPayload;
+    index.custom = customPayload;
+    index.header = header;
+    return index;
   }
 
-  bool TrackView::TagProxy::has(DictionaryId tagIdToCheck) const noexcept
-  {
-    return std::ranges::contains(*this, tagIdToCheck);
-  }
-
-  std::optional<CoverArt> TrackView::CoverArtProxy::primary() const noexcept
+  std::optional<CoverArt> CoverArtProxy::primary() const noexcept
   {
     if (empty())
     {
@@ -120,48 +147,63 @@ namespace ao::library
     return *begin();
   }
 
-  TrackView::CoverArtProxy::Iterator TrackView::CoverArtProxy::begin() const
+  CoverArtProxy::Iterator CoverArtProxy::begin() const
   {
-    return Iterator{entries().data()};
+    return Iterator{_entries.data()};
   }
 
-  TrackView::CoverArtProxy::Iterator TrackView::CoverArtProxy::end() const
+  CoverArtProxy::Iterator CoverArtProxy::end() const
   {
-    auto const coverEntries = entries();
-    return Iterator{coverEntries.data() + coverEntries.size()};
+    auto const* end = _entries.data();
+
+    if (end != nullptr)
+    {
+      end += _entries.size();
+    }
+
+    return Iterator{end};
   }
 
-  std::optional<std::string_view> TrackView::CustomMetadataProxy::get(DictionaryId dictId) const
+  std::string_view CustomMetadataProxy::value(std::span<std::byte const> payload, Entry const& entry) noexcept
   {
-    // Threshold for switching between linear and binary search
+    auto const valueOffset = static_cast<std::size_t>(entry.valueOffset);
+    auto const valueLength = static_cast<std::size_t>(entry.valueLength);
+
+    // Per-entry clamp: entry ranges are data, not gated structure, so one
+    // bounds check per access keeps garbage entries memory-safe.
+    if (valueOffset > payload.size() || valueLength > payload.size() - valueOffset)
+    {
+      return {};
+    }
+
+    return utility::bytes::stringView(payload.subspan(valueOffset, valueLength));
+  }
+
+  std::optional<std::string_view> CustomMetadataProxy::get(DictionaryId dictId) const noexcept
+  {
     constexpr std::size_t kSearchThreshold = 64;
-
     auto customEntries = entries();
 
-    // Small N: linear search via ranges::find_if (cache-friendly, no divisions)
     if (customEntries.size() < kSearchThreshold)
     {
       if (auto it = std::ranges::find(customEntries, dictId, &Entry::keyId); it != customEntries.end())
       {
-        gsl_Expects(it->valueOffset + it->valueLength <= _coldData.size());
-        return utility::bytes::stringView(_coldData.subspan(it->valueOffset, it->valueLength));
+        return value(_payload, *it);
       }
 
       return std::nullopt;
     }
 
-    // Large N: binary search via ranges::lower_bound
     if (auto it = std::ranges::lower_bound(customEntries, dictId, {}, &Entry::keyId);
         it != customEntries.end() && it->keyId == dictId)
     {
-      gsl_Expects(it->valueOffset + it->valueLength <= _coldData.size());
-      return utility::bytes::stringView(_coldData.subspan(it->valueOffset, it->valueLength));
+      return value(_payload, *it);
     }
 
     return std::nullopt;
   }
 
-  bool TrackView::CustomMetadataProxy::contains(DictionaryId dictId) const
+  bool CustomMetadataProxy::contains(DictionaryId dictId) const noexcept
   {
     constexpr std::size_t kSearchThreshold = 64;
     auto customEntries = entries();
@@ -175,46 +217,26 @@ namespace ao::library
     return it != customEntries.end() && it->keyId == dictId;
   }
 
-  TrackView::CustomMetadataProxy::Iterator TrackView::CustomMetadataProxy::begin() const
+  CustomMetadataProxy::Iterator CustomMetadataProxy::begin() const
+  {
+    return {entries().data(), _payload};
+  }
+
+  CustomMetadataProxy::Iterator CustomMetadataProxy::end() const
   {
     auto customEntries = entries();
-    return {customEntries.data(), _coldData.data()};
-  }
+    auto const* end = customEntries.data();
 
-  TrackView::CustomMetadataProxy::Iterator TrackView::CustomMetadataProxy::end() const
-  {
-    auto customEntries = entries();
-    return {customEntries.data() + customEntries.size(), _coldData.data()};
-  }
-
-  TrackView::CustomMetadataProxy::Iterator::Iterator(Entry const* pos, std::byte const* coldDataBase)
-    : _pos{pos}, _coldDataBase{coldDataBase}
-  {
-  }
-
-  TrackView::CustomMetadataProxy::Iterator::value_type TrackView::CustomMetadataProxy::Iterator::operator*() const
-  {
-    auto const& entry = *_pos;
-    auto value = std::string_view{};
-
-    if (entry.valueLength > 0)
+    if (end != nullptr)
     {
-      value = utility::bytes::stringView(utility::bytes::view(_coldDataBase + entry.valueOffset, entry.valueLength));
+      end += customEntries.size();
     }
 
-    return {entry.keyId, value};
+    return {end, _payload};
   }
 
-  TrackView::CustomMetadataProxy::Iterator& TrackView::CustomMetadataProxy::Iterator::operator++()
+  bool TrackView::TagProxy::has(DictionaryId tagIdToCheck) const noexcept
   {
-    ++_pos;
-    return *this;
-  }
-
-  TrackView::CustomMetadataProxy::Iterator TrackView::CustomMetadataProxy::Iterator::operator++(std::int32_t)
-  {
-    auto tmp = Iterator{*this};
-    ++_pos;
-    return tmp;
+    return std::ranges::contains(*this, tagIdToCheck);
   }
 } // namespace ao::library

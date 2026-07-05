@@ -3,6 +3,7 @@
 
 #include "lib/tag/flac/File.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/AudioCodec.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
@@ -61,7 +62,7 @@ namespace ao::tag::flac::test
         vc.insert(vc.end(), s.begin(), s.end());
       };
       addString("Vendor");
-      std::uint32_t const count = 16;
+      std::uint32_t const count = 21;
       vc.push_back(count & 0xFF);
       vc.push_back((count >> 8) & 0xFF);
       vc.push_back((count >> 16) & 0xFF);
@@ -72,6 +73,9 @@ namespace ao::tag::flac::test
       addString("ARTIST=Artist");
       addString("ALBUMARTIST=AlbumArtist");
       addString("COMPOSER=Composer");
+      addString("CONDUCTOR=Conductor");
+      addString("ENSEMBLE=Ensemble");
+      addString("ORCHESTRA=Orchestra Fallback");
       addString("GENRE=Genre");
       addString("TRACKNUMBER=1");
       addString("TRACKTOTAL=10");
@@ -83,6 +87,8 @@ namespace ao::tag::flac::test
       addString("WORK=WorkName");
       addString("MOVEMENTNAME=MovementName");
       addString("MOVEMENT=2/4");
+      addString("SOLOIST=Soloist");
+      addString("PERFORMER=Performer Fallback");
       addString("UNKNOWN=IgnoredValue");
 
       addBlockHeader(data, MetadataBlockType::VorbisComment, true, static_cast<std::uint32_t>(vc.size()));
@@ -112,6 +118,8 @@ namespace ao::tag::flac::test
     CHECK(meta.artist() == "Artist");
     CHECK(meta.albumArtist() == "AlbumArtist");
     CHECK(meta.composer() == "Composer");
+    CHECK(meta.conductor() == "Conductor");
+    CHECK(meta.ensemble() == "Ensemble");
     CHECK(meta.genre() == "Genre");
     CHECK(meta.trackNumber() == 1);
     CHECK(meta.trackTotal() == 10);
@@ -120,6 +128,7 @@ namespace ao::tag::flac::test
     CHECK(meta.year() == 2024);
     CHECK(meta.work() == "WorkName");
     CHECK(meta.movement() == "MovementName");
+    CHECK(meta.soloist() == "Soloist");
     CHECK(meta.movementNumber() == 2);
     CHECK(meta.movementTotal() == 4);
     CHECK(builder.customMetadata().pairs().empty());
@@ -130,6 +139,17 @@ namespace ao::tag::flac::test
     CHECK(prop.bitDepth() == 16);
     CHECK(prop.codec() == AudioCodec::Flac);
     CHECK(prop.duration() == std::chrono::seconds{1});
+  }
+
+  TEST_CASE("FLAC File - maps classical fallback comments when primary fields are absent", "[tag][unit][flac][file]")
+  {
+    auto const file = File{audio::test::requireAudioFixture("classical_fallback.flac")};
+    auto builder = loadTrack(file);
+    auto const meta = builder.metadata();
+
+    CHECK(meta.title() == "Classical Fallback");
+    CHECK(meta.ensemble() == "Fixture Fallback Ensemble");
+    CHECK(meta.soloist() == "Fixture Fallback Soloist");
   }
 
   TEST_CASE("FLAC File - audio payload range starts after metadata blocks", "[tag][unit][flac][file]")

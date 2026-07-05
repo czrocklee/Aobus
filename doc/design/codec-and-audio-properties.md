@@ -15,8 +15,10 @@ codecs. It does not describe the file extension or container.
 - `bitDepth` as `uint8_t`
 
 `sampleRate` is hot because built-in smart lists and common technical filters can use it without loading
-cold data. `TrackHotHeader` is 36 bytes and `TrackColdHeader` is 32 bytes, keeping the fixed per-track
-header total at 68 bytes.
+cold data. `TrackHotHeader` is 36 bytes and the fixed `TrackColdHeader` is 32 bytes. The cold header
+uses a five-slot offset table; the current slots are cover art, classical metadata, and custom
+metadata, with two reserved slots required to be zero. Slot payloads are written only when present, so
+the fixed per-track header cost is 68 bytes before optional cold payloads and the URI tail.
 
 ## Codec Mapping
 

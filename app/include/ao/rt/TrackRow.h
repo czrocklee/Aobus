@@ -30,8 +30,11 @@ namespace ao::rt
     std::string albumArtist{};
     std::string genre{};
     std::string composer{};
+    std::string conductor{};
+    std::string ensemble{};
     std::string work{};
     std::string movement{};
+    std::string soloist{};
     std::string tags{};
 
     TrackFieldDuration duration{0};

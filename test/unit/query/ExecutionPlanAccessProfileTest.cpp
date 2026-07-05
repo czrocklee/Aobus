@@ -70,6 +70,15 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
+  TEST_CASE("ExecutionPlan - reports ColdOnly access for classical role metadata", "[query][unit][execution_plan]")
+  {
+    auto expr = parseOk("$conductor = Kleiber");
+    auto compiler = QueryCompiler{};
+    auto plan = compileOk(compiler, expr);
+
+    CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+  }
+
   TEST_CASE("ExecutionPlan - reports ColdOnly access for duration", "[query][unit][execution_plan]")
   {
     auto expr = parseOk("@duration > 180000");

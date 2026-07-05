@@ -11,6 +11,7 @@
 #include <ao/tag/TagFile.h>
 #include <ao/utility/ByteView.h>
 
+#include <cctype>
 #include <cstdint>
 #include <cstring>
 #include <optional>
@@ -192,11 +193,60 @@ namespace ao::tag::mpeg::id3v2
       if (auto const nullPos = text.find('\0'); nullPos != std::string_view::npos)
       {
         auto const key = text.substr(0, nullPos);
+        auto const value = text.substr(nullPos + 1);
 
-        if (auto const value = text.substr(nullPos + 1);
-            key == "work" || key == "WORK" || key == "grouping" || key == "GROUPING")
+        auto const equalsKey = [](std::string_view lhs, std::string_view rhs)
+        {
+          if (lhs.size() != rhs.size())
+          {
+            return false;
+          }
+
+          for (std::size_t index = 0; index < lhs.size(); ++index)
+          {
+            if (std::tolower(static_cast<unsigned char>(lhs[index])) !=
+                std::tolower(static_cast<unsigned char>(rhs[index])))
+            {
+              return false;
+            }
+          }
+
+          return true;
+        };
+
+        if (equalsKey(key, "work") || equalsKey(key, "grouping"))
         {
           builder.metadata().work(detail::stashOwnedString(owner, std::string{value}));
+        }
+        else if (equalsKey(key, "conductor"))
+        {
+          builder.metadata().conductor(detail::stashOwnedString(owner, std::string{value}));
+        }
+        else if (equalsKey(key, "ensemble") || (equalsKey(key, "orchestra") && builder.metadata().ensemble().empty()))
+        {
+          builder.metadata().ensemble(detail::stashOwnedString(owner, std::string{value}));
+        }
+        else if (equalsKey(key, "soloist"))
+        {
+          builder.metadata().soloist(detail::stashOwnedString(owner, std::string{value}));
+        }
+        else if (equalsKey(key, "movementname") || equalsKey(key, "movement_name") || equalsKey(key, "mvnm"))
+        {
+          builder.metadata().movement(detail::stashOwnedString(owner, std::string{value}));
+        }
+        else if (equalsKey(key, "movement") || equalsKey(key, "mvin"))
+        {
+          auto const pair = parseSlashPair(value);
+
+          if (pair.optPrimary)
+          {
+            builder.metadata().movementNumber(*pair.optPrimary);
+          }
+
+          if (pair.optSecondary)
+          {
+            builder.metadata().movementTotal(*pair.optSecondary);
+          }
         }
       }
     }

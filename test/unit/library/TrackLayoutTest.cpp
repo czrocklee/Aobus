@@ -38,7 +38,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackColdHeader - has stable size and alignment", "[library][unit][track]")
   {
-    CHECK(sizeof(TrackColdHeader) == 40);
+    CHECK(sizeof(TrackColdHeader) == 32);
     CHECK(alignof(TrackColdHeader) == 4);
   }
 
@@ -47,23 +47,35 @@ namespace ao::library::test
     // 4-byte section
     CHECK(offsetof(TrackColdHeader, duration) == 0);
     CHECK(offsetof(TrackColdHeader, bitrate) == 4);
-    CHECK(offsetof(TrackColdHeader, workId) == 8);
-    CHECK(offsetof(TrackColdHeader, movementId) == 12);
 
     // 2-byte section
-    CHECK(offsetof(TrackColdHeader, trackNumber) == 16);
-    CHECK(offsetof(TrackColdHeader, trackTotal) == 18);
-    CHECK(offsetof(TrackColdHeader, discNumber) == 20);
-    CHECK(offsetof(TrackColdHeader, discTotal) == 22);
-    CHECK(offsetof(TrackColdHeader, movementNumber) == 24);
-    CHECK(offsetof(TrackColdHeader, movementTotal) == 26);
-    CHECK(offsetof(TrackColdHeader, customCount) == 28);
-    CHECK(offsetof(TrackColdHeader, uriOffset) == 30);
-    CHECK(offsetof(TrackColdHeader, uriLength) == 32);
-    CHECK(offsetof(TrackColdHeader, coverCount) == 34);
-    CHECK(offsetof(TrackColdHeader, customOffset) == 36);
+    CHECK(offsetof(TrackColdHeader, trackNumber) == 8);
+    CHECK(offsetof(TrackColdHeader, trackTotal) == 10);
+    CHECK(offsetof(TrackColdHeader, discNumber) == 12);
+    CHECK(offsetof(TrackColdHeader, discTotal) == 14);
+    CHECK(offsetof(TrackColdHeader, blockOffsets) == 16);
+    CHECK(offsetof(TrackColdHeader, uriOffset) == 26);
+    CHECK(offsetof(TrackColdHeader, uriLength) == 28);
 
     // 1-byte section
-    CHECK(offsetof(TrackColdHeader, channels) == 38);
+    CHECK(offsetof(TrackColdHeader, channels) == 30);
+    CHECK(offsetof(TrackColdHeader, reserved8) == 31);
+  }
+
+  TEST_CASE("TrackCold extension blocks - have stable size and alignment", "[library][unit][track]")
+  {
+    CHECK(kTrackColdKnownBlockSlotCount == 3);
+    CHECK(kTrackColdBlockSlotCount == 5);
+    CHECK(trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt) == 0);
+    CHECK(trackColdBlockSlotIndex(TrackColdBlockSlot::Classical) == 1);
+    CHECK(trackColdBlockSlotIndex(TrackColdBlockSlot::CustomMetadata) == 2);
+    CHECK(sizeof(CoverArtEntry) == 8);
+    CHECK(alignof(CoverArtEntry) == 4);
+    CHECK(sizeof(TrackClassicalBlock) == 24);
+    CHECK(alignof(TrackClassicalBlock) == 4);
+    CHECK(sizeof(CustomMetadataBlockHeader) == 8);
+    CHECK(alignof(CustomMetadataBlockHeader) <= 4);
+    CHECK(sizeof(CustomMetadataEntry) == 8);
+    CHECK(alignof(CustomMetadataEntry) == 4);
   }
 } // namespace ao::library::test

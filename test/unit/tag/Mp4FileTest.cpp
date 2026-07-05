@@ -3,6 +3,7 @@
 
 #include "lib/tag/mp4/File.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
 #include "test/unit/media/mp4/TestAtoms.h"
 #include <ao/AudioCodec.h>
 #include <ao/library/CoverArt.h>
@@ -46,6 +47,34 @@ namespace ao::tag::mp4::test
       return atom;
     }
 
+    std::vector<std::uint8_t> makeFreeformTextAtom(std::string_view name, std::string_view value)
+    {
+      auto freeformBody = std::vector<std::uint8_t>{};
+
+      auto addFreeformTextChild = [&](std::string_view type, std::string_view text)
+      {
+        auto childBody = std::vector<std::uint8_t>{0, 0, 0, 0};
+        childBody.insert(childBody.end(), text.begin(), text.end());
+        auto const child = ao::test::mp4::makeAtom(type, childBody);
+        freeformBody.insert(freeformBody.end(), child.begin(), child.end());
+      };
+
+      addFreeformTextChild("mean", "com.apple.iTunes");
+      addFreeformTextChild("name", name);
+
+      auto dataLayout = DataAtomLayout{};
+      dataLayout.common.length = static_cast<std::uint32_t>(sizeof(DataAtomLayout) + value.size());
+      std::memcpy(dataLayout.common.type.data(), "data", 4);
+      dataLayout.dataLength = static_cast<std::uint32_t>(16 + value.size());
+      std::memcpy(dataLayout.magic.data(), "data", 4);
+      dataLayout.type = 1;
+      auto const* dataAddr = reinterpret_cast<std::uint8_t const*>(&dataLayout);
+      freeformBody.insert(freeformBody.end(), dataAddr, dataAddr + sizeof(dataLayout));
+      freeformBody.insert(freeformBody.end(), value.begin(), value.end());
+
+      return ao::test::mp4::makeAtom("----", freeformBody);
+    }
+
     std::vector<std::uint8_t> createMinimalM4a(char const* sampleEntryType = "mp4a",
                                                std::vector<std::uint8_t> const& sampleEntryExtensions = {})
     {
@@ -69,6 +98,35 @@ namespace ao::tag::mp4::test
         ilstBody.insert(ilstBody.end(), atom.begin(), atom.end());
       };
 
+      auto addFreeformAtom = [&](std::string_view name, std::string_view value)
+      {
+        auto freeformBody = std::vector<std::uint8_t>{};
+
+        auto addFreeformTextChild = [&](std::string_view type, std::string_view text)
+        {
+          auto childBody = std::vector<std::uint8_t>{0, 0, 0, 0};
+          childBody.insert(childBody.end(), text.begin(), text.end());
+          auto const child = ao::test::mp4::makeAtom(type, childBody);
+          freeformBody.insert(freeformBody.end(), child.begin(), child.end());
+        };
+
+        addFreeformTextChild("mean", "com.apple.iTunes");
+        addFreeformTextChild("name", name);
+
+        auto dataLayout = DataAtomLayout{};
+        dataLayout.common.length = static_cast<std::uint32_t>(sizeof(DataAtomLayout) + value.size());
+        std::memcpy(dataLayout.common.type.data(), "data", 4);
+        dataLayout.dataLength = static_cast<std::uint32_t>(16 + value.size());
+        std::memcpy(dataLayout.magic.data(), "data", 4);
+        dataLayout.type = 1;
+        auto const* dataAddr = reinterpret_cast<std::uint8_t const*>(&dataLayout);
+        freeformBody.insert(freeformBody.end(), dataAddr, dataAddr + sizeof(dataLayout));
+        freeformBody.insert(freeformBody.end(), value.begin(), value.end());
+
+        auto const atom = ao::test::mp4::makeAtom("----", freeformBody);
+        ilstBody.insert(ilstBody.end(), atom.begin(), atom.end());
+      };
+
       addTextAtom("\xA9"
                   "nam",
                   "Title");
@@ -87,6 +145,9 @@ namespace ao::tag::mp4::test
       addTextAtom("\xA9"
                   "wrt",
                   "Composer");
+      addFreeformAtom("CONDUCTOR", "Conductor");
+      addFreeformAtom("ENSEMBLE", "Ensemble");
+      addFreeformAtom("ORCHESTRA", "Orchestra Fallback");
       addTextAtom("\xA9"
                   "wrk",
                   "Work");
@@ -96,6 +157,7 @@ namespace ao::tag::mp4::test
       addTextAtom("\xA9"
                   "mvn",
                   "MovementName");
+      addFreeformAtom("SOLOIST", "Soloist");
 
       auto const movementNumberAtom = makeIntegerMetadataAtom("\xA9"
                                                               "mvi",
@@ -321,8 +383,11 @@ namespace ao::tag::mp4::test
     CHECK(meta.year() == 2024);
     CHECK(meta.genre() == "Genre");
     CHECK(meta.composer() == "Composer");
+    CHECK(meta.conductor() == "Conductor");
+    CHECK(meta.ensemble() == "Ensemble");
     CHECK(meta.work() == "Grouping"); // grp overwrites wrk
     CHECK(meta.movement() == "MovementName");
+    CHECK(meta.soloist() == "Soloist");
     CHECK(meta.movementNumber() == 2);
     CHECK(meta.movementTotal() == 4);
     CHECK(meta.trackNumber() == 7);
@@ -349,6 +414,48 @@ namespace ao::tag::mp4::test
     CHECK(builder.property().channels() == 2);
     CHECK(builder.property().bitDepth() == 16);
     CHECK(builder.property().codec() == AudioCodec::Aac);
+  }
+
+  TEST_CASE("MP4 File - maps freeform classical names case-insensitively", "[tag][unit][mp4][file]")
+  {
+    auto ilstChildren = std::vector<std::uint8_t>{};
+
+    for (auto const& atom : {makeFreeformTextAtom("conductor", "Lower Conductor"),
+                             makeFreeformTextAtom("EnSeMbLe", "Mixed Ensemble"),
+                             makeFreeformTextAtom("soloist", "Lower Soloist")})
+    {
+      ilstChildren.insert(ilstChildren.end(), atom.begin(), atom.end());
+    }
+
+    auto const data = createMinimalM4aWithRawIlstAtom(ilstChildren);
+    auto const temp = TempFile{data, ".m4a"};
+
+    auto const file = File{temp.path};
+    auto const builder = loadTrack(file);
+
+    CHECK(builder.metadata().conductor() == "Lower Conductor");
+    CHECK(builder.metadata().ensemble() == "Mixed Ensemble");
+    CHECK(builder.metadata().soloist() == "Lower Soloist");
+  }
+
+  TEST_CASE("MP4 File - maps orchestra freeform fallback when ensemble is absent", "[tag][unit][mp4][file]")
+  {
+    auto const data = createMinimalM4aWithRawIlstAtom(makeFreeformTextAtom("orchestra", "Fallback Ensemble"));
+    auto const temp = TempFile{data, ".m4a"};
+
+    auto const file = File{temp.path};
+    auto const builder = loadTrack(file);
+
+    CHECK(builder.metadata().ensemble() == "Fallback Ensemble");
+  }
+
+  TEST_CASE("MP4 File - maps orchestra mdta fixture fallback when ensemble is absent", "[tag][unit][mp4][file]")
+  {
+    auto const file = File{audio::test::requireAudioFixture("classical_fallback.m4a")};
+    auto const builder = loadTrack(file);
+
+    CHECK(builder.metadata().title() == "Classical Fallback");
+    CHECK(builder.metadata().ensemble() == "Fixture Fallback Ensemble");
   }
 
   TEST_CASE("MP4 File - audio payload range exposes mdat payload", "[tag][unit][mp4][file]")

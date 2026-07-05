@@ -35,6 +35,35 @@ namespace ao::library::test
     CHECK(optView->metadata().trackTotal() == 10);
   }
 
+  TEST_CASE("TrackStore - rejects raw records that violate the alignment contract",
+            "[library][regression][track-store][raw-layout]")
+  {
+    auto fixture = TrackStoreFixture{};
+    auto hotData = makeHotData();
+    auto coldData = makeColdData();
+    auto hotBacking = std::vector<std::byte>(hotData.size() + 1, std::byte{0});
+    std::ranges::copy(hotData, hotBacking.begin() + 1);
+
+    auto wtxn = beginWriteTransaction(fixture.env);
+    auto writer = fixture.store.writer(wtxn);
+
+    SECTION("createHotCold rejects unaligned input spans")
+    {
+      auto const hotSpan = std::span<std::byte const>{hotBacking.data() + 1, hotData.size()};
+      auto const result = writer.createHotCold(hotSpan, coldData);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
+    }
+
+    SECTION("updateCold rejects sizes that are not 4-byte aligned")
+    {
+      auto const id = requireCreate(writer, hotData, coldData).first;
+      auto const result = writer.updateCold(id, coldData.size() + 1);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
+    }
+  }
+
   TEST_CASE("TrackStore - updateHot and updateCold replace separate raw records",
             "[library][unit][track-store][raw-layout]")
   {

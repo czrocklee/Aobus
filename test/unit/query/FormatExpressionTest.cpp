@@ -47,8 +47,11 @@ namespace ao::query::test
                        .album = "Solo Works",
                        .albumArtist = "Bach",
                        .composer = "Bach",
+                       .conductor = "Carlos Kleiber",
+                       .ensemble = "Vienna Philharmonic",
                        .work = "BWV 1007",
                        .movement = "Prelude",
+                       .soloist = "Yo-Yo Ma",
                        .genre = "Classical",
                        .year = 1720,
                        .trackNumber = 3,
@@ -91,6 +94,8 @@ namespace ao::query::test
 
     CHECK(evaluate(R"($trackNumber + "/" + $trackTotal + " " + $work)", fixture) == "3/6 BWV 1007");
     CHECK(evaluate(R"($movementNumber + "/" + $movementTotal + " " + $movement)", fixture) == "1/6 Prelude");
+    CHECK(evaluate(R"($conductor + " / " + $ensemble + " / " + $soloist)", fixture) ==
+          "Carlos Kleiber / Vienna Philharmonic / Yo-Yo Ma");
     CHECK(evaluate(R"(@codec + " " + @sampleRate + "Hz " + @bitDepth + "bit")", fixture) == "FLAC 96000Hz 24bit");
     CHECK(evaluate(R"(%catalog + " " + @duration)", fixture) == "Archiv 123 143000");
   }

@@ -13,13 +13,28 @@
 
 namespace ao::library
 {
+  namespace detail
+  {
+    inline constexpr FileManifestHeader kZeroFileManifestHeader{};
+  } // namespace detail
+
   /**
    * FileManifestView - Unified view of a file manifest entry.
+   *
+   * Error model (see doc/design/error-model.md, "Persisted binary layouts"):
+   * the constructor runs the O(1) structural gate (fixed-size header fits
+   * and is aligned). A record that fails the gate is a poisoned view:
+   * isValid() reports false and accessors return zero values. Accessors
+   * never throw. FileManifestStore additionally reports a short record as
+   * CorruptData at its Reader/Writer::get boundary.
    */
   class FileManifestView final
   {
   public:
-    explicit FileManifestView(std::span<std::byte const> data);
+    explicit FileManifestView(std::span<std::byte const> data) noexcept;
+
+    /** True when the record passed its structural gate. */
+    bool isValid() const noexcept { return _header != nullptr; }
 
     TrackId trackId() const noexcept;
     std::uint64_t fileSize() const noexcept;
@@ -29,8 +44,11 @@ namespace ao::library
     FileStatus status() const noexcept;
 
   private:
-    FileManifestHeader const& header() const noexcept;
+    FileManifestHeader const& header() const noexcept
+    {
+      return _header != nullptr ? *_header : detail::kZeroFileManifestHeader;
+    }
 
-    std::span<std::byte const> _data;
+    FileManifestHeader const* _header = nullptr;
   };
 } // namespace ao::library

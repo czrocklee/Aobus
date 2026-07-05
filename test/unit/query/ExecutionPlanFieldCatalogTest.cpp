@@ -90,6 +90,8 @@ namespace ao::query::test
                   Case{.name = "g", .expected = Field::GenreId},
                   Case{.name = "composer", .expected = Field::ComposerId},
                   Case{.name = "c", .expected = Field::ComposerId},
+                  Case{.name = "conductor", .expected = Field::ConductorId},
+                  Case{.name = "ensemble", .expected = Field::EnsembleId},
                   Case{.name = "albumArtist", .expected = Field::AlbumArtistId},
                   Case{.name = "aa", .expected = Field::AlbumArtistId},
                   Case{.name = "coverArt", .expected = Field::CoverArtId},
@@ -99,7 +101,8 @@ namespace ao::query::test
                   Case{.name = "work", .expected = Field::WorkId},
                   Case{.name = "w", .expected = Field::WorkId},
                   Case{.name = "movement", .expected = Field::MovementId},
-                  Case{.name = "m", .expected = Field::MovementId}};
+                  Case{.name = "m", .expected = Field::MovementId},
+                  Case{.name = "soloist", .expected = Field::SoloistId}};
 
     for (auto const& c : cases)
     {

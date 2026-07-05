@@ -101,7 +101,7 @@ fields. The analyzer also recognizes values inside `in [...]` lists, including l
 items, and keeps them bound to the left-hand field.
 
 Runtime value suggestions use the same whitelisted vocabulary as metadata-value completion:
-Artist, Album, AlbumArtist, Genre, Composer, Work, and Movement
+Artist, Album, AlbumArtist, Genre, Composer, Conductor, Ensemble, Work, Movement, and Soloist
 (`trackFieldSupportsValueCompletion`). Inserted query values are serialized string
 constants, so a library value such as `Massive Attack` is inserted as `"Massive Attack"` rather than
 as an invalid bare token. Custom values and numeric/unit templates are intentionally not populated
@@ -120,14 +120,16 @@ the parser independently.
 
 Value completion is deliberately limited in v1:
 
-- Whitelisted fields only: Artist, Album, AlbumArtist, Genre, Composer, Work, and Movement
-  (`trackFieldSupportsValueCompletion`). High-cardinality Title and numeric fields are excluded.
+- Whitelisted fields only: Artist, Album, AlbumArtist, Genre, Composer, Conductor, Ensemble,
+  Work, Movement, and Soloist (`trackFieldSupportsValueCompletion`). High-cardinality Title
+  and numeric fields are excluded.
 - The vocabulary is built by a full library scan, frequency-ranked (descending, then value
   ascending), and cached until invalidated.
 - Invalidation is coarse: any `LibraryChanges::onTracksMutated` event marks every vocabulary dirty
   and the next access rebuilds. Rebuild counting uses hash maps, then applies the stable final sort.
   Dirty metadata-value vocabularies are rebuilt per storage tier: Artist, Album, AlbumArtist, Genre,
-  and Composer share one hot-store scan; Work and Movement share a cold-store scan. The
+  and Composer share one hot-store scan; Conductor, Ensemble, Work, Movement, and Soloist share
+  a cold-store scan. The
   `span<TrackId>` is retained for a future incremental path but unused today.
 - A value editor holds a single value, so applying a suggestion replaces the **entire** entry text
   (the prefix matched is the text up to the cursor; any trailing text is discarded by design).

@@ -211,6 +211,37 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("TrackListProjection - sorts by classical role metadata", "[runtime][unit][projection]")
+  {
+    auto env = TestEnv{};
+
+    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "A",
+                                                               .conductor = "Leonard Bernstein",
+                                                               .ensemble = "New York Philharmonic",
+                                                               .soloist = "Martha Argerich"});
+    auto const id2 = env.lib.addTrack(library::test::TrackSpec{
+      .title = "B", .conductor = "Carlos Kleiber", .ensemble = "Vienna Philharmonic", .soloist = "Yo-Yo Ma"});
+    auto const id3 = env.lib.addTrack(library::test::TrackSpec{
+      .title = "C", .conductor = "Carlos Kleiber", .ensemble = "Staatskapelle Dresden", .soloist = "Glenn Gould"});
+
+    env.setupFiltered({{id1, id2, id3}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Conductor, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Ensemble, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Soloist, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 3);
+    CHECK(proj.trackIdAt(0) == id3);
+    CHECK(proj.trackIdAt(1) == id2);
+    CHECK(proj.trackIdAt(2) == id1);
+  }
+
   TEST_CASE("TrackListProjection - movement sort keeps performances contiguous", "[runtime][unit][projection]")
   {
     // One work recorded twice (two albums/performances). Grouping by Work merges both
@@ -280,7 +311,7 @@ namespace ao::rt::test
       auto const optView = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView.has_value());
       orderedAlbums.emplace_back(dict.get(optView->metadata().albumId()));
-      orderedMovements.push_back(optView->metadata().movementNumber());
+      orderedMovements.push_back(optView->classical().movementNumber());
     }
 
     // Karajan (alphabetically first) movements 1,2,3, then Kleiber movements 1,2,3.

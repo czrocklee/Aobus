@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/library/ListLayout.h>
-#include <ao/utility/ByteView.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -15,9 +15,18 @@
 
 namespace ao::library
 {
+  struct ListHeader;
+
   /**
-   * ListView - Safe accessor for list data stored in binary format.
-   * Reads fields directly from payload without storing header.
+   * ListView - Read-only view over a serialized list record.
+   *
+   * Error model (see doc/design/error-model.md, "Persisted binary layouts"):
+   * records are produced by ListBuilder and validated at write time, so the
+   * constructor runs a single O(1) structural gate (header fits, track-id
+   * array and string extents stay inside the record). A record that fails
+   * the gate is a poisoned view: isValid() reports false and every accessor
+   * returns an empty/zero value. Accessors never throw and never read out
+   * of bounds.
    *
    * Smart List Inheritance:
    * - Smart lists have a non-empty filter() and define membership as:
@@ -29,17 +38,20 @@ namespace ao::library
   class ListView final
   {
   public:
-    explicit ListView(std::span<std::byte const> data);
+    explicit ListView(std::span<std::byte const> data) noexcept;
 
-    std::string_view name() const;
-    std::string_view description() const;
+    /** True when the record passed its structural gate. */
+    bool isValid() const noexcept { return _header != nullptr; }
+
+    std::string_view name() const noexcept;
+    std::string_view description() const noexcept;
 
     /**
      * Local filter expression for smart lists.
      * For inherited filtering, effective filter is computed at runtime
      * as parent_membership AND this filter.
      */
-    std::string_view filter() const;
+    std::string_view filter() const noexcept;
 
     /** Parent list ID (0 = All Tracks / root) */
     ListId parentId() const noexcept;
@@ -58,28 +70,38 @@ namespace ao::library
     class TrackProxy : public std::ranges::view_interface<TrackProxy>
     {
     public:
-      TrackProxy(std::span<TrackId const> trackIds);
+      TrackProxy() = default;
 
-      TrackId at(std::size_t index) const;
-      TrackId operator[](std::size_t index) const { return at(index); }
+      explicit TrackProxy(std::span<TrackId const> trackIds) noexcept
+        : _trackIds{trackIds}
+      {
+      }
 
-      TrackId const* begin() const { return _trackIds.data(); }
-      TrackId const* end() const { return _trackIds.data() + _trackIds.size(); }
+      TrackId at(std::size_t index) const noexcept
+      {
+        gsl_Expects(index < _trackIds.size());
+        return _trackIds[index];
+      }
+
+      TrackId operator[](std::size_t index) const noexcept { return at(index); }
+
+      TrackId const* begin() const noexcept { return _trackIds.data(); }
+      TrackId const* end() const noexcept { return _trackIds.data() + _trackIds.size(); }
       bool empty() const noexcept { return _trackIds.empty(); }
-      std::size_t size() const { return _trackIds.size(); }
+      std::size_t size() const noexcept { return _trackIds.size(); }
 
     private:
-      std::span<TrackId const> _trackIds;
+      std::span<TrackId const> _trackIds{};
     };
 
-    TrackProxy tracks() const;
+    TrackProxy tracks() const noexcept;
 
     std::span<std::byte const> rawData() const noexcept { return _payload; }
 
   private:
-    ListHeader const* header() const { return utility::layout::view<ListHeader>(_payload); }
-    std::string_view getString(std::uint16_t offset, std::uint16_t length) const;
+    std::string_view getString(std::uint16_t offset, std::uint16_t length) const noexcept;
 
     std::span<std::byte const> _payload;
+    ListHeader const* _header = nullptr;
   };
 } // namespace ao::library

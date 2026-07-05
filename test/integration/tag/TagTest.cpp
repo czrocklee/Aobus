@@ -9,6 +9,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/tag/TagFile.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <lmdb.h>
@@ -111,6 +112,50 @@ namespace ao::tag::test
     CHECK(meta.genre() == "Electronic");
     CHECK(meta.trackNumber() == 2);
     CHECK(meta.year() == 2025);
+  }
+
+  TEST_CASE("TagReader - classical fixture exposes metadata", "[tag][integration][metadata][classical]")
+  {
+    auto const* const format = GENERATE("flac", "m4a", "mp3");
+    CAPTURE(format);
+    auto const path = kTestDataDir / ("classical_metadata." + std::string{format});
+
+    auto loaded = loadTrack(path);
+    auto& meta = loaded.builder.metadata();
+
+    CHECK(meta.title() == "Classical Fixture");
+    CHECK(meta.artist() == "Classical Artist");
+    CHECK(meta.album() == "Classical Album");
+    CHECK(meta.genre() == "Classical");
+    CHECK(meta.composer() == "Fixture Composer");
+    CHECK(meta.conductor() == "Fixture Conductor");
+    CHECK(meta.ensemble() == "Fixture Ensemble");
+    CHECK(meta.soloist() == "Fixture Soloist");
+    CHECK(meta.work() == "Fixture Work");
+    CHECK(meta.movement() == "Fixture Movement");
+    CHECK(meta.movementNumber() == 2);
+    CHECK(meta.movementTotal() == 4);
+    CHECK(meta.trackNumber() == 3);
+    CHECK(meta.trackTotal() == 9);
+    CHECK(meta.year() == 2026);
+  }
+
+  TEST_CASE("TagReader - classical fallback fixture maps orchestra fields", "[tag][integration][metadata][classical]")
+  {
+    auto const* const format = GENERATE("flac", "m4a", "mp3");
+    CAPTURE(format);
+    auto const path = kTestDataDir / ("classical_fallback." + std::string{format});
+
+    auto loaded = loadTrack(path);
+    auto& meta = loaded.builder.metadata();
+
+    CHECK(meta.title() == "Classical Fallback");
+    CHECK(meta.ensemble() == "Fixture Fallback Ensemble");
+
+    if (std::string_view{format} == "flac")
+    {
+      CHECK(meta.soloist() == "Fixture Fallback Soloist");
+    }
   }
 
   // ============================================================================

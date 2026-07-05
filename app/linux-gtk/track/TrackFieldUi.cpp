@@ -146,6 +146,30 @@ namespace ao::gtk
           .applyRowEditValue = applyStringEditValue,
         },
         {
+          .field = F::Conductor,
+          .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
+          { return std::string{row.stringField(rt::TrackField::Conductor)->raw()}; },
+          .parseInlineEdit = uimodel::parseTextEditValue,
+          .readRowEditValue = readStringEditValue,
+          .applyRowEditValue = applyStringEditValue,
+        },
+        {
+          .field = F::Ensemble,
+          .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
+          { return std::string{row.stringField(rt::TrackField::Ensemble)->raw()}; },
+          .parseInlineEdit = uimodel::parseTextEditValue,
+          .readRowEditValue = readStringEditValue,
+          .applyRowEditValue = applyStringEditValue,
+        },
+        {
+          .field = F::Soloist,
+          .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
+          { return std::string{row.stringField(rt::TrackField::Soloist)->raw()}; },
+          .parseInlineEdit = uimodel::parseTextEditValue,
+          .readRowEditValue = readStringEditValue,
+          .applyRowEditValue = applyStringEditValue,
+        },
+        {
           .field = F::Work,
           .readRowText = +[](TrackRowObject const& row, TrackRowCache const&) -> std::string
           { return std::string{row.stringField(rt::TrackField::Work)->raw()}; },

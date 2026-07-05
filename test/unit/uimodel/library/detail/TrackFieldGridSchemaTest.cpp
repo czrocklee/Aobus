@@ -20,8 +20,11 @@ namespace ao::uimodel::test
                                                    rt::TrackField::AlbumArtist,
                                                    rt::TrackField::Genre,
                                                    rt::TrackField::Composer,
+                                                   rt::TrackField::Conductor,
+                                                   rt::TrackField::Ensemble,
                                                    rt::TrackField::Work,
                                                    rt::TrackField::Movement,
+                                                   rt::TrackField::Soloist,
                                                    rt::TrackField::Year});
 
     CHECK(projection.compositeMetadataFields ==

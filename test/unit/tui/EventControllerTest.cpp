@@ -312,7 +312,7 @@ namespace ao::tui::test
     CHECK(library.selectedPresentation() == 0);
 
     CHECK(controller.handleEvent(ftxui::Event::PageDown));
-    CHECK(library.selectedPresentation() == static_cast<std::int32_t>(library.presentationItems().size()) - 1);
+    CHECK(library.selectedPresentation() == 10);
 
     CHECK(controller.handleEvent(ftxui::Event::PageUp));
     CHECK(library.selectedPresentation() == 0);

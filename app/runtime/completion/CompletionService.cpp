@@ -43,8 +43,11 @@ namespace ao::rt
       {.field = TrackField::AlbumArtist, .coldStore = false},
       {.field = TrackField::Genre, .coldStore = false},
       {.field = TrackField::Composer, .coldStore = false},
+      {.field = TrackField::Conductor, .coldStore = true},
+      {.field = TrackField::Ensemble, .coldStore = true},
       {.field = TrackField::Work, .coldStore = true},
       {.field = TrackField::Movement, .coldStore = true},
+      {.field = TrackField::Soloist, .coldStore = true},
     });
 
     using CountMap = boost::unordered_flat_map<std::string_view, std::uint32_t, std::hash<std::string_view>>;
@@ -123,8 +126,11 @@ namespace ao::rt
         case TrackField::AlbumArtist: return view.metadata().albumArtistId();
         case TrackField::Genre: return view.metadata().genreId();
         case TrackField::Composer: return view.metadata().composerId();
-        case TrackField::Work: return view.metadata().workId();
-        case TrackField::Movement: return view.metadata().movementId();
+        case TrackField::Conductor: return view.classical().conductorId();
+        case TrackField::Ensemble: return view.classical().ensembleId();
+        case TrackField::Work: return view.classical().workId();
+        case TrackField::Movement: return view.classical().movementId();
+        case TrackField::Soloist: return view.classical().soloistId();
         default: return kInvalidDictionaryId;
       }
     }

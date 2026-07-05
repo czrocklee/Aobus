@@ -2,13 +2,14 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/library/ListBuilder.h>
+#include <ao/library/ListLayout.h>
 #include <ao/library/ListView.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <cstring>
 #include <span>
 #include <vector>
 
@@ -78,13 +79,48 @@ namespace ao::library::test
     CHECK(view.isRootParent() == true);
   }
 
-  TEST_CASE("ListView - rejects invalid serialized data", "[library][unit][list]")
+  TEST_CASE("ListView - poisons invalid serialized data", "[library][unit][list]")
   {
+    auto expectPoisoned = [](ListView const& view)
+    {
+      CHECK_FALSE(view.isValid());
+      CHECK(view.name().empty());
+      CHECK(view.description().empty());
+      CHECK(view.filter().empty());
+      CHECK(view.tracks().empty());
+      CHECK(view.parentId() == kInvalidListId);
+    };
+
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte*>(nullptr), 100};
-    CHECK_THROWS_AS(ListView{nullSpan}, Exception);
+    expectPoisoned(ListView{nullSpan});
 
     auto const smallData = std::vector<std::byte>(10);
-    CHECK_THROWS_AS(ListView{smallData}, Exception);
+    expectPoisoned(ListView{smallData});
+
+    SECTION("track-id array overruns the record")
+    {
+      auto data = std::vector<std::byte>(kListHeaderSize, std::byte{0});
+      auto header = ListHeader{};
+      header.trackIdsCount = 4;
+      std::memcpy(data.data(), &header, sizeof(ListHeader));
+      expectPoisoned(ListView{data});
+    }
+
+    SECTION("string extent overruns the record")
+    {
+      auto data = std::vector<std::byte>(kListHeaderSize, std::byte{0});
+      auto header = ListHeader{};
+      header.nameOffset = 0;
+      header.nameLength = 16;
+      std::memcpy(data.data(), &header, sizeof(ListHeader));
+      expectPoisoned(ListView{data});
+    }
+  }
+
+  TEST_CASE("ListView - valid records report isValid", "[library][unit][list]")
+  {
+    auto const payload = ListBuilder::createNew().name("Test").serialize();
+    CHECK(ListView{payload}.isValid());
   }
 
   TEST_CASE("ListView - isSmart", "[library][unit][list]")

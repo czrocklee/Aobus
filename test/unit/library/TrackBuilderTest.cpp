@@ -20,7 +20,10 @@ namespace ao::library::test
     CHECK(builder.metadata().album().empty());
     CHECK(builder.metadata().albumArtist().empty());
     CHECK(builder.metadata().composer().empty());
+    CHECK(builder.metadata().conductor().empty());
+    CHECK(builder.metadata().ensemble().empty());
     CHECK(builder.metadata().genre().empty());
+    CHECK(builder.metadata().soloist().empty());
     CHECK(builder.property().uri().empty());
     CHECK(builder.property().bitDepth() == 0);
     CHECK(builder.property().duration() == std::chrono::milliseconds{0});
@@ -41,6 +44,9 @@ namespace ao::library::test
       .genre("Rock")
       .work("Symphony No. 9")
       .movement("I. Allegro ma non troppo")
+      .conductor("Carlos Kleiber")
+      .ensemble("Vienna Philharmonic")
+      .soloist("Yo-Yo Ma")
       .year(2024)
       .trackNumber(5)
       .trackTotal(10)
@@ -57,6 +63,9 @@ namespace ao::library::test
     CHECK(builder.metadata().genre() == "Rock");
     CHECK(builder.metadata().work() == "Symphony No. 9");
     CHECK(builder.metadata().movement() == "I. Allegro ma non troppo");
+    CHECK(builder.metadata().conductor() == "Carlos Kleiber");
+    CHECK(builder.metadata().ensemble() == "Vienna Philharmonic");
+    CHECK(builder.metadata().soloist() == "Yo-Yo Ma");
     CHECK(builder.metadata().year() == 2024);
     CHECK(builder.metadata().trackNumber() == 5);
     CHECK(builder.metadata().trackTotal() == 10);

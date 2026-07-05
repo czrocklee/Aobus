@@ -139,6 +139,20 @@ namespace ao::rt
         result.changedHot,
         changes);
       applyStringPatch(
+        patch.optConductor,
+        "conductor",
+        meta.conductor(),
+        [&meta](std::string_view value) { meta.conductor(value); },
+        result.changedCold,
+        changes);
+      applyStringPatch(
+        patch.optEnsemble,
+        "ensemble",
+        meta.ensemble(),
+        [&meta](std::string_view value) { meta.ensemble(value); },
+        result.changedCold,
+        changes);
+      applyStringPatch(
         patch.optWork,
         "work",
         meta.work(),
@@ -150,6 +164,13 @@ namespace ao::rt
         "movement",
         meta.movement(),
         [&meta](std::string_view value) { meta.movement(value); },
+        result.changedCold,
+        changes);
+      applyStringPatch(
+        patch.optSoloist,
+        "soloist",
+        meta.soloist(),
+        [&meta](std::string_view value) { meta.soloist(value); },
         result.changedCold,
         changes);
     }

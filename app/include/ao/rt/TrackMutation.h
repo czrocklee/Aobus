@@ -22,8 +22,11 @@ namespace ao::rt
     std::optional<std::string> optAlbumArtist{};
     std::optional<std::string> optGenre{};
     std::optional<std::string> optComposer{};
+    std::optional<std::string> optConductor{};
+    std::optional<std::string> optEnsemble{};
     std::optional<std::string> optWork{};
     std::optional<std::string> optMovement{};
+    std::optional<std::string> optSoloist{};
     std::optional<std::uint16_t> optYear{};
     std::optional<std::uint16_t> optTrackNumber{};
     std::optional<std::uint16_t> optTrackTotal{};

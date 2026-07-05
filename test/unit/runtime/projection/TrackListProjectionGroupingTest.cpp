@@ -376,14 +376,23 @@ namespace ao::rt::test
     CHECK(proj.groupAt(0).secondaryText == "Unknown Artist");
   }
 
-  TEST_CASE("TrackListProjection - grouping labels genre composer and work fields", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - grouping labels genre composer conductor ensemble and work fields",
+            "[runtime][unit][projection]")
   {
     auto env = TestEnv{};
 
-    auto id1 =
-      env.lib.addTrack(library::test::TrackSpec{.title = "A", .genre = "Pop", .composer = "Mozart", .work = "Opus 1"});
-    auto id2 =
-      env.lib.addTrack(library::test::TrackSpec{.title = "B", .genre = "Rock", .composer = "Bach", .work = "Opus 2"});
+    auto id1 = env.lib.addTrack(library::test::TrackSpec{.title = "A",
+                                                         .genre = "Pop",
+                                                         .composer = "Mozart",
+                                                         .conductor = "Carlos Kleiber",
+                                                         .ensemble = "Vienna Philharmonic",
+                                                         .work = "Opus 1"});
+    auto id2 = env.lib.addTrack(library::test::TrackSpec{.title = "B",
+                                                         .genre = "Rock",
+                                                         .composer = "Bach",
+                                                         .conductor = "Leonard Bernstein",
+                                                         .ensemble = "New York Philharmonic",
+                                                         .work = "Opus 2"});
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -420,6 +429,28 @@ namespace ao::rt::test
       CHECK(proj.groupAt(0).secondaryText == "Mozart");
       CHECK(proj.groupAt(1).primaryText == "Opus 2");
       CHECK(proj.groupAt(1).secondaryText == "Bach");
+    }
+
+    SECTION("Group by Conductor")
+    {
+      proj.setPresentation(
+        TrackPresentationSpec{.groupBy = TrackGroupKey::Conductor,
+                              .sortBy = {TrackSortTerm{.field = TrackSortField::Conductor, .ascending = true}}});
+      REQUIRE(proj.size() == 2);
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(proj.groupAt(0).primaryText == "Carlos Kleiber");
+      CHECK(proj.groupAt(1).primaryText == "Leonard Bernstein");
+    }
+
+    SECTION("Group by Ensemble")
+    {
+      proj.setPresentation(
+        TrackPresentationSpec{.groupBy = TrackGroupKey::Ensemble,
+                              .sortBy = {TrackSortTerm{.field = TrackSortField::Ensemble, .ascending = true}}});
+      REQUIRE(proj.size() == 2);
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(proj.groupAt(0).primaryText == "New York Philharmonic");
+      CHECK(proj.groupAt(1).primaryText == "Vienna Philharmonic");
     }
   }
 } // namespace ao::rt::test

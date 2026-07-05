@@ -26,15 +26,79 @@
 #include <format>
 #include <limits>
 #include <span>
+#include <string_view>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
 namespace ao::library
 {
-  constexpr std::uint32_t kBloomBitMask = 31;
-  constexpr std::size_t kSerializedAlignmentBytes = 4;
-  constexpr std::size_t kSerializedAlignmentMask = kSerializedAlignmentBytes - 1;
+  namespace
+  {
+    constexpr std::uint32_t kBloomBitMask = 31;
+    constexpr std::size_t kSerializedAlignmentBytes = 4;
+    constexpr std::size_t kSerializedAlignmentMask = kSerializedAlignmentBytes - 1;
+
+    constexpr std::size_t align4(std::size_t size) noexcept
+    {
+      return (size + kSerializedAlignmentMask) & ~kSerializedAlignmentMask;
+    }
+
+    constexpr std::size_t kU16Max = std::numeric_limits<std::uint16_t>::max();
+
+    std::uint16_t checkedUint16(std::size_t value, std::string_view label)
+    {
+      if (value > kU16Max)
+      {
+        detail::throwLibraryError(Error::Code::ValueTooLarge, std::format("{} {} exceeds uint16_t", label, value));
+      }
+
+      return static_cast<std::uint16_t>(value);
+    }
+
+    std::size_t checkedPayloadBytes(std::size_t count, std::size_t elementSize, std::string_view label)
+    {
+      if (count > std::numeric_limits<std::uint16_t>::max() / elementSize)
+      {
+        detail::throwLibraryError(Error::Code::ValueTooLarge, std::format("{} exceeds uint16_t", label));
+      }
+
+      auto const byteCount = count * elementSize;
+      checkedUint16(byteCount, label);
+      return byteCount;
+    }
+
+    DictionaryId resolveDictionaryId(std::string_view value, lmdb::WriteTransaction& txn, DictionaryStore& dict)
+    {
+      if (value.empty())
+      {
+        return kInvalidDictionaryId;
+      }
+
+      auto idResult = dict.put(txn, value);
+
+      if (!idResult)
+      {
+        detail::throwLibraryError(idResult.error());
+      }
+
+      return *idResult;
+    }
+
+    template<typename T>
+    void writePod(std::span<std::byte> out, std::size_t offset, T const& value)
+    {
+      static_assert(std::is_trivially_copyable_v<T>);
+      static_assert(std::is_standard_layout_v<T>);
+      static_assert(alignof(T) <= kSerializedAlignmentBytes);
+
+      gsl_Expects((offset % alignof(T)) == 0);
+      gsl_Expects(offset + sizeof(T) <= out.size());
+
+      std::memcpy(out.data() + offset, &value, sizeof(T));
+    }
+  } // namespace
 
   //=============================================================================
   // TrackBuilder - factory methods
@@ -98,23 +162,39 @@ namespace ao::library
         .trackNumber(meta.trackNumber())
         .trackTotal(meta.trackTotal())
         .discNumber(meta.discNumber())
-        .discTotal(meta.discTotal())
-        .movementNumber(meta.movementNumber())
-        .movementTotal(meta.movementTotal());
+        .discTotal(meta.discTotal());
+
+      auto classical = view.classical();
+      builder.metadata().movementNumber(classical.movementNumber()).movementTotal(classical.movementTotal());
 
       for (auto const cover : view.coverArt())
       {
         builder.coverArt().add(cover.type, cover.resourceId);
       }
 
-      if (auto workId = meta.workId(); workId.raw() > 0)
+      if (auto workId = classical.workId(); workId.raw() > 0)
       {
         builder.metadata().work(dict.get(workId));
       }
 
-      if (auto movementId = meta.movementId(); movementId.raw() > 0)
+      if (auto movementId = classical.movementId(); movementId.raw() > 0)
       {
         builder.metadata().movement(dict.get(movementId));
+      }
+
+      if (auto conductorId = classical.conductorId(); conductorId.raw() > 0)
+      {
+        builder.metadata().conductor(dict.get(conductorId));
+      }
+
+      if (auto ensembleId = classical.ensembleId(); ensembleId.raw() > 0)
+      {
+        builder.metadata().ensemble(dict.get(ensembleId));
+      }
+
+      if (auto soloistId = classical.soloistId(); soloistId.raw() > 0)
+      {
+        builder.metadata().soloist(dict.get(soloistId));
       }
 
       for (auto const& [dictId, value] : view.customMetadata())
@@ -210,6 +290,18 @@ namespace ao::library
     return *this;
   }
 
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::conductor(std::string_view text)
+  {
+    _conductor = text;
+    return *this;
+  }
+
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::ensemble(std::string_view text)
+  {
+    _ensemble = text;
+    return *this;
+  }
+
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::genre(std::string_view text)
   {
     _genre = text;
@@ -225,6 +317,12 @@ namespace ao::library
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::movement(std::string_view text)
   {
     _movement = text;
+    return *this;
+  }
+
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::soloist(std::string_view text)
+  {
+    _soloist = text;
     return *this;
   }
 
@@ -473,16 +571,11 @@ namespace ao::library
   // Prepared structures for zero-copy serialization
   //=============================================================================
 
-  TrackBuilder::PreparedHot::PreparedHot(TrackBuilder const* builder)
-    : _builder{builder}
-  {
-  }
-
   TrackBuilder::PreparedHot TrackBuilder::PreparedHot::create(TrackBuilder const* builder,
                                                               lmdb::WriteTransaction& txn,
                                                               DictionaryStore& dict)
   {
-    auto prepared = PreparedHot{builder};
+    auto prepared = PreparedHot{};
 
     // Resolve tag names to DictionaryIds
     prepared._tagIds.reserve(builder->_tagsBuilder._tagNames.size());
@@ -500,72 +593,35 @@ namespace ao::library
     }
 
     // Resolve metadata strings to DictionaryIds for header
-    if (!builder->_metadataBuilder._artist.empty())
-    {
-      auto idResult = dict.put(txn, builder->_metadataBuilder._artist);
-
-      if (!idResult)
-      {
-        detail::throwLibraryError(idResult.error());
-      }
-
-      prepared._artistId = *idResult;
-    }
-
-    if (!builder->_metadataBuilder._album.empty())
-    {
-      auto idResult = dict.put(txn, builder->_metadataBuilder._album);
-
-      if (!idResult)
-      {
-        detail::throwLibraryError(idResult.error());
-      }
-
-      prepared._albumId = *idResult;
-    }
-
-    if (!builder->_metadataBuilder._genre.empty())
-    {
-      auto idResult = dict.put(txn, builder->_metadataBuilder._genre);
-
-      if (!idResult)
-      {
-        detail::throwLibraryError(idResult.error());
-      }
-
-      prepared._genreId = *idResult;
-    }
-
-    if (!builder->_metadataBuilder._albumArtist.empty())
-    {
-      auto idResult = dict.put(txn, builder->_metadataBuilder._albumArtist);
-
-      if (!idResult)
-      {
-        detail::throwLibraryError(idResult.error());
-      }
-
-      prepared._albumArtistId = *idResult;
-    }
-
-    if (!builder->_metadataBuilder._composer.empty())
-    {
-      auto idResult = dict.put(txn, builder->_metadataBuilder._composer);
-
-      if (!idResult)
-      {
-        detail::throwLibraryError(idResult.error());
-      }
-
-      prepared._composerId = *idResult;
-    }
+    auto const& meta = builder->_metadataBuilder;
+    prepared._artistId = resolveDictionaryId(meta._artist, txn, dict);
+    prepared._albumId = resolveDictionaryId(meta._album, txn, dict);
+    prepared._genreId = resolveDictionaryId(meta._genre, txn, dict);
+    prepared._albumArtistId = resolveDictionaryId(meta._albumArtist, txn, dict);
+    prepared._composerId = resolveDictionaryId(meta._composer, txn, dict);
 
     prepared._bloomFilter = computeBloomFilter(prepared._tagIds);
 
-    // Compute total hot size: Header(36) + tags + title
+    // Hot header lengths are uint16_t. Reject anything the header cannot
+    // represent so writeTo's narrowing casts stay lossless and the write
+    // side remains the single validation boundary for readers.
+    auto const titleLength = builder->_metadataBuilder._title.size();
+    auto const tagLength = prepared._tagIds.size() * sizeof(DictionaryId);
+
+    // Snapshot everything writeTo emits so the prepared value stays valid
+    // and self-consistent even if the builder is mutated or destroyed later.
+    prepared._title = std::string{builder->_metadataBuilder._title};
+    prepared._titleLength = checkedUint16(titleLength, "Hot title length");
+    prepared._tagLength = checkedUint16(tagLength, "Hot tag payload length");
+    prepared._sampleRate = builder->_propertyBuilder._sampleRate;
+    prepared._year = builder->_metadataBuilder._year;
+    prepared._bitDepth = builder->_propertyBuilder._bitDepth;
+    prepared._codec = builder->_propertyBuilder._codec;
+
+    // Compute total hot size: header + tags + title
     prepared._size = sizeof(TrackHotHeader);
-    prepared._size += prepared._tagIds.size() * sizeof(DictionaryId);
-    prepared._size += builder->_metadataBuilder._title.size();
+    prepared._size += tagLength;
+    prepared._size += titleLength;
     prepared._size = (prepared._size + kSerializedAlignmentMask) & ~kSerializedAlignmentMask;
     return prepared;
   }
@@ -574,23 +630,24 @@ namespace ao::library
   {
     // Exact size validation and alignment check
     gsl_Expects(out.size() == _size);
-    gsl_Expects((std::uintptr_t(out.data()) % 4) == 0);
+    gsl_Expects(utility::bytes::isAligned(out.data(), kSerializedAlignmentBytes));
 
-    auto const& builder = *_builder;
-    new (out.data()) TrackHotHeader{
-      .tagBloom = _bloomFilter,
-      .artistId = _artistId,
-      .albumId = _albumId,
-      .genreId = _genreId,
-      .albumArtistId = _albumArtistId,
-      .composerId = _composerId,
-      .sampleRate = builder._propertyBuilder._sampleRate,
-      .year = builder._metadataBuilder._year,
-      .titleLength = static_cast<std::uint16_t>(builder._metadataBuilder._title.size()),
-      .tagLength = static_cast<std::uint16_t>(_tagIds.size() * sizeof(DictionaryId)),
-      .bitDepth = builder._propertyBuilder._bitDepth,
-      .codec = builder._propertyBuilder._codec,
-    };
+    writePod(out,
+             0,
+             TrackHotHeader{
+               .tagBloom = _bloomFilter,
+               .artistId = _artistId,
+               .albumId = _albumId,
+               .genreId = _genreId,
+               .albumArtistId = _albumArtistId,
+               .composerId = _composerId,
+               .sampleRate = _sampleRate,
+               .year = _year,
+               .titleLength = _titleLength,
+               .tagLength = _tagLength,
+               .bitDepth = _bitDepth,
+               .codec = _codec,
+             });
 
     auto pos = sizeof(TrackHotHeader);
 
@@ -602,10 +659,10 @@ namespace ao::library
     }
 
     // Write title
-    if (!builder._metadataBuilder._title.empty())
+    if (!_title.empty())
     {
-      std::memcpy(out.data() + pos, builder._metadataBuilder._title.data(), builder._metadataBuilder._title.size());
-      pos += builder._metadataBuilder._title.size();
+      std::memcpy(out.data() + pos, _title.data(), _title.size());
+      pos += _title.size();
     }
 
     // Pad to 4 bytes
@@ -615,46 +672,44 @@ namespace ao::library
     }
   }
 
-  TrackBuilder::PreparedCold::PreparedCold(TrackBuilder const* builder)
-    : _builder{builder}
-  {
-  }
-
   TrackBuilder::PreparedCold TrackBuilder::PreparedCold::create(TrackBuilder const* builder,
                                                                 lmdb::WriteTransaction& txn,
                                                                 DictionaryStore& dict,
                                                                 ResourceStore& resources)
   {
-    auto prepared = PreparedCold{builder};
+    auto prepared = PreparedCold{};
+    prepared.resolveClassicalIds(builder, txn, dict);
+    auto const resolvedPairs = resolveCustomMetadata(builder, txn, dict);
+    prepared.resolveCoverArt(builder, txn, resources);
+    prepared.appendCoverArtBlock();
+    prepared.appendClassicalBlock(builder->_metadataBuilder);
+    prepared.appendCustomMetadataBlock(resolvedPairs);
+    prepared.assignLayout(builder->_propertyBuilder._uri);
+    prepared.snapshot(builder);
+    return prepared;
+  }
 
-    if (!prepared._builder->_metadataBuilder._work.empty())
-    {
-      auto idResult = dict.put(txn, prepared._builder->_metadataBuilder._work);
+  void TrackBuilder::PreparedCold::resolveClassicalIds(TrackBuilder const* builder,
+                                                       lmdb::WriteTransaction& txn,
+                                                       DictionaryStore& dict)
+  {
+    auto const& meta = builder->_metadataBuilder;
+    _workId = resolveDictionaryId(meta._work, txn, dict);
+    _movementId = resolveDictionaryId(meta._movement, txn, dict);
+    _conductorId = resolveDictionaryId(meta._conductor, txn, dict);
+    _ensembleId = resolveDictionaryId(meta._ensemble, txn, dict);
+    _soloistId = resolveDictionaryId(meta._soloist, txn, dict);
+  }
 
-      if (!idResult)
-      {
-        detail::throwLibraryError(idResult.error());
-      }
+  std::vector<std::pair<DictionaryId, std::string_view>> TrackBuilder::PreparedCold::resolveCustomMetadata(
+    TrackBuilder const* builder,
+    lmdb::WriteTransaction& txn,
+    DictionaryStore& dict)
+  {
+    auto resolvedPairs = std::vector<std::pair<DictionaryId, std::string_view>>{};
+    resolvedPairs.reserve(builder->_customMetadataBuilder._customPairs.size());
 
-      prepared._workId = *idResult;
-    }
-
-    if (!prepared._builder->_metadataBuilder._movement.empty())
-    {
-      auto idResult = dict.put(txn, prepared._builder->_metadataBuilder._movement);
-
-      if (!idResult)
-      {
-        detail::throwLibraryError(idResult.error());
-      }
-
-      prepared._movementId = *idResult;
-    }
-
-    // Resolve custom keys to DictionaryIds
-    prepared._resolvedPairs.reserve(prepared._builder->_customMetadataBuilder._customPairs.size());
-
-    for (auto const& [key, value] : prepared._builder->_customMetadataBuilder._customPairs)
+    for (auto const& [key, value] : builder->_customMetadataBuilder._customPairs)
     {
       auto idResult = dict.put(txn, key);
 
@@ -663,175 +718,247 @@ namespace ao::library
         detail::throwLibraryError(idResult.error());
       }
 
-      prepared._resolvedPairs.emplace_back(*idResult, value);
+      resolvedPairs.emplace_back(*idResult, value);
     }
 
-    // Sort by dictId for binary search
-    std::ranges::sort(prepared._resolvedPairs, {}, &std::pair<DictionaryId, std::string_view>::first);
+    std::ranges::sort(resolvedPairs, {}, &std::pair<DictionaryId, std::string_view>::first);
+    return resolvedPairs;
+  }
 
-    // Resolve pending cover blobs into ResourceStore
+  void TrackBuilder::PreparedCold::resolveCoverArt(TrackBuilder const* builder,
+                                                   lmdb::WriteTransaction& txn,
+                                                   ResourceStore& resources)
+  {
+    auto writer = resources.writer(txn);
+    _coverArt.reserve(builder->_coverArtBuilder._entries.size());
+
+    for (auto const& pending : builder->_coverArtBuilder._entries)
     {
-      auto writer = resources.writer(txn);
-      prepared._coverArt.reserve(prepared._builder->_coverArtBuilder._entries.size());
-
-      for (auto const& pending : prepared._builder->_coverArtBuilder._entries)
+      if (auto const* ptrResourceId = std::get_if<ResourceId>(&pending.source); ptrResourceId != nullptr)
       {
-        if (auto const* ptrResourceId = std::get_if<ResourceId>(&pending.source); ptrResourceId != nullptr)
-        {
-          prepared._coverArt.push_back({.resourceId = *ptrResourceId, .type = pending.type});
-        }
-        else
-        {
-          auto const data = std::get<std::span<std::byte const>>(pending.source);
-          auto resourceResult = writer.create(data);
-
-          if (!resourceResult)
-          {
-            detail::throwLibraryError(resourceResult.error());
-          }
-
-          prepared._coverArt.push_back({.resourceId = *resourceResult, .type = pending.type});
-        }
+        _coverArt.push_back({.resourceId = *ptrResourceId, .type = pending.type});
+        continue;
       }
+
+      auto const data = std::get<std::span<std::byte const>>(pending.source);
+      auto resourceResult = writer.create(data);
+
+      if (!resourceResult)
+      {
+        detail::throwLibraryError(resourceResult.error());
+      }
+
+      _coverArt.push_back({.resourceId = *resourceResult, .type = pending.type});
+    }
+  }
+
+  void TrackBuilder::PreparedCold::appendBlock(TrackColdBlockSlot slot, std::vector<std::byte> payload)
+  {
+    checkedUint16(payload.size(), "Cold block payload length");
+    _blocks.push_back({.slot = slot, .payload = std::move(payload)});
+  }
+
+  void TrackBuilder::PreparedCold::appendCoverArtBlock()
+  {
+    if (_coverArt.empty())
+    {
+      return;
     }
 
-    // Compute sizes with overflow validation.
-    // All offset/count/length fields in TrackColdHeader are uint16_t, so every
-    // intermediate value must be checked before narrowing.
-    constexpr std::size_t kU16Max = std::numeric_limits<std::uint16_t>::max();
+    auto const payloadSize = checkedPayloadBytes(_coverArt.size(), sizeof(CoverArtEntry), "Cover art payload length");
+    auto payload = std::vector<std::byte>(payloadSize, std::byte{0});
+    std::size_t pos = 0;
 
-    std::size_t const coverCount = prepared._coverArt.size();
-    std::size_t const entryCount = prepared._resolvedPairs.size();
+    for (auto const& cover : _coverArt)
+    {
+      writePod(std::span<std::byte>{payload},
+               pos,
+               CoverArtEntry{.id = cover.resourceId, .type = static_cast<std::uint8_t>(cover.type)});
+      pos += sizeof(CoverArtEntry);
+    }
+
+    appendBlock(TrackColdBlockSlot::CoverArt, std::move(payload));
+  }
+
+  void TrackBuilder::PreparedCold::appendClassicalBlock(MetadataBuilder const& meta)
+  {
+    bool const hasClassical = _workId != kInvalidDictionaryId || _movementId != kInvalidDictionaryId ||
+                              _conductorId != kInvalidDictionaryId || _ensembleId != kInvalidDictionaryId ||
+                              _soloistId != kInvalidDictionaryId || meta._movementNumber != 0 ||
+                              meta._movementTotal != 0;
+
+    if (!hasClassical)
+    {
+      return;
+    }
+
+    auto payload = std::vector<std::byte>(sizeof(TrackClassicalBlock), std::byte{0});
+    writePod(std::span<std::byte>{payload},
+             0,
+             TrackClassicalBlock{
+               .workId = _workId,
+               .movementId = _movementId,
+               .conductorId = _conductorId,
+               .ensembleId = _ensembleId,
+               .soloistId = _soloistId,
+               .movementNumber = meta._movementNumber,
+               .movementTotal = meta._movementTotal,
+             });
+    appendBlock(TrackColdBlockSlot::Classical, std::move(payload));
+  }
+
+  void TrackBuilder::PreparedCold::appendCustomMetadataBlock(
+    std::vector<std::pair<DictionaryId, std::string_view>> const& resolvedPairs)
+  {
+    if (resolvedPairs.empty())
+    {
+      return;
+    }
+
+    auto const entryCount = resolvedPairs.size();
+    auto const entryBytes =
+      checkedPayloadBytes(entryCount, sizeof(CustomMetadataEntry), "Custom metadata entry table length");
+    auto const valueOffset = sizeof(CustomMetadataBlockHeader) + entryBytes;
+    checkedUint16(entryCount, "Custom metadata count");
+    checkedUint16(valueOffset, "Custom metadata value offset");
+
     std::size_t totalValueSize = 0;
 
-    for (auto const& resolvedPair : prepared._resolvedPairs)
+    for (auto const& pair : resolvedPairs)
     {
-      auto const len = resolvedPair.second.size();
+      checkedUint16(pair.second.size(), "Custom metadata value length");
 
-      if (len > kU16Max)
+      if (pair.second.size() > kU16Max - totalValueSize)
       {
-        detail::throwLibraryError(
-          Error::Code::ValueTooLarge, std::format("Custom metadata value length {} exceeds uint16_t", len));
+        detail::throwLibraryError(Error::Code::ValueTooLarge, "Custom metadata payload length exceeds uint16_t");
       }
 
-      totalValueSize += len;
+      totalValueSize += pair.second.size();
     }
 
-    auto const uriSize = prepared._builder->_propertyBuilder._uri.size();
+    auto const payloadSize = valueOffset + totalValueSize;
+    checkedUint16(payloadSize, "Custom metadata payload length");
 
-    if (uriSize > kU16Max)
+    auto payload = std::vector<std::byte>(payloadSize, std::byte{0});
+    writePod(std::span<std::byte>{payload},
+             0,
+             CustomMetadataBlockHeader{.entryCount = static_cast<std::uint16_t>(entryCount),
+                                       .valueOffset = static_cast<std::uint16_t>(valueOffset),
+                                       .payloadLength = static_cast<std::uint16_t>(payloadSize)});
+
+    auto entryPos = sizeof(CustomMetadataBlockHeader);
+    auto valuePos = valueOffset;
+
+    for (auto const& [dictId, value] : resolvedPairs)
     {
-      detail::throwLibraryError(Error::Code::ValueTooLarge, std::format("URI length {} exceeds uint16_t", uriSize));
+      checkedUint16(valuePos, "Custom metadata entry value offset");
+      writePod(std::span<std::byte>{payload},
+               entryPos,
+               CustomMetadataEntry{.keyId = dictId,
+                                   .valueOffset = static_cast<std::uint16_t>(valuePos),
+                                   .valueLength = static_cast<std::uint16_t>(value.size())});
+      entryPos += sizeof(CustomMetadataEntry);
+
+      if (!value.empty())
+      {
+        std::memcpy(payload.data() + valuePos, value.data(), value.size());
+      }
+
+      valuePos += value.size();
     }
 
-    if (coverCount > kU16Max)
+    appendBlock(TrackColdBlockSlot::CustomMetadata, std::move(payload));
+  }
+
+  void TrackBuilder::PreparedCold::assignLayout(std::string_view uri)
+  {
+    std::size_t pos = sizeof(TrackColdHeader);
+
+    for (auto const& block : _blocks)
+    {
+      auto const slotIndex = trackColdBlockSlotIndex(block.slot);
+      gsl_Expects(slotIndex < kTrackColdKnownBlockSlotCount);
+      _blockOffsets[slotIndex] = checkedUint16(pos, "Cold block offset");
+
+      auto const rawBlockLength = block.payload.size();
+      auto const alignedBlockLength = align4(rawBlockLength);
+
+      if (alignedBlockLength < rawBlockLength || alignedBlockLength > kU16Max - pos)
+      {
+        detail::throwLibraryError(Error::Code::ValueTooLarge, "Cold block length exceeds uint16_t");
+      }
+
+      pos += alignedBlockLength;
+    }
+
+    auto const uriSize = uri.size();
+    _uriLength = checkedUint16(uriSize, "URI length");
+    _uriOffset = checkedUint16(pos, "Cold record URI offset");
+
+    auto const unalignedSize = pos + uriSize;
+    auto const recordSize = align4(unalignedSize);
+
+    if (recordSize < unalignedSize || recordSize > kU16Max)
     {
       detail::throwLibraryError(
-        Error::Code::ValueTooLarge, std::format("Cover art count {} exceeds uint16_t", coverCount));
+        Error::Code::ValueTooLarge, std::format("Cold record size {} exceeds uint16_t", recordSize));
     }
 
-    if (entryCount > kU16Max)
-    {
-      detail::throwLibraryError(
-        Error::Code::ValueTooLarge, std::format("Custom metadata count {} exceeds uint16_t", entryCount));
-    }
+    _size = recordSize;
+  }
 
-    prepared._uriLength = static_cast<std::uint16_t>(uriSize);
+  void TrackBuilder::PreparedCold::snapshot(TrackBuilder const* builder)
+  {
+    auto const& meta = builder->_metadataBuilder;
+    auto const& property = builder->_propertyBuilder;
 
-    constexpr std::size_t kEntrySize = 8;
-    std::size_t const coverArea = (coverCount * kEntrySize);
-    std::size_t const customOffsetValue = sizeof(TrackColdHeader) + coverArea;
-
-    if (customOffsetValue > kU16Max)
-    {
-      detail::throwLibraryError(
-        Error::Code::ValueTooLarge, std::format("Cold record custom offset {} exceeds uint16_t", customOffsetValue));
-    }
-
-    prepared._customOffset = static_cast<std::uint16_t>(customOffsetValue);
-
-    std::size_t const customArea = (entryCount * kEntrySize) + totalValueSize;
-    std::size_t const uriOffsetValue = customOffsetValue + customArea;
-
-    if (uriOffsetValue > kU16Max)
-    {
-      detail::throwLibraryError(
-        Error::Code::ValueTooLarge, std::format("Cold record URI offset {} exceeds uint16_t", uriOffsetValue));
-    }
-
-    prepared._uriOffset = static_cast<std::uint16_t>(uriOffsetValue);
-
-    std::size_t size = uriOffsetValue + uriSize;
-    size = (size + kSerializedAlignmentMask) & ~kSerializedAlignmentMask;
-    prepared._size = size;
-
-    return prepared;
+    _uri = std::string{property._uri};
+    _duration = std::chrono::duration_cast<TrackDuration>(property._duration);
+    _bitrate = property._bitrate;
+    _trackNumber = meta._trackNumber;
+    _trackTotal = meta._trackTotal;
+    _discNumber = meta._discNumber;
+    _discTotal = meta._discTotal;
+    _channels = property._channels;
   }
 
   void TrackBuilder::PreparedCold::writeTo(std::span<std::byte> out) const
   {
     // Exact size validation and alignment check
     gsl_Expects(out.size() == _size);
-    gsl_Expects((std::uintptr_t(out.data()) % 4) == 0);
+    gsl_Expects(utility::bytes::isAligned(out.data(), kSerializedAlignmentBytes));
 
-    auto const& meta = _builder->_metadataBuilder;
-    auto const& prop = _builder->_propertyBuilder;
+    std::ranges::fill(out, std::byte{0});
 
+    writePod(out,
+             0,
+             TrackColdHeader{
+               .duration = _duration,
+               .bitrate = _bitrate,
+               .trackNumber = _trackNumber,
+               .trackTotal = _trackTotal,
+               .discNumber = _discNumber,
+               .discTotal = _discTotal,
+               .blockOffsets = _blockOffsets,
+               .uriOffset = _uriOffset,
+               .uriLength = _uriLength,
+               .channels = _channels,
+               .reserved8 = 0,
+             });
+
+    std::size_t pos = sizeof(TrackColdHeader);
+
+    for (auto const& block : _blocks)
     {
-      new (out.data()) TrackColdHeader{
-        .duration = std::chrono::duration_cast<TrackDuration>(prop._duration),
-        .bitrate = prop._bitrate,
-        .workId = _workId,
-        .movementId = _movementId,
-        .trackNumber = meta._trackNumber,
-        .trackTotal = meta._trackTotal,
-        .discNumber = meta._discNumber,
-        .discTotal = meta._discTotal,
-        .movementNumber = meta._movementNumber,
-        .movementTotal = meta._movementTotal,
-        .customCount = static_cast<std::uint16_t>(_resolvedPairs.size()), // validated in prepare
-        .uriOffset = _uriOffset,
-        .uriLength = _uriLength,
-        .coverCount = static_cast<std::uint16_t>(_coverArt.size()), // validated in prepare
-        .customOffset = _customOffset,
-        .channels = prop._channels,
-        .padding = {},
-      };
-    }
+      gsl_Assert(pos == _blockOffsets[trackColdBlockSlotIndex(block.slot)]);
 
-    auto pos = sizeof(TrackColdHeader);
-
-    // Write cover table immediately after header: resourceId(4) + type(1) + reserved(3) each
-    for (auto const& cover : _coverArt)
-    {
-      new (out.data() + pos) CoverArtEntry{.id = cover.resourceId, .type = static_cast<std::uint8_t>(cover.type)};
-      pos += sizeof(CoverArtEntry);
-    }
-
-    gsl_Assert(pos == _customOffset);
-
-    std::size_t valueOffset = _customOffset + (_resolvedPairs.size() * sizeof(CustomMetadataEntry));
-
-    for (auto const& [dictId, value] : _resolvedPairs)
-    {
-      new (out.data() + pos) CustomMetadataEntry{.keyId = dictId,
-                                                 .valueOffset = static_cast<std::uint16_t>(valueOffset),
-                                                 .valueLength = static_cast<std::uint16_t>(value.size())};
-      pos += sizeof(CustomMetadataEntry);
-      valueOffset += value.size();
-    }
-
-    // Write all custom values contiguously
-    for (auto const& resolvedPair : _resolvedPairs)
-    {
-      auto const& value = resolvedPair.second;
-
-      if (!value.empty())
+      if (!block.payload.empty())
       {
-        std::memcpy(out.data() + pos, value.data(), value.size());
+        std::memcpy(out.data() + pos, block.payload.data(), block.payload.size());
+        pos += block.payload.size();
       }
 
-      pos += value.size();
+      pos = align4(pos);
     }
 
     gsl_Assert(pos == _uriOffset);
@@ -839,7 +966,7 @@ namespace ao::library
     // Write uri
     if (_uriLength > 0)
     {
-      std::memcpy(out.data() + pos, _builder->_propertyBuilder._uri.data(), _uriLength);
+      std::memcpy(out.data() + pos, _uri.data(), _uriLength);
       pos += _uriLength;
     }
 

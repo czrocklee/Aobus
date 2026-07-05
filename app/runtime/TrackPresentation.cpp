@@ -186,6 +186,29 @@ namespace ao::rt
             TrackPresentationPreset{
               .spec =
                 TrackPresentationSpec{
+                  .id = "classical-conductors",
+                  .groupBy = TrackGroupKey::Conductor,
+                  .sortBy =
+                    {
+                      TrackSortTerm{.field = TrackSortField::Conductor, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Composer, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Work, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Movement, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+                    },
+                  .visibleFields = {F::Work, F::Movement, F::Composer, F::Ensemble, F::Album, F::Year, F::Duration},
+                  .redundantFields = {F::Conductor},
+                },
+              .label = "Classical: Conductors",
+              .description = "Grouped by conductor with work and ensemble columns.",
+            },
+            TrackPresentationPreset{
+              .spec =
+                TrackPresentationSpec{
                   .id = "classical-works",
                   .groupBy = TrackGroupKey::Work,
                   .sortBy =

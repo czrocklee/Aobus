@@ -1229,9 +1229,12 @@ namespace ao::rt
           .album("")
           .albumArtist("")
           .composer("")
+          .conductor("")
+          .ensemble("")
           .genre("")
           .work("")
           .movement("")
+          .soloist("")
           .year(0)
           .trackNumber(0)
           .trackTotal(0)
@@ -1288,9 +1291,12 @@ namespace ao::rt
       {.field = rt::TrackField::Album, .stringSetter = [](auto& meta, auto value) { meta.album(value); }},
       {.field = rt::TrackField::AlbumArtist, .stringSetter = [](auto& meta, auto value) { meta.albumArtist(value); }},
       {.field = rt::TrackField::Composer, .stringSetter = [](auto& meta, auto value) { meta.composer(value); }},
+      {.field = rt::TrackField::Conductor, .stringSetter = [](auto& meta, auto value) { meta.conductor(value); }},
+      {.field = rt::TrackField::Ensemble, .stringSetter = [](auto& meta, auto value) { meta.ensemble(value); }},
       {.field = rt::TrackField::Genre, .stringSetter = [](auto& meta, auto value) { meta.genre(value); }},
       {.field = rt::TrackField::Work, .stringSetter = [](auto& meta, auto value) { meta.work(value); }},
       {.field = rt::TrackField::Movement, .stringSetter = [](auto& meta, auto value) { meta.movement(value); }},
+      {.field = rt::TrackField::Soloist, .stringSetter = [](auto& meta, auto value) { meta.soloist(value); }},
       {.field = rt::TrackField::Year, .numberSetter = [](auto& meta, auto value) { meta.year(value); }},
       {.field = rt::TrackField::TrackNumber, .numberSetter = [](auto& meta, auto value) { meta.trackNumber(value); }},
       {.field = rt::TrackField::TrackTotal, .numberSetter = [](auto& meta, auto value) { meta.trackTotal(value); }},

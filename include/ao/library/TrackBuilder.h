@@ -10,13 +10,16 @@
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Transaction.h>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
@@ -65,9 +68,12 @@ namespace ao::library
       MetadataBuilder& album(std::string_view text);
       MetadataBuilder& albumArtist(std::string_view text);
       MetadataBuilder& composer(std::string_view text);
+      MetadataBuilder& conductor(std::string_view text);
+      MetadataBuilder& ensemble(std::string_view text);
       MetadataBuilder& genre(std::string_view text);
       MetadataBuilder& work(std::string_view text);
       MetadataBuilder& movement(std::string_view text);
+      MetadataBuilder& soloist(std::string_view text);
 
       // Numeric setters
       MetadataBuilder& year(std::uint16_t year);
@@ -84,9 +90,12 @@ namespace ao::library
       std::string_view album() const { return _album; }
       std::string_view albumArtist() const { return _albumArtist; }
       std::string_view composer() const { return _composer; }
+      std::string_view conductor() const { return _conductor; }
+      std::string_view ensemble() const { return _ensemble; }
       std::string_view genre() const { return _genre; }
       std::string_view work() const { return _work; }
       std::string_view movement() const { return _movement; }
+      std::string_view soloist() const { return _soloist; }
       std::uint16_t year() const { return _year; }
       std::uint16_t trackNumber() const { return _trackNumber; }
       std::uint16_t trackTotal() const { return _trackTotal; }
@@ -104,9 +113,12 @@ namespace ao::library
       std::string_view _album;
       std::string_view _albumArtist;
       std::string_view _composer;
+      std::string_view _conductor;
+      std::string_view _ensemble;
       std::string_view _genre;
       std::string_view _work;
       std::string_view _movement;
+      std::string_view _soloist;
 
       // Metadata numerics
       std::uint16_t _year = 0;
@@ -241,6 +253,11 @@ namespace ao::library
     /**
      * PreparedHot - prepared hot data for zero-copy write.
      * Resolves tag names and metadata strings to DictionaryIds before writing.
+     *
+     * A prepared value is an immutable snapshot: it owns every byte writeTo
+     * emits and freezes the overflow-checked header lengths at prepare time,
+     * so mutating or destroying builder inputs after prepare() cannot skew
+     * the validated size, header fields, or payload bytes.
      */
     class PreparedHot
     {
@@ -249,10 +266,10 @@ namespace ao::library
       void writeTo(std::span<std::byte> out) const;
 
     private:
-      explicit PreparedHot(TrackBuilder const* builder);
+      PreparedHot() = default;
       static PreparedHot create(TrackBuilder const* builder, lmdb::WriteTransaction& txn, DictionaryStore& dict);
 
-      TrackBuilder const* _builder;
+      std::string _title;
       std::vector<DictionaryId> _tagIds;
       DictionaryId _artistId = kInvalidDictionaryId;
       DictionaryId _albumId = kInvalidDictionaryId;
@@ -260,6 +277,12 @@ namespace ao::library
       DictionaryId _albumArtistId = kInvalidDictionaryId;
       DictionaryId _composerId = kInvalidDictionaryId;
       std::uint32_t _bloomFilter = 0;
+      SampleRate _sampleRate{};
+      std::uint16_t _year = 0;
+      std::uint16_t _titleLength = 0;
+      std::uint16_t _tagLength = 0;
+      BitDepth _bitDepth{};
+      AudioCodec _codec{};
       std::size_t _size = 0;
 
       friend class TrackBuilder;
@@ -267,7 +290,11 @@ namespace ao::library
 
     /**
      * PreparedCold - prepared cold data for zero-copy write.
-     * Created by constructor (handles embedded cover art, resolves custom keys).
+     * Created by create() (handles embedded cover art, resolves custom keys).
+     *
+     * Like PreparedHot, a prepared value is an immutable snapshot that owns
+     * every byte writeTo emits - including the URI - with all header fields
+     * overflow-checked and frozen at prepare time.
      */
     class PreparedCold
     {
@@ -276,20 +303,48 @@ namespace ao::library
       void writeTo(std::span<std::byte> out) const;
 
     private:
-      explicit PreparedCold(TrackBuilder const* builder);
+      PreparedCold() = default;
       static PreparedCold create(TrackBuilder const* builder,
                                  lmdb::WriteTransaction& txn,
                                  DictionaryStore& dict,
                                  ResourceStore& resources);
+      static std::vector<std::pair<DictionaryId, std::string_view>> resolveCustomMetadata(TrackBuilder const* builder,
+                                                                                          lmdb::WriteTransaction& txn,
+                                                                                          DictionaryStore& dict);
 
-      TrackBuilder const* _builder;
-      std::vector<std::pair<DictionaryId, std::string_view>> _resolvedPairs;
+      void resolveClassicalIds(TrackBuilder const* builder, lmdb::WriteTransaction& txn, DictionaryStore& dict);
+      void resolveCoverArt(TrackBuilder const* builder, lmdb::WriteTransaction& txn, ResourceStore& resources);
+      void appendBlock(TrackColdBlockSlot slot, std::vector<std::byte> payload);
+      void appendCoverArtBlock();
+      void appendClassicalBlock(MetadataBuilder const& meta);
+      void appendCustomMetadataBlock(std::vector<std::pair<DictionaryId, std::string_view>> const& resolvedPairs);
+      void assignLayout(std::string_view uri);
+      void snapshot(TrackBuilder const* builder);
+
+      struct PreparedBlock final
+      {
+        TrackColdBlockSlot slot{};
+        std::vector<std::byte> payload{};
+      };
+
+      std::string _uri;
       std::vector<CoverArt> _coverArt;
+      std::vector<PreparedBlock> _blocks;
+      std::array<std::uint16_t, kTrackColdBlockSlotCount> _blockOffsets{};
+      TrackDuration _duration{};
+      Bitrate _bitrate{};
+      std::uint16_t _trackNumber = 0;
+      std::uint16_t _trackTotal = 0;
+      std::uint16_t _discNumber = 0;
+      std::uint16_t _discTotal = 0;
       std::uint16_t _uriOffset = 0;
       std::uint16_t _uriLength = 0;
-      std::uint16_t _customOffset = 0;
       DictionaryId _workId = kInvalidDictionaryId;
       DictionaryId _movementId = kInvalidDictionaryId;
+      DictionaryId _conductorId = kInvalidDictionaryId;
+      DictionaryId _ensembleId = kInvalidDictionaryId;
+      DictionaryId _soloistId = kInvalidDictionaryId;
+      Channels _channels{};
       std::size_t _size = 0;
 
       friend class TrackBuilder;
