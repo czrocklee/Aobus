@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
@@ -15,7 +16,9 @@
 #include <sigc++/scoped_connection.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -48,6 +51,7 @@ namespace ao::gtk
     void setLayoutAndApply(std::span<rt::TrackField const> visibleFields);
     void updateColumnVisibility(std::span<rt::TrackField const> visibleFields);
     void queueSharedColumnLayoutUpdate();
+    void queueColumnResolve();
 
     // Title position CSS variable for the playing-track beam
     void updateTitlePositionVariable();
@@ -68,11 +72,20 @@ namespace ao::gtk
       Glib::RefPtr<Gtk::ColumnViewColumn> columnPtr;
     };
 
-    void updateColumnExpansion(std::span<rt::TrackField const> visibleFields);
+    struct PendingUserResize final
+    {
+      rt::TrackField field = rt::TrackField::Title;
+      std::int32_t width = 0;
+    };
+
     bool flushSharedColumnLayoutUpdate();
+    bool flushColumnResolve();
     bool flushTitlePositionVariableUpdate();
     void updateSharedColumnLayout();
-    std::vector<rt::TrackField> captureCurrentFieldOrder() const;
+    void applySolvedColumnWidths(std::span<uimodel::TrackColumnSolveSpec const> specs);
+    std::int32_t resolvedViewportWidth() const;
+    std::vector<rt::TrackField> visibleFieldsInColumnOrder() const;
+    std::vector<std::int32_t> visibleColumnWidths() const;
     std::vector<rt::TrackField> visibleFieldsInStoredOrder(std::span<rt::TrackField const> visibleFields) const;
 
     void ensureColumnPosition(Glib::RefPtr<Gio::ListModel> const& columns,
@@ -88,8 +101,10 @@ namespace ao::gtk
 
     std::vector<ColumnBinding> _columns;
     sigc::scoped_connection _queuedColumnLayoutUpdateConnection;
+    sigc::scoped_connection _queuedColumnResolveConnection;
     sigc::scoped_connection _queuedTitlePositionUpdateConnection;
     bool _syncingColumnLayout = false;
+    std::optional<PendingUserResize> _optPendingUserResize{};
     Glib::RefPtr<Gtk::CssProvider> _dynamicCssProviderPtr;
     std::string _lastTitleCss;
     std::vector<sigc::scoped_connection> _columnNotifyConnections;

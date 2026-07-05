@@ -54,6 +54,7 @@ namespace ao::tui
     std::vector<TrackColumnResizeHandle>* resizeHandles = nullptr;
     std::vector<TrackSectionRowBox>* sectionRowBoxes = nullptr;
     ftxui::Box* tableBox = nullptr;
+    std::int32_t availableColumns = 0;
   };
 
   std::int32_t trackVisualRow(std::int32_t trackIndex, std::span<TrackSection const> sections) noexcept;

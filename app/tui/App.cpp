@@ -594,7 +594,8 @@ namespace ao::tui
                                                   TrackTableViewOptions{.columnWidths = &trackColumnWidthOverrides,
                                                                         .resizeHandles = &trackColumnResizeHandles,
                                                                         .sectionRowBoxes = &trackSectionRowBoxes,
-                                                                        .tableBox = &trackTableBox});
+                                                                        .tableBox = &trackTableBox,
+                                                                        .availableColumns = terminalColumns});
         auto mainContentPtr = workspaceElementPtr;
         auto popoverElementPtr = ftxui::Element{};
         auto mainLayerPopover = [&](ftxui::Box const& rootAnchor,

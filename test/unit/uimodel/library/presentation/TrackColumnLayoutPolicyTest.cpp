@@ -11,22 +11,6 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackColumnLayoutPolicy - chooses the expanding column from visible fields",
-            "[uimodel][unit][library][presentation]")
-  {
-    auto fields = std::vector{rt::TrackField::Artist, rt::TrackField::Title};
-    CHECK(expandingTrackColumn(fields) == rt::TrackField::Title);
-
-    fields = {rt::TrackField::Artist, rt::TrackField::Tags};
-    CHECK(expandingTrackColumn(fields) == rt::TrackField::Tags);
-
-    fields = {rt::TrackField::Album, rt::TrackField::Artist};
-    CHECK(expandingTrackColumn(fields) == rt::TrackField::Album);
-
-    fields = {};
-    CHECK(expandingTrackColumn(fields) == rt::TrackField::Title);
-  }
-
   TEST_CASE("TrackColumnLayoutPolicy - orders visible fields using stored order first",
             "[uimodel][unit][library][presentation]")
   {

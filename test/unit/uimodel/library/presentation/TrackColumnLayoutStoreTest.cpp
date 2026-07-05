@@ -19,8 +19,8 @@ namespace ao::uimodel::test
     auto store = TrackColumnLayoutStore{};
     auto events = std::vector<ListId>{};
     auto sub = store.signalChanged().connect([&events](ListId listId) { events.push_back(listId); });
-    auto const layout = std::vector{TrackColumnState{.field = rt::TrackField::Album, .width = 230},
-                                    TrackColumnState{.field = rt::TrackField::Title, .width = 260}};
+    auto const layout = std::vector{TrackColumnState{.field = rt::TrackField::Album, .width = 230, .weight = -1.0},
+                                    TrackColumnState{.field = rt::TrackField::Title, .width = -1, .weight = 1.25}};
 
     store.updateLayout(kInvalidListId, layout);
     CHECK(store.layoutForList(kInvalidListId).empty());
@@ -35,6 +35,8 @@ namespace ao::uimodel::test
     REQUIRE(store.layoutForList(rt::kAllTracksListId).size() == 2);
     CHECK(store.layoutForList(rt::kAllTracksListId)[0].field == rt::TrackField::Album);
     CHECK(store.layoutForList(rt::kAllTracksListId)[0].width == 230);
+    CHECK(store.layoutForList(rt::kAllTracksListId)[1].field == rt::TrackField::Title);
+    CHECK(store.layoutForList(rt::kAllTracksListId)[1].weight == 1.25);
 
     auto const order = store.activeFieldOrder();
     REQUIRE(order.size() == 2);
@@ -48,7 +50,7 @@ namespace ao::uimodel::test
     auto events = std::vector<ListId>{};
     auto sub = store.signalChanged().connect([&events](ListId listId) { events.push_back(listId); });
     auto const layouts = std::map<ListId, std::vector<TrackColumnState>>{
-      {rt::kAllTracksListId, {TrackColumnState{.field = rt::TrackField::Duration, .width = 95}}},
+      {rt::kAllTracksListId, {TrackColumnState{.field = rt::TrackField::Duration, .width = 95, .weight = -1.0}}},
     };
 
     store.setListLayouts(layouts);

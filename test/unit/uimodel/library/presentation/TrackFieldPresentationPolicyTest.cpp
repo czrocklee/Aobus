@@ -22,6 +22,39 @@ namespace ao::uimodel::test
     CHECK(defaultTrackFieldColumnWidth(rt::TrackField::FilePath) == 300);
   }
 
+  TEST_CASE("trackFieldColumnSizing classifies text columns as flexible", "[uimodel][unit][library][presentation]")
+  {
+    CHECK(trackFieldColumnSizing(rt::TrackField::Title) == TrackColumnSizing::Flexible);
+    CHECK(trackFieldColumnSizing(rt::TrackField::Artist) == TrackColumnSizing::Flexible);
+    CHECK(trackFieldColumnSizing(rt::TrackField::Album) == TrackColumnSizing::Flexible);
+    CHECK(trackFieldColumnSizing(rt::TrackField::Tags) == TrackColumnSizing::Flexible);
+    CHECK(trackFieldColumnSizing(rt::TrackField::FilePath) == TrackColumnSizing::Flexible);
+
+    CHECK(trackFieldColumnSizing(rt::TrackField::Duration) == TrackColumnSizing::Fixed);
+    CHECK(trackFieldColumnSizing(rt::TrackField::Year) == TrackColumnSizing::Fixed);
+    CHECK(trackFieldColumnSizing(rt::TrackField::Bitrate) == TrackColumnSizing::Fixed);
+    CHECK(trackFieldColumnSizing(rt::TrackField::TechnicalSummary) == TrackColumnSizing::Fixed);
+  }
+
+  TEST_CASE("minimumTrackFieldColumnWidth keeps fixed minimums below default widths",
+            "[uimodel][unit][library][presentation]")
+  {
+    CHECK(minimumTrackFieldColumnWidth(rt::TrackField::Title) == 72);
+    CHECK(minimumTrackFieldColumnWidth(rt::TrackField::Duration) == 40);
+    CHECK(minimumTrackFieldColumnWidth(rt::TrackField::Duration) <
+          defaultTrackFieldColumnWidth(rt::TrackField::Duration));
+    CHECK(minimumTrackFieldColumnWidth(rt::TrackField::Year) < defaultTrackFieldColumnWidth(rt::TrackField::Year));
+  }
+
+  TEST_CASE("defaultTrackFieldColumnWeight favors title over secondary text fields",
+            "[uimodel][unit][library][presentation]")
+  {
+    CHECK(defaultTrackFieldColumnWeight(rt::TrackField::Title) > defaultTrackFieldColumnWeight(rt::TrackField::Artist));
+    CHECK(defaultTrackFieldColumnWeight(rt::TrackField::Artist) ==
+          defaultTrackFieldColumnWeight(rt::TrackField::Album));
+    CHECK(defaultTrackFieldColumnWeight(rt::TrackField::Tags) > defaultTrackFieldColumnWeight(rt::TrackField::Genre));
+  }
+
   TEST_CASE("trackFieldIsVisibleByDefault follows the default presentation visible fields",
             "[uimodel][unit][library][presentation]")
   {

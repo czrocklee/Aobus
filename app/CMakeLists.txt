@@ -64,6 +64,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/list/SmartListEditorModel.cpp
     uimodel/library/presentation/TrackColumnLayoutPolicy.cpp
     uimodel/library/presentation/TrackColumnLayoutStore.cpp
+    uimodel/library/presentation/TrackColumnWidthSolver.cpp
     uimodel/library/presentation/CustomPresentationEditorModel.cpp
     uimodel/library/presentation/TrackFieldPresentationPolicy.cpp
     uimodel/library/presentation/TrackPresentationCatalog.cpp

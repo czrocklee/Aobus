@@ -12,7 +12,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutPolicy.h>
+#include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <format>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -35,7 +36,6 @@ namespace ao::tui
     constexpr std::int32_t kPlayingColumns = 2;
     constexpr std::int32_t kColumnPadding = 2;
     constexpr std::int32_t kMaximumFieldColumns = 72;
-    constexpr std::int32_t kExpandedFieldColumns = 72;
     constexpr std::int32_t kScrollIndicatorColumns = 1;
     // GTK policy widths are pixels; TUI columns are character cells. This keeps
     // relative presentation widths while avoiding terminal-specific measurement.
@@ -90,6 +90,13 @@ namespace ao::tui
 
       return std::clamp(
         policyWidth / kPresentationPixelToTerminalColumnRatio, kMinimumTrackColumnWidthColumns, kMaximumFieldColumns);
+    }
+
+    std::int32_t terminalMinimumColumnWidth(rt::TrackField const field)
+    {
+      return std::clamp(uimodel::minimumTrackFieldColumnWidth(field) / kPresentationPixelToTerminalColumnRatio,
+                        kMinimumTrackColumnWidthColumns,
+                        kMaximumFieldColumns);
     }
 
     ftxui::Element fixedCell(std::string value, std::int32_t const width, bool const rightAligned = false)
@@ -167,27 +174,41 @@ namespace ao::tui
       return blankFallback(value);
     }
 
-    std::int32_t overrideColumnWidth(rt::TrackField const field,
-                                     std::int32_t const fallback,
-                                     std::vector<TrackColumnWidthOverride> const* const columnWidths)
+    std::optional<std::int32_t> overrideColumnWidth(rt::TrackField const field,
+                                                    std::vector<TrackColumnWidthOverride> const* const columnWidths)
     {
       if (columnWidths == nullptr)
       {
-        return fallback;
+        return std::nullopt;
       }
 
       auto const it = std::ranges::find(*columnWidths, field, &TrackColumnWidthOverride::field);
 
       if (it == columnWidths->end() || it->columns <= 0)
       {
-        return fallback;
+        return std::nullopt;
       }
 
       return std::clamp(it->columns, kMinimumTrackColumnWidthColumns, kMaximumTrackColumnResizeColumns);
     }
 
+    std::int32_t trackColumnViewport(std::int32_t const availableColumns, std::size_t const columnCount)
+    {
+      if (availableColumns <= 0 || columnCount == 0)
+      {
+        return 0;
+      }
+
+      auto const separators = columnCount > 1 ? static_cast<std::int32_t>(columnCount - 1) * 2 : 0;
+      auto const trailingSeparator = columnCount > 0 ? 1 : 0;
+      auto const chromeColumns =
+        kPlayingColumns + kColumnPadding + separators + trailingSeparator + kScrollIndicatorColumns;
+      return std::max(0, availableColumns - chromeColumns);
+    }
+
     std::vector<TrackColumn> columnsForPresentation(rt::TrackPresentationSpec const& presentation,
-                                                    std::vector<TrackColumnWidthOverride> const* const columnWidths)
+                                                    std::vector<TrackColumnWidthOverride> const* const columnWidths,
+                                                    std::int32_t const availableColumns)
     {
       auto normalized = rt::normalizeTrackPresentationSpec(presentation);
 
@@ -198,19 +219,32 @@ namespace ao::tui
 
       auto columns = std::vector<TrackColumn>{};
       columns.reserve(normalized.visibleFields.size());
-      auto const expandingField = uimodel::expandingTrackColumn(normalized.visibleFields);
+      auto specs = std::vector<uimodel::TrackColumnSolveSpec>{};
+      specs.reserve(normalized.visibleFields.size());
 
       for (auto const field : normalized.visibleFields)
       {
-        auto width = terminalColumnWidth(field);
+        auto spec = uimodel::TrackColumnSolveSpec{.field = field,
+                                                  .weight = uimodel::defaultTrackFieldColumnWeight(field),
+                                                  .fixedWidth = -1,
+                                                  .defaultWidth = terminalColumnWidth(field),
+                                                  .minimumWidth = terminalMinimumColumnWidth(field)};
 
-        if (field == expandingField)
+        if (auto const optOverrideWidth = overrideColumnWidth(field, columnWidths); optOverrideWidth)
         {
-          width = std::max(width, kExpandedFieldColumns);
+          spec.fixedWidth = *optOverrideWidth;
         }
 
-        width = overrideColumnWidth(field, width, columnWidths);
+        specs.push_back(spec);
+      }
 
+      auto const widths =
+        uimodel::solveTrackColumnWidths(specs, trackColumnViewport(availableColumns, normalized.visibleFields.size()));
+
+      for (std::size_t index = 0; index < normalized.visibleFields.size(); ++index)
+      {
+        auto const field = normalized.visibleFields[index];
+        auto const width = index < widths.size() ? widths[index] : terminalColumnWidth(field);
         columns.push_back(TrackColumn{.field = field,
                                       .label = std::string{uimodel::trackFieldColumnTitle(field)},
                                       .width = width,
@@ -441,7 +475,7 @@ namespace ao::tui
   {
     using namespace ftxui;
 
-    auto const columns = columnsForPresentation(presentation, options.columnWidths);
+    auto const columns = columnsForPresentation(presentation, options.columnWidths, options.availableColumns);
     auto rows = Elements{};
     rows.reserve(tracks.size() + sections.size());
     std::size_t sectionIndex = 0;

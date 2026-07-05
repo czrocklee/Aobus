@@ -338,6 +338,101 @@ namespace ao::tui::test
     CHECK(cellPosition(resizedHeader, "Duration") < cellPosition(defaultHeader, "Duration"));
   }
 
+  TEST_CASE("TrackTable - available terminal width expands flexible columns", "[tui][unit][track-table]")
+  {
+    auto const presentation = rt::TrackPresentationSpec{
+      .id = "elastic-widths", .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album}};
+    auto const tracks = std::vector{
+      makeTrackListItem(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .artist = "Artist", .album = "Album"})};
+    auto narrowHandles = std::vector<TrackColumnResizeHandle>{};
+    auto wideHandles = std::vector<TrackColumnResizeHandle>{};
+
+    auto const narrowRendered =
+      renderElement(trackTableView(tracks,
+                                   -1,
+                                   kInvalidTrackId,
+                                   presentation,
+                                   TrackTableViewOptions{.resizeHandles = &narrowHandles, .availableColumns = 100}),
+                    100);
+    auto const wideRendered =
+      renderElement(trackTableView(tracks,
+                                   -1,
+                                   kInvalidTrackId,
+                                   presentation,
+                                   TrackTableViewOptions{.resizeHandles = &wideHandles, .availableColumns = 120}),
+                    120);
+
+    REQUIRE_FALSE(narrowRendered.text.empty());
+    REQUIRE_FALSE(wideRendered.text.empty());
+    REQUIRE(narrowHandles.size() == 3);
+    REQUIRE(wideHandles.size() == 3);
+    CHECK(wideHandles[0].columns > narrowHandles[0].columns);
+    CHECK(wideHandles[1].columns > narrowHandles[1].columns);
+    CHECK(wideHandles[2].columns > narrowHandles[2].columns);
+  }
+
+  TEST_CASE("TrackTable - column width overrides stay fixed while other text columns flex", "[tui][unit][track-table]")
+  {
+    auto const presentation = rt::TrackPresentationSpec{
+      .id = "override-elastic-widths",
+      .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album}};
+    auto const tracks = std::vector{
+      makeTrackListItem(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .artist = "Artist", .album = "Album"})};
+    auto const overrides = std::vector{TrackColumnWidthOverride{.field = rt::TrackField::Title, .columns = 12}};
+    auto narrowHandles = std::vector<TrackColumnResizeHandle>{};
+    auto wideHandles = std::vector<TrackColumnResizeHandle>{};
+
+    auto const narrowRendered = renderElement(
+      trackTableView(
+        tracks,
+        -1,
+        kInvalidTrackId,
+        presentation,
+        TrackTableViewOptions{.columnWidths = &overrides, .resizeHandles = &narrowHandles, .availableColumns = 100}),
+      100);
+    auto const wideRendered = renderElement(
+      trackTableView(
+        tracks,
+        -1,
+        kInvalidTrackId,
+        presentation,
+        TrackTableViewOptions{.columnWidths = &overrides, .resizeHandles = &wideHandles, .availableColumns = 120}),
+      120);
+
+    REQUIRE_FALSE(narrowRendered.text.empty());
+    REQUIRE_FALSE(wideRendered.text.empty());
+    REQUIRE(narrowHandles.size() == 3);
+    REQUIRE(wideHandles.size() == 3);
+    CHECK(narrowHandles[0].columns == 12);
+    CHECK(wideHandles[0].columns == 12);
+    CHECK(wideHandles[1].columns > narrowHandles[1].columns);
+    CHECK(wideHandles[2].columns > narrowHandles[2].columns);
+  }
+
+  TEST_CASE("TrackTable - narrow available width clamps columns to terminal minimum", "[tui][unit][track-table]")
+  {
+    auto const presentation = rt::TrackPresentationSpec{
+      .id = "narrow-elastic-widths",
+      .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album}};
+    auto const tracks = std::vector{
+      makeTrackListItem(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .artist = "Artist", .album = "Album"})};
+    auto handles = std::vector<TrackColumnResizeHandle>{};
+
+    auto const rendered =
+      renderElement(trackTableView(tracks,
+                                   -1,
+                                   kInvalidTrackId,
+                                   presentation,
+                                   TrackTableViewOptions{.resizeHandles = &handles, .availableColumns = 30}),
+                    40);
+
+    REQUIRE_FALSE(rendered.text.empty());
+    REQUIRE(handles.size() == 3);
+    CHECK(handles[0].columns == kMinimumTrackColumnWidthColumns);
+    CHECK(handles[1].columns == kMinimumTrackColumnWidthColumns);
+    CHECK(handles[2].columns == kMinimumTrackColumnWidthColumns);
+  }
+
   TEST_CASE("TrackTable - header exposes resize handles", "[tui][unit][track-table]")
   {
     auto const presentation =
@@ -435,7 +530,8 @@ namespace ao::tui::test
     };
     auto const tracks = std::vector{makeTrackListItem(row)};
 
-    auto const text = renderText(trackTableView(tracks, -1, kInvalidTrackId, presentation), 140);
+    auto const text = renderText(
+      trackTableView(tracks, -1, kInvalidTrackId, presentation, TrackTableViewOptions{.availableColumns = 140}), 140);
 
     CHECK(text.find("wide-terminal-tail") != std::string::npos);
   }

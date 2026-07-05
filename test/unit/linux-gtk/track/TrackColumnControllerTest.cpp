@@ -14,6 +14,8 @@
 #include <gtkmm/signallistitemfactory.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -54,6 +56,13 @@ namespace ao::gtk::test
 
       return {};
     }
+
+    uimodel::TrackColumnState const* stateForField(std::vector<uimodel::TrackColumnState> const& layout,
+                                                   rt::TrackField field)
+    {
+      auto const it = std::ranges::find(layout, field, &uimodel::TrackColumnState::field);
+      return it == layout.end() ? nullptr : &*it;
+    }
   } // namespace
 
   TEST_CASE("TrackColumnController builds and updates visible track columns", "[gtk][unit][track][column]")
@@ -89,6 +98,8 @@ namespace ao::gtk::test
       CHECK(titleColumnPtr->get_visible());
       CHECK(artistColumnPtr->get_visible());
       CHECK_FALSE(albumColumnPtr->get_visible());
+      CHECK_FALSE(titleColumnPtr->get_expand());
+      CHECK_FALSE(artistColumnPtr->get_expand());
     }
 
     SECTION("setup and sync do not persist initial column construction")
@@ -133,6 +144,10 @@ namespace ao::gtk::test
       auto const& stored = layoutStore.layoutForList(rt::kAllTracksListId);
       CHECK(std::ranges::contains(stored, rt::TrackField::Artist, &uimodel::TrackColumnState::field));
       CHECK_FALSE(std::ranges::contains(stored, rt::TrackField::Album, &uimodel::TrackColumnState::field));
+      auto const* titleState = stateForField(stored, rt::TrackField::Title);
+      REQUIRE(titleState != nullptr);
+      CHECK(titleState->width == -1);
+      CHECK(titleState->weight > 0.0);
 
       drainGtkEvents();
       CHECK(events.size() == 1);
@@ -159,6 +174,22 @@ namespace ao::gtk::test
 
       CHECK_FALSE(controller.isTitlePositionUpdateQueuedForTest());
       CHECK(controller.titlePositionCssForTest() != initialCss);
+    }
+
+    SECTION("allocated column view exposes the viewport as horizontal page size")
+    {
+      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+
+      auto visible = std::vector{rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Duration};
+      controller.syncLayout(visible);
+      auto host = GtkWindowFixture{};
+      host.window().set_default_size(640, 240);
+      host.mount(columnView);
+      host.present();
+
+      auto const adjPtr = columnView.get_hadjustment();
+      REQUIRE(adjPtr);
+      CHECK(static_cast<std::int32_t>(std::lround(adjPtr->get_page_size())) == columnView.get_width());
     }
   }
 } // namespace ao::gtk::test

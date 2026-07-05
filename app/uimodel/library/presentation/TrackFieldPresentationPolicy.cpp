@@ -28,6 +28,14 @@ namespace ao::uimodel
     constexpr std::int32_t kWidthPath = 300;
     constexpr std::int32_t kWidthTime = 130;
     constexpr std::int32_t kWidthTags = 160;
+    constexpr std::int32_t kMinimumFlexibleWidth = 72;
+    constexpr std::int32_t kMinimumFixedWidth = 40;
+    constexpr double kWeightTitle = 3.0;
+    constexpr double kWeightPrimaryText = 2.0;
+    constexpr double kWeightAlbumArtist = 1.8;
+    constexpr double kWeightTags = 1.5;
+    constexpr double kWeightSecondaryText = 1.2;
+    constexpr double kWeightFallback = 1.0;
   } // namespace
 
   std::int32_t defaultTrackFieldColumnWidth(rt::TrackField field)
@@ -63,6 +71,47 @@ namespace ao::uimodel
       case rt::TrackField::DisplayTrackNumber: return kWidthTrack;
       case rt::TrackField::TechnicalSummary: return kWidthTechnicalSummary;
       default: return -1;
+    }
+  }
+
+  std::int32_t minimumTrackFieldColumnWidth(rt::TrackField field)
+  {
+    return trackFieldColumnSizing(field) == TrackColumnSizing::Flexible ? kMinimumFlexibleWidth : kMinimumFixedWidth;
+  }
+
+  double defaultTrackFieldColumnWeight(rt::TrackField field)
+  {
+    switch (field)
+    {
+      case rt::TrackField::Title: return kWeightTitle;
+      case rt::TrackField::Artist:
+      case rt::TrackField::Album:
+      case rt::TrackField::FilePath: return kWeightPrimaryText;
+      case rt::TrackField::AlbumArtist: return kWeightAlbumArtist;
+      case rt::TrackField::Tags: return kWeightTags;
+      case rt::TrackField::Genre:
+      case rt::TrackField::Composer:
+      case rt::TrackField::Work:
+      case rt::TrackField::Movement: return kWeightSecondaryText;
+      default: return kWeightFallback;
+    }
+  }
+
+  TrackColumnSizing trackFieldColumnSizing(rt::TrackField field)
+  {
+    switch (field)
+    {
+      case rt::TrackField::Title:
+      case rt::TrackField::Artist:
+      case rt::TrackField::Album:
+      case rt::TrackField::AlbumArtist:
+      case rt::TrackField::Genre:
+      case rt::TrackField::Composer:
+      case rt::TrackField::Work:
+      case rt::TrackField::Movement:
+      case rt::TrackField::Tags:
+      case rt::TrackField::FilePath: return TrackColumnSizing::Flexible;
+      default: return TrackColumnSizing::Fixed;
     }
   }
 

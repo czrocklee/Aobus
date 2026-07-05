@@ -12,26 +12,6 @@
 
 namespace ao::uimodel
 {
-  rt::TrackField expandingTrackColumn(std::span<rt::TrackField const> visibleFields)
-  {
-    if (std::ranges::contains(visibleFields, rt::TrackField::Title))
-    {
-      return rt::TrackField::Title;
-    }
-
-    if (std::ranges::contains(visibleFields, rt::TrackField::Tags))
-    {
-      return rt::TrackField::Tags;
-    }
-
-    if (!visibleFields.empty())
-    {
-      return visibleFields.front();
-    }
-
-    return rt::TrackField::Title;
-  }
-
   std::vector<rt::TrackField> visibleTrackFieldsInStoredOrder(std::span<rt::TrackField const> visibleFields,
                                                               std::span<rt::TrackField const> storedOrder)
   {

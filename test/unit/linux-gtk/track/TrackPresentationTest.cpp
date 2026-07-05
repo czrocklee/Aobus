@@ -22,8 +22,9 @@ namespace ao::gtk::test
 
     auto state = uimodel::TrackColumnLayoutState{};
     auto prefState = uimodel::ListPresentationPreferenceState{};
-    auto layout = std::vector{uimodel::TrackColumnState{.field = rt::TrackField::Title, .width = 321},
-                              uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 222}};
+    auto layout =
+      std::vector{uimodel::TrackColumnState{.field = rt::TrackField::Title, .width = -1, .weight = 1.25},
+                  uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 222, .weight = -1.0}};
     state.listLayouts.emplace(ListId{42}, layout);
 
     {
@@ -42,8 +43,10 @@ namespace ao::gtk::test
     auto const& loadedLayout = loaded.listLayouts.at(ListId{42});
     REQUIRE(loadedLayout.size() == 2);
     CHECK(loadedLayout[0].field == rt::TrackField::Title);
-    CHECK(loadedLayout[0].width == 321);
-    CHECK(loadedLayout[1].field == rt::TrackField::Artist);
+    CHECK(loadedLayout[0].width == -1);
+    CHECK(loadedLayout[0].weight == 1.25);
+    CHECK(loadedLayout[1].field == rt::TrackField::Duration);
     CHECK(loadedLayout[1].width == 222);
+    CHECK(loadedLayout[1].weight == -1.0);
   }
 } // namespace ao::gtk::test

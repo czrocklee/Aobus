@@ -11,8 +11,6 @@
 
 namespace ao::uimodel
 {
-  rt::TrackField expandingTrackColumn(std::span<rt::TrackField const> visibleFields);
-
   std::vector<rt::TrackField> visibleTrackFieldsInStoredOrder(std::span<rt::TrackField const> visibleFields,
                                                               std::span<rt::TrackField const> storedOrder);
 

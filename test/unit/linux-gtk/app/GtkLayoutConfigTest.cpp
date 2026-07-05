@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
+#include <fstream>
 
 namespace ao::gtk::test
 {
@@ -36,8 +37,10 @@ namespace ao::gtk::test
         auto config = GtkLayoutConfig{libraryPath};
         auto state = uimodel::TrackColumnLayoutState{};
         auto prefState = uimodel::ListPresentationPreferenceState{};
-        state.listLayouts[ListId{10}] = {uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 150}};
-        state.listLayouts[ListId{20}] = {uimodel::TrackColumnState{.field = rt::TrackField::Album, .width = 200}};
+        state.listLayouts[ListId{10}] = {
+          uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = -1, .weight = 1.75}};
+        state.listLayouts[ListId{20}] = {
+          uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 200, .weight = -1.0}};
         prefState.presentations[ListId{10}] = "albums";
         config.save(state, prefState);
       }
@@ -48,10 +51,36 @@ namespace ao::gtk::test
         auto prefState = uimodel::ListPresentationPreferenceState{};
         config.load(state, prefState);
         REQUIRE(state.listLayouts.size() == 2);
-        CHECK(state.listLayouts[ListId{10}][0].width == 150);
+        CHECK(state.listLayouts[ListId{10}][0].field == rt::TrackField::Artist);
+        CHECK(state.listLayouts[ListId{10}][0].weight == 1.75);
+        CHECK(state.listLayouts[ListId{20}][0].field == rt::TrackField::Duration);
+        CHECK(state.listLayouts[ListId{20}][0].width == 200);
         REQUIRE(prefState.presentations.size() == 1);
         CHECK(prefState.presentations[ListId{10}] == "albums");
       }
+    }
+
+    SECTION("Load old column layout entries without weight")
+    {
+      std::filesystem::create_directories(libraryPath);
+      auto output = std::ofstream{libraryPath / "gtk_layout.yaml"};
+      output << "trackView.columnLayouts:\n"
+                "  listLayouts:\n"
+                "    42:\n"
+                "      - field: 0\n"
+                "        width: 321\n";
+      output.close();
+
+      auto const config = GtkLayoutConfig{libraryPath};
+      auto state = uimodel::TrackColumnLayoutState{};
+      auto prefState = uimodel::ListPresentationPreferenceState{};
+      config.load(state, prefState);
+
+      REQUIRE(state.listLayouts.contains(ListId{42}));
+      REQUIRE(state.listLayouts[ListId{42}].size() == 1);
+      CHECK(state.listLayouts[ListId{42}][0].field == rt::TrackField::Title);
+      CHECK(state.listLayouts[ListId{42}][0].width == 321);
+      CHECK(state.listLayouts[ListId{42}][0].weight == -1.0);
     }
   }
 } // namespace ao::gtk::test

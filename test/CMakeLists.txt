@@ -187,6 +187,7 @@ add_executable(ao_core_test
     unit/uimodel/library/presentation/ListPresentationPreferenceStoreTest.cpp
     unit/uimodel/library/presentation/TrackColumnLayoutPolicyTest.cpp
     unit/uimodel/library/presentation/TrackColumnLayoutStoreTest.cpp
+    unit/uimodel/library/presentation/TrackColumnWidthSolverTest.cpp
     unit/uimodel/library/presentation/TrackFieldPresentationPolicyTest.cpp
     unit/uimodel/library/presentation/TrackPresentationCatalogTest.cpp
     unit/uimodel/library/presentation/TrackPresentationPickerViewModelTest.cpp
