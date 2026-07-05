@@ -34,7 +34,10 @@ namespace ao::uimodel
   std::string formatBitDepth(std::uint8_t bitDepth);
   std::string formatCodec(AudioCodec codec);
   std::string formatDisplayTrackNumber(std::uint16_t discNumber, std::uint16_t discTotal, std::uint16_t trackNumber);
-  std::string formatTechnicalSummary(AudioCodec codec, std::uint32_t sampleRate, std::uint16_t bitDepth);
+  std::string formatTechnicalSummary(AudioCodec codec,
+                                     std::uint32_t sampleRate,
+                                     std::uint16_t bitDepth,
+                                     std::uint32_t bitrate);
   std::string formatTrackFieldRawValue(rt::TrackField field, rt::TrackFieldRawValue const& rawValue);
   std::string displayTextForTrackField(rt::TrackField field,
                                        rt::TrackDetailSnapshot const& snap,

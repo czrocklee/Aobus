@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <ctime>
 #include <format>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -148,11 +149,6 @@ namespace ao::uimodel
       return {};
     }
 
-    if (sampleRate % 1000 == 0)
-    {
-      return std::format("{} kHz", sampleRate / 1000);
-    }
-
     return std::format("{:.4g} kHz", static_cast<double>(sampleRate) / 1000);
   }
 
@@ -221,43 +217,36 @@ namespace ao::uimodel
     return std::format("{}", trackNumber);
   }
 
-  std::string formatTechnicalSummary(AudioCodec codec, std::uint32_t sampleRate, std::uint16_t bitDepth)
+  std::string formatTechnicalSummary(AudioCodec codec,
+                                     std::uint32_t sampleRate,
+                                     std::uint16_t bitDepth,
+                                     std::uint32_t bitrate)
   {
-    auto codecText = formatCodec(codec);
-    auto rateText = formatSampleRateCompact(sampleRate);
-    auto depthText = bitDepth == 0 ? std::string{} : std::format("{}-bit", bitDepth);
+    auto result = std::string{};
+    result.reserve(64);
 
-    if (!codecText.empty() && rateText.empty() && depthText.empty())
-    {
-      return codecText;
-    }
+    bool first = true;
 
-    if (!codecText.empty() && rateText.empty())
+    auto append = [&]<typename... Args>(bool condition, std::format_string<Args...> fmtStr, Args&&... args)
     {
-      return std::format("{} · {}", codecText, depthText);
-    }
-
-    if (!codecText.empty() && depthText.empty())
-    {
-      return std::format("{} · {}", codecText, rateText);
-    }
-
-    if (codecText.empty())
-    {
-      if (rateText.empty())
+      if (condition)
       {
-        return depthText;
+        if (!first)
+        {
+          result.append(" \u00b7 ");
+        }
+
+        std::format_to(std::back_inserter(result), fmtStr, std::forward<Args>(args)...);
+        first = false;
       }
+    };
 
-      if (depthText.empty())
-      {
-        return rateText;
-      }
+    append(codec != AudioCodec::Unknown, "{}", audioCodecName(codec));
+    append(sampleRate > 0, "{:.4g} kHz", static_cast<double>(sampleRate) / 1000);
+    append(bitDepth > 0, "{}-bit", bitDepth);
+    append(bitrate > 0, "{} kbps", bitrate / 1000);
 
-      return std::format("{} \u00b7 {}", rateText, depthText);
-    }
-
-    return std::format("{} \u00b7 {} \u00b7 {}", codecText, rateText, depthText);
+    return result;
   }
 
   std::string formatTrackFieldRawValue(rt::TrackField field, rt::TrackFieldRawValue const& rawValue)

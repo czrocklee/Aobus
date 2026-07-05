@@ -142,7 +142,8 @@ namespace ao::tui
             uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber)};
         case F::TechnicalSummary:
           return rt::TrackFieldRawValue{
-            std::in_place_type<std::string>, uimodel::formatTechnicalSummary(row.codec, row.sampleRate, row.bitDepth)};
+            std::in_place_type<std::string>,
+            uimodel::formatTechnicalSummary(row.codec, row.sampleRate, row.bitDepth, row.bitrate)};
         case F::Quality: return rt::TrackFieldRawValue{};
       }
 

@@ -147,14 +147,13 @@ namespace ao::rt::test
 
     CHECK(spec.groupBy == TrackGroupKey::None);
 
-    REQUIRE(spec.visibleFields.size() == 7);
+    REQUIRE(spec.visibleFields.size() == 6);
     CHECK(spec.visibleFields[0] == TrackField::Title);
     CHECK(spec.visibleFields[1] == TrackField::Artist);
     CHECK(spec.visibleFields[2] == TrackField::Album);
     CHECK(spec.visibleFields[3] == TrackField::TechnicalSummary);
-    CHECK(spec.visibleFields[4] == TrackField::Bitrate);
-    CHECK(spec.visibleFields[5] == TrackField::FileSize);
-    CHECK(spec.visibleFields[6] == TrackField::FilePath);
+    CHECK(spec.visibleFields[4] == TrackField::FileSize);
+    CHECK(spec.visibleFields[5] == TrackField::FilePath);
 
     // FileSize/ModifiedTime are manifest-sourced and not yet sortable, so the
     // preset falls back to a metadata-only sort order.

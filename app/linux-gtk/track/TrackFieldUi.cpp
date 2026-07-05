@@ -69,7 +69,7 @@ namespace ao::gtk
 
     std::string readTechnicalSummary(TrackRowObject const& row, TrackRowCache const& /*cache*/)
     {
-      return uimodel::formatTechnicalSummary(row.codec(), row.sampleRate(), row.bitDepth());
+      return uimodel::formatTechnicalSummary(row.codec(), row.sampleRate(), row.bitDepth(), row.bitrate());
     }
 
     std::string readFilePathRowText(TrackRowObject const& row, TrackRowCache const& cache)

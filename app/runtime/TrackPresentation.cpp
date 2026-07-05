@@ -246,8 +246,7 @@ namespace ao::rt
                       TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields =
-                    {F::Title, F::Artist, F::Album, F::TechnicalSummary, F::Bitrate, F::FileSize, F::FilePath},
+                  .visibleFields = {F::Title, F::Artist, F::Album, F::TechnicalSummary, F::FileSize, F::FilePath},
                   .redundantFields = {},
                 },
               .label = "Technical",

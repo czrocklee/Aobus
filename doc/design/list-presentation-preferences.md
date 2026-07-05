@@ -1,7 +1,10 @@
 # List Presentation Preferences
 
 Aobus separates list content from the presentation normally used to view that
-content.
+content. The presentation model itself — the spec, the builtin preset set, and
+grouping/sorting semantics — is described in
+[Track Presentation](track-presentation.md); this document covers how a
+presentation is chosen for and remembered per list.
 
 ```text
 List = content set

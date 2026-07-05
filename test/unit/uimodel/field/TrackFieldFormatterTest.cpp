@@ -113,12 +113,16 @@ namespace ao::uimodel::test
     CHECK(formatDisplayTrackNumber(2, 3, 7) == "2-7");
     CHECK(formatDisplayTrackNumber(0, 3, 7) == "7");
 
-    CHECK(formatTechnicalSummary(AudioCodec::Flac, 44100, 16) == "FLAC \u00b7 44.1 kHz \u00b7 16-bit");
-    CHECK(formatTechnicalSummary(AudioCodec::Unknown, 48000, 24) == "48 kHz \u00b7 24-bit");
-    CHECK(formatTechnicalSummary(AudioCodec::Flac, 0, 0) == "FLAC");
-    CHECK(formatTechnicalSummary(AudioCodec::Unknown, 48000, 0) == "48 kHz");
-    CHECK(formatTechnicalSummary(AudioCodec::Unknown, 0, 24) == "24-bit");
-    CHECK(formatTechnicalSummary(AudioCodec::Unknown, 0, 0).empty());
+    CHECK(formatTechnicalSummary(AudioCodec::Flac, 44100, 16, 0) == "FLAC \u00b7 44.1 kHz \u00b7 16-bit");
+    CHECK(formatTechnicalSummary(AudioCodec::Flac, 44100, 16, 900000) ==
+          "FLAC \u00b7 44.1 kHz \u00b7 16-bit \u00b7 900 kbps");
+    CHECK(formatTechnicalSummary(AudioCodec::Mp3, 44100, 0, 320000) == "MP3 \u00b7 44.1 kHz \u00b7 320 kbps");
+    CHECK(formatTechnicalSummary(AudioCodec::Unknown, 48000, 24, 0) == "48 kHz \u00b7 24-bit");
+    CHECK(formatTechnicalSummary(AudioCodec::Flac, 0, 0, 0) == "FLAC");
+    CHECK(formatTechnicalSummary(AudioCodec::Unknown, 48000, 0, 0) == "48 kHz");
+    CHECK(formatTechnicalSummary(AudioCodec::Unknown, 0, 24, 0) == "24-bit");
+    CHECK(formatTechnicalSummary(AudioCodec::Unknown, 0, 0, 128000) == "128 kbps");
+    CHECK(formatTechnicalSummary(AudioCodec::Unknown, 0, 0, 0).empty());
   }
 
   TEST_CASE("formatTrackFieldRawValue formats raw values by field policy", "[uimodel][unit][field][formatter]")
