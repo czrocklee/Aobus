@@ -180,7 +180,7 @@ namespace ao::rt::test
 
     runtime.workspace().goBack();
     auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
-    CHECK(state.presentation.id == "songs");
+    CHECK(state.presentation.id == "library");
   }
 
   TEST_CASE("WorkspaceService - goBack works after closing the active view", "[runtime][unit][workspace][history]")

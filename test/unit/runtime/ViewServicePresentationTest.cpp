@@ -149,7 +149,7 @@ namespace ao::rt::test
     auto const snap = service.trackListState(result.viewId);
 
     CHECK(spec.id == "artists");
-    CHECK(snap.groupBy == TrackGroupKey::Artist);
+    CHECK(snap.groupBy == TrackGroupKey::AlbumArtist);
 
     auto const specInv = service.setPresentation(ViewId{999}, "artists");
     CHECK(specInv.id.empty());

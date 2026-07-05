@@ -289,7 +289,8 @@ namespace ao::tui::test
     CHECK(controller.statusMessage() == "Views");
 
     CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
-    CHECK(library.selectedPresentation() == 1);
+    CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
+    CHECK(library.selectedPresentation() == 2);
 
     CHECK(controller.handleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
@@ -470,7 +471,7 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto presentationButtonBox = ftxui::Box{.x_min = 20, .x_max = 29, .y_min = 23, .y_max = 23};
     auto rowBoxes = std::vector{
-      PresentationRowBox{.rowIndex = 1, .box = ftxui::Box{.x_min = 2, .x_max = 40, .y_min = 12, .y_max = 12}}};
+      PresentationRowBox{.rowIndex = 2, .box = ftxui::Box{.x_min = 2, .x_max = 40, .y_min = 12, .y_max = 12}}};
     auto controller = EventController{
       fixture.screen,
       fixture.shell,

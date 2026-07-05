@@ -50,6 +50,14 @@ namespace ao::gtk::test
       columnView.size_allocate(Gtk::Allocation{0, 0, 400, 200}, -1);
       drainGtkEvents();
     }
+
+    bool queryTooltip(Gtk::Widget& widget)
+    {
+      gboolean handled = FALSE;
+      ::g_signal_emit_by_name(
+        widget.gobj(), "query-tooltip", 0, 0, gboolean{FALSE}, static_cast<gpointer>(nullptr), &handled);
+      return handled != FALSE;
+    }
   } // namespace
 
   TEST_CASE("TrackColumnFactoryBuilder binds column factories to track row widgets", "[gtk][unit][track][column]")
@@ -89,6 +97,30 @@ namespace ao::gtk::test
         REQUIRE(label != nullptr);
         CHECK(label->get_single_line_mode());
         CHECK(label->get_lines() == 1);
+        CHECK(label->get_has_tooltip());
+        CHECK(label->get_tooltip_text().empty());
+        CHECK_FALSE(queryTooltip(*label));
+
+        columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
+        drainGtkEvents();
+      }
+
+      SECTION("tooltip appears only when text is ellipsized")
+      {
+        auto factoryPtr = buildColumnFactory(rt::TrackField::Title, [](auto, auto, auto) {}, *modelPtr);
+        auto columnPtr = Gtk::ColumnViewColumn::create("Title", factoryPtr);
+        columnPtr->set_fixed_width(24);
+        columnView.append_column(columnPtr);
+
+        realizeColumnView(window, columnView);
+
+        auto* const label = findLabelByText(columnView, "Test Title");
+        REQUIRE(label != nullptr);
+        REQUIRE(label->get_layout() != nullptr);
+        CHECK(label->get_layout()->is_ellipsized());
+        CHECK(label->get_has_tooltip());
+        CHECK(label->get_tooltip_text().empty());
+        CHECK(queryTooltip(*label));
 
         columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
         drainGtkEvents();

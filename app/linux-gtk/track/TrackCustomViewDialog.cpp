@@ -350,6 +350,7 @@ namespace ao::gtk
       box->append(*downBtn);
 
       auto* removeBtn = makeRowIconButton("user-trash-symbolic", "Remove");
+      removeBtn->set_sensitive(visibleFields.size() > 1);
       removeBtn->signal_clicked().connect(
         [this, i]
         {

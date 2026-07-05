@@ -30,7 +30,7 @@ namespace ao::uimodel::test
     auto const items = catalog.menuItems();
     auto const builtinCount = catalog.builtinPresets().size();
 
-    CHECK(catalog.labelForId(rt::kDefaultTrackPresentationId) == "Songs");
+    CHECK(catalog.labelForId(rt::kDefaultTrackPresentationId) == "Library");
     CHECK(catalog.labelForId("library-qa") == "Library QA");
     CHECK(catalog.labelForId("missing-preset") == "missing-preset");
     REQUIRE(catalog.specForId("library-qa").has_value());

@@ -9,12 +9,19 @@
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/columnview.h>
+#include <gtkmm/columnviewcolumn.h>
+#include <gtkmm/label.h>
+#include <gtkmm/listitem.h>
 #include <gtkmm/multiselection.h>
+#include <gtkmm/object.h>
 #include <gtkmm/selectionmodel.h>
+#include <gtkmm/signallistitemfactory.h>
 
 #include <chrono>
 #include <memory>
@@ -24,6 +31,27 @@ namespace ao::gtk::test
 {
   namespace
   {
+    void appendTestColumn(Gtk::ColumnView& columnView)
+    {
+      auto const factoryPtr = Gtk::SignalListItemFactory::create();
+      factoryPtr->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
+                                         { itemPtr->set_child(*Gtk::make_managed<Gtk::Label>()); });
+
+      factoryPtr->signal_bind().connect(
+        [](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
+        {
+          auto* const label = dynamic_cast<Gtk::Label*>(itemPtr->get_child());
+
+          if (label != nullptr)
+          {
+            label->set_text("track");
+          }
+        });
+
+      auto const columnPtr = Gtk::ColumnViewColumn::create("Track", factoryPtr);
+      columnPtr->set_fixed_width(160);
+      columnView.append_column(columnPtr);
+    }
   } // namespace
 
   TEST_CASE("TrackSelectionController synchronizes GTK selection with runtime views", "[gtk][unit][track][selection]")
@@ -56,6 +84,7 @@ namespace ao::gtk::test
 
     {
       auto columnView = Gtk::ColumnView{};
+      appendTestColumn(columnView);
       columnView.set_model(selectionModelPtr);
 
       auto controller = TrackSelectionController{columnView, modelPtr, selectionModelPtr};
@@ -111,6 +140,33 @@ namespace ao::gtk::test
 
       SECTION("selectTrack helper")
       {
+        controller.selectTrack(trackId2);
+        drainGtkEvents();
+
+        CHECK(controller.selectedTrackCount() == 1);
+        CHECK(controller.primarySelectedTrackId() == trackId2);
+      }
+
+      SECTION("selectTrack keeps the requested row selected in grouped presentations")
+      {
+        projectionPtr->setPresentation(rt::TrackPresentationSpec{
+          .groupBy = rt::TrackGroupKey::Album,
+          .sortBy = {rt::TrackSortTerm{.field = rt::TrackSortField::Album},
+                     rt::TrackSortTerm{.field = rt::TrackSortField::Title}},
+        });
+        drainGtkEvents();
+
+        REQUIRE(projectionPtr->groupCount() == 1);
+        CHECK(projectionPtr->groupAt(0).rows.start == 0);
+        auto const optTrack2Index = modelPtr->indexOf(trackId2);
+        REQUIRE(optTrack2Index);
+        CHECK(*optTrack2Index > projectionPtr->groupAt(0).rows.start);
+
+        auto host = GtkWindowFixture{};
+        host.mount(columnView);
+        host.present();
+        REQUIRE(columnView.get_mapped());
+
         controller.selectTrack(trackId2);
         drainGtkEvents();
 

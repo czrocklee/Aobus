@@ -33,7 +33,7 @@ namespace ao::rt::test
     CHECK(runtime.workspace().canGoBack() == true);
     runtime.workspace().goBack();
     auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
-    CHECK(state.presentation.id == "songs");
+    CHECK(state.presentation.id == "library");
   }
 
   TEST_CASE("WorkspaceService - setActivePresentation is safe without an active view",
@@ -63,7 +63,7 @@ namespace ao::rt::test
 
     runtime.workspace().goBack();
     auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
-    CHECK(state.presentation.id == "songs");
+    CHECK(state.presentation.id == "library");
     CHECK(runtime.workspace().canGoBack() == false);
   }
 

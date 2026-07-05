@@ -188,7 +188,7 @@ namespace ao::uimodel
 
     if (visitor.hasTechnical())
     {
-      return findPreset("albums");
+      return findPreset("technical");
     }
 
     if (visitor.hasTag())
@@ -203,7 +203,7 @@ namespace ao::uimodel
 
     if (visitor.hasAlbumArtist())
     {
-      return findPreset("album-artists");
+      return findPreset("artists");
     }
 
     if (visitor.hasArtist() || visitor.hasAlbum())

@@ -123,7 +123,7 @@ namespace ao::rt::test
     CHECK(snap.lifecycle == ViewLifecycleState::Attached);
     CHECK(snap.groupBy == TrackGroupKey::None);
 
-    auto const expectedNone = std::vector{TrackSortField::Artist,
+    auto const expectedNone = std::vector{TrackSortField::AlbumArtist,
                                           TrackSortField::Album,
                                           TrackSortField::DiscNumber,
                                           TrackSortField::TrackNumber,

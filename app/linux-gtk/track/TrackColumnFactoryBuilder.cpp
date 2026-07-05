@@ -21,6 +21,7 @@
 #include <gtkmm/object.h>
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/stack.h>
+#include <gtkmm/tooltip.h>
 #include <pangomm/layout.h>
 #include <sigc++/scoped_connection.h>
 
@@ -43,6 +44,41 @@ namespace ao::gtk
       sigc::scoped_connection playingChangedConnection; // now-playing highlight
     };
 
+    bool labelTextIsEllipsized(Gtk::Label const& label)
+    {
+      auto const layoutPtr = label.get_layout();
+      return layoutPtr != nullptr && layoutPtr->is_ellipsized();
+    }
+
+    void installEllipsizedTextTooltip(Gtk::Label& label)
+    {
+      label.set_has_tooltip();
+      label.signal_query_tooltip().connect(
+        [&label](
+          std::int32_t /*x*/, std::int32_t /*y*/, bool /*keyboardTooltip*/, Glib::RefPtr<Gtk::Tooltip> const& tooltip)
+        {
+          if (!labelTextIsEllipsized(label))
+          {
+            return false;
+          }
+
+          auto const text = label.get_text();
+
+          if (text.empty())
+          {
+            return false;
+          }
+
+          if (tooltip != nullptr)
+          {
+            tooltip->set_text(text);
+          }
+
+          return true;
+        },
+        false);
+    }
+
     void configureTrackCellLabel(Gtk::Label& label, rt::TrackField field)
     {
       if (field == rt::TrackField::Duration || field == rt::TrackField::Year || field == rt::TrackField::TrackNumber ||
@@ -61,6 +97,7 @@ namespace ao::gtk
       label.set_ellipsize(Pango::EllipsizeMode::END);
       label.set_single_line_mode(true);
       label.set_lines(1);
+      installEllipsizedTextTooltip(label);
     }
 
     void updatePlayingStyles(Gtk::ListItem& listItem, rt::TrackField field, bool playing)
@@ -146,7 +183,6 @@ namespace ao::gtk
         auto const* const text = row->displayText(field);
         auto const& displayText = text != nullptr ? *text : Glib::ustring{};
         label->set_text(displayText);
-        label->set_tooltip_text(displayText);
       }
     }
 
@@ -204,7 +240,6 @@ namespace ao::gtk
             auto const* const text = rowPtr->displayText(field);
             auto const& displayText = text != nullptr ? *text : Glib::ustring{};
             label->set_text(displayText);
-            label->set_tooltip_text(displayText);
             entry->set_text(displayText);
           }
         }

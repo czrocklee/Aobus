@@ -35,9 +35,9 @@ namespace ao::uimodel::test
 
     SECTION("technical fields")
     {
-      CHECK(recommend("@sampleRate >= 96000") == "albums");
-      CHECK(recommend("@bitDepth = 24") == "albums");
-      CHECK(recommend("@bitrate > 320000") == "albums");
+      CHECK(recommend("@sampleRate >= 96000") == "technical");
+      CHECK(recommend("@bitDepth = 24") == "technical");
+      CHECK(recommend("@bitrate > 320000") == "technical");
     }
 
     SECTION("tag")
@@ -57,7 +57,7 @@ namespace ao::uimodel::test
 
     SECTION("album artist")
     {
-      CHECK(recommend("$albumArtist = \"Artist\"") == "album-artists");
+      CHECK(recommend("$albumArtist = \"Artist\"") == "artists");
     }
 
     SECTION("artist")

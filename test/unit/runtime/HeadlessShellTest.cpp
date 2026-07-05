@@ -117,7 +117,7 @@ namespace ao::rt::test
       runtime.views().setPresentation(viewId, artistPreset->spec);
 
       auto const savedState = runtime.views().trackListState(viewId);
-      CHECK(savedState.groupBy == TrackGroupKey::Artist);
+      CHECK(savedState.groupBy == TrackGroupKey::AlbumArtist);
       CHECK_FALSE(savedState.sortBy.empty());
 
       runtime.workspace().saveSession(runtime.configStore());
@@ -126,7 +126,7 @@ namespace ao::rt::test
       auto verifyStore = ConfigStore{workspaceConfigPath};
       REQUIRE(verifyStore.load("workspace", loaded));
       REQUIRE(loaded.openViews.size() == 1);
-      CHECK(loaded.openViews[0].groupBy == TrackGroupKey::Artist);
+      CHECK(loaded.openViews[0].groupBy == TrackGroupKey::AlbumArtist);
 
       // Restore in new runtime
       auto session2 = makeRuntime(tempDir);
@@ -136,7 +136,7 @@ namespace ao::rt::test
       auto const layout2 = session2.workspace().layoutState();
       REQUIRE(layout2.openViews.size() == 1);
       auto const restoredState = session2.views().trackListState(layout2.openViews[0]);
-      CHECK(restoredState.groupBy == TrackGroupKey::Artist);
+      CHECK(restoredState.groupBy == TrackGroupKey::AlbumArtist);
       CHECK_FALSE(restoredState.sortBy.empty());
     }
 

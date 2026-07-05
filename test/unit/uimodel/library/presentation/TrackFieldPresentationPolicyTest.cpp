@@ -30,9 +30,10 @@ namespace ao::uimodel::test
     CHECK(trackFieldIsVisibleByDefault(rt::TrackField::Album));
     CHECK(trackFieldIsVisibleByDefault(rt::TrackField::Year));
     CHECK(trackFieldIsVisibleByDefault(rt::TrackField::Duration));
-    CHECK(trackFieldIsVisibleByDefault(rt::TrackField::Tags));
     CHECK(trackFieldIsVisibleByDefault(rt::TrackField::DisplayTrackNumber));
 
+    // The default "library" view drops Tags; tags live in the tagging view.
+    CHECK_FALSE(trackFieldIsVisibleByDefault(rt::TrackField::Tags));
     CHECK_FALSE(trackFieldIsVisibleByDefault(rt::TrackField::AlbumArtist));
     CHECK_FALSE(trackFieldIsVisibleByDefault(rt::TrackField::Genre));
     CHECK_FALSE(trackFieldIsVisibleByDefault(rt::TrackField::TrackNumber));

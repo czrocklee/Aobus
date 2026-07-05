@@ -170,7 +170,7 @@ namespace ao::uimodel
 
   bool CustomPresentationEditorModel::removeVisibleField(std::size_t index)
   {
-    if (index >= _visibleFields.size())
+    if (index >= _visibleFields.size() || _visibleFields.size() == 1)
     {
       return false;
     }

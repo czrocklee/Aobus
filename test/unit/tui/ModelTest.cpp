@@ -101,9 +101,9 @@ namespace ao::tui::test
     auto const items = makePresentationNavigation(rt::builtinTrackPresentationPresets(), custom);
 
     REQUIRE(items.size() > custom.size());
-    CHECK(items[0].id == "songs");
-    CHECK(items[0].label == "Songs");
-    CHECK(items[0].detail == "General-purpose song list.");
+    CHECK(items[0].id == "library");
+    CHECK(items[0].label == "Library");
+    CHECK(items[0].detail == "All tracks in album-artist and album order.");
     CHECK(items.back().id == "dense-albums");
     CHECK(items.back().label == "Dense Albums");
     CHECK(items.back().detail == "custom from albums");

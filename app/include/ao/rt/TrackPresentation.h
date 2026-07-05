@@ -12,7 +12,7 @@
 
 namespace ao::rt
 {
-  inline constexpr std::string_view kDefaultTrackPresentationId = "songs";
+  inline constexpr std::string_view kDefaultTrackPresentationId = "library";
 
   struct TrackPresentationSpec final
   {

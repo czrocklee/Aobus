@@ -67,5 +67,25 @@ namespace ao::gtk::test
       CHECK(foundSortAdd);
       CHECK(foundColumnAdd);
     }
+
+    SECTION("last visible column cannot be removed")
+    {
+      auto dialog = TrackCustomViewDialog{window, spec, "Initial Label"};
+      drainGtkEvents();
+
+      Gtk::Button const* removeButton = nullptr;
+
+      for (auto* const button : collectAll<Gtk::Button>(dialog))
+      {
+        if (button->get_tooltip_text() == "Remove")
+        {
+          removeButton = button;
+          break;
+        }
+      }
+
+      REQUIRE(removeButton != nullptr);
+      CHECK_FALSE(removeButton->get_sensitive());
+    }
   }
 } // namespace ao::gtk::test

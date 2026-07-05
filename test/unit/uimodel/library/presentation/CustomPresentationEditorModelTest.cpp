@@ -103,6 +103,12 @@ namespace ao::uimodel::test
       CHECK(model.removeVisibleField(0));
       REQUIRE(model.visibleFields().size() == 2);
       CHECK(model.visibleFields()[1] == rt::TrackField::Quality);
+
+      CHECK(model.removeVisibleField(0));
+      REQUIRE(model.visibleFields().size() == 1);
+      CHECK_FALSE(model.removeVisibleField(0));
+      REQUIRE(model.visibleFields().size() == 1);
+      CHECK(model.visibleFields()[0] == rt::TrackField::Quality);
     }
 
     SECTION("rejects out-of-range row operations")
