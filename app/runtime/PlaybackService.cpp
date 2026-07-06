@@ -9,6 +9,7 @@
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Player.h>
 #include <ao/audio/Transport.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -320,8 +321,13 @@ namespace ao::rt
             .channelsHint = property.channels().raw(),
             .bitDepthHint = property.bitDepth().raw(),
           },
+        .coverArtId = view.coverArt()
+                        .primary()
+                        .transform([](library::CoverArt const cover) { return cover.resourceId; })
+                        .value_or(kInvalidResourceId),
         .title = std::string{metadata.title()},
         .artist = std::string{library.dictionary().getOrDefault(metadata.artistId())},
+        .album = std::string{library.dictionary().getOrDefault(metadata.albumId())},
       };
 
       if (optFilePath)
@@ -391,10 +397,12 @@ namespace ao::rt
     TrackId currentTrackId = kInvalidTrackId;
     ListId currentSourceListId = kInvalidListId;
     audio::Engine::PlaybackItemId currentPlaybackItemId;
+    ResourceId currentTrackCoverArtId = kInvalidResourceId;
     ShuffleMode shuffleMode = ShuffleMode::Off;
     RepeatMode repeatMode = RepeatMode::Off;
     std::string currentTrackTitle{};
     std::string currentTrackArtist{};
+    std::string currentTrackAlbum{};
     std::chrono::milliseconds currentTrackDuration{0};
     std::string lastPlaybackError{};
     std::optional<PlaybackFailureNotification> optLastPlaybackFailureNotification;
@@ -481,8 +489,10 @@ namespace ao::rt
       state = buildPlaybackState(status);
       state.trackId = currentTrackId;
       state.sourceListId = currentSourceListId;
+      state.trackCoverArtId = currentTrackCoverArtId;
       state.trackTitle = currentTrackTitle;
       state.trackArtist = currentTrackArtist;
+      state.trackAlbum = currentTrackAlbum;
       state.shuffleMode = shuffleMode;
       state.repeatMode = repeatMode;
 
@@ -538,8 +548,10 @@ namespace ao::rt
       currentTrackId = request.trackId;
       currentSourceListId = sourceListId;
       currentPlaybackItemId = itemId;
+      currentTrackCoverArtId = request.coverArtId;
       currentTrackTitle = request.title;
       currentTrackArtist = request.artist;
+      currentTrackAlbum = request.album;
       currentTrackDuration = request.input.duration;
     }
 
@@ -688,8 +700,10 @@ namespace ao::rt
             PlaybackService::PlaybackRequest{
               .trackId = currentTrackId,
               .input = audio::PlaybackInput{.duration = currentTrackDuration},
+              .coverArtId = currentTrackCoverArtId,
               .title = currentTrackTitle,
               .artist = currentTrackArtist,
+              .album = currentTrackAlbum,
             },
           .sourceListId = currentSourceListId,
         };
@@ -1169,8 +1183,10 @@ namespace ao::rt
     _implPtr->currentTrackId = {};
     _implPtr->currentSourceListId = {};
     _implPtr->currentPlaybackItemId = {};
+    _implPtr->currentTrackCoverArtId = kInvalidResourceId;
     _implPtr->currentTrackTitle.clear();
     _implPtr->currentTrackArtist.clear();
+    _implPtr->currentTrackAlbum.clear();
     _implPtr->currentTrackDuration = std::chrono::milliseconds{0};
     _implPtr->discardPreparedRequests();
     _implPtr->optDeferredResume.reset();
@@ -1188,6 +1204,12 @@ namespace ao::rt
   void PlaybackService::setShuffleMode(ShuffleMode const mode)
   {
     _implPtr->ensureOnExecutor();
+
+    if (_implPtr->shuffleMode == mode)
+    {
+      return;
+    }
+
     _implPtr->shuffleMode = mode;
     _implPtr->refreshState();
     _implPtr->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = mode});
@@ -1196,6 +1218,12 @@ namespace ao::rt
   void PlaybackService::setRepeatMode(RepeatMode const mode)
   {
     _implPtr->ensureOnExecutor();
+
+    if (_implPtr->repeatMode == mode)
+    {
+      return;
+    }
+
     _implPtr->repeatMode = mode;
     _implPtr->refreshState();
     _implPtr->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = mode});

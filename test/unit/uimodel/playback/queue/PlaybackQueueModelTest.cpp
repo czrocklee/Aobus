@@ -94,8 +94,8 @@ namespace ao::uimodel::test
 
     SECTION("transport actions when inactive")
     {
-      queueModel.setShuffleMode(rt::ShuffleMode::On);
-      queueModel.setRepeatMode(rt::RepeatMode::One);
+      playbackService.setShuffleMode(rt::ShuffleMode::On);
+      playbackService.setRepeatMode(rt::RepeatMode::One);
       queueModel.next();
       queueModel.previous();
       // Should not crash or activate
@@ -209,7 +209,7 @@ namespace ao::uimodel::test
 
     SECTION("Repeat One")
     {
-      queueModel.setRepeatMode(rt::RepeatMode::One);
+      playbackService.setRepeatMode(rt::RepeatMode::One);
       auto const tracks1 = std::vector{track1, track2};
       queueModel.playQueue(tracks1, track1, ListId{10});
 
@@ -219,7 +219,7 @@ namespace ao::uimodel::test
 
     SECTION("Repeat All")
     {
-      queueModel.setRepeatMode(rt::RepeatMode::All);
+      playbackService.setRepeatMode(rt::RepeatMode::All);
       auto const tracks2 = std::vector{track1, track2};
       queueModel.playQueue(tracks2, track2, ListId{10});
 
@@ -232,7 +232,7 @@ namespace ao::uimodel::test
 
     SECTION("Previous at start with Repeat All wraps to end")
     {
-      queueModel.setRepeatMode(rt::RepeatMode::All);
+      playbackService.setRepeatMode(rt::RepeatMode::All);
       auto const tracks = std::vector{track1, track2, track3};
       queueModel.playQueue(tracks, track1, ListId{10});
       CHECK(queueModel.nowPlayingTrackId() == track1);
@@ -255,7 +255,7 @@ namespace ao::uimodel::test
 
     SECTION("Previous at start with Repeat All skips invalid tracks at end")
     {
-      queueModel.setRepeatMode(rt::RepeatMode::All);
+      playbackService.setRepeatMode(rt::RepeatMode::All);
       // Setup: [1, 2, 999] where 999 is invalid
       auto const tracks = std::vector{track1, track2, missingTrack};
       queueModel.playQueue(tracks, track1, ListId{10});
@@ -268,7 +268,7 @@ namespace ao::uimodel::test
 
     SECTION("Shuffle mode next picks random track")
     {
-      queueModel.setShuffleMode(rt::ShuffleMode::On);
+      playbackService.setShuffleMode(rt::ShuffleMode::On);
       auto const tracks = std::vector{track1, track2, track3};
       queueModel.playQueue(tracks, track1, ListId{10});
 
@@ -278,7 +278,7 @@ namespace ao::uimodel::test
 
     SECTION("Shuffle mode next commits the optPeeked successor")
     {
-      queueModel.setShuffleMode(rt::ShuffleMode::On);
+      playbackService.setShuffleMode(rt::ShuffleMode::On);
       auto const tracks = std::vector{track1, track2, track3};
       queueModel.playQueue(tracks, track1, ListId{10});
 
@@ -287,6 +287,32 @@ namespace ao::uimodel::test
 
       queueModel.next();
       CHECK(queueModel.nowPlayingTrackId() == optPeeked);
+    }
+
+    SECTION("direct repeat mode change re-prepares pending next")
+    {
+      auto const tracks = std::vector{track1, track2};
+      REQUIRE(queueModel.playQueue(tracks, track2, ListId{10}));
+      REQUIRE_FALSE(queueModel.hasNext());
+      REQUIRE_FALSE(queueModel.peekNext());
+
+      playbackService.setRepeatMode(rt::RepeatMode::All);
+
+      CHECK(queueModel.hasNext());
+      CHECK(queueModel.peekNext() == track1);
+    }
+
+    SECTION("direct shuffle mode change re-prepares pending next")
+    {
+      auto const tracks = std::vector{track1, track2};
+      REQUIRE(queueModel.playQueue(tracks, track2, ListId{10}));
+      REQUIRE_FALSE(queueModel.hasNext());
+      REQUIRE_FALSE(queueModel.peekNext());
+
+      playbackService.setShuffleMode(rt::ShuffleMode::On);
+
+      CHECK(queueModel.hasNext());
+      CHECK(queueModel.peekNext() == track1);
     }
 
     SECTION("restoreQueue builds an idle queue at the saved track and position")

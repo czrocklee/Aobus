@@ -119,7 +119,10 @@ namespace ao::gtk
       }
     };
 
+    _playbackSubs.push_back(_context.runtime.playback().onPreparing(refreshActionStates));
     _playbackSubs.push_back(_context.runtime.playback().onStarted(refreshActionStates));
+    _playbackSubs.push_back(_context.runtime.playback().onPaused(refreshActionStates));
+    _playbackSubs.push_back(_context.runtime.playback().onIdle(refreshActionStates));
     _playbackSubs.push_back(_context.runtime.playback().onStopped(refreshActionStates));
     _playbackSubs.push_back(
       _context.runtime.playback().onNowPlayingChanged([refreshActionStates](auto const&) { refreshActionStates(); }));
@@ -167,27 +170,80 @@ namespace ao::gtk
   void ShellLayoutController::registerPlaybackActions(RegisterActionFn const& registerAction,
                                                       layout::ActionStateProvider const& hasActiveQueue)
   {
-    registerAction("playback.playPause",
-                   "Play/Pause",
-                   "Playback",
-                   uimodel::LayoutActionCapability::None,
-                   [](layout::ActionActivationContext& ctx)
-                   {
-                     if (auto const& state = ctx.runtime.playback().state();
-                         state.transport == audio::Transport::Paused)
-                     {
-                       ctx.runtime.playback().resume();
-                     }
-                     else if (state.transport == audio::Transport::Playing)
-                     {
-                       ctx.runtime.playback().pause();
-                     }
-                     else
-                     {
-                       ctx.runtime.playSelectionInFocusedView();
-                     }
-                   },
-                   {});
+    auto const hasIdleCurrentTrack = [](rt::PlaybackState const& state)
+    { return state.transport == audio::Transport::Idle && state.trackId != kInvalidTrackId; };
+
+    auto const canPlay = [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
+    {
+      auto const& state = ctx.runtime.playback().state();
+      return uimodel::LayoutActionAvailability{
+        .enabled = state.ready && state.transport != audio::Transport::Playing, .disabledReason = ""};
+    };
+
+    auto const canPlayPause = [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
+    {
+      return uimodel::LayoutActionAvailability{.enabled = ctx.runtime.playback().state().ready, .disabledReason = ""};
+    };
+
+    auto const canStop = [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
+    {
+      return uimodel::LayoutActionAvailability{
+        .enabled = ctx.runtime.playback().state().transport != audio::Transport::Idle, .disabledReason = ""};
+    };
+
+    registerAction(
+      "playback.play",
+      "Play",
+      "Playback",
+      uimodel::LayoutActionCapability::None,
+      [hasIdleCurrentTrack](layout::ActionActivationContext& ctx)
+      {
+        if (auto const& state = ctx.runtime.playback().state();
+            state.transport == audio::Transport::Paused || hasIdleCurrentTrack(state))
+        {
+          ctx.runtime.playback().resume();
+        }
+        else if (state.transport != audio::Transport::Playing)
+        {
+          ctx.runtime.playSelectionInFocusedView();
+        }
+      },
+      canPlay);
+
+    registerAction(
+      "playback.pause",
+      "Pause",
+      "Playback",
+      uimodel::LayoutActionCapability::None,
+      [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().pause(); },
+      [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
+      {
+        return uimodel::LayoutActionAvailability{
+          .enabled = ctx.runtime.playback().state().transport == audio::Transport::Playing, .disabledReason = ""};
+      });
+
+    registerAction(
+      "playback.playPause",
+      "Play/Pause",
+      "Playback",
+      uimodel::LayoutActionCapability::None,
+      [hasIdleCurrentTrack](layout::ActionActivationContext& ctx)
+      {
+        if (auto const& state = ctx.runtime.playback().state();
+            state.transport == audio::Transport::Paused || hasIdleCurrentTrack(state))
+        {
+          ctx.runtime.playback().resume();
+        }
+        else if (state.transport == audio::Transport::Playing)
+        {
+          ctx.runtime.playback().pause();
+        }
+        else
+        {
+          ctx.runtime.playSelectionInFocusedView();
+        }
+      },
+      canPlayPause);
 
     registerAction(
       "playback.stop",
@@ -195,7 +251,7 @@ namespace ao::gtk
       "Playback",
       uimodel::LayoutActionCapability::None,
       [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().stop(); },
-      hasActiveQueue);
+      canStop);
 
     registerAction(
       "playback.next",
@@ -246,14 +302,11 @@ namespace ao::gtk
       "Toggle Shuffle",
       "Playback",
       uimodel::LayoutActionCapability::None,
-      [this](layout::ActionActivationContext& ctx)
+      [](layout::ActionActivationContext& ctx)
       {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
-        {
-          auto const current = ctx.runtime.playback().state().shuffleMode;
-          auto const next = (current == rt::ShuffleMode::Off) ? rt::ShuffleMode::On : rt::ShuffleMode::Off;
-          queueModel->setShuffleMode(next);
-        }
+        auto const current = ctx.runtime.playback().state().shuffleMode;
+        auto const next = (current == rt::ShuffleMode::Off) ? rt::ShuffleMode::On : rt::ShuffleMode::Off;
+        ctx.runtime.playback().setShuffleMode(next);
       },
       hasActiveQueue);
 
@@ -262,24 +315,21 @@ namespace ao::gtk
       "Cycle Repeat",
       "Playback",
       uimodel::LayoutActionCapability::None,
-      [this](layout::ActionActivationContext& ctx)
+      [](layout::ActionActivationContext& ctx)
       {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
+        auto const current = ctx.runtime.playback().state().repeatMode;
+        auto next = rt::RepeatMode::Off;
+
+        if (current == rt::RepeatMode::Off)
         {
-          auto const current = ctx.runtime.playback().state().repeatMode;
-          auto next = rt::RepeatMode::Off;
-
-          if (current == rt::RepeatMode::Off)
-          {
-            next = rt::RepeatMode::All;
-          }
-          else if (current == rt::RepeatMode::All)
-          {
-            next = rt::RepeatMode::One;
-          }
-
-          queueModel->setRepeatMode(next);
+          next = rt::RepeatMode::All;
         }
+        else if (current == rt::RepeatMode::All)
+        {
+          next = rt::RepeatMode::One;
+        }
+
+        ctx.runtime.playback().setRepeatMode(next);
       },
       hasActiveQueue);
 
@@ -792,6 +842,12 @@ namespace ao::gtk
   {
     auto ctx = getActionContext(id);
     return _actionRegistry.tryActivate(id, ctx);
+  }
+
+  uimodel::LayoutActionAvailability ShellLayoutController::actionAvailability(std::string_view id)
+  {
+    auto ctx = getActionContext(id);
+    return _actionRegistry.state(id, ctx);
   }
 
   layout::ActionActivationContext ShellLayoutController::getActionContext(std::string_view componentId)

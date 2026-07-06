@@ -141,6 +141,22 @@ namespace ao::tag::flac::test
     CHECK(prop.duration() == std::chrono::seconds{1});
   }
 
+  TEST_CASE("FLAC File - maps real fixture tags into TrackBuilder", "[tag][unit][flac][file]")
+  {
+    auto const file = File{audio::test::requireAudioFixture("basic_metadata.flac")};
+    auto builder = loadTrack(file);
+    auto const meta = builder.metadata();
+
+    CHECK(meta.title() == "Test Title");
+    CHECK(meta.artist() == "Test Artist");
+    CHECK(meta.album() == "Test Album");
+    CHECK(meta.genre() == "Rock");
+    CHECK(meta.composer() == "Test Composer");
+    CHECK(meta.work() == "Symphony No. 5");
+    CHECK(meta.trackNumber() == 1);
+    CHECK(meta.year() == 2024);
+  }
+
   TEST_CASE("FLAC File - maps classical fallback comments when primary fields are absent", "[tag][unit][flac][file]")
   {
     auto const file = File{audio::test::requireAudioFixture("classical_fallback.flac")};

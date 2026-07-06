@@ -256,7 +256,7 @@ namespace ao::uimodel::test
       CHECK(playback.state().transport == audio::Transport::Idle);
     }
 
-    SECTION("Shuffle click with null queue is no-op")
+    SECTION("Shuffle click does not require a queue")
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
@@ -265,12 +265,12 @@ namespace ao::uimodel::test
 
       vm.handleClick();
 
-      CHECK(playback.state().shuffleMode == rt::ShuffleMode::Off);
-      CHECK(log.states.size() == initialCount);
-      CHECK(log.last().engaged == false);
+      CHECK(playback.state().shuffleMode == rt::ShuffleMode::On);
+      CHECK(log.states.size() == initialCount + 1);
+      CHECK(log.last().engaged == true);
     }
 
-    SECTION("Repeat click with null queue is no-op")
+    SECTION("Repeat click does not require a queue")
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
@@ -279,9 +279,9 @@ namespace ao::uimodel::test
 
       vm.handleClick();
 
-      CHECK(playback.state().repeatMode == rt::RepeatMode::Off);
-      CHECK(log.states.size() == initialCount);
-      CHECK(log.last().engaged == false);
+      CHECK(playback.state().repeatMode == rt::RepeatMode::All);
+      CHECK(log.states.size() == initialCount + 1);
+      CHECK(log.last().engaged == true);
       CHECK(log.last().icon == TransportIcon::Repeat);
     }
 

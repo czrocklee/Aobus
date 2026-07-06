@@ -240,29 +240,22 @@ namespace ao::uimodel
         break;
 
       case TransportCommand::ToggleShuffle:
-        if (_queue != nullptr)
-        {
-          _queue->setShuffleMode(_playback.state().shuffleMode == rt::ShuffleMode::Off ? rt::ShuffleMode::On
+        _playback.setShuffleMode(_playback.state().shuffleMode == rt::ShuffleMode::Off ? rt::ShuffleMode::On
                                                                                        : rt::ShuffleMode::Off);
-        }
-
         break;
 
       case TransportCommand::CycleRepeat:
-        if (_queue != nullptr)
+        if (auto const mode = _playback.state().repeatMode; mode == rt::RepeatMode::Off)
         {
-          if (auto const mode = _playback.state().repeatMode; mode == rt::RepeatMode::Off)
-          {
-            _queue->setRepeatMode(rt::RepeatMode::All);
-          }
-          else if (mode == rt::RepeatMode::All)
-          {
-            _queue->setRepeatMode(rt::RepeatMode::One);
-          }
-          else
-          {
-            _queue->setRepeatMode(rt::RepeatMode::Off);
-          }
+          _playback.setRepeatMode(rt::RepeatMode::All);
+        }
+        else if (mode == rt::RepeatMode::All)
+        {
+          _playback.setRepeatMode(rt::RepeatMode::One);
+        }
+        else
+        {
+          _playback.setRepeatMode(rt::RepeatMode::Off);
         }
 
         break;

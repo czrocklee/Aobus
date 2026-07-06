@@ -30,6 +30,10 @@ namespace ao::gtk
   {
     class ImportExportCoordinator;
   }
+  namespace platform
+  {
+    class MprisBridge;
+  }
 
   class MainWindow final : public Gtk::ApplicationWindow
   {
@@ -70,5 +74,6 @@ namespace ao::gtk
     ShellLayoutController _shellLayout;
     std::unique_ptr<WindowActionRegistry> _windowActionRegistryPtr;
     std::unique_ptr<MenuController> _menuControllerPtr;
+    std::unique_ptr<platform::MprisBridge> _mprisBridgePtr;
   };
 } // namespace ao::gtk

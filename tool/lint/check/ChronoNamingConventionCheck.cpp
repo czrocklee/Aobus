@@ -97,6 +97,7 @@ namespace clang::tidy::readability
                                                                      "span",
                                                                      "budget",
                                                                      "delta",
+                                                                     "position",
                                                                      "threshold",
                                                                      "offset",
                                                                      "length"});
@@ -142,6 +143,7 @@ namespace clang::tidy::readability
                                                                        "period",
                                                                        "time",
                                                                        "offset",
+                                                                       "position",
                                                                        "threshold",
                                                                        "elapsed",
                                                                        "length",
@@ -196,7 +198,7 @@ namespace clang::tidy::readability
     StringRef durationNounsList()
     {
       return "duration, interval, timeout, delay, period, time, offset, threshold, elapsed, length, latency, "
-             "remaining, budget, span, age, delta";
+             "remaining, budget, span, age, delta, position";
     }
 
     StringRef timePointNounsList()

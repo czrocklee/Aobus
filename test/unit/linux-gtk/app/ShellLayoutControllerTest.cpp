@@ -7,8 +7,14 @@
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
+#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/audio/Transport.h>
 #include <ao/rt/AppPrefsState.h>
+#include <ao/rt/PlaybackSessionState.h>
+#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 #include <ao/uimodel/layout/component/ILayoutComponentStateStore.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -193,14 +199,50 @@ namespace ao::gtk::test
 
       auto gioActionPtr = actionMap->lookup_action("playback.stop");
       REQUIRE(gioActionPtr != nullptr);
+      CHECK(actionMap->lookup_action("playback.play") != nullptr);
+      CHECK(actionMap->lookup_action("playback.pause") != nullptr);
 
       // Layout state actions are owned by the window menu, not exported as shell.* actions.
       CHECK(actionMap->lookup_action("shell.resetRuntimeLayoutState") == nullptr);
       CHECK(actionMap->lookup_action("shell.saveCurrentPanelSizesAsLayoutDefaults") == nullptr);
 
-      // Queue model is not bound, so hasActiveQueue is false, thus stop should be disabled
+      // Nothing is playing yet, so stop should be disabled.
       controller.refreshExportedActions();
       CHECK(gioActionPtr->property_enabled() == false);
+    }
+
+    SECTION("playPause resumes restored idle now-playing and stop is transport-gated")
+    {
+      rt::test::addReadyAudioProvider(runtime.playback());
+      auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+      auto const trackId = library::test::addTrack(
+        runtime.musicLibrary(), library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
+      REQUIRE(runtime.playback().restoreSession(rt::PlaybackSessionState{
+        .sourceListId = ListId{5},
+        .trackId = trackId,
+        .positionMs = 50,
+      }));
+
+      controller.attachToWindow();
+      controller.refreshExportedActions();
+
+      auto* actionMap = dynamic_cast<Gio::ActionMap*>(&window);
+      REQUIRE(actionMap != nullptr);
+      auto const stopActionPtr = actionMap->lookup_action("playback.stop");
+      REQUIRE(stopActionPtr != nullptr);
+      CHECK(stopActionPtr->property_enabled() == false);
+
+      auto const playPauseOutcome = controller.activateAction("playback.playPause");
+      CHECK(playPauseOutcome.result == uimodel::LayoutActionActivationResult::Activated);
+      CHECK(runtime.playback().state().transport == audio::Transport::Playing);
+      CHECK(runtime.playback().state().trackId == trackId);
+
+      controller.refreshExportedActions();
+      CHECK(stopActionPtr->property_enabled() == true);
+
+      auto const stopOutcome = controller.activateAction("playback.stop");
+      CHECK(stopOutcome.result == uimodel::LayoutActionActivationResult::Activated);
+      CHECK(runtime.playback().state().transport == audio::Transport::Idle);
     }
 
     SECTION("resetRuntimeLayoutState clears preset state without removing customized layout")

@@ -16,6 +16,10 @@ public:
   // NEGATIVE
   std::chrono::milliseconds timeout;
 
+  // Media playback position is a duration from the start of the stream.
+  // NEGATIVE
+  std::chrono::milliseconds position;
+
   // NEGATIVE
   std::chrono::seconds duration;
 
@@ -35,6 +39,10 @@ public:
   // Redundant: 'elapsed' already names a span, so 'Duration' is dead weight.
   // POSITIVE
   std::chrono::milliseconds elapsedDuration;
+
+  // Redundant: 'track position' already names a stream-relative span.
+  // POSITIVE
+  std::chrono::milliseconds trackPositionDuration;
 
   // Redundant: 'elapsed' already names a span, so 'Time' is dead weight.
   // POSITIVE

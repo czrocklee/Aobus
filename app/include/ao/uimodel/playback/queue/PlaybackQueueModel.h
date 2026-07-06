@@ -7,7 +7,6 @@
 #include <ao/Error.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackFailure.h>
-#include <ao/rt/PlaybackState.h>
 
 #include <cstddef>
 #include <memory>
@@ -56,9 +55,6 @@ namespace ao::uimodel
     void previous();
     void resume();
 
-    void setShuffleMode(rt::ShuffleMode mode);
-    void setRepeatMode(rt::RepeatMode mode);
-
     // Current playback state queries
     bool isActive() const;
     std::optional<TrackId> nowPlayingTrackId() const;
@@ -85,6 +81,8 @@ namespace ao::uimodel
     rt::Subscription _outputDeviceChangedSub;
     rt::Subscription _seekSub;
     rt::Subscription _stoppedSub;
+    rt::Subscription _shuffleModeSub;
+    rt::Subscription _repeatModeSub;
     rt::NotificationId _skipNotificationId = rt::kInvalidNotificationId;
     std::size_t _skippedFailureCount = 0;
     std::size_t _consecutivePlaybackFailures = 0;

@@ -83,8 +83,10 @@ namespace ao::rt
     TrackId trackId{};
     ListId sourceListId = kInvalidListId;
     ViewId sourceViewId = kInvalidViewId;
+    ResourceId trackCoverArtId = kInvalidResourceId;
     std::string trackTitle{};
     std::string trackArtist{};
+    std::string trackAlbum{};
     std::chrono::milliseconds elapsed{0};
     std::chrono::milliseconds duration{0};
     float volume = 1.0F;

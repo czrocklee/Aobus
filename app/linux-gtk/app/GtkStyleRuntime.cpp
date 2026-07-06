@@ -6,16 +6,15 @@
 #include <ao/rt/Log.h>
 
 #include <gdkmm/display.h>
-#include <gio/gsettingsschema.h>
 #include <giomm/dbusconnection.h>
 #include <giomm/file.h>
 #include <giomm/filemonitor.h>
 #include <giomm/resource.h>
 #include <giomm/settings.h>
+#include <giomm/settingsschema.h>
+#include <giomm/settingsschemasource.h>
 #include <glib-unix.h>
 #include <glib.h>
-#include <glib/gmacros.h>
-#include <glibconfig.h>
 #include <glibmm/error.h>
 #include <glibmm/keyfile.h>
 #include <glibmm/main.h>
@@ -39,24 +38,16 @@ namespace ao::gtk
   {
     constexpr auto kReloadDebounceInterval = std::chrono::milliseconds{150};
 
-    bool schemaExists(char const* schemaId)
+    Glib::RefPtr<Gio::SettingsSchema> lookupSettingsSchema(char const* schemaId)
     {
-      auto* const source = ::g_settings_schema_source_get_default();
+      auto const sourcePtr = Gio::SettingsSchemaSource::get_default();
 
-      if (source == nullptr)
+      if (!sourcePtr)
       {
-        return false;
+        return {};
       }
 
-      auto* const schema = ::g_settings_schema_source_lookup(source, schemaId, TRUE);
-
-      if (schema == nullptr)
-      {
-        return false;
-      }
-
-      ::g_settings_schema_unref(schema);
-      return true;
+      return sourcePtr->lookup(schemaId, true);
     }
   } // namespace
 
@@ -227,15 +218,10 @@ namespace ao::gtk
       auto const keyfilePtr = Glib::KeyFile::create();
       keyfilePtr->load_from_file(settingsPath.string());
 
-      if (schemaExists("org.gnome.desktop.interface"))
+      if (auto const schemaPtr = lookupSettingsSchema("org.gnome.desktop.interface"); schemaPtr)
       {
         auto const gsettingsPtr = Gio::Settings::create("org.gnome.desktop.interface");
-
-        auto* const source = ::g_settings_schema_source_get_default();
-        auto* const schema = ::g_settings_schema_source_lookup(source, "org.gnome.desktop.interface", TRUE);
-
-        auto const hasSchemaKey = [schema](char const* key)
-        { return schema != nullptr && ::g_settings_schema_has_key(schema, key); };
+        auto const hasSchemaKey = [&schemaPtr](char const* key) { return schemaPtr->has_key(key); };
 
         if (keyfilePtr->has_key("Settings", "gtk-theme-name") && hasSchemaKey("gtk-theme-name"))
         {
@@ -247,11 +233,6 @@ namespace ao::gtk
         {
           gsettingsPtr->set_boolean("gtk-application-prefer-dark-theme",
                                     keyfilePtr->get_boolean("Settings", "gtk-application-prefer-dark-theme"));
-        }
-
-        if (schema != nullptr)
-        {
-          ::g_settings_schema_unref(schema);
         }
       }
       else

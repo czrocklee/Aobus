@@ -84,6 +84,7 @@ namespace ao::gtk
     void setConfirmPromotionCallback(ConfirmPromotionFn fn);
 
     uimodel::LayoutActionActivationOutcome activateAction(std::string_view id);
+    uimodel::LayoutActionAvailability actionAvailability(std::string_view id);
 
     layout::editor::LayoutEditorDialog* editorDialogForTest() const { return _editorDialogPtr.get(); }
 

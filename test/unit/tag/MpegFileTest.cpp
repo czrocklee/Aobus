@@ -291,6 +291,22 @@ namespace ao::tag::mpeg::test
     CHECK(builder.metadata().ensemble() == "Fixture Fallback Ensemble");
   }
 
+  TEST_CASE("MPEG File - maps real fixture tags into TrackBuilder", "[tag][unit][mpeg][file]")
+  {
+    auto const file = File{audio::test::requireAudioFixture("basic_metadata.mp3")};
+    auto builder = loadTrack(file);
+    auto const meta = builder.metadata();
+
+    CHECK(meta.title() == "Test Title");
+    CHECK(meta.artist() == "Test Artist");
+    CHECK(meta.album() == "Test Album");
+    CHECK(meta.genre() == "Rock");
+    CHECK(meta.composer() == "Test Composer");
+    CHECK(meta.work() == "Symphony No. 5");
+    CHECK(meta.trackNumber() == 1);
+    CHECK(meta.year() == 2024);
+  }
+
   TEST_CASE("MPEG File - audio payload range trims leading and trailing tags", "[tag][unit][mpeg][file]")
   {
     auto data = wrapId3v2(3, {});

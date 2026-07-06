@@ -87,8 +87,10 @@ namespace ao::rt
     {
       TrackId trackId = kInvalidTrackId;
       audio::PlaybackInput input{};
+      ResourceId coverArtId = kInvalidResourceId;
       std::string title{};
       std::string artist{};
+      std::string album{};
     };
 
     PlaybackService(async::IExecutor& executor,

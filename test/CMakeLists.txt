@@ -400,6 +400,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp
     unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp
     unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp
+    unit/linux-gtk/platform/MprisBridgeTest.cpp
       unit/linux-gtk/layout/document/LayoutModelTest.cpp
       unit/linux-gtk/layout/runtime/ActionRegistryTest.cpp
       unit/linux-gtk/layout/runtime/LayoutContextTest.cpp

@@ -416,6 +416,22 @@ namespace ao::tag::mp4::test
     CHECK(builder.property().codec() == AudioCodec::Aac);
   }
 
+  TEST_CASE("MP4 File - maps real fixture tags into TrackBuilder", "[tag][unit][mp4][file]")
+  {
+    auto const file = File{audio::test::requireAudioFixture("basic_metadata.m4a")};
+    auto builder = loadTrack(file);
+    auto const meta = builder.metadata();
+
+    CHECK(meta.title() == "Test Title");
+    CHECK(meta.artist() == "Test Artist");
+    CHECK(meta.album() == "Test Album");
+    CHECK(meta.genre() == "Rock");
+    CHECK(meta.composer() == "Test Composer");
+    CHECK(meta.work() == "Symphony No. 5");
+    CHECK(meta.trackNumber() == 1);
+    CHECK(meta.year() == 2024);
+  }
+
   TEST_CASE("MP4 File - maps freeform classical names case-insensitively", "[tag][unit][mp4][file]")
   {
     auto ilstChildren = std::vector<std::uint8_t>{};

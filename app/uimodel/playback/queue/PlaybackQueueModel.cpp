@@ -349,28 +349,6 @@ namespace ao::uimodel
     }
   }
 
-  void PlaybackQueueModel::setShuffleMode(rt::ShuffleMode mode)
-  {
-    _playback.setShuffleMode(mode);
-
-    if (_queueStatePtr)
-    {
-      _queueStatePtr->optPendingNextIndex.reset();
-      prepareNext();
-    }
-  }
-
-  void PlaybackQueueModel::setRepeatMode(rt::RepeatMode mode)
-  {
-    _playback.setRepeatMode(mode);
-
-    if (_queueStatePtr)
-    {
-      _queueStatePtr->optPendingNextIndex.reset();
-      prepareNext();
-    }
-  }
-
   void PlaybackQueueModel::resume()
   {
     _playback.resume();
@@ -714,6 +692,13 @@ namespace ao::uimodel
         }
       });
     _stoppedSub = _playback.onStopped([this] { clear(); });
+    auto const reprepareNext = [this](auto const&)
+    {
+      _queueStatePtr->optPendingNextIndex.reset();
+      prepareNext();
+    };
+    _shuffleModeSub = _playback.onShuffleModeChanged(reprepareNext);
+    _repeatModeSub = _playback.onRepeatModeChanged(reprepareNext);
   }
 
   void PlaybackQueueModel::unsubscribeEvents()
@@ -724,5 +709,7 @@ namespace ao::uimodel
     _outputDeviceChangedSub.reset();
     _seekSub.reset();
     _stoppedSub.reset();
+    _shuffleModeSub.reset();
+    _repeatModeSub.reset();
   }
 } // namespace ao::uimodel

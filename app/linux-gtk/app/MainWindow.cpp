@@ -14,7 +14,10 @@
 #include "app/UIState.h"
 #include "app/WindowActionRegistry.h"
 #include "list/ListNavigationController.h"
+#include "platform/MprisArtUrlCache.h"
+#include "platform/MprisBridge.h"
 #include "portal/ImportExportCoordinator.h"
+#include <ao/CoreIds.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
@@ -33,6 +36,7 @@
 #include <format>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::gtk
@@ -71,6 +75,35 @@ namespace ao::gtk
     _shellLayout.context().shell.menuModelPtr = _menuControllerPtr->menuModel();
 
     _shellLayout.attachToWindow();
+
+    auto mprisArtUrlCachePtr = std::make_shared<platform::MprisArtUrlCache>(_runtime.library());
+    _mprisBridgePtr = std::make_unique<platform::MprisBridge>(
+      _runtime.playback(),
+      platform::MprisBridge::Callbacks{
+        .activateAction = [this](std::string_view const actionId) { return _shellLayout.activateAction(actionId); },
+        .actionAvailability = [this](std::string_view const actionId)
+        { return _shellLayout.actionAvailability(actionId); },
+        .raise =
+          [this]
+        {
+          present();
+          return true;
+        },
+        .quit =
+          [this]
+        {
+          if (auto const appPtr = get_application(); appPtr)
+          {
+            appPtr->quit();
+            return true;
+          }
+
+          return false;
+        },
+        .artUrlForResource = [cachePtr = std::move(mprisArtUrlCachePtr)](ResourceId const resourceId)
+        { return cachePtr->urlForResource(resourceId); },
+      });
+    _mprisBridgePtr->start();
 
     _shellLayout.setConfirmPromotionCallback(
       [this](std::string const& presetId, ShellLayoutController::ConfirmPromotionAnswer answer)

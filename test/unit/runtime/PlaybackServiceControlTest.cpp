@@ -54,28 +54,30 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
 
-    bool shuffleChanged = false;
+    std::int32_t shuffleChangeCount = 0;
     auto sub1 = fixture.playbackService.onShuffleModeChanged(
       [&](auto const& ev)
       {
-        shuffleChanged = true;
+        ++shuffleChangeCount;
         CHECK(ev.mode == ShuffleMode::On);
       });
 
     fixture.playbackService.setShuffleMode(ShuffleMode::On);
-    CHECK(shuffleChanged);
+    fixture.playbackService.setShuffleMode(ShuffleMode::On);
+    CHECK(shuffleChangeCount == 1);
     CHECK(fixture.playbackService.state().shuffleMode == ShuffleMode::On);
 
-    bool repeatChanged = false;
+    std::int32_t repeatChangeCount = 0;
     auto sub2 = fixture.playbackService.onRepeatModeChanged(
       [&](auto const& ev)
       {
-        repeatChanged = true;
+        ++repeatChangeCount;
         CHECK(ev.mode == RepeatMode::All);
       });
 
     fixture.playbackService.setRepeatMode(RepeatMode::All);
-    CHECK(repeatChanged);
+    fixture.playbackService.setRepeatMode(RepeatMode::All);
+    CHECK(repeatChangeCount == 1);
     CHECK(fixture.playbackService.state().repeatMode == RepeatMode::All);
   }
 
