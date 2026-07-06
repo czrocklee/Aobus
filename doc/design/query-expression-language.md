@@ -154,7 +154,7 @@ Use parentheses to make grouping explicit when mixing `and` and `or`.
 | `@bitDepth` | `@bd` |
 | `@codec` | none |
 
-`@codec` accepts `UNKNOWN`, `FLAC`, `ALAC`, `AAC`, and `MP3` case-insensitively.
+`@codec` accepts `UNKNOWN`, `FLAC`, `ALAC`, `WAV`, `AAC`, and `MP3` case-insensitively.
 
 ### Tags
 
@@ -342,7 +342,7 @@ Multiple plain terms are combined with `and`.
 | `@channels = 2 and @bitDepth >= 16` | Stereo, 16-bit or better. |
 | `@codec = FLAC` | Codec is FLAC; codec names are case-insensitive. |
 | `$coverArt > 0` | Track has a primary cover-art resource id. |
-| `#lossless and (@codec = FLAC or @codec = ALAC)` | Lossless tag plus a lossless codec. |
+| `#lossless and (@codec = FLAC or @codec = ALAC or @codec = WAV)` | Lossless tag plus a lossless codec. |
 | `$work ~ "Cello Suite" and $composer = Bach` | Classical work search. |
 | `$albumArtist = "Various Artists" and $year < 1990` | Older compilation albums. |
 | `%"Mood" ~ "night" and !#skip` | Custom mood contains `night` and track is not skipped. |

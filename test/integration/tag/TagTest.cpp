@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/lmdb/TestUtils.h"
 #include <ao/CoreIds.h>
@@ -75,7 +75,7 @@ namespace ao::tag::test
 
   TEST_CASE("TagReader - basic fixture exposes metadata", "[tag][integration][metadata]")
   {
-    auto const* const format = GENERATE("flac", "m4a", "mp3");
+    auto const* const format = GENERATE("flac", "m4a", "mp3", "wav");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
     auto loaded = loadTrack(path);
@@ -85,11 +85,15 @@ namespace ao::tag::test
     CHECK(meta.title() == "Test Title");
     CHECK(meta.artist() == "Test Artist");
     CHECK(meta.album() == "Test Album");
-    CHECK(meta.composer() == "Test Composer");
-    CHECK(meta.work() == "Symphony No. 5");
     CHECK(meta.genre() == "Rock");
-    CHECK(meta.trackNumber() == 1);
     CHECK(meta.year() == 2024);
+
+    if (std::string_view{format} != "wav")
+    {
+      CHECK(meta.composer() == "Test Composer");
+      CHECK(meta.work() == "Symphony No. 5");
+      CHECK(meta.trackNumber() == 1);
+    }
   }
 
   // ============================================================================
@@ -97,7 +101,7 @@ namespace ao::tag::test
   // ============================================================================
   TEST_CASE("TagReader - hires fixture exposes metadata", "[tag][integration][metadata]")
   {
-    auto const* const format = GENERATE("flac", "m4a", "mp3");
+    auto const* const format = GENERATE("flac", "m4a", "mp3", "wav");
     auto const path = kTestDataDir / ("hires." + std::string{format});
 
     auto loaded = loadTrack(path);
@@ -107,11 +111,15 @@ namespace ao::tag::test
     CHECK(meta.title() == "HiRes Title");
     CHECK(meta.artist() == "HiRes Artist");
     CHECK(meta.album() == "HiRes Album");
-    CHECK(meta.composer() == "HiRes Composer");
-    CHECK(meta.work() == "The Four Seasons");
     CHECK(meta.genre() == "Electronic");
-    CHECK(meta.trackNumber() == 2);
     CHECK(meta.year() == 2025);
+
+    if (std::string_view{format} != "wav")
+    {
+      CHECK(meta.composer() == "HiRes Composer");
+      CHECK(meta.work() == "The Four Seasons");
+      CHECK(meta.trackNumber() == 2);
+    }
   }
 
   TEST_CASE("TagReader - classical fixture exposes metadata", "[tag][integration][metadata][classical]")
@@ -163,7 +171,7 @@ namespace ao::tag::test
   // ============================================================================
   TEST_CASE("TagReader - basic fixture exposes audio properties", "[tag][integration][property]")
   {
-    auto const* const format = GENERATE("flac", "m4a", "mp3");
+    auto const* const format = GENERATE("flac", "m4a", "mp3", "wav");
     auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
     auto loaded = loadTrack(path);
@@ -189,7 +197,7 @@ namespace ao::tag::test
 
   TEST_CASE("TagReader - hires fixture exposes audio properties", "[tag][integration][property]")
   {
-    auto const* const format = GENERATE("flac", "m4a", "mp3");
+    auto const* const format = GENERATE("flac", "m4a", "mp3", "wav");
     auto const path = kTestDataDir / ("hires." + std::string{format});
 
     auto loaded = loadTrack(path);
@@ -219,6 +227,12 @@ namespace ao::tag::test
       CHECK(prop.bitDepth() == 24);
       // FLAC bitrate varies
       CHECK(prop.bitrate() >= 500000);
+    }
+    else if (std::string{format} == "wav")
+    {
+      CHECK(prop.sampleRate() == 96000);
+      CHECK(prop.bitDepth() == 24);
+      CHECK(prop.bitrate() >= 4000000);
     }
     else
     {
@@ -282,7 +296,7 @@ namespace ao::tag::test
   // ============================================================================
   TEST_CASE("TagReader - empty fixture exposes empty metadata", "[tag][integration][metadata]")
   {
-    auto const* const format = GENERATE("flac", "m4a", "mp3");
+    auto const* const format = GENERATE("flac", "m4a", "mp3", "wav");
     auto const path = kTestDataDir / ("empty." + std::string{format});
 
     auto loaded = loadTrack(path);

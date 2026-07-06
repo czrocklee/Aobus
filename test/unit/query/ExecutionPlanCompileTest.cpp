@@ -91,12 +91,12 @@ namespace ao::query::test
   TEST_CASE("ExecutionPlan - compiles codec constants", "[query][unit][execution_plan]")
   {
     auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, parseOk("@codec = AAC"));
+    auto plan = compileOk(compiler, parseOk("@codec = WAV"));
 
     auto it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
 
     REQUIRE(it != plan.instructions.end());
-    CHECK(std::cmp_equal(it->constValue, audioCodecStorageValue(AudioCodec::Aac)));
+    CHECK(std::cmp_equal(it->constValue, audioCodecStorageValue(AudioCodec::Wav)));
   }
 
   TEST_CASE("ExecutionPlan - rejects unsupported codec constants", "[query][unit][execution_plan]")

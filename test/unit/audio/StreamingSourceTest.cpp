@@ -70,6 +70,10 @@ namespace ao::audio::test
     auto sourcePtr = std::make_unique<StreamingSource>(
       std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
     CHECK(sourcePtr->initialize());
+    CHECK(sourcePtr->bufferedDuration() == std::chrono::milliseconds{10});
+
+    auto out = std::vector<std::byte>(20);
+    CHECK(sourcePtr->read(out) == 20);
     CHECK(sourcePtr->isDrained());
     CHECK(errorCount.load() == 0);
   }

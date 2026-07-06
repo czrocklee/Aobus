@@ -72,6 +72,7 @@ add_executable(ao_core_test
     unit/tag/Mp4FileTest.cpp
     unit/tag/id3v2/ReaderTest.cpp
     unit/tag/FlacFileTest.cpp
+    unit/tag/WavFileTest.cpp
     unit/tag/TagFileTest.cpp
     unit/tag/DecoderTest.cpp
     unit/tag/TagErrorTest.cpp
@@ -79,6 +80,7 @@ add_executable(ao_core_test
     # media tests
     unit/media/mp4/DemuxerTest.cpp
     unit/media/mp4/SampleDescriptionTest.cpp
+    unit/media/wav/RiffTest.cpp
 
     # library tests
     unit/library/TrackLayoutTest.cpp
@@ -133,6 +135,7 @@ add_executable(ao_core_test
     unit/audio/AlacDecoderSessionTest.cpp
     unit/audio/AlacDecoderMalformedMp4Test.cpp
     unit/audio/Mp3DecoderSessionTest.cpp
+    unit/audio/WavDecoderSessionTest.cpp
     unit/audio/Mp3DecoderMalformedTest.cpp
     unit/audio/QualityAnalyzerTest.cpp
     unit/audio/FormatNegotiatorTest.cpp

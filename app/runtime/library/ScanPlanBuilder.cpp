@@ -94,8 +94,8 @@ namespace ao::rt
       auto const& path = entry.path();
 
       // Only files we can actually decode belong in the plan. Everything else -
-      // cover art, playlists, logs, or formats we have no reader for (.wav,
-      // .ogg, a literal .alac) - is not music we support and is ignored here.
+      // cover art, playlists, logs, or formats we have no reader for (.ogg,
+      // a literal .alac) - is not music we support and is ignored here.
       if (!tag::TagFile::isSupported(path))
       {
         return;

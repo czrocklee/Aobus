@@ -28,12 +28,13 @@ playback routing, YAML import/export, and UI formatting:
 - `Unknown`
 - `Flac`
 - `Alac`
+- `Wav`
 - `Aac`
 - `Mp3`
 
-The raw storage values are explicit: `Unknown = 0`, `Flac = 1`, `Alac = 2`, `Aac = 128`, and `Mp3 = 129`.
-The gap keeps lossless codecs grouped before lossy codecs without making expression evaluation depend on
-enum ordering.
+The raw storage values are explicit: `Unknown = 0`, `Flac = 1`, `Alac = 2`, `Wav = 3`,
+`Aac = 128`, and `Mp3 = 129`. The gap keeps lossless codecs grouped before lossy codecs
+without making expression evaluation depend on enum ordering.
 
 The shared helpers are:
 
@@ -49,11 +50,12 @@ Tag readers set codec directly:
 
 - MPEG audio sets `AudioCodec::Mp3`
 - FLAC sets `AudioCodec::Flac`
+- WAV PCM/float sets `AudioCodec::Wav`
 - MP4 `alac` sample entries set `AudioCodec::Alac`
 - MP4 `mp4a` sample entries set `AudioCodec::Aac`
 
-MP3 bit depth is stored as `16`, matching the decoder's current PCM output path. FLAC and MP4 keep bit
-depth when the container exposes it.
+MP3 bit depth is stored as `16`, matching the decoder's current PCM output path. FLAC, WAV,
+and MP4 keep bit depth when the container exposes it.
 
 AAC is supported for library metadata, YAML, UI, smart-list query data, and playback of MP4/M4A `mp4a`
 tracks through FDK-AAC. ADTS `.aac` files are not part of this support. The MP4/M4A decoder factory checks
@@ -64,13 +66,14 @@ together.
 
 ## Supported File Extensions
 
-The library scanner imports only files whose extension `ao::tag::TagFile` can open: `.flac`, `.mp3`, and
-`.m4a`. `TagFile::isSupported()` is the single source of truth, derived from the same extension-to-reader
-map that `TagFile::open()` dispatches on, so "what the scanner walks" can never drift from "what we can
-parse". Files with any other extension are skipped silently at the walk and never enter the scan plan -
-this includes cover art and playlists as well as audio formats we have no reader for, such as `.wav`,
-`.ogg`, or a literal `.alac` extension. ALAC is supported only as a codec inside an `.m4a` container, not
-as a standalone `.alac` file, so a real ALAC library is imported through `.m4a` and is unaffected.
+The library scanner imports only files whose extension `ao::tag::TagFile` can open: `.flac`, `.mp3`,
+`.m4a`, and `.wav`. `TagFile::isSupported()` is the single source of truth, derived from the
+same extension-to-reader map that `TagFile::open()` dispatches on, so "what the scanner walks" can
+never drift from "what we can parse". Files with any other extension are skipped silently at the walk
+and never enter the scan plan - this includes cover art and playlists as well as audio formats we
+have no reader for, such as `.ogg` or a literal `.alac` extension. ALAC is supported only as a codec
+inside an `.m4a` container, not as a standalone `.alac` file, so a real ALAC library is imported
+through `.m4a` and is unaffected.
 
 Aobus currently supports MP4 audio tracks with a single `stsd` sample-description entry. The demuxer
 rejects tracks with multiple sample descriptions or `stsc` mappings that reference anything other than
@@ -103,6 +106,7 @@ The supported decoder output formats are:
 | ALAC | Native integer depth, 16-bit to 32-bit padding, or 24-bit to 32-bit padding |
 | FLAC | 16-bit integer, packed 24-bit integer, or 32-bit integer storage |
 | MP3 | 16-bit integer or 32-bit float |
+| WAV | Native integer PCM depth, integer PCM padded to a wider supported storage width, or 32-bit float |
 
 For integer padding, `validBits` records the source precision rather than the storage width. Requests for
 a different effective precision are rejected unless the decoder implements that conversion explicitly.
@@ -127,7 +131,7 @@ integer comparison. `@sampleRate`, `@codec`, and `@bitDepth` are hot-only fields
 `@lossless` is intentionally not part of this change. A lossless list can be expressed as:
 
 ```text
-@codec = FLAC or @codec = ALAC
+@codec = FLAC or @codec = ALAC or @codec = WAV
 ```
 
 ## YAML and UI

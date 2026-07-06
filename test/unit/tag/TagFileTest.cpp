@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "lib/tag/flac/File.h"
 #include "lib/tag/mp4/File.h"
 #include "lib/tag/mpeg/File.h"
+#include "lib/tag/wav/File.h"
 #include "test/unit/TestUtils.h"
 #include <ao/tag/TagFile.h>
 
@@ -42,6 +43,15 @@ namespace ao::tag::test
       REQUIRE(fileResult);
       REQUIRE(*fileResult != nullptr);
       CHECK(dynamic_cast<flac::File*>(fileResult->get()) != nullptr);
+    }
+
+    SECTION("WAV extension")
+    {
+      auto const temp = TempFile{".wav"};
+      auto fileResult = TagFile::open(temp.path);
+      REQUIRE(fileResult);
+      REQUIRE(*fileResult != nullptr);
+      CHECK(dynamic_cast<wav::File*>(fileResult->get()) != nullptr);
     }
 
     SECTION("Unknown extension")

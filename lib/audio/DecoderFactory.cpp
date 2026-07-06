@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Error.h>
 #include <ao/audio/AacDecoderSession.h>
@@ -9,19 +9,24 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/Mp3DecoderSession.h>
+#include <ao/audio/WavDecoderSession.h>
 #include <ao/media/mp4/SampleDescription.h>
 #include <ao/utility/MappedFile.h>
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <string>
 
 namespace ao::audio
 {
   Result<std::unique_ptr<IDecoderSession>> createDecoderSession(std::filesystem::path const& filePath,
                                                                 Format outputFormat)
   {
-    auto const ext = filePath.extension().string();
+    auto ext = filePath.extension().string();
+    std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
     if (ext == ".flac")
     {
@@ -57,6 +62,11 @@ namespace ao::audio
     if (ext == ".mp3")
     {
       return std::make_unique<Mp3DecoderSession>(outputFormat);
+    }
+
+    if (ext == ".wav")
+    {
+      return std::make_unique<WavDecoderSession>(outputFormat);
     }
 
     return makeError(Error::Code::NotSupported, std::format("Unsupported audio file extension '{}'", ext));

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
@@ -54,11 +54,11 @@ namespace ao::audio
       plan.reason += "bit depth conversion required";
     }
 
-    void setSampleFormat(Format& format, std::uint8_t bitDepth, std::uint8_t validBits)
+    void setSampleFormat(Format& format, std::uint8_t bitDepth, std::uint8_t validBits, bool isFloat = false)
     {
       format.bitDepth = bitDepth;
       format.validBits = validBits;
-      format.isFloat = false;
+      format.isFloat = isFloat;
       format.isInterleaved = true;
     }
 
@@ -80,7 +80,22 @@ namespace ao::audio
       std::uint8_t bitDepth = 16;
       std::uint8_t validBits = 16;
 
-      if (plan.sourceFormat.bitDepth == 24)
+      if (plan.sourceFormat.isFloat)
+      {
+        bitDepth = 32;
+        validBits = 32;
+        plan.decoderOutputFormat.isFloat = true;
+      }
+      else if (plan.sourceFormat.bitDepth < 16)
+      {
+        if (!caps.bitDepths.empty())
+        {
+          bitDepth = *std::ranges::max_element(caps.bitDepths);
+        }
+
+        validBits = plan.sourceFormat.validBits != 0 ? plan.sourceFormat.validBits : plan.sourceFormat.bitDepth;
+      }
+      else if (plan.sourceFormat.bitDepth == 24)
       {
         if (std::ranges::contains(caps.bitDepths, 24))
         {
@@ -113,6 +128,97 @@ namespace ao::audio
       plan.decoderOutputFormat.bitDepth = bitDepth;
       plan.decoderOutputFormat.validBits = validBits;
     }
+
+    bool supportsNativeSampleFormat(Format const& sourceFormat, DeviceCapabilities const& caps)
+    {
+      auto const validBits = sourceFormat.validBits != 0 ? sourceFormat.validBits : sourceFormat.bitDepth;
+      return !caps.sampleFormats.empty() &&
+             supportsSampleFormat(caps, sourceFormat.bitDepth, validBits, sourceFormat.isFloat);
+    }
+
+    void applyFloatSampleFormatNegotiation(RenderPlan& plan, DeviceCapabilities const& caps)
+    {
+      if (caps.sampleFormats.empty() || supportsSampleFormat(caps, 32, 32, true))
+      {
+        setSampleFormat(plan.decoderOutputFormat, 32, 32, true);
+        setSampleFormat(plan.deviceFormat, 32, 32, true);
+        return;
+      }
+
+      requireBitDepthConversion(plan);
+
+      if (supportsSampleFormat(caps, 32, 32))
+      {
+        setSampleFormat(plan.decoderOutputFormat, 32, 32);
+        setSampleFormat(plan.deviceFormat, 32, 32);
+        return;
+      }
+
+      setSampleFormat(plan.decoderOutputFormat, 16, 16);
+      setSampleFormat(plan.deviceFormat, 16, 16);
+    }
+
+    void apply24BitSampleFormatNegotiation(RenderPlan& plan, DeviceCapabilities const& caps)
+    {
+      if (supportsSampleFormat(caps, 24, 24))
+      {
+        setSampleFormat(plan.decoderOutputFormat, 24, 24);
+        setSampleFormat(plan.deviceFormat, 24, 24);
+        return;
+      }
+
+      requireBitDepthConversion(plan);
+
+      if (supportsSampleFormat(caps, 32, 24))
+      {
+        setSampleFormat(plan.decoderOutputFormat, 32, 24);
+        setSampleFormat(plan.deviceFormat, 32, 24);
+      }
+      else if (supportsSampleFormat(caps, 32, 32))
+      {
+        setSampleFormat(plan.decoderOutputFormat, 32, 24);
+        setSampleFormat(plan.deviceFormat, 32, 32);
+      }
+      else
+      {
+        setSampleFormat(plan.decoderOutputFormat, 16, 16);
+        setSampleFormat(plan.deviceFormat, 16, 16);
+      }
+    }
+
+    void apply32BitSampleFormatNegotiation(RenderPlan& plan, DeviceCapabilities const& caps)
+    {
+      auto const sourceValidBits =
+        plan.sourceFormat.validBits != 0 ? plan.sourceFormat.validBits : plan.sourceFormat.bitDepth;
+
+      if (sourceValidBits == 24 && supportsSampleFormat(caps, 32, 24))
+      {
+        setSampleFormat(plan.decoderOutputFormat, 32, 24);
+        setSampleFormat(plan.deviceFormat, 32, 24);
+        return;
+      }
+
+      if (supportsSampleFormat(caps, 32, 32))
+      {
+        setSampleFormat(plan.decoderOutputFormat, 32, 32);
+        setSampleFormat(plan.deviceFormat, 32, 32);
+        return;
+      }
+
+      requireBitDepthConversion(plan);
+
+      if (supportsSampleFormat(caps, 24, 24))
+      {
+        setSampleFormat(plan.decoderOutputFormat, 24, 24);
+        setSampleFormat(plan.deviceFormat, 24, 24);
+      }
+      else
+      {
+        // Default to 16-bit if 24-bit is also not supported
+        setSampleFormat(plan.decoderOutputFormat, 16, 16);
+        setSampleFormat(plan.deviceFormat, 16, 16);
+      }
+    }
   } // namespace
 
   RenderPlan FormatNegotiator::buildPlan(Format sourceFormat, DeviceCapabilities const& caps)
@@ -138,12 +244,15 @@ namespace ao::audio
                                                  });
               });
 
-    negotiate(plan.deviceFormat.bitDepth,
-              caps.bitDepths,
-              plan.requiresBitDepthConversion,
-              plan.reason,
-              "bit depth conversion required",
-              [&] { return *std::ranges::max_element(caps.bitDepths); });
+    if (!supportsNativeSampleFormat(plan.sourceFormat, caps))
+    {
+      negotiate(plan.deviceFormat.bitDepth,
+                caps.bitDepths,
+                plan.requiresBitDepthConversion,
+                plan.reason,
+                "bit depth conversion required",
+                [&] { return *std::ranges::max_element(caps.bitDepths); });
+    }
 
     negotiate(plan.deviceFormat.channels,
               caps.channelCounts,
@@ -161,59 +270,21 @@ namespace ao::audio
 
     // Prefer exact backend sample formats for exclusive backends so 32/24 padded
     // PCM is not confused with true 32/32 support.
-    if (caps.sampleFormats.empty() || (plan.sourceFormat.bitDepth != 24 && plan.sourceFormat.bitDepth != 32))
+    if (plan.sourceFormat.isFloat)
+    {
+      applyFloatSampleFormatNegotiation(plan, caps);
+    }
+    else if (caps.sampleFormats.empty() || (plan.sourceFormat.bitDepth != 24 && plan.sourceFormat.bitDepth != 32))
     {
       applyLegacyDecoderNegotiation(plan, caps);
     }
     else if (plan.sourceFormat.bitDepth == 24)
     {
-      if (supportsSampleFormat(caps, 24, 24))
-      {
-        setSampleFormat(plan.decoderOutputFormat, 24, 24);
-        setSampleFormat(plan.deviceFormat, 24, 24);
-      }
-      else if (supportsSampleFormat(caps, 32, 24))
-      {
-        requireBitDepthConversion(plan);
-        setSampleFormat(plan.decoderOutputFormat, 32, 24);
-        setSampleFormat(plan.deviceFormat, 32, 24);
-      }
-      else if (supportsSampleFormat(caps, 32, 32))
-      {
-        requireBitDepthConversion(plan);
-        setSampleFormat(plan.decoderOutputFormat, 32, 24);
-        setSampleFormat(plan.deviceFormat, 32, 32);
-      }
-      else
-      {
-        requireBitDepthConversion(plan);
-        setSampleFormat(plan.decoderOutputFormat, 16, 16);
-        setSampleFormat(plan.deviceFormat, 16, 16);
-      }
+      apply24BitSampleFormatNegotiation(plan, caps);
     }
     else if (plan.sourceFormat.bitDepth == 32)
     {
-      if (supportsSampleFormat(caps, 32, 32))
-      {
-        setSampleFormat(plan.decoderOutputFormat, 32, 32);
-        setSampleFormat(plan.deviceFormat, 32, 32);
-      }
-      else
-      {
-        requireBitDepthConversion(plan);
-
-        if (supportsSampleFormat(caps, 24, 24))
-        {
-          setSampleFormat(plan.decoderOutputFormat, 24, 24);
-          setSampleFormat(plan.deviceFormat, 24, 24);
-        }
-        else
-        {
-          // Default to 16-bit if 24-bit is also not supported
-          setSampleFormat(plan.decoderOutputFormat, 16, 16);
-          setSampleFormat(plan.deviceFormat, 16, 16);
-        }
-      }
+      apply32BitSampleFormatNegotiation(plan, caps);
     }
 
     // Ensure deviceFormat matches decoderOutputFormat if no other conversion is needed

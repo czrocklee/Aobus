@@ -54,6 +54,7 @@ namespace ao::audio::test
     SECTION("Bit depth conversion required")
     {
       caps.bitDepths = {24, 32}; // 16 is not supported
+      caps.sampleFormats = {};   // Force fallback logic
       auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
 
       CHECK(plan.requiresBitDepthConversion == true);
@@ -146,6 +147,22 @@ namespace ao::audio::test
       CHECK(plan2.deviceFormat.validBits == 16);
     }
 
+    SECTION("32-bit container with 24 valid bits keeps native 32/24 output")
+    {
+      sourceFormat.bitDepth = 32;
+      sourceFormat.validBits = 24;
+      caps.sampleFormats = {
+        {.bitDepth = 16, .validBits = 16, .isFloat = false}, {.bitDepth = 32, .validBits = 24, .isFloat = false}};
+      caps.bitDepths = {16};
+
+      auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
+      CHECK_FALSE(plan.requiresBitDepthConversion);
+      CHECK(plan.decoderOutputFormat.bitDepth == 32);
+      CHECK(plan.decoderOutputFormat.validBits == 24);
+      CHECK(plan.deviceFormat.bitDepth == 32);
+      CHECK(plan.deviceFormat.validBits == 24);
+    }
+
     SECTION("16-bit source pads to 32/16 when only 32-bit container exists")
     {
       sourceFormat.bitDepth = 16;
@@ -161,10 +178,61 @@ namespace ao::audio::test
       CHECK(plan.requiresBitDepthConversion == true);
     }
 
+    SECTION("8-bit integer source decodes into the negotiated storage width with 8 valid bits")
+    {
+      sourceFormat.bitDepth = 8;
+      sourceFormat.validBits = 8;
+      caps.sampleFormats = {};
+
+      auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
+      CHECK(plan.decoderOutputFormat.bitDepth == 32);
+      CHECK(plan.decoderOutputFormat.validBits == 8);
+      CHECK_FALSE(plan.decoderOutputFormat.isFloat);
+      CHECK(plan.deviceFormat.bitDepth == 32);
+      CHECK(plan.deviceFormat.validBits == 8);
+    }
+
+    SECTION("32-bit float source keeps float output when supported")
+    {
+      sourceFormat.bitDepth = 32;
+      sourceFormat.validBits = 32;
+      sourceFormat.isFloat = true;
+      caps.sampleFormats = {
+        {.bitDepth = 32, .validBits = 32, .isFloat = false}, {.bitDepth = 32, .validBits = 32, .isFloat = true}};
+      caps.bitDepths = {32};
+
+      auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
+      CHECK(plan.decoderOutputFormat.bitDepth == 32);
+      CHECK(plan.decoderOutputFormat.validBits == 32);
+      CHECK(plan.decoderOutputFormat.isFloat);
+      CHECK(plan.deviceFormat.bitDepth == 32);
+      CHECK(plan.deviceFormat.validBits == 32);
+      CHECK(plan.deviceFormat.isFloat);
+      CHECK_FALSE(plan.requiresBitDepthConversion);
+    }
+
+    SECTION("32-bit float source uses integer decoder output when float is unsupported")
+    {
+      sourceFormat.bitDepth = 32;
+      sourceFormat.validBits = 32;
+      sourceFormat.isFloat = true;
+      caps.sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false}};
+      caps.bitDepths = {16};
+
+      auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
+      CHECK(plan.requiresBitDepthConversion);
+      CHECK_FALSE(plan.decoderOutputFormat.isFloat);
+      CHECK(plan.decoderOutputFormat.bitDepth == 16);
+      CHECK(plan.decoderOutputFormat.validBits == 16);
+      CHECK(plan.deviceFormat.bitDepth == 16);
+      CHECK(plan.deviceFormat.validBits == 16);
+    }
+
     SECTION("Reason string concatenates multiple required conversions in stable order")
     {
       caps.sampleRates = {48000};
       caps.bitDepths = {32};
+      caps.sampleFormats = {}; // Force fallback logic
       caps.channelCounts = {6};
 
       auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);

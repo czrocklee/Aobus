@@ -32,12 +32,15 @@ from the mapped file:
 - MP4: the single top-level `mdat` payload.
 - MP3: bytes from the first MPEG frame after ID3v2 to before trailing
   ID3v1/APEv2.
+- WAV: the RIFF `data` chunk payload.
 
 The range excludes known tag and non-audio container regions. FLAC currently
 treats every byte after the final metadata block as payload and rejects an
-empty payload. MP3 skips junk between ID3v2 and the first MPEG frame; encoder
-padding inside MPEG frames remains part of the encoded payload. Callers hash
-the returned span; no decode is required.
+empty payload. WAV excludes RIFF headers, `fmt `, `LIST/INFO`, `fact`, and
+other non-`data` chunks, and rejects an empty `data` chunk. MP3 skips junk
+between ID3v2 and the first MPEG frame; encoder padding inside MPEG frames
+remains part of the encoded payload. Callers hash the returned span; no decode
+is required.
 
 ## Signature
 

@@ -264,7 +264,8 @@ namespace ao::audio
     // ── Transition state ──────────────────────────────────────────
     static bool isGaplessCapable(DecodedStreamInfo const& info) noexcept
     {
-      return !info.isLossy && (info.codec == AudioCodec::Flac || info.codec == AudioCodec::Alac);
+      return !info.isLossy &&
+             (info.codec == AudioCodec::Flac || info.codec == AudioCodec::Alac || info.codec == AudioCodec::Wav);
     }
 
     static bool canSplice(DecodedStreamInfo const& currentInfo,

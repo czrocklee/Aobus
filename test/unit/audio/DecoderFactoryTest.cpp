@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/media/mp4/TestAtoms.h"
@@ -73,9 +73,16 @@ namespace ao::audio::test
       CHECK(*session != nullptr);
     }
 
+    SECTION("Creates WAV runtime for .wav")
+    {
+      auto session = createDecoderSession("song.wav", format);
+      REQUIRE(session);
+      CHECK(*session != nullptr);
+    }
+
     SECTION("Reports NotSupported for unsupported extensions")
     {
-      for (auto const* path : {"song.wav", "song.ogg"})
+      for (auto const* path : {"song.ogg"})
       {
         auto const result = createDecoderSession(path, format);
         REQUIRE_FALSE(result);
@@ -99,11 +106,20 @@ namespace ao::audio::test
       CHECK(result.error().code == Error::Code::IoError);
     }
 
-    SECTION("Case-sensitive extension behavior (Current)")
+    SECTION("Normalizes decoder extensions before dispatch")
     {
-      // The current implementation is case-sensitive on Linux.
-      CHECK_FALSE(createDecoderSession("song.FLAC", format));
-      CHECK_FALSE(createDecoderSession("song.M4A", format));
+      REQUIRE(createDecoderSession("song.FLAC", format));
+      REQUIRE(createDecoderSession("song.MP3", format));
+      REQUIRE(createDecoderSession("song.WAV", format));
+    }
+
+    SECTION("Normalizes MP4 extensions before probing the container")
+    {
+      auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".M4A"};
+      auto session = createDecoderSession(m4a.path, format);
+
+      REQUIRE(session);
+      CHECK(*session != nullptr);
     }
   }
 } // namespace ao::audio::test

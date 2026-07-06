@@ -21,6 +21,7 @@ add_library(ao_tag STATIC
     flac/File.cpp
     mp4/File.cpp
     mpeg/File.cpp
+    wav/File.cpp
     mpeg/Frame.cpp
     mpeg/id3v2/Reader.cpp
     "${FLAC_VORBIS_DISPATCH_HEADER}"

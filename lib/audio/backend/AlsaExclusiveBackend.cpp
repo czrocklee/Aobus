@@ -760,6 +760,11 @@ namespace ao::audio::backend
 
     alsaFormat = SND_PCM_FORMAT_S16_LE;
 
+    if (format.isFloat)
+    {
+      return makeError(Error::Code::FormatRejected, "ALSA float output is not supported");
+    }
+
     if (format.bitDepth == 32)
     {
       alsaFormat = (format.validBits == 24) ? SND_PCM_FORMAT_S24_LE : SND_PCM_FORMAT_S32_LE;

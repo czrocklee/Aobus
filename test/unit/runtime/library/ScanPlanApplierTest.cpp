@@ -857,7 +857,7 @@ namespace ao::rt::test
 
     // A text file, plus audio formats we have no reader for. The scanner only
     // admits decodable extensions, so none of these reach the executor.
-    for (auto const* const name : {"notes.txt", "cover.jpg", "song.wav", "song.ogg", "song.alac"})
+    for (auto const* const name : {"notes.txt", "cover.jpg", "song.ogg", "song.alac"})
     {
       auto out = std::ofstream{musicRoot / name, std::ios::binary};
       out << "not a supported audio file";

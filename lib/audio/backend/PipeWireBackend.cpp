@@ -393,7 +393,11 @@ namespace ao::audio::backend
 
     auto spaFmt = SPA_AUDIO_FORMAT_S16_LE;
 
-    if (format.bitDepth == 32)
+    if (format.isFloat && format.bitDepth == 32)
+    {
+      spaFmt = SPA_AUDIO_FORMAT_F32_LE;
+    }
+    else if (format.bitDepth == 32)
     {
       spaFmt = (format.validBits == 24) ? SPA_AUDIO_FORMAT_S24_32_LE : SPA_AUDIO_FORMAT_S32_LE;
     }

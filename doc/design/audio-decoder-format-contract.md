@@ -16,6 +16,8 @@ Decoders may support sample representation changes when they can produce correct
 
 Current behavior:
 - FLAC and ALAC support integer bit-depth conversion according to their implementation limits.
+- WAV supports PCM integer padding/truncation according to its implementation limits and preserves
+  32-bit IEEE float output when the backend supports it.
 - MP3 uses libmpg123 and supports 16-bit signed integer output and 32-bit float output.
 - MP3 rejects unsupported integer widths, such as requested 32-bit integer PCM, instead of returning 16-bit bytes with 32-bit metadata.
 
@@ -25,9 +27,9 @@ MP3 is a lossy source. Its compressed stream has native rate and channel metadat
 
 `DecodedStreamInfo::codec` and `DecodedStreamInfo::isLossy` are part of the
 engine splice gate. In the current gapless phase, only sessions reported as
-lossless FLAC or lossless ALAC are splice-capable. Unknown codecs and every
-lossy session are not splice-capable even when their decoded PCM format matches
-the next track.
+lossless FLAC, lossless ALAC, or WAV are splice-capable. Unknown codecs and
+every lossy session are not splice-capable even when their decoded PCM format
+matches the next track.
 
 Decoders must keep these fields conservative: a lossy format must set
 `isLossy`, and a decoder that cannot identify its codec must leave the codec as

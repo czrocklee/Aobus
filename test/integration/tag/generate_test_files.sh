@@ -98,6 +98,53 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
 echo "  Created classical_fallback.flac"
 
 # ============================================================================
+# WAV files (PCM, RIFF/WAVE)
+# ============================================================================
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "INAM=Test Title" \
+    -metadata "IART=Test Artist" \
+    -metadata "IPRD=Test Album" \
+    -metadata "IGNR=Rock" \
+    -metadata "ICRD=2024" \
+    -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
+    -codec:a pcm_s16le \
+    -y "$OUTPUT_DIR/basic_metadata.wav" 2>/dev/null
+echo "  Created basic_metadata.wav"
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
+    -codec:a pcm_s16le \
+    -y "$OUTPUT_DIR/empty.wav" 2>/dev/null
+echo "  Created empty.wav"
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "INAM=HiRes Title" \
+    -metadata "IART=HiRes Artist" \
+    -metadata "IPRD=HiRes Album" \
+    -metadata "IGNR=Electronic" \
+    -metadata "ICRD=2025" \
+    -af "aformat=sample_fmts=s32:channel_layouts=stereo" \
+    -ar 96000 \
+    -codec:a pcm_s24le \
+    -y "$OUTPUT_DIR/hires.wav" 2>/dev/null
+echo "  Created hires.wav (24-bit/96kHz stereo)"
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -metadata "INAM=Float Title" \
+    -metadata "IART=Float Artist" \
+    -af "aformat=sample_fmts=flt:channel_layouts=stereo" \
+    -ar 48000 \
+    -codec:a pcm_f32le \
+    -y "$OUTPUT_DIR/float32.wav" 2>/dev/null
+echo "  Created float32.wav (32-bit float/48kHz stereo)"
+
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -af "aformat=sample_fmts=u8:channel_layouts=mono" \
+    -codec:a pcm_u8 \
+    -y "$OUTPUT_DIR/u8.wav" 2>/dev/null
+echo "  Created u8.wav (8-bit unsigned/44.1kHz mono)"
+
+# ============================================================================
 # MP4/M4A files (AAC/ALAC, 44.1kHz stereo)
 # ============================================================================
 ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \

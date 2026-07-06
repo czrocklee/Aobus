@@ -103,6 +103,7 @@ namespace ao::uimodel::test
     CHECK(formatCodec(AudioCodec::Unknown).empty());
     CHECK(formatCodec(AudioCodec::Flac) == "FLAC");
     CHECK(formatCodec(AudioCodec::Alac) == "ALAC");
+    CHECK(formatCodec(AudioCodec::Wav) == "WAV");
     CHECK(formatCodec(AudioCodec::Aac) == "AAC");
   }
 
@@ -114,6 +115,8 @@ namespace ao::uimodel::test
     CHECK(formatDisplayTrackNumber(0, 3, 7) == "7");
 
     CHECK(formatTechnicalSummary(AudioCodec::Flac, 44100, 16, 0) == "FLAC \u00b7 44.1 kHz \u00b7 16-bit");
+    CHECK(formatTechnicalSummary(AudioCodec::Wav, 96000, 24, 4608000) ==
+          "WAV \u00b7 96 kHz \u00b7 24-bit \u00b7 4608 kbps");
     CHECK(formatTechnicalSummary(AudioCodec::Flac, 44100, 16, 900000) ==
           "FLAC \u00b7 44.1 kHz \u00b7 16-bit \u00b7 900 kbps");
     CHECK(formatTechnicalSummary(AudioCodec::Mp3, 44100, 0, 320000) == "MP3 \u00b7 44.1 kHz \u00b7 320 kbps");

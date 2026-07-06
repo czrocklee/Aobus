@@ -4,6 +4,7 @@
 #include "flac/File.h"
 #include "mp4/File.h"
 #include "mpeg/File.h"
+#include "wav/File.h"
 #include <ao/Error.h>
 #include <ao/tag/TagFile.h>
 
@@ -37,6 +38,9 @@ namespace ao::tag
       {".flac",
        [](std::filesystem::path const& filePath) -> std::unique_ptr<TagFile>
        { return std::make_unique<flac::File>(filePath); }},
+      {".wav",
+       [](std::filesystem::path const& filePath) -> std::unique_ptr<TagFile>
+       { return std::make_unique<wav::File>(filePath); }},
     });
 
     std::string normalizedExtension(std::filesystem::path const& path)

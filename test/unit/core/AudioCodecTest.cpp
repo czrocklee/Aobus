@@ -12,6 +12,7 @@ namespace ao::test
     CHECK(audioCodecName(AudioCodec::Unknown).empty());
     CHECK(audioCodecName(AudioCodec::Flac) == "FLAC");
     CHECK(audioCodecName(AudioCodec::Alac) == "ALAC");
+    CHECK(audioCodecName(AudioCodec::Wav) == "WAV");
     CHECK(audioCodecName(AudioCodec::Aac) == "AAC");
     CHECK(audioCodecName(AudioCodec::Mp3) == "MP3");
   }
@@ -20,6 +21,7 @@ namespace ao::test
   {
     CHECK(parseAudioCodecName("Flac") == AudioCodec::Flac);
     CHECK(parseAudioCodecName("alac") == AudioCodec::Alac);
+    CHECK(parseAudioCodecName("wav") == AudioCodec::Wav);
     CHECK(parseAudioCodecName("aac") == AudioCodec::Aac);
     CHECK(parseAudioCodecName("mp3") == AudioCodec::Mp3);
     CHECK(parseAudioCodecName("unknown") == AudioCodec::Unknown);
@@ -30,13 +32,15 @@ namespace ao::test
   {
     CHECK(audioCodecStorageValue(AudioCodec::Flac) == 1);
     CHECK(audioCodecStorageValue(AudioCodec::Alac) == 2);
+    CHECK(audioCodecStorageValue(AudioCodec::Wav) == 3);
     CHECK(audioCodecStorageValue(AudioCodec::Aac) == 128);
     CHECK(audioCodecStorageValue(AudioCodec::Mp3) == 129);
     CHECK(audioCodecFromStorage(1) == AudioCodec::Flac);
     CHECK(audioCodecFromStorage(2) == AudioCodec::Alac);
+    CHECK(audioCodecFromStorage(3) == AudioCodec::Wav);
     CHECK(audioCodecFromStorage(128) == AudioCodec::Aac);
     CHECK(audioCodecFromStorage(129) == AudioCodec::Mp3);
-    CHECK(audioCodecFromStorage(3) == AudioCodec::Unknown);
+    CHECK(audioCodecFromStorage(4) == AudioCodec::Unknown);
     CHECK(audioCodecFromStorage(255) == AudioCodec::Unknown);
   }
 } // namespace ao::test

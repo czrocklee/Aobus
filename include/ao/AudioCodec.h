@@ -16,6 +16,7 @@ namespace ao
     Unknown = 0,
     Flac = 1,
     Alac = 2,
+    Wav = 3,
     Aac = 128,
     Mp3 = 129,
   };
@@ -31,6 +32,7 @@ namespace ao
     inline constexpr auto kAudioCodecNames = std::to_array<AudioCodecNameEntry>({
       {.codec = AudioCodec::Flac, .name = "FLAC"},
       {.codec = AudioCodec::Alac, .name = "ALAC"},
+      {.codec = AudioCodec::Wav, .name = "WAV"},
       {.codec = AudioCodec::Aac, .name = "AAC"},
       {.codec = AudioCodec::Mp3, .name = "MP3"},
     });
@@ -66,6 +68,7 @@ namespace ao
       case AudioCodec::Unknown:
       case AudioCodec::Flac:
       case AudioCodec::Alac:
+      case AudioCodec::Wav:
       case AudioCodec::Aac:
       case AudioCodec::Mp3: return static_cast<AudioCodec>(value);
     }

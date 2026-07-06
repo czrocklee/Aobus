@@ -284,7 +284,7 @@ namespace ao::audio
       block = *blockResult;
     }
 
-    if (block.endOfStream)
+    if (block.endOfStream && block.bytes.empty())
     {
       _decoderReachedEof = true;
       return DecodeBlockStatus::Stopped;
@@ -292,6 +292,12 @@ namespace ao::audio
 
     if (!writeBlock(std::span<std::byte const>{block.bytes.data(), block.bytes.size()}, seekToken, threadStopToken))
     {
+      return DecodeBlockStatus::Stopped;
+    }
+
+    if (block.endOfStream)
+    {
+      _decoderReachedEof = true;
       return DecodeBlockStatus::Stopped;
     }
 

@@ -165,8 +165,8 @@ notification cannot advance the cursor once a newer track is already playing.
 
 At EOS, the render path attempts a splice only when both the current and
 prepared sessions are gapless-capable and their negotiated backend formats are
-identical. Current phase gapless-capable means a lossless FLAC or ALAC decoder
-session. Lossy sessions, unknown codecs, and backend-format mismatches take the
+identical. Current phase gapless-capable means a lossless FLAC, ALAC, or WAV
+decoder session. Lossy sessions, unknown codecs, and backend-format mismatches take the
 existing drain path, which stops and closes the backend after drain completion.
 No resampling, channel remapping, or artificial silence is introduced to force a
 splice.
