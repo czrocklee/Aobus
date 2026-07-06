@@ -9,12 +9,11 @@
 #include <gtkmm/button.h>
 #include <gtkmm/widget.h>
 
-#include <functional>
 #include <string>
 
 namespace ao::uimodel
 {
-  class PlaybackQueueModel;
+  class PlaybackCommandSurface;
 }
 
 namespace ao::gtk
@@ -25,9 +24,8 @@ namespace ao::gtk
     using Action = uimodel::TransportAction;
 
     TransportButton(rt::PlaybackService& playbackService,
-                    uimodel::PlaybackQueueModel* queueModel,
+                    uimodel::PlaybackCommandSurface& commands,
                     Action action,
-                    std::function<void()> onPlaySelection = {},
                     bool showLabel = false,
                     std::string const& size = "normal");
     ~TransportButton();

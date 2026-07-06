@@ -16,7 +16,7 @@ if(NOT TEST_ROOT)
 endif()
 
 set(_ao_uimodel_allowed_path_regex
-    "^(FrameClock\\.h|field/[^/]+\\.(h|hpp|cpp)|input/[^/]+\\.(h|hpp|cpp)|preferences/[^/]+\\.(h|hpp|cpp)|layout/(document|action|component|shell)/[^/]+\\.(h|hpp|cpp)|library/(list|presentation|track|detail|property)/[^/]+\\.(h|hpp|cpp)|playback/(now-playing|transport|seek|output|queue|quality|soul)/[^/]+\\.(h|hpp|cpp)|status/activity/[^/]+\\.(h|hpp|cpp))$")
+    "^(FrameClock\\.h|field/[^/]+\\.(h|hpp|cpp)|input/[^/]+\\.(h|hpp|cpp)|preferences/[^/]+\\.(h|hpp|cpp)|layout/(document|action|component|shell)/[^/]+\\.(h|hpp|cpp)|library/(list|presentation|track|detail|property)/[^/]+\\.(h|hpp|cpp)|playback/(command|now-playing|transport|seek|output|queue|quality|soul)/[^/]+\\.(h|hpp|cpp)|status/activity/[^/]+\\.(h|hpp|cpp))$")
 
 function(_ao_collect_uimodel_files out_var root)
   file(GLOB_RECURSE _files LIST_DIRECTORIES false

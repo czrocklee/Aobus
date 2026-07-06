@@ -13,6 +13,8 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 
 #include <gtkmm/application.h>
 #include <gtkmm/window.h>
@@ -21,6 +23,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace ao::gtk::layout::test
@@ -57,10 +60,16 @@ namespace ao::gtk::layout::test
     explicit LayoutRuntimeFixture(std::string_view applicationId = "io.github.aobus.layout_test")
       : _appPtr{Gtk::Application::create(std::string{applicationId})}
       , _runtime{gtk::test::makeRuntime(_tempDir)}
+      , _playbackQueueModel{_runtime.playback(), _runtime.notifications()}
+      , _playbackCommandSurface{_runtime.playback(),
+                                &_playbackQueueModel,
+                                [this] { std::ignore = _runtime.playSelectionInFocusedView(); }}
       , _ctx{.registry = _components, .actionRegistry = _actions, .runtime = _runtime, .parentWindow = _window}
       , _layoutRuntime{_components}
     {
       LayoutRuntime::registerStandardComponents(_components);
+      _ctx.playback.queueModel = &_playbackQueueModel;
+      _ctx.playback.commandSurface = &_playbackCommandSurface;
     }
 
     rt::AppRuntime& runtime() { return _runtime; }
@@ -83,6 +92,8 @@ namespace ao::gtk::layout::test
     Glib::RefPtr<Gtk::Application> _appPtr;
     ao::test::TempDir _tempDir;
     rt::AppRuntime _runtime;
+    uimodel::PlaybackQueueModel _playbackQueueModel;
+    uimodel::PlaybackCommandSurface _playbackCommandSurface;
     ComponentRegistry _components;
     ActionRegistry _actions;
     Gtk::Window _window;

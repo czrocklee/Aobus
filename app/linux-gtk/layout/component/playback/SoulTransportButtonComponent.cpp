@@ -7,6 +7,8 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/TransportButton.h"
+#include <ao/Exception.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/action/LayoutActionTypes.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -30,6 +32,16 @@ namespace ao::gtk::layout
 
     constexpr double kDefaultStrokeWidth = 9.0;
 
+    uimodel::PlaybackCommandSurface& commandSurface(LayoutContext& ctx)
+    {
+      if (ctx.playback.commandSurface == nullptr)
+      {
+        throwException<Exception>("SoulTransportButtonComponent: playback command surface is not bound");
+      }
+
+      return *ctx.playback.commandSurface;
+    }
+
     /**
      * @brief playback.soulPlayPauseButton
      */
@@ -38,9 +50,8 @@ namespace ao::gtk::layout
     public:
       SoulTransportButtonComponent(LayoutContext& ctx, LayoutNode const& node)
         : _transportController{ctx.runtime.playback(),
-                               ctx.playback.queueModel,
+                               commandSurface(ctx),
                                TransportButton::Action::PlayPause,
-                               getTransportCallback(ctx, TransportButton::Action::PlayPause),
                                false,
                                [this](uimodel::TransportViewState const& state) { applyTransportState(state); }}
         , _soulController{ctx.runtime.playback(),

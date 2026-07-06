@@ -22,21 +22,14 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 namespace ao::gtk::platform
 {
   namespace
   {
-    bool startsWith(std::span<std::byte const> bytes, std::span<std::byte const> prefix) noexcept
-    {
-      if (bytes.size() < prefix.size())
-      {
-        return false;
-      }
-
-      return std::equal(prefix.begin(), prefix.end(), bytes.begin());
-    }
+    constexpr auto kKnownExtensions = std::array<std::string_view, 5>{".png", ".jpg", ".gif", ".webp", ".img"};
   } // namespace
 
   MprisArtUrlCache::MprisArtUrlCache(rt::Library const& library)
@@ -60,6 +53,11 @@ namespace ao::gtk::platform
 
     try
     {
+      if (auto cached = cachedUrl(resourceId); !cached.empty())
+      {
+        return cached;
+      }
+
       return exportResource(resourceId);
     }
     catch (std::exception const& e)
@@ -96,18 +94,20 @@ namespace ao::gtk::platform
       std::array{std::byte{0x47}, std::byte{0x49}, std::byte{0x46}, std::byte{0x38}, std::byte{0x39}, std::byte{0x61}};
     constexpr auto kRiff = std::array{std::byte{0x52}, std::byte{0x49}, std::byte{0x46}, std::byte{0x46}};
     constexpr auto kWebp = std::array{std::byte{0x57}, std::byte{0x45}, std::byte{0x42}, std::byte{0x50}};
+    auto const hasPrefix = [](std::span<std::byte const> input, auto const& prefix)
+    { return input.size() >= prefix.size() && std::ranges::equal(prefix, input.first(prefix.size())); };
 
-    if (startsWith(bytes, kPng))
+    if (hasPrefix(bytes, kPng))
     {
       return ".png";
     }
 
-    if (startsWith(bytes, kJpeg))
+    if (hasPrefix(bytes, kJpeg))
     {
       return ".jpg";
     }
 
-    if (startsWith(bytes, kGif87) || startsWith(bytes, kGif89))
+    if (hasPrefix(bytes, kGif87) || hasPrefix(bytes, kGif89))
     {
       return ".gif";
     }
@@ -115,13 +115,24 @@ namespace ao::gtk::platform
     constexpr std::size_t kWebpHeaderSize = 12;
     constexpr std::size_t kRiffPrefixSize = 8;
 
-    if (bytes.size() >= kWebpHeaderSize && startsWith(bytes, kRiff) &&
-        startsWith(bytes.subspan(kRiffPrefixSize), kWebp))
+    if (bytes.size() >= kWebpHeaderSize && hasPrefix(bytes, kRiff) && hasPrefix(bytes.subspan(kRiffPrefixSize), kWebp))
     {
       return ".webp";
     }
 
     return ".img";
+  }
+
+  std::string MprisArtUrlCache::cachedUrl(ResourceId const resourceId) const
+  {
+    auto const it = _cache.find(resourceId);
+
+    if (it == _cache.end() || !cacheEntryValid(it->second))
+    {
+      return {};
+    }
+
+    return it->second.url;
   }
 
   std::string MprisArtUrlCache::exportResource(ResourceId const resourceId)
@@ -136,6 +147,7 @@ namespace ao::gtk::platform
 
     std::filesystem::create_directories(_cacheDir);
     auto const path = _cacheDir / (std::to_string(resourceId.raw()) + std::string{extensionForBytes(*optBytes)});
+    removeStaleResourceFiles(_cacheDir, resourceId, path);
 
     auto output = std::ofstream{path, std::ios::binary | std::ios::trunc};
 
@@ -146,13 +158,64 @@ namespace ao::gtk::platform
 
     auto const bytes = utility::bytes::stringView(*optBytes);
     output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    output.flush();
 
     if (!output)
+    {
+      auto ec = std::error_code{};
+      std::filesystem::remove(path, ec);
+      return {};
+    }
+
+    output.close();
+
+    if (!output)
+    {
+      auto ec = std::error_code{};
+      std::filesystem::remove(path, ec);
+      return {};
+    }
+
+    auto url = fileUriForPath(path);
+
+    if (url.empty())
     {
       return {};
     }
 
-    return fileUriForPath(path);
+    _cache[resourceId] = CacheEntry{.path = path, .url = url, .byteSize = optBytes->size()};
+    return url;
+  }
+
+  bool MprisArtUrlCache::cacheEntryValid(CacheEntry const& entry) noexcept
+  {
+    auto ec = std::error_code{};
+
+    if (!std::filesystem::is_regular_file(entry.path, ec) || ec)
+    {
+      return false;
+    }
+
+    auto const size = std::filesystem::file_size(entry.path, ec);
+    return !ec && size == entry.byteSize;
+  }
+
+  void MprisArtUrlCache::removeStaleResourceFiles(std::filesystem::path const& cacheDir,
+                                                  ResourceId const resourceId,
+                                                  std::filesystem::path const& keepPath)
+  {
+    for (auto const extension : kKnownExtensions)
+    {
+      auto const candidate = cacheDir / (std::to_string(resourceId.raw()) + std::string{extension});
+
+      if (candidate == keepPath)
+      {
+        continue;
+      }
+
+      auto ec = std::error_code{};
+      std::filesystem::remove(candidate, ec);
+    }
   }
 
   std::string MprisArtUrlCache::fileUriForPath(std::filesystem::path const& path)

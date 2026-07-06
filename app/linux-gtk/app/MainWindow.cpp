@@ -73,16 +73,15 @@ namespace ao::gtk
     _menuControllerPtr->setup();
     _mainWindowCoordinatorPtr->listNavigationController()->addActionsTo(*this);
     _shellLayout.context().shell.menuModelPtr = _menuControllerPtr->menuModel();
+    _shellLayout.bindServices(_mainWindowCoordinatorPtr->uiServices());
 
     _shellLayout.attachToWindow();
 
     auto mprisArtUrlCachePtr = std::make_shared<platform::MprisArtUrlCache>(_runtime.library());
     _mprisBridgePtr = std::make_unique<platform::MprisBridge>(
       _runtime.playback(),
+      *_mainWindowCoordinatorPtr->playbackCommandSurface(),
       platform::MprisBridge::Callbacks{
-        .activateAction = [this](std::string_view const actionId) { return _shellLayout.activateAction(actionId); },
-        .actionAvailability = [this](std::string_view const actionId)
-        { return _shellLayout.actionAvailability(actionId); },
         .raise =
           [this]
         {
@@ -182,7 +181,7 @@ namespace ao::gtk
   {
     _mainWindowCoordinatorPtr->initializeSession();
 
-    _shellLayout.context().bind(_mainWindowCoordinatorPtr->uiServices());
+    _shellLayout.bindServices(_mainWindowCoordinatorPtr->uiServices());
     _shellLayout.refreshExportedActions();
 
     _shellLayout.loadLayout(*_configPtr);

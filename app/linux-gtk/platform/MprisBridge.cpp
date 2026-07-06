@@ -3,13 +3,14 @@
 
 #include "MprisBridge.h"
 
+#include "MprisPlaybackEndpoint.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <giomm/dbusconnection.h>
@@ -82,7 +83,7 @@ namespace ao::gtk::platform
     </signal>
     <property name="PlaybackStatus" type="s" access="read"/>
     <property name="LoopStatus" type="s" access="readwrite"/>
-    <property name="Rate" type="d" access="read"/>
+    <property name="Rate" type="d" access="readwrite"/>
     <property name="Shuffle" type="b" access="readwrite"/>
     <property name="Metadata" type="a{sv}" access="read"/>
     <property name="Volume" type="d" access="readwrite"/>
@@ -163,37 +164,14 @@ namespace ao::gtk::platform
 
       return Glib::Variant<MetadataVariantMap>::create(metadata);
     }
-
-    bool relativeSeekPastEnd(rt::PlaybackState const& state, std::int64_t const offsetUs) noexcept
-    {
-      if (state.duration <= std::chrono::milliseconds{0} || offsetUs <= 0)
-      {
-        return false;
-      }
-
-      auto const offsetMs = MprisBridge::fromMprisMicroseconds(offsetUs).count();
-
-      if (offsetMs <= 0)
-      {
-        return false;
-      }
-
-      auto const elapsedMs = state.elapsed.count();
-      auto const durationMs = state.duration.count();
-
-      if (elapsedMs >= durationMs)
-      {
-        return true;
-      }
-
-      return offsetMs > durationMs - elapsedMs;
-    }
   } // namespace
 
   struct MprisBridge::Impl final
   {
     rt::PlaybackService& playback;
+    uimodel::PlaybackCommandSurface& commands;
     Callbacks callbacks;
+    MprisPlaybackEndpoint endpoint;
     Glib::RefPtr<Gio::DBus::Connection> connectionPtr{};
     Glib::RefPtr<Gio::DBus::NodeInfo> nodeInfoPtr{};
     utility::ScopedRegistration ownerRegistration{};
@@ -202,8 +180,11 @@ namespace ao::gtk::platform
     bool nameAcquired = false;
     std::vector<rt::Subscription> subscriptions{};
 
-    Impl(rt::PlaybackService& playbackRef, Callbacks callbacksIn)
-      : playback{playbackRef}, callbacks{std::move(callbacksIn)}
+    Impl(rt::PlaybackService& playbackRef, uimodel::PlaybackCommandSurface& commandsRef, Callbacks callbacksIn)
+      : playback{playbackRef}
+      , commands{commandsRef}
+      , callbacks{std::move(callbacksIn)}
+      , endpoint{playback, commands, callbacks}
     {
     }
 
@@ -251,16 +232,16 @@ namespace ao::gtk::platform
 
     void subscribePlayback()
     {
-      auto const notifyTransport = [this]
-      { emitPlayerPropertiesChanged({"PlaybackStatus", "CanPlay", "CanPause", "CanControl"}); };
+      auto const notifyTransport = [this] { emitPlayerPropertiesChanged({"PlaybackStatus"}); };
+      subscriptions.push_back(commands.onAvailabilityChanged(
+        [this] { emitPlayerPropertiesChanged({"CanPlay", "CanPause", "CanGoNext", "CanGoPrevious"}); }));
       subscriptions.push_back(playback.onPreparing(notifyTransport));
       subscriptions.push_back(playback.onStarted(notifyTransport));
       subscriptions.push_back(playback.onPaused(notifyTransport));
       subscriptions.push_back(playback.onIdle(notifyTransport));
       subscriptions.push_back(playback.onStopped(notifyTransport));
-      subscriptions.push_back(
-        playback.onNowPlayingChanged([this](rt::PlaybackService::NowPlayingChanged const&)
-                                     { emitPlayerPropertiesChanged({"Metadata", "CanSeek", "CanControl"}); }));
+      subscriptions.push_back(playback.onNowPlayingChanged([this](rt::PlaybackService::NowPlayingChanged const&)
+                                                           { emitPlayerPropertiesChanged({"Metadata", "CanSeek"}); }));
       subscriptions.push_back(playback.onSeekUpdate(
         [this](rt::PlaybackService::SeekUpdate const& event)
         {
@@ -280,133 +261,29 @@ namespace ao::gtk::platform
 
     bool dispatchPlayerMethod(std::string_view const methodName) const
     {
-      auto const optAction = MprisBridge::actionForPlayerMethod(methodName);
-
-      if (!optAction || !callbacks.activateAction)
-      {
-        return false;
-      }
-
-      switch (auto const outcome = callbacks.activateAction(*optAction); outcome.result)
-      {
-        case uimodel::LayoutActionActivationResult::Activated:
-        case uimodel::LayoutActionActivationResult::Disabled: return true;
-        case uimodel::LayoutActionActivationResult::UnknownAction:
-        case uimodel::LayoutActionActivationResult::InvalidBinding: return false;
-      }
-
-      return false;
+      return endpoint.dispatchPlayerMethod(methodName);
     }
 
-    bool dispatchRootMethod(std::string_view const methodName) const
-    {
-      if (methodName == "Raise")
-      {
-        return callbacks.raise && callbacks.raise();
-      }
+    bool dispatchRootMethod(std::string_view const methodName) const { return endpoint.dispatchRootMethod(methodName); }
 
-      if (methodName == "Quit")
-      {
-        return callbacks.quit && callbacks.quit();
-      }
-
-      return false;
-    }
-
-    bool dispatchSeek(std::int64_t const offsetUs)
-    {
-      auto const state = playback.state();
-
-      if (state.trackId == kInvalidTrackId)
-      {
-        return false;
-      }
-
-      if (relativeSeekPastEnd(state, offsetUs))
-      {
-        if (callbacks.activateAction)
-        {
-          std::ignore = dispatchPlayerMethod("Next");
-        }
-
-        return true;
-      }
-
-      playback.seek(MprisBridge::seekTargetElapsed(state, offsetUs));
-      return true;
-    }
+    bool dispatchSeek(std::int64_t const offsetUs) { return endpoint.dispatchSeek(offsetUs); }
 
     bool dispatchSetPosition(std::string_view const requestedTrackObjectPath, std::int64_t const positionUs)
     {
-      auto const state = playback.state();
-
-      if (state.trackId == kInvalidTrackId)
-      {
-        return false;
-      }
-
-      if (requestedTrackObjectPath != MprisBridge::trackObjectPath(state.trackId))
-      {
-        return true;
-      }
-
-      if (positionUs < 0)
-      {
-        return true;
-      }
-
-      auto const elapsed = MprisBridge::fromMprisMicroseconds(positionUs);
-
-      if (state.duration > std::chrono::milliseconds{0} && elapsed > state.duration)
-      {
-        return true;
-      }
-
-      playback.seek(elapsed);
-      return true;
+      return endpoint.dispatchSetPosition(requestedTrackObjectPath, positionUs);
     }
 
-    bool dispatchSetVolume(double const volume)
+    bool dispatchSetRate(double const rate) const { return endpoint.dispatchSetRate(rate); }
+
+    bool dispatchSetVolume(double const volume) { return endpoint.dispatchSetVolume(volume); }
+
+    bool dispatchSetShuffle(bool const shuffle) { return endpoint.dispatchSetShuffle(shuffle); }
+
+    bool dispatchSetLoopStatus(std::string_view const loopStatus) { return endpoint.dispatchSetLoopStatus(loopStatus); }
+
+    std::optional<bool> playerCapabilityProperty(std::string_view const propertyName) const
     {
-      playback.setVolume(static_cast<float>(volume));
-      return true;
-    }
-
-    bool dispatchSetShuffle(bool const shuffle)
-    {
-      playback.setShuffleMode(shuffle ? rt::ShuffleMode::On : rt::ShuffleMode::Off);
-      return true;
-    }
-
-    bool dispatchSetLoopStatus(std::string_view const loopStatus)
-    {
-      auto const optMode = MprisBridge::repeatModeForLoopStatus(loopStatus);
-
-      if (!optMode)
-      {
-        return false;
-      }
-
-      playback.setRepeatMode(*optMode);
-      return true;
-    }
-
-    bool actionAvailable(std::string_view const actionId) const
-    {
-      if (callbacks.actionAvailability)
-      {
-        return callbacks.actionAvailability(actionId).enabled;
-      }
-
-      return static_cast<bool>(callbacks.activateAction);
-    }
-
-    bool canControl(rt::PlaybackState const& state) const
-    {
-      return state.trackId != kInvalidTrackId || actionAvailable("playback.play") ||
-             actionAvailable("playback.playPause") || actionAvailable("playback.pause") ||
-             actionAvailable("playback.stop") || actionAvailable("playback.next") ||
-             actionAvailable("playback.previous");
+      return endpoint.playerCapabilityProperty(propertyName);
     }
 
     std::string artUrlForState(rt::PlaybackState const& state) const
@@ -447,6 +324,11 @@ namespace ao::gtk::platform
         {
           changed.emplace(glibString(propertyName), property);
         }
+      }
+
+      if (changed.empty())
+      {
+        return;
       }
 
       auto const params = Glib::Variant<PropertiesChangedPayload>::create(
@@ -526,29 +408,9 @@ namespace ao::gtk::platform
         return Glib::Variant<std::int64_t>::create(MprisBridge::microsecondsFromMilliseconds(state.elapsed));
       }
 
-      if (propertyName == "CanGoNext")
+      if (auto const optCapability = playerCapabilityProperty(propertyName); optCapability)
       {
-        return Glib::Variant<bool>::create(actionAvailable("playback.next"));
-      }
-
-      if (propertyName == "CanGoPrevious")
-      {
-        return Glib::Variant<bool>::create(actionAvailable("playback.previous"));
-      }
-
-      if (propertyName == "CanPlay")
-      {
-        return Glib::Variant<bool>::create(actionAvailable("playback.play"));
-      }
-
-      if (propertyName == "CanPause")
-      {
-        return Glib::Variant<bool>::create(actionAvailable("playback.pause"));
-      }
-
-      if (propertyName == "CanControl")
-      {
-        return Glib::Variant<bool>::create(canControl(state));
+        return Glib::Variant<bool>::create(*optCapability);
       }
 
       return {};
@@ -836,6 +698,16 @@ namespace ao::gtk::platform
         return true;
       }
 
+      if (propertyName == "Rate")
+      {
+        if (dispatchSetRate(value.get_dynamic<double>()))
+        {
+          return true;
+        }
+
+        throwGioError(Gio::Error::NOT_SUPPORTED, "Unsupported MPRIS playback rate");
+      }
+
       if (propertyName == "Shuffle")
       {
         dispatchSetShuffle(value.get_dynamic<bool>());
@@ -856,8 +728,10 @@ namespace ao::gtk::platform
     }
   };
 
-  MprisBridge::MprisBridge(rt::PlaybackService& playback, Callbacks callbacks)
-    : _implPtr{std::make_unique<Impl>(playback, std::move(callbacks))}
+  MprisBridge::MprisBridge(rt::PlaybackService& playback,
+                           uimodel::PlaybackCommandSurface& commands,
+                           Callbacks callbacks)
+    : _implPtr{std::make_unique<Impl>(playback, commands, std::move(callbacks))}
   {
   }
 
@@ -866,41 +740,6 @@ namespace ao::gtk::platform
   void MprisBridge::start()
   {
     _implPtr->start();
-  }
-
-  bool MprisBridge::dispatchRootMethod(std::string_view const methodName)
-  {
-    return _implPtr->dispatchRootMethod(methodName);
-  }
-
-  bool MprisBridge::dispatchPlayerMethod(std::string_view const methodName)
-  {
-    return _implPtr->dispatchPlayerMethod(methodName);
-  }
-
-  bool MprisBridge::dispatchSeek(std::int64_t const offsetUs)
-  {
-    return _implPtr->dispatchSeek(offsetUs);
-  }
-
-  bool MprisBridge::dispatchSetPosition(std::string_view const trackObjectPath, std::int64_t const positionUs)
-  {
-    return _implPtr->dispatchSetPosition(trackObjectPath, positionUs);
-  }
-
-  bool MprisBridge::dispatchSetVolume(double const volume)
-  {
-    return _implPtr->dispatchSetVolume(volume);
-  }
-
-  bool MprisBridge::dispatchSetShuffle(bool const shuffle)
-  {
-    return _implPtr->dispatchSetShuffle(shuffle);
-  }
-
-  bool MprisBridge::dispatchSetLoopStatus(std::string_view const loopStatus)
-  {
-    return _implPtr->dispatchSetLoopStatus(loopStatus);
   }
 
   bool MprisBridge::active() const noexcept
@@ -914,10 +753,10 @@ namespace ao::gtk::platform
     {
       case audio::Transport::Opening:
       case audio::Transport::Buffering:
+      case audio::Transport::Seeking:
       case audio::Transport::Playing: return "Playing";
       case audio::Transport::Paused: return "Paused";
       case audio::Transport::Idle:
-      case audio::Transport::Seeking:
       case audio::Transport::Stopping:
       case audio::Transport::Error: return "Stopped";
     }
@@ -952,41 +791,6 @@ namespace ao::gtk::platform
     if (loopStatus == "Playlist")
     {
       return rt::RepeatMode::All;
-    }
-
-    return std::nullopt;
-  }
-
-  std::optional<std::string_view> MprisBridge::actionForPlayerMethod(std::string_view const methodName) noexcept
-  {
-    if (methodName == "PlayPause")
-    {
-      return "playback.playPause";
-    }
-
-    if (methodName == "Play")
-    {
-      return "playback.play";
-    }
-
-    if (methodName == "Pause")
-    {
-      return "playback.pause";
-    }
-
-    if (methodName == "Stop")
-    {
-      return "playback.stop";
-    }
-
-    if (methodName == "Next")
-    {
-      return "playback.next";
-    }
-
-    if (methodName == "Previous")
-    {
-      return "playback.previous";
     }
 
     return std::nullopt;

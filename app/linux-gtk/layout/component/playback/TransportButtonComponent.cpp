@@ -6,6 +6,7 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/TransportButton.h"
+#include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -20,6 +21,16 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
+    uimodel::PlaybackCommandSurface& commandSurface(LayoutContext& ctx)
+    {
+      if (ctx.playback.commandSurface == nullptr)
+      {
+        throwException<Exception>("TransportButtonComponent: playback command surface is not bound");
+      }
+
+      return *ctx.playback.commandSurface;
+    }
+
     /**
      * @brief Generic transport button component.
      */
@@ -28,9 +39,8 @@ namespace ao::gtk::layout
     public:
       TransportButtonComponent(LayoutContext& ctx, LayoutNode const& node, TransportButton::Action action)
         : _button{ctx.runtime.playback(),
-                  ctx.playback.queueModel,
+                  commandSurface(ctx),
                   action,
-                  getTransportCallback(ctx, action),
                   node.getProp<bool>("showLabel", false),
                   node.getProp<std::string>("size", "normal")}
       {

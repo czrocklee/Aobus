@@ -35,6 +35,7 @@ namespace ao::rt
 namespace ao::gtk
 {
   class AppConfig;
+  struct GtkUiServices;
   class ShellLayoutComponentStateStore;
   class ShellLayoutStore;
   class ThemeCoordinator;
@@ -73,6 +74,7 @@ namespace ao::gtk
     uimodel::LayoutDocument const& activeLayout() const { return _session.snapshot().layout; }
 
     void attachToWindow();
+    void bindServices(GtkUiServices const& services);
     void refreshExportedActions();
     void loadLayout(AppConfig& config);
     void openEditor(AppConfig& config);
@@ -92,8 +94,7 @@ namespace ao::gtk
     bool canProvideSafeAnchor(uimodel::LayoutActionDescriptor const& desc) const override;
 
   private:
-    void registerPlaybackActions(RegisterActionFn const& registerAction,
-                                 layout::ActionStateProvider const& hasActiveQueue);
+    void registerPlaybackActions(RegisterActionFn const& registerAction);
     void registerShellActions(RegisterActionFn const& registerAction);
     void registerWorkspaceActions(RegisterActionFn const& registerAction,
                                   layout::ActionStateProvider const& hasActiveQueue);

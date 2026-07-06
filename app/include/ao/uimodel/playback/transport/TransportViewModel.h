@@ -12,7 +12,7 @@
 
 namespace ao::uimodel
 {
-  class PlaybackQueueModel;
+  class PlaybackCommandSurface;
 
   enum class TransportAction : std::uint8_t
   {
@@ -49,26 +49,12 @@ namespace ao::uimodel
     bool playing = false;
   };
 
-  enum class TransportCommand : std::uint8_t
-  {
-    None,
-    PlaySelection,
-    Pause,
-    Resume,
-    Stop,
-    Next,
-    Previous,
-    ToggleShuffle,
-    CycleRepeat,
-  };
-
   class TransportViewModel final
   {
   public:
     TransportViewModel(rt::PlaybackService& playback,
-                       PlaybackQueueModel* queue,
+                       PlaybackCommandSurface& commands,
                        TransportAction action,
-                       std::function<void()> onPlaySelection,
                        bool showLabel,
                        std::function<void(TransportViewState const&)> onRender);
 
@@ -84,18 +70,11 @@ namespace ao::uimodel
 
   private:
     rt::PlaybackService& _playback;
-    PlaybackQueueModel* _queue;
+    PlaybackCommandSurface& _commands;
     TransportAction _action;
-    std::function<void()> _onPlaySelection;
     bool _showLabel;
     std::function<void(TransportViewState const&)> _onRender;
 
-    rt::Subscription _startedSub;
-    rt::Subscription _pausedSub;
-    rt::Subscription _idleSub;
-    rt::Subscription _stoppedSub;
-    rt::Subscription _preparingSub;
-    rt::Subscription _shuffleSub;
-    rt::Subscription _repeatSub;
+    rt::Subscription _availabilitySub;
   };
 } // namespace ao::uimodel

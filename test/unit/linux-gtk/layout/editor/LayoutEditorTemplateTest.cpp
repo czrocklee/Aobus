@@ -1,21 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "../../GtkTestSupport.h"
-#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/widget.h>
-#include <gtkmm/window.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -27,7 +21,6 @@
 namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel;
-  using ao::gtk::test::makeRuntime;
 
   TEST_CASE("Built-in layout templates expose expected component structure", "[gtk][unit][layout][editor]")
   {
@@ -175,17 +168,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("template expansion via expandNode in build")
     {
-      auto registry = ComponentRegistry{};
-      LayoutRuntime::registerStandardComponents(registry);
-
-      auto const tempDir = ao::test::TempDir{};
-      auto runtime = makeRuntime(tempDir);
-
-      auto const appPtr = Gtk::Application::create("io.github.aobus.template_test");
-      auto window = Gtk::Window{};
-      auto const actionRegistry = ActionRegistry{};
-      auto ctx = LayoutContext{
-        .registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+      auto fixture = ao::gtk::layout::test::LayoutRuntimeFixture{"io.github.aobus.template_test"};
 
       auto doc = LayoutDocument{};
       doc.version = 1;
@@ -193,8 +176,7 @@ namespace ao::gtk::layout::editor::test
       doc.root.type = "template";
       doc.root.props["templateId"] = LayoutValue{std::string{"playback.compactControls"}};
 
-      auto layoutRuntime = LayoutRuntime{registry};
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = fixture.layoutRuntime().build(fixture.context(), doc);
 
       REQUIRE(compPtr != nullptr);
 
@@ -204,17 +186,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("recursive template reference produces error")
     {
-      auto registry = ComponentRegistry{};
-      LayoutRuntime::registerStandardComponents(registry);
-
-      auto const tempDir = ao::test::TempDir{};
-      auto runtime = makeRuntime(tempDir);
-
-      auto const appPtr = Gtk::Application::create("io.github.aobus.recursive_test");
-      auto window = Gtk::Window{};
-      auto const actionRegistry = ActionRegistry{};
-      auto ctx = LayoutContext{
-        .registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+      auto fixture = ao::gtk::layout::test::LayoutRuntimeFixture{"io.github.aobus.recursive_test"};
 
       auto doc = LayoutDocument{};
       doc.version = 1;
@@ -223,8 +195,7 @@ namespace ao::gtk::layout::editor::test
       doc.root.type = "template";
       doc.root.props["templateId"] = LayoutValue{std::string{"selfRef"}};
 
-      auto layoutRuntime = LayoutRuntime{registry};
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = fixture.layoutRuntime().build(fixture.context(), doc);
 
       REQUIRE(compPtr != nullptr);
       CHECK(dynamic_cast<Gtk::Widget*>(&compPtr->widget()) != nullptr);

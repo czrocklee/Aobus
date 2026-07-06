@@ -4,15 +4,13 @@
 #include "playback/TransportButton.h"
 
 #include <ao/rt/PlaybackService.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
 
-#include <functional>
 #include <string>
-#include <utility>
 
 namespace ao::gtk
 {
@@ -50,15 +48,13 @@ namespace ao::gtk
   } // namespace
 
   TransportButton::TransportButton(rt::PlaybackService& playbackService,
-                                   ao::uimodel::PlaybackQueueModel* queueModel,
+                                   ao::uimodel::PlaybackCommandSurface& commands,
                                    Action action,
-                                   std::function<void()> onPlaySelection,
                                    bool showLabel,
                                    std::string const& size)
     : _controller{playbackService,
-                  queueModel,
+                  commands,
                   action,
-                  std::move(onPlaySelection),
                   showLabel,
                   [this](ao::uimodel::TransportViewState const& state) { applyState(state); }}
   {

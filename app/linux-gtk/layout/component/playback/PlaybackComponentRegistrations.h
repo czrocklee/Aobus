@@ -4,10 +4,6 @@
 #pragma once
 
 #include "layout/runtime/LayoutContext.h"
-#include "playback/TransportButton.h"
-#include <ao/rt/AppRuntime.h>
-
-#include <functional>
 
 namespace ao::gtk::layout
 {
@@ -24,17 +20,4 @@ namespace ao::gtk::layout
   void registerTimeLabelComponent(ComponentRegistry& registry);
   void registerQualityIndicatorComponent(ComponentRegistry& registry);
   void registerAudioPipelinePanelComponent(ComponentRegistry& registry);
-
-  /**
-   * @brief Helper to get the transport button callback.
-   */
-  inline std::function<void()> getTransportCallback(LayoutContext& ctx, TransportButton::Action action)
-  {
-    if (action == TransportButton::Action::Play || action == TransportButton::Action::PlayPause)
-    {
-      return [&ctx] { ctx.runtime.playSelectionInFocusedView(); };
-    }
-
-    return {};
-  }
 } // namespace ao::gtk::layout

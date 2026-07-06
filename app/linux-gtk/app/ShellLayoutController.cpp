@@ -6,6 +6,7 @@
 #include "AppConfig.h"
 #include "ShellLayoutComponentStateStore.h"
 #include "ShellLayoutStore.h"
+#include "app/GtkUiServices.h"
 #include "app/ThemeCoordinator.h"
 #include "layout/document/GtkLayoutPresets.h"
 #include "layout/document/LayoutDocument.h"
@@ -24,11 +25,9 @@
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/audio/Transport.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -38,6 +37,8 @@
 #include <ao/uimodel/layout/component/LayoutStatePromoter.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 
 #include <gtkmm/dialog.h>
@@ -92,6 +93,16 @@ namespace ao::gtk
 
       return {.presetId = selection.presetId, .document = std::move(doc), .componentState = std::move(stateDoc)};
     }
+
+    uimodel::PlaybackCommandSurface& commandSurface(layout::PlaybackUiContext const& playback)
+    {
+      if (playback.commandSurface == nullptr)
+      {
+        throwException<Exception>("ShellLayoutController: playback command surface is not bound");
+      }
+
+      return *playback.commandSurface;
+    }
   } // namespace
   ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime,
                                                Gtk::Window& window,
@@ -110,26 +121,6 @@ namespace ao::gtk
   {
     _context.componentStateStore = _componentStateStorePtr.get();
     layout::LayoutRuntime::registerStandardComponents(_registry);
-
-    auto const refreshActionStates = [this]
-    {
-      if (_gioBridgeSessionPtr)
-      {
-        _gioBridgeSessionPtr->refreshStates();
-      }
-    };
-
-    _playbackSubs.push_back(_context.runtime.playback().onPreparing(refreshActionStates));
-    _playbackSubs.push_back(_context.runtime.playback().onStarted(refreshActionStates));
-    _playbackSubs.push_back(_context.runtime.playback().onPaused(refreshActionStates));
-    _playbackSubs.push_back(_context.runtime.playback().onIdle(refreshActionStates));
-    _playbackSubs.push_back(_context.runtime.playback().onStopped(refreshActionStates));
-    _playbackSubs.push_back(
-      _context.runtime.playback().onNowPlayingChanged([refreshActionStates](auto const&) { refreshActionStates(); }));
-    _playbackSubs.push_back(
-      _context.runtime.playback().onShuffleModeChanged([refreshActionStates](auto const&) { refreshActionStates(); }));
-    _playbackSubs.push_back(
-      _context.runtime.playback().onRepeatModeChanged([refreshActionStates](auto const&) { refreshActionStates(); }));
 
     auto const registerAction = [this](std::string_view id,
                                        std::string_view label,
@@ -155,7 +146,7 @@ namespace ao::gtk
       return uimodel::LayoutActionAvailability{.enabled = false, .disabledReason = ""};
     };
 
-    registerPlaybackActions(registerAction, hasActiveQueue);
+    registerPlaybackActions(registerAction);
     registerShellActions(registerAction);
     registerWorkspaceActions(registerAction, hasActiveQueue);
     registerTrackActions(registerAction);
@@ -167,171 +158,97 @@ namespace ao::gtk
     _editorDialogPtr.reset();
   }
 
-  void ShellLayoutController::registerPlaybackActions(RegisterActionFn const& registerAction,
-                                                      layout::ActionStateProvider const& hasActiveQueue)
+  void ShellLayoutController::bindServices(GtkUiServices const& services)
   {
-    auto const hasIdleCurrentTrack = [](rt::PlaybackState const& state)
-    { return state.transport == audio::Transport::Idle && state.trackId != kInvalidTrackId; };
+    _context.bind(services);
+    _playbackSubs.clear();
 
-    auto const canPlay = [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
+    auto const refreshActionStates = [this]
     {
-      auto const& state = ctx.runtime.playback().state();
-      return uimodel::LayoutActionAvailability{
-        .enabled = state.ready && state.transport != audio::Transport::Playing, .disabledReason = ""};
-    };
-
-    auto const canPlayPause = [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
-    {
-      return uimodel::LayoutActionAvailability{.enabled = ctx.runtime.playback().state().ready, .disabledReason = ""};
-    };
-
-    auto const canStop = [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
-    {
-      return uimodel::LayoutActionAvailability{
-        .enabled = ctx.runtime.playback().state().transport != audio::Transport::Idle, .disabledReason = ""};
-    };
-
-    registerAction(
-      "playback.play",
-      "Play",
-      "Playback",
-      uimodel::LayoutActionCapability::None,
-      [hasIdleCurrentTrack](layout::ActionActivationContext& ctx)
+      if (_gioBridgeSessionPtr)
       {
-        if (auto const& state = ctx.runtime.playback().state();
-            state.transport == audio::Transport::Paused || hasIdleCurrentTrack(state))
-        {
-          ctx.runtime.playback().resume();
-        }
-        else if (state.transport != audio::Transport::Playing)
-        {
-          ctx.runtime.playSelectionInFocusedView();
-        }
-      },
-      canPlay);
+        _gioBridgeSessionPtr->refreshStates();
+      }
+    };
 
-    registerAction(
-      "playback.pause",
-      "Pause",
-      "Playback",
-      uimodel::LayoutActionCapability::None,
-      [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().pause(); },
-      [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
+    _playbackSubs.push_back(commandSurface(_context.playback).onAvailabilityChanged(refreshActionStates));
+
+    refreshActionStates();
+  }
+
+  void ShellLayoutController::registerPlaybackActions(RegisterActionFn const& registerAction)
+  {
+    auto const execute = [this](uimodel::PlaybackCommand command)
+    {
+      return [this, command](layout::ActionActivationContext&) { commandSurface(_context.playback).execute(command); };
+    };
+
+    auto const enabled = [this](uimodel::PlaybackCommand command)
+    {
+      return [this, command](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
       {
         return uimodel::LayoutActionAvailability{
-          .enabled = ctx.runtime.playback().state().transport == audio::Transport::Playing, .disabledReason = ""};
-      });
+          .enabled = commandSurface(_context.playback).enabled(command), .disabledReason = ""};
+      };
+    };
 
-    registerAction(
-      "playback.playPause",
-      "Play/Pause",
-      "Playback",
-      uimodel::LayoutActionCapability::None,
-      [hasIdleCurrentTrack](layout::ActionActivationContext& ctx)
-      {
-        if (auto const& state = ctx.runtime.playback().state();
-            state.transport == audio::Transport::Paused || hasIdleCurrentTrack(state))
-        {
-          ctx.runtime.playback().resume();
-        }
-        else if (state.transport == audio::Transport::Playing)
-        {
-          ctx.runtime.playback().pause();
-        }
-        else
-        {
-          ctx.runtime.playSelectionInFocusedView();
-        }
-      },
-      canPlayPause);
+    using Command = uimodel::PlaybackCommand;
 
-    registerAction(
-      "playback.stop",
-      "Stop",
-      "Playback",
-      uimodel::LayoutActionCapability::None,
-      [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().stop(); },
-      canStop);
+    registerAction("playback.play",
+                   "Play",
+                   "Playback",
+                   uimodel::LayoutActionCapability::None,
+                   execute(Command::Play),
+                   enabled(Command::Play));
 
-    registerAction(
-      "playback.next",
-      "Next",
-      "Playback",
-      uimodel::LayoutActionCapability::None,
-      [this](layout::ActionActivationContext&)
-      {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
-        {
-          queueModel->next();
-        }
-      },
-      [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
-      {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
-        {
-          return uimodel::LayoutActionAvailability{.enabled = queueModel->hasNext(), .disabledReason = ""};
-        }
+    registerAction("playback.pause",
+                   "Pause",
+                   "Playback",
+                   uimodel::LayoutActionCapability::None,
+                   execute(Command::Pause),
+                   enabled(Command::Pause));
 
-        return uimodel::LayoutActionAvailability{.enabled = false, .disabledReason = ""};
-      });
+    registerAction("playback.playPause",
+                   "Play/Pause",
+                   "Playback",
+                   uimodel::LayoutActionCapability::None,
+                   execute(Command::PlayPause),
+                   enabled(Command::PlayPause));
 
-    registerAction(
-      "playback.previous",
-      "Previous",
-      "Playback",
-      uimodel::LayoutActionCapability::None,
-      [this](layout::ActionActivationContext&)
-      {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
-        {
-          queueModel->previous();
-        }
-      },
-      [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
-      {
-        if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
-        {
-          return uimodel::LayoutActionAvailability{.enabled = queueModel->hasPrevious(), .disabledReason = ""};
-        }
+    registerAction("playback.stop",
+                   "Stop",
+                   "Playback",
+                   uimodel::LayoutActionCapability::None,
+                   execute(Command::Stop),
+                   enabled(Command::Stop));
 
-        return uimodel::LayoutActionAvailability{.enabled = false, .disabledReason = ""};
-      });
+    registerAction("playback.next",
+                   "Next",
+                   "Playback",
+                   uimodel::LayoutActionCapability::None,
+                   execute(Command::Next),
+                   enabled(Command::Next));
 
-    registerAction(
-      "playback.toggleShuffle",
-      "Toggle Shuffle",
-      "Playback",
-      uimodel::LayoutActionCapability::None,
-      [](layout::ActionActivationContext& ctx)
-      {
-        auto const current = ctx.runtime.playback().state().shuffleMode;
-        auto const next = (current == rt::ShuffleMode::Off) ? rt::ShuffleMode::On : rt::ShuffleMode::Off;
-        ctx.runtime.playback().setShuffleMode(next);
-      },
-      hasActiveQueue);
+    registerAction("playback.previous",
+                   "Previous",
+                   "Playback",
+                   uimodel::LayoutActionCapability::None,
+                   execute(Command::Previous),
+                   enabled(Command::Previous));
 
-    registerAction(
-      "playback.cycleRepeat",
-      "Cycle Repeat",
-      "Playback",
-      uimodel::LayoutActionCapability::None,
-      [](layout::ActionActivationContext& ctx)
-      {
-        auto const current = ctx.runtime.playback().state().repeatMode;
-        auto next = rt::RepeatMode::Off;
+    registerAction("playback.toggleShuffle",
+                   "Toggle Shuffle",
+                   "Playback",
+                   uimodel::LayoutActionCapability::None,
+                   execute(Command::ToggleShuffle),
+                   enabled(Command::ToggleShuffle));
 
-        if (current == rt::RepeatMode::Off)
-        {
-          next = rt::RepeatMode::All;
-        }
-        else if (current == rt::RepeatMode::All)
-        {
-          next = rt::RepeatMode::One;
-        }
-
-        ctx.runtime.playback().setRepeatMode(next);
-      },
-      hasActiveQueue);
+    registerAction("playback.cycleRepeat",
+                   "Cycle Repeat",
+                   "Playback",
+                   uimodel::LayoutActionCapability::None,
+                   execute(Command::CycleRepeat),
+                   enabled(Command::CycleRepeat));
 
     registerAction("playback.showOutputDeviceSelector",
                    "Output Devices",

@@ -6,7 +6,6 @@
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 
 #include <chrono>
 #include <cstdint>
@@ -21,20 +20,21 @@ namespace ao::rt
   class PlaybackService;
 }
 
+namespace ao::uimodel
+{
+  class PlaybackCommandSurface;
+}
+
 namespace ao::gtk::platform
 {
   class MprisBridge final
   {
   public:
-    using ActionActivator = std::function<uimodel::LayoutActionActivationOutcome(std::string_view)>;
-    using ActionAvailabilityResolver = std::function<uimodel::LayoutActionAvailability(std::string_view)>;
     using RootCommand = std::function<bool()>;
     using ArtUrlResolver = std::function<std::string(ResourceId)>;
 
     struct Callbacks final
     {
-      ActionActivator activateAction{};
-      ActionAvailabilityResolver actionAvailability{};
       RootCommand raise{};
       RootCommand quit{};
       ArtUrlResolver artUrlForResource{};
@@ -50,7 +50,7 @@ namespace ao::gtk::platform
       std::int64_t lengthUs = 0;
     };
 
-    MprisBridge(rt::PlaybackService& playback, Callbacks callbacks);
+    MprisBridge(rt::PlaybackService& playback, uimodel::PlaybackCommandSurface& commands, Callbacks callbacks);
     ~MprisBridge();
 
     MprisBridge(MprisBridge const&) = delete;
@@ -59,20 +59,12 @@ namespace ao::gtk::platform
     MprisBridge& operator=(MprisBridge&&) = delete;
 
     void start();
-    bool dispatchRootMethod(std::string_view methodName);
-    bool dispatchPlayerMethod(std::string_view methodName);
-    bool dispatchSeek(std::int64_t offsetUs);
-    bool dispatchSetPosition(std::string_view trackObjectPath, std::int64_t positionUs);
-    bool dispatchSetVolume(double volume);
-    bool dispatchSetShuffle(bool shuffle);
-    bool dispatchSetLoopStatus(std::string_view loopStatus);
 
     bool active() const noexcept;
 
     static std::string_view playbackStatus(audio::Transport transport) noexcept;
     static std::string_view loopStatus(rt::RepeatMode mode) noexcept;
     static std::optional<rt::RepeatMode> repeatModeForLoopStatus(std::string_view loopStatus) noexcept;
-    static std::optional<std::string_view> actionForPlayerMethod(std::string_view methodName) noexcept;
     static std::int64_t microsecondsFromMilliseconds(std::chrono::milliseconds duration) noexcept;
     static std::chrono::milliseconds fromMprisMicroseconds(std::int64_t value) noexcept;
     static std::chrono::milliseconds clampElapsed(rt::PlaybackState const& state,

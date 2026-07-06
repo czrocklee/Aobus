@@ -694,6 +694,12 @@ namespace ao::uimodel
     _stoppedSub = _playback.onStopped([this] { clear(); });
     auto const reprepareNext = [this](auto const&)
     {
+      if (!_queueStatePtr)
+      {
+        _playback.clearPreparedNext();
+        return;
+      }
+
       _queueStatePtr->optPendingNextIndex.reset();
       prepareNext();
     };

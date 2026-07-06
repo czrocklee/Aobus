@@ -11,6 +11,7 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/PlaybackService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>

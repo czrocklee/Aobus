@@ -201,6 +201,7 @@ add_executable(ao_core_test
     unit/uimodel/library/track/TrackSelectionRegionPolicyTest.cpp
     unit/uimodel/library/track/TrackSelectionSummaryTest.cpp
     unit/uimodel/playback/now-playing/NowPlayingViewModelTest.cpp
+    unit/uimodel/playback/command/PlaybackCommandSurfaceTest.cpp
     unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp
     unit/uimodel/playback/output/VolumeViewModelTest.cpp
     unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp

@@ -3,7 +3,7 @@
 Aobus exposes the Linux desktop media-player surface through MPRIS on the GTK
 frontend. The runtime and core library stay D-Bus-free; the bridge lives in the
 Linux GTK layer and translates between D-Bus calls/properties and existing
-application-level playback actions.
+application-level playback commands.
 
 ## Boundary
 
@@ -13,14 +13,13 @@ application-level playback actions.
 - object path: `/org/mpris/MediaPlayer2`;
 - interfaces: `org.mpris.MediaPlayer2` and `org.mpris.MediaPlayer2.Player`;
 - state source: `rt::PlaybackService`;
-- command sink: the app-level action dispatcher already used by keyboard
-  shortcuts and layout actions.
+- command sink: `uimodel::PlaybackCommandSurface`.
 
 The bridge must never call layout components or transport button instances
 directly. Layout components are optional, user-customizable, and rebuilt during
-layout edits. MPRIS commands therefore activate stable action ids such as
-`playback.playPause`, `playback.next`, `playback.previous`, and
-`playback.stop` through `ShellLayoutController::activateAction()`.
+layout edits. MPRIS commands therefore execute `PlaybackCommand` values through
+`PlaybackCommandSurface`, the same owner used by shell actions, shortcuts, and
+transport buttons.
 
 ## Bus Name Policy
 
@@ -41,16 +40,17 @@ metadata, seek dispatch, live repeat/shuffle state, volume, and cover art URLs.
 
 ### Commands
 
-| MPRIS method | Aobus action |
+| MPRIS method/property | Aobus sink |
 |---|---|
-| `PlayPause` | `playback.playPause` |
-| `Play` | `playback.play` |
-| `Pause` | `playback.pause` |
-| `Stop` | `playback.stop` |
-| `Next` | `playback.next` |
-| `Previous` | `playback.previous` |
+| `PlayPause` | `PlaybackCommand::PlayPause` |
+| `Play` | `PlaybackCommand::Play` |
+| `Pause` | `PlaybackCommand::Pause` |
+| `Stop` | `PlaybackCommand::Stop` |
+| `Next` | `PlaybackCommand::Next` |
+| `Previous` | `PlaybackCommand::Previous` |
 | `Seek` | relative seek through `PlaybackService::seek()` |
 | `SetPosition` | absolute seek through `PlaybackService::seek()` when the MPRIS track id matches the current track |
+| `Rate` property write | `1.0` is accepted; other values fail because Aobus is fixed-rate |
 | `Volume` property write | `PlaybackService::setVolume()` |
 | `Shuffle` property write | `PlaybackService::setShuffleMode()` |
 | `LoopStatus` property write | `PlaybackService::setRepeatMode()` |
@@ -59,8 +59,9 @@ metadata, seek dispatch, live repeat/shuffle state, volume, and cover art URLs.
 
 `Raise` and `Quit` stay inside the GTK composition root. The bridge receives
 callbacks from `MainWindow` and never reaches into runtime/core for application
-lifecycle. Player methods that map to a known but currently disabled action are
-accepted as no-ops; unknown methods return a D-Bus error.
+lifecycle. Player methods that map to a known command are accepted; the command
+surface decides whether execution has an effect. Unknown methods return a D-Bus
+error.
 
 ### Properties
 
@@ -68,22 +69,25 @@ accepted as no-ops; unknown methods return a D-Bus error.
 
 | Transport | MPRIS |
 |---|---|
-| `Playing`, `Opening`, `Buffering` | `Playing` |
+| `Playing`, `Opening`, `Buffering`, `Seeking` | `Playing` |
 | `Paused` | `Paused` |
 | everything else | `Stopped` |
 
 The player reports these capabilities:
 
-- `CanControl=true` when at least one player command or seek target is
-  available;
+- `CanControl=true`; the MPRIS spec does not expect it to change while the
+  player is running;
 - `CanRaise=true`, `CanQuit=true` when the GTK callbacks are installed;
-- `CanPlay`, `CanPause`, `CanGoNext`, and `CanGoPrevious` reflect the same
-  action availability used by shell controls and keyboard shortcuts;
+- `CanPlay`, `CanPause`, `CanGoNext`, and `CanGoPrevious` come from
+  `PlaybackCommandSurface::capable()`, not GTK action enablement;
 - `CanSeek=true` only when a current track exists;
 - `Metadata` includes `mpris:trackid`, `xesam:title`, `xesam:artist`,
   `xesam:album`, `mpris:length`, and `mpris:artUrl` when those fields are
   available for the current track;
 - `Position` is the current playback position in microseconds;
+- `Rate`, `MinimumRate`, and `MaximumRate` all read as `1.0`; `Rate=1.0` is
+  accepted and other writes fail because Aobus does not support variable-rate
+  playback;
 - `Volume` is the current playback volume and is writable; writes use the same
   normalization and backend path as the in-app volume controls;
 - `Shuffle` reflects `PlaybackState::shuffleMode` and is writable;
@@ -94,27 +98,52 @@ The player reports these capabilities:
 `mpris:trackid` is stable for the current `TrackId` and uses
 `/org/mpris/MediaPlayer2/Track/<TrackId>`. `SetPosition` no-ops when the
 caller passes any other object path, matching the MPRIS stale-track guard.
-Absolute `SetPosition` requests outside the current track are no-ops. Relative
-`Seek` requests before zero clamp to zero; requests beyond the known duration
-delegate to `Next` and are otherwise accepted as no-ops when no next item is
-available.
+Absolute `SetPosition` requests outside the current track, and seek requests
+when no current track exists, are no-ops. Relative `Seek` requests before zero
+clamp to zero; requests beyond the known duration delegate to `Next` and are
+otherwise accepted as no-ops when no next item is available.
+
+Capability ownership:
+
+| MPRIS property | Query |
+|---|---|
+| `CanPlay` | `PlaybackCommandSurface::capable(PlaybackCommand::Play)` |
+| `CanPause` | `PlaybackCommandSurface::capable(PlaybackCommand::Pause)` |
+| `CanGoNext` | `PlaybackCommandSurface::capable(PlaybackCommand::Next)` |
+| `CanGoPrevious` | `PlaybackCommandSurface::capable(PlaybackCommand::Previous)` |
+| `CanControl` | constant `true` |
+| `CanSeek` | `PlaybackService::state().trackId != kInvalidTrackId` |
 
 ## Signals
 
 The bridge emits `org.freedesktop.DBus.Properties.PropertiesChanged` for
-`org.mpris.MediaPlayer2.Player` whenever the playback transport changes enough
-to affect `PlaybackStatus` or live capabilities, whenever now-playing metadata
-changes, and whenever volume, repeat, or shuffle state changes. Explicit final
-seeks emit the MPRIS `Seeked` signal with the new position in microseconds.
-In-app preview seeks are local drag feedback and do not emit `Seeked`.
+`org.mpris.MediaPlayer2.Player` whenever playback transport changes affect
+`PlaybackStatus`, whenever `PlaybackCommandSurface::onAvailabilityChanged()`
+reports capability changes, whenever now-playing metadata changes, and whenever
+volume, repeat, or shuffle state changes. Explicit final seeks emit the MPRIS
+`Seeked` signal with the new position in microseconds. In-app preview seeks are
+local drag feedback and do not emit `Seeked`.
 
 ## Threading
 
-The GTK bridge runs on the GTK main context. `PlaybackService` callbacks are
-subscribed in the same process and scheduled by the runtime executor; the bridge
-only reads `PlaybackService::state()` and activates GTK action dispatchers from
-the UI layer. No D-Bus callback may touch audio engine internals or block on
-decoder work.
+The GTK bridge runs on the GTK main context. `PlaybackService` and
+`PlaybackCommandSurface` callbacks are subscribed in the same process and
+scheduled by the runtime executor; the bridge only reads `PlaybackService`
+state, executes playback commands, and calls injected GTK lifecycle callbacks.
+No D-Bus callback may touch audio engine internals or block on decoder work.
+
+## Ownership Rules
+
+1. GTK layout actions, transport buttons, and MPRIS adapt playback commands;
+   they do not define command semantics.
+2. External protocols talk to `PlaybackCommandSurface`, never to the layout
+   action registry.
+3. Queue consistency under playback-mode changes is guaranteed by
+   `PlaybackQueueModel` subscriptions to `PlaybackService` mode events.
+4. Command availability has one owner and one change event:
+   `PlaybackCommandSurface::onAvailabilityChanged()`.
+5. View models describe presentation. Command execution and enablement live in
+   the command surface.
 
 ## Art And Metadata
 
@@ -122,12 +151,11 @@ The implemented metadata surface fills `Metadata` with title, artist, album,
 duration, stable track object path, and current cover art when present. Runtime
 state exposes only the primary cover-art `ResourceId`; GTK resolves that
 resource through `MprisArtUrlCache`, exporting the original resource bytes to
-the user cache directory and returning a `file://` URL. The cache file is
-rewritten from the current library resource whenever a URL is requested, so
-deleted or truncated cache files and reused resource ids do not leave stale
-URLs behind. The bridge only sees an injected resolver callback, so
-runtime/core remain D-Bus-free and file-URL-free. Tracks without cover art omit
-`mpris:artUrl`.
+the user cache directory and returning a `file://` URL. Valid exported files are
+memoized for the process; missing or size-mismatched files are rewritten, and
+stale sibling files from older extension guesses are removed. The bridge only
+sees an injected resolver callback, so runtime/core remain D-Bus-free and
+file-URL-free. Tracks without cover art omit `mpris:artUrl`.
 
 ## Degradation
 

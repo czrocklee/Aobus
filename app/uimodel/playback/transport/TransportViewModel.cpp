@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <functional>
@@ -48,224 +49,104 @@ namespace ao::uimodel
       return "";
     }
 
+    bool presentsAsPlaying(audio::Transport const transport) noexcept
+    {
+      return transport == audio::Transport::Opening || transport == audio::Transport::Buffering ||
+             transport == audio::Transport::Playing || transport == audio::Transport::Seeking;
+    }
+
     TransportViewState describeTransportButton(TransportAction action,
                                                rt::PlaybackState const& state,
-                                               bool sequenceActive,
+                                               bool enabled,
                                                bool showLabel)
     {
       auto view = TransportViewState{};
-      bool const isPlaying = (state.transport == audio::Transport::Playing);
+      bool const isPlaying = presentsAsPlaying(state.transport);
 
       view.icon = iconForAction(action);
       view.tooltip = labelForAction(action);
+      view.enabled = enabled;
 
       if (showLabel)
       {
         view.label = labelForAction(action);
       }
 
-      switch (action)
+      if (action == TransportAction::PlayPause)
       {
-        case TransportAction::Play: view.enabled = (state.ready && !isPlaying); break;
+        view.icon = isPlaying ? TransportIcon::Pause : TransportIcon::Play;
+        view.tooltip = isPlaying ? "Pause" : "Play";
+        view.playing = isPlaying;
 
-        case TransportAction::Pause: view.enabled = (state.ready && isPlaying); break;
-
-        case TransportAction::Stop: view.enabled = (state.transport != audio::Transport::Idle); break;
-
-        case TransportAction::PlayPause:
-          view.icon = isPlaying ? TransportIcon::Pause : TransportIcon::Play;
-          view.tooltip = isPlaying ? "Pause" : "Play";
-          view.playing = isPlaying;
-
-          if (showLabel)
-          {
-            view.label = isPlaying ? "Pause" : "Play";
-          }
-
-          view.enabled = state.ready;
-          break;
-
-        case TransportAction::Next:
-        case TransportAction::Previous: view.enabled = (state.ready && sequenceActive); break;
-
-        case TransportAction::Shuffle:
-          view.engaged = (state.shuffleMode == rt::ShuffleMode::On);
-          view.enabled = state.ready;
-          break;
-
-        case TransportAction::Repeat:
-          if (state.repeatMode == rt::RepeatMode::All)
-          {
-            view.icon = TransportIcon::Repeat;
-            view.engaged = true;
-          }
-          else if (state.repeatMode == rt::RepeatMode::One)
-          {
-            view.icon = TransportIcon::RepeatOne;
-            view.engaged = true;
-          }
-          else
-          {
-            view.icon = TransportIcon::Repeat;
-            view.engaged = false;
-          }
-
-          view.enabled = state.ready;
-          break;
+        if (showLabel)
+        {
+          view.label = isPlaying ? "Pause" : "Play";
+        }
+      }
+      else if (action == TransportAction::Shuffle)
+      {
+        view.engaged = (state.shuffleMode == rt::ShuffleMode::On);
+      }
+      else if (action == TransportAction::Repeat)
+      {
+        if (state.repeatMode == rt::RepeatMode::All)
+        {
+          view.icon = TransportIcon::Repeat;
+          view.engaged = true;
+        }
+        else if (state.repeatMode == rt::RepeatMode::One)
+        {
+          view.icon = TransportIcon::RepeatOne;
+          view.engaged = true;
+        }
+        else
+        {
+          view.icon = TransportIcon::Repeat;
+          view.engaged = false;
+        }
       }
 
       return view;
     }
 
-    TransportCommand resolveTransportButtonClick(TransportAction action, rt::PlaybackState const& state)
+    PlaybackCommand commandForAction(TransportAction action) noexcept
     {
-      auto const hasIdleCurrentTrack = state.transport == audio::Transport::Idle && state.trackId != kInvalidTrackId;
-
       switch (action)
       {
-        case TransportAction::Play:
-          if (state.transport == audio::Transport::Paused || hasIdleCurrentTrack)
-          {
-            return TransportCommand::Resume;
-          }
-
-          if (state.transport != audio::Transport::Playing)
-          {
-            return TransportCommand::PlaySelection;
-          }
-
-          return TransportCommand::None;
-
-        case TransportAction::Pause: return TransportCommand::Pause;
-
-        case TransportAction::Stop: return TransportCommand::Stop;
-
-        case TransportAction::PlayPause:
-          if (state.transport == audio::Transport::Paused || hasIdleCurrentTrack)
-          {
-            return TransportCommand::Resume;
-          }
-
-          if (state.transport == audio::Transport::Playing)
-          {
-            return TransportCommand::Pause;
-          }
-
-          return TransportCommand::PlaySelection;
-
-        case TransportAction::Next: return TransportCommand::Next;
-
-        case TransportAction::Previous: return TransportCommand::Previous;
-
-        case TransportAction::Shuffle: return TransportCommand::ToggleShuffle;
-
-        case TransportAction::Repeat: return TransportCommand::CycleRepeat;
+        case TransportAction::Play: return PlaybackCommand::Play;
+        case TransportAction::Pause: return PlaybackCommand::Pause;
+        case TransportAction::Stop: return PlaybackCommand::Stop;
+        case TransportAction::PlayPause: return PlaybackCommand::PlayPause;
+        case TransportAction::Next: return PlaybackCommand::Next;
+        case TransportAction::Previous: return PlaybackCommand::Previous;
+        case TransportAction::Shuffle: return PlaybackCommand::ToggleShuffle;
+        case TransportAction::Repeat: return PlaybackCommand::CycleRepeat;
       }
 
-      return TransportCommand::None;
+      return PlaybackCommand::PlayPause;
     }
   } // namespace
 
   TransportViewModel::TransportViewModel(rt::PlaybackService& playback,
-                                         PlaybackQueueModel* queue,
+                                         PlaybackCommandSurface& commands,
                                          TransportAction action,
-                                         std::function<void()> onPlaySelection,
                                          bool showLabel,
                                          std::function<void(TransportViewState const&)> onRender)
-    : _playback{playback}
-    , _queue{queue}
-    , _action{action}
-    , _onPlaySelection{std::move(onPlaySelection)}
-    , _showLabel{showLabel}
-    , _onRender{std::move(onRender)}
+    : _playback{playback}, _commands{commands}, _action{action}, _showLabel{showLabel}, _onRender{std::move(onRender)}
   {
-    auto const refreshCallback = [this] { refresh(); };
-    _startedSub = _playback.onStarted(refreshCallback);
-    _pausedSub = _playback.onPaused(refreshCallback);
-    _idleSub = _playback.onIdle(refreshCallback);
-    _stoppedSub = _playback.onStopped(refreshCallback);
-
-    if (_action == TransportAction::PlayPause)
-    {
-      _preparingSub = _playback.onPreparing(refreshCallback);
-    }
-
-    if (_action == TransportAction::Shuffle)
-    {
-      _shuffleSub = _playback.onShuffleModeChanged([this](auto const&) { refresh(); });
-    }
-
-    if (_action == TransportAction::Repeat)
-    {
-      _repeatSub = _playback.onRepeatModeChanged([this](auto const&) { refresh(); });
-    }
-
+    _availabilitySub = _commands.onAvailabilityChanged(commandForAction(_action), [this] { refresh(); });
     refresh();
   }
 
   void TransportViewModel::handleClick()
   {
-    auto const command = resolveTransportButtonClick(_action, _playback.state());
-
-    switch (command)
-    {
-      case TransportCommand::None: break;
-
-      case TransportCommand::PlaySelection:
-        if (_onPlaySelection)
-        {
-          _onPlaySelection();
-        }
-
-        break;
-
-      case TransportCommand::Pause: _playback.pause(); break;
-      case TransportCommand::Resume: _playback.resume(); break;
-      case TransportCommand::Stop: _playback.stop(); break;
-
-      case TransportCommand::Next:
-        if (_queue != nullptr)
-        {
-          _queue->next();
-        }
-
-        break;
-
-      case TransportCommand::Previous:
-        if (_queue != nullptr)
-        {
-          _queue->previous();
-        }
-
-        break;
-
-      case TransportCommand::ToggleShuffle:
-        _playback.setShuffleMode(_playback.state().shuffleMode == rt::ShuffleMode::Off ? rt::ShuffleMode::On
-                                                                                       : rt::ShuffleMode::Off);
-        break;
-
-      case TransportCommand::CycleRepeat:
-        if (auto const mode = _playback.state().repeatMode; mode == rt::RepeatMode::Off)
-        {
-          _playback.setRepeatMode(rt::RepeatMode::All);
-        }
-        else if (mode == rt::RepeatMode::All)
-        {
-          _playback.setRepeatMode(rt::RepeatMode::One);
-        }
-        else
-        {
-          _playback.setRepeatMode(rt::RepeatMode::Off);
-        }
-
-        break;
-    }
+    _commands.execute(commandForAction(_action));
   }
 
   void TransportViewModel::refresh()
   {
-    bool const sequenceActive = (_queue != nullptr && _queue->isActive());
-    auto const view = describeTransportButton(_action, _playback.state(), sequenceActive, _showLabel);
+    auto const command = commandForAction(_action);
+    auto const view = describeTransportButton(_action, _playback.state(), _commands.enabled(command), _showLabel);
 
     if (_onRender)
     {

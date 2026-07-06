@@ -43,6 +43,7 @@
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
 
 #include <glibmm/main.h>
@@ -55,6 +56,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -72,6 +74,9 @@ namespace ao::gtk
       , trackRowCache{runtime.library()}
       , imageCache{100}
       , playbackQueueModel{runtime.playback(), runtime.notifications()}
+      , playbackCommandSurface{runtime.playback(),
+                               &playbackQueueModel,
+                               [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
       , trackPresentationCatalog{runtime.workspace()}
       , trackPresentationPreferences{trackPresentationCatalog}
       , tagEditController{window, runtime, TagEditController::Callbacks{.onTagsMutated = [] {}}, themeController}
@@ -287,6 +292,7 @@ namespace ao::gtk
     TrackRowCache trackRowCache;
     ImageCache imageCache;
     uimodel::PlaybackQueueModel playbackQueueModel;
+    uimodel::PlaybackCommandSurface playbackCommandSurface;
     ao::uimodel::TrackPresentationCatalog trackPresentationCatalog;
     ao::uimodel::ListPresentationPreferenceStore trackPresentationPreferences;
     ao::uimodel::TrackColumnLayoutStore trackColumnLayouts;
@@ -462,6 +468,7 @@ namespace ao::gtk
     return GtkUiServices{.trackRowCache = &_implPtr->trackRowCache,
                          .imageCache = &_implPtr->imageCache,
                          .playbackQueueModel = &_implPtr->playbackQueueModel,
+                         .playbackCommandSurface = &_implPtr->playbackCommandSurface,
                          .tagEditController = &_implPtr->tagEditController,
                          .importExportCoordinator = &_implPtr->importExportCoordinator,
                          .trackPageHost = &_implPtr->trackPageHost,
@@ -501,6 +508,10 @@ namespace ao::gtk
   uimodel::PlaybackQueueModel* MainWindowCoordinator::playbackQueueModel()
   {
     return &_implPtr->playbackQueueModel;
+  }
+  uimodel::PlaybackCommandSurface* MainWindowCoordinator::playbackCommandSurface()
+  {
+    return &_implPtr->playbackCommandSurface;
   }
   TagEditController* MainWindowCoordinator::tagEditController()
   {

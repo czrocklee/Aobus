@@ -3,7 +3,9 @@
 
 #include "playback/TransportButton.h"
 
+#include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/button.h>
@@ -17,7 +19,8 @@ namespace ao::gtk::test
 
     SECTION("PlayPause action maps initial view state to button attributes")
     {
-      auto button = TransportButton{fixture.runtime().playback(), nullptr, TransportButton::Action::PlayPause};
+      auto commands = uimodel::PlaybackCommandSurface{fixture.runtime().playback(), nullptr, [] {}};
+      auto button = TransportButton{fixture.runtime().playback(), commands, TransportButton::Action::PlayPause};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
       REQUIRE(gtkButton != nullptr);
 
@@ -27,11 +30,11 @@ namespace ao::gtk::test
 
     SECTION("Play action routes clicks to selection playback callback")
     {
+      rt::test::addReadyAudioProvider(fixture.runtime().playback());
       bool playSelectionCalled = false;
-      auto button = TransportButton{fixture.runtime().playback(),
-                                    nullptr,
-                                    TransportButton::Action::Play,
-                                    [&playSelectionCalled] { playSelectionCalled = true; }};
+      auto commands = uimodel::PlaybackCommandSurface{
+        fixture.runtime().playback(), nullptr, [&playSelectionCalled] { playSelectionCalled = true; }};
+      auto button = TransportButton{fixture.runtime().playback(), commands, TransportButton::Action::Play, false};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
       REQUIRE(gtkButton != nullptr);
 
