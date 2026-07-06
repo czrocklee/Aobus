@@ -141,7 +141,7 @@ namespace ao::uimodel::test
       addReadyAudioProvider(playback, makePipeWireOutputStatus());
       viewModel.selectOutputDevice(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
 
-      auto const& sel = playback.state().selectedOutputDevice;
+      auto const& sel = playback.state().output.selectedDevice;
       CHECK(sel.backendId == audio::BackendId{"pipewire"});
       CHECK(sel.deviceId == audio::DeviceId{"device1"});
       CHECK(sel.profileId == audio::kProfileShared);

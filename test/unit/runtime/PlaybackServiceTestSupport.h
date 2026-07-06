@@ -12,8 +12,10 @@
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
+#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -38,13 +40,19 @@ namespace ao::rt::test
                                                           std::string_view filePath,
                                                           std::string title,
                                                           std::string artist,
-                                                          std::chrono::milliseconds duration)
+                                                          std::chrono::milliseconds duration,
+                                                          std::string album = {},
+                                                          ResourceId coverArtId = kInvalidResourceId,
+                                                          ViewId sourceViewId = kInvalidViewId)
   {
     return PlaybackService::PlaybackRequest{
-      .trackId = trackId,
+      .item = NowPlayingInfo{.trackId = trackId,
+                             .sourceViewId = sourceViewId,
+                             .coverArtId = coverArtId,
+                             .title = std::move(title),
+                             .artist = std::move(artist),
+                             .album = std::move(album)},
       .input = audio::PlaybackInput{.filePath = std::string{filePath}, .duration = duration},
-      .title = std::move(title),
-      .artist = std::move(artist),
     };
   }
 

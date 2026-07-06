@@ -85,16 +85,16 @@ namespace ao::uimodel
       }
       else if (action == TransportAction::Shuffle)
       {
-        view.engaged = (state.shuffleMode == rt::ShuffleMode::On);
+        view.engaged = (state.mode.shuffle == rt::ShuffleMode::On);
       }
       else if (action == TransportAction::Repeat)
       {
-        if (state.repeatMode == rt::RepeatMode::All)
+        if (state.mode.repeat == rt::RepeatMode::All)
         {
           view.icon = TransportIcon::Repeat;
           view.engaged = true;
         }
-        else if (state.repeatMode == rt::RepeatMode::One)
+        else if (state.mode.repeat == rt::RepeatMode::One)
         {
           view.icon = TransportIcon::RepeatOne;
           view.engaged = true;

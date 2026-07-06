@@ -44,14 +44,14 @@ namespace ao::tui::test
     auto const tracks = std::vector{trackItem(firstId), trackItem(secondId)};
 
     CHECK(playSelected(fixture.playbackService, tracks, -4, ListId{7}));
-    CHECK(fixture.playbackService.state().trackId == firstId);
-    CHECK(fixture.playbackService.state().sourceListId == ListId{7});
-    CHECK(fixture.playbackService.state().trackTitle == "First");
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == firstId);
+    CHECK(fixture.playbackService.state().nowPlaying.sourceListId == ListId{7});
+    CHECK(fixture.playbackService.state().nowPlaying.title == "First");
 
     CHECK(playSelected(fixture.playbackService, tracks, 12, ListId{8}));
-    CHECK(fixture.playbackService.state().trackId == secondId);
-    CHECK(fixture.playbackService.state().sourceListId == ListId{8});
-    CHECK(fixture.playbackService.state().trackTitle == "Second");
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == secondId);
+    CHECK(fixture.playbackService.state().nowPlaying.sourceListId == ListId{8});
+    CHECK(fixture.playbackService.state().nowPlaying.title == "Second");
   }
 
   TEST_CASE("PlaybackActions - playSelected rejects an empty track list", "[tui][unit][playback]")
@@ -59,8 +59,8 @@ namespace ao::tui::test
     auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
 
     CHECK_FALSE(playSelected(fixture.playbackService, {}, 0, ListId{7}));
-    CHECK(fixture.playbackService.state().trackId == kInvalidTrackId);
-    CHECK(fixture.playbackService.state().sourceListId == kInvalidListId);
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == kInvalidTrackId);
+    CHECK(fixture.playbackService.state().nowPlaying.sourceListId == kInvalidListId);
   }
 
   TEST_CASE("PlaybackActions - togglePlayback starts the selected track when idle", "[tui][unit][playback]")
@@ -78,8 +78,8 @@ namespace ao::tui::test
     auto const tracks = std::vector{trackItem(trackId)};
 
     CHECK(togglePlayback(fixture.playbackService, tracks, 0, ListId{9}));
-    CHECK(fixture.playbackService.state().trackId == trackId);
-    CHECK(fixture.playbackService.state().trackTitle == "Toggle Target");
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == trackId);
+    CHECK(fixture.playbackService.state().nowPlaying.title == "Toggle Target");
   }
 
   TEST_CASE("PlaybackActions - seekBy clamps negative relative seeks", "[tui][unit][playback]")
@@ -106,13 +106,13 @@ namespace ao::tui::test
 
     fixture.playbackService.setVolume(0.4F);
     changeVolume(fixture.playbackService, 0.3F);
-    CHECK(fixture.playbackService.state().volume > 0.69F);
-    CHECK(fixture.playbackService.state().volume < 0.71F);
+    CHECK(fixture.playbackService.state().volume.level > 0.69F);
+    CHECK(fixture.playbackService.state().volume.level < 0.71F);
 
     changeVolume(fixture.playbackService, 1.0F);
-    CHECK(fixture.playbackService.state().volume == 1.0F);
+    CHECK(fixture.playbackService.state().volume.level == 1.0F);
 
     changeVolume(fixture.playbackService, -2.0F);
-    CHECK(fixture.playbackService.state().volume == 0.0F);
+    CHECK(fixture.playbackService.state().volume.level == 0.0F);
   }
 } // namespace ao::tui::test

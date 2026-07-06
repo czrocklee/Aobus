@@ -115,7 +115,7 @@ namespace ao::gtk::test
     auto window = MainWindow{fixture.runtime(), configPtr, nullptr};
     drainGtkEvents();
 
-    auto const& output = fixture.runtime().playback().state().selectedOutputDevice;
+    auto const& output = fixture.runtime().playback().state().output.selectedDevice;
     CHECK(output.backendId == audio::BackendId{"test_backend"});
     CHECK(output.deviceId == audio::DeviceId{"test_device"});
     CHECK(output.profileId == audio::kProfileShared);

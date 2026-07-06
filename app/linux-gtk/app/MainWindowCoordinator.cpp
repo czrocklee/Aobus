@@ -413,9 +413,9 @@ namespace ao::gtk
 
     session.lastLibraryPath = _runtime.musicLibrary().rootPath().string();
     auto const& pb = _runtime.playback().state();
-    session.lastOutputBackendId = pb.selectedOutputDevice.backendId.raw();
-    session.lastOutputDeviceId = pb.selectedOutputDevice.deviceId.raw();
-    session.lastOutputProfileId = pb.selectedOutputDevice.profileId.raw();
+    session.lastOutputBackendId = pb.output.selectedDevice.backendId.raw();
+    session.lastOutputDeviceId = pb.output.selectedDevice.deviceId.raw();
+    session.lastOutputProfileId = pb.output.selectedDevice.profileId.raw();
 
     _configPtr->saveAppSession(session);
 

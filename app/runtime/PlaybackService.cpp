@@ -103,24 +103,32 @@ namespace ao::rt
 
       return PlaybackState{
         .transport = status.engine.transport,
-        .trackId = {},
         .elapsed = status.engine.elapsed,
         .duration = status.engine.duration,
-        .volume = status.volume,
-        .muted = status.muted,
-        .volumeAvailable = status.volumeAvailable,
-        .volumeIsHardwareAssisted = status.volumeIsHardwareAssisted,
         .ready = status.isReady,
-        .selectedOutputDevice =
-          OutputDeviceSelection{
-            .backendId = status.engine.backendId,
-            .deviceId = status.engine.currentDeviceId,
-            .profileId = status.engine.profileId,
+        .volume =
+          VolumeState{
+            .level = status.volume,
+            .muted = status.muted,
+            .available = status.volumeAvailable,
+            .hardwareAssisted = status.volumeIsHardwareAssisted,
           },
-        .availableOutputBackends = std::move(outputBackends),
-        .flow = status.flow,
-        .quality = status.quality,
-        .qualityAssessments = status.qualityAssessments,
+        .output =
+          OutputState{
+            .selectedDevice =
+              OutputDeviceSelection{
+                .backendId = status.engine.backendId,
+                .deviceId = status.engine.currentDeviceId,
+                .profileId = status.engine.profileId,
+              },
+            .availableBackends = std::move(outputBackends),
+          },
+        .quality =
+          QualityState{
+            .overall = status.quality,
+            .assessments = status.qualityAssessments,
+            .flow = status.flow,
+          },
       };
     }
 
@@ -313,7 +321,17 @@ namespace ao::rt
                         uri.is_absolute() ? uri.lexically_normal() : (library.rootPath() / uri).lexically_normal()};
 
       auto request = PlaybackService::PlaybackRequest{
-        .trackId = trackId,
+        .item =
+          NowPlayingInfo{
+            .trackId = trackId,
+            .coverArtId = view.coverArt()
+                            .primary()
+                            .transform([](library::CoverArt const cover) { return cover.resourceId; })
+                            .value_or(kInvalidResourceId),
+            .title = std::string{metadata.title()},
+            .artist = std::string{library.dictionary().getOrDefault(metadata.artistId())},
+            .album = std::string{library.dictionary().getOrDefault(metadata.albumId())},
+          },
         .input =
           audio::PlaybackInput{
             .duration = property.duration(),
@@ -321,13 +339,6 @@ namespace ao::rt
             .channelsHint = property.channels().raw(),
             .bitDepthHint = property.bitDepth().raw(),
           },
-        .coverArtId = view.coverArt()
-                        .primary()
-                        .transform([](library::CoverArt const cover) { return cover.resourceId; })
-                        .value_or(kInvalidResourceId),
-        .title = std::string{metadata.title()},
-        .artist = std::string{library.dictionary().getOrDefault(metadata.artistId())},
-        .album = std::string{library.dictionary().getOrDefault(metadata.albumId())},
       };
 
       if (optFilePath)
@@ -394,16 +405,10 @@ namespace ao::rt
     ViewService& views;
     library::MusicLibrary& library;
     NotificationService& notifications;
-    TrackId currentTrackId = kInvalidTrackId;
-    ListId currentSourceListId = kInvalidListId;
+    PlaybackService::PlaybackRequest currentRequest;
     audio::Engine::PlaybackItemId currentPlaybackItemId;
-    ResourceId currentTrackCoverArtId = kInvalidResourceId;
     ShuffleMode shuffleMode = ShuffleMode::Off;
     RepeatMode repeatMode = RepeatMode::Off;
-    std::string currentTrackTitle{};
-    std::string currentTrackArtist{};
-    std::string currentTrackAlbum{};
-    std::chrono::milliseconds currentTrackDuration{0};
     std::string lastPlaybackError{};
     std::optional<PlaybackFailureNotification> optLastPlaybackFailureNotification;
     std::vector<PreparedPlaybackRequest> preparedRequests;
@@ -487,14 +492,8 @@ namespace ao::rt
       auto const status = playerPtr->status();
 
       state = buildPlaybackState(status);
-      state.trackId = currentTrackId;
-      state.sourceListId = currentSourceListId;
-      state.trackCoverArtId = currentTrackCoverArtId;
-      state.trackTitle = currentTrackTitle;
-      state.trackArtist = currentTrackArtist;
-      state.trackAlbum = currentTrackAlbum;
-      state.shuffleMode = shuffleMode;
-      state.repeatMode = repeatMode;
+      state.nowPlaying = currentRequest.item;
+      state.mode = PlaybackModeState{.shuffle = shuffleMode, .repeat = repeatMode};
 
       if (optDeferredResume && state.transport == audio::Transport::Idle)
       {
@@ -504,17 +503,17 @@ namespace ao::rt
 
       if (state.duration == std::chrono::milliseconds{0})
       {
-        state.duration = currentTrackDuration;
+        state.duration = currentRequest.input.duration;
       }
 
-      if (!sameOutputDevice(previousState.selectedOutputDevice, state.selectedOutputDevice))
+      if (!sameOutputDevice(previousState.output.selectedDevice, state.output.selectedDevice))
       {
-        logOutputDeviceTransition(previousState.selectedOutputDevice, state.selectedOutputDevice);
+        logOutputDeviceTransition(previousState.output.selectedDevice, state.output.selectedDevice);
       }
 
       if (state.transport == audio::Transport::Error)
       {
-        recordPlaybackError(previousState.transport, status.engine, state.selectedOutputDevice);
+        recordPlaybackError(previousState.transport, status.engine, state.output.selectedDevice);
       }
       else
       {
@@ -545,14 +544,9 @@ namespace ao::rt
                                ListId sourceListId,
                                audio::Engine::PlaybackItemId itemId)
     {
-      currentTrackId = request.trackId;
-      currentSourceListId = sourceListId;
+      currentRequest = request;
+      currentRequest.item.sourceListId = sourceListId;
       currentPlaybackItemId = itemId;
-      currentTrackCoverArtId = request.coverArtId;
-      currentTrackTitle = request.title;
-      currentTrackArtist = request.artist;
-      currentTrackAlbum = request.album;
-      currentTrackDuration = request.input.duration;
     }
 
     audio::Engine::PlaybackItem makePlaybackItem(audio::PlaybackInput input)
@@ -595,7 +589,8 @@ namespace ao::rt
     PlaybackSessionState currentSessionState() const
     {
       auto elapsed = state.elapsed < std::chrono::milliseconds{0} ? std::chrono::milliseconds{0} : state.elapsed;
-      auto const duration = state.duration > std::chrono::milliseconds{0} ? state.duration : currentTrackDuration;
+      auto const duration =
+        state.duration > std::chrono::milliseconds{0} ? state.duration : currentRequest.input.duration;
 
       if (duration > std::chrono::milliseconds{0} && elapsed >= duration)
       {
@@ -603,19 +598,19 @@ namespace ao::rt
       }
 
       return PlaybackSessionState{
-        .sourceListId = currentSourceListId,
-        .trackId = currentTrackId,
+        .sourceListId = currentRequest.item.sourceListId,
+        .trackId = currentRequest.item.trackId,
         .positionMs = static_cast<std::uint64_t>(elapsed.count()),
         .shuffleMode = shuffleMode,
         .repeatMode = repeatMode,
-        .volume = normalizePlaybackVolume(state.volume),
-        .muted = state.muted,
+        .volume = normalizePlaybackVolume(state.volume.level),
+        .muted = state.volume.muted,
       };
     }
 
     void rememberRestorableSession()
     {
-      if (currentTrackId != kInvalidTrackId)
+      if (currentRequest.item.trackId != kInvalidTrackId)
       {
         optLastRestorableSession = currentSessionState();
       }
@@ -623,7 +618,7 @@ namespace ao::rt
 
     PlaybackSessionState snapshotSessionState() const
     {
-      if (currentTrackId == kInvalidTrackId)
+      if (currentRequest.item.trackId == kInvalidTrackId)
       {
         return optLastRestorableSession.value_or(PlaybackSessionState{});
       }
@@ -662,8 +657,8 @@ namespace ao::rt
       });
       shuffleModeChangedSignal.emit(PlaybackService::ShuffleModeChanged{.mode = shuffleMode});
       repeatModeChangedSignal.emit(PlaybackService::RepeatModeChanged{.mode = repeatMode});
-      volumeChangedSignal.emit(state.volume);
-      mutedChangedSignal.emit(state.muted);
+      volumeChangedSignal.emit(state.volume.level);
+      mutedChangedSignal.emit(state.volume.muted);
     }
 
     // Restored volume/mute intents come from disk, so surface application
@@ -686,27 +681,16 @@ namespace ao::rt
     void announceNowPlaying(PlaybackService::PlaybackRequest const& request, ListId sourceListId)
     {
       nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
-        .trackId = request.trackId,
+        .trackId = request.item.trackId,
         .sourceListId = sourceListId,
       });
     }
 
     std::optional<PlaybackRequestContext> contextForPlaybackItem(audio::Engine::PlaybackItemId itemId) const
     {
-      if (itemId == currentPlaybackItemId && currentTrackId != kInvalidTrackId)
+      if (itemId == currentPlaybackItemId && currentRequest.item.trackId != kInvalidTrackId)
       {
-        return PlaybackRequestContext{
-          .request =
-            PlaybackService::PlaybackRequest{
-              .trackId = currentTrackId,
-              .input = audio::PlaybackInput{.duration = currentTrackDuration},
-              .coverArtId = currentTrackCoverArtId,
-              .title = currentTrackTitle,
-              .artist = currentTrackArtist,
-              .album = currentTrackAlbum,
-            },
-          .sourceListId = currentSourceListId,
-        };
+        return PlaybackRequestContext{.request = currentRequest, .sourceListId = currentRequest.item.sourceListId};
       }
 
       auto const it = std::ranges::find_if(
@@ -783,9 +767,9 @@ namespace ao::rt
         return;
       }
 
-      translated.trackId = optContext->request.trackId;
+      translated.trackId = optContext->request.item.trackId;
       translated.sourceListId = optContext->sourceListId;
-      translated.title = optContext->request.title;
+      translated.title = optContext->request.item.title;
       publishPlaybackFailure(std::move(translated));
     }
 
@@ -804,7 +788,7 @@ namespace ao::rt
         publishCurrentRequest(optPrepared->request, optPrepared->sourceListId, optPrepared->itemId);
         refreshState();
         nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
-          .trackId = optPrepared->request.trackId,
+          .trackId = optPrepared->request.item.trackId,
           .sourceListId = optPrepared->sourceListId,
         });
         return;
@@ -851,13 +835,13 @@ namespace ao::rt
           refreshState();
 
           // Auto-select first available default output device if none is selected yet.
-          if (!state.selectedOutputDevice.backendId.empty() || state.availableOutputBackends.empty())
+          if (!state.output.selectedDevice.backendId.empty() || state.output.availableBackends.empty())
           {
             outputDevicesChangedSignal.emit();
             return;
           }
 
-          auto const optSelection = defaultOutputDeviceSelection(state.availableOutputBackends);
+          auto const optSelection = defaultOutputDeviceSelection(state.output.availableBackends);
 
           if (!optSelection)
           {
@@ -873,7 +857,7 @@ namespace ao::rt
           }
 
           refreshState();
-          outputDeviceChangedSignal.emit(state.selectedOutputDevice);
+          outputDeviceChangedSignal.emit(state.output.selectedDevice);
           outputDevicesChangedSignal.emit();
         });
 
@@ -881,18 +865,19 @@ namespace ao::rt
         [this](audio::Quality, bool)
         {
           refreshState();
-          qualityChangedSignal.emit(PlaybackService::QualityChanged{.quality = state.quality, .ready = state.ready});
+          qualityChangedSignal.emit(
+            PlaybackService::QualityChanged{.quality = state.quality.overall, .ready = state.ready});
         });
     }
 
     ~Impl()
     {
-      if (hasOutputDevice(state.selectedOutputDevice))
+      if (hasOutputDevice(state.output.selectedDevice))
       {
         APP_LOG_INFO("Audio output device released: backend={} device={} profile={}",
-                     state.selectedOutputDevice.backendId,
-                     state.selectedOutputDevice.deviceId,
-                     state.selectedOutputDevice.profileId);
+                     state.output.selectedDevice.backendId,
+                     state.output.selectedDevice.deviceId,
+                     state.output.selectedDevice.profileId);
       }
 
       // Tear the player down first: Player::~Impl drains its own callback gate
@@ -1039,11 +1024,11 @@ namespace ao::rt
       impl.refreshState();
       impl.postOrUpdateFailureNotification(PlaybackFailure{
         .kind = PlaybackFailureKind::RouteActivation,
-        .trackId = request.trackId,
+        .trackId = request.item.trackId,
         .sourceListId = sourceListId,
         .error = result.error(),
         .recoverable = false,
-        .title = request.title,
+        .title = request.item.title,
       });
       return std::unexpected{result.error()};
     }
@@ -1180,14 +1165,8 @@ namespace ao::rt
     _implPtr->ensureOnExecutor();
     _implPtr->refreshState();
     _implPtr->rememberRestorableSession();
-    _implPtr->currentTrackId = {};
-    _implPtr->currentSourceListId = {};
+    _implPtr->currentRequest = PlaybackRequest{};
     _implPtr->currentPlaybackItemId = {};
-    _implPtr->currentTrackCoverArtId = kInvalidResourceId;
-    _implPtr->currentTrackTitle.clear();
-    _implPtr->currentTrackArtist.clear();
-    _implPtr->currentTrackAlbum.clear();
-    _implPtr->currentTrackDuration = std::chrono::milliseconds{0};
     _implPtr->discardPreparedRequests();
     _implPtr->optDeferredResume.reset();
     _implPtr->clearPreparedNext();
@@ -1274,10 +1253,10 @@ namespace ao::rt
     _implPtr->refreshState();
     // Publish the engine-confirmed selection from the refreshed state, not the
     // raw request. This keeps the signal consistent with the auto-select path in
-    // onOutputDevicesChanged (which emits state.selectedOutputDevice) and reports what the
+    // onOutputDevicesChanged (which emits state.output.selectedDevice) and reports what the
     // engine actually selected. The two coincide while Engine::setBackend is
     // synchronous; if it ever becomes async, this still reflects reality.
-    _implPtr->outputDeviceChangedSignal.emit(_implPtr->state.selectedOutputDevice);
+    _implPtr->outputDeviceChangedSignal.emit(_implPtr->state.output.selectedDevice);
   }
 
   void PlaybackService::setVolume(float const volume)
@@ -1291,7 +1270,7 @@ namespace ao::rt
     }
 
     _implPtr->refreshState();
-    _implPtr->volumeChangedSignal.emit(_implPtr->state.volume);
+    _implPtr->volumeChangedSignal.emit(_implPtr->state.volume.level);
   }
 
   void PlaybackService::setMuted(bool const muted)
@@ -1304,12 +1283,12 @@ namespace ao::rt
     }
 
     _implPtr->refreshState();
-    _implPtr->mutedChangedSignal.emit(_implPtr->state.muted);
+    _implPtr->mutedChangedSignal.emit(_implPtr->state.volume.muted);
   }
 
   void PlaybackService::revealPlayingTrack()
   {
-    revealTrack(_implPtr->state.trackId, kInvalidViewId, _implPtr->state.sourceListId);
+    revealTrack(_implPtr->state.nowPlaying.trackId, kInvalidViewId, _implPtr->state.nowPlaying.sourceListId);
   }
 
   void PlaybackService::revealTrack(TrackId const trackId, ViewId const preferredViewId, ListId const preferredListId)
@@ -1332,7 +1311,7 @@ namespace ao::rt
     // saved snapshot reflects reality. rememberRestorableSession is not needed
     // here: snapshotSessionState reads a live currentSessionState() when a
     // track is active, and falls back to optLastRestorableSession otherwise,
-    // which stop() is responsible for capturing before clearing currentTrackId.
+    // which stop() is responsible for capturing before clearing currentRequest.
     _implPtr->refreshState();
     auto const session = _implPtr->snapshotSessionState();
 

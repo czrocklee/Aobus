@@ -41,12 +41,11 @@ namespace ao::rt::test
     auto fixture = PlaybackFixture<MockExecutor>{};
 
     auto const& state = fixture.playbackService.state();
-    CHECK(state.trackId == kInvalidTrackId);
-    CHECK(state.sourceListId == kInvalidListId);
+    CHECK(state.nowPlaying == NowPlayingInfo{});
     CHECK(state.duration == std::chrono::milliseconds{0});
     CHECK(state.elapsed == std::chrono::milliseconds{0});
-    CHECK(state.shuffleMode == ShuffleMode::Off);
-    CHECK(state.repeatMode == RepeatMode::Off);
+    CHECK(state.mode.shuffle == ShuffleMode::Off);
+    CHECK(state.mode.repeat == RepeatMode::Off);
   }
 
   TEST_CASE("PlaybackService control - shuffle and repeat update state and emit signals",
@@ -65,7 +64,7 @@ namespace ao::rt::test
     fixture.playbackService.setShuffleMode(ShuffleMode::On);
     fixture.playbackService.setShuffleMode(ShuffleMode::On);
     CHECK(shuffleChangeCount == 1);
-    CHECK(fixture.playbackService.state().shuffleMode == ShuffleMode::On);
+    CHECK(fixture.playbackService.state().mode.shuffle == ShuffleMode::On);
 
     std::int32_t repeatChangeCount = 0;
     auto sub2 = fixture.playbackService.onRepeatModeChanged(
@@ -78,7 +77,7 @@ namespace ao::rt::test
     fixture.playbackService.setRepeatMode(RepeatMode::All);
     fixture.playbackService.setRepeatMode(RepeatMode::All);
     CHECK(repeatChangeCount == 1);
-    CHECK(fixture.playbackService.state().repeatMode == RepeatMode::All);
+    CHECK(fixture.playbackService.state().mode.repeat == RepeatMode::All);
   }
 
   TEST_CASE("PlaybackService control - play pause resume and stop", "[runtime][unit][playback][control]")
@@ -111,17 +110,27 @@ namespace ao::rt::test
       });
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const desc = playbackRequest(TrackId{1}, fixturePath, "Fake Track", "Fake Artist", std::chrono::minutes{2});
+    auto const desc = playbackRequest(TrackId{1},
+                                      fixturePath,
+                                      "Fake Track",
+                                      "Fake Artist",
+                                      std::chrono::minutes{2},
+                                      "Fake Album",
+                                      ResourceId{77},
+                                      ViewId{9});
 
     REQUIRE(fixture.playbackService.play(desc, ListId{1}));
 
     CHECK(preparingFired);
     CHECK(startedFired);
     CHECK(nowPlayingFired);
-    CHECK(fixture.playbackService.state().trackId == TrackId{1});
-    CHECK(fixture.playbackService.state().sourceListId == ListId{1});
-    CHECK(fixture.playbackService.state().trackTitle == "Fake Track");
-    CHECK(fixture.playbackService.state().trackArtist == "Fake Artist");
+    CHECK(fixture.playbackService.state().nowPlaying == NowPlayingInfo{.trackId = TrackId{1},
+                                                                       .sourceListId = ListId{1},
+                                                                       .sourceViewId = ViewId{9},
+                                                                       .coverArtId = ResourceId{77},
+                                                                       .title = "Fake Track",
+                                                                       .artist = "Fake Artist",
+                                                                       .album = "Fake Album"});
 
     bool pausedFired = false;
     auto subPause = fixture.playbackService.onPaused([&] { pausedFired = true; });
@@ -142,7 +151,7 @@ namespace ao::rt::test
     fixture.playbackService.stop();
     CHECK(stoppedFired);
     CHECK(idleFired);
-    CHECK(fixture.playbackService.state().trackId == kInvalidTrackId);
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == kInvalidTrackId);
 
     auto const stoppedSession = fixture.playbackService.sessionState();
     CHECK(stoppedSession.trackId == TrackId{1});
@@ -201,20 +210,20 @@ namespace ao::rt::test
       });
 
     fixture.playbackService.setVolume(0.5F);
-    CHECK(fixture.playbackService.state().volume == 0.5F);
-    CHECK(fixture.playbackService.state().volumeIsHardwareAssisted == true);
+    CHECK(fixture.playbackService.state().volume.level == 0.5F);
+    CHECK(fixture.playbackService.state().volume.hardwareAssisted == true);
 
     fixture.playbackService.setVolume(5.0F);
-    CHECK(fixture.playbackService.state().volume == 1.0F);
+    CHECK(fixture.playbackService.state().volume.level == 1.0F);
 
     fixture.playbackService.setVolume(-1.0F);
-    CHECK(fixture.playbackService.state().volume == 0.0F);
+    CHECK(fixture.playbackService.state().volume.level == 0.0F);
 
     fixture.playbackService.setVolume(std::numeric_limits<float>::quiet_NaN());
-    CHECK(fixture.playbackService.state().volume == 1.0F);
+    CHECK(fixture.playbackService.state().volume.level == 1.0F);
 
     fixture.playbackService.setMuted(true);
-    CHECK(fixture.playbackService.state().muted == true);
+    CHECK(fixture.playbackService.state().volume.muted == true);
     CHECK(mutedChangedFired);
     CHECK(lastMutedState == true);
   }
@@ -241,14 +250,14 @@ namespace ao::rt::test
     // refresh the state snapshot and emit their signals synchronously - no
     // executor turn is required, unlike the async Player callbacks.
     CHECK(startedFired);
-    CHECK(fixture.playbackService.state().trackId == TrackId{77});
-    CHECK(fixture.playbackService.state().sourceListId == ListId{9});
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == TrackId{77});
+    CHECK(fixture.playbackService.state().nowPlaying.sourceListId == ListId{9});
 
     // Draining any executor-deferred Player state callbacks leaves it intact.
     fixture.executor.drain();
 
-    CHECK(fixture.playbackService.state().trackId == TrackId{77});
-    CHECK(fixture.playbackService.state().sourceListId == ListId{9});
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == TrackId{77});
+    CHECK(fixture.playbackService.state().nowPlaying.sourceListId == ListId{9});
   }
 
   TEST_CASE("PlaybackService control - rejected play does not emit success", "[runtime][unit][playback][control]")
@@ -285,9 +294,9 @@ namespace ao::rt::test
     CHECK_FALSE(startedFired);
     CHECK_FALSE(nowPlayingFired);
     CHECK_FALSE(failureFired);
-    CHECK(playbackService.state().trackId == kInvalidTrackId);
-    CHECK(playbackService.state().sourceListId == kInvalidListId);
-    CHECK(playbackService.state().trackTitle.empty());
+    CHECK(playbackService.state().nowPlaying.trackId == kInvalidTrackId);
+    CHECK(playbackService.state().nowPlaying.sourceListId == kInvalidListId);
+    CHECK(playbackService.state().nowPlaying.title.empty());
     auto const feed = notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
@@ -313,14 +322,14 @@ namespace ao::rt::test
 
     auto const restored = fixture.playbackService.state();
     CHECK(restored.transport == audio::Transport::Idle);
-    CHECK(restored.trackId == trackId);
-    CHECK(restored.sourceListId == ListId{10});
-    CHECK(restored.trackTitle == "Restored Track");
+    CHECK(restored.nowPlaying.trackId == trackId);
+    CHECK(restored.nowPlaying.sourceListId == ListId{10});
+    CHECK(restored.nowPlaying.title == "Restored Track");
     CHECK(restored.elapsed == std::chrono::milliseconds{50});
-    CHECK(restored.shuffleMode == ShuffleMode::On);
-    CHECK(restored.repeatMode == RepeatMode::All);
-    CHECK(restored.volume == 0.5F);
-    CHECK(restored.muted == true);
+    CHECK(restored.mode.shuffle == ShuffleMode::On);
+    CHECK(restored.mode.repeat == RepeatMode::All);
+    CHECK(restored.volume.level == 0.5F);
+    CHECK(restored.volume.muted == true);
     CHECK(fixture.renderTarget == nullptr);
     Verify(Method(fixture.spyBackendPtr->mock(), open)).Never();
 
@@ -363,7 +372,7 @@ namespace ao::rt::test
 
     CHECK(fixture.renderTarget != nullptr);
     CHECK(fixture.playbackService.state().transport == audio::Transport::Playing);
-    CHECK(fixture.playbackService.state().trackId == trackId);
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == trackId);
     CHECK(withinOneMillisecond(fixture.playbackService.state().elapsed, std::chrono::milliseconds{75}));
     Verify(Method(fixture.spyBackendPtr->mock(), open)).Once();
   }
@@ -388,12 +397,12 @@ namespace ao::rt::test
     REQUIRE(fixture.playbackService.restoreSession(session));
 
     auto const restored = fixture.playbackService.state();
-    CHECK(restored.trackId == trackId);
+    CHECK(restored.nowPlaying.trackId == trackId);
     CHECK(restored.elapsed == std::chrono::seconds{3});
-    CHECK(restored.shuffleMode == ShuffleMode::Off);
-    CHECK(restored.repeatMode == RepeatMode::Off);
-    CHECK(restored.volume == 1.0F);
-    CHECK(restored.muted == true);
+    CHECK(restored.mode.shuffle == ShuffleMode::Off);
+    CHECK(restored.mode.repeat == RepeatMode::Off);
+    CHECK(restored.volume.level == 1.0F);
+    CHECK(restored.volume.muted == true);
 
     auto const tempDir = ao::test::TempDir{};
     auto sessionStore = ConfigStore{std::filesystem::path{tempDir.path()} / "workspace.yaml"};

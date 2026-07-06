@@ -51,12 +51,12 @@ namespace ao::rt::test
     CHECK(outputChangedFired);
     // setOutputDevice publishes the engine-confirmed selection taken from the
     // refreshed state, not the raw request, so the emitted event mirrors
-    // state().selectedOutputDevice exactly (and stays consistent with the
-    // auto-select path that also emits state.selectedOutputDevice).
+    // state().output.selectedDevice exactly (and stays consistent with the
+    // auto-select path that also emits state.output.selectedDevice).
     CHECK(lastOutputDevice.backendId == audio::BackendId{"mock_backend"});
     CHECK(lastOutputDevice.deviceId == audio::DeviceId{"mock_device"});
     CHECK(lastOutputDevice.profileId == audio::ProfileId{audio::kProfileShared});
-    CHECK(lastOutputDevice == fixture.playbackService.state().selectedOutputDevice);
+    CHECK(lastOutputDevice == fixture.playbackService.state().output.selectedDevice);
     CHECK(qualityEvents.empty());
 
     auto qualityFixture = PlaybackFixture<QueuedExecutor>{};
@@ -80,7 +80,7 @@ namespace ao::rt::test
     REQUIRE(routedQualityEvents.size() == 1);
     CHECK(routedQualityEvents[0].quality == audio::Quality::BitwisePerfect);
     CHECK(routedQualityEvents[0].ready == true);
-    CHECK(routedQualityEvents[0].quality == qualityFixture.playbackService.state().quality);
+    CHECK(routedQualityEvents[0].quality == qualityFixture.playbackService.state().quality.overall);
     CHECK(routedQualityEvents[0].ready == qualityFixture.playbackService.state().ready);
   }
 
@@ -96,7 +96,7 @@ namespace ao::rt::test
     auto const desc = playbackRequest(TrackId{1}, fixturePath, "Fake Track", "Fake Artist", std::chrono::minutes{2});
 
     CHECK(fixture.playbackService.play(desc, ListId{1}));
-    CHECK(fixture.playbackService.state().trackId == TrackId{1});
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == TrackId{1});
   }
 
   TEST_CASE("PlaybackService output device - auto-select notifies device list subscribers",
@@ -109,9 +109,9 @@ namespace ao::rt::test
     fixture.onDevicesChangedCb(fixture.status.devices);
 
     CHECK(devicesChangedFired);
-    CHECK(fixture.playbackService.state().selectedOutputDevice.backendId == audio::BackendId{"mock_backend"});
-    REQUIRE(fixture.playbackService.state().availableOutputBackends.size() == 1);
-    REQUIRE(fixture.playbackService.state().availableOutputBackends.front().devices.size() == 1);
+    CHECK(fixture.playbackService.state().output.selectedDevice.backendId == audio::BackendId{"mock_backend"});
+    REQUIRE(fixture.playbackService.state().output.availableBackends.size() == 1);
+    REQUIRE(fixture.playbackService.state().output.availableBackends.front().devices.size() == 1);
   }
 
   TEST_CASE("PlaybackService output device - auto-select skips unsupported default exclusive profile",
@@ -135,7 +135,7 @@ namespace ao::rt::test
 
     fixture.onDevicesChangedCb(fixture.status.devices);
 
-    auto const& selection = fixture.playbackService.state().selectedOutputDevice;
+    auto const& selection = fixture.playbackService.state().output.selectedDevice;
     CHECK(selection.backendId == audio::BackendId{"mock_backend"});
     CHECK(selection.deviceId == audio::DeviceId{});
     CHECK(selection.profileId == audio::kProfileShared);

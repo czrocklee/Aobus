@@ -251,7 +251,7 @@ namespace ao::tui
 
   void EventController::revealCurrentTrack()
   {
-    _statusMessage = _library.revealTrack(_playback.state().trackId);
+    _statusMessage = _library.revealTrack(_playback.state().nowPlaying.trackId);
   }
 
   void EventController::runCommand(Command const& command)

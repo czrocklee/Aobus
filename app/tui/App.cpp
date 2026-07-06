@@ -589,7 +589,7 @@ namespace ao::tui
         auto workspaceElementPtr = trackTableView(library.tracks(),
                                                   library.sections(),
                                                   library.selectedTrack(),
-                                                  state.trackId,
+                                                  state.nowPlaying.trackId,
                                                   viewState.presentation,
                                                   TrackTableViewOptions{.columnWidths = &trackColumnWidthOverrides,
                                                                         .resizeHandles = &trackColumnResizeHandles,

@@ -4,7 +4,14 @@
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
 #include "app/linux-gtk/layout/runtime/ILayoutComponent.h"
+#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/audio/PlaybackInput.h>
+#include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_approx.hpp>
@@ -17,6 +24,7 @@
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -123,6 +131,37 @@ namespace ao::gtk::layout::test
       CHECK(picture->get_width() == 60);
       CHECK(picture->get_height() == 60);
       CHECK(button->get_opacity() == Catch::Approx{0.5}.margin(0.01));
+    }
+
+    SECTION("now playing cover art drives the image resource")
+    {
+      rt::test::addReadyAudioProvider(fixture.runtime().playback());
+      ao::gtk::test::drainGtkEvents();
+
+      auto const coverArtId = ResourceId{42};
+      imageCachePtr->put(ImageCacheKey::full(coverArtId), ao::gtk::test::makePixbuf(80, 80));
+
+      auto const node = LayoutNode{.type = "playback.image"};
+      auto const compPtr = fixture.components().create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+      auto* const picture = dynamic_cast<Gtk::Picture*>(button->get_child());
+      REQUIRE(picture != nullptr);
+
+      auto const request = rt::PlaybackService::PlaybackRequest{
+        .item = rt::NowPlayingInfo{.trackId = TrackId{987}, .coverArtId = coverArtId, .title = "Virtual Track"},
+        .input = audio::PlaybackInput{.duration = std::chrono::seconds{1}},
+      };
+
+      REQUIRE(fixture.runtime().playback().play(request, kInvalidListId));
+      ao::gtk::test::drainGtkEvents();
+
+      auto const paintablePtr = picture->get_paintable();
+      REQUIRE(paintablePtr);
+      CHECK(paintablePtr->get_intrinsic_width() == 64 * picture->get_scale_factor());
+      CHECK(paintablePtr->get_intrinsic_height() == 64 * picture->get_scale_factor());
     }
   }
 

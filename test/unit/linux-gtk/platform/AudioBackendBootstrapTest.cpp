@@ -20,7 +20,7 @@ namespace ao::gtk::test
     bool hasBackend(rt::PlaybackState const& state, audio::BackendId const& id)
     {
       return std::ranges::any_of(
-        state.availableOutputBackends, [&id](rt::OutputBackendSnapshot const& backend) { return backend.id == id; });
+        state.output.availableBackends, [&id](rt::OutputBackendSnapshot const& backend) { return backend.id == id; });
     }
   } // namespace
 
@@ -34,7 +34,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
 
-    REQUIRE(playback.state().availableOutputBackends.empty());
+    REQUIRE(playback.state().output.availableBackends.empty());
 
     registerPlatformAudioBackends(fixture.runtime());
     drainGtkEvents();

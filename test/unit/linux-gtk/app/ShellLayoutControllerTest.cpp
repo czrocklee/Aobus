@@ -243,7 +243,7 @@ namespace ao::gtk::test
       auto const playPauseOutcome = controller.activateAction("playback.playPause");
       CHECK(playPauseOutcome.result == uimodel::LayoutActionActivationResult::Activated);
       CHECK(runtime.playback().state().transport == audio::Transport::Playing);
-      CHECK(runtime.playback().state().trackId == trackId);
+      CHECK(runtime.playback().state().nowPlaying.trackId == trackId);
 
       controller.refreshExportedActions();
       CHECK(stopActionPtr->property_enabled() == true);

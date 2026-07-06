@@ -37,20 +37,20 @@ namespace ao::uimodel
 
   void VolumeViewModel::toggleMuted()
   {
-    _playback.setMuted(!_playback.state().muted);
+    _playback.setMuted(!_playback.state().volume.muted);
   }
 
   void VolumeViewModel::handleScroll(double scrollDy)
   {
     auto const& state = _playback.state();
-    float const newVolume = resolveVolumeScroll(state.volume, scrollDy);
+    float const newVolume = resolveVolumeScroll(state.volume.level, scrollDy);
 
     // Mute policy on scroll
-    if (state.muted && newVolume > state.volume)
+    if (state.volume.muted && newVolume > state.volume.level)
     {
       _playback.setMuted(false);
     }
-    else if (newVolume <= 0.0F && !state.muted)
+    else if (newVolume <= 0.0F && !state.volume.muted)
     {
       // Wait, should scrolling down to 0 explicitly set mute?
       // The plan says: "If scroll drives volume to 0, set volume to 0; visual state becomes muted. Explicit `muted` can
@@ -64,13 +64,14 @@ namespace ao::uimodel
   {
     auto const& state = _playback.state();
 
-    auto view = VolumeViewState{};
-    view.visible = state.volumeAvailable;
-    view.volume = state.volume;
-    view.isHardwareAssisted = state.volumeIsHardwareAssisted;
-    view.muted = state.muted;
-    view.iconName = resolveIconName(state.volume, state.muted);
-    view.tooltip = resolveTooltip(state.volume, state.muted, state.volumeIsHardwareAssisted);
+    auto view = VolumeViewState{
+      .visible = state.volume.available,
+      .volume = state.volume.level,
+      .isHardwareAssisted = state.volume.hardwareAssisted,
+      .muted = state.volume.muted,
+      .iconName = resolveIconName(state.volume.level, state.volume.muted),
+      .tooltip = resolveTooltip(state.volume.level, state.volume.muted, state.volume.hardwareAssisted),
+    };
 
     if (_onRender)
     {

@@ -59,7 +59,7 @@ namespace ao::gtk::platform
     {
       auto const state = _playback.state();
 
-      if (state.trackId == kInvalidTrackId)
+      if (state.nowPlaying.trackId == kInvalidTrackId)
       {
         return true;
       }
@@ -78,12 +78,12 @@ namespace ao::gtk::platform
     {
       auto const state = _playback.state();
 
-      if (state.trackId == kInvalidTrackId)
+      if (state.nowPlaying.trackId == kInvalidTrackId)
       {
         return true;
       }
 
-      if (requestedTrackObjectPath != MprisBridge::trackObjectPath(state.trackId))
+      if (requestedTrackObjectPath != MprisBridge::trackObjectPath(state.nowPlaying.trackId))
       {
         return true;
       }

@@ -7,6 +7,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/PlaybackInput.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>
@@ -34,10 +35,8 @@ namespace ao::gtk::test
     CHECK(gtkLabel->get_tooltip_text() == "Click to show playing list");
 
     auto desc = rt::PlaybackService::PlaybackRequest{
-      .trackId = TrackId{1},
+      .item = rt::NowPlayingInfo{.trackId = TrackId{1}, .title = "Song", .artist = "Artist"},
       .input = audio::PlaybackInput{.duration = std::chrono::seconds{1}},
-      .title = "Song",
-      .artist = "Artist",
     };
 
     REQUIRE(playback.play(desc, ListId{1}));

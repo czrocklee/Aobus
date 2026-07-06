@@ -161,7 +161,7 @@ namespace ao::uimodel::test
       vm.handleClick();
 
       CHECK(fixture.playbackService.state().transport == audio::Transport::Playing);
-      CHECK(fixture.playbackService.state().trackId == firstTrack);
+      CHECK(fixture.playbackService.state().nowPlaying.trackId == firstTrack);
     }
 
     SECTION("Next delegates to queue command")
@@ -184,7 +184,7 @@ namespace ao::uimodel::test
 
       vm.handleClick();
 
-      CHECK(fixture.playbackService.state().shuffleMode == rt::ShuffleMode::On);
+      CHECK(fixture.playbackService.state().mode.shuffle == rt::ShuffleMode::On);
       CHECK(log.last().engaged == true);
     }
   }

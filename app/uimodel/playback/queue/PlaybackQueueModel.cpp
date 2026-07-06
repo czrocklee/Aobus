@@ -211,12 +211,12 @@ namespace ao::uimodel
 
     auto const& state = _playback.state();
 
-    if (state.repeatMode == rt::RepeatMode::One || state.repeatMode == rt::RepeatMode::All)
+    if (state.mode.repeat == rt::RepeatMode::One || state.mode.repeat == rt::RepeatMode::All)
     {
       return !_queueStatePtr->trackIds.empty();
     }
 
-    if (state.shuffleMode == rt::ShuffleMode::On)
+    if (state.mode.shuffle == rt::ShuffleMode::On)
     {
       return _queueStatePtr->trackIds.size() > 1;
     }
@@ -243,7 +243,7 @@ namespace ao::uimodel
       return true;
     }
 
-    if (state.repeatMode == rt::RepeatMode::All)
+    if (state.mode.repeat == rt::RepeatMode::All)
     {
       return !_queueStatePtr->trackIds.empty();
     }
@@ -326,7 +326,7 @@ namespace ao::uimodel
         }
       }
     }
-    else if (state.repeatMode == rt::RepeatMode::All && !_queueStatePtr->trackIds.empty())
+    else if (state.mode.repeat == rt::RepeatMode::All && !_queueStatePtr->trackIds.empty())
     {
       for (auto [idx, trackId] : _queueStatePtr->trackIds | std::views::enumerate | std::views::reverse)
       {
@@ -405,11 +405,11 @@ namespace ao::uimodel
     auto const& state = _playback.state();
     auto optNextIndex = std::optional<std::size_t>{};
 
-    if (state.repeatMode == rt::RepeatMode::One)
+    if (state.mode.repeat == rt::RepeatMode::One)
     {
       optNextIndex = _queueStatePtr->currentIndex;
     }
-    else if (state.shuffleMode == rt::ShuffleMode::On && _queueStatePtr->trackIds.size() > 1)
+    else if (state.mode.shuffle == rt::ShuffleMode::On && _queueStatePtr->trackIds.size() > 1)
     {
       static std::mt19937 gen(std::random_device{}());
       auto dist = std::uniform_int_distribution<std::size_t>{0, _queueStatePtr->trackIds.size() - 1};
@@ -426,7 +426,7 @@ namespace ao::uimodel
     {
       optNextIndex = _queueStatePtr->currentIndex + 1;
     }
-    else if (state.repeatMode == rt::RepeatMode::All)
+    else if (state.mode.repeat == rt::RepeatMode::All)
     {
       optNextIndex = 0;
     }
@@ -547,7 +547,7 @@ namespace ao::uimodel
 
     auto const& state = _playback.state();
 
-    if (state.repeatMode == rt::RepeatMode::One)
+    if (state.mode.repeat == rt::RepeatMode::One)
     {
       if (tryAdvanceToIndex(_queueStatePtr->currentIndex))
       {
@@ -566,7 +566,7 @@ namespace ao::uimodel
       }
     }
 
-    if (state.shuffleMode == rt::ShuffleMode::On && _queueStatePtr->trackIds.size() > 1)
+    if (state.mode.shuffle == rt::ShuffleMode::On && _queueStatePtr->trackIds.size() > 1)
     {
       if (auto const optNextIndex = peekNextIndex(); optNextIndex)
       {
@@ -589,7 +589,7 @@ namespace ao::uimodel
       }
     }
 
-    if (state.repeatMode == rt::RepeatMode::All && !_queueStatePtr->trackIds.empty())
+    if (state.mode.repeat == rt::RepeatMode::All && !_queueStatePtr->trackIds.empty())
     {
       for (auto [idx, trackId] : _queueStatePtr->trackIds | std::views::enumerate)
       {

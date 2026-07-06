@@ -156,7 +156,7 @@ namespace ao::gtk::test
     auto coordinator = MainWindowCoordinator{window, runtime, configPtr};
     coordinator.loadSession();
 
-    auto const& selected = runtime.playback().state().selectedOutputDevice;
+    auto const& selected = runtime.playback().state().output.selectedDevice;
     CHECK(selected.backendId == audio::BackendId{"test_backend"});
     CHECK(selected.deviceId == audio::DeviceId{"test_device"});
     CHECK(selected.profileId == audio::kProfileShared);
@@ -192,10 +192,10 @@ namespace ao::gtk::test
     CHECK(queueModel->nowPlayingTrackId() == trackId);
     CHECK(queueModel->sourceListId() == rt::kAllTracksListId);
     CHECK(runtime.playback().state().transport == audio::Transport::Idle);
-    CHECK(runtime.playback().state().trackId == trackId);
+    CHECK(runtime.playback().state().nowPlaying.trackId == trackId);
     CHECK(runtime.playback().state().elapsed == std::chrono::milliseconds{6789});
-    CHECK(runtime.playback().state().shuffleMode == rt::ShuffleMode::On);
-    CHECK(runtime.playback().state().repeatMode == rt::RepeatMode::All);
+    CHECK(runtime.playback().state().mode.shuffle == rt::ShuffleMode::On);
+    CHECK(runtime.playback().state().mode.repeat == rt::RepeatMode::All);
 
     auto const focusedViewId = runtime.workspace().layoutState().activeViewId;
     REQUIRE(focusedViewId != rt::kInvalidViewId);

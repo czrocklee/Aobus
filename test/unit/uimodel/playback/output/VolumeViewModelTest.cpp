@@ -40,7 +40,7 @@ namespace ao::uimodel::test
     SECTION("handleVolumeChanged delegates to playback")
     {
       viewModel.handleVolumeChanged(0.35F);
-      CHECK(playback.state().volume == 0.35F);
+      CHECK(playback.state().volume.level == 0.35F);
       CHECK(log.last().isHardwareAssisted == false); // Initially false in mock
     }
 
@@ -67,11 +67,11 @@ namespace ao::uimodel::test
     SECTION("Mute controls")
     {
       viewModel.handleMutedChanged(true);
-      CHECK(playback.state().muted == true);
+      CHECK(playback.state().volume.muted == true);
       CHECK(log.last().muted == true);
 
       viewModel.toggleMuted();
-      CHECK(playback.state().muted == false);
+      CHECK(playback.state().volume.muted == false);
       CHECK(log.last().muted == false);
     }
 
@@ -81,11 +81,11 @@ namespace ao::uimodel::test
       viewModel.handleMutedChanged(true);
 
       viewModel.handleScroll(-1.0); // scroll up
-      CHECK(playback.state().volume == Catch::Approx{0.52F}.margin(0.001F));
-      CHECK(playback.state().muted == false); // Clears mute
+      CHECK(playback.state().volume.level == Catch::Approx{0.52F}.margin(0.001F));
+      CHECK(playback.state().volume.muted == false); // Clears mute
 
       viewModel.handleScroll(1.0); // scroll down
-      CHECK(playback.state().volume == Catch::Approx{0.50F}.margin(0.001F));
+      CHECK(playback.state().volume.level == Catch::Approx{0.50F}.margin(0.001F));
     }
   }
 

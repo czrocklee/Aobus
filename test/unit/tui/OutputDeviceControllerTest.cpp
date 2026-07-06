@@ -54,7 +54,7 @@ namespace ao::tui::test
     CHECK(controller.selectRow(0) == "No output device selected");
 
     auto const status = controller.selectRow(1);
-    auto const& selection = fixture.playbackService.state().selectedOutputDevice;
+    auto const& selection = fixture.playbackService.state().output.selectedDevice;
 
     CHECK(status == "Output: Mock Device");
     CHECK(selection.backendId == audio::BackendId{"mock_backend"});

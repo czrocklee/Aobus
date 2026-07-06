@@ -94,12 +94,12 @@ namespace ao::tui
 
     auto fallbackState = rt::PlaybackState{};
     auto const& state = view.playbackState == nullptr ? fallbackState : *view.playbackState;
-    auto const quality = qualityIndicatorStyle(state.quality);
-    auto const title = state.trackTitle.empty() ? std::string{"No active track"} : state.trackTitle;
-    auto const artist = state.trackArtist.empty() ? std::string{"-"} : state.trackArtist;
+    auto const quality = qualityIndicatorStyle(state.quality.overall);
+    auto const title = state.nowPlaying.title.empty() ? std::string{"No active track"} : state.nowPlaying.title;
+    auto const artist = state.nowPlaying.artist.empty() ? std::string{"-"} : state.nowPlaying.artist;
     auto const elapsed = formatDuration(view.displayElapsed);
     auto const duration = state.duration.count() > 0 ? formatDuration(state.duration) : std::string{"--:--"};
-    auto const volume = std::format("{}%", static_cast<std::int32_t>(std::round(state.volume * 100.0F)));
+    auto const volume = std::format("{}%", static_cast<std::int32_t>(std::round(state.volume.level * 100.0F)));
     auto libraryElementPtr = text("  " + std::string{view.listTitle}) | dim;
     auto presentationElementPtr = text("  " + presentationBadgeLabel(view.presentationId)) | dim;
     auto qualityElementPtr = text("  ●") | color(Color::RGB(quality.red, quality.green, quality.blue));
@@ -148,11 +148,11 @@ namespace ao::tui
     auto rows = Elements{};
     auto deviceName = std::string{};
 
-    for (auto const& backend : state.availableOutputBackends)
+    for (auto const& backend : state.output.availableBackends)
     {
       for (auto const& device : backend.devices)
       {
-        if (device.id == state.selectedOutputDevice.deviceId)
+        if (device.id == state.output.selectedDevice.deviceId)
         {
           deviceName = device.displayName;
           break;
@@ -167,11 +167,11 @@ namespace ao::tui
 
     rows.push_back(hbox({
       text(deviceName.empty() ? "Audio Pipeline" : deviceName) | bold | flex,
-      qualityDot(state.quality),
+      qualityDot(state.quality.overall),
     }));
     rows.push_back(separator());
 
-    auto const path = uimodel::playbackPath(state.flow);
+    auto const path = uimodel::playbackPath(state.quality.flow);
 
     if (path.empty())
     {
@@ -199,9 +199,9 @@ namespace ao::tui
       rows.push_back(text(nodeLine));
 
       auto const assessmentIt =
-        std::ranges::find(state.qualityAssessments, node->id, &audio::NodeQualityAssessment::nodeId);
+        std::ranges::find(state.quality.assessments, node->id, &audio::NodeQualityAssessment::nodeId);
 
-      if (assessmentIt == state.qualityAssessments.end())
+      if (assessmentIt == state.quality.assessments.end())
       {
         continue;
       }
@@ -223,13 +223,13 @@ namespace ao::tui
       }
     }
 
-    auto const conclusion = uimodel::audioQualityConclusion(state.quality);
+    auto const conclusion = uimodel::audioQualityConclusion(state.quality.overall);
 
     if (!conclusion.empty())
     {
       rows.push_back(separator());
       rows.push_back(hbox({
-        qualityDot(state.quality),
+        qualityDot(state.quality.overall),
         text(" " + conclusion),
       }));
     }

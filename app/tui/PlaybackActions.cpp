@@ -83,6 +83,6 @@ namespace ao::tui
   void changeVolume(rt::PlaybackService& playback, float const delta)
   {
     auto const state = playback.state();
-    playback.setVolume(std::clamp(state.volume + delta, 0.0F, 1.0F));
+    playback.setVolume(std::clamp(state.volume.level + delta, 0.0F, 1.0F));
   }
 } // namespace ao::tui

@@ -119,7 +119,7 @@ namespace ao::uimodel::test
       CHECK(queueModel.isActive() == true);
       CHECK(queueModel.nowPlayingTrackId() == track2);
       CHECK(queueModel.sourceListId() == ListId{10});
-      CHECK(playbackService.state().trackId == track2);
+      CHECK(playbackService.state().nowPlaying.trackId == track2);
     }
 
     SECTION("playQueue fails on empty list")
@@ -165,7 +165,7 @@ namespace ao::uimodel::test
       CHECK(*optFirstPeek == track2);
       CHECK(optSecondPeek == optFirstPeek);
       CHECK(queueModel.nowPlayingTrackId() == track1);
-      CHECK(playbackService.state().trackId == track1);
+      CHECK(playbackService.state().nowPlaying.trackId == track1);
     }
 
     SECTION("now-playing change commits pending successor")
@@ -332,10 +332,10 @@ namespace ao::uimodel::test
       CHECK(queueModel.nowPlayingTrackId() == track2);
       CHECK(queueModel.sourceListId() == ListId{10});
       CHECK(playbackService.state().transport == audio::Transport::Idle);
-      CHECK(playbackService.state().trackId == track2);
+      CHECK(playbackService.state().nowPlaying.trackId == track2);
       CHECK(playbackService.state().elapsed == std::chrono::milliseconds{4321});
-      CHECK(playbackService.state().shuffleMode == rt::ShuffleMode::On);
-      CHECK(playbackService.state().repeatMode == rt::RepeatMode::All);
+      CHECK(playbackService.state().mode.shuffle == rt::ShuffleMode::On);
+      CHECK(playbackService.state().mode.repeat == rt::RepeatMode::All);
     }
 
     SECTION("restoreQueue falls back to the queue head when the saved track was evicted")
@@ -350,7 +350,7 @@ namespace ao::uimodel::test
       REQUIRE(queueModel.restoreQueue(tracks, session, ListId{10}));
 
       CHECK(queueModel.nowPlayingTrackId() == track1);
-      CHECK(playbackService.state().trackId == track1);
+      CHECK(playbackService.state().nowPlaying.trackId == track1);
       CHECK(playbackService.state().elapsed == std::chrono::milliseconds{0});
     }
 
@@ -366,7 +366,7 @@ namespace ao::uimodel::test
       REQUIRE(queueModel.restoreQueue(tracks, session, ListId{10}));
 
       CHECK(queueModel.nowPlayingTrackId() == track1);
-      CHECK(playbackService.state().trackId == track1);
+      CHECK(playbackService.state().nowPlaying.trackId == track1);
       CHECK(playbackService.state().elapsed == std::chrono::milliseconds{0});
     }
 
@@ -387,7 +387,7 @@ namespace ao::uimodel::test
       CHECK(queueModel.isActive());
       CHECK(queueModel.nowPlayingTrackId() == track2);
       CHECK(queueModel.sourceListId() == ListId{10});
-      CHECK(playbackService.state().trackId == track2);
+      CHECK(playbackService.state().nowPlaying.trackId == track2);
     }
   }
 
@@ -419,7 +419,7 @@ namespace ao::uimodel::test
 
     CHECK(fixture.renderTarget != nullptr);
     CHECK(fixture.playbackService.state().transport == audio::Transport::Playing);
-    CHECK(fixture.playbackService.state().trackId == restoredTrack);
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == restoredTrack);
     CHECK(fixture.playbackService.state().elapsed == std::chrono::milliseconds{50});
   }
 
@@ -458,8 +458,8 @@ namespace ao::uimodel::test
     }
 
     REQUIRE(queueModel.nowPlayingTrackId() == nextTrack);
-    CHECK(fixture.playbackService.state().trackId == nextTrack);
-    CHECK(fixture.playbackService.state().trackTitle == "Fallback MP3");
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == nextTrack);
+    CHECK(fixture.playbackService.state().nowPlaying.title == "Fallback MP3");
     CHECK(queueModel.isActive());
   }
 
@@ -480,8 +480,8 @@ namespace ao::uimodel::test
     REQUIRE(fixture.executor.drainUntil([&] { return queueModel.nowPlayingTrackId() == playableTrack; }));
 
     CHECK(queueModel.isActive());
-    CHECK(fixture.playbackService.state().trackId == playableTrack);
-    CHECK(fixture.playbackService.state().trackTitle == "Playable Track");
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == playableTrack);
+    CHECK(fixture.playbackService.state().nowPlaying.title == "Playable Track");
     CHECK(hasNotification(fixture.notificationService, NotificationSeverity::Warning, "Skipped 1 unplayable track"));
     CHECK(notificationCount(fixture.notificationService, NotificationSeverity::Error, "Could not play") == 0);
   }
@@ -503,7 +503,7 @@ namespace ao::uimodel::test
     REQUIRE(fixture.executor.drainUntil([&] { return !queueModel.isActive(); }));
 
     CHECK_FALSE(queueModel.nowPlayingTrackId());
-    CHECK(fixture.playbackService.state().trackId == kInvalidTrackId);
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == kInvalidTrackId);
     CHECK(hasNotification(fixture.notificationService, NotificationSeverity::Warning, "Skipped 2 unplayable tracks"));
     CHECK(notificationCount(fixture.notificationService, NotificationSeverity::Error, "Could not play") == 0);
     CHECK(hasNotification(
@@ -584,7 +584,7 @@ namespace ao::uimodel::test
     REQUIRE(fixture.executor.drainUntil([&] { return !queueModel.isActive(); }));
 
     CHECK_FALSE(queueModel.nowPlayingTrackId());
-    CHECK(fixture.playbackService.state().trackId == kInvalidTrackId);
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == kInvalidTrackId);
     CHECK(hasNotification(fixture.notificationService, NotificationSeverity::Error, "Playback device failed"));
   }
 } // namespace ao::uimodel::test

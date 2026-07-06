@@ -16,7 +16,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <string>
 
 namespace ao::library
 {
@@ -85,12 +84,8 @@ namespace ao::rt
 
     struct PlaybackRequest final
     {
-      TrackId trackId = kInvalidTrackId;
+      NowPlayingInfo item{};
       audio::PlaybackInput input{};
-      ResourceId coverArtId = kInvalidResourceId;
-      std::string title{};
-      std::string artist{};
-      std::string album{};
     };
 
     PlaybackService(async::IExecutor& executor,

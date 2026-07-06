@@ -10,6 +10,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -32,10 +33,8 @@ namespace ao::gtk::test
     rt::PlaybackService::PlaybackRequest playbackRequest(TrackId trackId, std::string title, std::string artist = {})
     {
       return rt::PlaybackService::PlaybackRequest{
-        .trackId = trackId,
+        .item = rt::NowPlayingInfo{.trackId = trackId, .title = std::move(title), .artist = std::move(artist)},
         .input = audio::PlaybackInput{.duration = std::chrono::seconds{1}},
-        .title = std::move(title),
-        .artist = std::move(artist),
       };
     }
   } // namespace
@@ -55,7 +54,6 @@ namespace ao::gtk::test
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
 
-      auto const idleText = gtkLabel->get_text();
       CHECK(gtkLabel->has_css_class("ao-playback-title"));
       CHECK_FALSE(gtkLabel->has_css_class("ao-clickable"));
       CHECK_FALSE(hasController<Gtk::GestureClick>(*gtkLabel));
@@ -65,7 +63,7 @@ namespace ao::gtk::test
       REQUIRE(playback.play(desc, ListId{7}));
       drainGtkEvents();
 
-      CHECK(gtkLabel->get_text() != idleText);
+      CHECK(gtkLabel->get_text() == "Test Song");
     }
 
     SECTION("artist label binds artist text and css")
@@ -74,14 +72,12 @@ namespace ao::gtk::test
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&artistLabel.widget());
       REQUIRE(gtkLabel);
 
-      auto const idleText = gtkLabel->get_text();
-
       auto desc = playbackRequest(TrackId{2}, "Another Song", "Known Artist");
 
       REQUIRE(playback.play(desc, ListId{8}));
       drainGtkEvents();
 
-      CHECK(gtkLabel->get_text() != idleText);
+      CHECK(gtkLabel->get_text() == "Known Artist");
       CHECK(gtkLabel->has_css_class("ao-playback-artist"));
       CHECK_FALSE(gtkLabel->has_css_class("ao-playback-title"));
     }

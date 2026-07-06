@@ -12,6 +12,8 @@
 #include <ao/audio/PlaybackInput.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/adjustment.h>  // NOLINT(misc-include-cleaner)
@@ -43,11 +45,9 @@ namespace ao::gtk::test
         library, library::test::TrackSpec{.title = "Tick Test", .duration = std::chrono::seconds{5}});
 
       auto const request = rt::PlaybackService::PlaybackRequest{
-        .trackId = trackId,
+        .item = rt::NowPlayingInfo{.trackId = trackId, .title = "Tick Test", .artist = "Artist"},
         .input = audio::PlaybackInput{.filePath = audio::test::requireAudioFixture("basic_metadata.flac"),
                                       .duration = std::chrono::seconds{5}},
-        .title = "Tick Test",
-        .artist = "Artist",
       };
 
       REQUIRE(playback.play(request, kInvalidListId));

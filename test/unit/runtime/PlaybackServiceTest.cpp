@@ -55,11 +55,15 @@ namespace ao::rt::test
     auto const trackId = fixture.testLib.addTrack(spec);
 
     CHECK(fixture.playbackService.playTrack(trackId, ListId{7}));
-    CHECK(fixture.playbackService.state().trackId == trackId);
-    CHECK(fixture.playbackService.state().sourceListId == ListId{7});
-    CHECK(fixture.playbackService.state().trackTitle == "Playable Track");
-    CHECK(fixture.playbackService.state().trackArtist == "Queue Artist");
+    CHECK(fixture.playbackService.state().nowPlaying == NowPlayingInfo{.trackId = trackId,
+                                                                       .sourceListId = ListId{7},
+                                                                       .title = "Playable Track",
+                                                                       .artist = "Queue Artist",
+                                                                       .album = "Queue Album"});
     CHECK(fixture.playbackService.state().duration > std::chrono::milliseconds{0});
+
+    fixture.playbackService.stop();
+    CHECK(fixture.playbackService.state().nowPlaying == NowPlayingInfo{});
   }
 
   TEST_CASE("PlaybackService playback - prepareNext does not replace current state", "[runtime][unit][playback]")
@@ -74,10 +78,10 @@ namespace ao::rt::test
     REQUIRE(fixture.playbackService.playTrack(currentTrack, ListId{7}));
     REQUIRE(fixture.playbackService.prepareNext(nextTrack, ListId{7}));
 
-    CHECK(fixture.playbackService.state().trackId == currentTrack);
-    CHECK(fixture.playbackService.state().trackTitle == "Current Track");
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == currentTrack);
+    CHECK(fixture.playbackService.state().nowPlaying.title == "Current Track");
     CHECK_FALSE(fixture.playbackService.prepareNext(TrackId{99999}, ListId{7}));
-    CHECK(fixture.playbackService.state().trackId == currentTrack);
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == currentTrack);
   }
 
   TEST_CASE("PlaybackService playback - drain emits idle when playback is actually idle",
@@ -161,8 +165,8 @@ namespace ao::rt::test
     REQUIRE(nowPlaying.size() == 1);
     CHECK(nowPlaying[0].trackId == nextTrack);
     CHECK(nowPlaying[0].sourceListId == ListId{7});
-    CHECK(fixture.playbackService.state().trackId == nextTrack);
-    CHECK(fixture.playbackService.state().trackTitle == "Prepared Track");
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == nextTrack);
+    CHECK(fixture.playbackService.state().nowPlaying.title == "Prepared Track");
     CHECK(idleCount == 0);
   }
 
@@ -201,8 +205,8 @@ namespace ao::rt::test
     REQUIRE(nowPlaying.size() == 1);
     CHECK(nowPlaying[0].trackId == nextTrack);
     CHECK(nowPlaying[0].sourceListId == ListId{7});
-    CHECK(fixture.playbackService.state().trackId == nextTrack);
-    CHECK(fixture.playbackService.state().trackTitle == "Prepared Track");
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == nextTrack);
+    CHECK(fixture.playbackService.state().nowPlaying.title == "Prepared Track");
   }
 
   TEST_CASE("PlaybackService playback - subscribed track open failure emits without default notification",
@@ -294,7 +298,7 @@ namespace ao::rt::test
 
     CHECK(failures.empty());
     CHECK(fixture.notificationService.feed().entries.empty());
-    CHECK(fixture.playbackService.state().trackId == replacementTrack);
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == replacementTrack);
   }
 
   TEST_CASE("PlaybackService playback - route activation failures dedupe by kind", "[runtime][unit][playback][error]")

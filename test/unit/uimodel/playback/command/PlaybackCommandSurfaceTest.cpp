@@ -54,7 +54,7 @@ namespace ao::uimodel::test
 
       CHECK(playSelectionCount == 0);
       CHECK(fixture.playbackService.state().transport == audio::Transport::Playing);
-      CHECK(fixture.playbackService.state().trackId == trackId);
+      CHECK(fixture.playbackService.state().nowPlaying.trackId == trackId);
 
       fixture.playbackService.stop();
       REQUIRE(fixture.playbackService.restoreSession(PlaybackSessionState{
@@ -139,21 +139,21 @@ namespace ao::uimodel::test
 
       commands.execute(PlaybackCommand::CycleRepeat);
 
-      CHECK(fixture.playbackService.state().repeatMode == rt::RepeatMode::All);
+      CHECK(fixture.playbackService.state().mode.repeat == rt::RepeatMode::All);
       CHECK(queue.hasNext());
       CHECK(queue.peekNext() == firstTrack);
 
       commands.execute(PlaybackCommand::CycleRepeat);
-      CHECK(fixture.playbackService.state().repeatMode == rt::RepeatMode::One);
+      CHECK(fixture.playbackService.state().mode.repeat == rt::RepeatMode::One);
 
       commands.execute(PlaybackCommand::CycleRepeat);
-      CHECK(fixture.playbackService.state().repeatMode == rt::RepeatMode::Off);
+      CHECK(fixture.playbackService.state().mode.repeat == rt::RepeatMode::Off);
       REQUIRE_FALSE(queue.hasNext());
       REQUIRE_FALSE(queue.peekNext());
 
       commands.execute(PlaybackCommand::ToggleShuffle);
 
-      CHECK(fixture.playbackService.state().shuffleMode == rt::ShuffleMode::On);
+      CHECK(fixture.playbackService.state().mode.shuffle == rt::ShuffleMode::On);
       CHECK(queue.hasNext());
       CHECK(queue.peekNext() == firstTrack);
     }

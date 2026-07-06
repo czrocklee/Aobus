@@ -8,6 +8,7 @@
 #include <ao/audio/PlaybackInput.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -49,10 +50,8 @@ namespace ao::uimodel::test
       auto const trackId = testLib.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       auto desc = PlaybackService::PlaybackRequest{
-        .trackId = trackId,
+        .item = NowPlayingInfo{.trackId = trackId, .title = "Seek Test", .artist = "Artist"},
         .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{30}},
-        .title = "Seek Test",
-        .artist = "Artist",
       };
       REQUIRE(playback.play(desc, kInvalidListId));
 

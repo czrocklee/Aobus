@@ -67,11 +67,10 @@ namespace ao::tui::test
   TEST_CASE("PlaybackPanel - playback bar renders current track timing and volume", "[tui][unit][playback]")
   {
     auto state = rt::PlaybackState{.transport = audio::Transport::Playing,
-                                   .trackTitle = "Signal Path",
-                                   .trackArtist = "Aobus",
                                    .duration = std::chrono::seconds{125},
-                                   .volume = 0.42F,
-                                   .quality = audio::Quality::LosslessFloat};
+                                   .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path", .artist = "Aobus"},
+                                   .volume = rt::VolumeState{.level = 0.42F},
+                                   .quality = rt::QualityState{.overall = audio::Quality::LosslessFloat}};
 
     auto const text = renderText(playbackBar(PlaybackBarViewState{.playbackState = &state,
                                                                   .listTitle = "Favorites",
@@ -132,7 +131,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - quality panel renders empty pipeline state", "[tui][unit][playback]")
   {
-    auto state = rt::PlaybackState{.quality = audio::Quality::Unknown};
+    auto state = rt::PlaybackState{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
 
     auto const text = renderText(qualityPanel(state));
 
@@ -146,47 +145,55 @@ namespace ao::tui::test
   {
     auto state =
       rt::PlaybackState{
-        .selectedOutputDevice =
-          rt::OutputDeviceSelection{.backendId = audio::BackendId{"mock_backend"}, .deviceId = audio::DeviceId{"dac"}},
-        .availableOutputBackends =
-          std::vector{
-            rt::OutputBackendSnapshot{
-              .id = audio::BackendId{"mock_backend"},
-              .name = "Mock Backend",
-              .devices =
-                std::vector{
-                  rt::OutputDeviceSnapshot{.id = audio::DeviceId{"dac"}, .displayName = "Studio DAC"},
+        .output =
+          rt::OutputState{
+            .selectedDevice = rt::OutputDeviceSelection{.backendId = audio::BackendId{"mock_backend"},
+                                                        .deviceId = audio::DeviceId{"dac"}},
+            .availableBackends =
+              std::vector{
+                rt::OutputBackendSnapshot{
+                  .id = audio::BackendId{"mock_backend"},
+                  .name = "Mock Backend",
+                  .devices =
+                    std::vector{
+                      rt::OutputDeviceSnapshot{.id = audio::DeviceId{"dac"}, .displayName = "Studio DAC"},
+                    },
                 },
-            },
-          },
-        .flow =
-          audio::flow::Graph{
-            .nodes =
-              std::vector{
-                audio::flow::Node{
-                  .id = "ao-source", .type = audio::flow::NodeType::Source, .name = "FLAC", .optFormat = cdFormat()},
-                audio::flow::Node{
-                  .id = "ao-sink", .type = audio::flow::NodeType::Sink, .name = "DAC", .optFormat = cdFormat()},
-              },
-            .connections =
-              std::vector{
-                audio::flow::Connection{.sourceId = "ao-source", .destId = "ao-sink"},
               },
           },
-        .quality = audio::Quality::LinearIntervention,
-        .qualityAssessments =
-          std::vector{
-            audio::NodeQualityAssessment{
-              .nodeId = "ao-sink",
-              .nodeName = "DAC",
-              .nodeType = audio::flow::NodeType::Sink,
-              .worstQuality = audio::Quality::LinearIntervention,
-              .findings =
-                std::vector{
-                  audio::QualityFinding{.kind = audio::QualityFindingKind::BitPerfect},
-                  audio::QualityFinding{.kind = audio::QualityFindingKind::SoftwareVolumeModification},
+        .quality =
+          rt::QualityState{
+            .overall = audio::Quality::LinearIntervention,
+            .assessments =
+              std::vector{
+                audio::NodeQualityAssessment{
+                  .nodeId = "ao-sink",
+                  .nodeName = "DAC",
+                  .nodeType = audio::flow::NodeType::Sink,
+                  .worstQuality = audio::Quality::LinearIntervention,
+                  .findings =
+                    std::vector{
+                      audio::QualityFinding{.kind = audio::QualityFindingKind::BitPerfect},
+                      audio::QualityFinding{.kind = audio::QualityFindingKind::SoftwareVolumeModification},
+                    },
                 },
-            },
+              },
+            .flow =
+              audio::flow::Graph{
+                .nodes =
+                  std::vector{
+                    audio::flow::Node{.id = "ao-source",
+                                      .type = audio::flow::NodeType::Source,
+                                      .name = "FLAC",
+                                      .optFormat = cdFormat()},
+                    audio::flow::Node{
+                      .id = "ao-sink", .type = audio::flow::NodeType::Sink, .name = "DAC", .optFormat = cdFormat()},
+                  },
+                .connections =
+                  std::vector{
+                    audio::flow::Connection{.sourceId = "ao-source", .destId = "ao-sink"},
+                  },
+              },
           },
       };
 

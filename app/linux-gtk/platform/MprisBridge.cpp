@@ -288,22 +288,23 @@ namespace ao::gtk::platform
 
     std::string artUrlForState(rt::PlaybackState const& state) const
     {
-      if (state.trackCoverArtId == kInvalidResourceId || !callbacks.artUrlForResource)
+      if (state.nowPlaying.coverArtId == kInvalidResourceId || !callbacks.artUrlForResource)
       {
         return {};
       }
 
       try
       {
-        return callbacks.artUrlForResource(state.trackCoverArtId);
+        return callbacks.artUrlForResource(state.nowPlaying.coverArtId);
       }
       catch (std::exception const& e)
       {
-        APP_LOG_WARN("MPRIS art URL resolver failed for resource {}: {}", state.trackCoverArtId.raw(), e.what());
+        APP_LOG_WARN("MPRIS art URL resolver failed for resource {}: {}", state.nowPlaying.coverArtId.raw(), e.what());
       }
       catch (...)
       {
-        APP_LOG_WARN("MPRIS art URL resolver failed for resource {}: unknown exception", state.trackCoverArtId.raw());
+        APP_LOG_WARN(
+          "MPRIS art URL resolver failed for resource {}: unknown exception", state.nowPlaying.coverArtId.raw());
       }
 
       return {};
@@ -375,7 +376,7 @@ namespace ao::gtk::platform
 
       if (propertyName == "LoopStatus")
       {
-        return Glib::Variant<Glib::ustring>::create(glibString(MprisBridge::loopStatus(state.repeatMode)));
+        return Glib::Variant<Glib::ustring>::create(glibString(MprisBridge::loopStatus(state.mode.repeat)));
       }
 
       if (propertyName == "Rate" || propertyName == "MinimumRate" || propertyName == "MaximumRate")
@@ -385,17 +386,17 @@ namespace ao::gtk::platform
 
       if (propertyName == "Volume")
       {
-        return Glib::Variant<double>::create(static_cast<double>(state.volume));
+        return Glib::Variant<double>::create(static_cast<double>(state.volume.level));
       }
 
       if (propertyName == "Shuffle")
       {
-        return Glib::Variant<bool>::create(state.shuffleMode == rt::ShuffleMode::On);
+        return Glib::Variant<bool>::create(state.mode.shuffle == rt::ShuffleMode::On);
       }
 
       if (propertyName == "CanSeek")
       {
-        return Glib::Variant<bool>::create(state.trackId != kInvalidTrackId);
+        return Glib::Variant<bool>::create(state.nowPlaying.trackId != kInvalidTrackId);
       }
 
       if (propertyName == "Metadata")
@@ -870,15 +871,15 @@ namespace ao::gtk::platform
 
   MprisBridge::MetadataSnapshot MprisBridge::metadataForState(rt::PlaybackState const& state, std::string artUrl)
   {
-    if (state.trackId == kInvalidTrackId)
+    if (state.nowPlaying.trackId == kInvalidTrackId)
     {
       return {};
     }
 
-    return MetadataSnapshot{.trackObjectPath = trackObjectPath(state.trackId),
-                            .title = state.trackTitle,
-                            .artist = state.trackArtist,
-                            .album = state.trackAlbum,
+    return MetadataSnapshot{.trackObjectPath = trackObjectPath(state.nowPlaying.trackId),
+                            .title = state.nowPlaying.title,
+                            .artist = state.nowPlaying.artist,
+                            .album = state.nowPlaying.album,
                             .artUrl = std::move(artUrl),
                             .lengthUs = microsecondsFromMilliseconds(state.duration)};
   }

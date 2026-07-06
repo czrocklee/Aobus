@@ -11,6 +11,7 @@
 #include <ao/query/Serializer.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -36,10 +37,8 @@ namespace ao::uimodel::test
     {
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       return PlaybackService::PlaybackRequest{
-        .trackId = trackId,
+        .item = NowPlayingInfo{.trackId = trackId, .title = std::move(title), .artist = std::move(artist)},
         .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{1}},
-        .title = std::move(title),
-        .artist = std::move(artist),
       };
     }
   } // namespace

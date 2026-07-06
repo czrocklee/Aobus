@@ -106,7 +106,7 @@ namespace ao::gtk
 
             if (_onSelected)
             {
-              _onSelected(_playback.state().selectedOutputDevice);
+              _onSelected(_playback.state().output.selectedDevice);
             }
 
             popdown();

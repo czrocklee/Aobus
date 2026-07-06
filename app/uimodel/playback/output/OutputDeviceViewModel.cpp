@@ -26,9 +26,9 @@ namespace ao::uimodel
     {
       auto result = BackendDeviceNames{};
 
-      for (auto const& backend : state.availableOutputBackends)
+      for (auto const& backend : state.output.availableBackends)
       {
-        if (backend.id != state.selectedOutputDevice.backendId)
+        if (backend.id != state.output.selectedDevice.backendId)
         {
           continue;
         }
@@ -37,7 +37,7 @@ namespace ao::uimodel
 
         for (auto const& device : backend.devices)
         {
-          if (device.id == state.selectedOutputDevice.deviceId)
+          if (device.id == state.output.selectedDevice.deviceId)
           {
             result.device = device.displayName;
             break;
@@ -49,12 +49,12 @@ namespace ao::uimodel
 
       if (result.backend.empty())
       {
-        result.backend = state.selectedOutputDevice.backendId.raw();
+        result.backend = state.output.selectedDevice.backendId.raw();
       }
 
       if (result.device.empty())
       {
-        result.device = state.selectedOutputDevice.deviceId.raw();
+        result.device = state.output.selectedDevice.deviceId.raw();
       }
 
       return result;
@@ -80,7 +80,7 @@ namespace ao::uimodel
     auto const& state = _playback.state();
     auto view = OutputDeviceViewState{};
 
-    for (auto const& backend : state.availableOutputBackends)
+    for (auto const& backend : state.output.availableBackends)
     {
       view.rows.push_back(OutputDeviceRow{
         .kind = OutputDeviceRow::Kind::BackendHeader,
@@ -106,8 +106,8 @@ namespace ao::uimodel
           bool const isExclusive = (profile == audio::kProfileExclusive);
 
           bool const isActive =
-            (backend.id == state.selectedOutputDevice.backendId && profile == state.selectedOutputDevice.profileId &&
-             device.id == state.selectedOutputDevice.deviceId);
+            (backend.id == state.output.selectedDevice.backendId && profile == state.output.selectedDevice.profileId &&
+             device.id == state.output.selectedDevice.deviceId);
 
           view.rows.push_back(OutputDeviceRow{
             .kind = OutputDeviceRow::Kind::DeviceProfile,
@@ -123,7 +123,7 @@ namespace ao::uimodel
       }
     }
 
-    if (state.selectedOutputDevice.backendId == audio::kBackendNone)
+    if (state.output.selectedDevice.backendId == audio::kBackendNone)
     {
       view.outputBackendSummary = "--";
     }
@@ -131,19 +131,19 @@ namespace ao::uimodel
     {
       view.hasActiveOutputDevice = true;
 
-      if (state.selectedOutputDevice.backendId == audio::kBackendPipeWire)
+      if (state.output.selectedDevice.backendId == audio::kBackendPipeWire)
       {
         view.outputBackendSummary = "PW";
       }
-      else if (state.selectedOutputDevice.backendId == audio::kBackendAlsa)
+      else if (state.output.selectedDevice.backendId == audio::kBackendAlsa)
       {
         view.outputBackendSummary = "ALSA";
       }
       else
       {
-        for (auto const& backend : state.availableOutputBackends)
+        for (auto const& backend : state.output.availableBackends)
         {
-          if (backend.id == state.selectedOutputDevice.backendId)
+          if (backend.id == state.output.selectedDevice.backendId)
           {
             view.outputBackendSummary = backend.name;
             break;
@@ -152,12 +152,12 @@ namespace ao::uimodel
 
         if (view.outputBackendSummary.empty())
         {
-          view.outputBackendSummary = state.selectedOutputDevice.backendId.raw();
+          view.outputBackendSummary = state.output.selectedDevice.backendId.raw();
         }
       }
 
       auto const names = resolveBackendDeviceNames(state);
-      bool const isExclusive = (state.selectedOutputDevice.profileId == audio::kProfileExclusive);
+      bool const isExclusive = (state.output.selectedDevice.profileId == audio::kProfileExclusive);
 
       view.outputDeviceStatus = std::format("{}: {}", names.backend, names.device);
 

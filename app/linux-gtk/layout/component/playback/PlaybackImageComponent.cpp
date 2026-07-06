@@ -13,8 +13,6 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -164,20 +162,13 @@ namespace ao::gtk::layout
           _button.signal_clicked().connect([this] { onImageClicked(); });
         }
 
-        _sub = _runtime.playback().onNowPlayingChanged(
-          [this](auto const& ev)
-          {
-            if (ev.trackId != _currentTrackId)
-            {
-              _currentTrackId = ev.trackId;
-              updateImage();
-            }
-          });
+        _sub = _runtime.playback().onNowPlayingChanged([this](auto const&) { syncNowPlaying(); });
 
         _stoppedSub = _runtime.playback().onStopped(
           [this]
           {
             _currentTrackId = kInvalidTrackId;
+            _currentCoverArtId = kInvalidResourceId;
             updateImage();
           });
 
@@ -185,12 +176,11 @@ namespace ao::gtk::layout
           [this]
           {
             _currentTrackId = kInvalidTrackId;
+            _currentCoverArtId = kInvalidResourceId;
             updateImage();
           });
 
-        // Initial update
-        _currentTrackId = _runtime.playback().state().trackId;
-        updateImage();
+        syncNowPlaying();
       }
 
       Gtk::Widget& widget() override
@@ -218,6 +208,20 @@ namespace ao::gtk::layout
         }
       }
 
+      void syncNowPlaying()
+      {
+        auto const& nowPlaying = _runtime.playback().state().nowPlaying;
+
+        if (nowPlaying.trackId == _currentTrackId && nowPlaying.coverArtId == _currentCoverArtId)
+        {
+          return;
+        }
+
+        _currentTrackId = nowPlaying.trackId;
+        _currentCoverArtId = nowPlaying.coverArtId;
+        updateImage();
+      }
+
       void updateImage()
       {
         if (_currentTrackId == kInvalidTrackId)
@@ -226,12 +230,9 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto scope = _runtime.library().reader();
-        auto const coverArtId = scope.trackCoverArtId(_currentTrackId);
-
-        if (coverArtId != kInvalidResourceId)
+        if (_currentCoverArtId != kInvalidResourceId)
         {
-          _imageControllerPtr->load(coverArtId);
+          _imageControllerPtr->load(_currentCoverArtId);
           _button.set_visible(true);
           return;
         }
@@ -248,6 +249,7 @@ namespace ao::gtk::layout
       Gtk::Button _button;
       Gtk::Label* _error = nullptr;
       TrackId _currentTrackId = kInvalidTrackId;
+      ResourceId _currentCoverArtId = kInvalidResourceId;
       rt::Subscription _sub;
       rt::Subscription _stoppedSub;
       rt::Subscription _idleSub;

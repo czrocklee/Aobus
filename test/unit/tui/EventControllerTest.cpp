@@ -454,7 +454,7 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickRow)));
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(controller.statusMessage() == "Output: Test Device");
-    CHECK(fixture.runtime.playback().state().selectedOutputDevice.backendId == audio::BackendId{"test_backend"});
+    CHECK(fixture.runtime.playback().state().output.selectedDevice.backendId == audio::BackendId{"test_backend"});
 
     enterCommand(controller, "output");
     CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
@@ -782,10 +782,10 @@ namespace ao::tui::test
     CHECK(seekEvents[1] == std::chrono::seconds{5});
 
     CHECK(controller.handleEvent(ftxui::Event::Character("-")));
-    CHECK(fixture.runtime.playback().state().volume < 0.50F);
+    CHECK(fixture.runtime.playback().state().volume.level < 0.50F);
 
     CHECK(controller.handleEvent(ftxui::Event::Character("+")));
-    CHECK(fixture.runtime.playback().state().volume > 0.49F);
+    CHECK(fixture.runtime.playback().state().volume.level > 0.49F);
 
     CHECK(controller.handleEvent(ftxui::Event::Character("s")));
     CHECK(controller.statusMessage() == "Stopped");

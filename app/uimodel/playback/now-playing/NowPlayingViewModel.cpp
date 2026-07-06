@@ -77,7 +77,7 @@ namespace ao::uimodel
     auto const& state = _playback.state();
     auto view = NowPlayingViewState{};
 
-    if (state.trackTitle.empty())
+    if (state.nowPlaying.title.empty())
     {
       view.title = "Not Playing";
       view.streamInfo = state.ready ? "" : "Connecting to audio engine...";
@@ -85,29 +85,29 @@ namespace ao::uimodel
     }
     else
     {
-      view.title = state.trackTitle;
-      view.artist = state.trackArtist.empty() ? "Unknown Artist" : state.trackArtist;
+      view.title = state.nowPlaying.title;
+      view.artist = state.nowPlaying.artist.empty() ? "Unknown Artist" : state.nowPlaying.artist;
 
-      if (!state.trackArtist.empty())
+      if (!state.nowPlaying.artist.empty())
       {
-        view.combinedStatus = std::format("{} - {}", state.trackArtist, state.trackTitle);
+        view.combinedStatus = std::format("{} - {}", state.nowPlaying.artist, state.nowPlaying.title);
       }
       else
       {
-        view.combinedStatus = state.trackTitle;
+        view.combinedStatus = state.nowPlaying.title;
       }
 
-      auto const it = std::ranges::find_if(state.flow.nodes,
+      auto const it = std::ranges::find_if(state.quality.flow.nodes,
                                            [](auto const& node)
                                            { return node.type == audio::flow::NodeType::Source && node.optFormat; });
 
       // The source node carries the track's native format, so show its true
       // resolution (valid bits) rather than a padded transport container width.
-      view.streamInfo =
-        (it != state.flow.nodes.end() && it->optFormat) ? audioFormatLabel(*it->optFormat, true) : std::string{};
+      view.streamInfo = (it != state.quality.flow.nodes.end() && it->optFormat) ? audioFormatLabel(*it->optFormat, true)
+                                                                                : std::string{};
 
       auto plainTextFallback = std::string{"Audio Pipeline:\n"};
-      auto const conclusionText = audioQualityConclusion(state.quality);
+      auto const conclusionText = audioQualityConclusion(state.quality.overall);
 
       if (!conclusionText.empty())
       {
@@ -117,11 +117,11 @@ namespace ao::uimodel
       auto deviceName = std::string{};
       auto deviceIconName = std::string{};
 
-      for (auto const& backend : state.availableOutputBackends)
+      for (auto const& backend : state.output.availableBackends)
       {
         for (auto const& device : backend.devices)
         {
-          if (device.id == state.selectedOutputDevice.deviceId)
+          if (device.id == state.output.selectedDevice.deviceId)
           {
             deviceName = device.displayName;
             deviceIconName = backend.iconName;
@@ -135,15 +135,15 @@ namespace ao::uimodel
         }
       }
 
-      view.audioPipeline = AudioPipelineView{.flow = state.flow,
-                                             .quality = state.quality,
-                                             .assessments = state.qualityAssessments,
+      view.audioPipeline = AudioPipelineView{.flow = state.quality.flow,
+                                             .quality = state.quality.overall,
+                                             .assessments = state.quality.assessments,
                                              .deviceName = std::move(deviceName),
                                              .deviceIconName = std::move(deviceIconName),
                                              .plainTextFallback = plainTextFallback};
 
-      view.isActive = (state.quality != audio::Quality::Unknown);
-      view.qualityCategory = audioQualityCategory(state.quality);
+      view.isActive = (state.quality.overall != audio::Quality::Unknown);
+      view.qualityCategory = audioQualityCategory(state.quality.overall);
     }
 
     if (_onRender)
@@ -169,8 +169,8 @@ namespace ao::uimodel
 
         switch (field)
         {
-          case rt::TrackField::Title: value = state.trackTitle; break;
-          case rt::TrackField::Artist: value = state.trackArtist; break;
+          case rt::TrackField::Title: value = state.nowPlaying.title; break;
+          case rt::TrackField::Artist: value = state.nowPlaying.artist; break;
           default: break;
         }
 

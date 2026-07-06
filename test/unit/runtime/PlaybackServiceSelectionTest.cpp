@@ -86,7 +86,7 @@ namespace ao::rt::test
 
     TrackId const tid = fixture.playbackService.playSelectionInView(result.viewId);
     CHECK(tid == trackId);
-    CHECK(fixture.playbackService.state().trackId == trackId);
+    CHECK(fixture.playbackService.state().nowPlaying.trackId == trackId);
 
     if (fixture.renderTarget != nullptr)
     {

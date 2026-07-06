@@ -68,7 +68,7 @@ namespace ao::uimodel
 
     auto view = AobusSoulViewState{};
     view.isBreathing = playing;
-    view.auraColor = computeColor(playing, state.ready, state.quality);
+    view.auraColor = computeColor(playing, state.ready, state.quality.overall);
 
     if (_onRender)
     {

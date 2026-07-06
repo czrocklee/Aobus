@@ -88,7 +88,7 @@ namespace ao::gtk::test
 
       ::g_signal_emit_by_name(listBox->gobj(), "row-activated", exclusiveRow->gobj());
 
-      auto const& selected = playback.state().selectedOutputDevice;
+      auto const& selected = playback.state().output.selectedDevice;
       CHECK(selected.backendId == audio::BackendId{"pipewire"});
       CHECK(selected.deviceId == audio::DeviceId{"device1"});
       CHECK(selected.profileId == audio::kProfileExclusive);

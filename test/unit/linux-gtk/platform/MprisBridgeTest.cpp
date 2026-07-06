@@ -94,12 +94,17 @@ namespace ao::gtk::platform::test
 
   TEST_CASE("MprisBridge - metadata snapshot maps playback state to MPRIS fields", "[gtk][unit][mpris]")
   {
-    auto const state = rt::PlaybackState{.trackId = TrackId{42},
-                                         .trackCoverArtId = ResourceId{77},
-                                         .trackTitle = "Keyboard Partita",
-                                         .trackArtist = "Johann Sebastian Bach",
-                                         .trackAlbum = "Partitas",
-                                         .duration = std::chrono::seconds{125}};
+    auto const state = rt::PlaybackState{
+      .duration = std::chrono::seconds{125},
+      .nowPlaying =
+        rt::NowPlayingInfo{
+          .trackId = TrackId{42},
+          .coverArtId = ResourceId{77},
+          .title = "Keyboard Partita",
+          .artist = "Johann Sebastian Bach",
+          .album = "Partitas",
+        },
+    };
 
     auto const metadata = MprisBridge::metadataForState(state, "file:///tmp/aobus-cover.png");
 
@@ -150,9 +155,9 @@ namespace ao::gtk::platform::test
       .sourceListId = ListId{5},
       .trackId = trackId,
     }));
-    CHECK(runtime.playback().state().trackCoverArtId == resourceId);
+    CHECK(runtime.playback().state().nowPlaying.coverArtId == resourceId);
 
-    auto const url = cache.urlForResource(runtime.playback().state().trackCoverArtId);
+    auto const url = cache.urlForResource(runtime.playback().state().nowPlaying.coverArtId);
     REQUIRE(url.starts_with("file://"));
 
     auto const exportedPath = pathFromFileUrl(url);
@@ -188,9 +193,9 @@ namespace ao::gtk::platform::test
 
   TEST_CASE("MprisBridge - elapsed helpers convert and clamp MPRIS time", "[gtk][unit][mpris]")
   {
-    auto state = rt::PlaybackState{.trackId = TrackId{7},
-                                   .elapsed = std::chrono::milliseconds{5'000},
-                                   .duration = std::chrono::milliseconds{10'000}};
+    auto state = rt::PlaybackState{.elapsed = std::chrono::milliseconds{5'000},
+                                   .duration = std::chrono::milliseconds{10'000},
+                                   .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{7}}};
 
     CHECK(MprisBridge::microsecondsFromMilliseconds(std::chrono::milliseconds{1234}) == 1'234'000);
     CHECK(MprisBridge::fromMprisMicroseconds(1'234'567) == std::chrono::milliseconds{1234});
@@ -331,7 +336,7 @@ namespace ao::gtk::platform::test
     CHECK(queue.nowPlayingTrackId() == secondTrack);
     REQUIRE(endpoint.dispatchPlayerMethod("Next"));
     CHECK(queue.nowPlayingTrackId() == secondTrack);
-    CHECK(playback.state().trackId == secondTrack);
+    CHECK(playback.state().nowPlaying.trackId == secondTrack);
 
     checkCapability("CanGoNext", uimodel::PlaybackCommand::Next);
     checkCapability("CanGoPrevious", uimodel::PlaybackCommand::Previous);
@@ -349,13 +354,13 @@ namespace ao::gtk::platform::test
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     CHECK(endpoint.dispatchSetVolume(0.42));
-    CHECK(playback.state().volume == Catch::Approx{0.42F});
+    CHECK(playback.state().volume.level == Catch::Approx{0.42F});
 
     CHECK(endpoint.dispatchSetVolume(5.0));
-    CHECK(playback.state().volume == 1.0F);
+    CHECK(playback.state().volume.level == 1.0F);
 
     CHECK(endpoint.dispatchSetVolume(-1.0));
-    CHECK(playback.state().volume == 0.0F);
+    CHECK(playback.state().volume.level == 0.0F);
 
     CHECK(endpoint.dispatchSetRate(1.0));
     CHECK_FALSE(endpoint.dispatchSetRate(2.0));
@@ -371,19 +376,19 @@ namespace ao::gtk::platform::test
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     CHECK(endpoint.dispatchSetShuffle(true));
-    CHECK(playback.state().shuffleMode == rt::ShuffleMode::On);
+    CHECK(playback.state().mode.shuffle == rt::ShuffleMode::On);
 
     CHECK(endpoint.dispatchSetLoopStatus("Track"));
-    CHECK(playback.state().repeatMode == rt::RepeatMode::One);
+    CHECK(playback.state().mode.repeat == rt::RepeatMode::One);
 
     CHECK(endpoint.dispatchSetLoopStatus("Playlist"));
-    CHECK(playback.state().repeatMode == rt::RepeatMode::All);
+    CHECK(playback.state().mode.repeat == rt::RepeatMode::All);
 
     CHECK(endpoint.dispatchSetLoopStatus("None"));
-    CHECK(playback.state().repeatMode == rt::RepeatMode::Off);
+    CHECK(playback.state().mode.repeat == rt::RepeatMode::Off);
 
     CHECK_FALSE(endpoint.dispatchSetLoopStatus("Album"));
-    CHECK(playback.state().repeatMode == rt::RepeatMode::Off);
+    CHECK(playback.state().mode.repeat == rt::RepeatMode::Off);
   }
 
   TEST_CASE("MprisBridge - shuffle and loop status setters re-prepare an active queue", "[gtk][unit][mpris]")
@@ -466,7 +471,7 @@ namespace ao::gtk::platform::test
     REQUIRE(queue.playQueue({trackId, nextTrackId}, trackId, ListId{5}));
     CHECK(endpoint.dispatchSeek(99'000'000));
     CHECK(queue.nowPlayingTrackId() == nextTrackId);
-    CHECK(playback.state().trackId == nextTrackId);
+    CHECK(playback.state().nowPlaying.trackId == nextTrackId);
 
     playback.stop();
     CHECK(endpoint.dispatchSeek(1'000'000));

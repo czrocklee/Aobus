@@ -77,32 +77,66 @@ namespace ao::rt
     All,
   };
 
+  struct NowPlayingInfo final
+  {
+    TrackId trackId = kInvalidTrackId;
+    ListId sourceListId = kInvalidListId;
+    ViewId sourceViewId = kInvalidViewId;
+    ResourceId coverArtId = kInvalidResourceId;
+    std::string title{};
+    std::string artist{};
+    std::string album{};
+
+    bool operator==(NowPlayingInfo const&) const = default;
+  };
+
+  struct PlaybackModeState final
+  {
+    ShuffleMode shuffle = ShuffleMode::Off;
+    RepeatMode repeat = RepeatMode::Off;
+
+    bool operator==(PlaybackModeState const&) const = default;
+  };
+
+  struct VolumeState final
+  {
+    float level = 1.0F;
+    bool muted = false;
+    bool available = false;
+    bool hardwareAssisted = false;
+
+    bool operator==(VolumeState const&) const = default;
+  };
+
+  struct OutputState final
+  {
+    OutputDeviceSelection selectedDevice{};
+    std::vector<OutputBackendSnapshot> availableBackends{};
+
+    bool operator==(OutputState const&) const = default;
+  };
+
+  struct QualityState final
+  {
+    audio::Quality overall = audio::Quality::Unknown;
+    std::vector<audio::NodeQualityAssessment> assessments{};
+    audio::flow::Graph flow{};
+
+    bool operator==(QualityState const&) const = default;
+  };
+
   struct PlaybackState final
   {
     audio::Transport transport = audio::Transport::Idle;
-    TrackId trackId{};
-    ListId sourceListId = kInvalidListId;
-    ViewId sourceViewId = kInvalidViewId;
-    ResourceId trackCoverArtId = kInvalidResourceId;
-    std::string trackTitle{};
-    std::string trackArtist{};
-    std::string trackAlbum{};
     std::chrono::milliseconds elapsed{0};
     std::chrono::milliseconds duration{0};
-    float volume = 1.0F;
-    bool muted = false;
-    bool volumeAvailable = false;
-    bool volumeIsHardwareAssisted = false;
     bool ready = false;
 
-    ShuffleMode shuffleMode = ShuffleMode::Off;
-    RepeatMode repeatMode = RepeatMode::Off;
-
-    OutputDeviceSelection selectedOutputDevice{};
-    std::vector<OutputBackendSnapshot> availableOutputBackends{};
-    audio::flow::Graph flow{};
-    audio::Quality quality = audio::Quality::Unknown;
-    std::vector<audio::NodeQualityAssessment> qualityAssessments{};
+    NowPlayingInfo nowPlaying{};
+    PlaybackModeState mode{};
+    VolumeState volume{};
+    OutputState output{};
+    QualityState quality{};
     std::uint64_t revision = 0;
   };
 } // namespace ao::rt

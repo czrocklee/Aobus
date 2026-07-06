@@ -21,7 +21,7 @@ namespace ao::uimodel
   {
     bool hasIdleCurrentTrack(rt::PlaybackState const& state) noexcept
     {
-      return state.transport == audio::Transport::Idle && state.trackId != kInvalidTrackId;
+      return state.transport == audio::Transport::Idle && state.nowPlaying.trackId != kInvalidTrackId;
     }
 
     bool isActivePlayback(audio::Transport const transport) noexcept
@@ -141,11 +141,11 @@ namespace ao::uimodel
         break;
 
       case PlaybackCommand::ToggleShuffle:
-        _playback.setShuffleMode(state.shuffleMode == rt::ShuffleMode::Off ? rt::ShuffleMode::On
-                                                                           : rt::ShuffleMode::Off);
+        _playback.setShuffleMode(state.mode.shuffle == rt::ShuffleMode::Off ? rt::ShuffleMode::On
+                                                                            : rt::ShuffleMode::Off);
         break;
 
-      case PlaybackCommand::CycleRepeat: _playback.setRepeatMode(nextRepeatMode(state.repeatMode)); break;
+      case PlaybackCommand::CycleRepeat: _playback.setRepeatMode(nextRepeatMode(state.mode.repeat)); break;
     }
   }
 
@@ -170,8 +170,8 @@ namespace ao::uimodel
   {
     switch (auto const& state = _playback.state(); command)
     {
-      case PlaybackCommand::Play: return state.trackId != kInvalidTrackId || state.ready;
-      case PlaybackCommand::Pause: return state.trackId != kInvalidTrackId;
+      case PlaybackCommand::Play: return state.nowPlaying.trackId != kInvalidTrackId || state.ready;
+      case PlaybackCommand::Pause: return state.nowPlaying.trackId != kInvalidTrackId;
       case PlaybackCommand::Next:
       case PlaybackCommand::Previous:
       case PlaybackCommand::PlayPause:
