@@ -11,7 +11,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Hash128.h>
 
 #include <cstddef>
 #include <cstdint>

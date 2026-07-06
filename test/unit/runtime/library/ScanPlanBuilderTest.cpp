@@ -10,7 +10,8 @@
 #include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/tag/TagFile.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Hash128.h>
+#include <ao/utility/Xxh3.h>
 #include <runtime/library/ScanPlanBuilder.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -121,7 +122,7 @@ namespace ao::rt::test
       REQUIRE(payloadResult);
 
       return AudioIdentity{.payloadLength = static_cast<std::uint64_t>(payloadResult->bytes.size()),
-                           .signature = utility::fnv1a128(payloadResult->bytes)};
+                           .signature = utility::xxh3Hash128(payloadResult->bytes)};
     }
 
     void putManifestEntry(library::MusicLibrary& ml, std::string_view uri, TrackId trackId, AudioIdentity identity)
@@ -339,7 +340,7 @@ namespace ao::rt::test
     writeBinaryFile(retaggedFile, createRetaggableFlac("Retagged Title", audioPayload));
 
     auto const identity = AudioIdentity{.payloadLength = static_cast<std::uint64_t>(audioPayload.size()),
-                                        .signature = utility::fnv1a128(std::as_bytes(std::span{audioPayload}))};
+                                        .signature = utility::xxh3Hash128(std::as_bytes(std::span{audioPayload}))};
 
     auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
     putManifestEntry(ml, "old-title.flac", TrackId{42}, identity);

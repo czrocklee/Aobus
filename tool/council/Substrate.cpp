@@ -446,7 +446,7 @@ namespace ao::council
       }
 
       std::ranges::sort(entries, {}, [](auto const& path) { return path.generic_string(); });
-      auto hash = Fnv1a64{};
+      auto hash = TreeHash64{};
 
       for (auto const& relative : entries)
       {

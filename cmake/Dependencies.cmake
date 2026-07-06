@@ -127,6 +127,12 @@ message(STATUS "libudev found and enabled")
 # ── lmdb ────────────────────────────────────────────────────────────────────
 pkg_check_modules(LMDB REQUIRED lmdb)
 
+# ── xxHash ──────────────────────────────────────────────────────────────────
+pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
+add_library(PkgXXHash INTERFACE)
+target_link_libraries(PkgXXHash INTERFACE PkgConfig::XXHASH)
+message(STATUS "xxHash found")
+
 # ── mimalloc ────────────────────────────────────────────────────────────────
 find_package(mimalloc REQUIRED)
 

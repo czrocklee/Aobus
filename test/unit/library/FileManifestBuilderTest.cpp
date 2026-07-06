@@ -4,7 +4,7 @@
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -12,7 +12,7 @@ namespace ao::library::test
 {
   TEST_CASE("FileManifestBuilder - constructs valid payload", "[library][unit][manifest]")
   {
-    auto const signature = utility::fnv1a128("audio payload");
+    auto const signature = utility::xxh3Hash128("audio payload");
     auto builder = FileManifestBuilder::createNew();
     builder.trackId(TrackId{100})
       .fileSize(999999)
@@ -36,7 +36,7 @@ namespace ao::library::test
 
   TEST_CASE("FileManifestBuilder - constructs from view", "[library][unit][manifest]")
   {
-    auto const signature = utility::fnv1a128("copied payload");
+    auto const signature = utility::xxh3Hash128("copied payload");
     auto builder1 = FileManifestBuilder::createNew();
     builder1.trackId(TrackId{123})
       .fileSize(111)

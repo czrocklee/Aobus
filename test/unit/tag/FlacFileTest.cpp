@@ -7,7 +7,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -218,7 +218,7 @@ namespace ao::tag::flac::test
 
     CHECK(firstPayloadResult->bytes.size() == audioPayload.size());
     CHECK(secondPayloadResult->bytes.size() == audioPayload.size());
-    CHECK(utility::fnv1a128(firstPayloadResult->bytes) == utility::fnv1a128(secondPayloadResult->bytes));
+    CHECK(utility::xxh3Hash128(firstPayloadResult->bytes) == utility::xxh3Hash128(secondPayloadResult->bytes));
   }
 
   TEST_CASE("FLAC File - rejects malformed input", "[tag][unit][flac][file]")

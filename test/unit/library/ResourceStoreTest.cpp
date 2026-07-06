@@ -138,8 +138,9 @@ namespace ao::library::test
     auto store = ResourceStore{openDatabase(wtxn, "resources")};
     REQUIRE(wtxn.commit());
 
-    // FNV-1a 32-bit hashes these bytes to zero, which is reserved as the invalid ID.
-    constexpr auto kData = std::array{std::byte{0xcc}, std::byte{0x24}, std::byte{0x31}, std::byte{0xc4}};
+    // XXH3-64 hashes these bytes to 0xf91404d400000000; the low 32 bits used
+    // as the resource key are zero, which is reserved as the invalid ID.
+    constexpr auto kData = std::array{std::byte{0xee}, std::byte{0xdc}, std::byte{0xc8}, std::byte{0xbf}};
 
     auto wtxn2 = beginWriteTransaction(env);
     auto writer = store.writer(wtxn2);

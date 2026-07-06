@@ -9,7 +9,7 @@
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
@@ -48,7 +48,7 @@ namespace ao::library::test
     auto db = openDatabase(wtxn, "manifests");
     auto store = FileManifestStore{db};
 
-    auto const signature = utility::fnv1a128("stored payload");
+    auto const signature = utility::xxh3Hash128("stored payload");
     auto builder = FileManifestBuilder::createNew();
     builder.trackId(TrackId{42})
       .fileSize(12345)

@@ -18,6 +18,7 @@
 
 #include <boost/asio/this_coro.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -49,7 +50,17 @@ namespace ao::rt
     bool shouldPublishBackfillProgress(AudioIdentityIndexProgress const& progress)
     {
       constexpr std::int32_t kBackfillProgressItemInterval = 25;
-      return progress.itemFraction == 0.0 && progress.itemIndex % kBackfillProgressItemInterval == 0;
+      return progress.itemFraction == 0.0 && progress.processedCount % kBackfillProgressItemInterval == 0;
+    }
+
+    double backfillProgressFraction(AudioIdentityIndexProgress const& progress)
+    {
+      if (progress.totalCount <= 0)
+      {
+        return 0.0;
+      }
+
+      return std::min(1.0, static_cast<double>(progress.processedCount) / static_cast<double>(progress.totalCount));
     }
 
     struct [[nodiscard]] CancellationSlotGuard final
@@ -280,12 +291,15 @@ namespace ao::rt
         slotGuard.slot.assign([&stopSource](async::CancellationType) { stopSource.request_stop(); });
       }
 
-      auto mutationLock = std::scoped_lock{_implPtr->mutationMutex};
-      auto indexer = AudioIdentityIndexer{_implPtr->library};
+      // No mutation lock here: fingerprinting runs unlocked and the indexer
+      // acquires the lock itself, only around each batch write-back, so scans
+      // and imports are not blocked while files are being hashed.
+      auto indexer = AudioIdentityIndexer{_implPtr->asyncRuntime, _implPtr->library, _implPtr->mutationMutex};
 
       try
       {
-        backfillResult = indexer.indexPending(
+        backfillResult = co_await indexer.indexPending(
+          {},
           [this](AudioIdentityIndexProgress const& progress)
           {
             if (!shouldPublishBackfillProgress(progress))
@@ -293,12 +307,13 @@ namespace ao::rt
               return;
             }
 
+            auto const fraction = backfillProgressFraction(progress);
             auto const filename = progress.path.filename().string();
             _implPtr->asyncRuntime.callbackExecutor().dispatch(
-              [this, filename]
+              [this, fraction, filename]
               {
                 _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
-                  .fraction = 0.0,
+                  .fraction = fraction,
                   .message = "Indexing audio identity: " + filename,
                 });
               });

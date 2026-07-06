@@ -5,7 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Hash128.h>
 
 #include <cstddef>
 #include <cstdint>

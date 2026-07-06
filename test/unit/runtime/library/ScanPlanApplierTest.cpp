@@ -14,7 +14,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Hash128.h>
 #include <runtime/library/ScanPlanApplier.h>
 #include <runtime/library/ScanPlanBuilder.h>
 

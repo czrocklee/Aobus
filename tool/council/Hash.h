@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Xxh3.h>
 
 #include <array>
 #include <cstddef>
@@ -17,9 +17,9 @@
 
 namespace ao::council
 {
-  // Incremental 64-bit FNV-1a used by tree canaries.
+  // Incremental 64-bit XXH3 used by tree canaries.
   // Wraps the shared ao::utility accumulator and adds streamed-file mixing.
-  class Fnv1a64 final
+  class TreeHash64 final
   {
   public:
     void mix(std::string_view bytes) noexcept { _accumulator.mix(bytes); }
@@ -58,6 +58,6 @@ namespace ao::council
     std::string hex() const { return _accumulator.hex(); }
 
   private:
-    utility::Fnv1a64Accumulator _accumulator;
+    utility::Xxh3Accumulator64 _accumulator;
   };
 } // namespace ao::council

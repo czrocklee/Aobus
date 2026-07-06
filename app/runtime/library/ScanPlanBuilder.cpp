@@ -9,7 +9,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/tag/TagFile.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Hash128.h>
 
 #include <chrono>
 #include <cstddef>

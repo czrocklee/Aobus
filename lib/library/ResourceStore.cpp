@@ -5,7 +5,7 @@
 #include <ao/Error.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Xxh3.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -26,8 +26,10 @@ namespace ao::library
 
   Result<ResourceId> Writer::create(std::span<std::byte const> data)
   {
-    // 32-bit FNV-1a: simple, fast, and good distribution for content-addressable storage.
-    auto key = ResourceId{utility::fnv1a32(data)};
+    // Low 32 bits of one-shot XXH3-64: fast and well distributed for
+    // content-addressable storage; the probe-and-verify loop below resolves
+    // collisions in the 32-bit key space.
+    auto key = ResourceId{static_cast<std::uint32_t>(utility::xxh3Hash64(data))};
 
     if (key == kInvalidResourceId)
     {

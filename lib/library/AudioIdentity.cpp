@@ -4,7 +4,7 @@
 #include <ao/Error.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/tag/TagFile.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Xxh3.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -34,7 +34,7 @@ namespace ao::library
     }
 
     auto const bytes = payloadResult->bytes;
-    auto accumulator = utility::Fnv1a128Accumulator{};
+    auto accumulator = utility::Xxh3Accumulator128{};
     std::size_t processed = 0;
 
     if (progress)

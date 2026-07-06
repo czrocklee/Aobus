@@ -9,7 +9,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -402,7 +402,7 @@ namespace ao::tag::mpeg::test
 
     CHECK(firstPayloadResult->bytes.size() == frame.size());
     CHECK(secondPayloadResult->bytes.size() == frame.size());
-    CHECK(utility::fnv1a128(firstPayloadResult->bytes) == utility::fnv1a128(secondPayloadResult->bytes));
+    CHECK(utility::xxh3Hash128(firstPayloadResult->bytes) == utility::xxh3Hash128(secondPayloadResult->bytes));
   }
 
   TEST_CASE("MPEG File - derives CBR audio properties", "[tag][unit][mpeg][file]")

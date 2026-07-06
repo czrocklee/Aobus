@@ -2,6 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Error.h>
+#include <ao/async/Parallel.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
@@ -10,15 +13,19 @@
 #include <ao/rt/library/AudioIdentityIndexer.h>
 #include <ao/tag/TagFile.h>
 
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <mutex>
 #include <optional>
 #include <stop_token>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -114,6 +121,24 @@ namespace ao::rt
       return rows;
     }
 
+    std::int32_t countPendingRows(library::MusicLibrary& ml)
+    {
+      std::int32_t count = 0;
+      auto const txn = ml.readTransaction();
+      auto const reader = ml.manifest().reader(txn);
+
+      for (auto const& [uriView, view] : reader)
+      {
+        if (view.status() == library::FileStatus::Available &&
+            !library::hasAudioIdentity(view.audioPayloadLength(), view.audioSignature()))
+        {
+          ++count;
+        }
+      }
+
+      return count;
+    }
+
     bool pendingRowStillMatches(library::FileManifestView const& view, PendingIdentityRow const& row)
     {
       return view.status() == library::FileStatus::Available &&
@@ -121,11 +146,176 @@ namespace ao::rt
              view.fileSize() == row.fileSize && view.mtime() == row.mtime;
     }
 
-    struct HashedIdentityRow final
+    std::size_t effectiveConcurrency(std::size_t requested)
     {
-      PendingIdentityRow const* row = nullptr;
+      if (requested != 0)
+      {
+        return requested;
+      }
+
+      auto const hardware = static_cast<std::size_t>(std::thread::hardware_concurrency());
+      return std::clamp<std::size_t>(hardware / 2, 2, 4);
+    }
+
+    enum class RowOutcome : std::uint8_t
+    {
+      // Never pulled from the cursor, or hashing was interrupted by a stop
+      // request; the row stays pending.
+      NotProcessed,
+      Hashed,
+      Failed,
+      Skipped
+    };
+
+    struct RowSlot final
+    {
+      RowOutcome outcome = RowOutcome::NotProcessed;
       library::AudioIdentity identity{};
     };
+
+    // Shared state for one batch's fingerprint workers. Workers pull row
+    // indices from `cursor` and each writes only its own `slots` entry, so the
+    // vectors need no locking; user callbacks are serialized through
+    // `callbackMutex`.
+    struct FingerprintBatch final
+    {
+      std::vector<PendingIdentityRow> const& rows;
+      std::vector<RowSlot>& slots;
+      AudioIdentityIndexer::FingerprintFunction const& fingerprint;
+      AudioIdentityIndexer::ProgressCallback& progressCallback;
+      AudioIdentityIndexer::ItemFailureCallback& failureCallback;
+      std::stop_token stopToken;
+      std::int32_t totalCount = 0;
+      std::atomic<std::size_t>& cursor;
+      std::atomic<std::int32_t>& processedCount;
+      std::mutex& callbackMutex;
+    };
+
+    void reportProgress(FingerprintBatch& batch, std::filesystem::path const& path, double itemFraction)
+    {
+      if (!batch.progressCallback)
+      {
+        return;
+      }
+
+      auto const lock = std::scoped_lock{batch.callbackMutex};
+      batch.progressCallback(AudioIdentityIndexProgress{.path = path,
+                                                        .processedCount = batch.processedCount.load(),
+                                                        .totalCount = batch.totalCount,
+                                                        .itemFraction = itemFraction});
+    }
+
+    void reportFailure(FingerprintBatch& batch, std::string uri, std::string stage, std::string message)
+    {
+      if (!batch.failureCallback)
+      {
+        return;
+      }
+
+      auto const lock = std::scoped_lock{batch.callbackMutex};
+      batch.failureCallback(
+        AudioIdentityIndexFailure{.uri = std::move(uri), .stage = std::move(stage), .message = std::move(message)});
+    }
+
+    RowSlot processPendingRow(FingerprintBatch& batch, PendingIdentityRow const& row)
+    {
+      auto ec = std::error_code{};
+      auto const exists = std::filesystem::exists(row.fullPath, ec);
+
+      if (ec)
+      {
+        reportFailure(batch, row.uri, "stat", ec.message());
+        return RowSlot{.outcome = RowOutcome::Failed};
+      }
+
+      if (!exists)
+      {
+        return RowSlot{.outcome = RowOutcome::Skipped};
+      }
+
+      auto const isRegularFile = std::filesystem::is_regular_file(row.fullPath, ec);
+
+      if (ec)
+      {
+        reportFailure(batch, row.uri, "stat", ec.message());
+        return RowSlot{.outcome = RowOutcome::Failed};
+      }
+
+      if (!isRegularFile || !tag::TagFile::isSupported(row.fullPath))
+      {
+        return RowSlot{.outcome = RowOutcome::Skipped};
+      }
+
+      auto statError = std::string{};
+      auto optBeforeHashStat = readCurrentStat(row.fullPath, statError);
+
+      if (!optBeforeHashStat)
+      {
+        reportFailure(batch, row.uri, "stat", statError);
+        return RowSlot{.outcome = RowOutcome::Failed};
+      }
+
+      if (!matchesSnapshot(*optBeforeHashStat, row))
+      {
+        return RowSlot{.outcome = RowOutcome::Skipped};
+      }
+
+      auto identityResult = batch.fingerprint(
+        row.fullPath,
+        [&batch, &row](double fraction) { reportProgress(batch, row.fullPath, fraction); },
+        batch.stopToken);
+
+      if (!identityResult)
+      {
+        reportFailure(batch, row.uri, "fingerprint", identityResult.error().message);
+        return RowSlot{.outcome = RowOutcome::Failed};
+      }
+
+      if (!*identityResult)
+      {
+        return RowSlot{.outcome = RowOutcome::NotProcessed};
+      }
+
+      statError.clear();
+      auto optAfterHashStat = readCurrentStat(row.fullPath, statError);
+
+      if (!optAfterHashStat)
+      {
+        reportFailure(batch, row.uri, "stat", statError);
+        return RowSlot{.outcome = RowOutcome::Failed};
+      }
+
+      if (!matchesSnapshot(*optAfterHashStat, row))
+      {
+        return RowSlot{.outcome = RowOutcome::Skipped};
+      }
+
+      return RowSlot{.outcome = RowOutcome::Hashed, .identity = **identityResult};
+    }
+
+    async::Task<> fingerprintWorker(FingerprintBatch* batch)
+    {
+      while (!batch->stopToken.stop_requested())
+      {
+        auto const index = batch->cursor.fetch_add(1);
+
+        if (index >= batch->rows.size())
+        {
+          break;
+        }
+
+        auto const slot = processPendingRow(*batch, batch->rows[index]);
+
+        if (slot.outcome != RowOutcome::NotProcessed)
+        {
+          batch->processedCount.fetch_add(1);
+        }
+
+        batch->slots[index] = slot;
+      }
+
+      co_return;
+    }
 
     // Writes a batch of hashed identities in a single transaction so the
     // commit (and its fsync) is amortized across the batch instead of paid per
@@ -133,10 +323,11 @@ namespace ao::rt
     // since it was hashed is skipped without aborting the rest of the batch.
     // Counts are folded into the result only after the commit succeeds.
     Result<> writeHashedBatch(library::MusicLibrary& ml,
-                              std::vector<HashedIdentityRow> const& hashedRows,
+                              std::vector<PendingIdentityRow> const& rows,
+                              std::vector<RowSlot> const& slots,
                               AudioIdentityIndexResult& result)
     {
-      if (hashedRows.empty())
+      if (std::ranges::none_of(slots, [](RowSlot const& slot) { return slot.outcome == RowOutcome::Hashed; }))
       {
         return {};
       }
@@ -146,9 +337,14 @@ namespace ao::rt
       std::int32_t batchCompletedCount = 0;
       std::int32_t batchSkippedCount = 0;
 
-      for (auto const& hashed : hashedRows)
+      for (std::size_t index = 0; index < slots.size(); ++index)
       {
-        auto const& row = *hashed.row;
+        if (slots[index].outcome != RowOutcome::Hashed)
+        {
+          continue;
+        }
+
+        auto const& row = rows[index];
         auto currentResult = writer.get(row.uri);
 
         if (!currentResult)
@@ -169,7 +365,7 @@ namespace ao::rt
         }
 
         auto builder = library::FileManifestBuilder::fromView(*currentResult);
-        builder.audioPayloadLength(hashed.identity.payloadLength).audioSignature(hashed.identity.signature);
+        builder.audioPayloadLength(slots[index].identity.payloadLength).audioSignature(slots[index].identity.signature);
 
         if (auto putResult = writer.put(row.uri, builder.serialize()); !putResult)
         {
@@ -188,194 +384,108 @@ namespace ao::rt
       result.skippedCount += batchSkippedCount;
       return {};
     }
-
-    void reportProgress(AudioIdentityIndexer::ProgressCallback& progressCallback,
-                        std::filesystem::path const& path,
-                        std::int32_t itemIndex,
-                        double itemFraction)
-    {
-      if (progressCallback)
-      {
-        progressCallback(
-          AudioIdentityIndexProgress{.path = path, .itemIndex = itemIndex, .itemFraction = itemFraction});
-      }
-    }
-
-    void reportFailure(AudioIdentityIndexer::ItemFailureCallback& failureCallback,
-                       std::string uri,
-                       std::string stage,
-                       std::string message)
-    {
-      if (failureCallback)
-      {
-        failureCallback(
-          AudioIdentityIndexFailure{.uri = std::move(uri), .stage = std::move(stage), .message = std::move(message)});
-      }
-    }
-
-    enum class RowOutcome : std::uint8_t
-    {
-      Hashed,
-      Failed,
-      Skipped,
-      Cancelled
-    };
-
-    RowOutcome processPendingRow(PendingIdentityRow const& row,
-                                 std::int32_t itemIndex,
-                                 std::stop_token stopToken,
-                                 AudioIdentityIndexer::ProgressCallback& progressCallback,
-                                 AudioIdentityIndexer::ItemFailureCallback& failureCallback,
-                                 std::vector<HashedIdentityRow>& hashedRows)
-    {
-      if (stopToken.stop_requested())
-      {
-        return RowOutcome::Cancelled;
-      }
-
-      auto ec = std::error_code{};
-      auto const exists = std::filesystem::exists(row.fullPath, ec);
-
-      if (ec)
-      {
-        reportFailure(failureCallback, row.uri, "stat", ec.message());
-        return RowOutcome::Failed;
-      }
-
-      if (!exists)
-      {
-        return RowOutcome::Skipped;
-      }
-
-      auto const isRegularFile = std::filesystem::is_regular_file(row.fullPath, ec);
-
-      if (ec)
-      {
-        reportFailure(failureCallback, row.uri, "stat", ec.message());
-        return RowOutcome::Failed;
-      }
-
-      if (!isRegularFile || !tag::TagFile::isSupported(row.fullPath))
-      {
-        return RowOutcome::Skipped;
-      }
-
-      auto statError = std::string{};
-      auto optBeforeHashStat = readCurrentStat(row.fullPath, statError);
-
-      if (!optBeforeHashStat)
-      {
-        reportFailure(failureCallback, row.uri, "stat", statError);
-        return RowOutcome::Failed;
-      }
-
-      if (!matchesSnapshot(*optBeforeHashStat, row))
-      {
-        return RowOutcome::Skipped;
-      }
-
-      auto identityResult = library::readAudioIdentity(
-        row.fullPath,
-        [&progressCallback, &row, itemIndex](double fraction)
-        { reportProgress(progressCallback, row.fullPath, itemIndex, fraction); },
-        stopToken);
-
-      if (!identityResult)
-      {
-        reportFailure(failureCallback, row.uri, "fingerprint", identityResult.error().message);
-        return RowOutcome::Failed;
-      }
-
-      if (!*identityResult)
-      {
-        return RowOutcome::Cancelled;
-      }
-
-      statError.clear();
-      auto optAfterHashStat = readCurrentStat(row.fullPath, statError);
-
-      if (!optAfterHashStat)
-      {
-        reportFailure(failureCallback, row.uri, "stat", statError);
-        return RowOutcome::Failed;
-      }
-
-      if (!matchesSnapshot(*optAfterHashStat, row))
-      {
-        return RowOutcome::Skipped;
-      }
-
-      hashedRows.push_back(HashedIdentityRow{.row = &row, .identity = **identityResult});
-      return RowOutcome::Hashed;
-    }
   } // namespace
 
-  AudioIdentityIndexer::AudioIdentityIndexer(library::MusicLibrary& library)
-    : _library{library}
+  AudioIdentityIndexer::AudioIdentityIndexer(async::Runtime& asyncRuntime,
+                                             library::MusicLibrary& library,
+                                             std::mutex& mutationMutex)
+    : _asyncRuntime{asyncRuntime}, _library{library}, _mutationMutex{mutationMutex}
   {
   }
 
-  Result<AudioIdentityIndexResult> AudioIdentityIndexer::indexPending(ProgressCallback progressCallback,
-                                                                      ItemFailureCallback failureCallback,
-                                                                      std::stop_token stopToken)
+  async::Task<Result<AudioIdentityIndexResult>> AudioIdentityIndexer::indexPending(Options options,
+                                                                                   ProgressCallback progressCallback,
+                                                                                   ItemFailureCallback failureCallback,
+                                                                                   std::stop_token stopToken)
   {
     auto result = AudioIdentityIndexResult{};
+    auto const fingerprint =
+      options.fingerprint
+        ? std::move(options.fingerprint)
+        : FingerprintFunction{
+            [](
+              std::filesystem::path const& path, library::AudioIdentityProgressCallback progress, std::stop_token token)
+            { return library::readAudioIdentity(path, std::move(progress), token); }};
+    auto const concurrency = effectiveConcurrency(options.maxConcurrency);
+    auto const totalCount = countPendingRows(_library);
+    auto processedCount = std::atomic<std::int32_t>{0};
+    auto callbackMutex = std::mutex{};
     auto optAfterUri = std::optional<std::string>{};
-    std::int32_t visitedCount = 0;
 
     while (true)
     {
       if (stopToken.stop_requested())
       {
         result.cancelled = true;
-        return result;
+        co_return result;
       }
 
+      // Phase 1: snapshot a batch of pending rows. A plain read transaction is
+      // a consistent LMDB snapshot, and every row is revalidated before its
+      // write, so no mutation lock is needed here.
       auto rows = collectPendingRows(_library, optAfterUri);
 
       if (rows.empty())
       {
-        return result;
+        co_return result;
       }
 
       optAfterUri = rows.back().uri;
 
-      auto hashedRows = std::vector<HashedIdentityRow>{};
-      hashedRows.reserve(rows.size());
-      bool stopRequested = false;
+      // Phase 2: fingerprint the batch concurrently, without any lock or LMDB
+      // transaction. The coordinator is suspended while workers run, so it
+      // holds no worker-pool thread.
+      auto slots = std::vector<RowSlot>(rows.size());
+      auto cursor = std::atomic<std::size_t>{0};
+      auto batch = FingerprintBatch{.rows = rows,
+                                    .slots = slots,
+                                    .fingerprint = fingerprint,
+                                    .progressCallback = progressCallback,
+                                    .failureCallback = failureCallback,
+                                    .stopToken = stopToken,
+                                    .totalCount = totalCount,
+                                    .cursor = cursor,
+                                    .processedCount = processedCount,
+                                    .callbackMutex = callbackMutex};
 
-      for (auto const& row : rows)
+      auto const workerCount = std::min(concurrency, rows.size());
+      auto workers = std::vector<async::Task<>>{};
+      workers.reserve(workerCount);
+
+      for (std::size_t worker = 0; worker < workerCount; ++worker)
       {
-        auto const itemIndex = visitedCount++;
-        auto const outcome =
-          processPendingRow(row, itemIndex, stopToken, progressCallback, failureCallback, hashedRows);
+        workers.push_back(fingerprintWorker(&batch));
+      }
 
-        if (outcome == RowOutcome::Cancelled)
-        {
-          stopRequested = true;
-          break;
-        }
+      co_await async::whenAll(&_asyncRuntime, std::move(workers));
 
-        if (outcome == RowOutcome::Failed)
+      for (auto const& slot : slots)
+      {
+        if (slot.outcome == RowOutcome::Failed)
         {
           ++result.failureCount;
         }
-        else if (outcome == RowOutcome::Skipped)
+        else if (slot.outcome == RowOutcome::Skipped)
         {
           ++result.skippedCount;
         }
       }
 
-      // Flush even on cancellation so already-computed hashes are not lost.
-      if (auto writeResult = writeHashedBatch(_library, hashedRows, result); !writeResult)
+      // Phase 3: serial write-back under the mutation lock. Flush even on
+      // cancellation so already-computed hashes are not lost.
       {
-        return std::unexpected{writeResult.error()};
+        auto mutationLock = std::scoped_lock{_mutationMutex};
+
+        if (auto writeResult = writeHashedBatch(_library, rows, slots, result); !writeResult)
+        {
+          co_return std::unexpected{writeResult.error()};
+        }
       }
 
-      if (stopRequested)
+      if (stopToken.stop_requested())
       {
         result.cancelled = true;
-        return result;
+        co_return result;
       }
     }
   }

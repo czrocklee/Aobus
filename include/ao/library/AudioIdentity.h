@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Hash128.h>
 
 #include <cstdint>
 #include <filesystem>

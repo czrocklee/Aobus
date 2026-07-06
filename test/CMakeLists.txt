@@ -22,7 +22,7 @@ add_executable(ao_core_test
     # utility tests
     unit/utility/AtomicFileTest.cpp
     unit/utility/Base64Test.cpp
-    unit/utility/Fnv1aTest.cpp
+    unit/utility/Xxh3Test.cpp
     unit/utility/MappedFileTest.cpp
     unit/utility/LogTest.cpp
     unit/utility/ByteViewTest.cpp
@@ -218,6 +218,7 @@ add_executable(ao_core_test
 
     # app unit tests (no platform deps)
     unit/runtime/AppPrefsStateTest.cpp
+    unit/runtime/AsyncParallelTest.cpp
     unit/runtime/AsyncRuntimeTest.cpp
     unit/runtime/QueuedExecutorTest.cpp
     unit/runtime/library/LibraryReaderTest.cpp

@@ -4,7 +4,7 @@
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -15,7 +15,7 @@ namespace ao::library::test
 {
   TEST_CASE("FileManifestView - properties", "[library][unit][manifest]")
   {
-    auto const signature = utility::fnv1a128("view payload");
+    auto const signature = utility::xxh3Hash128("view payload");
     auto buffer = std::array<std::byte, kFileManifestHeaderSize>{};
     auto* header = reinterpret_cast<FileManifestHeader*>(buffer.data());
 

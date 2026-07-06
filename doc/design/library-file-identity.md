@@ -41,21 +41,23 @@ the returned span; no decode is required.
 
 ## Signature
 
-The current content signature is `utility::Hash128` produced by
-`utility::fnv1a128()`. This is a non-cryptographic 128-bit signature for local
-content identity, not a security boundary. Aobus stores payload length with the
-128-bit signature so accidental collisions require both the byte count and the
-full signature to match; 128-bit is used instead of 64-bit to keep the birthday
-collision margin comfortably outside realistic local-library sizes without
-adding meaningful storage cost.
+The current content signature is `utility::Hash128` produced by XXH3-128
+(xxHash) through the `utility::Xxh3Accumulator128` wrapper. This is a
+non-cryptographic 128-bit signature for local content identity, not a security
+boundary. Aobus stores payload length with the 128-bit signature so accidental
+collisions require both the byte count and the full signature to match; 128-bit
+is used instead of 64-bit to keep the birthday collision margin comfortably
+outside realistic local-library sizes without adding meaningful storage cost.
 
-The manifest stores the signature bytes in canonical big-endian numeric order
-(`hash.high` most-significant byte first, then `hash.low` most-significant byte
-first). Incremental hashing is chunk-boundary invariant: hashing one span or
-the same bytes split across `Fnv1a128Accumulator::mix()` calls produces the same
-signature. Identity readers hash audio payloads through `Fnv1a128Accumulator`
-in bounded chunks so callers receive fingerprinting progress and cancellation
-is honored while hashing large files.
+The manifest stores the signature bytes in the XXH128 canonical serialization
+(`XXH128_canonicalFromHash`, defined big-endian), so the stored representation
+is platform independent. Incremental hashing is chunk-boundary invariant:
+hashing one span or the same bytes split across `Xxh3Accumulator128::mix()`
+calls produces the same signature. Identity readers hash audio payloads through
+`Xxh3Accumulator128` in bounded chunks so callers receive fingerprinting
+progress and cancellation is honored while hashing large files. xxHash is an
+implementation detail of the `ao/utility/Xxh3.h` wrapper; library-layer headers
+never include `<xxhash.h>`.
 
 ## Manifest Format
 
@@ -68,7 +70,7 @@ is honored while hashing large files.
 - 128-bit audio payload signature
 - file status
 
-The library format version is `2`. Aobus does not carry compatibility
+The library format version is `4`. Aobus does not carry compatibility
 migration code for older metadata headers; opening a library whose stored
 version differs from the current version reports `CorruptData`. Development
 databases must be reset and rescanned after a format bump. There is no separate
@@ -140,18 +142,37 @@ or not at all.
 
 `library::readAudioIdentity()` computes the encoded audio payload identity.
 Runtime `AudioIdentityIndexer` scans the manifest for available rows whose
-identity is pending. It collects rows in bounded batches, releases the read
-transaction, and hashes files outside any LMDB transaction. Before hashing it
-verifies the live file is still a supported regular audio file and that
-size/mtime match the manifest snapshot. After hashing it checks size/mtime
-again. The hashed rows of a batch are then written back in a single write
-transaction, so the commit cost is amortized across the batch. Inside that
-transaction each row is reread, rebuilt with `FileManifestBuilder::fromView()`,
-and written with `FileManifestStore::Writer::put()` only if it is still
-available, still pending, and still has the same size/mtime; a row that changed
-mid-batch is skipped without aborting the rest of the batch. This prevents a
-stale hash from being committed when the file or manifest changes while
-indexing is running.
+identity is pending and fills them in three phases per bounded batch:
+
+1. **Snapshot.** A plain LMDB read transaction collects the batch's pending
+   rows (URI, path, size, mtime). No mutation lock is held: the write-back
+   phase revalidates every row, so a stale snapshot cannot commit stale state.
+2. **Concurrent fingerprint.** Rows are hashed outside any LMDB transaction
+   and without any lock by a bounded set of workers on the shared async worker
+   pool; the default worker count is `clamp(hardware_concurrency / 2, 2, 4)`
+   because hashing is disk-bound and the pool is shared with the rest of the
+   app. The coordinator awaits the workers through `async::whenAll` and holds
+   no pool thread while suspended, so indexing cannot starve a small pool.
+   Before hashing, a worker verifies the live file is still a supported
+   regular audio file whose size/mtime match the manifest snapshot, and
+   verifies size/mtime again after hashing. Per-file failures are reported and
+   counted without aborting the run; database failures are fatal.
+3. **Serial write-back.** The hashed rows of a batch are written back in a
+   single write transaction, so the commit cost is amortized across the batch.
+   The constructor-provided mutation mutex is locked only around this phase:
+   `LibraryTasks` passes its mutation mutex, so scans, imports, and exports
+   block on backfill only during these short write windows, never while files
+   are being hashed. Inside the transaction each row is reread, rebuilt with
+   `FileManifestBuilder::fromView()`, and written with
+   `FileManifestStore::Writer::put()` only if it is still available, still
+   pending, and still has the same size/mtime; a row that changed mid-batch is
+   skipped without aborting the rest of the batch. This prevents a stale hash
+   from being committed when the file or manifest changes while indexing is
+   running.
+
+Cancellation stops workers between hashing chunks, flushes rows already hashed
+in the current batch (they are valid completed work), and returns a cancelled
+result; rows not yet hashed or written stay pending.
 
 Indexing updates manifest identity only. Runtime and GTK completion paths do not
 emit track-mutation notifications for indexing because track rows and displayed

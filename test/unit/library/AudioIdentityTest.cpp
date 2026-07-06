@@ -3,7 +3,9 @@
 
 #include "test/unit/audio/AudioFixtureUtils.h"
 #include <ao/library/AudioIdentity.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/tag/TagFile.h>
+#include <ao/utility/Hash128.h>
+#include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -26,6 +28,24 @@ namespace ao::library::test
     REQUIRE(progressEvents.size() >= 2);
     CHECK(progressEvents.front() == 0.0);
     CHECK(progressEvents.back() == 1.0);
+  }
+
+  TEST_CASE("readAudioIdentity matches one-shot XXH3-128 of the audio payload", "[library][unit][audio-identity]")
+  {
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    auto tagFileResult = tag::TagFile::open(sourceFile);
+    REQUIRE(tagFileResult);
+    auto const payloadResult = (*tagFileResult)->audioPayload();
+    REQUIRE(payloadResult);
+
+    auto result = readAudioIdentity(**tagFileResult);
+
+    REQUIRE(result);
+    REQUIRE(result->has_value());
+    // The production loop hashes in bounded chunks; XXH3 streaming is
+    // chunk-boundary invariant, so it must equal the one-shot signature.
+    CHECK((*result)->signature == utility::xxh3Hash128(payloadResult->bytes));
+    CHECK((*result)->payloadLength == payloadResult->bytes.size());
   }
 
   TEST_CASE("readAudioIdentity returns empty optional when cancelled", "[library][unit][audio-identity]")

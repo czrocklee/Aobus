@@ -8,7 +8,7 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Xxh3.h>
 #include <ao/yaml/ConfigTraits.h>
 #include <ao/yaml/Utils.h>
 
@@ -142,7 +142,7 @@ namespace ao::uimodel
 
   std::string componentBaselineHash(LayoutNode const& node)
   {
-    return utility::fnv1a64Hex(canonicalBaseline(node));
+    return utility::xxh3Hash64Hex(canonicalBaseline(node));
   }
 
   std::optional<LayoutComponentStateEntry> resolveComponentState(LayoutComponentStateDocument const& stateDoc,

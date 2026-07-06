@@ -65,6 +65,7 @@ pkgs.mkShell {
       boost.dev
       lmdb
       lmdb.dev
+      xxhash
       (spdlog.overrideAttrs (oldAttrs: {
         cmakeFlags = (oldAttrs.cmakeFlags or []) ++ [
           "-DSPDLOG_USE_STD_FORMAT=ON"

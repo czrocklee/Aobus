@@ -9,7 +9,7 @@
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/mp4/AtomLayout.h>
-#include <ao/utility/Fnv1a.h>
+#include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -513,7 +513,7 @@ namespace ao::tag::mp4::test
 
     CHECK(baselinePayloadResult->bytes.size() == payload.size());
     CHECK(retaggedPayloadResult->bytes.size() == payload.size());
-    CHECK(utility::fnv1a128(baselinePayloadResult->bytes) == utility::fnv1a128(retaggedPayloadResult->bytes));
+    CHECK(utility::xxh3Hash128(baselinePayloadResult->bytes) == utility::xxh3Hash128(retaggedPayloadResult->bytes));
   }
 
   TEST_CASE("MP4 File - single covr with two data boxes", "[tag][unit][mp4][file][cover]")
