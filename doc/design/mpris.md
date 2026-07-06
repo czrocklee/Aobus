@@ -50,7 +50,7 @@ metadata, seek dispatch, live repeat/shuffle state, volume, and cover art URLs.
 | `Previous` | `PlaybackCommand::Previous` |
 | `Seek` | relative seek through `PlaybackService::seek()` |
 | `SetPosition` | absolute seek through `PlaybackService::seek()` when the MPRIS track id matches the current track |
-| `Rate` property write | `1.0` is accepted; other values fail because Aobus is fixed-rate |
+| `Rate` property write | finite non-zero values are accepted and ignored; `0.0` pauses because Aobus is fixed-rate |
 | `Volume` property write | `PlaybackService::setVolume()` |
 | `Shuffle` property write | `PlaybackService::setShuffleMode()` |
 | `LoopStatus` property write | `PlaybackService::setRepeatMode()` |
@@ -85,9 +85,9 @@ The player reports these capabilities:
   `xesam:album`, `mpris:length`, and `mpris:artUrl` when those fields are
   available for the current track;
 - `Position` is the current playback position in microseconds;
-- `Rate`, `MinimumRate`, and `MaximumRate` all read as `1.0`; `Rate=1.0` is
-  accepted and other writes fail because Aobus does not support variable-rate
-  playback;
+- `Rate`, `MinimumRate`, and `MaximumRate` all read as `1.0`; finite non-zero
+  rate writes are accepted and ignored because Aobus does not support
+  variable-rate playback, while `0.0` acts like `Pause`;
 - `Volume` is the current playback volume and is writable; writes use the same
   normalization and backend path as the in-app volume controls;
 - `Shuffle` reflects `PlaybackState::shuffleMode` and is writable;
@@ -112,7 +112,7 @@ Capability ownership:
 | `CanGoNext` | `PlaybackCommandSurface::capable(PlaybackCommand::Next)` |
 | `CanGoPrevious` | `PlaybackCommandSurface::capable(PlaybackCommand::Previous)` |
 | `CanControl` | constant `true` |
-| `CanSeek` | `PlaybackService::state().trackId != kInvalidTrackId` |
+| `CanSeek` | `PlaybackService::state().nowPlaying.trackId != kInvalidTrackId` |
 
 ## Signals
 

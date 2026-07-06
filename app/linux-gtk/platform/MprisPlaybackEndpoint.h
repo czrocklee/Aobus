@@ -11,6 +11,7 @@
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -104,7 +105,20 @@ namespace ao::gtk::platform
       return true;
     }
 
-    bool dispatchSetRate(double const rate) const noexcept { return rate == 1.0; }
+    bool dispatchSetRate(double const rate) const
+    {
+      if (!std::isfinite(rate))
+      {
+        return false;
+      }
+
+      if (rate == 0.0)
+      {
+        _commands.execute(uimodel::PlaybackCommand::Pause);
+      }
+
+      return true;
+    }
 
     bool dispatchSetVolume(double const volume)
     {

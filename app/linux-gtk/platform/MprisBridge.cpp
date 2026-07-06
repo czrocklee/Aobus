@@ -706,7 +706,7 @@ namespace ao::gtk::platform
           return true;
         }
 
-        throwGioError(Gio::Error::NOT_SUPPORTED, "Unsupported MPRIS playback rate");
+        throwGioError(Gio::Error::INVALID_ARGUMENT, "Invalid MPRIS playback rate");
       }
 
       if (propertyName == "Shuffle")

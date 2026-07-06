@@ -31,6 +31,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -361,9 +362,39 @@ namespace ao::gtk::platform::test
 
     CHECK(endpoint.dispatchSetVolume(-1.0));
     CHECK(playback.state().volume.level == 0.0F);
+  }
+
+  TEST_CASE("MprisBridge - rate setter keeps fixed rate and pauses on zero", "[gtk][unit][mpris]")
+  {
+    auto fixture = ao::gtk::test::GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto& playback = runtime.playback();
+    rt::test::addReadyAudioProvider(playback);
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const trackId = library::test::addTrack(
+      runtime.musicLibrary(), library::test::TrackSpec{.title = "Rate Track", .uri = fixturePath});
+    auto queue = uimodel::PlaybackQueueModel{playback, runtime.notifications()};
+    auto commands = uimodel::PlaybackCommandSurface{playback, &queue, [] {}};
+    auto callbacks = MprisBridge::Callbacks{};
+    auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
+
+    REQUIRE(queue.playQueue({trackId}, trackId, ListId{8}));
+    REQUIRE(playback.state().transport == audio::Transport::Playing);
+
+    CHECK(endpoint.dispatchSetRate(2.0));
+    CHECK(playback.state().transport == audio::Transport::Playing);
+
+    CHECK(endpoint.dispatchSetRate(-1.0));
+    CHECK(playback.state().transport == audio::Transport::Playing);
+
+    CHECK(endpoint.dispatchSetRate(0.0));
+    CHECK(playback.state().transport == audio::Transport::Paused);
 
     CHECK(endpoint.dispatchSetRate(1.0));
-    CHECK_FALSE(endpoint.dispatchSetRate(2.0));
+    CHECK(playback.state().transport == audio::Transport::Paused);
+
+    CHECK_FALSE(endpoint.dispatchSetRate(std::numeric_limits<double>::infinity()));
+    CHECK_FALSE(endpoint.dispatchSetRate(std::numeric_limits<double>::quiet_NaN()));
   }
 
   TEST_CASE("MprisBridge - shuffle and loop status setters delegate to playback service", "[gtk][unit][mpris]")
