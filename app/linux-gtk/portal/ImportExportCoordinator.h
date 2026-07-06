@@ -62,6 +62,7 @@ namespace ao::gtk::portal
 
     void openLibrary() override;
     void scanLibrary() override;
+    void scanLibrary(ScanRequestMode mode);
     void importLibrary() override; // YAML import
     void exportLibrary() override; // YAML export
 

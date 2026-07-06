@@ -12,6 +12,8 @@
 #include "app/ShellLayoutStore.h"
 #include "platform/AudioBackendBootstrap.h"
 #include "portal/ImportExportCoordinator.h"
+#include "portal/ImportExportCoordinatorPolicy.h"
+#include "portal/LibraryImportExportWorkflow.h"
 #include "preferences/PreferencesWindow.h"
 #include <ao/AppVersion.h>
 #include <ao/Exception.h>
@@ -58,6 +60,7 @@ namespace
     std::filesystem::path musicRoot;
     std::filesystem::path databasePath;
     LibraryWindowKind windowKind = LibraryWindowKind::Library;
+    bool scanAfterOpen = false;
   };
 
   LibraryPaths resolveLibraryPaths(AppConfig const& config)
@@ -72,15 +75,16 @@ namespace
       if (std::filesystem::exists(musicRoot))
       {
         return {.musicRoot = musicRoot,
-                .databasePath = musicRoot / ".aobus" / "library",
-                .windowKind = LibraryWindowKind::Library};
+                .databasePath = portal::defaultLibraryDatabasePath(musicRoot),
+                .windowKind = LibraryWindowKind::Library,
+                .scanAfterOpen = portal::shouldScanAfterOpen(musicRoot)};
       }
     }
 
     auto const emptyPath = std::filesystem::temp_directory_path() / "aobus-empty";
     std::filesystem::create_directories(emptyPath);
     return {.musicRoot = emptyPath,
-            .databasePath = emptyPath / ".aobus" / "library",
+            .databasePath = portal::defaultLibraryDatabasePath(emptyPath),
             .windowKind = LibraryWindowKind::FallbackEmptyLibrary};
   }
 
@@ -230,12 +234,14 @@ namespace
       return;
     }
 
-    auto newWindowPtr = createWindow(
-      *app,
-      {.musicRoot = path, .databasePath = path / ".aobus" / "library", .windowKind = LibraryWindowKind::Library},
-      appConfigPtr,
-      shellLayoutStorePtr,
-      componentStateStorePtr);
+    auto newWindowPtr = createWindow(*app,
+                                     {.musicRoot = path,
+                                      .databasePath = portal::defaultLibraryDatabasePath(path),
+                                      .windowKind = LibraryWindowKind::Library,
+                                      .scanAfterOpen = scanAfterOpen},
+                                     appConfigPtr,
+                                     shellLayoutStorePtr,
+                                     componentStateStorePtr);
     configureOpenLibraryCallback(newWindowPtr,
                                  LibraryWindowKind::Library,
                                  app,
@@ -244,12 +250,12 @@ namespace
                                  shellLayoutStorePtr,
                                  componentStateStorePtr);
 
-    if (scanAfterOpen)
-    {
-      newWindowPtr->importExportCoordinator().scanLibrary();
-    }
-
     windows.push_back(std::move(newWindowPtr));
+
+    if (auto& openedWindowPtr = windows.back(); scanAfterOpen)
+    {
+      openedWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
+    }
 
     if (mode == OpenLibraryWindowMode::ReplaceSourceWindow)
     {
@@ -496,11 +502,17 @@ namespace
     auto paths = resolveLibraryPaths(*appConfigPtr);
 
     auto const windowKind = paths.windowKind;
+    auto const scanAfterOpen = paths.scanAfterOpen;
     auto windowPtr = createWindow(*app, std::move(paths), appConfigPtr, shellLayoutStorePtr, componentStateStorePtr);
     configureOpenLibraryCallback(
       windowPtr, windowKind, app, windows, appConfigPtr, shellLayoutStorePtr, componentStateStorePtr);
 
     windows.push_back(std::move(windowPtr));
+
+    if (scanAfterOpen)
+    {
+      windows.back()->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
+    }
   }
 
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)

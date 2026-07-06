@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "ScanPlanBuilder.h"
+
 #include <ao/Error.h>
+#include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
-#include <ao/library/LibraryScanner.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/library/ScanPlan.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Fnv1a.h>
 
@@ -21,7 +24,7 @@
 #include <utility>
 #include <vector>
 
-namespace ao::library
+namespace ao::rt
 {
   namespace
   {
@@ -54,7 +57,7 @@ namespace ao::library
 
     void processEntry(std::filesystem::directory_entry const& entry,
                       std::filesystem::path const& root,
-                      FileManifestStore::Reader const& manifestReader,
+                      library::FileManifestStore::Reader const& manifestReader,
                       std::unordered_set<std::string>& seenUris,
                       ScanPlan& plan)
     {
@@ -153,7 +156,7 @@ namespace ao::library
       plan.items.push_back(std::move(item));
     }
     void addMissingEntries(ScanPlan& plan,
-                           FileManifestStore::Reader const& manifestReader,
+                           library::FileManifestStore::Reader const& manifestReader,
                            std::unordered_set<std::string> const& seenUris)
     {
       for (auto const& [uriView, view] : manifestReader)
@@ -231,7 +234,15 @@ namespace ao::library
           continue;
         }
 
-        item.audioSignature = utility::fnv1a128(payloadResult->bytes);
+        auto identityResult = library::readAudioIdentity(**tagFileResult);
+
+        if (!identityResult || !*identityResult)
+        {
+          continue;
+        }
+
+        item.audioPayloadLength = (*identityResult)->payloadLength;
+        item.audioSignature = (*identityResult)->signature;
         auto const key = AudioIdentityKey{.payloadLength = item.audioPayloadLength, .signature = item.audioSignature};
         newByIdentity[key].push_back(index);
       }
@@ -282,12 +293,12 @@ namespace ao::library
     }
   } // namespace
 
-  LibraryScanner::LibraryScanner(MusicLibrary& ml)
+  ScanPlanBuilder::ScanPlanBuilder(library::MusicLibrary& ml)
     : _ml{ml}
   {
   }
 
-  Result<ScanPlan> LibraryScanner::buildPlan(ProgressCallback progress)
+  Result<ScanPlan> ScanPlanBuilder::buildPlan(ProgressCallback progress)
   {
     auto plan = ScanPlan{};
     auto const root = _ml.rootPath();
@@ -376,4 +387,4 @@ namespace ao::library
 
     return plan;
   }
-} // namespace ao::library
+} // namespace ao::rt

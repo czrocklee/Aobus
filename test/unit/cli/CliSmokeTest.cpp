@@ -7,6 +7,8 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/AppVersion.h>
 #include <ao/CoreIds.h>
+#include <ao/library/AudioIdentity.h>
+#include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/yaml/Utils.h>
@@ -251,6 +253,15 @@ namespace ao::cli::test
     private:
       ao::test::TempDir _temp;
     };
+
+    bool manifestHasAudioIdentity(CliFixture const& fixture, std::string_view uri)
+    {
+      auto musicLibrary = library::MusicLibrary{fixture.root(), fixture.root() / ".aobus/library"};
+      auto txn = musicLibrary.readTransaction();
+      auto manifestResult = musicLibrary.manifest().reader(txn).get(uri);
+      REQUIRE(manifestResult);
+      return library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature());
+    }
   } // namespace
 
   TEST_CASE("CLI - init and dump commands run against fixture library", "[cli][workflow][smoke]")
@@ -720,6 +731,36 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "new 0  changed 0  moved 0  missing 1  unchanged 0  errors 0"));
     CHECK(contains(result.out, "1 missing file needs review"));
+  }
+
+  TEST_CASE("CLI - deferred scan fingerprints pending manifest rows on demand", "[cli][workflow][scan]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "track.flac");
+
+    auto result = fixture.run({"scan", "--defer-fingerprint", "--verbose"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "new 1  changed 0  moved 0  missing 0  unchanged 0  errors 0"));
+    CHECK(contains(result.out, "Audio identity fingerprinting was deferred"));
+    CHECK(contains(result.err, "scan:"));
+    CHECK(contains(result.err, "apply:"));
+    CHECK_FALSE(contains(result.err, "fingerprint:"));
+    CHECK_FALSE(manifestHasAudioIdentity(fixture, "track.flac"));
+
+    result = fixture.run({"lib", "fingerprint", "--pending", "--verbose"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "fingerprinted 1  skipped 0  failed 0"));
+    CHECK(contains(result.err, "fingerprint:"));
+    CHECK(manifestHasAudioIdentity(fixture, "track.flac"));
+
+    result = fixture.run({"-O", "json", "lib", "fingerprint", "--pending"});
+    REQUIRE(result.status == 0);
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["completed"]) == "0");
+    CHECK(yaml::scalarView(tree.rootref()["skipped"]) == "0");
+    CHECK(yaml::scalarView(tree.rootref()["failures"]) == "0");
+
+    checkDomainFailure(fixture.run({"lib", "fingerprint"}), "lib fingerprint requires --pending");
   }
 
   TEST_CASE("CLI - scan reports moved files", "[cli][workflow][scan]")

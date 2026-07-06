@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include <ao/library/LibraryScanner.h>
+#include <ao/rt/library/ScanPlan.h>
 
 #include <string_view>
 
 namespace ao::cli
 {
-  std::string_view scanClassificationName(library::ScanClassification classification);
+  std::string_view scanClassificationName(rt::ScanClassification classification);
 } // namespace ao::cli

@@ -9,6 +9,7 @@
 #include "layout/LayoutConstants.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/ImportExportCoordinatorPolicy.h"
+#include "portal/LibraryImportExportWorkflow.h"
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 
@@ -71,7 +72,12 @@ namespace ao::gtk::portal
 
   void ImportExportCoordinator::scanLibrary()
   {
-    _workflow.scan();
+    scanLibrary(ScanRequestMode::Eager);
+  }
+
+  void ImportExportCoordinator::scanLibrary(ScanRequestMode mode)
+  {
+    _workflow.scan(mode);
   }
 
   void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path, bool const scanAfterOpen) const

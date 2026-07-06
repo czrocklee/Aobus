@@ -5,22 +5,26 @@
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/library/LibraryScanner.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/ScanPlanExecutor.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/library/AudioIdentityIndexer.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTasks.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/ThreadUtils.h>
 
 #include <boost/asio/this_coro.hpp>
 
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <expected>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <stop_token>
 #include <string>
 #include <utility>
@@ -30,16 +34,22 @@ namespace ao::rt
 {
   namespace
   {
-    std::string scanApplyProgressMessage(library::ScanPlanExecutor::Progress const& progress)
+    std::string scanApplyProgressMessage(ScanApplyProgress const& progress)
     {
       auto prefix = std::string_view{"Updating"};
 
-      if (progress.stage == library::ScanPlanExecutor::ProgressStage::Fingerprinting)
+      if (progress.stage == ScanApplyProgressStage::Fingerprinting)
       {
         prefix = "Fingerprinting";
       }
 
       return std::string{prefix} + ": " + progress.path.filename().string();
+    }
+
+    bool shouldPublishBackfillProgress(AudioIdentityIndexProgress const& progress)
+    {
+      constexpr std::int32_t kBackfillProgressItemInterval = 25;
+      return progress.itemFraction == 0.0 && progress.itemIndex % kBackfillProgressItemInterval == 0;
     }
 
     struct [[nodiscard]] CancellationSlotGuard final
@@ -71,6 +81,7 @@ namespace ao::rt
     async::Runtime& asyncRuntime;
     library::MusicLibrary& library;
     LibraryChanges& changes;
+    std::mutex mutationMutex;
   };
 
   LibraryTasks::LibraryTasks(async::Runtime& asyncRuntime, library::MusicLibrary& library, LibraryChanges& changes)
@@ -84,13 +95,16 @@ namespace ao::rt
   {
     co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryImport");
-    auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
-    auto importResult = importer.importFromYaml(path);
     auto result = Result<>{};
 
-    if (!importResult)
     {
-      result = std::unexpected{importResult.error()};
+      auto mutationLock = std::scoped_lock{_implPtr->mutationMutex};
+      auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
+
+      if (auto importResult = importer.importFromYaml(path); !importResult)
+      {
+        result = std::unexpected{importResult.error()};
+      }
     }
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
@@ -101,31 +115,44 @@ namespace ao::rt
   {
     co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("LibraryExport");
-    auto exporter = ao::rt::LibraryYamlExporter{_implPtr->library};
-    auto result = exporter.exportToYaml(path, mode);
+    auto result = Result<>{};
+
+    {
+      // Export only opens a read transaction; the LMDB snapshot is consistent
+      // on its own, so it does not serialize against in-flight mutations.
+      auto exporter = ao::rt::LibraryYamlExporter{_implPtr->library};
+      result = exporter.exportToYaml(path, mode);
+    }
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
     co_return result;
   }
 
-  async::Task<Result<library::ScanPlan>> LibraryTasks::buildScanPlanAsync()
+  async::Task<Result<ScanPlan>> LibraryTasks::buildScanPlanAsync()
   {
     co_await _implPtr->asyncRuntime.resumeOnWorker();
-    setCurrentThreadName("LibraryScanner");
+    setCurrentThreadName("LibraryScan");
 
-    auto scanner = library::LibraryScanner{_implPtr->library};
-    auto planResult = scanner.buildPlan(
-      [this](std::filesystem::path const& path)
-      {
-        _implPtr->asyncRuntime.callbackExecutor().dispatch(
-          [this, path]
-          {
-            _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
-              .fraction = 0.0,
-              .message = "Scanning: " + path.filename().string(),
+    auto planResult = Result<ScanPlan>{};
+
+    {
+      // Plan building only opens a read transaction; the LMDB snapshot is
+      // consistent on its own, and holding the mutation mutex here would not
+      // keep the plan fresh anyway (the lock is released before apply).
+      auto scanService = LibraryScan{_implPtr->library};
+      planResult = scanService.buildPlan(
+        [this](std::filesystem::path const& path)
+        {
+          _implPtr->asyncRuntime.callbackExecutor().dispatch(
+            [this, path]
+            {
+              _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
+                .fraction = 0.0,
+                .message = "Scanning: " + path.filename().string(),
+              });
             });
-          });
-      });
+        });
+    }
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
 
@@ -137,10 +164,8 @@ namespace ao::rt
       co_return std::unexpected{planResult.error()};
     }
 
-    if (planResult->count(library::ScanClassification::New) == 0 &&
-        planResult->count(library::ScanClassification::Changed) == 0 &&
-        planResult->count(library::ScanClassification::Moved) == 0 &&
-        planResult->count(library::ScanClassification::Missing) == 0)
+    if (planResult->count(ScanClassification::New) == 0 && planResult->count(ScanClassification::Changed) == 0 &&
+        planResult->count(ScanClassification::Moved) == 0 && planResult->count(ScanClassification::Missing) == 0)
     {
       _implPtr->changes.notifyLibraryTaskCompleted(0);
     }
@@ -148,48 +173,15 @@ namespace ao::rt
     co_return std::move(planResult);
   }
 
-  async::Task<Result<library::ScanApplyResult>> LibraryTasks::applyScanPlanAsync(library::ScanPlan plan)
+  async::Task<Result<ScanApplyResult>> LibraryTasks::applyScanPlanAsync(ScanPlan plan, ScanApplyOptions options)
   {
     co_await _implPtr->asyncRuntime.resumeOnWorker();
     setCurrentThreadName("ApplyScanPlan");
 
-    auto applyResult = Result<library::ScanApplyResult>{};
+    auto applyResult = Result<ScanApplyResult>{};
     auto const totalItems = plan.items.size();
-
-    auto executor = ao::library::ScanPlanExecutor{
-      _implPtr->library,
-      std::move(plan),
-      [this, totalItems](library::ScanPlanExecutor::Progress const& progress)
-      {
-        _implPtr->asyncRuntime.callbackExecutor().dispatch(
-          [this, progress, totalItems]
-          {
-            auto const itemBase = static_cast<double>(progress.itemIndex);
-            auto const fraction =
-              totalItems > 0 ? (itemBase + progress.itemFraction) / static_cast<double>(totalItems) : 0.0;
-            _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
-              .fraction = fraction,
-              .message = scanApplyProgressMessage(progress),
-            });
-          });
-      },
-      // Diagnostics run on the worker thread; spdlog is thread-safe and the
-      // failure's string views are only valid for the duration of this call.
-      [](library::ScanFailure const& failure)
-      {
-        if (failure.uri.empty())
-        {
-          APP_LOG_ERROR("Failed to {}: {}", failure.stage, failure.message);
-        }
-        else
-        {
-          APP_LOG_ERROR("Failed to {} {}: {}", failure.stage, failure.uri, failure.message);
-        }
-      }};
-
     auto exceptionPtr = std::exception_ptr{};
 
-    try
     {
       auto stopSource = std::stop_source{};
       auto const cancellationState = co_await boost::asio::this_coro::cancellation_state;
@@ -200,12 +192,49 @@ namespace ao::rt
         slotGuard.slot.assign([&stopSource](async::CancellationType) { stopSource.request_stop(); });
       }
 
-      applyResult = executor.run(stopSource.get_token());
-    }
-    catch (...)
-    {
-      async::rethrowIfOperationCancelled();
-      exceptionPtr = std::current_exception();
+      auto mutationLock = std::scoped_lock{_implPtr->mutationMutex};
+
+      auto scanService = LibraryScan{_implPtr->library};
+
+      try
+      {
+        applyResult = scanService.applyPlan(
+          std::move(plan),
+          options,
+          [this, totalItems](ScanApplyProgress const& progress)
+          {
+            _implPtr->asyncRuntime.callbackExecutor().dispatch(
+              [this, progress, totalItems]
+              {
+                auto const itemBase = static_cast<double>(progress.itemIndex);
+                auto const fraction =
+                  totalItems > 0 ? (itemBase + progress.itemFraction) / static_cast<double>(totalItems) : 0.0;
+                _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
+                  .fraction = fraction,
+                  .message = scanApplyProgressMessage(progress),
+                });
+              });
+          },
+          // Diagnostics run on the worker thread; spdlog is thread-safe and the
+          // failure's string views are only valid for the duration of this call.
+          [](ScanFailure const& failure)
+          {
+            if (failure.uri.empty())
+            {
+              APP_LOG_ERROR("Failed to {}: {}", failure.stage, failure.message);
+            }
+            else
+            {
+              APP_LOG_ERROR("Failed to {} {}: {}", failure.stage, failure.uri, failure.message);
+            }
+          },
+          stopSource.get_token());
+      }
+      catch (...)
+      {
+        async::rethrowIfOperationCancelled();
+        exceptionPtr = std::current_exception();
+      }
     }
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
@@ -231,5 +260,84 @@ namespace ao::rt
     }
 
     co_return applyResult;
+  }
+
+  async::Task<Result<AudioIdentityIndexResult>> LibraryTasks::backfillAudioIdentityAsync()
+  {
+    co_await _implPtr->asyncRuntime.resumeOnWorker();
+    setCurrentThreadName("AudioBackfill");
+
+    auto backfillResult = Result<AudioIdentityIndexResult>{};
+    auto exceptionPtr = std::exception_ptr{};
+
+    {
+      auto stopSource = std::stop_source{};
+      auto const cancellationState = co_await boost::asio::this_coro::cancellation_state;
+      auto slotGuard = CancellationSlotGuard{cancellationState.slot()};
+
+      if (slotGuard.slot.is_connected())
+      {
+        slotGuard.slot.assign([&stopSource](async::CancellationType) { stopSource.request_stop(); });
+      }
+
+      auto mutationLock = std::scoped_lock{_implPtr->mutationMutex};
+      auto indexer = AudioIdentityIndexer{_implPtr->library};
+
+      try
+      {
+        backfillResult = indexer.indexPending(
+          [this](AudioIdentityIndexProgress const& progress)
+          {
+            if (!shouldPublishBackfillProgress(progress))
+            {
+              return;
+            }
+
+            auto const filename = progress.path.filename().string();
+            _implPtr->asyncRuntime.callbackExecutor().dispatch(
+              [this, filename]
+              {
+                _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
+                  .fraction = 0.0,
+                  .message = "Indexing audio identity: " + filename,
+                });
+              });
+          },
+          [](AudioIdentityIndexFailure const& failure)
+          {
+            if (failure.uri.empty())
+            {
+              APP_LOG_ERROR("Failed to {}: {}", failure.stage, failure.message);
+            }
+            else
+            {
+              APP_LOG_ERROR("Failed to {} {}: {}", failure.stage, failure.uri, failure.message);
+            }
+          },
+          stopSource.get_token());
+      }
+      catch (...)
+      {
+        async::rethrowIfOperationCancelled();
+        exceptionPtr = std::current_exception();
+      }
+    }
+
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+
+    if (exceptionPtr)
+    {
+      _implPtr->changes.notifyLibraryTaskCompleted(0);
+      std::rethrow_exception(exceptionPtr);
+    }
+
+    if (!backfillResult)
+    {
+      _implPtr->changes.notifyLibraryTaskCompleted(0);
+      co_return std::unexpected{backfillResult.error()};
+    }
+
+    _implPtr->changes.notifyLibraryTaskCompleted(static_cast<std::size_t>(backfillResult->completedCount));
+    co_return backfillResult;
   }
 } // namespace ao::rt

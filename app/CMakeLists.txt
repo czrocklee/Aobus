@@ -14,6 +14,10 @@ add_library(ao_app_runtime STATIC
     runtime/ConfigStore.cpp
     runtime/PlaybackService.cpp
     runtime/library/LibraryWriter.cpp
+    runtime/library/AudioIdentityIndexer.cpp
+    runtime/library/LibraryScan.cpp
+    runtime/library/ScanPlanBuilder.cpp
+    runtime/library/ScanPlanApplier.cpp
     runtime/library/LibraryTasks.cpp
     runtime/source/ListSourceStore.cpp
     runtime/source/ManualListSource.cpp
@@ -128,7 +132,7 @@ add_dependencies(ao_app_uimodel ao_uimodel_organization_guardrail)
 # Cleared boundaries run in enforce mode and are attached to the owning target.
 # ao_layering_boundary_report remains as an aggregate entry point.
 set(AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX "ao/audio/(Player|IBackend|IBackendProvider|Engine|NullBackend|backend/|detail/)")
-set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"]ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|IBackend|IBackendProvider|Engine|NullBackend|backend/|detail/))")
+set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|IBackend|IBackendProvider|Engine|NullBackend|backend/|detail/)))")
 set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|${AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX})")
 set(AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView))")
 set(AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX [=[/platform/|/MainWindowCoordinator\.cpp|/AudioBackendBootstrap\.]=])

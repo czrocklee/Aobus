@@ -7,9 +7,10 @@
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Task.h>
-#include <ao/library/LibraryScanner.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/ScanPlan.h>
 
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <optional>
@@ -23,6 +24,12 @@ namespace ao::rt
 
 namespace ao::gtk::portal
 {
+  enum class ScanRequestMode : std::uint8_t
+  {
+    Eager,
+    FastBootstrap
+  };
+
   /**
    * LibraryImportExportWorkflow owns the background scan/import/export operations and their UI presentation:
    * progress events, result notifications, and internal-error reporting.
@@ -42,21 +49,23 @@ namespace ao::gtk::portal
     LibraryImportExportWorkflow(LibraryImportExportWorkflow&&) = delete;
     LibraryImportExportWorkflow& operator=(LibraryImportExportWorkflow&&) = delete;
 
-    void scan();
+    void scan(ScanRequestMode mode = ScanRequestMode::Eager);
     void importFrom(std::filesystem::path path);
     void exportTo(std::filesystem::path path, rt::ExportMode mode);
 
   private:
-    async::Task<void> scanWorkflow();
+    async::Task<void> scanWorkflow(ScanRequestMode mode);
+    async::Task<void> backfillAudioIdentityWorkflow();
     async::Task<void> importWorkflow(ImportExportCallbacks callbacks, std::filesystem::path importPath);
     async::Task<void> exportWorkflow(std::filesystem::path exportPath, rt::ExportMode mode);
 
     // Scan-library pipeline split into coroutine + sync helpers so that scanWorkflow() stays a flat orchestrator.
-    async::Task<std::optional<library::ScanPlan>> buildScanPlanOrReportFailure();
-    async::Task<void> applyScanPlanWithProgress(library::ScanPlan plan);
+    async::Task<std::optional<rt::ScanPlan>> buildScanPlanOrReportFailure();
+    async::Task<void> applyScanPlanWithProgress(rt::ScanPlan plan, ScanRequestMode mode);
+    void startAudioIdentityIndexing();
     // Returns true when the plan has no New/Changed/Missing items; in that case the appropriate
     // notification is posted and the caller should return.
-    bool reportIfNoActionableWork(library::ScanPlan const& plan);
+    bool reportIfNoActionableWork(rt::ScanPlan const& plan);
 
     // Presents a Result error: structured log of the error plus an error-severity notification.
     void presentFailure(std::string_view action, std::string const& notificationMessage, Error const& error);

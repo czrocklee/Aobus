@@ -11,20 +11,21 @@
 #include "ScanOutput.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/AudioIdentity.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
-#include <ao/library/LibraryScanner.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/Meta.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/library/ScanPlanExecutor.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/CoreRuntime.h>
+#include <ao/rt/library/AudioIdentityIndexer.h>
+#include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
-#include <ao/tag/TagFile.h>
+#include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Fnv1a.h>
 #include <ao/utility/Uuid.h>
@@ -391,18 +392,15 @@ namespace ao::cli
       std::println(os, "diskBytes: {}", stats.diskBytes);
     }
 
-    bool isVerifyIssue(library::ScanClassification classification)
+    bool isVerifyIssue(rt::ScanClassification classification)
     {
-      return classification == library::ScanClassification::Changed ||
-             classification == library::ScanClassification::Moved ||
-             classification == library::ScanClassification::Missing ||
-             classification == library::ScanClassification::Error;
+      return classification == rt::ScanClassification::Changed || classification == rt::ScanClassification::Moved ||
+             classification == rt::ScanClassification::Missing || classification == rt::ScanClassification::Error;
     }
 
-    bool isVerifyFailure(library::ScanClassification classification)
+    bool isVerifyFailure(rt::ScanClassification classification)
     {
-      return classification == library::ScanClassification::Missing ||
-             classification == library::ScanClassification::Error;
+      return classification == rt::ScanClassification::Missing || classification == rt::ScanClassification::Error;
     }
   } // namespace
 
@@ -438,17 +436,14 @@ namespace ao::cli
       std::vector<VerifyIssueDto> issues{};
     };
 
-    VerifyIssueDto verifyIssueDto(library::ScanItem const& item)
+    VerifyIssueDto verifyIssueDto(rt::ScanItem const& item)
     {
       return VerifyIssueDto{.type = std::string{scanClassificationName(item.classification)},
                             .uri = item.uri,
                             .optMessage = item.errorMessage.empty() ? std::nullopt : std::optional{item.errorMessage}};
     }
 
-    void printVerifyIssues(std::vector<library::ScanItem> const& issues,
-                           bool failed,
-                           OutputFormat format,
-                           std::ostream& os)
+    void printVerifyIssues(std::vector<rt::ScanItem> const& issues, bool failed, OutputFormat format, std::ostream& os)
     {
       if (format != OutputFormat::Plain)
       {
@@ -485,8 +480,8 @@ namespace ao::cli
 
     void verifyLibrary(library::MusicLibrary& ml, OutputFormat format, std::ostream& os)
     {
-      auto scanner = library::LibraryScanner{ml};
-      auto planResult = scanner.buildPlan();
+      auto scanService = rt::LibraryScan{ml};
+      auto planResult = scanService.buildPlan();
 
       if (!planResult)
       {
@@ -494,7 +489,7 @@ namespace ao::cli
         throwCommandError(error, "verify failed: {}", error.message);
       }
 
-      auto issues = std::vector<library::ScanItem>{};
+      auto issues = std::vector<rt::ScanItem>{};
       bool failed = false;
 
       for (auto const& item : planResult->items)
@@ -545,31 +540,29 @@ namespace ao::cli
       TrackId trackId{};
     };
 
-    RelinkIdentity relinkIdentityFromItem(library::ScanItem const& item)
+    RelinkIdentity relinkIdentityFromItem(rt::ScanItem const& item)
     {
       return RelinkIdentity{.payloadLength = item.audioPayloadLength, .signature = item.audioSignature};
     }
 
-    RelinkIdentity readAudioIdentity(std::filesystem::path const& path)
+    RelinkIdentity readRelinkAudioIdentity(std::filesystem::path const& path)
     {
-      auto tagFileResult = tag::TagFile::open(path);
+      auto identityResult = library::readAudioIdentity(path);
 
-      if (!tagFileResult)
+      if (!identityResult)
       {
-        auto const& error = tagFileResult.error();
-        throwCommandError(error, "failed to open relink candidate: {}", error.message);
-      }
-
-      auto payloadResult = (*tagFileResult)->audioPayload();
-
-      if (!payloadResult)
-      {
-        auto const& error = payloadResult.error();
+        auto const& error = identityResult.error();
         throwCommandError(error, "failed to fingerprint relink candidate: {}", error.message);
       }
 
-      return RelinkIdentity{.payloadLength = static_cast<std::uint64_t>(payloadResult->bytes.size()),
-                            .signature = utility::fnv1a128(payloadResult->bytes)};
+      if (!*identityResult)
+      {
+        throwCommandError(
+          Error::Code::InvalidState, "fingerprinting relink candidate was cancelled: {}", path.string());
+      }
+
+      return RelinkIdentity{
+        .payloadLength = (*identityResult)->payloadLength, .signature = (*identityResult)->signature};
     }
 
     bool sameRelinkIdentity(RelinkIdentity const& left, RelinkIdentity const& right)
@@ -611,7 +604,7 @@ namespace ao::cli
       return uri;
     }
 
-    std::vector<RelinkCandidateDto> relinkCandidates(library::ScanPlan const& plan)
+    std::vector<RelinkCandidateDto> relinkCandidates(rt::ScanPlan const& plan)
     {
       auto missingIndexes = std::vector<std::size_t>{};
       auto newIdentities = std::vector<std::pair<std::size_t, RelinkIdentity>>{};
@@ -619,7 +612,7 @@ namespace ao::cli
       for (std::size_t index = 0; index < plan.items.size(); ++index)
       {
         if (auto const& item = plan.items[index];
-            item.classification == library::ScanClassification::Missing && library::hasAudioIdentity(item))
+            item.classification == rt::ScanClassification::Missing && rt::hasAudioIdentity(item))
         {
           missingIndexes.push_back(index);
         }
@@ -629,12 +622,12 @@ namespace ao::cli
       {
         auto const& item = plan.items[index];
 
-        if (item.classification != library::ScanClassification::New)
+        if (item.classification != rt::ScanClassification::New)
         {
           continue;
         }
 
-        if (library::hasAudioIdentity(item))
+        if (rt::hasAudioIdentity(item))
         {
           newIdentities.emplace_back(index, relinkIdentityFromItem(item));
         }
@@ -665,17 +658,17 @@ namespace ao::cli
       return candidates;
     }
 
-    RelinkListDto relinkListDto(library::ScanPlan const& plan)
+    RelinkListDto relinkListDto(rt::ScanPlan const& plan)
     {
       auto dto = RelinkListDto{.candidates = relinkCandidates(plan)};
 
       for (auto const& item : plan.items)
       {
-        if (item.classification == library::ScanClassification::Missing)
+        if (item.classification == rt::ScanClassification::Missing)
         {
           dto.missing.push_back(item.uri);
         }
-        else if (item.classification == library::ScanClassification::New)
+        else if (item.classification == rt::ScanClassification::New)
         {
           dto.newFiles.push_back(item.uri);
         }
@@ -684,7 +677,7 @@ namespace ao::cli
       return dto;
     }
 
-    void printRelinkList(library::ScanPlan const& plan, OutputFormat format, std::ostream& os)
+    void printRelinkList(rt::ScanPlan const& plan, OutputFormat format, std::ostream& os)
     {
       auto const dto = relinkListDto(plan);
 
@@ -716,9 +709,9 @@ namespace ao::cli
       }
     }
 
-    library::ScanItem const* findPlanItem(library::ScanPlan const& plan,
-                                          library::ScanClassification classification,
-                                          std::string_view uri)
+    rt::ScanItem const* findPlanItem(rt::ScanPlan const& plan,
+                                     rt::ScanClassification classification,
+                                     std::string_view uri)
     {
       for (auto const& item : plan.items)
       {
@@ -731,23 +724,24 @@ namespace ao::cli
       return nullptr;
     }
 
-    RelinkCandidateDto validateRelink(library::ScanPlan const& plan,
-                                      std::string const& oldUri,
-                                      std::string const& newUri)
+    RelinkCandidateDto validateRelink(rt::ScanPlan const& plan, std::string const& oldUri, std::string const& newUri)
     {
-      auto const* const missingItem = findPlanItem(plan, library::ScanClassification::Missing, oldUri);
+      auto const* const missingItem = findPlanItem(plan, rt::ScanClassification::Missing, oldUri);
 
       if (missingItem == nullptr)
       {
         throwCommandError(Error::Code::InvalidInput, "missing manifest row is not unresolved: {}", oldUri);
       }
 
-      if (!library::hasAudioIdentity(*missingItem))
+      if (!rt::hasAudioIdentity(*missingItem))
       {
-        throwCommandError(Error::Code::InvalidInput, "missing manifest row has no audio signature: {}", oldUri);
+        throwCommandError(Error::Code::InvalidInput,
+                          "missing manifest row has no audio signature: {}; run `aobus lib fingerprint --pending` "
+                          "before relinking",
+                          oldUri);
       }
 
-      auto const* const newItem = findPlanItem(plan, library::ScanClassification::New, newUri);
+      auto const* const newItem = findPlanItem(plan, rt::ScanClassification::New, newUri);
 
       if (newItem == nullptr)
       {
@@ -755,7 +749,7 @@ namespace ao::cli
       }
 
       auto const missingIdentity = relinkIdentityFromItem(*missingItem);
-      auto const newIdentity = readAudioIdentity(newItem->fullPath);
+      auto const newIdentity = readRelinkAudioIdentity(newItem->fullPath);
 
       if (!sameRelinkIdentity(missingIdentity, newIdentity))
       {
@@ -783,9 +777,9 @@ namespace ao::cli
       std::println(os, "relinked {} -> {}{}", candidate.oldUri, candidate.newUri, dryRun ? " (dry-run)" : "");
     }
 
-    library::ScanItem makeMovedRelinkItem(library::ScanPlan const& plan, RelinkCandidateDto const& candidate)
+    rt::ScanItem makeMovedRelinkItem(rt::ScanPlan const& plan, RelinkCandidateDto const& candidate)
     {
-      auto const* const newItem = findPlanItem(plan, library::ScanClassification::New, candidate.newUri);
+      auto const* const newItem = findPlanItem(plan, rt::ScanClassification::New, candidate.newUri);
 
       if (newItem == nullptr)
       {
@@ -793,14 +787,14 @@ namespace ao::cli
       }
 
       auto item = *newItem;
-      item.classification = library::ScanClassification::Moved;
+      item.classification = rt::ScanClassification::Moved;
       item.oldUri = candidate.oldUri;
       item.trackId = candidate.trackId;
       return item;
     }
 
     void applyRelink(library::MusicLibrary& ml,
-                     library::ScanPlan const& plan,
+                     rt::ScanPlan const& plan,
                      RelinkCandidateDto const& candidate,
                      bool dryRun,
                      OutputFormat format,
@@ -812,22 +806,24 @@ namespace ao::cli
         return;
       }
 
-      auto relinkPlan = library::ScanPlan{};
+      auto relinkPlan = rt::ScanPlan{};
       relinkPlan.items.push_back(makeMovedRelinkItem(plan, candidate));
 
       auto failures = std::vector<std::string>{};
-      auto executor = library::ScanPlanExecutor{
-        ml,
+      auto scanService = rt::LibraryScan{ml};
+      auto result = scanService.applyPlan(
         std::move(relinkPlan),
-        nullptr,
-        [&failures](library::ScanFailure const& failure)
+        // Default (eager) options on purpose: Moved items are fingerprinted
+        // during apply regardless of policy, so a relink must never leave the
+        // rebound row with a pending identity.
+        rt::ScanApplyOptions{},
+        rt::LibraryScan::ApplyProgressCallback{},
+        [&failures](rt::ScanFailure const& failure)
         {
           failures.push_back(failure.uri.empty()
                                ? std::format("failed to {}: {}", failure.stage, failure.message)
                                : std::format("failed to {} {}: {}", failure.stage, failure.uri, failure.message));
-        }};
-
-      auto result = executor.run();
+        });
 
       if (!result)
       {
@@ -851,8 +847,8 @@ namespace ao::cli
                        OutputFormat format,
                        std::ostream& os)
     {
-      auto scanner = library::LibraryScanner{ml};
-      auto planResult = scanner.buildPlan();
+      auto scanService = rt::LibraryScan{ml};
+      auto planResult = scanService.buildPlan();
 
       if (!planResult)
       {
@@ -877,6 +873,77 @@ namespace ao::cli
       auto const newUri = normalizeRelinkUri(ml, *optNewUri);
       auto const candidate = validateRelink(plan, oldUri, newUri);
       applyRelink(ml, plan, candidate, dryRun, format, os);
+    }
+
+    struct FingerprintReportDto final
+    {
+      std::int32_t completed = 0;
+      std::int32_t skipped = 0;
+      std::int32_t failures = 0;
+      bool cancelled = false;
+    };
+
+    void printBackfillFailure(rt::AudioIdentityIndexFailure const& failure, std::ostream& err)
+    {
+      if (failure.uri.empty())
+      {
+        std::println(err, "failed to {}: {}", failure.stage, failure.message);
+        return;
+      }
+
+      std::println(err, "failed to {} {}: {}", failure.stage, failure.uri, failure.message);
+    }
+
+    void printFingerprintReport(rt::AudioIdentityIndexResult const& result, OutputFormat format, std::ostream& os)
+    {
+      if (format != OutputFormat::Plain)
+      {
+        emitDocument(os,
+                     format,
+                     FingerprintReportDto{.completed = result.completedCount,
+                                          .skipped = result.skippedCount,
+                                          .failures = result.failureCount,
+                                          .cancelled = result.cancelled});
+        return;
+      }
+
+      std::println(
+        os, "fingerprinted {}  skipped {}  failed {}", result.completedCount, result.skippedCount, result.failureCount);
+    }
+
+    void fingerprintPending(library::MusicLibrary& ml,
+                            bool pending,
+                            bool verbose,
+                            OutputFormat format,
+                            std::ostream& os,
+                            std::ostream& err)
+    {
+      if (!pending)
+      {
+        throwCommandError(Error::Code::InvalidInput, "lib fingerprint requires --pending");
+      }
+
+      auto indexer = rt::AudioIdentityIndexer{ml};
+      auto result = indexer.indexPending(
+        verbose ? rt::AudioIdentityIndexer::ProgressCallback{[&err](rt::AudioIdentityIndexProgress const& progress)
+                                                             {
+                                                               if (progress.itemFraction == 0.0)
+                                                               {
+                                                                 std::println(err,
+                                                                              "fingerprint: {}",
+                                                                              progress.path.generic_string());
+                                                               }
+                                                             }}
+                : nullptr,
+        [&err](rt::AudioIdentityIndexFailure const& failure) { printBackfillFailure(failure, err); });
+
+      if (!result)
+      {
+        auto const& error = result.error();
+        throwCommandError(error, "fingerprint failed: {}", error.message);
+      }
+
+      printFingerprintReport(*result, format, os);
     }
 
     struct ResourceRecordDto final
@@ -1288,6 +1355,21 @@ namespace ao::cli
 
         relinkLibrary(
           context.musicLibrary(), optFrom, optTo, isDryRun(relinkDryRun), context.options().format, context.io().out);
+      });
+
+    auto* fingerprintCmd = lib->add_subcommand("fingerprint", "Fingerprint pending manifest audio identities");
+    auto* fingerprintPendingFlag =
+      fingerprintCmd->add_flag("--pending", "fingerprint manifest rows with pending audio identity");
+    auto* fingerprintVerbose = fingerprintCmd->add_flag("--verbose", "print fingerprint progress to stderr");
+    fingerprintCmd->callback(
+      [&context, fingerprintPendingFlag, fingerprintVerbose]
+      {
+        fingerprintPending(context.musicLibrary(),
+                           fingerprintPendingFlag->count() > 0,
+                           fingerprintVerbose->count() > 0,
+                           context.options().format,
+                           context.io().out,
+                           context.io().err);
       });
 
     auto* exportCmd = lib->add_subcommand("export", "Export library to YAML");

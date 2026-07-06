@@ -53,6 +53,10 @@ namespace ao::library
     {};
     /**
      * Iterator for all manifest entries.
+     *
+     * Yields entries in strictly increasing lexicographic byte order of the
+     * URI key (the manifest database uses LMDB's default memcmp comparator).
+     * URI-cursor pagination over the manifest depends on this ordering.
      */
     class Iterator final
     {

@@ -99,8 +99,7 @@ add_executable(ao_core_test
     unit/library/ListLayoutTest.cpp
     unit/library/ListViewTest.cpp
     unit/library/DictionaryStoreTest.cpp
-    unit/library/ScanPlanExecutorTest.cpp
-    unit/library/LibraryScannerTest.cpp
+    unit/library/AudioIdentityTest.cpp
     unit/library/ListStoreTest.cpp
     unit/library/ResourceStoreTest.cpp
 
@@ -248,6 +247,10 @@ add_executable(ao_core_test
     unit/runtime/source/AllTracksSourceTest.cpp
     unit/runtime/source/ListSourceStoreTest.cpp
     unit/runtime/projection/TrackDetailProjectionTest.cpp
+    unit/runtime/library/AudioIdentityIndexerTest.cpp
+    unit/runtime/library/LibraryScanTest.cpp
+    unit/runtime/library/ScanPlanBuilderTest.cpp
+    unit/runtime/library/ScanPlanApplierTest.cpp
     unit/runtime/library/LibraryTasksTest.cpp
     unit/runtime/library/LibraryWriterTest.cpp
     unit/runtime/completion/MetadataValueCompleterTest.cpp

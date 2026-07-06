@@ -76,7 +76,8 @@ empty `.aobus/library` container while guaranteeing no library content is
 imported.
 
 `aobus scan [--dry-run] [--verbose]` compares files under the music root with
-the manifest using `library::LibraryScanner`.
+the manifest through runtime `LibraryScan`, which builds and applies
+library scan plans without exposing scan internals to the CLI adapter.
 
 - Plain output uses summary line `new N  changed C  moved R  missing M
   unchanged U  errors E`. Structured output emits the same counts as fields.

@@ -7,8 +7,8 @@
 #include "CommandError.h"
 #include "Output.h"
 #include "ScanOutput.h"
-#include <ao/library/LibraryScanner.h>
-#include <ao/library/ScanPlanExecutor.h>
+#include <ao/rt/library/LibraryScan.h>
+#include <ao/rt/library/ScanPlan.h>
 #include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
@@ -82,7 +82,7 @@ namespace ao::cli
 {
   namespace
   {
-    std::string itemLabel(library::ScanItem const& item)
+    std::string itemLabel(rt::ScanItem const& item)
     {
       if (!item.uri.empty())
       {
@@ -92,21 +92,21 @@ namespace ao::cli
       return item.fullPath.generic_string();
     }
 
-    ScanItemDto scanItemDto(library::ScanItem const& item)
+    ScanItemDto scanItemDto(rt::ScanItem const& item)
     {
       return ScanItemDto{.type = std::string{scanClassificationName(item.classification)},
                          .uri = itemLabel(item),
                          .optMessage = item.errorMessage.empty() ? std::nullopt : std::optional{item.errorMessage}};
     }
 
-    void printScanResult(library::ScanPlan const& plan, bool dryRun, OutputFormat format, std::ostream& os)
+    void printScanResult(rt::ScanPlan const& plan, bool dryRun, OutputFormat format, std::ostream& os)
     {
-      auto const newCount = plan.count(library::ScanClassification::New);
-      auto const changedCount = plan.count(library::ScanClassification::Changed);
-      auto const movedCount = plan.count(library::ScanClassification::Moved);
-      auto const missingCount = plan.count(library::ScanClassification::Missing);
-      auto const unchangedCount = plan.count(library::ScanClassification::Unchanged);
-      auto const errorCount = plan.count(library::ScanClassification::Error);
+      auto const newCount = plan.count(rt::ScanClassification::New);
+      auto const changedCount = plan.count(rt::ScanClassification::Changed);
+      auto const movedCount = plan.count(rt::ScanClassification::Moved);
+      auto const missingCount = plan.count(rt::ScanClassification::Missing);
+      auto const unchangedCount = plan.count(rt::ScanClassification::Unchanged);
+      auto const errorCount = plan.count(rt::ScanClassification::Error);
 
       if (format != OutputFormat::Plain)
       {
@@ -124,7 +124,7 @@ namespace ao::cli
 
           for (auto const& item : plan.items)
           {
-            if (item.classification == library::ScanClassification::Unchanged)
+            if (item.classification == rt::ScanClassification::Unchanged)
             {
               continue;
             }
@@ -153,7 +153,7 @@ namespace ao::cli
 
       for (auto const& item : plan.items)
       {
-        if (item.classification == library::ScanClassification::Unchanged)
+        if (item.classification == rt::ScanClassification::Unchanged)
         {
           continue;
         }
@@ -169,7 +169,7 @@ namespace ao::cli
       }
     }
 
-    void printFailure(library::ScanFailure const& failure, std::ostream& err)
+    void printFailure(rt::ScanFailure const& failure, std::ostream& err)
     {
       if (failure.uri.empty())
       {
@@ -180,7 +180,7 @@ namespace ao::cli
       std::println(err, "failed to {} {}: {}", failure.stage, failure.uri, failure.message);
     }
 
-    void printApplySummary(library::ScanApplyResult const& result, std::ostream& os)
+    void printApplySummary(rt::ScanApplyResult const& result, std::ostream& os)
     {
       if (result.relinkedCount > 0)
       {
@@ -197,29 +197,31 @@ namespace ao::cli
       }
     }
 
-    std::string_view applyProgressName(library::ScanPlanExecutor::ProgressStage stage)
+    std::string_view applyProgressName(rt::ScanApplyProgressStage stage)
     {
       switch (stage)
       {
-        case library::ScanPlanExecutor::ProgressStage::Updating: return "apply";
-        case library::ScanPlanExecutor::ProgressStage::Fingerprinting: return "fingerprint";
+        case rt::ScanApplyProgressStage::Updating: return "apply";
+        case rt::ScanApplyProgressStage::Fingerprinting: return "fingerprint";
       }
 
       return "apply";
     }
   } // namespace
 
-  void runScan(CliContext& context, bool dryRun, bool verbose)
+  void runScan(CliContext& context, bool dryRun, bool verbose, bool deferFingerprint)
   {
     auto& ml = context.musicLibrary();
-    auto scanner = library::LibraryScanner{ml};
-    auto planResult = scanner.buildPlan(
-      verbose
-        ? library::LibraryScanner::ProgressCallback{[&context](std::filesystem::path const& path)
-                                                    {
-                                                      std::println(context.io().err, "scan: {}", path.generic_string());
-                                                    }}
-        : nullptr);
+    auto scanService = rt::LibraryScan{ml};
+    auto buildProgress = rt::LibraryScan::BuildProgressCallback{};
+
+    if (verbose)
+    {
+      buildProgress = [&context](std::filesystem::path const& path)
+      { std::println(context.io().err, "scan: {}", path.generic_string()); };
+    }
+
+    auto planResult = scanService.buildPlan(std::move(buildProgress));
 
     if (!planResult)
     {
@@ -235,24 +237,32 @@ namespace ao::cli
       return;
     }
 
-    auto executor = library::ScanPlanExecutor{
-      ml,
-      std::move(plan),
-      verbose
-        ? library::ScanPlanExecutor::ProgressCallback{[&context](library::ScanPlanExecutor::Progress const& progress)
-                                                      {
-                                                        if (!progress.path.empty())
-                                                        {
-                                                          std::println(context.io().err,
-                                                                       "{}: {}",
-                                                                       applyProgressName(progress.stage),
-                                                                       progress.path.generic_string());
-                                                        }
-                                                      }}
-        : nullptr,
-      [&context](library::ScanFailure const& failure) { printFailure(failure, context.io().err); }};
+    auto options = rt::ScanApplyOptions{};
 
-    if (auto const applyResult = executor.run(); !applyResult)
+    if (deferFingerprint)
+    {
+      options.audioIdentityPolicy = rt::AudioIdentityPolicy::DeferNew;
+    }
+
+    auto applyProgress = rt::LibraryScan::ApplyProgressCallback{};
+
+    if (verbose)
+    {
+      applyProgress = [&context](rt::ScanApplyProgress const& progress)
+      {
+        if (!progress.path.empty())
+        {
+          std::println(context.io().err, "{}: {}", applyProgressName(progress.stage), progress.path.generic_string());
+        }
+      };
+    }
+
+    if (auto const applyResult = scanService.applyPlan(std::move(plan),
+                                                       options,
+                                                       std::move(applyProgress),
+                                                       [&context](rt::ScanFailure const& failure)
+                                                       { printFailure(failure, context.io().err); });
+        !applyResult)
     {
       auto const& error = applyResult.error();
       throwCommandError(error, "scan apply failed: {}", error.message);
@@ -260,6 +270,13 @@ namespace ao::cli
     else if (context.options().format == OutputFormat::Plain)
     {
       printApplySummary(*applyResult, context.io().out);
+
+      if (deferFingerprint && !applyResult->cancelled)
+      {
+        std::println(
+          context.io().out,
+          "Audio identity fingerprinting was deferred; run `aobus lib fingerprint --pending` to finish indexing.");
+      }
     }
   }
 
@@ -268,7 +285,9 @@ namespace ao::cli
     auto* const cmd = app.add_subcommand("scan", "Scan music root and reconcile the library");
     auto* const dryRun = cmd->add_flag("--dry-run", "show planned changes without mutating the library");
     auto* const verbose = cmd->add_flag("--verbose", "print scan progress to stderr");
+    auto* const deferFingerprint = cmd->add_flag("--defer-fingerprint", "defer new-file audio fingerprinting");
 
-    cmd->callback([&context, dryRun, verbose] { runScan(context, dryRun->count() > 0, verbose->count() > 0); });
+    cmd->callback([&context, dryRun, verbose, deferFingerprint]
+                  { runScan(context, dryRun->count() > 0, verbose->count() > 0, deferFingerprint->count() > 0); });
   }
 } // namespace ao::cli

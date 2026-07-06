@@ -6,11 +6,12 @@
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
-#include <ao/library/LibraryScanner.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
+#include <ao/rt/library/ScanPlan.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Fnv1a.h>
+#include <runtime/library/ScanPlanBuilder.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -25,7 +26,7 @@
 #include <string_view>
 #include <vector>
 
-namespace ao::library::test
+namespace ao::rt::test
 {
   namespace
   {
@@ -123,17 +124,17 @@ namespace ao::library::test
                            .signature = utility::fnv1a128(payloadResult->bytes)};
     }
 
-    void putManifestEntry(MusicLibrary& ml, std::string_view uri, TrackId trackId, AudioIdentity identity)
+    void putManifestEntry(library::MusicLibrary& ml, std::string_view uri, TrackId trackId, AudioIdentity identity)
     {
       auto txn = ml.writeTransaction();
-      auto builder = FileManifestBuilder::createNew();
+      auto builder = library::FileManifestBuilder::createNew();
       builder.trackId(trackId).audioPayloadLength(identity.payloadLength).audioSignature(identity.signature);
       REQUIRE(ml.manifest().writer(txn).put(uri, builder.serialize()));
       REQUIRE(txn.commit());
     }
   } // namespace
 
-  TEST_CASE("LibraryScanner - classifies supported and hidden entries", "[library][unit][scan]")
+  TEST_CASE("ScanPlanBuilder - classifies supported and hidden entries", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -145,7 +146,7 @@ namespace ao::library::test
     createFile(musicRoot / "changed.m4a");
     createFile(musicRoot / "unsupported.txt");
 
-    auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
 
     // Setup manifest for existing files
     {
@@ -154,7 +155,7 @@ namespace ao::library::test
 
       // Unchanged
       char const* const unchangedUri = "unchanged.mp3";
-      auto builder1 = FileManifestBuilder::createNew();
+      auto builder1 = library::FileManifestBuilder::createNew();
       builder1.trackId(TrackId{1})
         .fileSize(std::filesystem::file_size(musicRoot / unchangedUri))
         .mtime(
@@ -165,20 +166,20 @@ namespace ao::library::test
 
       // Changed (different size)
       char const* const changedUri = "changed.m4a";
-      auto builder2 = FileManifestBuilder::createNew();
+      auto builder2 = library::FileManifestBuilder::createNew();
       builder2.trackId(TrackId{2}).fileSize(99999).mtime(0);
       REQUIRE(manifestWriter.put(changedUri, builder2.serialize()));
 
       // Missing (in manifest but not on disk)
       char const* const missingUri = "missing.flac";
-      auto builder3 = FileManifestBuilder::createNew();
+      auto builder3 = library::FileManifestBuilder::createNew();
       builder3.trackId(TrackId{3});
       REQUIRE(manifestWriter.put(missingUri, builder3.serialize()));
 
       REQUIRE(txn.commit());
     }
 
-    auto scanner = LibraryScanner{ml};
+    auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
 
     CHECK(plan.count(ScanClassification::New) == 1);
@@ -207,7 +208,7 @@ namespace ao::library::test
     CHECK(foundMissing);
   }
 
-  TEST_CASE("LibraryScanner - reports IO errors while scanning", "[library][unit][scan][error]")
+  TEST_CASE("ScanPlanBuilder - reports IO errors while scanning", "[runtime][unit][library][scan][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -227,8 +228,8 @@ namespace ao::library::test
       SKIP("permissions test is meaningless when running as root");
     }
 
-    auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
-    auto scanner = LibraryScanner{ml};
+    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
 
     // Reset permissions so ao::test::TempDir can clean up
@@ -267,20 +268,20 @@ namespace ao::library::test
     CHECK(foundRestricted);
   }
 
-  TEST_CASE("LibraryScanner - handles empty roots", "[library][unit][scan]")
+  TEST_CASE("ScanPlanBuilder - handles empty roots", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "empty_music";
     std::filesystem::create_directories(musicRoot);
 
-    auto ml = MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
-    auto scanner = LibraryScanner{ml};
+    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
 
     CHECK(plan.items.empty());
   }
 
-  TEST_CASE("LibraryScanner - treats missing roots as fatal", "[library][unit][scan][error]")
+  TEST_CASE("ScanPlanBuilder - treats missing roots as fatal", "[runtime][unit][library][scan][error]")
   {
     auto const temp = ao::test::TempDir{};
     // Point the library at a music root that does not exist. The database still
@@ -288,15 +289,15 @@ namespace ao::library::test
     // the scan fails - distinguishing "cannot scan" from "scanned an empty root".
     auto const musicRoot = std::filesystem::path{temp.path()} / "does_not_exist";
 
-    auto ml = MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
-    auto scanner = LibraryScanner{ml};
+    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto scanner = ScanPlanBuilder{ml};
     auto const result = scanner.buildPlan();
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("LibraryScanner - classifies unambiguous moved files by audio identity", "[library][unit][scan]")
+  TEST_CASE("ScanPlanBuilder - classifies unambiguous moved files by audio identity", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -308,10 +309,10 @@ namespace ao::library::test
     std::filesystem::copy_file(sourceFile, movedFile);
     auto const identity = requireAudioIdentity(movedFile);
 
-    auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
     putManifestEntry(ml, "old-name.flac", TrackId{42}, identity);
 
-    auto scanner = LibraryScanner{ml};
+    auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
 
     REQUIRE(plan.items.size() == 1);
@@ -326,7 +327,7 @@ namespace ao::library::test
     CHECK(plan.count(ScanClassification::New) == 0);
   }
 
-  TEST_CASE("LibraryScanner - relinks moved files after metadata retag", "[library][unit][scan]")
+  TEST_CASE("ScanPlanBuilder - relinks moved files after metadata retag", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -340,10 +341,10 @@ namespace ao::library::test
     auto const identity = AudioIdentity{.payloadLength = static_cast<std::uint64_t>(audioPayload.size()),
                                         .signature = utility::fnv1a128(std::as_bytes(std::span{audioPayload}))};
 
-    auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
     putManifestEntry(ml, "old-title.flac", TrackId{42}, identity);
 
-    auto scanner = LibraryScanner{ml};
+    auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
 
     REQUIRE(plan.items.size() == 1);
@@ -356,7 +357,7 @@ namespace ao::library::test
     CHECK(item.audioSignature == identity.signature);
   }
 
-  TEST_CASE("LibraryScanner - leaves equal-length signature mismatches unresolved", "[library][unit][scan]")
+  TEST_CASE("ScanPlanBuilder - leaves equal-length signature mismatches unresolved", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -371,13 +372,13 @@ namespace ao::library::test
     auto wrongSignature = actualIdentity.signature;
     wrongSignature.bytes[0] = static_cast<std::byte>(std::to_integer<std::uint8_t>(wrongSignature.bytes[0]) ^ 0xFFU);
 
-    auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
     putManifestEntry(ml,
                      "old-name.flac",
                      TrackId{42},
                      AudioIdentity{.payloadLength = actualIdentity.payloadLength, .signature = wrongSignature});
 
-    auto scanner = LibraryScanner{ml};
+    auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
 
     CHECK(plan.count(ScanClassification::Moved) == 0);
@@ -410,7 +411,7 @@ namespace ao::library::test
     CHECK(foundMissing);
   }
 
-  TEST_CASE("LibraryScanner - leaves duplicate-content moves unresolved", "[library][unit][scan]")
+  TEST_CASE("ScanPlanBuilder - leaves duplicate-content moves unresolved", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -426,11 +427,11 @@ namespace ao::library::test
     std::filesystem::copy_file(sourceFile, secondMovedFile);
     auto const identity = requireAudioIdentity(firstMovedFile);
 
-    auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
     putManifestEntry(ml, "old/copy-a.flac", TrackId{100}, identity);
     putManifestEntry(ml, "old/copy-b.flac", TrackId{200}, identity);
 
-    auto scanner = LibraryScanner{ml};
+    auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
 
     CHECK(plan.count(ScanClassification::Moved) == 0);
@@ -439,7 +440,7 @@ namespace ao::library::test
     CHECK(plan.items.size() == 4);
   }
 
-  TEST_CASE("LibraryScanner - canonicalizes URI edge cases", "[library][unit][scan][uri]")
+  TEST_CASE("ScanPlanBuilder - canonicalizes URI edge cases", "[runtime][unit][library][scan][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -448,8 +449,8 @@ namespace ao::library::test
 
     createFile(musicRoot / "nested" / "dir" / "song.flac");
 
-    auto ml = MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
-    auto scanner = LibraryScanner{ml};
+    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
 
     REQUIRE(plan.items.size() == 1);
@@ -462,4 +463,4 @@ namespace ao::library::test
       CHECK(item.uri.find("./") == std::string::npos);
     }
   }
-} // namespace ao::library::test
+} // namespace ao::rt::test

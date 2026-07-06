@@ -10,7 +10,6 @@
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/library/LibraryScanner.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
@@ -18,6 +17,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryTasks.h>
+#include <ao/rt/library/ScanPlan.h>
 
 #include <cstdint>
 #include <exception>
@@ -53,7 +53,7 @@ namespace ao::gtk::portal
         "{} missing file{} need{} review", missingCount, missingCount == 1 ? "" : "s", missingCount == 1 ? "s" : "");
     }
 
-    std::string scanCompletionSummary(library::ScanApplyResult const& result)
+    std::string scanCompletionSummary(rt::ScanApplyResult const& result)
     {
       if (result.relinkedCount > 0 && result.missingCount > 0)
       {
@@ -86,7 +86,7 @@ namespace ao::gtk::portal
     _tasks.cancelAll();
   }
 
-  void LibraryImportExportWorkflow::scan()
+  void LibraryImportExportWorkflow::scan(ScanRequestMode mode)
   {
     APP_LOG_INFO("Starting library scan...");
 
@@ -94,7 +94,7 @@ namespace ao::gtk::portal
       _runtime.async(),
       _tasks,
       *this,
-      [](LibraryImportExportWorkflow* self) { return self->scanWorkflow(); },
+      [mode](LibraryImportExportWorkflow* self) { return self->scanWorkflow(mode); },
       [](LibraryImportExportWorkflow* self, std::exception_ptr exceptionPtr)
       { self->reportInternalFailure("Scan failed", "Scan failed: Internal error", exceptionPtr); });
   }
@@ -124,7 +124,7 @@ namespace ao::gtk::portal
       { self->reportInternalFailure("Export failed", "Export failed: Internal error", exceptionPtr); });
   }
 
-  async::Task<void> LibraryImportExportWorkflow::scanWorkflow()
+  async::Task<void> LibraryImportExportWorkflow::scanWorkflow(ScanRequestMode mode)
   {
     auto optPlan = co_await buildScanPlanOrReportFailure();
 
@@ -139,13 +139,50 @@ namespace ao::gtk::portal
     }
 
     APP_LOG_INFO("Scan plan: {} new, {} changed, {} moved, {} missing, {} errors",
-                 optPlan->count(library::ScanClassification::New),
-                 optPlan->count(library::ScanClassification::Changed),
-                 optPlan->count(library::ScanClassification::Moved),
-                 optPlan->count(library::ScanClassification::Missing),
-                 optPlan->count(library::ScanClassification::Error));
+                 optPlan->count(rt::ScanClassification::New),
+                 optPlan->count(rt::ScanClassification::Changed),
+                 optPlan->count(rt::ScanClassification::Moved),
+                 optPlan->count(rt::ScanClassification::Missing),
+                 optPlan->count(rt::ScanClassification::Error));
 
-    co_await applyScanPlanWithProgress(std::move(*optPlan));
+    co_await applyScanPlanWithProgress(std::move(*optPlan), mode);
+  }
+
+  async::Task<void> LibraryImportExportWorkflow::backfillAudioIdentityWorkflow()
+  {
+    try
+    {
+      auto result = co_await _runtime.library().tasks().backfillAudioIdentityAsync();
+
+      if (!result)
+      {
+        logStructuredError("Audio identity indexing failed", result.error());
+        _runtime.notifications().post(rt::NotificationSeverity::Warning, "Audio identity indexing failed");
+        co_return;
+      }
+
+      if (result->cancelled)
+      {
+        co_return;
+      }
+
+      if (result->failureCount > 0)
+      {
+        _runtime.notifications().post(
+          rt::NotificationSeverity::Warning, "Audio identity indexing completed with errors");
+      }
+      else if (result->completedCount > 0)
+      {
+        _runtime.notifications().post(rt::NotificationSeverity::Info, "Audio identity indexing complete");
+      }
+    }
+    catch (...)
+    {
+      async::rethrowIfOperationCancelled();
+
+      reportInternalFailure(
+        "Audio identity indexing failed", "Audio identity indexing failed: Internal error", std::current_exception());
+    }
   }
 
   async::Task<void> LibraryImportExportWorkflow::exportWorkflow(std::filesystem::path exportPath, rt::ExportMode mode)
@@ -180,7 +217,7 @@ namespace ao::gtk::portal
     _runtime.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
   }
 
-  async::Task<std::optional<library::ScanPlan>> LibraryImportExportWorkflow::buildScanPlanOrReportFailure()
+  async::Task<std::optional<rt::ScanPlan>> LibraryImportExportWorkflow::buildScanPlanOrReportFailure()
   {
     auto result = co_await _runtime.library().tasks().buildScanPlanAsync();
 
@@ -193,15 +230,15 @@ namespace ao::gtk::portal
     co_return std::move(*result);
   }
 
-  bool LibraryImportExportWorkflow::reportIfNoActionableWork(library::ScanPlan const& plan)
+  bool LibraryImportExportWorkflow::reportIfNoActionableWork(rt::ScanPlan const& plan)
   {
-    if (plan.count(library::ScanClassification::New) != 0 || plan.count(library::ScanClassification::Changed) != 0 ||
-        plan.count(library::ScanClassification::Moved) != 0 || plan.count(library::ScanClassification::Missing) != 0)
+    if (plan.count(rt::ScanClassification::New) != 0 || plan.count(rt::ScanClassification::Changed) != 0 ||
+        plan.count(rt::ScanClassification::Moved) != 0 || plan.count(rt::ScanClassification::Missing) != 0)
     {
       return false;
     }
 
-    if (plan.count(library::ScanClassification::Error) == 0)
+    if (plan.count(rt::ScanClassification::Error) == 0)
     {
       _runtime.notifications().post(rt::NotificationSeverity::Info, "Library is up to date");
       return true;
@@ -209,7 +246,7 @@ namespace ao::gtk::portal
 
     for (auto const& item : plan.items)
     {
-      if (item.classification == library::ScanClassification::Error)
+      if (item.classification == rt::ScanClassification::Error)
       {
         APP_LOG_ERROR("Failed to scan {}: {}", item.uri, item.errorMessage);
       }
@@ -219,11 +256,18 @@ namespace ao::gtk::portal
     return true;
   }
 
-  async::Task<void> LibraryImportExportWorkflow::applyScanPlanWithProgress(library::ScanPlan plan)
+  async::Task<void> LibraryImportExportWorkflow::applyScanPlanWithProgress(rt::ScanPlan plan, ScanRequestMode mode)
   {
     try
     {
-      auto result = co_await _runtime.library().tasks().applyScanPlanAsync(std::move(plan));
+      auto options = rt::ScanApplyOptions{};
+
+      if (mode == ScanRequestMode::FastBootstrap)
+      {
+        options.audioIdentityPolicy = rt::AudioIdentityPolicy::DeferNew;
+      }
+
+      auto result = co_await _runtime.library().tasks().applyScanPlanAsync(std::move(plan), options);
 
       if (!result)
       {
@@ -259,6 +303,11 @@ namespace ao::gtk::portal
         {
           _runtime.notifications().post(rt::NotificationSeverity::Info, scanCompletionSummary(*result));
         }
+
+        if (mode == ScanRequestMode::FastBootstrap && !result->cancelled)
+        {
+          startAudioIdentityIndexing();
+        }
       }
     }
     catch (...)
@@ -267,6 +316,23 @@ namespace ao::gtk::portal
 
       reportInternalFailure("Scan failed", "Scan failed: Internal error", std::current_exception());
     }
+  }
+
+  void LibraryImportExportWorkflow::startAudioIdentityIndexing()
+  {
+    _runtime.notifications().post(
+      rt::NotificationSeverity::Info, "Library ready; indexing audio identity in background");
+
+    spawnUiWorkflow(
+      _runtime.async(),
+      _tasks,
+      *this,
+      [](LibraryImportExportWorkflow* self) { return self->backfillAudioIdentityWorkflow(); },
+      [](LibraryImportExportWorkflow* self, std::exception_ptr exceptionPtr)
+      {
+        self->reportInternalFailure(
+          "Audio identity indexing failed", "Audio identity indexing failed: Internal error", exceptionPtr);
+      });
   }
 
   void LibraryImportExportWorkflow::presentFailure(std::string_view action,

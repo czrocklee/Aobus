@@ -14,6 +14,6 @@ namespace ao::cli
   {
     auto* const cmd = app.add_subcommand("init", "Initialize library and scan the music root");
     auto* const dryRun = addDryRunFlag(*cmd);
-    cmd->callback([&context, dryRun] { runScan(context, isDryRun(dryRun), false); });
+    cmd->callback([&context, dryRun] { runScan(context, isDryRun(dryRun), false, false); });
   }
 } // namespace ao::cli

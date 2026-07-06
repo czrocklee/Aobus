@@ -7,6 +7,8 @@
 #include "test/unit/RuntimeTestUtils.h"
 #include "test/unit/audio/AudioFixtureUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/library/AudioIdentity.h>
+#include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
@@ -90,6 +92,14 @@ namespace ao::gtk::test
       return std::ranges::any_of(titles, [&](std::string const& title) { return title == expectedTitle; });
     }
 
+    bool manifestHasAudioIdentity(GtkRuntimeFixture& fixture, std::string_view uri)
+    {
+      auto txn = fixture.runtime().musicLibrary().readTransaction();
+      auto manifestResult = fixture.runtime().musicLibrary().manifest().reader(txn).get(uri);
+      REQUIRE(manifestResult);
+      return library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature());
+    }
+
     std::vector<std::string> trackUris(GtkRuntimeFixture& fixture)
     {
       auto uris = std::vector<std::string>{};
@@ -118,7 +128,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("LibraryImportExportWorkflow - scan reports up-to-date empty library", "[gtk][unit][workflow]")
+  TEST_CASE("LibraryImportExportWorkflow - scan reports up-to-date empty library", "[gtk][unit][workflow][scan]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -144,7 +154,7 @@ namespace ao::gtk::test
     CHECK(feed.entries.back().message == "Library is up to date");
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - scan mutates only when files change", "[gtk][unit][workflow]")
+  TEST_CASE("LibraryImportExportWorkflow - scan mutates only when files change", "[gtk][unit][workflow][scan]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -201,7 +211,32 @@ namespace ao::gtk::test
     CHECK(progressEvents[0].fraction == 0.0);
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - scan reports relinked moved files", "[gtk][unit][workflow]")
+  TEST_CASE("LibraryImportExportWorkflow - fast bootstrap scan backfills audio identity in background",
+            "[gtk][unit][workflow][scan]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    std::int32_t mutationCallbackCount = 0;
+    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
+
+    copyMetadataFixtureToLibrary(fixture);
+
+    workflow.scan(portal::ScanRequestMode::FastBootstrap);
+
+    REQUIRE(pumpGtkEventsUntil(
+      [&fixture, &mutationCallbackCount]
+      {
+        return mutationCallbackCount == 1 &&
+               hasNotification(fixture, rt::NotificationSeverity::Info, "Audio identity indexing complete");
+      }));
+
+    CHECK(
+      hasNotification(fixture, rt::NotificationSeverity::Info, "Library ready; indexing audio identity in background"));
+    CHECK(manifestHasAudioIdentity(fixture, "song.flac"));
+  }
+
+  TEST_CASE("LibraryImportExportWorkflow - scan reports relinked moved files", "[gtk][unit][workflow][scan]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -235,7 +270,7 @@ namespace ao::gtk::test
     CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - scan reports missing files needing review", "[gtk][unit][workflow]")
+  TEST_CASE("LibraryImportExportWorkflow - scan reports missing files needing review", "[gtk][unit][workflow][scan]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -267,7 +302,8 @@ namespace ao::gtk::test
     CHECK(mutationCallbackCount == 1);
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - scan reports missing files even when errors occur", "[gtk][unit][workflow]")
+  TEST_CASE("LibraryImportExportWorkflow - scan reports missing files even when errors occur",
+            "[gtk][unit][workflow][scan]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -300,7 +336,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("LibraryImportExportWorkflow - scan reports error-only plans without up-to-date success",
-            "[gtk][unit][workflow][error]")
+            "[gtk][unit][workflow][scan][error]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

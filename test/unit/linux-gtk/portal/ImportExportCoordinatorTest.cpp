@@ -29,7 +29,8 @@ namespace ao::gtk::test
 
       CHECK(portal::shouldScanAfterOpen(libraryPath));
 
-      auto const databasePath = libraryPath / "data.mdb";
+      auto const databasePath = portal::defaultLibraryDatabasePath(libraryPath) / "data.mdb";
+      std::filesystem::create_directories(databasePath.parent_path());
       auto databaseFile = std::ofstream{databasePath};
       databaseFile << "existing database marker";
       databaseFile.close();
