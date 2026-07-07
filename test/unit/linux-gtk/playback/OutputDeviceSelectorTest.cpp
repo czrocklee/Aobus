@@ -86,7 +86,7 @@ namespace ao::gtk::test
       auto* const exclusiveRow = listBox->get_row_at_index(2);
       REQUIRE(exclusiveRow != nullptr);
 
-      ::g_signal_emit_by_name(listBox->gobj(), "row-activated", exclusiveRow->gobj());
+      emitRowActivated(*listBox, *exclusiveRow);
 
       auto const& selected = playback.state().output.selectedDevice;
       CHECK(selected.backendId == audio::BackendId{"pipewire"});

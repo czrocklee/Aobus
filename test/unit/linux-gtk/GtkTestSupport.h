@@ -23,6 +23,8 @@
 #include <gtkmm/eventcontrollerfocus.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/label.h>
+#include <gtkmm/listbox.h>
+#include <gtkmm/listboxrow.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
@@ -146,6 +148,14 @@ namespace ao::gtk::test
   inline void emitShow(Gtk::Widget& widget)
   {
     ::g_signal_emit_by_name(widget.gobj(), "show");
+  }
+
+  /**
+   * emitRowActivated - Emits GtkListBox::row-activated with a concrete row.
+   */
+  inline void emitRowActivated(Gtk::ListBox& listBox, Gtk::ListBoxRow& row)
+  {
+    ::g_signal_emit_by_name(listBox.gobj(), "row-activated", row.gobj());
   }
 
   /**

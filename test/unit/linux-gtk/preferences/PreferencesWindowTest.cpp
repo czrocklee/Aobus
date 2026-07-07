@@ -193,7 +193,7 @@ namespace ao::gtk::test
     auto* const deviceRow = listBox->get_row_at_index(1);
     REQUIRE(deviceRow != nullptr);
 
-    ::g_signal_emit_by_name(listBox->gobj(), "row-activated", deviceRow->gobj());
+    emitRowActivated(*listBox, *deviceRow);
 
     REQUIRE(optPersisted.has_value());
     CHECK(optPersisted->lastThemePreset == "modern");

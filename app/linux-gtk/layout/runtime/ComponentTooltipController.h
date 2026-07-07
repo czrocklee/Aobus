@@ -27,6 +27,7 @@ namespace ao::gtk::layout
     void attach(Gtk::Widget& target, ILayoutComponent& tooltipComponent);
 
   private:
+    void detach();
     void onEnter();
     void onLeave();
 
@@ -35,6 +36,8 @@ namespace ao::gtk::layout
 
     Gtk::Popover _popover;
     Glib::RefPtr<Gtk::EventControllerMotion> _motionControllerPtr;
+    sigc::connection _motionEnterConn;
+    sigc::connection _motionLeaveConn;
     sigc::connection _hoverTimeout;
   };
 } // namespace ao::gtk::layout

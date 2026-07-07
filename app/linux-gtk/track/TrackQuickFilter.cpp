@@ -41,7 +41,19 @@ namespace ao::gtk
     {
       return Glib::signal_timeout().connect(std::move(callback), interval.count());
     }
-  }
+
+    std::optional<std::string> stringFromDropValue(Glib::ValueBase const& value)
+    {
+      if (value.gobj()->g_type != G_TYPE_STRING)
+      {
+        return std::nullopt;
+      }
+
+      auto stringValue = Glib::Value<std::string>{};
+      stringValue.init(value.gobj());
+      return stringValue.get();
+    }
+  } // namespace
 
   TrackQuickFilter::TrackQuickFilter(rt::AppRuntime& runtime, DebounceScheduler debounceScheduler)
     : Gtk::Box{Gtk::Orientation::HORIZONTAL, 0}
@@ -93,11 +105,9 @@ namespace ao::gtk
     dropTargetPtr->signal_drop().connect(
       [this](Glib::ValueBase const& value, double /*x*/, double /*y*/)
       {
-        if (value.gobj()->g_type == G_TYPE_STRING)
+        if (auto const optText = stringFromDropValue(value); optText)
         {
-          auto val = Glib::Value<std::string>{};
-          val.init(value.gobj());
-          _entry.set_text(val.get());
+          _entry.set_text(*optText);
           return true;
         }
 

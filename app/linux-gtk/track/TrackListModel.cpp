@@ -33,6 +33,25 @@ namespace
     static auto theClass = Gio::ListModel_Class{};
     return theClass.init();
   }
+
+  ::GType resolveTrackRowObjectType(Glib::RefPtr<ao::gtk::TrackRowObject> const& rowPtr)
+  {
+    auto type = ::g_type_from_name("gtkmm__CustomObject_TrackRowObject");
+
+    if (type != G_TYPE_INVALID)
+    {
+      return type;
+    }
+
+    type = ::g_type_from_name("TrackRowObject");
+
+    if (type != G_TYPE_INVALID)
+    {
+      return type;
+    }
+
+    return rowPtr ? G_OBJECT_TYPE(rowPtr->gobj()) : G_TYPE_OBJECT; // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)
+  }
 } // namespace
 
 namespace ao::gtk
@@ -101,33 +120,19 @@ namespace ao::gtk
       return _cachedItemType;
     }
 
-    _cachedItemType = ::g_type_from_name("gtkmm__CustomObject_TrackRowObject");
-
-    if (_cachedItemType != G_TYPE_INVALID)
-    {
-      return _cachedItemType;
-    }
-
-    _cachedItemType = ::g_type_from_name("TrackRowObject");
-
-    if (_cachedItemType != G_TYPE_INVALID)
-    {
-      return _cachedItemType;
-    }
-
-    // Try to resolve via a live row if available
     if (_projectionPtr != nullptr && _provider != nullptr && _projectionPtr->size() > 0)
     {
       auto const id = _projectionPtr->trackIdAt(0);
 
       if (auto const rowPtr = _provider->trackRow(id); rowPtr)
       {
-        _cachedItemType = G_OBJECT_TYPE(rowPtr->gobj()); // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)
+        _cachedItemType = resolveTrackRowObjectType(rowPtr);
         return _cachedItemType;
       }
     }
 
-    return G_TYPE_OBJECT;
+    _cachedItemType = resolveTrackRowObjectType({});
+    return _cachedItemType;
   }
 
   ::guint TrackListModel::get_n_items_vfunc()

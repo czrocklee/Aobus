@@ -161,7 +161,7 @@ namespace ao::gtk::test
         REQUIRE(entry != nullptr);
 
         entry->set_text("Edited Title");
-        ::g_signal_emit_by_name(entry->gobj(), "activate");
+        emitActivate(*entry);
         drainGtkEvents();
 
         auto* const stack = findWidget<Gtk::Stack>(columnView);

@@ -25,12 +25,13 @@ namespace ao::gtk::layout
 
   ComponentTooltipController::~ComponentTooltipController()
   {
-    _hoverTimeout.disconnect();
-    _popover.unparent();
+    detach();
   }
 
   void ComponentTooltipController::attach(Gtk::Widget& target, ILayoutComponent& tooltipComponent)
   {
+    detach();
+
     _target = &target;
     _tooltipComponent = &tooltipComponent;
 
@@ -55,9 +56,31 @@ namespace ao::gtk::layout
 
     // Set up hover interaction
     _motionControllerPtr = Gtk::EventControllerMotion::create();
-    _motionControllerPtr->signal_enter().connect([this](double, double) { onEnter(); });
-    _motionControllerPtr->signal_leave().connect([this] { onLeave(); });
+    _motionEnterConn = _motionControllerPtr->signal_enter().connect([this](double, double) { onEnter(); });
+    _motionLeaveConn = _motionControllerPtr->signal_leave().connect([this] { onLeave(); });
     target.add_controller(_motionControllerPtr);
+  }
+
+  void ComponentTooltipController::detach()
+  {
+    _hoverTimeout.disconnect();
+    _motionEnterConn.disconnect();
+    _motionLeaveConn.disconnect();
+
+    if (_target != nullptr && _motionControllerPtr)
+    {
+      _target->remove_controller(_motionControllerPtr);
+    }
+
+    _motionControllerPtr = nullptr;
+
+    if (_popover.get_parent() != nullptr)
+    {
+      _popover.unparent();
+    }
+
+    _target = nullptr;
+    _tooltipComponent = nullptr;
   }
 
   void ComponentTooltipController::onEnter()

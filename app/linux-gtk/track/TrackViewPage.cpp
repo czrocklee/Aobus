@@ -79,6 +79,8 @@ namespace ao::gtk
     TrackRowObject* trackRowFromSorterItem(gpointer item)
     {
       auto* const object = static_cast<GObject*>(item);
+      // The GTK sorter passes a borrowed row object; wrap_auto(..., false)
+      // returns the existing C++ wrapper without taking ownership.
       return object != nullptr ? dynamic_cast<TrackRowObject*>(Glib::wrap_auto(object, false)) : nullptr;
     }
 

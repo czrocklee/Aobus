@@ -20,6 +20,7 @@
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/eventcontrollermotion.h>
 #include <gtkmm/picture.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
@@ -33,6 +34,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
   using ao::gtk::test::findWidget;
+  using ao::gtk::test::hasController;
 
   namespace
   {
@@ -182,5 +184,26 @@ namespace ao::gtk::layout::test
     REQUIRE(popover != nullptr);
     CHECK(popover->has_css_class("ao-popover-transparent"));
     CHECK_FALSE(popover->has_css_class("ao-opacity-80"));
+  }
+
+  TEST_CASE("ComponentTooltipController detaches target controller on destruction",
+            "[gtk][unit][layout][component][regression]")
+  {
+    auto const appPtr = Gtk::Application::create("io.github.aobus.tooltip_controller_lifecycle_test");
+
+    auto target = Gtk::Button{};
+    auto tooltipBox = Gtk::Box{};
+    auto tooltipComponent = StaticWidgetComponent{tooltipBox};
+
+    {
+      auto controller = ComponentTooltipController{};
+      controller.attach(target, tooltipComponent);
+
+      CHECK(hasController<Gtk::EventControllerMotion>(target));
+      CHECK(findWidget<Gtk::Popover>(target) != nullptr);
+    }
+
+    CHECK_FALSE(hasController<Gtk::EventControllerMotion>(target));
+    CHECK(findWidget<Gtk::Popover>(target) == nullptr);
   }
 } // namespace ao::gtk::layout::test
