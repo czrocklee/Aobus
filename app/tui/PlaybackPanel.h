@@ -26,9 +26,6 @@ namespace ao::rt
 
 namespace ao::tui
 {
-  inline constexpr std::int32_t kQualityPanelColumns = 48;
-  inline constexpr std::int32_t kOutputDevicePanelColumns = 48;
-
   struct OutputDeviceRowBox final
   {
     std::int32_t rowIndex = -1;
@@ -51,8 +48,11 @@ namespace ao::tui
 
   ftxui::Element playbackBar(PlaybackBarViewState const& view);
 
-  ftxui::Element qualityPanel(rt::PlaybackState const& state);
+  std::int32_t qualityPanelColumns(rt::PlaybackState const& state, std::int32_t terminalColumns);
+  ftxui::Element qualityPanel(rt::PlaybackState const& state, std::int32_t columns = 0);
+  std::int32_t outputDevicePanelColumns(uimodel::OutputDeviceViewState const& view, std::int32_t terminalColumns);
   ftxui::Element outputDevicePanel(uimodel::OutputDeviceViewState const& view,
                                    std::int32_t selectedRow,
-                                   std::vector<OutputDeviceRowBox>* rowBoxes = nullptr);
+                                   std::vector<OutputDeviceRowBox>* rowBoxes = nullptr,
+                                   std::int32_t columns = 0);
 } // namespace ao::tui

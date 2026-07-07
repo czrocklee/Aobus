@@ -56,12 +56,23 @@ namespace ao::tui
 
   ftxui::Element bottomPopover(ftxui::Element popoverPtr);
   ftxui::Element topPopover(ftxui::Element popoverPtr);
-  ftxui::Element detailPane(TrackListItem const* selectedTrack, ftxui::Element coverElementPtr);
-  ftxui::Element helpPane();
-  ftxui::Element commandCompletionPanel(rt::CompletionResult const& completion, std::int32_t selectedIndex);
+  std::int32_t detailPaneColumns(TrackListItem const* selectedTrack, std::int32_t terminalColumns);
+  ftxui::Element detailPane(TrackListItem const* selectedTrack,
+                            ftxui::Element coverElementPtr,
+                            std::int32_t columns = 0);
+  std::int32_t helpPaneColumns(std::int32_t terminalColumns);
+  ftxui::Element helpPane(std::int32_t columns = 0);
+  std::int32_t commandCompletionPanelColumns(rt::CompletionResult const& completion, std::int32_t terminalColumns);
+  ftxui::Element commandCompletionPanel(rt::CompletionResult const& completion,
+                                        std::int32_t selectedIndex,
+                                        std::int32_t columns = 0);
+  std::int32_t presentationPanelColumns(std::vector<PresentationNavItem> const& items,
+                                        std::string_view activePresentationId,
+                                        std::int32_t terminalColumns);
   ftxui::Element presentationPanel(std::vector<PresentationNavItem> const& items,
                                    std::string_view activePresentationId,
                                    std::int32_t selectedIndex,
-                                   std::vector<PresentationRowBox>* rowBoxes = nullptr);
+                                   std::vector<PresentationRowBox>* rowBoxes = nullptr,
+                                   std::int32_t columns = 0);
   ftxui::Element statusBar(StatusBarViewState const& state);
 } // namespace ao::tui

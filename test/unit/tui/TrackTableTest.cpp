@@ -519,6 +519,20 @@ namespace ao::tui::test
     CHECK(row.find("--:--") != std::string::npos);
   }
 
+  TEST_CASE("TrackTable - library chooser width follows labels and terminal bounds", "[tui][unit][track-table]")
+  {
+    auto labels = std::vector<std::string>{"All Tracks", "[?] Very Long Smart List Name For Testing"};
+    auto const wideColumns = libraryChooserPaneColumns(labels, 120);
+
+    CHECK(wideColumns > libraryChooserPaneColumns({"All Tracks"}, 120));
+    CHECK(wideColumns <= 120);
+    CHECK(libraryChooserPaneColumns(labels, 24) == 24);
+
+    auto const text = renderText(libraryChooserPane(labels, 1, wideColumns), wideColumns);
+
+    CHECK(text.find("Very Long Smart List") != std::string::npos);
+  }
+
   TEST_CASE("TrackTable - title column expands on wide terminals", "[tui][unit][track-table]")
   {
     auto const presentation =

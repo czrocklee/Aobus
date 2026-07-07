@@ -16,6 +16,7 @@
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -31,7 +32,7 @@ namespace ao::tui
   namespace
   {
     constexpr std::int32_t kOutputDeviceRows = 14;
-    constexpr std::int32_t kOutputDeviceInnerColumns = kOutputDevicePanelColumns - 2;
+    constexpr std::int32_t kPanelScrollIndicatorColumns = 1;
 
     ftxui::Element qualityDot(uimodel::AudioQualityCategory const category)
     {
@@ -73,10 +74,54 @@ namespace ao::tui
       return "No output device selected";
     }
 
-    ftxui::Element outputText(std::string value, bool const dimmed = false)
+    std::string selectedDeviceName(rt::PlaybackState const& state)
     {
-      auto elementPtr = ftxui::text(fitCellText(value, kOutputDeviceInnerColumns)) |
-                        ftxui::size(ftxui::WIDTH, ftxui::EQUAL, kOutputDeviceInnerColumns);
+      auto deviceName = std::string{};
+
+      for (auto const& backend : state.output.availableBackends)
+      {
+        for (auto const& device : backend.devices)
+        {
+          if (device.id == state.output.selectedDevice.deviceId)
+          {
+            deviceName = device.displayName;
+            break;
+          }
+        }
+
+        if (!deviceName.empty())
+        {
+          break;
+        }
+      }
+
+      return deviceName;
+    }
+
+    std::string qualityNodeLine(audio::NodeQualityAssessment const& assessment)
+    {
+      auto nodeLine = uimodel::audioNodeTypeLabel(assessment.nodeType);
+
+      if (!assessment.nodeName.empty())
+      {
+        nodeLine.append(" ");
+        nodeLine.append(assessment.nodeName);
+      }
+
+      if (assessment.optFormat)
+      {
+        auto const preferValidBits = assessment.nodeType == audio::flow::NodeType::Source;
+        nodeLine.append(" (");
+        nodeLine.append(uimodel::audioFormatLabel(*assessment.optFormat, preferValidBits));
+        nodeLine.push_back(')');
+      }
+
+      return nodeLine;
+    }
+
+    ftxui::Element outputText(std::string value, std::int32_t const columns, bool const dimmed = false)
+    {
+      auto elementPtr = ftxui::text(fitCellText(value, columns)) | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, columns);
 
       if (dimmed)
       {
@@ -142,29 +187,51 @@ namespace ao::tui
     });
   }
 
-  ftxui::Element qualityPanel(rt::PlaybackState const& state)
+  std::int32_t qualityPanelColumns(rt::PlaybackState const& state, std::int32_t const terminalColumns)
+  {
+    auto const deviceName = selectedDeviceName(state);
+    auto contentColumns = std::max(cellWidth(deviceName.empty() ? "Audio Pipeline" : deviceName) + cellWidth("●"),
+                                   cellWidth(overlayHint(Overlay::QualityPanel)));
+
+    if (state.quality.assessments.empty())
+    {
+      contentColumns = std::max(contentColumns, cellWidth("No audio pipeline yet"));
+    }
+
+    for (auto const& assessment : state.quality.assessments)
+    {
+      contentColumns = std::max(contentColumns, cellWidth(qualityNodeLine(assessment)));
+
+      for (auto const& finding : assessment.findings)
+      {
+        if (auto const findingText = uimodel::audioFindingLabel(finding); !findingText.empty())
+        {
+          contentColumns = std::max(contentColumns, cellWidth("  ● ") + cellWidth(findingText));
+        }
+      }
+    }
+
+    auto const presentation = uimodel::audioQualityPresentation(state.quality);
+
+    if (!presentation.headline.empty())
+    {
+      contentColumns = std::max(contentColumns, cellWidth("● ") + cellWidth(presentation.headline));
+    }
+
+    return panelColumnsForContent(contentColumns, terminalColumns);
+  }
+
+  ftxui::Element qualityPanel(rt::PlaybackState const& state, std::int32_t columns)
   {
     using namespace ftxui;
 
-    auto rows = Elements{};
-    auto deviceName = std::string{};
-
-    for (auto const& backend : state.output.availableBackends)
+    if (columns <= 0)
     {
-      for (auto const& device : backend.devices)
-      {
-        if (device.id == state.output.selectedDevice.deviceId)
-        {
-          deviceName = device.displayName;
-          break;
-        }
-      }
-
-      if (!deviceName.empty())
-      {
-        break;
-      }
+      columns = qualityPanelColumns(state, 0);
     }
+
+    auto rows = Elements{};
+    auto const deviceName = selectedDeviceName(state);
 
     rows.push_back(hbox({
       text(deviceName.empty() ? "Audio Pipeline" : deviceName) | bold | flex,
@@ -179,23 +246,7 @@ namespace ao::tui
 
     for (auto const& assessment : state.quality.assessments)
     {
-      auto nodeLine = uimodel::audioNodeTypeLabel(assessment.nodeType);
-
-      if (!assessment.nodeName.empty())
-      {
-        nodeLine.append(" ");
-        nodeLine.append(assessment.nodeName);
-      }
-
-      if (assessment.optFormat)
-      {
-        auto const preferValidBits = assessment.nodeType == audio::flow::NodeType::Source;
-        nodeLine.append(" (");
-        nodeLine.append(uimodel::audioFormatLabel(*assessment.optFormat, preferValidBits));
-        nodeLine.push_back(')');
-      }
-
-      rows.push_back(text(nodeLine));
+      rows.push_back(text(qualityNodeLine(assessment)));
 
       for (auto const& finding : assessment.findings)
       {
@@ -228,15 +279,54 @@ namespace ao::tui
     rows.push_back(separator());
     rows.push_back(text(std::string{overlayHint(Overlay::QualityPanel)}) | dim);
 
-    return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, kQualityPanelColumns);
+    return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, columns);
+  }
+
+  std::int32_t outputDevicePanelColumns(uimodel::OutputDeviceViewState const& view, std::int32_t const terminalColumns)
+  {
+    auto contentColumns = std::max({cellWidth("Output Devices") + cellWidth(outputSummary(&view)),
+                                    cellWidth(outputDeviceFooter(view)),
+                                    cellWidth(overlayHint(Overlay::OutputDevices))});
+
+    if (view.rows.empty())
+    {
+      contentColumns = std::max(contentColumns, cellWidth("No output devices found") + kPanelScrollIndicatorColumns);
+    }
+
+    for (auto const& row : view.rows)
+    {
+      if (row.kind == uimodel::OutputDeviceRow::Kind::BackendHeader)
+      {
+        contentColumns = std::max(contentColumns, cellWidth(row.title) + kPanelScrollIndicatorColumns);
+        continue;
+      }
+
+      contentColumns = std::max(contentColumns, cellWidth(row.title) + cellWidth("* ") + kPanelScrollIndicatorColumns);
+
+      if (!row.description.empty())
+      {
+        contentColumns =
+          std::max(contentColumns, cellWidth(row.description) + cellWidth("  ") + kPanelScrollIndicatorColumns);
+      }
+    }
+
+    return panelColumnsForContent(contentColumns, terminalColumns);
   }
 
   ftxui::Element outputDevicePanel(uimodel::OutputDeviceViewState const& view,
                                    std::int32_t const selectedRow,
-                                   std::vector<OutputDeviceRowBox>* const rowBoxes)
+                                   std::vector<OutputDeviceRowBox>* const rowBoxes,
+                                   std::int32_t columns)
   {
     using namespace ftxui;
 
+    if (columns <= 0)
+    {
+      columns = outputDevicePanelColumns(view, 0);
+    }
+
+    auto const listTextColumns = std::max(0, columns - kPanelBorderColumns - kPanelScrollIndicatorColumns);
+    auto const footerTextColumns = std::max(0, columns - kPanelBorderColumns);
     auto rows = Elements{};
     auto listRows = Elements{};
     std::int32_t focusRow = 0;
@@ -255,7 +345,7 @@ namespace ao::tui
 
     if (view.rows.empty())
     {
-      listRows.push_back(outputText("No output devices found", true));
+      listRows.push_back(outputText("No output devices found", listTextColumns, true));
     }
 
     for (std::size_t index = 0; index < view.rows.size(); ++index)
@@ -264,12 +354,12 @@ namespace ao::tui
 
       if (row.kind == uimodel::OutputDeviceRow::Kind::BackendHeader)
       {
-        listRows.push_back(outputText(row.title, true));
+        listRows.push_back(outputText(row.title, listTextColumns, true));
         continue;
       }
 
       auto titleLine = std::string{row.isActive ? "* " : "  "} + row.title;
-      auto rowPtr = outputText(std::move(titleLine));
+      auto rowPtr = outputText(std::move(titleLine), listTextColumns);
 
       if (std::cmp_equal(index, selectedRow))
       {
@@ -287,7 +377,7 @@ namespace ao::tui
 
       if (!row.description.empty())
       {
-        auto descPtr = outputText("  " + row.description, true);
+        auto descPtr = outputText("  " + row.description, listTextColumns, true);
 
         if (rowBoxes != nullptr)
         {
@@ -301,9 +391,9 @@ namespace ao::tui
     rows.push_back(vbox(std::move(listRows)) | focusPosition(0, focusRow) | vscroll_indicator | frame |
                    size(HEIGHT, EQUAL, kOutputDeviceRows));
     rows.push_back(separator());
-    rows.push_back(outputText(outputDeviceFooter(view), true));
-    rows.push_back(outputText(std::string{overlayHint(Overlay::OutputDevices)}, true));
+    rows.push_back(outputText(outputDeviceFooter(view), footerTextColumns, true));
+    rows.push_back(outputText(std::string{overlayHint(Overlay::OutputDevices)}, footerTextColumns, true));
 
-    return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, kOutputDevicePanelColumns);
+    return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui

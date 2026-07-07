@@ -25,7 +25,6 @@ namespace ftxui
 
 namespace ao::tui
 {
-  inline constexpr std::int32_t kLibraryChooserPaneColumns = 34;
   inline constexpr std::int32_t kMinimumTrackColumnWidthColumns = 8;
   inline constexpr std::int32_t kMaximumTrackColumnResizeColumns = 160;
 
@@ -73,5 +72,8 @@ namespace ao::tui
                                 TrackId playingTrackId,
                                 rt::TrackPresentationSpec const& presentation,
                                 TrackTableViewOptions options = {});
-  ftxui::Element libraryChooserPane(std::vector<std::string> const& labels, std::int32_t selected);
+  std::int32_t libraryChooserPaneColumns(std::vector<std::string> const& labels, std::int32_t terminalColumns);
+  ftxui::Element libraryChooserPane(std::vector<std::string> const& labels,
+                                    std::int32_t selected,
+                                    std::int32_t columns = 0);
 } // namespace ao::tui

@@ -5,6 +5,7 @@
 
 #include "tui/Model.h"
 #include "tui/ShellModel.h"
+#include <ao/rt/TrackRow.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 
@@ -68,6 +69,18 @@ namespace ao::tui::test
     CHECK(text.find("/output") != std::string::npos);
     CHECK(text.find("/views") != std::string::npos);
     CHECK(text.find("{ / }") != std::string::npos);
+  }
+
+  TEST_CASE("Render - side panes size to content and terminal bounds", "[tui][unit][render]")
+  {
+    auto row =
+      rt::TrackRow{.id = TrackId{7}, .title = "A very long title that should widen detail content", .artist = "Artist"};
+    auto item = makeTrackListItem(row);
+
+    CHECK(helpPaneColumns(120) > 0);
+    CHECK(helpPaneColumns(30) == 30);
+    CHECK(detailPaneColumns(&item, 120) > detailPaneColumns(nullptr, 120));
+    CHECK(detailPaneColumns(&item, 40) == 40);
   }
 
   TEST_CASE("Render - wide idle status bar keeps feedback shortcuts and selection on one row", "[tui][unit][render]")
@@ -203,6 +216,21 @@ namespace ao::tui::test
     CHECK(rendered.screen.PixelAt(1, 2).inverted);
   }
 
+  TEST_CASE("Render - command completion width follows content and terminal bounds", "[tui][unit][render]")
+  {
+    auto const completion = rt::CompletionResult{
+      .items = {rt::CompletionItem{.displayText = "/v", .insertText = "views", .detail = "views"}},
+    };
+    auto const wideCompletion = rt::CompletionResult{
+      .items = {rt::CompletionItem{
+        .displayText = "/very-long-command", .insertText = "very-long-command", .detail = "detailed command help"}},
+    };
+
+    CHECK(commandCompletionPanelColumns(completion, 120) < kPresentationPanelColumns);
+    CHECK(commandCompletionPanelColumns(wideCompletion, 120) > commandCompletionPanelColumns(completion, 120));
+    CHECK(commandCompletionPanelColumns(wideCompletion, 20) == 20);
+  }
+
   TEST_CASE("Render - presentation panel renders selected and active views", "[tui][unit][render]")
   {
     auto const items = std::vector<PresentationNavItem>{
@@ -216,9 +244,32 @@ namespace ao::tui::test
     CHECK(rendered.text.find("Views") != std::string::npos);
     CHECK(rendered.text.find("albums") != std::string::npos);
     CHECK(rendered.text.find("* Albums") != std::string::npos);
+    CHECK(rendered.text.find("Grouped by album.") != std::string::npos);
+    CHECK(rendered.text.find("songs") == std::string::npos);
     REQUIRE(rowBoxes.size() == 2);
     CHECK(rowBoxes[1].rowIndex == 1);
     CHECK(rendered.screen.PixelAt(rowBoxes[1].box.x_min, rowBoxes[1].box.y_min).inverted);
+  }
+
+  TEST_CASE("Render - presentation panel width follows content and terminal bounds", "[tui][unit][render]")
+  {
+    auto const items = std::vector<PresentationNavItem>{
+      {.id = "wide",
+       .label = "Wide View",
+       .detail = "Detailed description long enough to widen the picker beyond the default."},
+    };
+
+    auto const wideColumns = presentationPanelColumns(items, "wide", 120);
+
+    CHECK(wideColumns > kPresentationPanelColumns);
+    CHECK(wideColumns <= 120);
+    CHECK(presentationPanelColumns(items, "wide", 60) == 60);
+    CHECK(presentationPanelColumns({PresentationNavItem{.id = "x", .label = "X"}}, "x", 120) <
+          kPresentationPanelColumns);
+
+    auto const rendered = renderElement(presentationPanel(items, "wide", 0, nullptr, wideColumns), wideColumns, 16);
+
+    CHECK(rendered.text.find("Detailed description") != std::string::npos);
   }
 
   TEST_CASE("Render - presentation panel handles empty and out-of-range selection", "[tui][unit][render]")

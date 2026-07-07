@@ -528,9 +528,30 @@ namespace ao::tui
     return tablePtr;
   }
 
-  ftxui::Element libraryChooserPane(std::vector<std::string> const& labels, std::int32_t const selected)
+  std::int32_t libraryChooserPaneColumns(std::vector<std::string> const& labels, std::int32_t const terminalColumns)
+  {
+    auto contentColumns = std::max({cellWidth("Lists"),
+                                    cellWidth("No lists found") + kScrollIndicatorColumns,
+                                    cellWidth(overlayHint(Overlay::ListChooser))});
+
+    for (auto const& label : labels)
+    {
+      contentColumns = std::max(contentColumns, cellWidth(label) + kScrollIndicatorColumns);
+    }
+
+    return panelColumnsForContent(contentColumns, terminalColumns);
+  }
+
+  ftxui::Element libraryChooserPane(std::vector<std::string> const& labels,
+                                    std::int32_t const selected,
+                                    std::int32_t columns)
   {
     using namespace ftxui;
+
+    if (columns <= 0)
+    {
+      columns = libraryChooserPaneColumns(labels, 0);
+    }
 
     auto rows = Elements{};
     rows.reserve(labels.size());
@@ -547,6 +568,6 @@ namespace ao::tui
              separator(),
              text(std::string{overlayHint(Overlay::ListChooser)}) | dim,
            }) |
-           border | size(WIDTH, EQUAL, kLibraryChooserPaneColumns);
+           border | size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui

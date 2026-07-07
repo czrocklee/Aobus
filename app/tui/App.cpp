@@ -41,6 +41,7 @@
 #include <ftxui/screen/terminal.hpp>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cerrno>
@@ -72,7 +73,6 @@ namespace ao::tui
     constexpr std::int32_t kKittyCoverArtColumns = 768;
     constexpr std::int32_t kKittyCoverArtRows = 384;
     constexpr std::int32_t kMainLayerTopRows = 1;
-    constexpr std::int32_t kCommandCompletionPanelColumns = 48;
     constexpr std::int32_t kCommandCompletionPanelRows = 10;
     std::atomic<std::int32_t> gSignalWriteFd{-1}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
@@ -98,15 +98,16 @@ namespace ao::tui
         return {};
       }
 
-      return anchoredOverlay(
-        commandCompletionPanel(*optCompletion, shell.commandCompletionSelection()) |
-          ftxui::size(ftxui::WIDTH, ftxui::EQUAL, kCommandCompletionPanelColumns) |
-          ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kCommandCompletionPanelRows),
-        commandInputBox,
-        AnchoredOverlayPlacement::Above,
-        AnchoredOverlaySize{.columns = kCommandCompletionPanelColumns, .rows = kCommandCompletionPanelRows},
-        AnchoredOverlayTerminal{.columns = terminalColumns, .rows = terminalRows},
-        AnchoredOverlayOptions{.fallbackToBottom = true});
+      auto const panelColumns = commandCompletionPanelColumns(*optCompletion, terminalColumns);
+
+      return anchoredOverlay(commandCompletionPanel(*optCompletion, shell.commandCompletionSelection(), panelColumns) |
+                               ftxui::size(ftxui::WIDTH, ftxui::EQUAL, panelColumns) |
+                               ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kCommandCompletionPanelRows),
+                             commandInputBox,
+                             AnchoredOverlayPlacement::Above,
+                             AnchoredOverlaySize{.columns = panelColumns, .rows = kCommandCompletionPanelRows},
+                             AnchoredOverlayTerminal{.columns = terminalColumns, .rows = terminalRows},
+                             AnchoredOverlayOptions{.fallbackToBottom = true});
     }
 
     ftxui::Element presentationPopover(ShellModel const& shell,
@@ -120,14 +121,23 @@ namespace ao::tui
         return {};
       }
 
+      auto const activePresentationId = library.activePresentationId();
+      auto const panelColumns =
+        presentationPanelColumns(library.presentationItems(), activePresentationId, terminalColumns);
+
       return anchoredOverlay(
         presentationPanel(
-          library.presentationItems(), library.activePresentationId(), library.selectedPresentation(), rowBoxes) |
+          library.presentationItems(), activePresentationId, library.selectedPresentation(), rowBoxes, panelColumns) |
           ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kPresentationPanelRows),
         presentationButtonBox,
         AnchoredOverlayPlacement::Below,
-        AnchoredOverlaySize{.columns = kPresentationPanelColumns, .rows = kPresentationPanelRows},
+        AnchoredOverlaySize{.columns = panelColumns, .rows = kPresentationPanelRows},
         AnchoredOverlayTerminal{.columns = terminalColumns});
+    }
+
+    std::int32_t sidePanelColumnsLimit(std::int32_t const terminalColumns)
+    {
+      return terminalColumns <= 0 ? terminalColumns : std::max(1, terminalColumns / 2);
     }
 
     enum class CoverArtMode : std::uint8_t
@@ -615,34 +625,52 @@ namespace ao::tui
         {
           case Overlay::None: break;
           case Overlay::ListChooser:
-            popoverElementPtr = mainLayerPopover(libraryButtonBox,
-                                                 kLibraryChooserPaneColumns,
-                                                 0,
-                                                 libraryChooserPane(library.libraryLabels(), library.selectedList()));
+          {
+            auto const panelColumns = libraryChooserPaneColumns(library.libraryLabels(), terminalColumns);
+            popoverElementPtr =
+              mainLayerPopover(libraryButtonBox,
+                               panelColumns,
+                               0,
+                               libraryChooserPane(library.libraryLabels(), library.selectedList(), panelColumns));
             break;
+          }
           case Overlay::DetailPanel:
+          {
+            auto const panelColumns =
+              detailPaneColumns(selectedTrackView.track, sidePanelColumnsLimit(terminalColumns));
             mainContentPtr = hbox({
               workspaceElementPtr,
-              detailPane(selectedTrackView.track, std::move(coverElementPtr)),
+              detailPane(selectedTrackView.track, std::move(coverElementPtr), panelColumns),
             });
             break;
+          }
           case Overlay::QualityPanel:
-            popoverElementPtr = mainLayerPopover(qualityButtonBox, kQualityPanelColumns, 0, qualityPanel(state));
+          {
+            auto const panelColumns = qualityPanelColumns(state, terminalColumns);
+            popoverElementPtr = mainLayerPopover(qualityButtonBox, panelColumns, 0, qualityPanel(state, panelColumns));
             break;
+          }
           case Overlay::OutputDevices:
+          {
+            auto const panelColumns = outputDevicePanelColumns(outputDevices.viewState(), terminalColumns);
             popoverElementPtr = mainLayerPopover(
               outputDeviceButtonBox,
-              kOutputDevicePanelColumns,
+              panelColumns,
               0,
-              outputDevicePanel(outputDevices.viewState(), outputDevices.selectedRow(), &outputDeviceRowBoxes));
+              outputDevicePanel(
+                outputDevices.viewState(), outputDevices.selectedRow(), &outputDeviceRowBoxes, panelColumns));
             break;
+          }
           case Overlay::PresentationPanel: break;
           case Overlay::Help:
+          {
+            auto const panelColumns = helpPaneColumns(sidePanelColumnsLimit(terminalColumns));
             mainContentPtr = hbox({
               workspaceElementPtr,
-              helpPane(),
+              helpPane(panelColumns),
             });
             break;
+          }
         }
 
         auto mainLayerPtr = popoverElementPtr == nullptr ? std::move(mainContentPtr)

@@ -208,6 +208,23 @@ namespace ao::tui::test
     CHECK(text.find("Pipeline intervention") != std::string::npos);
   }
 
+  TEST_CASE("PlaybackPanel - quality panel width follows content and terminal bounds", "[tui][unit][playback]")
+  {
+    auto state = rt::PlaybackState{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
+    auto const narrowColumns = qualityPanelColumns(state, 120);
+
+    state.quality.assessments = std::vector{
+      audio::NodeQualityAssessment{
+        .nodeName = "Extremely Long Decoder Stage Name",
+        .nodeType = audio::flow::NodeType::Source,
+        .optFormat = cdFormat(),
+      },
+    };
+
+    CHECK(qualityPanelColumns(state, 120) > narrowColumns);
+    CHECK(qualityPanelColumns(state, 32) == 32);
+  }
+
   TEST_CASE("PlaybackPanel - output device panel renders grouped selectable rows", "[tui][unit][playback]")
   {
     auto rowBoxes = std::vector<OutputDeviceRowBox>{};
@@ -253,6 +270,30 @@ namespace ao::tui::test
     REQUIRE(rowBoxes.size() == 2);
     CHECK(rowBoxes[0].rowIndex == 1);
     CHECK(rowBoxes[1].rowIndex == 2);
+  }
+
+  TEST_CASE("PlaybackPanel - output device panel width follows content and terminal bounds", "[tui][unit][playback]")
+  {
+    auto view = uimodel::OutputDeviceViewState{
+      .rows =
+        std::vector{
+          uimodel::OutputDeviceRow{
+            .kind = uimodel::OutputDeviceRow::Kind::DeviceProfile,
+            .backendId = audio::BackendId{"pipewire"},
+            .deviceId = audio::DeviceId{"studio"},
+            .profileId = audio::kProfileShared,
+            .title = "Studio DAC",
+          },
+        },
+      .outputBackendSummary = "PW",
+      .outputDeviceStatus = "PipeWire: Studio DAC",
+    };
+    auto const narrowColumns = outputDevicePanelColumns(view, 120);
+
+    view.rows[0].description = "USB interface with a very long ALSA/PipeWire profile identifier";
+
+    CHECK(outputDevicePanelColumns(view, 120) > narrowColumns);
+    CHECK(outputDevicePanelColumns(view, 40) == 40);
   }
 
   TEST_CASE("PlaybackPanel - output device panel frames long device lists", "[tui][unit][playback]")

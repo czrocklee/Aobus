@@ -7,6 +7,19 @@
 
 namespace ao::tui::test
 {
+  TEST_CASE("TextCell - cellWidth measures terminal cells", "[tui][unit][text]")
+  {
+    CHECK(cellWidth("abc") == 3);
+    CHECK(cellWidth("雨") == 2);
+  }
+
+  TEST_CASE("TextCell - panelColumnsForContent adds border and clamps to terminal", "[tui][unit][text]")
+  {
+    CHECK(panelColumnsForContent(10, 0) == 12);
+    CHECK(panelColumnsForContent(10, 80) == 12);
+    CHECK(panelColumnsForContent(10, 8) == 8);
+  }
+
   TEST_CASE("TextCell - truncateToCellWidth respects terminal cell width", "[tui][unit][text]")
   {
     CHECK(truncateToCellWidth("abcdef", 3) == "abc");

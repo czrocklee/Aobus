@@ -13,6 +13,23 @@
 
 namespace ao::tui
 {
+  std::int32_t cellWidth(std::string_view const value)
+  {
+    return static_cast<std::int32_t>(ftxui::string_width(std::string{value}));
+  }
+
+  std::int32_t panelColumnsForContent(std::int32_t const contentColumns, std::int32_t const terminalColumns)
+  {
+    auto const desiredColumns = contentColumns + kPanelBorderColumns;
+
+    if (terminalColumns <= 0)
+    {
+      return desiredColumns;
+    }
+
+    return std::min(desiredColumns, terminalColumns);
+  }
+
   std::string truncateToCellWidth(std::string_view const value, std::int32_t const width)
   {
     if (width <= 0)
@@ -48,7 +65,7 @@ namespace ao::tui
   std::string fitCellText(std::string_view const value, std::int32_t const width, CellAlignment const alignment)
   {
     auto result = truncateToCellWidth(value, width);
-    auto const padding = std::max(0, width - static_cast<std::int32_t>(ftxui::string_width(result)));
+    auto const padding = std::max(0, width - cellWidth(result));
 
     if (padding <= 0)
     {
