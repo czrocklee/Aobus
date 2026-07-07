@@ -28,14 +28,12 @@ namespace ao::gtk::test
   public:
     static void renderLibraryTaskProgress(ActivityStatus& status, std::string message, double const fraction)
     {
-      status._model.onLibraryTaskProgress(std::move(message), fraction);
-      status.render();
+      status._activityStatusViewModel.onLibraryTaskProgress(std::move(message), fraction);
     }
 
     static void renderLibraryTaskCompleted(ActivityStatus& status, std::size_t const count)
     {
-      status._model.onLibraryTaskCompleted(count, status._notifications.feed());
-      status.render();
+      status._activityStatusViewModel.onLibraryTaskCompleted(count);
     }
   };
 

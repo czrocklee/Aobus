@@ -5,10 +5,9 @@
 
 #include "layout/LayoutConstants.h"
 #include <ao/rt/CorePrimitives.h>
-#include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/LibraryChanges.h>
-#include <ao/uimodel/status/activity/ActivityStatusModel.h>
+#include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
+#include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/enums.h>
@@ -61,37 +60,20 @@ namespace ao::gtk
   } // namespace
 
   ActivityStatus::ActivityStatus(ActivityStatusDependencies dependencies)
-    : _notifications{dependencies.notifications}
-    , _libraryChanges{dependencies.libraryChanges}
-    , _options{dependencies.options}
+    : _options{dependencies.options}
     , _resolveNotificationAction{std::move(dependencies.resolveNotificationAction)}
     , _onNotificationAction{std::move(dependencies.onNotificationAction)}
     , _box{Gtk::Orientation::HORIZONTAL}
     , _readoutBox{Gtk::Orientation::HORIZONTAL}
     , _detailBox{Gtk::Orientation::VERTICAL}
+    , _activityStatusViewModel{dependencies.notifications,
+                               [this](uimodel::ActivityStatusViewState const&) { render(); },
+                               uimodel::ActivityStatusViewModelOptions{
+                                 .libraryChanges = dependencies.libraryChanges,
+                                 .emitInitialState = false,
+                               }}
   {
     setupUi();
-    _model.initialize(_notifications.feed());
-
-    _postedSub = _notifications.onPosted([this](auto id) { onNotificationPosted(id); });
-    _changedSub = _notifications.onChanged([this] { onNotificationsChanged(); });
-
-    if (_libraryChanges != nullptr)
-    {
-      _libraryProgressSub = _libraryChanges->onLibraryTaskProgress(
-        [this](auto const& ev)
-        {
-          _model.onLibraryTaskProgress(ev.message, ev.fraction);
-          render();
-        });
-      _libraryCompletedSub = _libraryChanges->onLibraryTaskCompleted(
-        [this](std::size_t count)
-        {
-          _model.onLibraryTaskCompleted(count, _notifications.feed());
-          render();
-        });
-    }
-
     render();
   }
 
@@ -168,7 +150,7 @@ namespace ao::gtk
       _autoDismissTimer.disconnect();
     }
 
-    auto const& compact = _model.viewState().compact;
+    auto const& compact = _activityStatusViewModel.viewState().compact;
     bool const idle = compact.kind == uimodel::ActivityStatusKind::Idle;
     bool const reserveIdle = idle && _options.idleBehavior == ActivityStatusIdleBehavior::Reserve;
 
@@ -208,7 +190,7 @@ namespace ao::gtk
 
     _dismissButton.set_visible(compact.dismissible && !idle);
     setCssClass(_box, "ao-activity-status-has-details", compact.hasDetails);
-    bool const openable = uimodel::hasDetailContent(_model.viewState().detail) && !idle;
+    bool const openable = uimodel::hasDetailContent(_activityStatusViewModel.viewState().detail) && !idle;
     _detailButton.set_sensitive(openable);
     setCssClass(_box, "ao-activity-status-openable", openable);
     renderDetail();
@@ -226,7 +208,7 @@ namespace ao::gtk
       _detailBox.remove(*child);
     }
 
-    auto const& detail = _model.viewState().detail;
+    auto const& detail = _activityStatusViewModel.viewState().detail;
 
     if (!uimodel::hasDetailContent(detail))
     {
@@ -379,8 +361,7 @@ namespace ao::gtk
     _autoDismissTimer = Glib::signal_timeout().connect(
       [this]
       {
-        _model.onTransientExpired(_notifications.feed());
-        render();
+        _activityStatusViewModel.expireTransient();
         return false;
       },
       static_cast<std::uint32_t>(timeout.count()));
@@ -396,28 +377,14 @@ namespace ao::gtk
     _box.remove_css_class("ao-activity-status-error");
   }
 
-  void ActivityStatus::onNotificationPosted(rt::NotificationId const id)
-  {
-    _model.onNotificationPosted(_notifications.feed(), id);
-    render();
-  }
-
-  void ActivityStatus::onNotificationsChanged()
-  {
-    _model.onFeedChanged(_notifications.feed());
-    render();
-  }
-
   void ActivityStatus::onDismissClicked()
   {
-    _model.dismissCompact(_notifications.feed());
-    render();
+    _activityStatusViewModel.dismissCompact();
   }
 
   void ActivityStatus::onDetailDismissClicked(rt::NotificationId const id)
   {
-    _model.hideDetailNotificationFromActivity(id, _notifications.feed());
-    render();
+    _activityStatusViewModel.hideDetailNotificationFromActivity(id);
   }
 
   void ActivityStatus::onDetailActionClicked(rt::NotificationId const id, std::string actionId, Gtk::Widget& anchor)

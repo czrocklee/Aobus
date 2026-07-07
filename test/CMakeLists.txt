@@ -214,10 +214,11 @@ add_executable(ao_core_test
     unit/uimodel/playback/seek/SeekViewModelTest.cpp
     unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp
     unit/uimodel/playback/transport/TransportViewModelTest.cpp
-    unit/uimodel/status/activity/ActivityStatusModelCompactTest.cpp
-    unit/uimodel/status/activity/ActivityStatusModelDetailTest.cpp
-    unit/uimodel/status/activity/ActivityStatusModelNotificationTest.cpp
-    unit/uimodel/status/activity/ActivityStatusModelPresentationTest.cpp
+    unit/uimodel/status/activity/ActivityStatusFeedStateCompactTest.cpp
+    unit/uimodel/status/activity/ActivityStatusFeedStateDetailTest.cpp
+    unit/uimodel/status/activity/ActivityStatusFeedStateNotificationTest.cpp
+    unit/uimodel/status/activity/ActivityStatusFeedStatePresentationTest.cpp
+    unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp
 
     # app unit tests (no platform deps)
     unit/runtime/AppPrefsStateTest.cpp
@@ -293,14 +294,17 @@ add_executable(ao_tui_test
     unit/tui/EventControllerTest.cpp
     unit/tui/ExecutorTest.cpp
     unit/tui/LibraryControllerTest.cpp
+    unit/tui/ListNavigationTest.cpp
     unit/tui/ModelTest.cpp
     unit/tui/OutputDeviceControllerTest.cpp
     unit/tui/PlaybackActionsTest.cpp
     unit/tui/PlaybackPanelTest.cpp
     unit/tui/RenderTest.cpp
     unit/tui/ShellModelTest.cpp
+    unit/tui/SoulButtonTest.cpp
     unit/tui/TextCellTest.cpp
     unit/tui/TrackTableTest.cpp
+    unit/tui/TuiHitRegionsTest.cpp
 )
 
 target_link_libraries(ao_tui_test PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)

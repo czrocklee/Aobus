@@ -3,6 +3,7 @@
 
 #include "tui/TrackTable.h"
 
+#include "test/unit/tui/TuiRenderTestSupport.h"
 #include "tui/Model.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
@@ -10,17 +11,14 @@
 #include <ao/rt/TrackRow.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/screen.hpp>
 #include <ftxui/screen/string.hpp>
 
-#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <format>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -30,80 +28,6 @@ namespace ao::tui::test
 {
   namespace
   {
-    struct RenderedElement final
-    {
-      ftxui::Screen screen;
-      std::string text{};
-    };
-
-    std::string stripAnsi(std::string_view text)
-    {
-      auto result = std::string{};
-      result.reserve(text.size());
-
-      for (std::size_t index = 0; index < text.size(); ++index)
-      {
-        if (text[index] != '\x1B')
-        {
-          result.push_back(text[index]);
-          continue;
-        }
-
-        ++index;
-
-        while (index < text.size() && std::isalpha(static_cast<unsigned char>(text[index])) == 0 && text[index] != '\\')
-        {
-          ++index;
-        }
-      }
-
-      return result;
-    }
-
-    RenderedElement renderElement(ftxui::Element elementPtr,
-                                  std::int32_t const width = 120,
-                                  std::optional<std::int32_t> const optHeight = {})
-    {
-      auto screen = optHeight
-                      ? ftxui::Screen::Create(ftxui::Dimension::Fixed(width), ftxui::Dimension::Fixed(*optHeight))
-                      : ftxui::Screen::Create(ftxui::Dimension::Fixed(width), ftxui::Dimension::Fit(elementPtr));
-      ftxui::Render(screen, elementPtr);
-      auto text = stripAnsi(screen.ToString());
-      return RenderedElement{.screen = std::move(screen), .text = std::move(text)};
-    }
-
-    std::string renderText(ftxui::Element elementPtr, std::int32_t const width = 120)
-    {
-      return renderElement(std::move(elementPtr), width).text;
-    }
-
-    std::int32_t lineIndexContaining(std::string_view text, std::string_view needle)
-    {
-      std::int32_t lineIndex = 0;
-      std::size_t lineStart = 0;
-
-      while (lineStart < text.size())
-      {
-        auto const lineEnd = text.find('\n', lineStart);
-        auto const end = lineEnd == std::string_view::npos ? text.size() : lineEnd;
-
-        if (auto const line = text.substr(lineStart, end - lineStart); line.find(needle) != std::string_view::npos)
-        {
-          return lineIndex;
-        }
-
-        if (lineEnd == std::string_view::npos)
-        {
-          break;
-        }
-
-        lineStart = lineEnd + 1;
-        ++lineIndex;
-      }
-
-      return -1;
-    }
-
     std::string lineContaining(std::string_view text, std::string_view needle)
     {
       auto const position = text.find(needle);
@@ -294,7 +218,8 @@ namespace ao::tui::test
     CHECK(albumALine < firstTrackLine);
     CHECK(albumBLine < selectedTrackLine);
     CHECK_FALSE(rendered.screen.PixelAt(2, albumBLine).inverted);
-    CHECK(rendered.screen.PixelAt(2, selectedTrackLine).inverted);
+    CHECK_FALSE(rendered.screen.PixelAt(2, selectedTrackLine).inverted);
+    checkInteractiveSurface(rendered.screen.PixelAt(2, selectedTrackLine));
     REQUIRE(sectionBoxes.size() == 2);
     CHECK(sectionBoxes[1].sectionIndex == 1);
     CHECK(sectionBoxes[1].box.y_min == albumBLine);
@@ -466,10 +391,10 @@ namespace ao::tui::test
     auto const row = lineIndexContaining(rendered.text, "Beta");
 
     REQUIRE(row >= 0);
-    CHECK(rendered.screen.PixelAt(2, row).inverted);
-    CHECK(rendered.screen.PixelAt(2, row).bold);
-    CHECK(rendered.screen.PixelAt(90, row).inverted);
-    CHECK(rendered.screen.PixelAt(90, row).bold);
+    CHECK_FALSE(rendered.screen.PixelAt(2, row).inverted);
+    checkInteractiveSurface(rendered.screen.PixelAt(2, row));
+    CHECK_FALSE(rendered.screen.PixelAt(90, row).inverted);
+    checkInteractiveSurface(rendered.screen.PixelAt(90, row));
   }
 
   TEST_CASE("TrackTable - selected row is scrolled into a short viewport", "[tui][unit][track-table]")

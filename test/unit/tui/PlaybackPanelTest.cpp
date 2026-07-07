@@ -3,6 +3,9 @@
 
 #include "tui/PlaybackPanel.h"
 
+#include "test/unit/tui/TuiRenderTestSupport.h"
+#include "tui/OutputDevicePanel.h"
+#include "tui/QualityPanel.h"
 #include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/QualityAnalyzer.h>
@@ -18,6 +21,7 @@
 #include <ftxui/screen/screen.hpp>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <string>
@@ -28,18 +32,66 @@ namespace ao::tui::test
 {
   namespace
   {
-    std::string renderText(ftxui::Element elementPtr)
+    std::string renderPlaybackText(ftxui::Element elementPtr)
     {
       auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fit(elementPtr));
       ftxui::Render(screen, elementPtr);
       return screen.ToString();
     }
 
-    std::string renderText(ftxui::Element elementPtr, std::int32_t const width, std::int32_t const height)
+    std::string renderPlaybackText(ftxui::Element elementPtr, std::int32_t const width, std::int32_t const height)
     {
       auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(width), ftxui::Dimension::Fixed(height));
       ftxui::Render(screen, elementPtr);
       return screen.ToString();
+    }
+
+    bool isBrailleGlyph(std::string const& character)
+    {
+      return character.size() == 3 && static_cast<unsigned char>(character[0]) == 0xE2 &&
+             (static_cast<unsigned char>(character[1]) & 0xFC) == 0xA0;
+    }
+
+    bool containsBrailleGlyph(std::string const& text)
+    {
+      for (std::size_t index = 0; index + 1 < text.size(); ++index)
+      {
+        if (static_cast<unsigned char>(text[index]) == 0xE2 &&
+            (static_cast<unsigned char>(text[index + 1]) & 0xFC) == 0xA0)
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    std::int32_t cellIndexOf(ftxui::Screen const& screen, std::string const& needle, std::int32_t const row = 0)
+    {
+      auto const needleColumns = static_cast<std::int32_t>(needle.size());
+
+      for (std::int32_t column = 0; column <= screen.dimx() - needleColumns; ++column)
+      {
+        bool matches = true;
+
+        for (std::int32_t offset = 0; offset < needleColumns; ++offset)
+        {
+          auto const needleCell = std::string(1, needle[static_cast<std::size_t>(offset)]);
+
+          if (screen.PixelAt(column + offset, row).character != needleCell)
+          {
+            matches = false;
+            break;
+          }
+        }
+
+        if (matches)
+        {
+          return column;
+        }
+      }
+
+      return -1;
     }
 
     audio::Format cdFormat()
@@ -52,38 +104,154 @@ namespace ao::tui::test
   {
     auto const state = rt::PlaybackState{};
 
-    auto const text = renderText(
-      playbackBar(PlaybackBarViewState{.playbackState = &state, .listTitle = "Library", .presentationId = "songs"}));
+    auto const text = renderPlaybackText(playbackBar(PlaybackBarViewState{.playbackState = &state}));
 
-    CHECK(text.find("Aobus") != std::string::npos);
-    CHECK(text.find("Library") != std::string::npos);
-    CHECK(text.find("view:songs") != std::string::npos);
+    CHECK(text.find("Aobus") == std::string::npos);
+    CHECK(text.find("Library") == std::string::npos);
+    CHECK(text.find("view:") == std::string::npos);
+    CHECK(containsBrailleGlyph(text));
     CHECK(text.find("No active track") != std::string::npos);
-    CHECK(text.find("Idle") != std::string::npos);
-    CHECK(text.find("0:00 / --:--") != std::string::npos);
-    CHECK(text.find("100%") != std::string::npos);
+    CHECK(text.find('-') != std::string::npos);
+    CHECK(text.find("0:00") != std::string::npos);
+    CHECK(text.find("--:--") != std::string::npos);
+    CHECK(text.find("Vol 100%") != std::string::npos);
   }
 
   TEST_CASE("PlaybackPanel - playback bar renders current track timing and volume", "[tui][unit][playback]")
   {
     auto state = rt::PlaybackState{.transport = audio::Transport::Playing,
                                    .duration = std::chrono::seconds{125},
-                                   .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path", .artist = "Aobus"},
+                                   .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path", .artist = "Artist"},
                                    .volume = rt::VolumeState{.level = 0.42F},
                                    .quality = rt::QualityState{.overall = audio::Quality::LosslessFloat}};
 
-    auto const text = renderText(playbackBar(PlaybackBarViewState{.playbackState = &state,
-                                                                  .listTitle = "Favorites",
-                                                                  .presentationId = "albums",
-                                                                  .displayElapsed = std::chrono::seconds{65}}));
+    auto const text = renderPlaybackText(
+      playbackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{65}}));
 
-    CHECK(text.find("Favorites") != std::string::npos);
-    CHECK(text.find("view:albums") != std::string::npos);
+    CHECK(text.find("view:") == std::string::npos);
     CHECK(text.find("Signal Path") != std::string::npos);
-    CHECK(text.find("Aobus") != std::string::npos);
-    CHECK(text.find("Playing") != std::string::npos);
-    CHECK(text.find("1:05 / 2:05") != std::string::npos);
-    CHECK(text.find("42%") != std::string::npos);
+    CHECK(text.find("Artist") != std::string::npos);
+    CHECK(text.find("Aobus") == std::string::npos);
+    CHECK(containsBrailleGlyph(text));
+    CHECK(text.find("1:05") != std::string::npos);
+    CHECK(text.find("2:05") != std::string::npos);
+    CHECK(text.find("Vol 42%") != std::string::npos);
+  }
+
+  TEST_CASE("PlaybackPanel - playback bar anchors the soul button at the far left", "[tui][unit][playback]")
+  {
+    auto const state = rt::PlaybackState{};
+    auto soulButtonBox = ftxui::Box{};
+
+    auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
+    ftxui::Render(screen, playbackBar(PlaybackBarViewState{.playbackState = &state, .soulButtonBox = &soulButtonBox}));
+
+    CHECK(isBrailleGlyph(screen.PixelAt(1, 0).character));
+    CHECK(soulButtonBox.x_min == 0);
+    CHECK(soulButtonBox.x_max == 2);
+    CHECK(soulButtonBox.y_min == 0);
+  }
+
+  TEST_CASE("PlaybackPanel - playback bar previews seek position without percent text", "[tui][unit][playback]")
+  {
+    auto state = rt::PlaybackState{.transport = audio::Transport::Playing,
+                                   .duration = std::chrono::seconds{100},
+                                   .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+
+    auto const text = renderPlaybackText(
+      playbackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{50}}));
+
+    CHECK(text.find("50%") == std::string::npos);
+    CHECK(text.find("●") != std::string::npos);
+    CHECK(text.find("1:40") != std::string::npos);
+  }
+
+  TEST_CASE("PlaybackPanel - playback bar reflects only the seek rail", "[tui][unit][playback]")
+  {
+    auto state = rt::PlaybackState{.transport = audio::Transport::Playing,
+                                   .duration = std::chrono::seconds{100},
+                                   .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+    auto seekRailBox = ftxui::Box{};
+
+    auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
+    ftxui::Render(screen,
+                  playbackBar(PlaybackBarViewState{
+                    .playbackState = &state, .displayElapsed = std::chrono::seconds{50}, .seekRailBox = &seekRailBox}));
+
+    CHECK(screen.ToString().find("0:50") != std::string::npos);
+    CHECK(seekRailBox.y_min == 0);
+    CHECK(seekRailBox.y_max == 0);
+    CHECK(seekRailBox.x_min < seekRailBox.x_max);
+    CHECK(seekRailBox.x_min > 0);
+  }
+
+  TEST_CASE("PlaybackPanel - playback bar places output selector before elapsed time", "[tui][unit][playback]")
+  {
+    auto state = rt::PlaybackState{
+      .duration = std::chrono::seconds{100}, .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+    auto output = uimodel::OutputDeviceViewState{
+      .outputBackendSummary = "PW",
+      .outputDeviceStatus = "PipeWire: Studio DAC",
+      .hasActiveOutputDevice = true,
+    };
+    auto outputDeviceBox = ftxui::Box{};
+    auto seekRailBox = ftxui::Box{};
+
+    auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(120), ftxui::Dimension::Fixed(1));
+    ftxui::Render(screen,
+                  playbackBar(PlaybackBarViewState{.playbackState = &state,
+                                                   .outputView = &output,
+                                                   .outputDeviceBox = &outputDeviceBox,
+                                                   .seekRailBox = &seekRailBox,
+                                                   .terminalColumns = 120}));
+
+    auto const elapsedColumn = cellIndexOf(screen, "0:00");
+    REQUIRE(elapsedColumn >= 0);
+    CHECK(outputDeviceBox.x_max + 1 == elapsedColumn);
+    CHECK(elapsedColumn < seekRailBox.x_min);
+    CHECK(outputDeviceBox.y_min == seekRailBox.y_min);
+  }
+
+  TEST_CASE("PlaybackPanel - playback bar expands seek rail on wide terminals", "[tui][unit][playback]")
+  {
+    auto const state = rt::PlaybackState{
+      .duration = std::chrono::seconds{100}, .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+    auto narrowRailBox = ftxui::Box{};
+    auto wideRailBox = ftxui::Box{};
+
+    auto narrowScreen = ftxui::Screen::Create(ftxui::Dimension::Fixed(120), ftxui::Dimension::Fixed(1));
+    ftxui::Render(
+      narrowScreen,
+      playbackBar(PlaybackBarViewState{.playbackState = &state, .seekRailBox = &narrowRailBox, .terminalColumns = 72}));
+
+    auto wideScreen = ftxui::Screen::Create(ftxui::Dimension::Fixed(160), ftxui::Dimension::Fixed(1));
+    ftxui::Render(
+      wideScreen,
+      playbackBar(PlaybackBarViewState{.playbackState = &state, .seekRailBox = &wideRailBox, .terminalColumns = 150}));
+
+    CHECK(narrowRailBox.x_max - narrowRailBox.x_min + 1 == 24);
+    CHECK(wideRailBox.x_max - wideRailBox.x_min + 1 == 48);
+  }
+
+  TEST_CASE("PlaybackPanel - playback dock stays on one row", "[tui][unit][playback]")
+  {
+    auto state = rt::PlaybackState{.transport = audio::Transport::Playing,
+                                   .duration = std::chrono::seconds{100},
+                                   .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+    auto seekRailBox = ftxui::Box{};
+
+    auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(120), ftxui::Dimension::Fixed(1));
+    ftxui::Render(screen,
+                  playbackBar(PlaybackBarViewState{
+                    .playbackState = &state, .displayElapsed = std::chrono::seconds{50}, .seekRailBox = &seekRailBox}));
+
+    CHECK(playbackBarRows(20) == 1);
+    CHECK(playbackBarRows(24) == 1);
+    CHECK(screen.ToString().find("Signal Path") != std::string::npos);
+    CHECK(screen.ToString().find("0:50") != std::string::npos);
+    CHECK(screen.ToString().find("1:40") != std::string::npos);
+    CHECK(seekRailBox.y_min == 0);
+    CHECK(seekRailBox.y_max == 0);
   }
 
   TEST_CASE("PlaybackPanel - playback bar renders output backend badge", "[tui][unit][playback]")
@@ -95,47 +263,42 @@ namespace ao::tui::test
       .hasActiveOutputDevice = true,
     };
 
-    auto const text = renderText(playbackBar(PlaybackBarViewState{
-      .playbackState = &state, .listTitle = "Library", .presentationId = "songs", .outputView = &output}));
+    auto const text =
+      renderPlaybackText(playbackBar(PlaybackBarViewState{.playbackState = &state, .outputView = &output}));
 
     CHECK(text.find("PW") != std::string::npos);
     CHECK(text.find("No active track") != std::string::npos);
   }
 
-  TEST_CASE("PlaybackPanel - playback bar renders default presentation fallback", "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - hovered output selector uses the interactive surface", "[tui][unit][playback]")
   {
     auto const state = rt::PlaybackState{};
-
-    auto const text = renderText(playbackBar(PlaybackBarViewState{.playbackState = &state, .listTitle = "Library"}));
-
-    CHECK(text.find("view:default") != std::string::npos);
-  }
-
-  TEST_CASE("PlaybackPanel - playback bar reflects presentation badge", "[tui][unit][playback]")
-  {
-    auto const state = rt::PlaybackState{};
-    auto presentationBox = ftxui::Box{};
+    auto const output = uimodel::OutputDeviceViewState{
+      .outputBackendSummary = "PW",
+      .outputDeviceStatus = "PipeWire: Studio DAC",
+      .hasActiveOutputDevice = true,
+    };
+    auto outputDeviceBox = ftxui::Box{};
 
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
     ftxui::Render(screen,
                   playbackBar(PlaybackBarViewState{.playbackState = &state,
-                                                   .listTitle = "Library",
-                                                   .presentationId = "albums",
-                                                   .presentationBox = &presentationBox}));
+                                                   .outputView = &output,
+                                                   .outputDeviceBox = &outputDeviceBox,
+                                                   .outputDeviceHovered = true}));
 
-    CHECK(screen.ToString().find("view:albums") != std::string::npos);
-    CHECK(presentationBox.x_min > 0);
-    CHECK(presentationBox.x_min < presentationBox.x_max);
-    CHECK(presentationBox.y_min == 0);
+    auto const pixel = screen.PixelAt(outputDeviceBox.x_min, outputDeviceBox.y_min);
+    checkInteractiveSurface(pixel);
   }
 
   TEST_CASE("PlaybackPanel - quality panel renders empty pipeline state", "[tui][unit][playback]")
   {
     auto state = rt::PlaybackState{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
 
-    auto const text = renderText(qualityPanel(state));
+    auto const text = renderPlaybackText(qualityPanel(state));
 
-    CHECK(text.find("Audio Pipeline") != std::string::npos);
+    CHECK(text.find("Quality") == std::string::npos);
+    CHECK(text.find("Audio Pipeline") == std::string::npos);
     CHECK(text.find("No audio pipeline yet") != std::string::npos);
     CHECK(text.find("a toggle") != std::string::npos);
     CHECK(text.find("Esc close") != std::string::npos);
@@ -198,9 +361,10 @@ namespace ao::tui::test
           },
       };
 
-    auto const text = renderText(qualityPanel(state));
+    auto const text = renderPlaybackText(qualityPanel(state));
 
     CHECK(text.find("Studio DAC") != std::string::npos);
+    CHECK(text.find("Quality") == std::string::npos);
     CHECK(text.find("[Source] FLAC") != std::string::npos);
     CHECK(text.find("44.1 kHz") != std::string::npos);
     CHECK(text.find("[Device] DAC") != std::string::npos);
@@ -259,7 +423,7 @@ namespace ao::tui::test
       .hasActiveOutputDevice = true,
     };
 
-    auto const text = renderText(outputDevicePanel(view, 2, &rowBoxes));
+    auto const text = renderPlaybackText(outputDevicePanel(view, 2, &rowBoxes));
 
     CHECK(text.find("Output Devices") != std::string::npos);
     CHECK(text.find("PipeWire") != std::string::npos);
@@ -269,7 +433,11 @@ namespace ao::tui::test
     CHECK(text.find("Enter select") != std::string::npos);
     REQUIRE(rowBoxes.size() == 2);
     CHECK(rowBoxes[0].rowIndex == 1);
+    CHECK(rowBoxes[0].backendId == audio::BackendId{"pipewire"});
+    CHECK(rowBoxes[0].deviceId == audio::DeviceId{"studio"});
+    CHECK(rowBoxes[0].profileId == audio::kProfileShared);
     CHECK(rowBoxes[1].rowIndex == 2);
+    CHECK(rowBoxes[1].profileId == audio::kProfileExclusive);
   }
 
   TEST_CASE("PlaybackPanel - output device panel width follows content and terminal bounds", "[tui][unit][playback]")
@@ -326,7 +494,7 @@ namespace ao::tui::test
       .hasActiveOutputDevice = true,
     };
 
-    auto const text = renderText(outputDevicePanel(view, 1), 48, 24);
+    auto const text = renderPlaybackText(outputDevicePanel(view, 1), 48, 24);
 
     CHECK(text.find("very_long_identifier") == std::string::npos);
     CHECK(text.find("o toggle") != std::string::npos);

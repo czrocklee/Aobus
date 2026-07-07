@@ -12,15 +12,22 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::tui::test
 {
   namespace
   {
-    std::string renderText(ftxui::Element elementPtr, std::int32_t const width, std::int32_t const height)
+    ftxui::Screen renderScreen(ftxui::Element elementPtr, std::int32_t const width, std::int32_t const height)
     {
       auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(width), ftxui::Dimension::Fixed(height));
       ftxui::Render(screen, elementPtr);
+      return screen;
+    }
+
+    std::string renderText(ftxui::Element elementPtr, std::int32_t const width, std::int32_t const height)
+    {
+      auto screen = renderScreen(std::move(elementPtr), width, height);
       return screen.ToString();
     }
 
@@ -91,6 +98,34 @@ namespace ao::tui::test
     REQUIRE_FALSE(line.empty());
     CHECK(line.find("Popup") == 12);
     CHECK(lineIndexContaining(rendered, "Popup") == 2);
+  }
+
+  TEST_CASE("AnchoredOverlay - clears one-cell gutter for wide glyphs next to the edge", "[tui][unit][overlay]")
+  {
+    using namespace ftxui;
+
+    auto backgroundPtr = vbox({
+      filler() | size(HEIGHT, EQUAL, 2),
+      hbox({
+        filler() | size(WIDTH, EQUAL, 11),
+        text("界"),
+        filler(),
+      }),
+      filler(),
+    });
+    auto overlayPtr = anchoredOverlay(popup(),
+                                      anchor(12, 17, 1),
+                                      AnchoredOverlayPlacement::Below,
+                                      AnchoredOverlaySize{.columns = 8, .rows = 1},
+                                      AnchoredOverlayTerminal{.columns = 40, .rows = 5});
+
+    auto const screen = renderScreen(dbox({std::move(backgroundPtr), std::move(overlayPtr)}), 40, 5);
+    auto const text = screen.ToString();
+    auto const line = lineContaining(text, "Popup");
+
+    REQUIRE_FALSE(line.empty());
+    CHECK(line.find("Popup") == 12);
+    CHECK(screen.PixelAt(11, 2).character == " ");
   }
 
   TEST_CASE("AnchoredOverlay - placement clamps inside terminal width", "[tui][unit][overlay]")

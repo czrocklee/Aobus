@@ -12,6 +12,7 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <algorithm>
 #include <chrono>
@@ -67,21 +68,7 @@ namespace ao::tui
       return depth;
     }
 
-    struct IndicatorColor final
-    {
-      std::uint8_t red = 0;
-      std::uint8_t green = 0;
-      std::uint8_t blue = 0;
-    };
-
-    constexpr auto kMedalColor = IndicatorColor{.red = 0xA8, .green = 0x55, .blue = 0xF7};
-    constexpr auto kPositiveColor = IndicatorColor{.red = 0x10, .green = 0xB9, .blue = 0x81};
-    constexpr auto kDiagnosticColor = IndicatorColor{.red = 0xF5, .green = 0x9E, .blue = 0x0B};
-    constexpr auto kWarningColor = IndicatorColor{.red = 0xF5, .green = 0x9E, .blue = 0x0B};
-    constexpr auto kInformationalColor = IndicatorColor{.red = 0x6B, .green = 0x72, .blue = 0x80};
-    constexpr auto kClippedColor = IndicatorColor{.red = 0xEF, .green = 0x44, .blue = 0x44};
-
-    void applyIndicatorColor(QualityIndicatorStyle& style, IndicatorColor const color)
+    void applyIndicatorColor(QualityIndicatorStyle& style, uimodel::AobusSoulRgb const color)
     {
       style.red = color.red;
       style.green = color.green;
@@ -135,19 +122,25 @@ namespace ao::tui
 
     switch (category)
     {
-      case uimodel::AudioQualityCategory::Medal: applyIndicatorColor(style, kMedalColor); return style;
-      case uimodel::AudioQualityCategory::Positive: applyIndicatorColor(style, kPositiveColor); return style;
-      case uimodel::AudioQualityCategory::Diagnostic: applyIndicatorColor(style, kDiagnosticColor); return style;
-      case uimodel::AudioQualityCategory::Warning: applyIndicatorColor(style, kWarningColor); return style;
-      case uimodel::AudioQualityCategory::Informational: applyIndicatorColor(style, kInformationalColor); return style;
-      case uimodel::AudioQualityCategory::Clipped: applyIndicatorColor(style, kClippedColor); return style;
+      case uimodel::AudioQualityCategory::Medal: applyIndicatorColor(style, uimodel::kAobusSoulRadiant); return style;
+      case uimodel::AudioQualityCategory::Positive:
+        applyIndicatorColor(style, uimodel::kAobusSoulFlowing);
+        return style;
+      case uimodel::AudioQualityCategory::Diagnostic:
+      case uimodel::AudioQualityCategory::Warning:
+        applyIndicatorColor(style, uimodel::kAobusSoulTurbulent);
+        return style;
+      case uimodel::AudioQualityCategory::Informational:
+        applyIndicatorColor(style, uimodel::kAobusSoulVeiled);
+        return style;
+      case uimodel::AudioQualityCategory::Clipped: applyIndicatorColor(style, uimodel::kAobusSoulBurning); return style;
       case uimodel::AudioQualityCategory::Unknown:
-        applyIndicatorColor(style, kInformationalColor);
+        applyIndicatorColor(style, uimodel::kAobusSoulVeiled);
         style.label = "Unknown quality";
         return style;
     }
 
-    applyIndicatorColor(style, kInformationalColor);
+    applyIndicatorColor(style, uimodel::kAobusSoulVeiled);
     style.label = "Unknown quality";
     return style;
   }

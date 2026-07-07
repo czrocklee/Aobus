@@ -39,6 +39,12 @@ namespace ao::tui::test
     CHECK(controller.selectedRow() == 2);
     CHECK_FALSE(controller.moveSelection(1));
     CHECK(controller.selectedRow() == 2);
+    CHECK(controller.moveSelection(-10));
+    CHECK(controller.selectedRow() == 1);
+    CHECK(controller.moveSelection(10));
+    CHECK(controller.selectedRow() == 2);
+    CHECK_FALSE(controller.moveSelection(0));
+    CHECK(controller.selectedRow() == 2);
   }
 
   TEST_CASE("OutputDeviceController - selecting a row updates playback output", "[tui][unit][output]")
@@ -50,17 +56,21 @@ namespace ao::tui::test
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto controller = OutputDeviceController{fixture.playbackService};
 
-    CHECK(controller.selectRow(-1) == "No output device selected");
-    CHECK(controller.selectRow(0) == "No output device selected");
+    CHECK_FALSE(controller.selectRow(-1));
+    CHECK_FALSE(controller.selectRow(0));
+    CHECK(controller.selectedRow() == 1);
+    CHECK(fixture.playbackService.state().output.selectedDevice.backendId == audio::BackendId{"mock_backend"});
 
-    auto const status = controller.selectRow(1);
+    CHECK(controller.selectRow(1));
     auto const& selection = fixture.playbackService.state().output.selectedDevice;
 
-    CHECK(status == "Output: Mock Device");
     CHECK(selection.backendId == audio::BackendId{"mock_backend"});
     CHECK(selection.deviceId == audio::DeviceId{"mock_device"});
     CHECK(selection.profileId == audio::kProfileShared);
 
-    CHECK(controller.selectRow(2) == "Output: Mock Device (Exclusive)");
+    REQUIRE(controller.viewState().rows.size() == 3);
+    CHECK(controller.viewState().rows[2].profileId == audio::kProfileExclusive);
+    CHECK(controller.selectRow(2));
+    CHECK(controller.selectedRow() == 2);
   }
 } // namespace ao::tui::test

@@ -7,15 +7,28 @@
 #include <ftxui/screen/box.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <utility>
 
 namespace ao::tui
 {
   namespace
   {
+    constexpr std::int32_t kOverlayClearGutterColumns = 1;
+
     bool isEmptyAnchor(ftxui::Box const& box)
     {
       return box.x_min == 0 && box.x_max == 0 && box.y_min == 0 && box.y_max == 0;
+    }
+
+    ftxui::Element clearGutter(std::int32_t const columns)
+    {
+      if (columns <= 0)
+      {
+        return ftxui::emptyElement();
+      }
+
+      return ftxui::filler() | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, columns) | ftxui::clear_under;
     }
 
     ftxui::Box bottomFallbackAnchor(AnchoredOverlayTerminal const terminal)
@@ -47,6 +60,9 @@ namespace ao::tui
     auto const anchor = layerAnchor(rootAnchor, terminal, options);
     auto const maxLeft = terminal.columns > overlaySize.columns ? terminal.columns - overlaySize.columns : 0;
     auto const left = std::clamp(anchor.x_min, 0, maxLeft);
+    auto const leadingClearColumns = left > 0 ? kOverlayClearGutterColumns : 0;
+    auto const trailingClearColumns = left + overlaySize.columns < terminal.columns ? kOverlayClearGutterColumns : 0;
+    auto const layerLeft = left - leadingClearColumns;
     auto const top = placement == AnchoredOverlayPlacement::Above ? std::max(0, anchor.y_min - overlaySize.rows)
                                                                   : std::max(0, anchor.y_max + 1);
     auto const rowsBelowPtr = placement == AnchoredOverlayPlacement::Above
@@ -56,8 +72,10 @@ namespace ao::tui
     return vbox({
       filler() | size(HEIGHT, EQUAL, top),
       hbox({
-        filler() | size(WIDTH, EQUAL, left),
+        filler() | size(WIDTH, EQUAL, layerLeft),
+        clearGutter(leadingClearColumns),
         std::move(overlayPtr) | clear_under,
+        clearGutter(trailingClearColumns),
         filler(),
       }),
       rowsBelowPtr,

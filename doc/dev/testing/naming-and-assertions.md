@@ -20,7 +20,7 @@ Examples:
 TEST_CASE("NotificationService - dismissing missing id does not publish event",
           "[runtime][unit][notification]")
 
-TEST_CASE("ActivityStatusModel - detail-only notification does not replace compact state",
+TEST_CASE("ActivityStatusFeedState - detail-only notification does not replace compact state",
           "[uimodel][unit][activity-status]")
 
 TEST_CASE("TrackPresentationButton - selecting preset updates active list presentation",

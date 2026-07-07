@@ -12,7 +12,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <numbers>
 
 namespace Gtk
 {
@@ -53,7 +52,7 @@ namespace ao::gtk
 
     static Gdk::RGBA mapSoulAura(uimodel::SoulAura aura);
 
-    static constexpr double kGoldenRatio = std::numbers::phi;
+    static constexpr double kGoldenRatio = uimodel::kAobusSoulGoldenRatio;
 
   protected:
     void on_map() override;

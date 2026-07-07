@@ -22,6 +22,7 @@ namespace ao::tui
     QualityPanel,
     OutputDevices,
     PresentationPanel,
+    Notifications,
     Help,
   };
 
@@ -33,6 +34,7 @@ namespace ao::tui
     OpenQuality,
     OpenOutputDevices,
     OpenPresentationPanel,
+    OpenNotifications,
     CloseOverlay,
     ShowHelp,
     RevealCurrentTrack,
@@ -56,6 +58,8 @@ namespace ao::tui
     std::string_view prefix;
     CommandAction action;
     std::string_view detail;
+    std::string_view category{};
+    std::string_view shortcut{};
   };
 
   struct CommandAliasSpec final
@@ -63,6 +67,8 @@ namespace ao::tui
     std::string_view alias;
     CommandAction action;
     std::string_view detail;
+    std::string_view category{};
+    std::string_view shortcut{};
   };
 
   std::span<CommandPrefixSpec const> commandPrefixSpecs();

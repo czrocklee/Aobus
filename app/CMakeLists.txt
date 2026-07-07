@@ -94,7 +94,8 @@ add_library(ao_app_uimodel STATIC
     uimodel/playback/seek/SeekViewModel.cpp
     uimodel/playback/soul/AobusSoulViewModel.cpp
     uimodel/playback/transport/TransportViewModel.cpp
-    uimodel/status/activity/ActivityStatusModel.cpp
+    uimodel/status/activity/ActivityStatusFeedState.cpp
+    uimodel/status/activity/ActivityStatusViewModel.cpp
 )
 target_include_directories(ao_app_uimodel PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(ao_app_uimodel PRIVATE "${CMAKE_SOURCE_DIR}/app")

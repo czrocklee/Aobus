@@ -236,7 +236,7 @@ namespace ao::tui::test
     CHECK_FALSE(transportNeedsClockTick(audio::Transport::Error));
   }
 
-  TEST_CASE("Model - quality indicator uses GTK quality colors", "[tui][unit][model]")
+  TEST_CASE("Model - quality indicator uses Soul brand quality colors", "[tui][unit][model]")
   {
     auto style = qualityIndicatorStyle(audio::Quality::BitwisePerfect);
     CHECK(style.red == 0xA8);

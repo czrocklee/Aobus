@@ -1,19 +1,30 @@
 add_library(aobus-tui-lib STATIC
     AnchoredOverlay.cpp
     CommandCompletion.cpp
+    CommandPalettePanel.cpp
     CommandCompletionProvider.cpp
     CommandCompletionState.cpp
     CoverArt.cpp
     EventController.cpp
     Executor.cpp
     LibraryController.cpp
+    ListNavigation.cpp
+    NotificationCenterPanel.cpp
     OutputDeviceController.cpp
+    OutputDevicePanel.cpp
     PlaybackActions.cpp
     PlaybackPanel.cpp
+    PresentationPanel.cpp
+    QualityPanel.cpp
     Render.cpp
+    SelectableList.cpp
+    StatusBar.cpp
+    Style.cpp
     TrackTable.cpp
+    TuiHitRegions.cpp
     Model.cpp
     ShellModel.cpp
+    SoulButton.cpp
     TextCell.cpp
 )
 

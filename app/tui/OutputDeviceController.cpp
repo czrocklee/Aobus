@@ -3,15 +3,14 @@
 
 #include "OutputDeviceController.h"
 
-#include <ao/audio/Backend.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <functional>
-#include <string>
+#include <limits>
 #include <utility>
 
 namespace ao::tui
@@ -88,44 +87,81 @@ namespace ao::tui
       return false;
     }
 
-    auto const step = delta < 0 ? -1 : 1;
-    auto target = _selectedRow + delta;
-
-    while (target >= 0 && std::cmp_less(target, _view.rows.size()))
+    if (delta == 0)
     {
-      if (selectableRow(target))
+      return false;
+    }
+
+    auto const maxRow = static_cast<std::int32_t>(
+      std::min<std::size_t>(_view.rows.size() - 1, static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())));
+    auto const target = static_cast<std::int32_t>(
+      std::clamp<std::int64_t>(static_cast<std::int64_t>(_selectedRow) + static_cast<std::int64_t>(delta), 0, maxRow));
+    auto const selectTarget = [this](std::int32_t const row)
+    {
+      if (row != _selectedRow && selectableRow(row))
       {
-        _selectedRow = target;
+        _selectedRow = row;
         return true;
       }
 
-      target += step;
+      return false;
+    };
+
+    if (delta > 0)
+    {
+      for (auto row = target; row <= maxRow; ++row)
+      {
+        if (selectTarget(row))
+        {
+          return true;
+        }
+      }
+
+      for (auto row = target - 1; row > _selectedRow; --row)
+      {
+        if (selectTarget(row))
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    for (auto row = target; row >= 0; --row)
+    {
+      if (selectTarget(row))
+      {
+        return true;
+      }
+    }
+
+    for (auto row = target + 1; row < _selectedRow; ++row)
+    {
+      if (selectTarget(row))
+      {
+        return true;
+      }
     }
 
     return false;
   }
 
-  std::string OutputDeviceController::selectSelected()
+  bool OutputDeviceController::selectSelected()
   {
     return selectRow(_selectedRow);
   }
 
-  std::string OutputDeviceController::selectRow(std::int32_t const rowIndex)
+  bool OutputDeviceController::selectRow(std::int32_t const rowIndex)
   {
     if (!selectableRow(rowIndex))
     {
-      return "No output device selected";
+      return false;
     }
 
     _selectedRow = rowIndex;
     auto const& row = _view.rows[static_cast<std::size_t>(rowIndex)];
     _viewModel.selectOutputDevice(row.backendId, row.deviceId, row.profileId);
-
-    if (row.profileId == audio::kProfileExclusive)
-    {
-      return std::format("Output: {} (Exclusive)", row.title);
-    }
-
-    return std::format("Output: {}", row.title);
+    return true;
   }
 } // namespace ao::tui

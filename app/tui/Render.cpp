@@ -5,10 +5,8 @@
 
 #include "CoverArt.h"
 #include "Model.h"
-#include "ShellModel.h"
+#include "Style.h"
 #include "TextCell.h"
-#include <ao/rt/completion/CompletionResult.h>
-#include <ao/rt/completion/CompletionText.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
@@ -18,8 +16,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <format>
-#include <optional>
 #include <print>
 #include <string>
 #include <string_view>
@@ -33,21 +29,6 @@ namespace ao::tui
     constexpr std::int32_t kCoverArtPanelColumns = 30;
     constexpr std::int32_t kCoverArtPanelRows = 16;
     constexpr std::int32_t kDetailPaneLabelColumns = 14;
-    constexpr std::int32_t kPresentationPanelMarkerColumns = 2;
-    constexpr std::int32_t kPresentationPanelScrollIndicatorColumns = 1;
-
-    std::string presentationPanelRowText(PresentationNavItem const& item)
-    {
-      auto label = item.label;
-
-      if (!item.detail.empty())
-      {
-        label.append(" - ");
-        label.append(item.detail);
-      }
-
-      return label;
-    }
 
     constexpr auto kHelpPaneLines = std::to_array<std::string_view>({
       "Commands",
@@ -57,6 +38,7 @@ namespace ao::tui
       "/pipeline or /a    show audio pipeline",
       "/output or /o      choose output device",
       "/views or /v       choose presentation",
+      "/notifications or /n show notification center",
       "/current           reveal current track",
       "/view <id>         switch presentation",
       "{ / }              previous / next group",
@@ -70,6 +52,11 @@ namespace ao::tui
     constexpr std::size_t kHelpPaneCommandFirstLine = kHelpPaneTitleLine + 1;
     constexpr std::size_t kHelpPaneFooterLine = kHelpPaneLines.size() - 1;
     constexpr std::size_t kHelpPaneSeparatorCount = 2;
+
+    ftxui::Element popoverClearHalo(ftxui::Element popoverPtr)
+    {
+      return std::move(popoverPtr) | ftxui::borderEmpty | ftxui::clear_under;
+    }
   } // namespace
 
   ftxui::Element renderKittyCoverArtPlaceholder(bool const hasCover)
@@ -102,7 +89,7 @@ namespace ao::tui
     std::fflush(stdout);
   }
 
-  ftxui::Element bottomPopover(ftxui::Element popoverPtr)
+  ftxui::Element centerPopover(ftxui::Element popoverPtr)
   {
     using namespace ftxui;
 
@@ -110,19 +97,8 @@ namespace ao::tui
       filler(),
       hbox({
         filler(),
-        std::move(popoverPtr) | clear_under,
-      }),
-    });
-  }
-
-  ftxui::Element topPopover(ftxui::Element popoverPtr)
-  {
-    using namespace ftxui;
-
-    return vbox({
-      hbox({
+        popoverClearHalo(std::move(popoverPtr)),
         filler(),
-        std::move(popoverPtr) | clear_under,
       }),
       filler(),
     });
@@ -144,7 +120,7 @@ namespace ao::tui
       }
     }
 
-    return panelColumnsForContent(contentColumns, terminalColumns);
+    return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
   ftxui::Element detailPane(TrackListItem const* selectedTrack, ftxui::Element coverElementPtr, std::int32_t columns)
@@ -173,14 +149,13 @@ namespace ao::tui
       }
     }
 
-    return vbox({
-             std::move(coverElementPtr),
-             separator(),
-             text("Track Detail") | bold,
-             separator(),
-             vbox(std::move(detailElements)) | frame | flex,
-           }) |
-           border | size(WIDTH, EQUAL, columns);
+    return style::popupPanel("Track Detail",
+                             vbox({
+                               std::move(coverElementPtr),
+                               separator(),
+                               vbox(std::move(detailElements)) | frame | flex,
+                             })) |
+           size(WIDTH, EQUAL, columns);
   }
 
   std::int32_t helpPaneColumns(std::int32_t const terminalColumns)
@@ -192,7 +167,7 @@ namespace ao::tui
       contentColumns = std::max(contentColumns, cellWidth(line));
     }
 
-    return panelColumnsForContent(contentColumns, terminalColumns);
+    return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
   ftxui::Element helpPane(std::int32_t columns)
@@ -206,8 +181,6 @@ namespace ao::tui
 
     auto rows = Elements{};
     rows.reserve(kHelpPaneLines.size() + kHelpPaneSeparatorCount);
-    rows.push_back(text(std::string{kHelpPaneLines[kHelpPaneTitleLine]}) | bold);
-    rows.push_back(separator());
 
     for (std::size_t line = kHelpPaneCommandFirstLine; line < kHelpPaneFooterLine; ++line)
     {
@@ -217,241 +190,6 @@ namespace ao::tui
     rows.push_back(separator());
     rows.push_back(text(std::string{kHelpPaneLines[kHelpPaneFooterLine]}) | dim);
 
-    return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, columns);
-  }
-
-  std::int32_t commandCompletionPanelColumns(rt::CompletionResult const& completion, std::int32_t const terminalColumns)
-  {
-    std::int32_t contentColumns = 0;
-
-    for (auto const& item : completion.items)
-    {
-      contentColumns = std::max(contentColumns, cellWidth(item.displayText) + cellWidth(item.detail));
-    }
-
-    return panelColumnsForContent(contentColumns, terminalColumns);
-  }
-
-  ftxui::Element commandCompletionPanel(rt::CompletionResult const& completion,
-                                        std::int32_t const selectedIndex,
-                                        std::int32_t columns)
-  {
-    using namespace ftxui;
-
-    if (columns <= 0)
-    {
-      columns = commandCompletionPanelColumns(completion, 0);
-    }
-
-    std::int32_t detailColumns = 0;
-
-    for (auto const& item : completion.items)
-    {
-      detailColumns = std::max(detailColumns, cellWidth(item.detail));
-    }
-
-    detailColumns = std::min(detailColumns, std::max(0, columns - kPanelBorderColumns));
-
-    auto rows = Elements{};
-    rows.reserve(completion.items.size());
-
-    for (std::size_t index = 0; index < completion.items.size(); ++index)
-    {
-      auto const& item = completion.items[index];
-      auto cells = Elements{};
-      cells.reserve(2);
-      cells.push_back(text(item.displayText) | flex);
-
-      if (detailColumns > 0)
-      {
-        cells.push_back(text(item.detail) | dim | size(WIDTH, EQUAL, detailColumns));
-      }
-
-      auto rowPtr = hbox(std::move(cells));
-
-      if (std::cmp_equal(index, selectedIndex))
-      {
-        rowPtr = rowPtr | inverted;
-      }
-
-      rows.push_back(std::move(rowPtr));
-    }
-
-    return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, columns);
-  }
-
-  std::int32_t presentationPanelColumns(std::vector<PresentationNavItem> const& items,
-                                        std::string_view const activePresentationId,
-                                        std::int32_t const terminalColumns)
-  {
-    auto contentColumns = std::max(cellWidth("No views available") + kPresentationPanelScrollIndicatorColumns,
-                                   cellWidth(overlayHint(Overlay::PresentationPanel)));
-    contentColumns =
-      std::max(contentColumns, cellWidth("Views") + cellWidth(presentationDisplayId(activePresentationId)));
-
-    for (auto const& item : items)
-    {
-      contentColumns = std::max(contentColumns,
-                                kPresentationPanelMarkerColumns + cellWidth(presentationPanelRowText(item)) +
-                                  kPresentationPanelScrollIndicatorColumns);
-    }
-
-    return panelColumnsForContent(contentColumns, terminalColumns);
-  }
-
-  ftxui::Element presentationPanel(std::vector<PresentationNavItem> const& items,
-                                   std::string_view const activePresentationId,
-                                   std::int32_t const selectedIndex,
-                                   std::vector<PresentationRowBox>* const rowBoxes,
-                                   std::int32_t const columns)
-  {
-    using namespace ftxui;
-
-    auto const panelColumns = columns <= 0 ? presentationPanelColumns(items, activePresentationId, 0) : columns;
-
-    auto rows = Elements{};
-    auto listRows = Elements{};
-    std::int32_t focusRow = 0;
-
-    if (rowBoxes != nullptr)
-    {
-      rowBoxes->clear();
-      rowBoxes->reserve(items.size());
-    }
-
-    rows.push_back(hbox({
-      text("Views") | bold | flex,
-      text(presentationDisplayId(activePresentationId)) | bold,
-    }));
-    rows.push_back(separator());
-
-    if (items.empty())
-    {
-      listRows.push_back(text("No views available") | dim);
-    }
-
-    for (std::size_t index = 0; index < items.size(); ++index)
-    {
-      auto const& item = items[index];
-      auto label = presentationPanelRowText(item);
-
-      auto rowPtr = hbox({
-        text(item.id == activePresentationId ? "* " : "  "),
-        text(std::move(label)) | flex,
-      });
-
-      if (std::cmp_equal(index, selectedIndex))
-      {
-        focusRow = static_cast<std::int32_t>(listRows.size());
-        rowPtr = rowPtr | inverted | bold;
-      }
-
-      if (rowBoxes != nullptr)
-      {
-        rowBoxes->push_back(PresentationRowBox{.rowIndex = static_cast<std::int32_t>(index)});
-        rowPtr = std::move(rowPtr) | reflect(rowBoxes->back().box);
-      }
-
-      listRows.push_back(std::move(rowPtr));
-    }
-
-    rows.push_back(vbox(std::move(listRows)) | focusPosition(0, focusRow) | vscroll_indicator | frame |
-                   size(HEIGHT, EQUAL, kPresentationPanelListRows));
-    rows.push_back(separator());
-    rows.push_back(text(std::string{overlayHint(Overlay::PresentationPanel)}) | dim);
-
-    return vbox(std::move(rows)) | border | size(WIDTH, EQUAL, panelColumns);
-  }
-
-  ftxui::Element statusBar(StatusBarViewState const& state)
-  {
-    using namespace ftxui;
-
-    constexpr std::int32_t kSingleLineStatusColumns = 120;
-
-    auto const& shell = *state.shell;
-    auto const selection = selectionSummary(state.trackCount, state.selectedTrack);
-
-    if (shell.commandActive())
-    {
-      auto suffix = std::string{};
-
-      if (auto const& optCompletion = shell.commandCompletion(); optCompletion && !optCompletion->items.empty())
-      {
-        auto const selected = std::clamp<std::int32_t>(
-          shell.commandCompletionSelection(), 0, static_cast<std::int32_t>(optCompletion->items.size()) - 1);
-        auto const& item = optCompletion->items[static_cast<std::size_t>(selected)];
-        auto const replaceBegin = std::min(optCompletion->replaceBegin, shell.commandDraft().size());
-        auto const replaceEnd = std::min(optCompletion->replaceEnd, shell.commandDraft().size());
-        auto const current = std::string_view{shell.commandDraft()}.substr(replaceBegin, replaceEnd - replaceBegin);
-
-        if (!current.empty() && replaceEnd == shell.commandDraft().size() &&
-            rt::completionStartsWithInsensitive(item.insertText, current))
-        {
-          suffix = item.insertText.substr(current.size());
-        }
-      }
-
-      auto commandLinePtr = hbox({
-        text("/" + shell.commandDraft()) | bold,
-        text(suffix) | dim,
-        text("_") | bold,
-      });
-
-      if (state.commandBox != nullptr)
-      {
-        commandLinePtr = std::move(commandLinePtr) | reflect(*state.commandBox);
-      }
-
-      return hbox({
-        std::move(commandLinePtr) | flex,
-        text("Tab complete  Enter run  Esc cancel") | dim,
-      });
-    }
-
-    auto const overlay = shell.overlay();
-    auto const interactionHint = std::string{overlayHint(overlay)};
-    auto const contextLabel = overlay == Overlay::None ? std::string{} : overlayLabel(overlay);
-
-    auto hint = std::string{};
-
-    if (!state.filterDraft.empty())
-    {
-      hint = std::format("Filter: {}  ", state.filterDraft);
-    }
-
-    hint += interactionHint;
-
-    if (overlay != Overlay::None)
-    {
-      return hbox({
-        text(state.statusMessage) | flex,
-        text(contextLabel) | bold,
-        text("  "),
-        text(hint) | dim,
-        text("  "),
-        text(selection),
-      });
-    }
-
-    if (state.terminalColumns >= kSingleLineStatusColumns)
-    {
-      return hbox({
-        text(state.statusMessage) | flex,
-        text(hint) | dim,
-        text("  "),
-        text(selection),
-      });
-    }
-
-    return vbox({
-      hbox({
-        text(state.statusMessage) | flex,
-        text(selection),
-      }),
-      hbox({
-        text(hint) | dim | flex,
-      }),
-    });
+    return style::popupPanel(kHelpPaneLines[kHelpPaneTitleLine], vbox(std::move(rows))) | size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui

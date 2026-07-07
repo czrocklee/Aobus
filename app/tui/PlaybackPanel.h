@@ -3,15 +3,11 @@
 
 #pragma once
 
-#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
-
 #include <ftxui/screen/box.hpp>
 
 #include <chrono>
 #include <cstdint>
 #include <memory>
-#include <string_view>
-#include <vector>
 
 namespace ftxui
 {
@@ -24,35 +20,26 @@ namespace ao::rt
   struct PlaybackState;
 } // namespace ao::rt
 
+namespace ao::uimodel
+{
+  struct OutputDeviceViewState;
+} // namespace ao::uimodel
+
 namespace ao::tui
 {
-  struct OutputDeviceRowBox final
-  {
-    std::int32_t rowIndex = -1;
-    ftxui::Box box{};
-    ftxui::Box secondaryBox{};
-  };
-
   struct PlaybackBarViewState final
   {
     rt::PlaybackState const* playbackState = nullptr;
-    std::string_view listTitle{};
-    std::string_view presentationId{};
     std::chrono::milliseconds displayElapsed{};
+    std::chrono::milliseconds animationElapsed{};
     uimodel::OutputDeviceViewState const* outputView = nullptr;
     ftxui::Box* outputDeviceBox = nullptr;
-    ftxui::Box* libraryBox = nullptr;
-    ftxui::Box* qualityBox = nullptr;
-    ftxui::Box* presentationBox = nullptr;
+    ftxui::Box* soulButtonBox = nullptr;
+    ftxui::Box* seekRailBox = nullptr;
+    bool outputDeviceHovered = false;
+    std::int32_t terminalColumns = 0;
   };
 
+  std::int32_t playbackBarRows(std::int32_t terminalRows) noexcept;
   ftxui::Element playbackBar(PlaybackBarViewState const& view);
-
-  std::int32_t qualityPanelColumns(rt::PlaybackState const& state, std::int32_t terminalColumns);
-  ftxui::Element qualityPanel(rt::PlaybackState const& state, std::int32_t columns = 0);
-  std::int32_t outputDevicePanelColumns(uimodel::OutputDeviceViewState const& view, std::int32_t terminalColumns);
-  ftxui::Element outputDevicePanel(uimodel::OutputDeviceViewState const& view,
-                                   std::int32_t selectedRow,
-                                   std::vector<OutputDeviceRowBox>* rowBoxes = nullptr,
-                                   std::int32_t columns = 0);
 } // namespace ao::tui

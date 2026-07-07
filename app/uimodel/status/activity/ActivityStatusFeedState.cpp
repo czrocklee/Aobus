@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "ActivityStatusFeedState.h"
+
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/uimodel/status/activity/ActivityStatusModel.h>
+#include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <algorithm>
 #include <chrono>
@@ -215,13 +217,13 @@ namespace ao::uimodel
     return result;
   }
 
-  void ActivityStatusModel::initialize(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::initialize(rt::NotificationFeedState const& feed)
   {
     projectDetail(feed);
     projectPersistentCompact(feed);
   }
 
-  void ActivityStatusModel::onFeedChanged(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::onFeedChanged(rt::NotificationFeedState const& feed)
   {
     projectDetail(feed);
 
@@ -259,7 +261,7 @@ namespace ao::uimodel
     }
   }
 
-  void ActivityStatusModel::onNotificationPosted(rt::NotificationFeedState const& feed, rt::NotificationId const id)
+  void ActivityStatusFeedState::onNotificationPosted(rt::NotificationFeedState const& feed, rt::NotificationId const id)
   {
     projectDetail(feed);
 
@@ -290,7 +292,7 @@ namespace ao::uimodel
     }
   }
 
-  void ActivityStatusModel::onLibraryTaskProgress(std::string message, double const fraction)
+  void ActivityStatusFeedState::onLibraryTaskProgress(std::string message, double const fraction)
   {
     _taskActive = true;
     _optLibraryProgress = LibraryProgressState{.message = std::move(message), .fraction = fraction};
@@ -304,7 +306,7 @@ namespace ao::uimodel
     _state.detail.hasActiveProgress = true;
   }
 
-  void ActivityStatusModel::onLibraryTaskCompleted(std::size_t const count, rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::onLibraryTaskCompleted(std::size_t const count, rt::NotificationFeedState const& feed)
   {
     _taskActive = false;
     _optLibraryProgress.reset();
@@ -319,15 +321,15 @@ namespace ao::uimodel
     }
   }
 
-  void ActivityStatusModel::dismissCompact(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::dismissCompact(rt::NotificationFeedState const& feed)
   {
     rememberDismissedCompactSources();
     _state.compact = ActivityCompactState{};
     projectDetail(feed);
   }
 
-  void ActivityStatusModel::hideDetailNotificationFromActivity(rt::NotificationId const id,
-                                                               rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::hideDetailNotificationFromActivity(rt::NotificationId const id,
+                                                                   rt::NotificationFeedState const& feed)
   {
     auto const iter = std::ranges::find(feed.entries, id, &rt::NotificationEntry::id);
 
@@ -350,13 +352,13 @@ namespace ao::uimodel
     }
   }
 
-  void ActivityStatusModel::onTransientExpired(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::onTransientExpired(rt::NotificationFeedState const& feed)
   {
     projectDetail(feed);
     projectPersistentCompact(feed);
   }
 
-  std::vector<rt::NotificationId> ActivityStatusModel::locallyHideableNotificationIds(
+  std::vector<rt::NotificationId> ActivityStatusFeedState::locallyHideableNotificationIds(
     rt::NotificationFeedState const& feed) const
   {
     return feed.entries | std::views::filter(isDetailEligible) |
@@ -366,12 +368,12 @@ namespace ao::uimodel
            std::views::transform(&rt::NotificationEntry::id) | std::ranges::to<std::vector>();
   }
 
-  ActivityStatusViewState const& ActivityStatusModel::viewState() const noexcept
+  ActivityStatusViewState const& ActivityStatusFeedState::viewState() const noexcept
   {
     return _state;
   }
 
-  void ActivityStatusModel::projectDetail(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::projectDetail(rt::NotificationFeedState const& feed)
   {
     pruneDismissedSources(feed);
 
@@ -425,7 +427,7 @@ namespace ao::uimodel
       .items = std::move(items), .optLibraryTask = std::move(optLibraryTask), .hasActiveProgress = hasActiveProgress};
   }
 
-  void ActivityStatusModel::projectPersistentCompact(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::projectPersistentCompact(rt::NotificationFeedState const& feed)
   {
     auto optSeverity = std::optional<rt::NotificationSeverity>{};
     auto ids = std::vector<rt::NotificationId>{};
@@ -490,7 +492,7 @@ namespace ao::uimodel
     };
   }
 
-  void ActivityStatusModel::showNotificationCompact(rt::NotificationEntry const& entry)
+  void ActivityStatusFeedState::showNotificationCompact(rt::NotificationEntry const& entry)
   {
     _state.compact = ActivityCompactState{
       .kind = kindForSeverity(entry.severity),
@@ -506,7 +508,7 @@ namespace ao::uimodel
     };
   }
 
-  void ActivityStatusModel::showCompletionCompact(std::size_t const count)
+  void ActivityStatusFeedState::showCompletionCompact(std::size_t const count)
   {
     _state.compact = ActivityCompactState{
       .kind = ActivityStatusKind::Success,
@@ -515,8 +517,8 @@ namespace ao::uimodel
     };
   }
 
-  bool ActivityStatusModel::compactSourceStillExists(ActivityCompactState const& compact,
-                                                     rt::NotificationFeedState const& feed) const
+  bool ActivityStatusFeedState::compactSourceStillExists(ActivityCompactState const& compact,
+                                                         rt::NotificationFeedState const& feed) const
   {
     return std::ranges::any_of(compact.sourceNotificationIds,
                                [&feed](auto const id)
@@ -526,20 +528,20 @@ namespace ao::uimodel
                                });
   }
 
-  bool ActivityStatusModel::compactSourceIsDismissed(ActivityCompactState const& compact) const
+  bool ActivityStatusFeedState::compactSourceIsDismissed(ActivityCompactState const& compact) const
   {
     return !compact.sourceNotificationIds.empty() &&
            std::ranges::all_of(
              compact.sourceNotificationIds, [this](auto const id) { return compactSourceIsSuppressed(id); });
   }
 
-  bool ActivityStatusModel::compactSourceIsSuppressed(rt::NotificationId const id) const
+  bool ActivityStatusFeedState::compactSourceIsSuppressed(rt::NotificationId const id) const
   {
     return std::ranges::contains(_compactDismissedNotificationIds, id) ||
            std::ranges::contains(_detailDismissedNotificationIds, id);
   }
 
-  void ActivityStatusModel::rememberDismissedCompactSources()
+  void ActivityStatusFeedState::rememberDismissedCompactSources()
   {
     for (auto const id : _state.compact.sourceNotificationIds)
     {
@@ -550,7 +552,7 @@ namespace ao::uimodel
     }
   }
 
-  void ActivityStatusModel::pruneDismissedSources(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::pruneDismissedSources(rt::NotificationFeedState const& feed)
   {
     auto const existsInFeed = [&feed](auto const id)
     { return std::ranges::contains(feed.entries, id, &rt::NotificationEntry::id); };

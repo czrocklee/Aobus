@@ -9,7 +9,6 @@
 
 #include <cstdint>
 #include <functional>
-#include <string>
 
 namespace ao::tui
 {
@@ -23,8 +22,8 @@ namespace ao::tui
 
     void refresh();
     bool moveSelection(std::int32_t delta);
-    std::string selectSelected();
-    std::string selectRow(std::int32_t rowIndex);
+    bool selectSelected();
+    bool selectRow(std::int32_t rowIndex);
 
   private:
     bool selectableRow(std::int32_t rowIndex) const;

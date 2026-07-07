@@ -17,12 +17,14 @@ plus track count without a blank activity slot. The old combined
 `status.statusSlot` component is intentionally removed so selection state and
 runtime activity state can be positioned independently by layout presets.
 
-`ActivityStatusModel` also keeps a detail/feed projection for unresolved runtime
-notifications and active library task progress. The GTK `status.activityStatus`
-component renders the compact inline readout and opens a minimal detail popover
-only when detail content exists and the compact readout is visible. The popover
-renders active task detail and a bounded set of qualifying notification rows; it
-intentionally has no empty state, unread badge, or full feed stack.
+`ActivityStatusViewModel` adapts runtime notifications and active library task
+progress into the shared compact/detail view state. Its private
+`ActivityStatusFeedState` keeps the detail/feed state for unresolved runtime
+notifications and task progress. The GTK `status.activityStatus` component renders
+the compact inline readout and opens a minimal detail popover only when detail
+content exists and the compact readout is visible. The popover renders active task
+detail and a bounded set of qualifying notification rows; it intentionally has no
+empty state, unread badge, or full feed stack.
 Clearable notification detail rows have a local dismiss affordance. This hides the
 row from `ActivityStatus` and removes that source from the compact activity
 projection without calling `rt::NotificationService::dismiss`, so the runtime feed
@@ -109,6 +111,6 @@ with the existing GTK-side `TrackSelectionController::selectedTracksDuration()`.
 - Widget smoke: `test/unit/linux-gtk/track/SelectionInfoLabelTest.cpp` covers the
   count text; duration correctness is proven at the layers above rather than
   re-proven through the widget.
-- Runtime activity status: `test/unit/uimodel/status/ActivityStatusModel*Test.cpp`
+- Runtime activity status: `test/unit/uimodel/status/activity/ActivityStatusFeedState*Test.cpp`
   covers progress priority, transient completion, warning/error persistence, and
   compact dismissal semantics.

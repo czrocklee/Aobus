@@ -23,7 +23,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <numbers>
 #include <optional>
 
 namespace ao::gtk
@@ -40,26 +39,28 @@ namespace ao::gtk
       void operator()(::GskStroke* stroke) const noexcept { ::gsk_stroke_free(stroke); }
     };
 
-    constexpr double kFullCircleDegrees = 360.0;
-    constexpr double kBreathingPeriodSec = 5.119;
-    constexpr double kRotationPeriodSec = kBreathingPeriodSec * AobusSoul::kGoldenRatio;
-    constexpr double kOpacityPeriodSec = kRotationPeriodSec * AobusSoul::kGoldenRatio;
-    constexpr double kHuePeriodSec = kOpacityPeriodSec * AobusSoul::kGoldenRatio;
     constexpr float kRefHeight = 65.0F;
     constexpr float kUnitRadius = 30.0F / kRefHeight;
     constexpr float kLogoXOffset = 43.5F / kRefHeight;
     constexpr float kStrokeWidthA = 10.0F;
-    constexpr float kPhaseShift = 0.5F;
     constexpr float kCos60 = 0.5F;
     constexpr float kSin60 = 0.866F;
     constexpr float kEpsilon = 0.001F;
+
+    Gdk::RGBA rgbaFromSoulRgb(uimodel::AobusSoulRgb const color, float const alpha = 1.0F) noexcept
+    {
+      constexpr float kMaxChannel = 255.0F;
+      return {static_cast<float>(color.red) / kMaxChannel,
+              static_cast<float>(color.green) / kMaxChannel,
+              static_cast<float>(color.blue) / kMaxChannel,
+              alpha};
+    }
   } // namespace
 
   struct AobusSoul::Impl final
   {
-    Gdk::RGBA cyan{"#00E5FF"};
-    Gdk::RGBA gray{"#6B7280"};
-    Gdk::RGBA amber{"#F97316"};
+    Gdk::RGBA cyan{rgbaFromSoulRgb(uimodel::kAobusSoulUiCyan)};
+    Gdk::RGBA amber{rgbaFromSoulRgb(uimodel::kAobusSoulAnchorAmber)};
     Gdk::RGBA aura{cyan};
 
     std::chrono::duration<double> time{0.0};
@@ -301,19 +302,7 @@ namespace ao::gtk
 
   Gdk::RGBA AobusSoul::mapSoulAura(ao::uimodel::SoulAura aura)
   {
-    using Aura = ao::uimodel::SoulAura;
-
-    switch (aura)
-    {
-      case Aura::Dormant: return Gdk::RGBA{"#00E5FF"};
-      case Aura::Veiled: return Gdk::RGBA{"#6B7280"};
-      case Aura::Radiant: return Gdk::RGBA{"#A855F7"};
-      case Aura::Flowing: return Gdk::RGBA{"#10B981"};
-      case Aura::Turbulent: return Gdk::RGBA{"#F59E0B"};
-      case Aura::Burning: return Gdk::RGBA{"#EF4444"};
-    }
-
-    return Gdk::RGBA{"#6B7280"};
+    return rgbaFromSoulRgb(uimodel::aobusSoulAuraRgb(aura));
   }
 
   Gtk::SizeRequestMode AobusSoul::get_request_mode_vfunc() const
@@ -335,110 +324,13 @@ namespace ao::gtk
 
   Gdk::RGBA AobusSoul::shiftColor(Gdk::RGBA const& color, float const shift) noexcept
   {
-    static constexpr float kMinShift = 0.01F;
+    constexpr float kMaxChannel = 255.0F;
+    auto const rgb =
+      uimodel::AobusSoulRgb{.red = static_cast<std::uint8_t>(std::lround(color.get_red() * kMaxChannel)),
+                            .green = static_cast<std::uint8_t>(std::lround(color.get_green() * kMaxChannel)),
+                            .blue = static_cast<std::uint8_t>(std::lround(color.get_blue() * kMaxChannel))};
 
-    if (std::abs(shift) < kMinShift)
-    {
-      return color;
-    }
-
-    float const red = color.get_red();
-    float const green = color.get_green();
-    float const blue = color.get_blue();
-    float const maxValue = std::max({red, green, blue});
-    float const minValue = std::min({red, green, blue});
-    float const delta = maxValue - minValue;
-    float const saturation = (maxValue == 0.0F) ? 0.0F : (delta / maxValue);
-    float hue = 0.0F;
-
-    if (maxValue == minValue)
-    {
-      hue = 0.0F;
-    }
-    else
-    {
-      static constexpr float kSectorOffset6 = 6.0F;
-      static constexpr float kSectorOffset2 = 2.0F;
-      static constexpr float kSectorOffset4 = 4.0F;
-
-      if (maxValue == red)
-      {
-        hue = ((green - blue) / delta) + (green < blue ? kSectorOffset6 : 0.0F);
-      }
-      else if (maxValue == green)
-      {
-        hue = ((blue - red) / delta) + kSectorOffset2;
-      }
-      else
-      {
-        hue = ((red - green) / delta) + kSectorOffset4;
-      }
-
-      hue /= kSectorOffset6;
-    }
-
-    static constexpr float kDegreesFullCircle = 360.0F;
-    hue = std::fmod(hue + (shift / kDegreesFullCircle), 1.0F);
-
-    if (hue < 0.0F)
-    {
-      hue += 1.0F;
-    }
-
-    static constexpr float kSectorCountF = 6.0F;
-    static constexpr int kSectorCount = 6;
-    static constexpr int kRedSector = 0;
-    static constexpr int kYellowSector = 1;
-    static constexpr int kGreenSector = 2;
-    static constexpr int kCyanSector = 3;
-    static constexpr int kBlueSector = 4;
-    static constexpr int kMagentaSector = 5;
-    int const sector = static_cast<std::int32_t>(hue * kSectorCountF);
-    float const fraction = (hue * kSectorCountF) - static_cast<float>(sector);
-    float const pValue = maxValue * (1.0F - saturation);
-    float const qValue = maxValue * (1.0F - (fraction * saturation));
-    float const tValue = maxValue * (1.0F - ((1.0F - fraction) * saturation));
-
-    float resultRed = 0.0F;
-    float resultGreen = 0.0F;
-    float resultBlue = 0.0F;
-
-    switch (sector % kSectorCount)
-    {
-      case kRedSector:
-        resultRed = maxValue;
-        resultGreen = tValue;
-        resultBlue = pValue;
-        break;
-      case kYellowSector:
-        resultRed = qValue;
-        resultGreen = maxValue;
-        resultBlue = pValue;
-        break;
-      case kGreenSector:
-        resultRed = pValue;
-        resultGreen = maxValue;
-        resultBlue = tValue;
-        break;
-      case kCyanSector:
-        resultRed = pValue;
-        resultGreen = qValue;
-        resultBlue = maxValue;
-        break;
-      case kBlueSector:
-        resultRed = tValue;
-        resultGreen = pValue;
-        resultBlue = maxValue;
-        break;
-      case kMagentaSector:
-      default:
-        resultRed = maxValue;
-        resultGreen = pValue;
-        resultBlue = qValue;
-        break;
-    }
-
-    return {resultRed, resultGreen, resultBlue, color.get_alpha()};
+    return rgbaFromSoulRgb(uimodel::aobusSoulShiftRgb(rgb, shift), color.get_alpha());
   }
 
   void AobusSoul::snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot)
@@ -493,24 +385,14 @@ namespace ao::gtk
     float rotationAngle = 0.0F;
     float currentStrokeBase = _implPtr->baseStrokeWidth;
     float currentOpacity = 1.0F;
+    auto motion = uimodel::AobusSoulMotionFrame{};
 
     if (!_implPtr->isStopped)
     {
-      auto const timeSec = std::chrono::duration<double>{_implPtr->time}.count();
-
-      rotationAngle =
-        static_cast<float>(std::fmod(timeSec * (kFullCircleDegrees / kRotationPeriodSec), kFullCircleDegrees));
-      double const breathingPhase =
-        std::fmod(timeSec * (2.0 * std::numbers::pi / kBreathingPeriodSec), 2.0 * std::numbers::pi);
-      currentStrokeBase = static_cast<float>(
-        _implPtr->baseStrokeWidth + (strokeWidthVariance * ((std::sin(breathingPhase) * kPhaseShift) + kPhaseShift)));
-
-      double const opacityPhase =
-        std::fmod(timeSec * (2.0 * std::numbers::pi / kOpacityPeriodSec), 2.0 * std::numbers::pi);
-      // Golden Ratio Opacity: range [0.618, 1.0]
-      static constexpr double kOpacityBase = 0.809;
-      static constexpr double kOpacityVariance = 0.191;
-      currentOpacity = static_cast<float>(kOpacityBase + (kOpacityVariance * std::sin(opacityPhase)));
+      motion = uimodel::aobusSoulMotionAt(_implPtr->time);
+      rotationAngle = static_cast<float>(motion.rotationDegrees);
+      currentStrokeBase = static_cast<float>(_implPtr->baseStrokeWidth + (strokeWidthVariance * motion.breath));
+      currentOpacity = static_cast<float>(motion.luminance);
     }
 
     ::gsk_stroke_set_line_width(_implPtr->cachedStrokePtr.get(), currentStrokeBase / kRefHeight);
@@ -530,17 +412,7 @@ namespace ao::gtk
     ::gtk_snapshot_push_stroke(snapshot->gobj(), _implPtr->unitPathOPtr.get(), _implPtr->cachedStrokePtr.get());
 
     // Calculate Aura Flow (Hue Shift)
-    float hueShift = 0.0F;
-
-    if (!_implPtr->isStopped)
-    {
-      auto const timeSec = std::chrono::duration<double>{_implPtr->time}.count();
-      float const huePhase =
-        std::fmod(static_cast<float>(timeSec) * (2.0F * std::numbers::pi_v<float> / static_cast<float>(kHuePeriodSec)),
-                  2.0F * std::numbers::pi_v<float>);
-      static constexpr float kMaxHueShift = 10.0F;
-      hueShift = kMaxHueShift * std::sin(huePhase);
-    }
+    float const hueShift = _implPtr->isStopped ? 0.0F : static_cast<float>(motion.hueShiftDegrees);
 
     static constexpr std::size_t kStopCount = 3;
     auto stops = std::array<::GskColorStop, kStopCount>{};
@@ -548,7 +420,7 @@ namespace ao::gtk
     auto const shiftedAura = shiftColor(aura, -hueShift);
 
     // Player UI: Cyan as the core (38.2%), Indicator (Quality) as the dominant body (61.8%)
-    static constexpr float kCoreOffset = 0.382F;
+    static constexpr float kCoreOffset = static_cast<float>(uimodel::kAobusSoulCoreGradientStop);
     stops[0].offset = 0.0F;
     stops[0].color = *(shiftedCyan.gobj());
     stops[1].offset = kCoreOffset;

@@ -4,7 +4,9 @@
 #include "TrackTable.h"
 
 #include "Model.h"
+#include "SelectableList.h"
 #include "ShellModel.h"
+#include "Style.h"
 #include "TextCell.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
@@ -108,6 +110,16 @@ namespace ao::tui
     ftxui::Element fieldCell(std::string value, TrackColumn const& column)
     {
       return fixedCell(std::move(value), column.width, column.rightAligned);
+    }
+
+    ftxui::Element columnSeparator(std::size_t const index)
+    {
+      return ftxui::text(index == 0 ? std::string(kColumnPadding, ' ') : std::string{"| "}) | ftxui::dim;
+    }
+
+    ftxui::Element trailingColumnSeparator()
+    {
+      return ftxui::text("|") | ftxui::dim;
     }
 
     rt::TrackFieldRawValue rawValueForField(rt::TrackField const field, rt::TrackRow const& row)
@@ -275,9 +287,9 @@ namespace ao::tui
       for (std::size_t index = 0; index < columns.size(); ++index)
       {
         auto const& column = columns[index];
-        cells.push_back(text(index == 0 ? std::string(kColumnPadding, ' ') : std::string{"| "}));
+        cells.push_back(columnSeparator(index));
 
-        auto cellPtr = fieldCell(column.label, column);
+        auto cellPtr = fieldCell(column.label, column) | style::accent() | bold;
 
         if (resizeHandles != nullptr)
         {
@@ -290,12 +302,12 @@ namespace ao::tui
 
       if (!columns.empty())
       {
-        cells.push_back(text("|"));
+        cells.push_back(trailingColumnSeparator());
       }
 
       cells.push_back(filler());
       cells.push_back(fixedCell("", kScrollIndicatorColumns));
-      return hbox(std::move(cells)) | dim;
+      return hbox(std::move(cells));
     }
 
     ftxui::Element trackRow(TrackListItem const& track,
@@ -307,18 +319,25 @@ namespace ao::tui
       auto const playing = track.id == playingTrackId;
       auto cells = Elements{};
       cells.reserve((columns.size() * 2) + 3);
-      cells.push_back(fixedCell(playing ? std::string{">"} : std::string{}, kPlayingColumns));
+      auto playingMarkerPtr = fixedCell(playing ? std::string{">"} : std::string{}, kPlayingColumns);
+
+      if (playing)
+      {
+        playingMarkerPtr = std::move(playingMarkerPtr) | style::success() | bold;
+      }
+
+      cells.push_back(std::move(playingMarkerPtr));
 
       for (std::size_t index = 0; index < columns.size(); ++index)
       {
         auto const& column = columns[index];
-        cells.push_back(text(index == 0 ? std::string(kColumnPadding, ' ') : std::string{"| "}));
+        cells.push_back(columnSeparator(index));
         cells.push_back(fieldCell(displayTextForField(column.field, track.row), column));
       }
 
       if (!columns.empty())
       {
-        cells.push_back(text("|"));
+        cells.push_back(trailingColumnSeparator());
       }
 
       cells.push_back(filler());
@@ -348,7 +367,7 @@ namespace ao::tui
       {
         if (index > 0)
         {
-          result.append("  ");
+          result.append(" · ");
         }
 
         result.append(details[index]);
@@ -365,11 +384,10 @@ namespace ao::tui
       auto detail = sectionDetailText(section);
 
       return hbox({
-        text("  "),
-        text(primary) | bold,
+        text("─ ") | dim,
+        text(primary) | style::accent() | bold,
+        text(detail.empty() ? std::string{} : " · " + detail) | dim,
         filler(),
-        text(std::move(detail)) | dim,
-        text(" "),
       });
     }
 
@@ -389,12 +407,7 @@ namespace ao::tui
       {
         if (std::cmp_equal(index, selected))
         {
-          rows[index] = rows[index] | inverted;
-
-          if (active)
-          {
-            rows[index] = rows[index] | bold;
-          }
+          rows[index] = active ? rows[index] | style::selected() : rows[index] | inverted;
         }
       }
 
@@ -539,7 +552,7 @@ namespace ao::tui
       contentColumns = std::max(contentColumns, cellWidth(label) + kScrollIndicatorColumns);
     }
 
-    return panelColumnsForContent(contentColumns, terminalColumns);
+    return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
   ftxui::Element libraryChooserPane(std::vector<std::string> const& labels,
@@ -553,21 +566,27 @@ namespace ao::tui
       columns = libraryChooserPaneColumns(labels, 0);
     }
 
-    auto rows = Elements{};
+    auto rows = std::vector<SelectableListRow>{};
     rows.reserve(labels.size());
 
-    for (auto const& label : labels)
+    for (std::size_t index = 0; index < labels.size(); ++index)
     {
-      rows.push_back(text(label) | flex);
+      rows.push_back(
+        SelectableListRow{.elementPtr = text(labels[index]) | flex, .selected = std::cmp_equal(index, selected)});
     }
 
-    return vbox({
-             text("Lists") | bold,
-             separator(),
-             selectableRows(std::move(rows), selected, true, "No lists found"),
-             separator(),
-             text(std::string{overlayHint(Overlay::ListChooser)}) | dim,
-           }) |
-           border | size(WIDTH, EQUAL, columns);
+    return style::popupPanel("Lists",
+                             vbox({
+                               selectableList(std::move(rows),
+                                              SelectableListOptions{.focusRow = std::max(0, selected),
+                                                                    .emptyText = "No lists found",
+                                                                    .framed = !labels.empty(),
+                                                                    .scrollIndicator = !labels.empty(),
+                                                                    .flex = !labels.empty(),
+                                                                    .centerEmpty = labels.empty()}),
+                               separator(),
+                               style::panelFooterHint(overlayHint(Overlay::ListChooser)),
+                             })) |
+           size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui

@@ -5,25 +5,32 @@
 
 #include "LibraryController.h"
 #include "OutputDeviceController.h"
-#include "PlaybackPanel.h"
-#include "Render.h"
 #include "ShellModel.h"
 #include "TrackTable.h"
+#include "TuiHitRegions.h"
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
+#include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
 #include <ftxui/component/screen_interactive.hpp>
-#include <ftxui/screen/box.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace ao::rt
+{
+  class NotificationService;
+}
 
 namespace ao::tui
 {
@@ -32,16 +39,10 @@ namespace ao::tui
   struct EventControllerBindings final
   {
     OutputDeviceController* outputDevices = nullptr;
-    ftxui::Box* outputDeviceButtonBox = nullptr;
-    std::vector<OutputDeviceRowBox>* outputDeviceRowBoxes = nullptr;
-    ftxui::Box* libraryButtonBox = nullptr;
-    ftxui::Box* qualityButtonBox = nullptr;
-    ftxui::Box* presentationButtonBox = nullptr;
-    std::vector<PresentationRowBox>* presentationRowBoxes = nullptr;
-    std::vector<TrackColumnResizeHandle>* trackColumnResizeHandles = nullptr;
+    TuiHitRegions* hitRegions = nullptr;
     std::vector<TrackColumnWidthOverride>* trackColumnWidthOverrides = nullptr;
-    ftxui::Box* trackTableBox = nullptr;
-    std::vector<TrackSectionRowBox>* trackSectionRowBoxes = nullptr;
+    uimodel::ActivityStatusViewModel* activityStatusViewModel = nullptr;
+    rt::NotificationService* notifications = nullptr;
     CommandCompletionCallback commandCompletionCallback{};
   };
 
@@ -54,7 +55,8 @@ namespace ao::tui
                     rt::PlaybackService& playback,
                     EventControllerBindings bindings = {});
 
-    std::string const& statusMessage() const noexcept { return _statusMessage; }
+    bool qualityHoverVisible() const noexcept { return _qualityHoverVisible; }
+    HoveredButton hoveredButton() const noexcept { return _hoveredButton; }
     bool handleEvent(ftxui::Event const& event);
 
   private:
@@ -66,13 +68,20 @@ namespace ao::tui
     void toggleQualityPanel();
     void toggleOutputDevices();
     void togglePresentationPanel();
+    void toggleNotificationCenter();
     void selectOutputDevice();
     void selectPresentation();
     void revealCurrentTrack();
+    void togglePlaybackFromSelection();
     void runCommand(Command const& command);
+    void postActivityNotification(rt::NotificationSeverity severity, std::string message);
     void refreshCommandCompletion();
     bool handleMouse(ftxui::Mouse const& mouse);
     bool selectTrackFromScrollbar(std::int32_t row);
+    void syncSeekSlider();
+    std::chrono::milliseconds seekRailElapsed(std::int32_t column) const;
+    void applySeekDecision(uimodel::SeekSliderDecision const& decision);
+    void cancelSeekInteraction();
 
     struct TrackColumnResizeDrag final
     {
@@ -84,24 +93,24 @@ namespace ao::tui
     struct TrackScrollbarDrag final
     {};
 
+    struct SeekRailDrag final
+    {};
+
     ftxui::ScreenInteractive& _screen;
     ShellModel& _shell;
     LibraryController& _library;
     rt::PlaybackService& _playback;
     OutputDeviceController* _outputDevices = nullptr;
-    ftxui::Box* _outputDeviceButtonBox = nullptr;
-    std::vector<OutputDeviceRowBox>* _outputDeviceRowBoxes = nullptr;
-    ftxui::Box* _libraryButtonBox = nullptr;
-    ftxui::Box* _qualityButtonBox = nullptr;
-    ftxui::Box* _presentationButtonBox = nullptr;
-    std::vector<PresentationRowBox>* _presentationRowBoxes = nullptr;
-    std::vector<TrackColumnResizeHandle>* _trackColumnResizeHandles = nullptr;
+    TuiHitRegions* _hitRegions = nullptr;
     std::vector<TrackColumnWidthOverride>* _trackColumnWidthOverrides = nullptr;
-    ftxui::Box* _trackTableBox = nullptr;
-    std::vector<TrackSectionRowBox>* _trackSectionRowBoxes = nullptr;
     std::optional<TrackColumnResizeDrag> _optTrackColumnResizeDrag{};
     std::optional<TrackScrollbarDrag> _optTrackScrollbarDrag{};
+    std::optional<SeekRailDrag> _optSeekRailDrag{};
+    uimodel::SeekSliderInteractionModel _seekSlider{};
+    uimodel::ActivityStatusViewModel* _activityStatusViewModel = nullptr;
+    rt::NotificationService* _notifications = nullptr;
     CommandCompletionCallback _commandCompletionCallback{};
-    std::string _statusMessage{"Ready"};
+    bool _qualityHoverVisible = false;
+    HoveredButton _hoveredButton = HoveredButton::None;
   };
 } // namespace ao::tui

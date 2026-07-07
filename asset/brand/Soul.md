@@ -65,7 +65,7 @@ The system is tuned around the Golden Ratio (`phi ~= 1.618`) to keep the animati
 
 ## Technical Note
 
-`Soul.svg` is the visual source of truth. Inside the GTK application, the same geometry and timing model are reconstructed natively in `app/linux-gtk/app/AobusSoul.cpp` so the brand mark can stay sharp, lightweight, and responsive at runtime.
+`Soul.svg` is the visual source of truth. Runtime UI code uses the shared Soul color and motion recipe in `app/uimodel/playback/soul/AobusSoulViewModel.cpp`, while GTK and TUI reconstruct their own platform-specific shapes from that same model so the brand mark can stay sharp, lightweight, and responsive.
 
 ---
 

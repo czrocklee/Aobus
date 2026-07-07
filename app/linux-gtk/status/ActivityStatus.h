@@ -4,7 +4,8 @@
 #pragma once
 
 #include <ao/rt/CorePrimitives.h>
-#include <ao/uimodel/status/activity/ActivityStatusModel.h>
+#include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
+#include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -98,14 +99,10 @@ namespace ao::gtk
     void appendNotificationDetail(uimodel::ActivityDetailItem const& item);
     void startAutoDismissTimer(std::chrono::milliseconds timeout);
     void clearKindClasses();
-    void onNotificationPosted(rt::NotificationId id);
-    void onNotificationsChanged();
     void onDismissClicked();
     void onDetailDismissClicked(rt::NotificationId id);
     void onDetailActionClicked(rt::NotificationId id, std::string actionId, Gtk::Widget& anchor);
 
-    rt::NotificationService& _notifications;
-    rt::LibraryChanges const* _libraryChanges = nullptr;
     ActivityStatusOptions _options{};
     ActivityStatusActionResolver _resolveNotificationAction{};
     ActivityStatusActionHandler _onNotificationAction{};
@@ -120,12 +117,7 @@ namespace ao::gtk
     Gtk::Box _detailBox;
     Gtk::Popover _detailPopover;
 
-    uimodel::ActivityStatusModel _model;
-
-    rt::Subscription _postedSub;
-    rt::Subscription _changedSub;
-    rt::Subscription _libraryProgressSub;
-    rt::Subscription _libraryCompletedSub;
+    uimodel::ActivityStatusViewModel _activityStatusViewModel;
     sigc::connection _autoDismissTimer;
   };
 } // namespace ao::gtk
