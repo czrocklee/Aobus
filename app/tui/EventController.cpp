@@ -190,12 +190,12 @@ namespace ao::tui
     if (_shell.overlay() == Overlay::QualityPanel)
     {
       _shell.closeOverlay();
-      _statusMessage = "Quality closed";
+      _statusMessage = "Pipeline closed";
       return;
     }
 
     _shell.openOverlay(Overlay::QualityPanel);
-    _statusMessage = "Audio quality";
+    _statusMessage = "Audio pipeline";
   }
 
   void EventController::toggleOutputDevices()

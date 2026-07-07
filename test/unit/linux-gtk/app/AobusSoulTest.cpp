@@ -4,6 +4,7 @@
 #include "app/AobusSoul.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdkmm/rgba.h>
@@ -65,6 +66,16 @@ namespace ao::gtk::test
       auto color = Gdk::RGBA{"#ff0000"};
       soul.setAura(color);
       CHECK(soul.aura() == color);
+    }
+
+    SECTION("brand aura tokens map to source-of-truth colors")
+    {
+      CHECK(AobusSoul::mapSoulAura(uimodel::SoulAura::Dormant) == Gdk::RGBA{"#00E5FF"});
+      CHECK(AobusSoul::mapSoulAura(uimodel::SoulAura::Veiled) == Gdk::RGBA{"#6B7280"});
+      CHECK(AobusSoul::mapSoulAura(uimodel::SoulAura::Radiant) == Gdk::RGBA{"#A855F7"});
+      CHECK(AobusSoul::mapSoulAura(uimodel::SoulAura::Flowing) == Gdk::RGBA{"#10B981"});
+      CHECK(AobusSoul::mapSoulAura(uimodel::SoulAura::Turbulent) == Gdk::RGBA{"#F59E0B"});
+      CHECK(AobusSoul::mapSoulAura(uimodel::SoulAura::Burning) == Gdk::RGBA{"#EF4444"});
     }
 
     SECTION("setShowFullLogo updates render state")

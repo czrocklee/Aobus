@@ -11,7 +11,6 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <algorithm>
@@ -75,10 +74,11 @@ namespace ao::tui
       std::uint8_t blue = 0;
     };
 
-    constexpr auto kBitPerfectColor = IndicatorColor{.red = 0xA8, .green = 0x55, .blue = 0xF7};
-    constexpr auto kLosslessFloatColor = IndicatorColor{.red = 0x10, .green = 0xB9, .blue = 0x81};
-    constexpr auto kLinearInterventionColor = IndicatorColor{.red = 0xF5, .green = 0x9E, .blue = 0x0B};
-    constexpr auto kNeutralQualityColor = IndicatorColor{.red = 0x6B, .green = 0x72, .blue = 0x80};
+    constexpr auto kMedalColor = IndicatorColor{.red = 0xA8, .green = 0x55, .blue = 0xF7};
+    constexpr auto kPositiveColor = IndicatorColor{.red = 0x10, .green = 0xB9, .blue = 0x81};
+    constexpr auto kDiagnosticColor = IndicatorColor{.red = 0xF5, .green = 0x9E, .blue = 0x0B};
+    constexpr auto kWarningColor = IndicatorColor{.red = 0xF5, .green = 0x9E, .blue = 0x0B};
+    constexpr auto kInformationalColor = IndicatorColor{.red = 0x6B, .green = 0x72, .blue = 0x80};
     constexpr auto kClippedColor = IndicatorColor{.red = 0xEF, .green = 0x44, .blue = 0x44};
 
     void applyIndicatorColor(QualityIndicatorStyle& style, IndicatorColor const color)
@@ -129,27 +129,39 @@ namespace ao::tui
     return false;
   }
 
-  QualityIndicatorStyle qualityIndicatorStyle(audio::Quality const quality)
+  QualityIndicatorStyle qualityIndicatorStyle(uimodel::AudioQualityCategory const category)
   {
-    auto style = QualityIndicatorStyle{.label = uimodel::audioQualityConclusion(quality)};
+    auto style = QualityIndicatorStyle{};
 
-    switch (uimodel::audioQualityCategory(quality))
+    switch (category)
     {
-      case uimodel::AudioQualityCategory::Perfect: applyIndicatorColor(style, kBitPerfectColor); return style;
-      case uimodel::AudioQualityCategory::Lossless: applyIndicatorColor(style, kLosslessFloatColor); return style;
-      case uimodel::AudioQualityCategory::Intervention:
-        applyIndicatorColor(style, kLinearInterventionColor);
-        return style;
-      case uimodel::AudioQualityCategory::Lossy: applyIndicatorColor(style, kNeutralQualityColor); return style;
+      case uimodel::AudioQualityCategory::Medal: applyIndicatorColor(style, kMedalColor); return style;
+      case uimodel::AudioQualityCategory::Positive: applyIndicatorColor(style, kPositiveColor); return style;
+      case uimodel::AudioQualityCategory::Diagnostic: applyIndicatorColor(style, kDiagnosticColor); return style;
+      case uimodel::AudioQualityCategory::Warning: applyIndicatorColor(style, kWarningColor); return style;
+      case uimodel::AudioQualityCategory::Informational: applyIndicatorColor(style, kInformationalColor); return style;
       case uimodel::AudioQualityCategory::Clipped: applyIndicatorColor(style, kClippedColor); return style;
       case uimodel::AudioQualityCategory::Unknown:
-        applyIndicatorColor(style, kNeutralQualityColor);
+        applyIndicatorColor(style, kInformationalColor);
         style.label = "Unknown quality";
         return style;
     }
 
-    applyIndicatorColor(style, kNeutralQualityColor);
+    applyIndicatorColor(style, kInformationalColor);
     style.label = "Unknown quality";
+    return style;
+  }
+
+  QualityIndicatorStyle qualityIndicatorStyle(audio::Quality const quality)
+  {
+    auto style = qualityIndicatorStyle(uimodel::audioQualityCategory(quality));
+    style.label = uimodel::audioQualityConclusion(quality);
+
+    if (style.label.empty() && quality == audio::Quality::Unknown)
+    {
+      style.label = "Unknown quality";
+    }
+
     return style;
   }
 

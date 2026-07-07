@@ -24,7 +24,7 @@
 }
 
 .ao-activity-status-success {
-  color: var(--ao-quality-lossless);
+  color: var(--ao-quality-positive);
 }
 
 .ao-activity-status-info {
@@ -545,24 +545,28 @@ listboxrow:first-child .ao-menu-header {
 .ao-rich-list {}
 
 /* PlaybackDetailsWidget */
-.ao-quality-perfect {
-  color: #A855F7;
+.ao-quality-medal {
+  color: var(--ao-quality-medal);
 }
 
-.ao-quality-lossless {
-  color: #10B981;
+.ao-quality-positive {
+  color: var(--ao-quality-positive);
 }
 
-.ao-quality-intervention {
-  color: #F59E0B;
+.ao-quality-diagnostic {
+  color: var(--ao-quality-diagnostic);
 }
 
-.ao-quality-lossy {
-  color: #6B7280;
+.ao-quality-warning {
+  color: var(--ao-quality-warning);
+}
+
+.ao-quality-informational {
+  color: var(--ao-quality-informational);
 }
 
 .ao-quality-clipped {
-  color: #EF4444;
+  color: var(--ao-quality-clipped);
 }
 
 .ao-pipeline-title {

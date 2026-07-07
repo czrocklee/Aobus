@@ -163,36 +163,37 @@ namespace ao::tui::test
           },
         .quality =
           rt::QualityState{
+            .sourceQuality = audio::Quality::BitwisePerfect,
+            .pipelineQuality = audio::Quality::LinearIntervention,
             .overall = audio::Quality::LinearIntervention,
             .assessments =
               std::vector{
                 audio::NodeQualityAssessment{
+                  .nodeId = "ao-source",
+                  .nodeName = "FLAC",
+                  .nodeType = audio::flow::NodeType::Source,
+                  .optFormat = cdFormat(),
+                  .worstQuality = audio::Quality::BitwisePerfect,
+                  .findings =
+                    std::vector{
+                      audio::QualityFinding{
+                        .kind = audio::QualityFindingKind::BitPerfect, .quality = audio::Quality::BitwisePerfect},
+                    },
+                },
+                audio::NodeQualityAssessment{
                   .nodeId = "ao-sink",
                   .nodeName = "DAC",
                   .nodeType = audio::flow::NodeType::Sink,
+                  .optFormat = cdFormat(),
                   .worstQuality = audio::Quality::LinearIntervention,
                   .findings =
                     std::vector{
-                      audio::QualityFinding{.kind = audio::QualityFindingKind::BitPerfect},
-                      audio::QualityFinding{.kind = audio::QualityFindingKind::SoftwareVolumeModification},
+                      audio::QualityFinding{
+                        .kind = audio::QualityFindingKind::BitPerfect, .quality = audio::Quality::BitwisePerfect},
+                      audio::QualityFinding{.kind = audio::QualityFindingKind::SoftwareVolumeModification,
+                                            .quality = audio::Quality::LinearIntervention},
                     },
                 },
-              },
-            .flow =
-              audio::flow::Graph{
-                .nodes =
-                  std::vector{
-                    audio::flow::Node{.id = "ao-source",
-                                      .type = audio::flow::NodeType::Source,
-                                      .name = "FLAC",
-                                      .optFormat = cdFormat()},
-                    audio::flow::Node{
-                      .id = "ao-sink", .type = audio::flow::NodeType::Sink, .name = "DAC", .optFormat = cdFormat()},
-                  },
-                .connections =
-                  std::vector{
-                    audio::flow::Connection{.sourceId = "ao-source", .destId = "ao-sink"},
-                  },
               },
           },
       };
@@ -204,7 +205,7 @@ namespace ao::tui::test
     CHECK(text.find("44.1 kHz") != std::string::npos);
     CHECK(text.find("[Device] DAC") != std::string::npos);
     CHECK(text.find("Software volume attenuation") != std::string::npos);
-    CHECK(text.find("Linear intervention") != std::string::npos);
+    CHECK(text.find("Pipeline intervention") != std::string::npos);
   }
 
   TEST_CASE("PlaybackPanel - output device panel renders grouped selectable rows", "[tui][unit][playback]")

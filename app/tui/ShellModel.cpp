@@ -32,10 +32,10 @@ namespace ao::tui
       {.alias = "detail", .action = CommandAction::OpenDetail, .detail = "track detail"},
       {.alias = "details", .action = CommandAction::OpenDetail, .detail = "track detail"},
       {.alias = "d", .action = CommandAction::OpenDetail, .detail = "track detail"},
-      {.alias = "quality", .action = CommandAction::OpenQuality, .detail = "audio quality"},
-      {.alias = "audio", .action = CommandAction::OpenQuality, .detail = "audio quality"},
-      {.alias = "pipeline", .action = CommandAction::OpenQuality, .detail = "audio quality"},
-      {.alias = "a", .action = CommandAction::OpenQuality, .detail = "audio quality"},
+      {.alias = "quality", .action = CommandAction::OpenQuality, .detail = "audio pipeline"},
+      {.alias = "audio", .action = CommandAction::OpenQuality, .detail = "audio pipeline"},
+      {.alias = "pipeline", .action = CommandAction::OpenQuality, .detail = "audio pipeline"},
+      {.alias = "a", .action = CommandAction::OpenQuality, .detail = "audio pipeline"},
       {.alias = "output", .action = CommandAction::OpenOutputDevices, .detail = "output device"},
       {.alias = "outputs", .action = CommandAction::OpenOutputDevices, .detail = "output device"},
       {.alias = "device", .action = CommandAction::OpenOutputDevices, .detail = "output device"},
@@ -69,7 +69,7 @@ namespace ao::tui
     });
 
     constexpr std::string_view kWorkspaceHint =
-      "/ command  l lists  v view  d detail  a quality  o output  { } groups  Ctrl-L current  q quit";
+      "/ command  l lists  v view  d detail  a pipeline  o output  { } groups  Ctrl-L current  q quit";
 
     std::string trim(std::string_view value)
     {
@@ -145,7 +145,7 @@ namespace ao::tui
       case Overlay::None: return "Tracks";
       case Overlay::ListChooser: return "Lists";
       case Overlay::DetailPanel: return "Detail";
-      case Overlay::QualityPanel: return "Quality";
+      case Overlay::QualityPanel: return "Pipeline";
       case Overlay::OutputDevices: return "Output";
       case Overlay::PresentationPanel: return "Views";
       case Overlay::Help: return "Help";

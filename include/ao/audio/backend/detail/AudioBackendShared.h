@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -40,5 +41,22 @@ namespace ao::audio::backend::detail
     {
       caps.bitDepths.push_back(capability.bitDepth);
     }
+  }
+
+  inline Format preserveRequestedSignalPrecision(Format const& requested, Format current) noexcept
+  {
+    if (requested.isFloat || current.isFloat || requested.sampleRate != current.sampleRate ||
+        requested.channels != current.channels)
+    {
+      return current;
+    }
+
+    if (auto const requestedBits = effectiveBits(requested);
+        requestedBits <= effectiveBits(current) && requestedBits <= current.bitDepth)
+    {
+      current.validBits = requestedBits;
+    }
+
+    return current;
   }
 } // namespace ao::audio::backend::detail

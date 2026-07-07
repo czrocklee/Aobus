@@ -39,7 +39,7 @@ namespace ao::gtk::layout
                           [this](uimodel::AobusSoulViewState const& state)
                           {
                             _soul.breathe(state.isBreathing);
-                            _soul.setAura(AobusSoul::mapAuraColor(state.auraColor));
+                            _soul.setAura(AobusSoul::mapSoulAura(state.aura));
                           }}
       {
         _button.set_has_frame(false);

@@ -11,6 +11,7 @@
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Player.h>
+#include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -163,16 +164,19 @@ namespace ao::audio::test
 
       REQUIRE(onGraphChanged);
 
-      auto qualityEvents = std::vector<std::pair<Quality, bool>>{};
-      player.setOnQualityChanged([&](Quality quality, bool ready) { qualityEvents.emplace_back(quality, ready); });
+      auto qualityEvents = std::vector<std::pair<QualityResult, bool>>{};
+      player.setOnQualityChanged([&](QualityResult const& quality, bool ready)
+                                 { qualityEvents.emplace_back(quality, ready); });
 
       onGraphChanged(flow::Graph{});
 
       auto const snap = player.status();
       CHECK(snap.quality == Quality::BitwisePerfect);
+      CHECK(snap.qualityFullyVerified == false);
       CHECK(snap.isReady == false);
       REQUIRE(qualityEvents.size() == 1);
-      CHECK(qualityEvents[0].first == Quality::BitwisePerfect);
+      CHECK(qualityEvents[0].first.overall == Quality::BitwisePerfect);
+      CHECK(qualityEvents[0].first.fullyVerified == false);
       CHECK(qualityEvents[0].second == false);
     }
 
@@ -188,11 +192,40 @@ namespace ao::audio::test
       auto const snap = player.status();
       // Should still work, but no connection from engine to system
       CHECK(snap.flow.nodes.size() == 4); // Source, Decoder, Engine, Sink
+      CHECK(snap.qualityFullyVerified == false);
 
       // The source node is labelled with the detected codec.
       auto const srcIt = std::ranges::find(snap.flow.nodes, std::string_view{"ao-source"}, &flow::Node::id);
       REQUIRE(srcIt != snap.flow.nodes.end());
       CHECK(srcIt->name == "FLAC");
+    }
+
+    SECTION("System nodes without reported formats are not backfilled")
+    {
+      auto engineSnap = createBaseEngineRoute();
+      player.handleRouteChanged(engineSnap, player.playbackGeneration());
+
+      onGraphChanged(
+        flow::Graph{.nodes =
+                      {
+                        flow::Node{.id = "sys-stream", .type = flow::NodeType::Stream, .name = "PipeWire Stream"},
+                        flow::Node{.id = "sys-sink", .type = flow::NodeType::Sink, .name = "Speakers"},
+                      },
+                    .connections = {
+                      flow::Connection{.sourceId = "sys-stream", .destId = "sys-sink", .isActive = true},
+                    }});
+
+      auto const snap = player.status();
+      auto const streamIt = std::ranges::find(snap.flow.nodes, std::string_view{"sys-stream"}, &flow::Node::id);
+      REQUIRE(streamIt != snap.flow.nodes.end());
+      CHECK_FALSE(streamIt->optFormat.has_value());
+      CHECK(snap.quality == Quality::BitwisePerfect);
+      CHECK(snap.qualityFullyVerified == false);
+
+      auto const assessmentIt =
+        std::ranges::find(snap.qualityAssessments, std::string_view{"sys-stream"}, &NodeQualityAssessment::nodeId);
+      REQUIRE(assessmentIt != snap.qualityAssessments.end());
+      CHECK_FALSE(assessmentIt->optFormat.has_value());
     }
 
     SECTION("handleRouteChanged with stale generation is ignored")
@@ -439,8 +472,9 @@ namespace ao::audio::test
     REQUIRE(onGraphChanged);
     executor.drain();
 
-    auto qualityEvents = std::vector<std::pair<Quality, bool>>{};
-    player.setOnQualityChanged([&](Quality quality, bool ready) { qualityEvents.emplace_back(quality, ready); });
+    auto qualityEvents = std::vector<std::pair<QualityResult, bool>>{};
+    player.setOnQualityChanged([&](QualityResult const& quality, bool ready)
+                               { qualityEvents.emplace_back(quality, ready); });
 
     auto worker =
       std::jthread{[&]
@@ -460,7 +494,10 @@ namespace ao::audio::test
     CHECK(std::ranges::find(snap.flow.nodes, std::string_view{"sys-sink"}, &flow::Node::id) != snap.flow.nodes.end());
     CHECK(snap.quality == Quality::BitwisePerfect);
     REQUIRE(qualityEvents.size() == 1);
-    CHECK(qualityEvents[0].first == Quality::BitwisePerfect);
+    CHECK(qualityEvents[0].first.overall == Quality::BitwisePerfect);
+    CHECK(qualityEvents[0].first.sourceQuality == Quality::BitwisePerfect);
+    CHECK(qualityEvents[0].first.pipelineQuality == Quality::BitwisePerfect);
+    CHECK(qualityEvents[0].first.fullyVerified == false);
     CHECK(qualityEvents[0].second == true);
   }
 

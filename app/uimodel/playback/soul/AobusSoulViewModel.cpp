@@ -4,6 +4,7 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <functional>
@@ -11,39 +12,47 @@
 
 namespace ao::uimodel
 {
-  namespace
+  SoulAura resolveSoulAura(bool const playing, bool const ready, rt::QualityState const& signal) noexcept
   {
-    AuraColor colorForQuality(audio::Quality const quality)
+    if (!playing)
     {
-      switch (quality)
-      {
-        case audio::Quality::BitwisePerfect:
-        case audio::Quality::LosslessPadded: return AuraColor::Perfect;
-        case audio::Quality::LosslessFloat: return AuraColor::Lossless;
-        case audio::Quality::LinearIntervention: return AuraColor::Intervention;
-        case audio::Quality::Clipped: return AuraColor::Clipped;
-        case audio::Quality::LossySource:
-        case audio::Quality::Unknown: return AuraColor::Unknown;
-      }
-
-      return AuraColor::Unknown;
+      return SoulAura::Dormant;
     }
 
-    AuraColor computeColor(bool const playing, bool const ready, audio::Quality const quality)
+    if (!ready)
     {
-      if (!playing)
-      {
-        return AuraColor::Idle;
-      }
-
-      if (!ready)
-      {
-        return AuraColor::Unknown;
-      }
-
-      return colorForQuality(quality);
+      return SoulAura::Veiled;
     }
-  } // namespace
+
+    if (signal.overall == audio::Quality::Clipped || signal.pipelineQuality == audio::Quality::Clipped)
+    {
+      return SoulAura::Burning;
+    }
+
+    if (signal.pipelineQuality == audio::Quality::LinearIntervention)
+    {
+      return SoulAura::Turbulent;
+    }
+
+    if (!signal.fullyVerified || signal.sourceQuality == audio::Quality::LossySource ||
+        signal.sourceQuality == audio::Quality::Unknown)
+    {
+      return SoulAura::Veiled;
+    }
+
+    switch (signal.pipelineQuality)
+    {
+      case audio::Quality::BitwisePerfect: return SoulAura::Radiant;
+      case audio::Quality::LosslessPadded:
+      case audio::Quality::LosslessFloat: return SoulAura::Flowing;
+      case audio::Quality::LinearIntervention: return SoulAura::Turbulent;
+      case audio::Quality::Clipped: return SoulAura::Burning;
+      case audio::Quality::LossySource:
+      case audio::Quality::Unknown: return SoulAura::Veiled;
+    }
+
+    return SoulAura::Veiled;
+  }
 
   AobusSoulViewModel::AobusSoulViewModel(rt::PlaybackService& playback,
                                          std::function<void(AobusSoulViewState const&)> onRender)
@@ -68,7 +77,7 @@ namespace ao::uimodel
 
     auto view = AobusSoulViewState{};
     view.isBreathing = playing;
-    view.auraColor = computeColor(playing, state.ready, state.quality.overall);
+    view.aura = resolveSoulAura(playing, state.ready, state.quality);
 
     if (_onRender)
     {

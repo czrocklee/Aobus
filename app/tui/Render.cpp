@@ -128,7 +128,7 @@ namespace ao::tui
              text("/text              quick filter"),
              text("/lists or /l       choose list"),
              text("/detail or /d      show selected track detail"),
-             text("/quality or /a     show audio quality"),
+             text("/pipeline or /a    show audio pipeline"),
              text("/output or /o      choose output device"),
              text("/views or /v       choose presentation"),
              text("/current           reveal current track"),

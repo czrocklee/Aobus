@@ -37,6 +37,8 @@ namespace ao::audio::flow
     std::optional<Format> optFormat = std::nullopt;
     bool hardwareVolumeNotUnity = false;
     bool softwareVolumeNotUnity = false;
+    float maxSoftwareGain = 0.0F;
+    float minSoftwareGain = 0.0F;
     bool unclassifiedVolumeNotUnity = false;
     bool isMuted = false;
     bool isLossySource = false;

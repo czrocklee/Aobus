@@ -51,7 +51,7 @@ namespace ao::gtk
     bool showFullLogo() const;
     Gdk::RGBA aura() const;
 
-    static Gdk::RGBA mapAuraColor(uimodel::AuraColor color);
+    static Gdk::RGBA mapSoulAura(uimodel::SoulAura aura);
 
     static constexpr double kGoldenRatio = std::numbers::phi;
 

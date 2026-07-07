@@ -37,7 +37,7 @@ namespace ao::gtk::layout
                           [this](uimodel::AobusSoulViewState const& view)
                           {
                             _soul.breathe(view.isBreathing);
-                            _soul.setAura(AobusSoul::mapAuraColor(view.auraColor));
+                            _soul.setAura(AobusSoul::mapSoulAura(view.aura));
                           }}
       {
       }

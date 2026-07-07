@@ -30,6 +30,18 @@
 
 namespace ao::audio
 {
+  namespace
+  {
+    QualityResult qualityResultFromStatus(Player::Status const& status)
+    {
+      return QualityResult{.sourceQuality = status.sourceQuality,
+                           .pipelineQuality = status.pipelineQuality,
+                           .overall = status.quality,
+                           .fullyVerified = status.qualityFullyVerified,
+                           .assessments = status.qualityAssessments};
+    }
+  } // namespace
+
   struct Player::Impl final
   {
     struct ProviderRecord
@@ -120,7 +132,7 @@ namespace ao::audio
     std::function<void(Engine::PlaybackFailure const&)> onPlaybackFailure;
     std::function<void()> onStateChanged;
     std::function<void(std::vector<IBackendProvider::Status> const&)> onOutputDevicesChanged;
-    std::function<void(Quality, bool)> onQualityChanged;
+    std::function<void(QualityResult const&, bool)> onQualityChanged;
 
     void handleOutputDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices);
     void handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation);
@@ -248,7 +260,7 @@ namespace ao::audio
     }
 
     auto const playerStatus = owner->status();
-    dispatchOutward(&Impl::onQualityChanged, playerStatus.quality, playerStatus.isReady);
+    dispatchOutward(&Impl::onQualityChanged, qualityResultFromStatus(playerStatus), playerStatus.isReady);
   }
 
   void Player::Impl::updateMergedGraph()
@@ -288,15 +300,8 @@ namespace ao::audio
         },
     };
 
-    auto const optEngineFormat = Format{rs.engineOutputFormat};
-
-    for (auto node : cachedSystemGraph.nodes)
+    for (auto const& node : cachedSystemGraph.nodes)
     {
-      if (!node.optFormat && optEngineFormat.sampleRate > 0)
-      {
-        node.optFormat = optEngineFormat;
-      }
-
       mergedGraph.nodes.push_back(node);
     }
 
@@ -423,7 +428,7 @@ namespace ao::audio
     _implPtr->onOutputDevicesChanged = std::move(callback);
   }
 
-  void Player::setOnQualityChanged(std::function<void(Quality quality, bool ready)> callback)
+  void Player::setOnQualityChanged(std::function<void(QualityResult const& quality, bool ready)> callback)
   {
     _implPtr->onQualityChanged = std::move(callback);
   }
@@ -601,7 +606,10 @@ namespace ao::audio
     {
       auto const lock = std::scoped_lock{_implPtr->graphMutex};
       status.flow = _implPtr->mergedGraph;
-      status.quality = _implPtr->qualityResult.quality;
+      status.sourceQuality = _implPtr->qualityResult.sourceQuality;
+      status.pipelineQuality = _implPtr->qualityResult.pipelineQuality;
+      status.quality = _implPtr->qualityResult.overall;
+      status.qualityFullyVerified = _implPtr->qualityResult.fullyVerified;
       status.qualityAssessments = _implPtr->qualityResult.assessments;
     }
     status.isReady = isReady();
@@ -668,7 +676,7 @@ namespace ao::audio
     lock.unlock();
 
     auto const playerStatus = this->status();
-    _implPtr->dispatchOutward(&Impl::onQualityChanged, playerStatus.quality, playerStatus.isReady);
+    _implPtr->dispatchOutward(&Impl::onQualityChanged, qualityResultFromStatus(playerStatus), playerStatus.isReady);
   }
 
   std::uint64_t Player::playbackGeneration() const noexcept

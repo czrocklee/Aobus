@@ -30,6 +30,7 @@ extern "C"
 #include <cstdint>
 #include <cstdlib>
 #include <span>
+#include <unordered_map>
 #include <vector>
 
 #ifdef __clang__
@@ -176,6 +177,78 @@ namespace ao::audio::backend::detail::test
       CHECK(caps.bitDepths[0] == 16);
     }
 
+    SECTION("currentFormatFromNodeParam - EnumFormat is not current format")
+    {
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
+      ::spa_pod_builder_add(&b,
+                            SPA_FORMAT_mediaType,
+                            SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                            SPA_FORMAT_mediaSubtype,
+                            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                            SPA_FORMAT_AUDIO_format,
+                            SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
+                            SPA_FORMAT_AUDIO_rate,
+                            SPA_POD_Int(44100),
+                            SPA_FORMAT_AUDIO_channels,
+                            SPA_POD_Int(2),
+                            0);
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      CHECK_FALSE(currentFormatFromNodeParam(SPA_PARAM_EnumFormat, pod));
+    }
+
+    SECTION("currentFormatFromNodeParam - Format is current format")
+    {
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_Format);
+      ::spa_pod_builder_add(&b,
+                            SPA_FORMAT_mediaType,
+                            SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                            SPA_FORMAT_mediaSubtype,
+                            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                            SPA_FORMAT_AUDIO_format,
+                            SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
+                            SPA_FORMAT_AUDIO_rate,
+                            SPA_POD_Int(44100),
+                            SPA_FORMAT_AUDIO_channels,
+                            SPA_POD_Int(2),
+                            0);
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto const optFormat = currentFormatFromNodeParam(SPA_PARAM_Format, pod);
+      REQUIRE(optFormat);
+      CHECK(optFormat->sampleRate == 44100);
+      CHECK(optFormat->channels == 2);
+      CHECK(optFormat->bitDepth == 16);
+    }
+
+    SECTION("updateCurrentFormatFromNodeParam - failed current format clears stale cache")
+    {
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_Format);
+      ::spa_pod_builder_add(&b,
+                            SPA_FORMAT_mediaType,
+                            SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                            SPA_FORMAT_mediaSubtype,
+                            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                            SPA_FORMAT_AUDIO_format,
+                            SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
+                            SPA_FORMAT_AUDIO_rate,
+                            SPA_POD_Int(44100),
+                            SPA_FORMAT_AUDIO_channels,
+                            SPA_POD_Int(2),
+                            0);
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto cache = std::unordered_map<std::uint32_t, Format>{};
+      updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, pod);
+      REQUIRE(cache.contains(42));
+
+      updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, nullptr);
+      CHECK_FALSE(cache.contains(42));
+    }
+
     SECTION("parseEnumFormat - Discrete Sample Rates")
     {
       auto f = ::spa_pod_frame{};
@@ -290,7 +363,7 @@ namespace ao::audio::backend::detail::test
       auto const cls = props.classifyVolume();
       CHECK(cls.hardwareNotUnity == true);
       CHECK(cls.softwareNotUnity == false);
-      CHECK(cls.unclassifiedNotUnity == false);
+      CHECK(cls.unclassifiedNotUnity == true);
     }
 
     SECTION("SinkProps::classifyVolume - Software-only")
@@ -314,6 +387,30 @@ namespace ao::audio::backend::detail::test
       auto const cls = props.classifyVolume();
       CHECK(cls.hardwareNotUnity == false);
       CHECK(cls.softwareNotUnity == true);
+      CHECK(cls.maxSoftwareGain == 0.5F);
+      CHECK(cls.minSoftwareGain == 0.5F);
+      CHECK(cls.unclassifiedNotUnity == false);
+    }
+
+    SECTION("SinkProps::classifyVolume - Software amplification")
+    {
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+
+      auto const softVols = std::array{1.0F, 1.25F};
+      ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == false);
+      CHECK(cls.softwareNotUnity == true);
+      CHECK(cls.maxSoftwareGain == 1.25F);
+      CHECK(cls.minSoftwareGain == 1.0F);
       CHECK(cls.unclassifiedNotUnity == false);
     }
 
@@ -359,6 +456,27 @@ namespace ao::audio::backend::detail::test
       CHECK(cls.hardwareNotUnity == false);
       CHECK(cls.softwareNotUnity == false);
       CHECK(cls.unclassifiedNotUnity == true);
+    }
+
+    SECTION("SinkProps::classifyVolume - stream ambiguous volume is software")
+    {
+      auto const vols = std::array{1.0F, 0.5F};
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      auto const cls = props.classifyVolume(SinkProps::VolumeClassificationContext::Stream);
+      CHECK(cls.hardwareNotUnity == false);
+      CHECK(cls.softwareNotUnity == true);
+      CHECK(cls.maxSoftwareGain == 1.0F);
+      CHECK(cls.minSoftwareGain == 0.5F);
+      CHECK(cls.unclassifiedNotUnity == false);
     }
 
     SECTION("SinkProps::classifyVolume - Hardware-capable unity")

@@ -8,6 +8,7 @@
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Player.h>
+#include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Transport.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
@@ -125,9 +126,11 @@ namespace ao::rt
           },
         .quality =
           QualityState{
+            .sourceQuality = status.sourceQuality,
+            .pipelineQuality = status.pipelineQuality,
             .overall = status.quality,
+            .fullyVerified = status.qualityFullyVerified,
             .assessments = status.qualityAssessments,
-            .flow = status.flow,
           },
       };
     }
@@ -862,11 +865,10 @@ namespace ao::rt
         });
 
       playerPtr->setOnQualityChanged(
-        [this](audio::Quality, bool)
+        [this](audio::QualityResult const&, bool)
         {
           refreshState();
-          qualityChangedSignal.emit(
-            PlaybackService::QualityChanged{.quality = state.quality.overall, .ready = state.ready});
+          qualityChangedSignal.emit(PlaybackService::QualityChanged{.quality = state.quality, .ready = state.ready});
         });
     }
 

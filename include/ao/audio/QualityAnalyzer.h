@@ -23,6 +23,7 @@ namespace ao::audio
     BitPerfect,
     LossySource,
     SoftwareVolumeModification,
+    SoftwareAmplification,
     HardwareVolumeModification,
     UnclassifiedVolumeModification,
     Muted,
@@ -30,6 +31,7 @@ namespace ao::audio
     ChannelMapping,
     LosslessPadding,
     LosslessFloat,
+    LosslessRoundTrip,
     Truncation,
     MixedSources,
   };
@@ -40,10 +42,13 @@ namespace ao::audio
    * Format transition findings (Resampling, ChannelMapping, LosslessPadding,
    * LosslessFloat, Truncation) carry the source and destination formats.
    * MixedSources findings carry the names of other applications sharing the node.
+   * Software volume findings carry gain when the backend reported a magnitude.
    */
   struct QualityFinding final
   {
     QualityFindingKind kind = QualityFindingKind::Unknown;
+    Quality quality = Quality::Unknown;
+    float gain = 0.0F;
     std::optional<Format> optFromFormat{};
     std::optional<Format> optToFormat{};
     std::vector<std::string> sharedApps{};
@@ -62,6 +67,7 @@ namespace ao::audio
     std::string nodeId{};
     std::string nodeName{};
     flow::NodeType nodeType = flow::NodeType::Intermediary;
+    std::optional<Format> optFormat{};
     Quality worstQuality = Quality::BitwisePerfect;
     std::vector<QualityFinding> findings{};
 
@@ -73,7 +79,10 @@ namespace ao::audio
    */
   struct QualityResult final
   {
-    Quality quality = Quality::Unknown;
+    Quality sourceQuality = Quality::Unknown;
+    Quality pipelineQuality = Quality::Unknown;
+    Quality overall = Quality::Unknown;
+    bool fullyVerified = true;
     std::vector<NodeQualityAssessment> assessments{};
 
     bool operator==(QualityResult const&) const = default;

@@ -3,19 +3,16 @@
 
 #pragma once
 
-#include <ao/audio/Backend.h>
-#include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Transport.h>
-#include <ao/audio/flow/Graph.h>
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <cstdint>
 #include <functional>
 #include <string>
-#include <vector>
 
 namespace ao::uimodel
 {
@@ -23,18 +20,6 @@ namespace ao::uimodel
   {
     std::string formatPipelineTooltip(rt::PlaybackState const& state);
   }
-
-  enum class AudioQualityCategory : std::uint8_t
-  {
-    Unknown,
-    Perfect,
-    Lossless,
-    Intervention,
-    Lossy,
-    Clipped,
-  };
-
-  AudioQualityCategory audioQualityCategory(audio::Quality quality) noexcept;
 
   enum class NowPlayingFieldAction : std::uint8_t
   {
@@ -63,9 +48,7 @@ namespace ao::uimodel
 
   struct AudioPipelineView final
   {
-    audio::flow::Graph flow{};
-    audio::Quality quality = audio::Quality::Unknown;
-    std::vector<audio::NodeQualityAssessment> assessments{};
+    rt::QualityState quality{};
     std::string deviceName{};
     std::string deviceIconName{};
     std::string plainTextFallback{};

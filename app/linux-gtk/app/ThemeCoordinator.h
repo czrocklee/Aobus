@@ -8,6 +8,7 @@
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -15,15 +16,12 @@ namespace ao::gtk
 {
   class AppConfig;
   class ThemeCoordinator;
+  struct ThemeWindowRegistration;
 
   class [[nodiscard]] ThemeRegistrationToken final
   {
   public:
     ThemeRegistrationToken() = default;
-    ThemeRegistrationToken(ThemeCoordinator* coordinator, Gtk::Window* window)
-      : _coordinator{coordinator}, _window{window}
-    {
-    }
 
     ~ThemeRegistrationToken();
 
@@ -31,7 +29,7 @@ namespace ao::gtk
     ThemeRegistrationToken& operator=(ThemeRegistrationToken const&) = delete;
 
     ThemeRegistrationToken(ThemeRegistrationToken&& other) noexcept
-      : _coordinator{std::exchange(other._coordinator, nullptr)}, _window{std::exchange(other._window, nullptr)}
+      : _registrationPtr{std::move(other._registrationPtr)}
     {
     }
 
@@ -40,8 +38,7 @@ namespace ao::gtk
       if (this != &other)
       {
         reset();
-        _coordinator = std::exchange(other._coordinator, nullptr);
-        _window = std::exchange(other._window, nullptr);
+        _registrationPtr = std::move(other._registrationPtr);
       }
 
       return *this;
@@ -50,13 +47,27 @@ namespace ao::gtk
     void reset();
 
   private:
-    ThemeCoordinator* _coordinator = nullptr;
-    Gtk::Window* _window = nullptr;
+    friend class ThemeCoordinator;
+
+    explicit ThemeRegistrationToken(std::shared_ptr<ThemeWindowRegistration> registrationPtr)
+      : _registrationPtr{std::move(registrationPtr)}
+    {
+    }
+
+    std::shared_ptr<ThemeWindowRegistration> _registrationPtr;
   };
 
   class ThemeCoordinator final
   {
   public:
+    ThemeCoordinator() = default;
+    ~ThemeCoordinator();
+
+    ThemeCoordinator(ThemeCoordinator const&) = delete;
+    ThemeCoordinator& operator=(ThemeCoordinator const&) = delete;
+    ThemeCoordinator(ThemeCoordinator&&) = delete;
+    ThemeCoordinator& operator=(ThemeCoordinator&&) = delete;
+
     void load(AppConfig const& config);
     void save(AppConfig& config) const;
 
@@ -71,9 +82,10 @@ namespace ao::gtk
     friend class ThemeRegistrationToken;
 
     rt::ThemePresetId _activePreset = rt::ThemePresetId::Classic;
-    std::vector<Gtk::Window*> _registeredWindows;
+    std::vector<std::shared_ptr<ThemeWindowRegistration>> _registeredWindows;
 
-    void unregisterToplevel(Gtk::Window& window);
+    void unregisterToplevel(std::shared_ptr<ThemeWindowRegistration> const& registrationPtr);
+    void pruneExpiredRegistrations();
 
     void applyThemeClass(Gtk::Widget& widget, rt::ThemePresetId preset) const;
     void removeThemeClass(Gtk::Widget& widget, rt::ThemePresetId preset) const;

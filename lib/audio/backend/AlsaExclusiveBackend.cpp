@@ -29,6 +29,7 @@ extern "C"
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -96,6 +97,97 @@ namespace ao::audio::backend
     AlsaMixerLevel toAlsaMixerLevel(std::ptrdiff_t value) noexcept
     {
       return static_cast<AlsaMixerLevel>(value);
+    }
+
+    struct AlsaCurrentHwFormat final
+    {
+      Format format{};
+      ::snd_pcm_format_t alsaFormat = SND_PCM_FORMAT_UNKNOWN;
+    };
+
+    std::optional<Format> sampleFormatFromAlsa(::snd_pcm_format_t const alsaFormat) noexcept
+    {
+      switch (auto format = Format{.isInterleaved = true}; alsaFormat)
+      {
+        case SND_PCM_FORMAT_S16_LE:
+        case SND_PCM_FORMAT_S16_BE:
+          format.bitDepth = 16;
+          format.validBits = 16;
+          return format;
+        case SND_PCM_FORMAT_S24_3LE:
+        case SND_PCM_FORMAT_S24_3BE:
+          format.bitDepth = 24;
+          format.validBits = 24;
+          return format;
+        case SND_PCM_FORMAT_S24_LE:
+        case SND_PCM_FORMAT_S24_BE:
+          format.bitDepth = 32;
+          format.validBits = 24;
+          return format;
+        case SND_PCM_FORMAT_S32_LE:
+        case SND_PCM_FORMAT_S32_BE:
+          format.bitDepth = 32;
+          format.validBits = 32;
+          return format;
+        case SND_PCM_FORMAT_FLOAT_LE:
+        case SND_PCM_FORMAT_FLOAT_BE:
+          format.bitDepth = 32;
+          format.validBits = 32;
+          format.isFloat = true;
+          return format;
+        case SND_PCM_FORMAT_FLOAT64_LE:
+        case SND_PCM_FORMAT_FLOAT64_BE:
+          format.bitDepth = 64;
+          format.validBits = 64;
+          format.isFloat = true;
+          return format;
+        default: return std::nullopt;
+      }
+    }
+
+    std::optional<AlsaCurrentHwFormat> readCurrentHwFormat(::snd_pcm_t* const pcm)
+    {
+      ::snd_pcm_hw_params_t* params = nullptr;
+      snd_pcm_hw_params_alloca(&params);
+
+      if (::snd_pcm_hw_params_current(pcm, params) < 0)
+      {
+        return std::nullopt;
+      }
+
+      auto alsaFormat = SND_PCM_FORMAT_UNKNOWN;
+
+      if (::snd_pcm_hw_params_get_format(params, &alsaFormat) < 0)
+      {
+        return std::nullopt;
+      }
+
+      auto optFormat = sampleFormatFromAlsa(alsaFormat);
+
+      if (!optFormat)
+      {
+        return std::nullopt;
+      }
+
+      unsigned int rate = 0;
+      unsigned int channels = 0;
+
+      if (::snd_pcm_hw_params_get_rate(params, &rate, nullptr) < 0 ||
+          ::snd_pcm_hw_params_get_channels(params, &channels) < 0 ||
+          channels > std::numeric_limits<std::uint8_t>::max())
+      {
+        return std::nullopt;
+      }
+
+      optFormat->sampleRate = rate;
+      optFormat->channels = static_cast<std::uint8_t>(channels);
+
+      return AlsaCurrentHwFormat{.format = *optFormat, .alsaFormat = alsaFormat};
+    }
+
+    bool isConfiguredFormat(Format const& format) noexcept
+    {
+      return format.sampleRate != 0U && format.channels != 0U && format.bitDepth != 0U;
     }
 
     bool setPlaybackVolumeAll(::snd_mixer_elem_t* elem, std::ptrdiff_t value)
@@ -724,7 +816,15 @@ namespace ao::audio::backend
       muted = mixer.softwareMuted();
     }
 
-    graphRegistry->publish({.routeAnchor = deviceName, .volume = vol, .muted = muted, .volumeMode = mode});
+    auto optFormat = std::optional<Format>{};
+
+    if (pcmPtr && isConfiguredFormat(format))
+    {
+      optFormat = format;
+    }
+
+    graphRegistry->publish(
+      {.routeAnchor = deviceName, .optFormat = optFormat, .volume = vol, .muted = muted, .volumeMode = mode});
   }
   Result<> AlsaExclusiveBackend::Impl::setVolumeProperty(PropertyValue const& value)
   {
@@ -827,8 +927,16 @@ namespace ao::audio::backend
       return makeError(Error::Code::InitFailed, "Failed to apply hw params");
     }
 
+    auto optCurrentFormat = readCurrentHwFormat(pcm);
+
+    if (!optCurrentFormat)
+    {
+      return makeError(Error::Code::InitFailed, "Failed to read ALSA current hw params");
+    }
+
     canPause = (::snd_pcm_hw_params_can_pause(params) == 1);
-    format.sampleRate = rate;
+    format = detail::preserveRequestedSignalPrecision(format, optCurrentFormat->format);
+    alsaFormat = optCurrentFormat->alsaFormat;
     return {};
   }
 
@@ -902,33 +1010,14 @@ namespace ao::audio::backend
       return res;
     }
 
+    bool const backendFormatChanged = !(currentFormat == format);
+
     _implPtr->format = currentFormat;
     _implPtr->alsaFormat = alsaFormat;
     _implPtr->is3Byte24Bit = (alsaFormat == SND_PCM_FORMAT_S24_3LE);
 
-    // When the ALSA hardware forces a wider sample container (e.g. S16_LE
-    // rejected in favour of S32_LE), the Engine must be told so its PCM
-    // converter produces data that matches the MMAP buffer layout.
-    auto const hwBitDepth = [&] -> std::uint8_t
+    if (backendFormatChanged)
     {
-      if (alsaFormat == SND_PCM_FORMAT_S32_LE || alsaFormat == SND_PCM_FORMAT_S24_LE)
-      {
-        return 32;
-      }
-
-      if (alsaFormat == SND_PCM_FORMAT_S24_3LE)
-      {
-        return 24;
-      }
-
-      return 16;
-    }();
-
-    if (hwBitDepth != format.bitDepth)
-    {
-      _implPtr->format.bitDepth = hwBitDepth;
-      _implPtr->format.validBits = format.bitDepth;
-
       _implPtr->renderTarget->onFormatChanged(_implPtr->format);
     }
 

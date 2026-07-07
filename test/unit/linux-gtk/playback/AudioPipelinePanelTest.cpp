@@ -5,13 +5,20 @@
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/QualityAnalyzer.h>
+#include <ao/audio/flow/Graph.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -41,13 +48,61 @@ namespace ao::gtk
 
     bool hasCssClass(std::string const& className) const { return _widget.has_css_class(className); }
 
+    std::vector<std::string> labelTexts() const
+    {
+      auto labels = std::vector<std::string>{};
+      collectLabelTexts(_widget, labels);
+      return labels;
+    }
+
+    bool hasDescendantCssClass(std::string const& className) const { return containsCssClass(_widget, className); }
+
   private:
+    static void collectLabelTexts(Gtk::Widget& widget, std::vector<std::string>& labels)
+    {
+      if (auto* const label = dynamic_cast<Gtk::Label*>(&widget); label != nullptr)
+      {
+        labels.push_back(label->get_text().raw());
+      }
+
+      for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+      {
+        collectLabelTexts(*child, labels);
+      }
+    }
+
+    static bool containsCssClass(Gtk::Widget& widget, std::string const& className)
+    {
+      if (widget.has_css_class(className))
+      {
+        return true;
+      }
+
+      for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+      {
+        if (containsCssClass(*child, className))
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
     AudioPipelinePanel& _widget;
   };
 } // namespace ao::gtk
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    bool hasLabel(std::vector<std::string> const& labels, std::string_view const expected)
+    {
+      return std::ranges::contains(labels, expected);
+    }
+  } // namespace
+
   TEST_CASE("AudioPipelinePanel renders no rows for an empty pipeline", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -67,12 +122,30 @@ namespace ao::gtk::test
     auto peer = AudioPipelinePanelTestPeer{widget};
 
     auto view = uimodel::AudioPipelineView{};
-    view.flow.nodes.push_back({.id = "ao-source", .name = "Source"});
-    view.quality = audio::Quality::BitwisePerfect;
+    view.quality = rt::QualityState{
+      .sourceQuality = audio::Quality::BitwisePerfect,
+      .pipelineQuality = audio::Quality::BitwisePerfect,
+      .overall = audio::Quality::BitwisePerfect,
+      .assessments = {
+        audio::NodeQualityAssessment{
+          .nodeId = "ao-source",
+          .nodeName = "Source",
+          .nodeType = audio::flow::NodeType::Source,
+          .optFormat = audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .validBits = 16},
+          .findings = {audio::QualityFinding{
+            .kind = audio::QualityFindingKind::BitPerfect, .quality = audio::Quality::BitwisePerfect}},
+        },
+      }};
 
     widget.apply(view);
 
-    CHECK(peer.getChildCount() > 0);
+    auto const labels = peer.labelTexts();
+    CHECK(hasLabel(labels, "Audio Pipeline"));
+    CHECK(hasLabel(labels, "[Source]"));
+    CHECK(hasLabel(labels, "Source"));
+    CHECK(hasLabel(labels, "(44.1 kHz · 16-bit · Stereo)"));
+    CHECK(hasLabel(labels, "Bit-perfect playback"));
+    CHECK(peer.hasDescendantCssClass("ao-quality-medal"));
   }
 
   TEST_CASE("AudioPipelinePanel replaces variant CSS classes", "[gtk][unit][playback]")

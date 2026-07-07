@@ -6,14 +6,60 @@
 #include "app/ThemePreset.h"
 #include <ao/rt/AppPrefsState.h>
 
+#include <glib-object.h>
+#include <glibmm/objectbase.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
+#include <utility>
 
 namespace ao::gtk
 {
+  struct ThemeWindowRegistration final
+  {
+    ThemeCoordinator* coordinator = nullptr;
+    Gtk::Window* window = nullptr;
+    bool weakRefActive = false;
+  };
+
+  namespace
+  {
+    void onRegisteredWindowFinalized(void* const data, GObject* /*whereTheObjectWas*/)
+    {
+      auto* const registration = static_cast<ThemeWindowRegistration*>(data);
+
+      if (registration != nullptr)
+      {
+        registration->window = nullptr;
+        registration->weakRefActive = false;
+      }
+    }
+
+    GObject* gObjectFor(Gtk::Window& window) noexcept
+    {
+      return static_cast<Glib::ObjectBase&>(window).gobj();
+    }
+
+    void disconnectWindowWeakRef(ThemeWindowRegistration& registration)
+    {
+      if (registration.weakRefActive && registration.window != nullptr)
+      {
+        ::g_object_weak_unref(gObjectFor(*registration.window), onRegisteredWindowFinalized, &registration);
+      }
+
+      registration.weakRefActive = false;
+    }
+
+    bool registrationMatchesWindow(std::shared_ptr<ThemeWindowRegistration> const& registrationPtr,
+                                   Gtk::Window const* const window)
+    {
+      return registrationPtr != nullptr && registrationPtr->window == window;
+    }
+  } // namespace
+
   ThemeRegistrationToken::~ThemeRegistrationToken()
   {
     reset();
@@ -21,13 +67,35 @@ namespace ao::gtk
 
   void ThemeRegistrationToken::reset()
   {
-    if (_coordinator != nullptr && _window != nullptr)
+    if (_registrationPtr == nullptr)
     {
-      _coordinator->unregisterToplevel(*_window);
+      return;
     }
 
-    _coordinator = nullptr;
-    _window = nullptr;
+    if (_registrationPtr->coordinator != nullptr)
+    {
+      _registrationPtr->coordinator->unregisterToplevel(_registrationPtr);
+    }
+    else
+    {
+      disconnectWindowWeakRef(*_registrationPtr);
+      _registrationPtr->window = nullptr;
+    }
+
+    _registrationPtr.reset();
+  }
+
+  ThemeCoordinator::~ThemeCoordinator()
+  {
+    for (auto const& registrationPtr : _registeredWindows)
+    {
+      if (registrationPtr != nullptr)
+      {
+        disconnectWindowWeakRef(*registrationPtr);
+        registrationPtr->coordinator = nullptr;
+        registrationPtr->window = nullptr;
+      }
+    }
   }
 
   void ThemeCoordinator::load(AppConfig const& config)
@@ -55,9 +123,11 @@ namespace ao::gtk
     auto const oldPreset = _activePreset;
     _activePreset = preset;
 
-    for (auto* const window : _registeredWindows)
+    pruneExpiredRegistrations();
+
+    for (auto const& registrationPtr : _registeredWindows)
     {
-      if (window != nullptr)
+      if (auto* const window = registrationPtr->window; window != nullptr)
       {
         removeThemeClass(*window, oldPreset);
         applyThemeClass(*window, preset);
@@ -77,25 +147,69 @@ namespace ao::gtk
 
   ThemeRegistrationToken ThemeCoordinator::registerToplevel(Gtk::Window& window)
   {
-    _registeredWindows.push_back(&window);
+    pruneExpiredRegistrations();
+
+    auto registrationPtr = std::make_shared<ThemeWindowRegistration>();
+    registrationPtr->coordinator = this;
+    registrationPtr->window = &window;
+    ::g_object_weak_ref(gObjectFor(window), onRegisteredWindowFinalized, registrationPtr.get());
+    registrationPtr->weakRefActive = true;
+
+    _registeredWindows.push_back(registrationPtr);
     applyThemeClass(window, _activePreset);
 
-    return ThemeRegistrationToken{this, &window};
+    return ThemeRegistrationToken{std::move(registrationPtr)};
   }
 
-  void ThemeCoordinator::unregisterToplevel(Gtk::Window& window)
+  void ThemeCoordinator::unregisterToplevel(std::shared_ptr<ThemeWindowRegistration> const& registrationPtr)
   {
-    auto const position = std::ranges::find(_registeredWindows, &window);
+    if (registrationPtr == nullptr)
+    {
+      return;
+    }
+
+    auto* const window = registrationPtr->window;
+    auto const position = std::ranges::find(_registeredWindows, registrationPtr);
 
     if (position != _registeredWindows.end())
     {
       _registeredWindows.erase(position);
     }
 
-    if (!std::ranges::contains(_registeredWindows, &window))
+    if (window != nullptr)
     {
-      removeThemeClass(window, _activePreset);
+      bool const hasRemainingRegistration = std::ranges::any_of(
+        _registeredWindows,
+        [window](auto const& candidatePtr) { return registrationMatchesWindow(candidatePtr, window); });
+
+      if (!hasRemainingRegistration)
+      {
+        removeThemeClass(*window, _activePreset);
+      }
     }
+
+    disconnectWindowWeakRef(*registrationPtr);
+    registrationPtr->coordinator = nullptr;
+    registrationPtr->window = nullptr;
+  }
+
+  void ThemeCoordinator::pruneExpiredRegistrations()
+  {
+    std::erase_if(_registeredWindows,
+                  [](std::shared_ptr<ThemeWindowRegistration> const& registrationPtr)
+                  {
+                    if (registrationPtr == nullptr || registrationPtr->window == nullptr)
+                    {
+                      if (registrationPtr != nullptr)
+                      {
+                        registrationPtr->coordinator = nullptr;
+                      }
+
+                      return true;
+                    }
+
+                    return false;
+                  });
   }
 
   void ThemeCoordinator::applyThemeClass(Gtk::Widget& widget, rt::ThemePresetId preset) const

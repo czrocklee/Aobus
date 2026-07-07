@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/Format.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
+#include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -50,6 +52,35 @@ TEST_CASE("AlsaGraphRegistry - hardware volume publish updates subscribers", "[a
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
 }
 
+TEST_CASE("AlsaGraphRegistry - published negotiated format reaches stream and sink", "[audio][unit][alsa]")
+{
+  auto registry = AlsaGraphRegistry{};
+  auto receivedGraph = Graph{};
+  auto const negotiatedFormat = ao::audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 32, .validBits = 16};
+
+  auto sub = registry.subscribe("hw:0,0", [&](Graph const& g) { receivedGraph = g; });
+
+  registry.publish({.routeAnchor = "hw:0,0", .optFormat = negotiatedFormat});
+
+  REQUIRE(receivedGraph.nodes.size() == 2);
+  REQUIRE(receivedGraph.nodes[0].optFormat.has_value());
+  REQUIRE(receivedGraph.nodes[1].optFormat.has_value());
+  CHECK(*receivedGraph.nodes[0].optFormat == negotiatedFormat);
+  CHECK(*receivedGraph.nodes[1].optFormat == negotiatedFormat);
+}
+
+TEST_CASE("ALSA backend detail - current hardware container preserves requested signal precision",
+          "[audio][unit][alsa]")
+{
+  auto const requested = ao::audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .validBits = 16};
+  auto const currentHw = ao::audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 32, .validBits = 32};
+
+  auto const graphFormat = preserveRequestedSignalPrecision(requested, currentHw);
+
+  CHECK(graphFormat.bitDepth == 32);
+  CHECK(graphFormat.validBits == 16);
+}
+
 TEST_CASE("AlsaGraphRegistry - software volume publish updates subscribers", "[audio][unit][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
@@ -63,6 +94,24 @@ TEST_CASE("AlsaGraphRegistry - software volume publish updates subscribers", "[a
   REQUIRE(receivedGraph.nodes.size() == 2);
   CHECK_FALSE(receivedGraph.nodes[1].hardwareVolumeNotUnity);
   CHECK(receivedGraph.nodes[1].softwareVolumeNotUnity);
+  CHECK(receivedGraph.nodes[1].maxSoftwareGain == 0.8F);
+  CHECK_FALSE(receivedGraph.nodes[1].isMuted);
+}
+
+TEST_CASE("AlsaGraphRegistry - software amplification publishes gain magnitude", "[audio][unit][alsa]")
+{
+  auto registry = AlsaGraphRegistry{};
+  auto receivedGraph = Graph{};
+
+  auto sub = registry.subscribe("hw:0,0", [&](Graph const& g) { receivedGraph = g; });
+
+  registry.publish(
+    {.routeAnchor = "hw:0,0", .volume = 1.25F, .muted = false, .volumeMode = AlsaVolumeControlMode::SoftwareGain});
+
+  REQUIRE(receivedGraph.nodes.size() == 2);
+  CHECK_FALSE(receivedGraph.nodes[1].hardwareVolumeNotUnity);
+  CHECK(receivedGraph.nodes[1].softwareVolumeNotUnity);
+  CHECK(receivedGraph.nodes[1].maxSoftwareGain == 1.25F);
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
 }
 

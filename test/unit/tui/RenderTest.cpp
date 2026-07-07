@@ -85,7 +85,7 @@ namespace ao::tui::test
     CHECK(rendered.find("l lists") != std::string::npos);
     CHECK(rendered.find("v view") != std::string::npos);
     CHECK(rendered.find("d detail") != std::string::npos);
-    CHECK(rendered.find("a quality") != std::string::npos);
+    CHECK(rendered.find("a pipeline") != std::string::npos);
     CHECK(rendered.find("o output") != std::string::npos);
     CHECK(rendered.find("Ctrl-L current") != std::string::npos);
     CHECK(rendered.find("q quit") != std::string::npos);
@@ -131,7 +131,7 @@ namespace ao::tui::test
     auto const cases = std::vector<Case>{
       {.overlay = Overlay::ListChooser, .label = "Lists", .hint = "l toggle  Enter open  Esc close"},
       {.overlay = Overlay::DetailPanel, .label = "Detail", .hint = "d toggle  Esc close"},
-      {.overlay = Overlay::QualityPanel, .label = "Quality", .hint = "a toggle  Esc close"},
+      {.overlay = Overlay::QualityPanel, .label = "Pipeline", .hint = "a toggle  Esc close"},
       {.overlay = Overlay::OutputDevices, .label = "Output", .hint = "o toggle  Enter select  Esc close"},
       {.overlay = Overlay::PresentationPanel, .label = "Views", .hint = "v toggle  Enter select  Esc close"},
       {.overlay = Overlay::Help, .label = "Help", .hint = "Esc close"},

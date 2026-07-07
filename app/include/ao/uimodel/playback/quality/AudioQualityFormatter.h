@@ -6,9 +6,10 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/rt/PlaybackState.h>
 
+#include <cstdint>
 #include <string>
-#include <vector>
 
 namespace ao::audio
 {
@@ -17,6 +18,23 @@ namespace ao::audio
 
 namespace ao::uimodel
 {
+  enum class AudioQualityCategory : std::uint8_t
+  {
+    Unknown,
+    Medal,
+    Positive,
+    Diagnostic,
+    Warning,
+    Informational,
+    Clipped,
+  };
+
+  struct AudioQualityPresentation final
+  {
+    std::string headline{};
+    AudioQualityCategory category = AudioQualityCategory::Unknown;
+  };
+
   std::string audioNodeTypeLabel(audio::flow::NodeType type);
 
   /**
@@ -31,19 +49,8 @@ namespace ao::uimodel
    */
   std::string audioFormatLabel(audio::Format const& format, bool preferValidBits = false);
   std::string audioFindingLabel(audio::QualityFinding const& finding);
+  AudioQualityCategory audioFindingCategory(audio::QualityFinding const& finding) noexcept;
   std::string audioQualityConclusion(audio::Quality quality);
-
-  /**
-   * @brief Maps an individual quality finding to a UI quality category.
-   * This is used solely for determining the color of the finding's bullet point in the UI.
-   */
-  audio::Quality qualityForFinding(audio::QualityFinding const& finding) noexcept;
-
-  /**
-   * @brief Returns the active nodes in the playback path, in order from decoder to sink.
-   *
-   * @note The returned pointers point directly into the provided graph. The caller
-   * must ensure that the graph outlives the returned vector.
-   */
-  std::vector<audio::flow::Node const*> playbackPath(audio::flow::Graph const& graph);
+  AudioQualityCategory audioQualityCategory(audio::Quality quality) noexcept;
+  AudioQualityPresentation audioQualityPresentation(rt::QualityState const& state);
 } // namespace ao::uimodel

@@ -4,7 +4,7 @@
 #include "playback/AudioQualityCss.h"
 
 #include <ao/audio/Backend.h>
-#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <gtkmm/widget.h>
 
@@ -16,10 +16,11 @@ namespace ao::gtk
 
     switch (category)
     {
-      case Category::Perfect: return "ao-quality-perfect";
-      case Category::Lossless: return "ao-quality-lossless";
-      case Category::Intervention: return "ao-quality-intervention";
-      case Category::Lossy: return "ao-quality-lossy";
+      case Category::Medal: return "ao-quality-medal";
+      case Category::Positive: return "ao-quality-positive";
+      case Category::Diagnostic: return "ao-quality-diagnostic";
+      case Category::Warning: return "ao-quality-warning";
+      case Category::Informational: return "ao-quality-informational";
       case Category::Clipped: return "ao-quality-clipped";
       case Category::Unknown: return "";
     }
@@ -34,10 +35,11 @@ namespace ao::gtk
 
   void clearQualityCssClasses(Gtk::Widget& widget)
   {
-    for (auto const& cls : {"ao-quality-perfect",
-                            "ao-quality-lossless",
-                            "ao-quality-intervention",
-                            "ao-quality-lossy",
+    for (auto const& cls : {"ao-quality-medal",
+                            "ao-quality-positive",
+                            "ao-quality-diagnostic",
+                            "ao-quality-warning",
+                            "ao-quality-informational",
                             "ao-quality-clipped"})
     {
       widget.remove_css_class(cls);

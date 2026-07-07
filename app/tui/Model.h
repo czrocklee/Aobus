@@ -9,6 +9,7 @@
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
+#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <chrono>
 #include <cstddef>
@@ -71,6 +72,7 @@ namespace ao::tui
   std::string formatDuration(std::chrono::milliseconds duration);
   std::string transportLabel(audio::Transport transport);
   bool transportNeedsClockTick(audio::Transport transport);
+  QualityIndicatorStyle qualityIndicatorStyle(uimodel::AudioQualityCategory category);
   QualityIndicatorStyle qualityIndicatorStyle(audio::Quality quality);
   std::string trackDisplayTitle(rt::TrackRow const& row);
   std::string trackDisplayDetail(rt::TrackRow const& row);

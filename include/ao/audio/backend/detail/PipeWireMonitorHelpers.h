@@ -4,11 +4,13 @@
 #pragma once
 
 #include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
 
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 extern "C"
@@ -42,6 +44,12 @@ namespace ao::audio::backend::detail
 
   struct SinkProps final
   {
+    enum class VolumeClassificationContext : std::uint8_t
+    {
+      Sink,
+      Stream,
+    };
+
     bool hasVolume = false;
     bool volumeIsHardware = false;
     float volume = 1.0F;
@@ -60,13 +68,16 @@ namespace ao::audio::backend::detail
     {
       bool hardwareNotUnity = false;
       bool softwareNotUnity = false;
+      float maxSoftwareGain = 0.0F;
+      float minSoftwareGain = 0.0F;
       bool unclassifiedNotUnity = false;
     };
 
     /**
      * @brief Classifies the volume state based on hardware and software evidence.
      */
-    VolumeClassification classifyVolume() const noexcept;
+    VolumeClassification classifyVolume(
+      VolumeClassificationContext context = VolumeClassificationContext::Sink) const noexcept;
   };
 
   /**
@@ -93,6 +104,26 @@ namespace ao::audio::backend::detail
    * @brief Parses an EnumFormat SPA pod into DeviceCapabilities.
    */
   void parseEnumFormat(::spa_pod const* param, DeviceCapabilities& caps);
+
+  /**
+   * @brief Returns the current node format only for active Format params.
+   *
+   * EnumFormat params describe supported candidates and must not be treated as
+   * the current stream/sink format.
+   */
+  std::optional<Format> currentFormatFromNodeParam(std::uint32_t paramId, ::spa_pod const* param) noexcept;
+
+  /**
+   * @brief Updates the live format cache from an active Format param.
+   *
+   * A failed/null current Format invalidates any previously cached format for
+   * the node; EnumFormat and other params are capabilities or unrelated state
+   * and do not touch the live-format cache.
+   */
+  void updateCurrentFormatFromNodeParam(std::unordered_map<std::uint32_t, Format>& nodeFormatMap,
+                                        std::uint32_t nodeId,
+                                        std::uint32_t paramId,
+                                        ::spa_pod const* param);
 
   /**
    * @brief Merges sink properties from a SPA Props pod.

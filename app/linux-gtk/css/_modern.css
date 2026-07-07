@@ -200,7 +200,7 @@
 }
 
 .ao-theme-modern .ao-activity-status-warning {
-  color: var(--ao-quality-intervention);
+  color: var(--ao-quality-warning);
   background: alpha(currentColor, 0.06);
 }
 

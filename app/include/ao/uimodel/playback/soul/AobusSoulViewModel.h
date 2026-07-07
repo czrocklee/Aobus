@@ -5,27 +5,30 @@
 
 #include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackState.h>
 
 #include <cstdint>
 #include <functional>
 
 namespace ao::uimodel
 {
-  enum class AuraColor : std::uint8_t
+  enum class SoulAura : std::uint8_t
   {
-    Idle,
-    Unknown,
-    Perfect,
-    Lossless,
-    Intervention,
-    Clipped,
+    Dormant,
+    Veiled,
+    Radiant,
+    Flowing,
+    Turbulent,
+    Burning,
   };
 
   struct AobusSoulViewState final
   {
-    AuraColor auraColor = AuraColor::Idle;
+    SoulAura aura = SoulAura::Dormant;
     bool isBreathing = false;
   };
+
+  SoulAura resolveSoulAura(bool playing, bool ready, rt::QualityState const& signal) noexcept;
 
   class AobusSoulViewModel final
   {

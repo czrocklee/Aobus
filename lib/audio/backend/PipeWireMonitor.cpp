@@ -411,21 +411,10 @@ namespace ao::audio::backend
 
         if (id == SPA_PARAM_Format)
         {
-          if (auto const optFmt = detail::parseRawStreamFormat(param); optFmt)
-          {
-            impl->nodeFormatMap[binding->id] = *optFmt;
-          }
+          detail::updateCurrentFormatFromNodeParam(impl->nodeFormatMap, binding->id, id, param);
         }
         else if (binding->role == NodeBindingRole::Sink && id == SPA_PARAM_EnumFormat)
         {
-          if (!impl->nodeFormatMap.contains(binding->id))
-          {
-            if (auto const optFmt = detail::parseRawStreamFormat(param); optFmt)
-            {
-              impl->nodeFormatMap[binding->id] = *optFmt;
-            }
-          }
-
           auto& caps = impl->sinkCapabilitiesMap[binding->id];
           parseEnumFormat(param, caps);
         }
@@ -933,9 +922,12 @@ namespace ao::audio::backend
     if (auto const propsIt = sinkPropsMap.find(id); propsIt != sinkPropsMap.end())
     {
       auto const& sinkProps = propsIt->second;
-      auto const volumeCls = sinkProps.classifyVolume();
+      auto const volumeCls = sinkProps.classifyVolume(isRs ? SinkProps::VolumeClassificationContext::Stream
+                                                           : SinkProps::VolumeClassificationContext::Sink);
       node.hardwareVolumeNotUnity = volumeCls.hardwareNotUnity;
       node.softwareVolumeNotUnity = volumeCls.softwareNotUnity;
+      node.maxSoftwareGain = volumeCls.maxSoftwareGain;
+      node.minSoftwareGain = volumeCls.minSoftwareGain;
       node.unclassifiedVolumeNotUnity = volumeCls.unclassifiedNotUnity;
       node.isMuted = sinkProps.isMuted || sinkProps.isSoftMuted;
     }

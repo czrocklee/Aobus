@@ -22,13 +22,13 @@ The name **Aobus** comes from *"Ao-bu"*, an early, deliberate syllable spoken by
 | Token | Value | Use |
 | :--- | :--- | :--- |
 | Brand cyan | `#06B6D4` | Master SVG, documentation, and hero visuals |
-| UI cyan | `#00E5FF` | Small GTK rendering where extra luminance improves clarity |
+| UI cyan | `#00E5FF` | Dormant aura; stopped playback in small GTK rendering |
 | Anchor amber | `#F97316` | Static `a` anchor |
-| Hi-Res purple | `#A855F7` | Bit-perfect and padded lossless states |
-| Lossless green | `#10B981` | Lossless float state |
-| Intervention orange | `#F59E0B` | Linear intervention state |
-| Warning red | `#EF4444` | Clipped or error state |
-| Quiet gray | `#6B7280` | Stopped, lossy, or unavailable state |
+| Radiant purple | `#A855F7` | Radiant aura; reserved for the top verified signal state |
+| Flowing green | `#10B981` | Flowing aura; preserved-signal states |
+| Turbulent orange | `#F59E0B` | Turbulent aura; linear intervention state |
+| Burning red | `#EF4444` | Burning aura; clipped or error state |
+| Veiled gray | `#6B7280` | Veiled aura; lossy, unknown, partially verified, or unavailable state |
 | Night field | `#111827` | Dark icon tile and presentation background |
 
 ## Geometry And Motion
@@ -65,7 +65,7 @@ The system is tuned around the Golden Ratio (`phi ~= 1.618`) to keep the animati
 
 ## Technical Note
 
-`Soul.svg` is the visual source of truth. Inside the GTK application, the same geometry and timing model are reconstructed natively in `app/linux-gtk/ui/AobusSoul.cpp` so the brand mark can stay sharp, lightweight, and responsive at runtime.
+`Soul.svg` is the visual source of truth. Inside the GTK application, the same geometry and timing model are reconstructed natively in `app/linux-gtk/app/AobusSoul.cpp` so the brand mark can stay sharp, lightweight, and responsive at runtime.
 
 ---
 

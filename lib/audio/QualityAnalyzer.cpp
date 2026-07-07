@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <set>
 #include <span>
 #include <string>
@@ -22,32 +23,79 @@ namespace ao::audio
 {
   namespace
   {
+    constexpr float kGainEpsilon = 1e-4F;
+
     bool isLosslessBitDepthChange(Format const& src, Format const& dst) noexcept
     {
       if (src.isFloat == dst.isFloat)
       {
-        auto const srcBits = (src.validBits != 0) ? src.validBits : src.bitDepth;
-        auto const dstBits = (dst.validBits != 0) ? dst.validBits : dst.bitDepth;
-
-        return srcBits <= dstBits;
+        return effectiveBits(src) <= effectiveBits(dst);
       }
 
       if (!src.isFloat && dst.isFloat)
       {
-        auto const srcBits = (src.validBits != 0) ? src.validBits : src.bitDepth;
-
         if (dst.bitDepth == 32)
         {
-          return srcBits <= 24;
+          return effectiveBits(src) <= 24;
         }
 
         if (dst.bitDepth == 64)
         {
-          return srcBits <= 32;
+          return effectiveBits(src) <= 32;
         }
       }
 
       return false;
+    }
+
+    bool hasKnownEffectiveBitChange(Format const& src, Format const& dst) noexcept
+    {
+      return src.validBits != 0U && dst.validBits != 0U && effectiveBits(src) != effectiveBits(dst);
+    }
+
+    bool hasFormatPrecisionChange(Format const& src, Format const& dst) noexcept
+    {
+      return src.bitDepth != dst.bitDepth || src.isFloat != dst.isFloat || hasKnownEffectiveBitChange(src, dst);
+    }
+
+    void addFinding(NodeQualityAssessment& assessment, QualityFinding finding)
+    {
+      assessment.worstQuality = worseQuality(assessment.worstQuality, finding.quality);
+      assessment.findings.push_back(std::move(finding));
+    }
+
+    bool invalidatesProvenPrecision(QualityFinding const& finding) noexcept
+    {
+      switch (finding.kind)
+      {
+        case QualityFindingKind::SoftwareVolumeModification:
+        case QualityFindingKind::SoftwareAmplification:
+        case QualityFindingKind::UnclassifiedVolumeModification:
+        case QualityFindingKind::Muted:
+        case QualityFindingKind::Resampling:
+        case QualityFindingKind::ChannelMapping:
+        case QualityFindingKind::Truncation:
+        case QualityFindingKind::MixedSources: return true;
+        case QualityFindingKind::Unknown:
+        case QualityFindingKind::BitPerfect:
+        case QualityFindingKind::LossySource:
+        case QualityFindingKind::HardwareVolumeModification:
+        case QualityFindingKind::LosslessPadding:
+        case QualityFindingKind::LosslessFloat:
+        case QualityFindingKind::LosslessRoundTrip: return false;
+      }
+
+      return true;
+    }
+
+    bool hasPrecisionInvalidatingFinding(NodeQualityAssessment const& assessment) noexcept
+    {
+      return std::ranges::any_of(assessment.findings, invalidatesProvenPrecision);
+    }
+
+    bool hasVerifiedOutputEndpoint(std::vector<flow::Node const*> const& path) noexcept
+    {
+      return !path.empty() && path.back()->type == flow::NodeType::Sink;
     }
 
     std::vector<flow::Node const*> findPlaybackPath(flow::Graph const& graph, std::string const& startId)
@@ -95,6 +143,7 @@ namespace ao::audio
       {
         auto const& sources = inputSources.at(node.id);
         auto otherAppNames = std::vector<std::string>{};
+        bool hasExternalSource = false;
 
         for (auto const& srcId : sources)
         {
@@ -102,24 +151,26 @@ namespace ao::audio
 
           if (!isInternal)
           {
+            hasExternalSource = true;
             auto const it = std::ranges::find(graph.nodes, srcId, &flow::Node::id);
 
-            if (it != graph.nodes.end())
+            if (it != graph.nodes.end() && !it->name.empty())
             {
               otherAppNames.push_back(it->name);
             }
           }
         }
 
-        if (!otherAppNames.empty())
+        if (hasExternalSource)
         {
           std::ranges::sort(otherAppNames);
           auto const [first, last] = std::ranges::unique(otherAppNames);
           otherAppNames.erase(first, last);
 
-          targetAssessment.findings.push_back(
-            QualityFinding{.kind = QualityFindingKind::MixedSources, .sharedApps = std::move(otherAppNames)});
-          targetAssessment.worstQuality = worseQuality(targetAssessment.worstQuality, Quality::LinearIntervention);
+          addFinding(targetAssessment,
+                     QualityFinding{.kind = QualityFindingKind::MixedSources,
+                                    .quality = Quality::LinearIntervention,
+                                    .sharedApps = std::move(otherAppNames)});
         }
       }
     }
@@ -128,37 +179,54 @@ namespace ao::audio
     {
       if (node.isLossySource)
       {
-        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::LossySource});
-        assessment.worstQuality = worseQuality(assessment.worstQuality, Quality::LossySource);
+        addFinding(
+          assessment, QualityFinding{.kind = QualityFindingKind::LossySource, .quality = Quality::LossySource});
       }
 
       if (node.softwareVolumeNotUnity)
       {
-        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::SoftwareVolumeModification});
-        assessment.worstQuality = worseQuality(assessment.worstQuality, Quality::LinearIntervention);
+        auto const isAmplification = node.maxSoftwareGain > 1.0F + kGainEpsilon;
+        auto const attenuationGain = node.minSoftwareGain > 0.0F ? node.minSoftwareGain : node.maxSoftwareGain;
+        auto const gain = isAmplification ? node.maxSoftwareGain : attenuationGain;
+        addFinding(assessment,
+                   QualityFinding{.kind = isAmplification ? QualityFindingKind::SoftwareAmplification
+                                                          : QualityFindingKind::SoftwareVolumeModification,
+                                  .quality = Quality::LinearIntervention,
+                                  .gain = gain});
+      }
+      else if (node.maxSoftwareGain > 1.0F + kGainEpsilon)
+      {
+        addFinding(assessment,
+                   QualityFinding{.kind = QualityFindingKind::SoftwareAmplification,
+                                  .quality = Quality::LinearIntervention,
+                                  .gain = node.maxSoftwareGain});
       }
 
       if (node.hardwareVolumeNotUnity)
       {
-        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::HardwareVolumeModification});
+        addFinding(
+          assessment,
+          QualityFinding{.kind = QualityFindingKind::HardwareVolumeModification, .quality = Quality::BitwisePerfect});
       }
 
       if (node.unclassifiedVolumeNotUnity)
       {
-        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::UnclassifiedVolumeModification});
-        assessment.worstQuality = worseQuality(assessment.worstQuality, Quality::LinearIntervention);
+        addFinding(assessment,
+                   QualityFinding{.kind = QualityFindingKind::UnclassifiedVolumeModification,
+                                  .quality = Quality::LinearIntervention});
       }
 
       if (node.isMuted)
       {
-        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::Muted});
-        assessment.worstQuality = worseQuality(assessment.worstQuality, Quality::LinearIntervention);
+        addFinding(
+          assessment, QualityFinding{.kind = QualityFindingKind::Muted, .quality = Quality::LinearIntervention});
       }
     }
 
     void assessFormatTransition(flow::Node const& prevNode,
                                 flow::Node const& currentNode,
-                                NodeQualityAssessment& targetAssessment)
+                                NodeQualityAssessment& targetAssessment,
+                                std::optional<std::uint8_t> optProvenPrecision)
     {
       if (!prevNode.optFormat || !currentNode.optFormat)
       {
@@ -170,35 +238,63 @@ namespace ao::audio
 
       if (f1.sampleRate != f2.sampleRate)
       {
-        targetAssessment.findings.push_back(
-          QualityFinding{.kind = QualityFindingKind::Resampling, .optFromFormat = f1, .optToFormat = f2});
-        targetAssessment.worstQuality = worseQuality(targetAssessment.worstQuality, Quality::LinearIntervention);
+        addFinding(targetAssessment,
+                   QualityFinding{.kind = QualityFindingKind::Resampling,
+                                  .quality = Quality::LinearIntervention,
+                                  .optFromFormat = f1,
+                                  .optToFormat = f2});
+        optProvenPrecision.reset();
       }
 
       if (f1.channels != f2.channels)
       {
-        targetAssessment.findings.push_back(
-          QualityFinding{.kind = QualityFindingKind::ChannelMapping, .optFromFormat = f1, .optToFormat = f2});
-        targetAssessment.worstQuality = worseQuality(targetAssessment.worstQuality, Quality::LinearIntervention);
+        addFinding(targetAssessment,
+                   QualityFinding{.kind = QualityFindingKind::ChannelMapping,
+                                  .quality = Quality::LinearIntervention,
+                                  .optFromFormat = f1,
+                                  .optToFormat = f2});
+        optProvenPrecision.reset();
       }
-      else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
+
+      if (hasFormatPrecisionChange(f1, f2))
       {
-        if (isLosslessBitDepthChange(f1, f2))
+        if (f1.isFloat && !f2.isFloat && optProvenPrecision && *optProvenPrecision <= effectiveBits(f2))
         {
-          targetAssessment.findings.push_back(
+          addFinding(targetAssessment,
+                     QualityFinding{.kind = QualityFindingKind::LosslessRoundTrip,
+                                    .quality = Quality::LosslessFloat,
+                                    .optFromFormat = f1,
+                                    .optToFormat = f2});
+        }
+        else if (isLosslessBitDepthChange(f1, f2))
+        {
+          addFinding(
+            targetAssessment,
             QualityFinding{.kind = f2.isFloat ? QualityFindingKind::LosslessFloat : QualityFindingKind::LosslessPadding,
+                           .quality = f2.isFloat ? Quality::LosslessFloat : Quality::LosslessPadded,
                            .optFromFormat = f1,
                            .optToFormat = f2});
-          targetAssessment.worstQuality =
-            worseQuality(targetAssessment.worstQuality, f2.isFloat ? Quality::LosslessFloat : Quality::LosslessPadded);
         }
         else
         {
-          targetAssessment.findings.push_back(
-            QualityFinding{.kind = QualityFindingKind::Truncation, .optFromFormat = f1, .optToFormat = f2});
-          targetAssessment.worstQuality = worseQuality(targetAssessment.worstQuality, Quality::LinearIntervention);
+          addFinding(targetAssessment,
+                     QualityFinding{.kind = QualityFindingKind::Truncation,
+                                    .quality = Quality::LinearIntervention,
+                                    .optFromFormat = f1,
+                                    .optToFormat = f2});
         }
       }
+    }
+
+    void updateAxes(QualityFinding const& finding, QualityResult& result) noexcept
+    {
+      if (finding.kind == QualityFindingKind::LossySource)
+      {
+        result.sourceQuality = worseQuality(result.sourceQuality, finding.quality);
+        return;
+      }
+
+      result.pipelineQuality = worseQuality(result.pipelineQuality, finding.quality);
     }
   } // namespace
 
@@ -209,11 +305,10 @@ namespace ao::audio
 
   QualityResult analyzeAudioQuality(flow::Graph const& graph)
   {
-    auto result = QualityResult{.quality = Quality::BitwisePerfect, .assessments = {}};
+    auto result = QualityResult{};
 
     if (graph.nodes.empty())
     {
-      result.quality = Quality::Unknown;
       return result;
     }
 
@@ -221,9 +316,13 @@ namespace ao::audio
 
     if (path.empty())
     {
-      result.quality = Quality::Unknown;
       return result;
     }
+
+    result.sourceQuality = path.front()->optFormat ? Quality::BitwisePerfect : Quality::Unknown;
+    result.pipelineQuality = Quality::BitwisePerfect;
+    result.overall = worseQuality(result.sourceQuality, result.pipelineQuality);
+    result.fullyVerified = hasVerifiedOutputEndpoint(path);
 
     auto inputSources = boost::unordered_flat_map<std::string, std::set<std::string>>{};
 
@@ -235,13 +334,27 @@ namespace ao::audio
       }
     }
 
+    auto optProvenPrecision = std::optional<std::uint8_t>{};
+
+    if (auto const& optSourceFormat = path.front()->optFormat; optSourceFormat && !optSourceFormat->isFloat)
+    {
+      optProvenPrecision = effectiveBits(*optSourceFormat);
+    }
+
     for (size_t i = 0; i < path.size(); ++i)
     {
       auto const* const node = path[i];
+
+      if (!node->optFormat)
+      {
+        result.fullyVerified = false;
+      }
+
       auto assessment = NodeQualityAssessment{
         .nodeId = node->id,
         .nodeName = node->name,
         .nodeType = node->type,
+        .optFormat = node->optFormat,
         .worstQuality = Quality::BitwisePerfect,
         .findings = {},
       };
@@ -252,15 +365,33 @@ namespace ao::audio
       if (i > 0)
       {
         auto const* const prevNode = path[i - 1];
-        assessFormatTransition(*prevNode, *node, assessment);
+        auto optTransitionPrecision = optProvenPrecision;
+
+        if (!node->optFormat || hasPrecisionInvalidatingFinding(assessment))
+        {
+          optTransitionPrecision.reset();
+        }
+
+        assessFormatTransition(*prevNode, *node, assessment, optTransitionPrecision);
       }
 
       if (assessment.findings.empty())
       {
-        assessment.findings.push_back(QualityFinding{.kind = QualityFindingKind::BitPerfect});
+        addFinding(
+          assessment, QualityFinding{.kind = QualityFindingKind::BitPerfect, .quality = Quality::BitwisePerfect});
       }
 
-      result.quality = worseQuality(result.quality, assessment.worstQuality);
+      for (auto const& finding : assessment.findings)
+      {
+        updateAxes(finding, result);
+      }
+
+      if (!node->optFormat || hasPrecisionInvalidatingFinding(assessment))
+      {
+        optProvenPrecision.reset();
+      }
+
+      result.overall = worseQuality(result.sourceQuality, result.pipelineQuality);
       result.assessments.push_back(std::move(assessment));
     }
 

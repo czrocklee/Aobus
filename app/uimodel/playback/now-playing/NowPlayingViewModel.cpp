@@ -7,6 +7,7 @@
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
@@ -28,25 +29,20 @@ namespace ao::uimodel
     {
       return query::serialize(query::ConstantExpression{std::string{value}});
     }
-  } // namespace
 
-  AudioQualityCategory audioQualityCategory(audio::Quality const quality) noexcept
-  {
-    using Quality = audio::Quality;
-
-    switch (quality)
+    std::string sourceStreamInfo(rt::QualityState const& quality)
     {
-      case Quality::BitwisePerfect:
-      case Quality::LosslessPadded: return AudioQualityCategory::Perfect;
-      case Quality::LosslessFloat: return AudioQualityCategory::Lossless;
-      case Quality::LinearIntervention: return AudioQualityCategory::Intervention;
-      case Quality::LossySource: return AudioQualityCategory::Lossy;
-      case Quality::Clipped: return AudioQualityCategory::Clipped;
-      case Quality::Unknown: return AudioQualityCategory::Unknown;
-    }
+      auto const it =
+        std::ranges::find_if(quality.assessments,
+                             [](auto const& assessment)
+                             { return assessment.nodeType == audio::flow::NodeType::Source && assessment.optFormat; });
 
-    return AudioQualityCategory::Unknown;
-  }
+      // The source node carries the track's native format, so show its true
+      // resolution (valid bits) rather than a padded transport container width.
+      return (it != quality.assessments.end() && it->optFormat) ? audioFormatLabel(*it->optFormat, true)
+                                                                : std::string{};
+    }
+  } // namespace
 
   NowPlayingViewModel::NowPlayingViewModel(rt::PlaybackService& playback,
                                            std::function<void(NowPlayingViewState const&)> onRender)
@@ -97,21 +93,14 @@ namespace ao::uimodel
         view.combinedStatus = state.nowPlaying.title;
       }
 
-      auto const it = std::ranges::find_if(state.quality.flow.nodes,
-                                           [](auto const& node)
-                                           { return node.type == audio::flow::NodeType::Source && node.optFormat; });
-
-      // The source node carries the track's native format, so show its true
-      // resolution (valid bits) rather than a padded transport container width.
-      view.streamInfo = (it != state.quality.flow.nodes.end() && it->optFormat) ? audioFormatLabel(*it->optFormat, true)
-                                                                                : std::string{};
+      auto const presentation = audioQualityPresentation(state.quality);
+      view.streamInfo = sourceStreamInfo(state.quality);
 
       auto plainTextFallback = std::string{"Audio Pipeline:\n"};
-      auto const conclusionText = audioQualityConclusion(state.quality.overall);
 
-      if (!conclusionText.empty())
+      if (!presentation.headline.empty())
       {
-        std::format_to(std::back_inserter(plainTextFallback), "\n{}", conclusionText);
+        std::format_to(std::back_inserter(plainTextFallback), "\n{}", presentation.headline);
       }
 
       auto deviceName = std::string{};
@@ -135,15 +124,13 @@ namespace ao::uimodel
         }
       }
 
-      view.audioPipeline = AudioPipelineView{.flow = state.quality.flow,
-                                             .quality = state.quality.overall,
-                                             .assessments = state.quality.assessments,
+      view.audioPipeline = AudioPipelineView{.quality = state.quality,
                                              .deviceName = std::move(deviceName),
                                              .deviceIconName = std::move(deviceIconName),
                                              .plainTextFallback = plainTextFallback};
 
       view.isActive = (state.quality.overall != audio::Quality::Unknown);
-      view.qualityCategory = audioQualityCategory(state.quality.overall);
+      view.qualityCategory = presentation.category;
     }
 
     if (_onRender)

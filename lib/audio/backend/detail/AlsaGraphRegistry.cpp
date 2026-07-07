@@ -30,13 +30,25 @@ namespace ao::audio::backend::detail
     {
       auto graph = flow::Graph{};
 
-      graph.nodes.push_back(
-        {.id = "alsa-stream", .type = flow::NodeType::Stream, .name = "ALSA Stream", .objectPath = ""});
+      graph.nodes.push_back({.id = "alsa-stream",
+                             .type = flow::NodeType::Stream,
+                             .name = "ALSA Stream",
+                             .optFormat = state.optFormat,
+                             .objectPath = ""});
 
-      auto sink = flow::Node{
-        .id = "alsa-sink", .type = flow::NodeType::Sink, .name = state.routeAnchor, .objectPath = state.routeAnchor};
+      auto sink = flow::Node{.id = "alsa-sink",
+                             .type = flow::NodeType::Sink,
+                             .name = state.routeAnchor,
+                             .optFormat = state.optFormat,
+                             .objectPath = state.routeAnchor};
 
       sink.isMuted = state.muted;
+
+      if (state.volumeMode == AlsaVolumeControlMode::SoftwareGain)
+      {
+        sink.maxSoftwareGain = state.volume;
+        sink.minSoftwareGain = state.volume;
+      }
 
       if (!isUnity(state.volume))
       {

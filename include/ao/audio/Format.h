@@ -25,6 +25,15 @@ namespace ao::audio
   };
 
   /**
+   * @brief Meaningful sample precision, falling back to container width when
+   * valid bits are unknown.
+   */
+  constexpr std::uint8_t effectiveBits(Format const& format) noexcept
+  {
+    return (format.validBits != 0U) ? format.validBits : format.bitDepth;
+  }
+
+  /**
    * @brief Storage size in bytes of one sample of the given format.
    *
    * Maps the logical bit depth onto the container width the decoders emit:

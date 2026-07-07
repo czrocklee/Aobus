@@ -24,11 +24,12 @@
   --ao-radius-md: 8px;
   --ao-radius-full: 100px;
 
-  /* Audio Quality Semantic Colors */
-  --ao-quality-perfect: #A855F7;
-  --ao-quality-lossless: #10B981;
-  --ao-quality-intervention: #F59E0B;
-  --ao-quality-lossy: #6B7280;
+  /* Audio Quality Visual Tiers */
+  --ao-quality-medal: #A855F7;
+  --ao-quality-positive: #10B981;
+  --ao-quality-diagnostic: #F59E0B;
+  --ao-quality-warning: #F59E0B;
+  --ao-quality-informational: #6B7280;
   --ao-quality-clipped: #EF4444;
 
   /* Opacity */

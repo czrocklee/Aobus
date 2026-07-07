@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/window.h>
 
+#include <memory>
 #include <utility>
 
 namespace ao::gtk::test
@@ -88,6 +89,23 @@ namespace ao::gtk::test
 
     secondToken.reset();
     CHECK_FALSE(window.has_css_class("ao-theme-modern"));
+  }
+
+  TEST_CASE("ThemeCoordinator - destroyed windows expire before token reset", "[gtk][unit][app][theme]")
+  {
+    auto const appPtr = ensureGtkApplication();
+    auto coordinator = ThemeCoordinator{};
+    auto token = ThemeRegistrationToken{};
+
+    {
+      auto windowPtr = std::make_unique<Gtk::Window>();
+      token = coordinator.registerToplevel(*windowPtr);
+      CHECK(windowPtr->has_css_class("ao-theme-classic"));
+      windowPtr.reset();
+    }
+
+    coordinator.setTheme(rt::ThemePresetId::Modern);
+    token.reset();
   }
 
   TEST_CASE("ThemeCoordinator - applyTo replaces stale theme classes", "[gtk][unit][app][theme]")

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
 #include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/audio/backend/detail/PipeWireMonitorHelpers.h>
 #include <ao/audio/backend/detail/PipeWireShared.h>
@@ -12,6 +13,7 @@ extern "C"
 #include <pipewire/keys.h>
 #include <spa/param/audio/raw.h>
 #include <spa/param/format.h>
+#include <spa/param/param.h>
 #include <spa/param/props.h>
 #include <spa/pod/body.h>
 #include <spa/pod/iter.h>
@@ -27,6 +29,7 @@ extern "C"
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -257,6 +260,35 @@ namespace ao::audio::backend::detail
     }
   }
 
+  std::optional<Format> currentFormatFromNodeParam(std::uint32_t const paramId, ::spa_pod const* const param) noexcept
+  {
+    if (paramId != SPA_PARAM_Format)
+    {
+      return std::nullopt;
+    }
+
+    return parseRawStreamFormat(param);
+  }
+
+  void updateCurrentFormatFromNodeParam(std::unordered_map<std::uint32_t, Format>& nodeFormatMap,
+                                        std::uint32_t const nodeId,
+                                        std::uint32_t const paramId,
+                                        ::spa_pod const* const param)
+  {
+    if (paramId != SPA_PARAM_Format)
+    {
+      return;
+    }
+
+    if (auto const optFmt = currentFormatFromNodeParam(paramId, param); optFmt)
+    {
+      nodeFormatMap[nodeId] = *optFmt;
+      return;
+    }
+
+    nodeFormatMap.erase(nodeId);
+  }
+
   namespace
   {
     bool copyFloatArray(::spa_pod const& pod, std::vector<float>& output)
@@ -334,27 +366,71 @@ namespace ao::audio::backend::detail
     }
   }
 
-  SinkProps::VolumeClassification SinkProps::classifyVolume() const noexcept
+  SinkProps::VolumeClassification SinkProps::classifyVolume(VolumeClassificationContext const context) const noexcept
   {
     static constexpr float kUnityEpsilon = 1e-4F;
     auto const isNotUnity = [](float val) { return std::abs(val - 1.0F) >= kUnityEpsilon; };
+    auto recordSoftwareGain = [](VolumeClassification& cls, float const gain)
+    {
+      if (cls.maxSoftwareGain == 0.0F || gain > cls.maxSoftwareGain)
+      {
+        cls.maxSoftwareGain = gain;
+      }
+
+      if (cls.minSoftwareGain == 0.0F || gain < cls.minSoftwareGain)
+      {
+        cls.minSoftwareGain = gain;
+      }
+    };
+    auto recordSoftwareGains = [&recordSoftwareGain](VolumeClassification& cls, std::vector<float> const& gains)
+    {
+      for (auto const gain : gains)
+      {
+        recordSoftwareGain(cls, gain);
+      }
+    };
 
     auto cls = VolumeClassification{};
 
-    if (hasSoftVolumes && std::ranges::any_of(softVolumes, isNotUnity))
+    bool const softNotUnity = hasSoftVolumes && std::ranges::any_of(softVolumes, isNotUnity);
+
+    if (softNotUnity)
     {
       cls.softwareNotUnity = true;
     }
 
+    if (hasSoftVolumes && !softVolumes.empty())
+    {
+      recordSoftwareGains(cls, softVolumes);
+    }
+
     bool const channelNotUnity = hasChannelVolumes && std::ranges::any_of(channelVolumes, isNotUnity);
     bool const scalarNotUnity = hasVolume && isNotUnity(volume);
+    bool const hardwareNotUnity =
+      (channelNotUnity && channelVolumesAreHardware) || (scalarNotUnity && volumeIsHardware);
+    bool const ambiguousNotUnity =
+      (channelNotUnity && !channelVolumesAreHardware) || (scalarNotUnity && !volumeIsHardware);
 
-    if ((channelNotUnity && channelVolumesAreHardware) || (scalarNotUnity && volumeIsHardware))
+    if (hardwareNotUnity)
     {
       cls.hardwareNotUnity = true;
     }
 
-    if ((channelNotUnity || scalarNotUnity) && !cls.hardwareNotUnity && !cls.softwareNotUnity)
+    if (context == VolumeClassificationContext::Stream && ambiguousNotUnity)
+    {
+      cls.softwareNotUnity = true;
+
+      if (channelNotUnity)
+      {
+        recordSoftwareGains(cls, channelVolumes);
+      }
+
+      if (scalarNotUnity)
+      {
+        recordSoftwareGain(cls, volume);
+      }
+    }
+    else if (ambiguousNotUnity && !softNotUnity)
     {
       cls.unclassifiedNotUnity = true;
     }

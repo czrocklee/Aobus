@@ -112,7 +112,7 @@ namespace ao::tui::test
     CHECK(overlayLabel(Overlay::None) == "Tracks");
     CHECK(overlayLabel(Overlay::ListChooser) == "Lists");
     CHECK(overlayLabel(Overlay::DetailPanel) == "Detail");
-    CHECK(overlayLabel(Overlay::QualityPanel) == "Quality");
+    CHECK(overlayLabel(Overlay::QualityPanel) == "Pipeline");
     CHECK(overlayLabel(Overlay::OutputDevices) == "Output");
     CHECK(overlayLabel(Overlay::PresentationPanel) == "Views");
     CHECK(overlayLabel(Overlay::Help) == "Help");
@@ -121,7 +121,7 @@ namespace ao::tui::test
   TEST_CASE("ShellModel - overlay hints are stable", "[tui][unit][shell]")
   {
     CHECK(overlayHint(Overlay::None) ==
-          "/ command  l lists  v view  d detail  a quality  o output  { } groups  Ctrl-L current  q quit");
+          "/ command  l lists  v view  d detail  a pipeline  o output  { } groups  Ctrl-L current  q quit");
     CHECK(overlayHint(Overlay::ListChooser) == "l toggle  Enter open  Esc close");
     CHECK(overlayHint(Overlay::DetailPanel) == "d toggle  Esc close");
     CHECK(overlayHint(Overlay::QualityPanel) == "a toggle  Esc close");

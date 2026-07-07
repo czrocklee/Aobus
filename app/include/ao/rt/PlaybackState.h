@@ -8,7 +8,6 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Transport.h>
-#include <ao/audio/flow/Graph.h>
 
 #include <chrono>
 #include <cstdint>
@@ -118,9 +117,11 @@ namespace ao::rt
 
   struct QualityState final
   {
+    audio::Quality sourceQuality = audio::Quality::Unknown;
+    audio::Quality pipelineQuality = audio::Quality::Unknown;
     audio::Quality overall = audio::Quality::Unknown;
+    bool fullyVerified = true;
     std::vector<audio::NodeQualityAssessment> assessments{};
-    audio::flow::Graph flow{};
 
     bool operator==(QualityState const&) const = default;
   };

@@ -49,7 +49,7 @@ namespace ao::rt
 
     struct QualityChanged final
     {
-      audio::Quality quality = audio::Quality::Unknown;
+      QualityState quality{};
       bool ready = false;
     };
 

@@ -20,7 +20,7 @@ namespace ao::gtk
 {
   /**
    * PlaybackDetailsWidget displays source stream information (sample rate, bit depth)
-   * and an audio quality status icon with detailed pipeline tooltips.
+   * and an audio pipeline status icon with detailed pipeline tooltips.
    */
   class PlaybackDetailsWidget final
   {

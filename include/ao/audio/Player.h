@@ -53,7 +53,10 @@ namespace ao::audio
       Engine::Status engine;
       std::vector<IBackendProvider::Status> availableBackends;
       flow::Graph flow;
+      Quality sourceQuality = Quality::Unknown;
+      Quality pipelineQuality = Quality::Unknown;
       Quality quality = Quality::Unknown;
+      bool qualityFullyVerified = true;
       std::vector<NodeQualityAssessment> qualityAssessments{};
       float volume = 1.0F;
       bool muted = false;
@@ -105,7 +108,7 @@ namespace ao::audio
     void setOnOutputDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback);
 
     /// Called when playback quality or readiness changes.
-    void setOnQualityChanged(std::function<void(Quality quality, bool ready)> callback);
+    void setOnQualityChanged(std::function<void(QualityResult const& quality, bool ready)> callback);
 
     // Internal visibility for tests
     void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);

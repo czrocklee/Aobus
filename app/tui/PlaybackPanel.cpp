@@ -16,7 +16,6 @@
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
 
-#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -34,9 +33,9 @@ namespace ao::tui
     constexpr std::int32_t kOutputDeviceRows = 14;
     constexpr std::int32_t kOutputDeviceInnerColumns = kOutputDevicePanelColumns - 2;
 
-    ftxui::Element qualityDot(audio::Quality const quality)
+    ftxui::Element qualityDot(uimodel::AudioQualityCategory const category)
     {
-      auto const style = qualityIndicatorStyle(quality);
+      auto const style = qualityIndicatorStyle(category);
       return ftxui::text("●") | ftxui::color(ftxui::Color::RGB(style.red, style.green, style.blue));
     }
 
@@ -94,7 +93,9 @@ namespace ao::tui
 
     auto fallbackState = rt::PlaybackState{};
     auto const& state = view.playbackState == nullptr ? fallbackState : *view.playbackState;
-    auto const quality = qualityIndicatorStyle(state.quality.overall);
+    auto const presentation = uimodel::audioQualityPresentation(state.quality);
+    auto const quality = presentation.headline.empty() ? qualityIndicatorStyle(state.quality.overall)
+                                                       : qualityIndicatorStyle(presentation.category);
     auto const title = state.nowPlaying.title.empty() ? std::string{"No active track"} : state.nowPlaying.title;
     auto const artist = state.nowPlaying.artist.empty() ? std::string{"-"} : state.nowPlaying.artist;
     auto const elapsed = formatDuration(view.displayElapsed);
@@ -167,46 +168,36 @@ namespace ao::tui
 
     rows.push_back(hbox({
       text(deviceName.empty() ? "Audio Pipeline" : deviceName) | bold | flex,
-      qualityDot(state.quality.overall),
+      qualityDot(uimodel::audioQualityPresentation(state.quality).category),
     }));
     rows.push_back(separator());
 
-    auto const path = uimodel::playbackPath(state.quality.flow);
-
-    if (path.empty())
+    if (state.quality.assessments.empty())
     {
       rows.push_back(text("No audio pipeline yet") | dim);
     }
 
-    for (auto const* node : path)
+    for (auto const& assessment : state.quality.assessments)
     {
-      auto nodeLine = uimodel::audioNodeTypeLabel(node->type);
+      auto nodeLine = uimodel::audioNodeTypeLabel(assessment.nodeType);
 
-      if (!node->name.empty())
+      if (!assessment.nodeName.empty())
       {
         nodeLine.append(" ");
-        nodeLine.append(node->name);
+        nodeLine.append(assessment.nodeName);
       }
 
-      if (node->optFormat)
+      if (assessment.optFormat)
       {
-        auto const preferValidBits = node->type == audio::flow::NodeType::Source;
+        auto const preferValidBits = assessment.nodeType == audio::flow::NodeType::Source;
         nodeLine.append(" (");
-        nodeLine.append(uimodel::audioFormatLabel(*node->optFormat, preferValidBits));
+        nodeLine.append(uimodel::audioFormatLabel(*assessment.optFormat, preferValidBits));
         nodeLine.push_back(')');
       }
 
       rows.push_back(text(nodeLine));
 
-      auto const assessmentIt =
-        std::ranges::find(state.quality.assessments, node->id, &audio::NodeQualityAssessment::nodeId);
-
-      if (assessmentIt == state.quality.assessments.end())
-      {
-        continue;
-      }
-
-      for (auto const& finding : assessmentIt->findings)
+      for (auto const& finding : assessment.findings)
       {
         auto const findingText = uimodel::audioFindingLabel(finding);
 
@@ -217,20 +208,20 @@ namespace ao::tui
 
         rows.push_back(hbox({
           text("  "),
-          qualityDot(uimodel::qualityForFinding(finding)),
+          qualityDot(uimodel::audioFindingCategory(finding)),
           text(" " + findingText) | dim,
         }));
       }
     }
 
-    auto const conclusion = uimodel::audioQualityConclusion(state.quality.overall);
+    auto const presentation = uimodel::audioQualityPresentation(state.quality);
 
-    if (!conclusion.empty())
+    if (!presentation.headline.empty())
     {
       rows.push_back(separator());
       rows.push_back(hbox({
-        qualityDot(state.quality.overall),
-        text(" " + conclusion),
+        qualityDot(presentation.category),
+        text(" " + presentation.headline),
       }));
     }
 

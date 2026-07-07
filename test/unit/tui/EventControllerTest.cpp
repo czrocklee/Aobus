@@ -174,11 +174,11 @@ namespace ao::tui::test
 
     CHECK(controller.handleEvent(ftxui::Event::Character("a")));
     CHECK(fixture.shell.overlay() == Overlay::QualityPanel);
-    CHECK(controller.statusMessage() == "Audio quality");
+    CHECK(controller.statusMessage() == "Audio pipeline");
 
     CHECK(controller.handleEvent(ftxui::Event::Character("a")));
     CHECK(fixture.shell.overlay() == Overlay::None);
-    CHECK(controller.statusMessage() == "Quality closed");
+    CHECK(controller.statusMessage() == "Pipeline closed");
   }
 
   TEST_CASE("EventController - output shortcut toggles the output overlay", "[tui][unit][event]")
@@ -211,7 +211,7 @@ namespace ao::tui::test
     REQUIRE(library.selectedTrack() == 0);
     CHECK(controller.handleEvent(ftxui::Event::Character("a")));
     REQUIRE(fixture.shell.overlay() == Overlay::QualityPanel);
-    REQUIRE(controller.statusMessage() == "Audio quality");
+    REQUIRE(controller.statusMessage() == "Audio pipeline");
 
     auto const workspaceEvents = std::vector{
       ftxui::Event::PageDown,
@@ -236,12 +236,12 @@ namespace ao::tui::test
     {
       CHECK(controller.handleEvent(event));
       CHECK(library.selectedTrack() == 0);
-      CHECK(controller.statusMessage() == "Audio quality");
+      CHECK(controller.statusMessage() == "Audio pipeline");
     }
 
     CHECK(controller.handleEvent(ftxui::Event::Character("a")));
     CHECK(fixture.shell.overlay() == Overlay::None);
-    CHECK(controller.statusMessage() == "Quality closed");
+    CHECK(controller.statusMessage() == "Pipeline closed");
   }
 
   TEST_CASE("EventController - non-list modal overlays do not page the track table", "[tui][regression][event]")
@@ -388,7 +388,7 @@ namespace ao::tui::test
 
     enterCommand(controller, "quality");
     CHECK(fixture.shell.overlay() == Overlay::QualityPanel);
-    CHECK(controller.statusMessage() == "Audio quality");
+    CHECK(controller.statusMessage() == "Audio pipeline");
     CHECK(controller.handleEvent(ftxui::Event::Escape));
 
     enterCommand(controller, "views");

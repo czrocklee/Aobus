@@ -299,18 +299,18 @@ namespace ao::gtk
     queue_draw();
   }
 
-  Gdk::RGBA AobusSoul::mapAuraColor(ao::uimodel::AuraColor color)
+  Gdk::RGBA AobusSoul::mapSoulAura(ao::uimodel::SoulAura aura)
   {
-    using Color = ao::uimodel::AuraColor;
+    using Aura = ao::uimodel::SoulAura;
 
-    switch (color)
+    switch (aura)
     {
-      case Color::Idle: return Gdk::RGBA{"#00E5FF"};
-      case Color::Unknown: return Gdk::RGBA{"#6B7280"};
-      case Color::Perfect: return Gdk::RGBA{"#A855F7"};
-      case Color::Lossless: return Gdk::RGBA{"#10B981"};
-      case Color::Intervention: return Gdk::RGBA{"#F59E0B"};
-      case Color::Clipped: return Gdk::RGBA{"#EF4444"};
+      case Aura::Dormant: return Gdk::RGBA{"#00E5FF"};
+      case Aura::Veiled: return Gdk::RGBA{"#6B7280"};
+      case Aura::Radiant: return Gdk::RGBA{"#A855F7"};
+      case Aura::Flowing: return Gdk::RGBA{"#10B981"};
+      case Aura::Turbulent: return Gdk::RGBA{"#F59E0B"};
+      case Aura::Burning: return Gdk::RGBA{"#EF4444"};
     }
 
     return Gdk::RGBA{"#6B7280"};

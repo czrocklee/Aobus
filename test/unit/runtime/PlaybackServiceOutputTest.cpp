@@ -78,9 +78,13 @@ namespace ao::rt::test
     REQUIRE(qualityFixture.executor.drainUntil([&] { return !routedQualityEvents.empty(); }));
 
     REQUIRE(routedQualityEvents.size() == 1);
-    CHECK(routedQualityEvents[0].quality == audio::Quality::BitwisePerfect);
+    CHECK(routedQualityEvents[0].quality.overall == audio::Quality::BitwisePerfect);
+    CHECK(routedQualityEvents[0].quality.sourceQuality == qualityFixture.playbackService.state().quality.sourceQuality);
+    CHECK(routedQualityEvents[0].quality.pipelineQuality ==
+          qualityFixture.playbackService.state().quality.pipelineQuality);
+    CHECK(routedQualityEvents[0].quality.fullyVerified == qualityFixture.playbackService.state().quality.fullyVerified);
     CHECK(routedQualityEvents[0].ready == true);
-    CHECK(routedQualityEvents[0].quality == qualityFixture.playbackService.state().quality.overall);
+    CHECK(routedQualityEvents[0].quality.overall == qualityFixture.playbackService.state().quality.overall);
     CHECK(routedQualityEvents[0].ready == qualityFixture.playbackService.state().ready);
   }
 
