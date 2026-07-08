@@ -10,7 +10,7 @@
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -105,7 +105,7 @@ namespace ao::uimodel::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const firstTrack = fixture.testLib.addTrack({.title = "Queue First", .uri = fixturePath});
     auto const secondTrack = fixture.testLib.addTrack({.title = "Queue Second", .uri = fixturePath});
-    auto queue = PlaybackQueueModel{fixture.playbackService, fixture.notificationService};
+    auto queue = PlaybackQueueSession{fixture.playbackService, fixture.notificationService};
     auto commands = PlaybackCommandSurface{fixture.playbackService, &queue, [] {}};
 
     SECTION("Next and Previous enablement follows real queue targets")

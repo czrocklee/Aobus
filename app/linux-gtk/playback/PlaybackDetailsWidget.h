@@ -45,6 +45,6 @@ namespace ao::gtk
     Gtk::Label _streamInfoLabel;
     Gtk::Image _sinkStatusIcon;
 
-    uimodel::NowPlayingViewModel _controller;
+    uimodel::NowPlayingViewModel _nowPlayingViewModel;
   };
 } // namespace ao::gtk

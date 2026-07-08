@@ -29,6 +29,7 @@ class CliParseTest(unittest.TestCase):
             "check",
             "test",
             "test-audit",
+            "name-audit",
             "coverage",
             "tidy",
             "analyze",
@@ -104,6 +105,11 @@ class CliParseTest(unittest.TestCase):
         args = self.parse(["test-audit", "--fail-on-issue", "test/unit/query"])
         self.assertTrue(args.fail_on_issue)
         self.assertEqual(args.paths, ["test/unit/query"])
+
+    def test_name_audit_arguments(self):
+        args = self.parse(["name-audit", "--fail-on-issue", "app/include/ao/uimodel"])
+        self.assertTrue(args.fail_on_issue)
+        self.assertEqual(args.paths, ["app/include/ao/uimodel"])
 
     def test_test_suite_targets_use_suite_name_suffixes(self):
         self.assertEqual(

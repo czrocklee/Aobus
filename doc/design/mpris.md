@@ -139,7 +139,7 @@ No D-Bus callback may touch audio engine internals or block on decoder work.
 2. External protocols talk to `PlaybackCommandSurface`, never to the layout
    action registry.
 3. Queue consistency under playback-mode changes is guaranteed by
-   `PlaybackQueueModel` subscriptions to `PlaybackService` mode events.
+   `PlaybackQueueSession` subscriptions to `PlaybackService` mode events.
 4. Command availability has one owner and one change event:
    `PlaybackCommandSurface::onAvailabilityChanged()`.
 5. View models describe presentation. Command execution and enablement live in

@@ -28,7 +28,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -188,11 +188,11 @@ namespace ao::gtk::test
 
     coordinator.initializeSession();
 
-    auto* const queueModel = coordinator.playbackQueueModel();
-    REQUIRE(queueModel != nullptr);
-    CHECK(queueModel->isActive());
-    CHECK(queueModel->nowPlayingTrackId() == trackId);
-    CHECK(queueModel->sourceListId() == rt::kAllTracksListId);
+    auto* const queueSession = coordinator.playbackQueueSession();
+    REQUIRE(queueSession != nullptr);
+    CHECK(queueSession->isActive());
+    CHECK(queueSession->nowPlayingTrackId() == trackId);
+    CHECK(queueSession->sourceListId() == rt::kAllTracksListId);
     CHECK(runtime.playback().state().transport == audio::Transport::Idle);
     CHECK(runtime.playback().state().nowPlaying.trackId == trackId);
     CHECK(runtime.playback().state().elapsed == std::chrono::milliseconds{6789});

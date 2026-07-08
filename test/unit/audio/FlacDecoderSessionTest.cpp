@@ -6,7 +6,7 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/PcmConverter.h>
+#include <ao/audio/PcmConversion.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -80,7 +80,7 @@ namespace ao::audio::test
     REQUIRE(sourceBlock->frames == targetBlock->frames);
 
     auto sourceSamples = std::vector<std::int32_t>(sourceBlock->bytes.size() / 3U);
-    PcmConverter::unpackS24(sourceBlock->bytes, sourceSamples);
+    unpackS24PcmSamples(sourceBlock->bytes, sourceSamples);
     auto const targetSamples = utility::layout::viewArray<std::int16_t>(targetBlock->bytes);
     auto const samplesToCheck = std::min({sourceSamples.size(), targetSamples.size(), std::size_t{256}});
     REQUIRE(samplesToCheck > 0);

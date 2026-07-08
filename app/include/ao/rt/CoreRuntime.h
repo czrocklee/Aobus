@@ -21,7 +21,7 @@ namespace ao::rt
 {
   class CompletionService;
   class Library;
-  class ListSourceStore;
+  class TrackSourceCache;
   class NotificationService;
 
   /**
@@ -49,7 +49,7 @@ namespace ao::rt
     std::filesystem::path const& databasePath() const noexcept;
 
     CompletionService& completion() noexcept;
-    ListSourceStore& sources() noexcept;
+    TrackSourceCache& sources() noexcept;
     NotificationService& notifications() noexcept;
 
     async::Runtime& async() noexcept;

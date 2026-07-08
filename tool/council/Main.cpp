@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "council/CouncilSchema.h"
 #include "council/Engine.h"
-#include "council/Model.h"
 #include "council/ProcessRunner.h"
 #include "council/Serialization.h"
 #include <ao/Error.h>

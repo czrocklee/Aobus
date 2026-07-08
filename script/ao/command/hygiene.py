@@ -1,4 +1,4 @@
-"""ao hygiene - the check-only commit gate: format, test naming, and tidy checks.
+"""ao hygiene - the check-only commit gate: format, naming audits, and tidy checks.
 
 Deliberately never modifies files: rewriting sources mid-session disturbs in-flight work,
 and most clang-tidy findings have no safe auto-fix. The gate reports; fixes are applied
@@ -17,9 +17,9 @@ from collections.abc import Callable
 
 from ..core import tidyengine
 from . import format as format_command
-from . import test_audit, tidy
+from . import name_audit, test_audit, tidy
 
-HELP = "Run the commit gate: format --check, test-audit, then tidy (check-only, never edits files)"
+HELP = "Run the commit gate: format --check, naming audits, then tidy (check-only, never edits files)"
 
 EPILOG = """\
 With no paths, checks files changed against local main + working tree + staged + untracked.
@@ -89,6 +89,10 @@ def _test_audit_args() -> argparse.Namespace:
     return _subcommand_defaults(test_audit.register, "test-audit", paths=[], fail_on_issue=True)
 
 
+def _name_audit_args() -> argparse.Namespace:
+    return _subcommand_defaults(name_audit.register, "name-audit", paths=[], fail_on_issue=True)
+
+
 def run_command(args: argparse.Namespace) -> int:
     print("=== format --check ===")
     format_failed = format_command.run_command(_format_args(args)) != 0
@@ -98,10 +102,14 @@ def run_command(args: argparse.Namespace) -> int:
     test_audit_failed = test_audit.run_command(_test_audit_args()) != 0
 
     print()
+    print("=== name-audit ===")
+    name_audit_failed = name_audit.run_command(_name_audit_args()) != 0
+
+    print()
     print("=== tidy ===")
     tidy_failed = tidy.run_command(_tidy_args(args)) != 0
 
-    if not (format_failed or test_audit_failed or tidy_failed):
+    if not (format_failed or test_audit_failed or name_audit_failed or tidy_failed):
         return 0
 
     print("Hygiene issues found. This gate is check-only; fix and re-run.", file=sys.stderr)
@@ -122,6 +130,12 @@ def run_command(args: argparse.Namespace) -> int:
         print(
             "  - Test names/tags: fix the reported TEST_CASE names or tags, then rerun "
             "./ao test-audit --fail-on-issue.",
+            file=sys.stderr,
+        )
+    if name_audit_failed:
+        print(
+            "  - Class/file names: fix the reported role or catch-all names, then rerun "
+            "./ao name-audit --fail-on-issue.",
             file=sys.stderr,
         )
     return 1

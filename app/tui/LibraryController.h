@@ -3,7 +3,10 @@
 
 #pragma once
 
-#include "Model.h"
+#include "LibraryNavigation.h"
+#include "TrackListEntry.h"
+#include "TrackPresentationNavigation.h"
+#include "TrackSection.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/Subscription.h>
 #include <ao/rt/ViewIds.h>
@@ -29,7 +32,7 @@ namespace ao::tui
 
   struct SelectedTrackView final
   {
-    TrackListItem const* track = nullptr;
+    TrackListEntry const* track = nullptr;
     ResourceId coverArtId = kInvalidResourceId;
   };
 
@@ -38,10 +41,10 @@ namespace ao::tui
   public:
     explicit LibraryController(rt::AppRuntime& runtime);
 
-    std::vector<LibraryNavItem> const& libraryItems() const noexcept { return _libraryItems; }
+    std::vector<LibraryNavEntry> const& libraryEntries() const noexcept { return _libraryEntries; }
     std::vector<std::string> const& libraryLabels() const noexcept { return _libraryLabels; }
-    std::vector<PresentationNavItem> const& presentationItems() const noexcept { return _presentationItems; }
-    std::vector<TrackListItem> const& tracks() const noexcept { return _tracks; }
+    std::vector<TrackPresentationNavEntry> const& presentationEntries() const noexcept { return _presentationEntries; }
+    std::vector<TrackListEntry> const& tracks() const noexcept { return _tracks; }
     std::vector<TrackSection> const& sections() const noexcept { return _sections; }
     ListId currentListId() const noexcept { return _currentListId; }
     rt::ViewId activeViewId() const noexcept { return _activeViewId; }
@@ -75,11 +78,11 @@ namespace ao::tui
     bool setSelectedTrackById(TrackId trackId);
     void syncSelectedPresentation(std::string_view presentationId);
     void refreshPresentationNavigation();
-    std::vector<LibraryNavItem> loadLibraryNavigation();
-    std::vector<PresentationNavItem> loadPresentationNavigation();
+    std::vector<LibraryNavEntry> loadLibraryNavigation();
+    std::vector<TrackPresentationNavEntry> loadPresentationNavigation();
     struct TrackItemsSnapshot final
     {
-      std::vector<TrackListItem> tracks{};
+      std::vector<TrackListEntry> tracks{};
       std::vector<TrackSection> sections{};
     };
 
@@ -87,10 +90,10 @@ namespace ao::tui
     TrackItemsSnapshot loadTrackItems(ListId listId);
 
     rt::AppRuntime& _runtime;
-    std::vector<LibraryNavItem> _libraryItems{};
+    std::vector<LibraryNavEntry> _libraryEntries{};
     std::vector<std::string> _libraryLabels{};
-    std::vector<PresentationNavItem> _presentationItems{};
-    std::vector<TrackListItem> _tracks{};
+    std::vector<TrackPresentationNavEntry> _presentationEntries{};
+    std::vector<TrackListEntry> _tracks{};
     std::vector<TrackSection> _sections{};
     ListId _currentListId{rt::kAllTracksListId};
     rt::ViewId _activeViewId{rt::kInvalidViewId};

@@ -49,6 +49,6 @@ namespace ao::gtk
 
     Gtk::ListBox _listBox;
     Glib::RefPtr<Gio::ListStore<Glib::Object>> _storePtr{};
-    uimodel::OutputDeviceViewModel _outputDeviceController;
+    uimodel::OutputDeviceViewModel _outputDeviceViewModel;
   };
 } // namespace ao::gtk

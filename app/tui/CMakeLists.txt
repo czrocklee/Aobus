@@ -22,8 +22,15 @@ add_library(aobus-tui-lib STATIC
     Style.cpp
     TrackTable.cpp
     TuiHitRegions.cpp
-    Model.cpp
-    ShellModel.cpp
+    LibraryNavigation.cpp
+    PlaybackStatusFormatter.cpp
+    QualityIndicatorStyle.cpp
+    SelectionNavigation.cpp
+    TrackDetailLines.cpp
+    TrackListEntry.cpp
+    TrackPresentationNavigation.cpp
+    TrackSection.cpp
+    ShellInteractionModel.cpp
     SoulButton.cpp
     TextCell.cpp
 )

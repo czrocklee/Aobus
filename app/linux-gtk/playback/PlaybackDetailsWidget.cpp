@@ -18,7 +18,7 @@ namespace ao::gtk
   }
 
   PlaybackDetailsWidget::PlaybackDetailsWidget(rt::PlaybackService& playbackService)
-    : _controller{playbackService, [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
+    : _nowPlayingViewModel{playbackService, [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
   {
     _container.set_spacing(layout::kSpacingLarge);
     _container.add_css_class("ao-playback-details");

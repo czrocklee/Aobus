@@ -22,7 +22,7 @@
 namespace ao::gtk
 {
   VolumeControl::VolumeControl(rt::PlaybackService& playbackService)
-    : _controller{playbackService, [this](ao::uimodel::VolumeViewState const& state) { applyState(state); }}
+    : _volumeViewModel{playbackService, [this](ao::uimodel::VolumeViewState const& state) { applyState(state); }}
   {
     _button.set_child(_icon);
     _button.set_valign(Gtk::Align::CENTER);
@@ -41,7 +41,7 @@ namespace ao::gtk
         }
         else if (button == GDK_BUTTON_MIDDLE)
         {
-          _controller.toggleMuted();
+          _volumeViewModel.toggleMuted();
         }
       },
       false);
@@ -53,7 +53,7 @@ namespace ao::gtk
     scrollControllerPtr->signal_scroll().connect(
       [this](double /*dx*/, double dy)
       {
-        _controller.handleScroll(dy);
+        _volumeViewModel.handleScroll(dy);
 
         // Show bubble
         if (!_popover.get_visible())
@@ -112,7 +112,7 @@ namespace ao::gtk
           return;
         }
 
-        _controller.handleVolumeChanged(static_cast<float>(_scale.get_value()));
+        _volumeViewModel.handleVolumeChanged(static_cast<float>(_scale.get_value()));
       });
     vbox->append(_scale);
 
@@ -127,7 +127,7 @@ namespace ao::gtk
           return;
         }
 
-        _controller.handleMutedChanged(_muteButton.get_active());
+        _volumeViewModel.handleMutedChanged(_muteButton.get_active());
       });
     vbox->append(_muteButton);
 

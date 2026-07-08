@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "Model.h"
+#include "TrackListEntry.h"
+#include "TrackSection.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -41,7 +42,7 @@ namespace ao::tui
     std::int32_t columns = 0;
   };
 
-  struct TrackSectionRowBox final
+  struct TrackSectionRowHitRegion final
   {
     std::int32_t sectionIndex = -1;
     ftxui::Box box{};
@@ -51,7 +52,7 @@ namespace ao::tui
   {
     std::vector<TrackColumnWidthOverride> const* columnWidths = nullptr;
     std::vector<TrackColumnResizeHandle>* resizeHandles = nullptr;
-    std::vector<TrackSectionRowBox>* sectionRowBoxes = nullptr;
+    std::vector<TrackSectionRowHitRegion>* sectionRowHitRegions = nullptr;
     ftxui::Box* tableBox = nullptr;
     std::int32_t availableColumns = 0;
   };
@@ -61,12 +62,12 @@ namespace ao::tui
                                       std::size_t trackCount,
                                       std::span<TrackSection const> sections) noexcept;
 
-  ftxui::Element trackTableView(std::span<TrackListItem const> tracks,
+  ftxui::Element trackTableView(std::span<TrackListEntry const> tracks,
                                 std::int32_t selected,
                                 TrackId playingTrackId,
                                 rt::TrackPresentationSpec const& presentation,
                                 TrackTableViewOptions options = {});
-  ftxui::Element trackTableView(std::span<TrackListItem const> tracks,
+  ftxui::Element trackTableView(std::span<TrackListEntry const> tracks,
                                 std::span<TrackSection const> sections,
                                 std::int32_t selected,
                                 TrackId playingTrackId,

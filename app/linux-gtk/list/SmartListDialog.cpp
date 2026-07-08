@@ -18,11 +18,15 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>
-#include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/uimodel/library/list/SmartListEditorModel.h>
+#include <ao/rt/source/TrackSourceCache.h>
+#include <ao/uimodel/library/list/SmartListDraft.h>
+#include <ao/uimodel/library/list/SmartListEditorViewState.h>
+#include <ao/uimodel/library/list/SmartListExpression.h>
+#include <ao/uimodel/library/list/SmartListPreview.h>
+#include <ao/uimodel/library/list/SmartListTrackPresentationResolver.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
@@ -93,7 +97,7 @@ namespace ao::gtk
     _okButton->set_label("Save");
 
     auto const presentationIndex =
-      uimodel::SmartListEditorModel::presentationIndexForId(optPresentationId, rt::builtinTrackPresentationPresets());
+      uimodel::resolveSmartListTrackPresentationIndex(optPresentationId, rt::builtinTrackPresentationPresets());
     _presentationDropDown.set_selected(static_cast<std::uint32_t>(presentationIndex));
 
     updateDialogState();
@@ -109,7 +113,7 @@ namespace ao::gtk
     auto const selected = _presentationDropDown.get_selected();
     auto const localExpr = std::string{_exprBox.entry().get_text()};
 
-    return uimodel::SmartListEditorModel::resolvePresentationId(
+    return uimodel::resolveSmartListTrackPresentationId(
       selected, selected != GTK_INVALID_LIST_POSITION, localExpr, rt::builtinTrackPresentationPresets(), {});
   }
 
@@ -277,7 +281,7 @@ namespace ao::gtk
           auto const artistText = artist != nullptr ? std::string_view{artist->raw()} : std::string_view{};
           auto const albumText = album != nullptr ? std::string_view{album->raw()} : std::string_view{};
 
-          label->set_text(uimodel::SmartListEditorModel::previewTrackLabel(titleText, artistText, albumText));
+          label->set_text(uimodel::formatSmartListPreviewTrackLabel(titleText, artistText, albumText));
         }
       });
 
@@ -341,20 +345,18 @@ namespace ao::gtk
       }
     }
 
-    _inheritedExprLabel.set_text(uimodel::SmartListEditorModel::formatExpressionDisplayText(inheritedExpr));
+    _inheritedExprLabel.set_text(uimodel::formatSmartListExpressionDisplayText(inheritedExpr));
 
     auto const localExpr = std::string{_exprBox.entry().get_text()};
-    auto const effectiveExpression =
-      ao::uimodel::SmartListEditorModel::composeEffectiveExpression(inheritedExpr, localExpr);
-    _effectiveExprLabel.set_text(uimodel::SmartListEditorModel::formatExpressionDisplayText(effectiveExpression));
+    auto const effectiveExpression = ao::uimodel::combineSmartListEffectiveExpression(inheritedExpr, localExpr);
+    _effectiveExprLabel.set_text(uimodel::formatSmartListExpressionDisplayText(effectiveExpression));
   }
 
   void SmartListDialog::updateDialogState()
   {
-    auto const status =
-      ao::uimodel::SmartListEditorModel::dialogStatus(_expressionValid, _previewFilteredListPtr != nullptr);
+    auto const status = ao::uimodel::deriveSmartListPreviewStatus(_expressionValid, _previewFilteredListPtr != nullptr);
 
-    _okButton->set_sensitive(ao::uimodel::SmartListEditorModel::canSubmit(_nameEntry.get_text().raw(), status));
+    _okButton->set_sensitive(ao::uimodel::canSubmitSmartListDraft(_nameEntry.get_text().raw(), status));
   }
 
   void SmartListDialog::updatePreview()
@@ -363,7 +365,7 @@ namespace ao::gtk
 
     if (!_previewFilteredListPtr)
     {
-      auto const state = ao::uimodel::SmartListEditorModel::previewState(ao::uimodel::SmartListPreviewInput{
+      auto const state = ao::uimodel::makeSmartListEditorViewState(ao::uimodel::SmartListPreviewState{
         .name = _nameEntry.get_text().raw(),
         .localExpression = _exprBox.entry().get_text().raw(),
         .hasPreviewSource = false,
@@ -389,7 +391,7 @@ namespace ao::gtk
     auto const errorMessage = optError ? optError->message : std::string{};
     auto const matchCount = _previewFilteredListPtr->size();
 
-    auto const state = ao::uimodel::SmartListEditorModel::previewState(ao::uimodel::SmartListPreviewInput{
+    auto const state = ao::uimodel::makeSmartListEditorViewState(ao::uimodel::SmartListPreviewState{
       .name = _nameEntry.get_text().raw(),
       .localExpression = expr,
       .hasPreviewSource = true,
@@ -420,7 +422,7 @@ namespace ao::gtk
 
   rt::LibraryWriter::ListDraft SmartListDialog::draft() const
   {
-    return ao::uimodel::SmartListEditorModel::makeDraft(
+    return ao::uimodel::makeSmartListDraft(
       _parentListId, _editListId, _nameEntry.get_text(), _descEntry.get_text(), _exprBox.entry().get_text());
   }
 } // namespace ao::gtk

@@ -65,17 +65,17 @@ namespace ao::tui
   }
 
   ftxui::Element notificationCenterPanel(uimodel::ActivityStatusViewState const& state,
-                                         std::vector<NotificationDetailRowBox>* const rowBoxes,
+                                         std::vector<NotificationDetailRowHitRegion>* const rowHitRegions,
                                          std::int32_t const columns)
   {
     using namespace ftxui;
 
     auto const panelColumns = columns <= 0 ? notificationCenterPanelColumns(state, 0) : columns;
 
-    if (rowBoxes != nullptr)
+    if (rowHitRegions != nullptr)
     {
-      rowBoxes->clear();
-      rowBoxes->reserve(state.detail.items.size());
+      rowHitRegions->clear();
+      rowHitRegions->reserve(state.detail.items.size());
     }
 
     auto rows = Elements{};
@@ -132,10 +132,10 @@ namespace ao::tui
         item.dismissible ? text(" x") | dim : emptyElement(),
       });
 
-      if (rowBoxes != nullptr)
+      if (rowHitRegions != nullptr)
       {
-        rowBoxes->push_back(NotificationDetailRowBox{.id = item.id, .dismissible = item.dismissible});
-        rowPtr = std::move(rowPtr) | reflect(rowBoxes->back().box);
+        rowHitRegions->push_back(NotificationDetailRowHitRegion{.id = item.id, .dismissible = item.dismissible});
+        rowPtr = std::move(rowPtr) | reflect(rowHitRegions->back().box);
       }
 
       rows.push_back(std::move(rowPtr));

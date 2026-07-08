@@ -21,7 +21,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/applicationwindow.h>
@@ -109,13 +109,13 @@ namespace ao::gtk::test
     auto const storePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
     auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state");
     auto themeController = ThemeCoordinator{};
-    auto queueModel = uimodel::PlaybackQueueModel{runtime.playback(), runtime.notifications()};
+    auto queueSession = uimodel::PlaybackQueueSession{runtime.playback(), runtime.notifications()};
     auto commandSurface = uimodel::PlaybackCommandSurface{
-      runtime.playback(), &queueModel, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+      runtime.playback(), &queueSession, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
     auto controller =
       ShellLayoutController{runtime, window, configPtr, storePtr, componentStateStorePtr, themeController};
     controller.bindServices(
-      GtkUiServices{.playbackQueueModel = &queueModel, .playbackCommandSurface = &commandSurface});
+      GtkUiServices{.playbackQueueSession = &queueSession, .playbackCommandSurface = &commandSurface});
 
     SECTION("attachToWindow sets child")
     {

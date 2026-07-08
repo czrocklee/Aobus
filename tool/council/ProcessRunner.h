@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "council/Model.h"
+#include "council/CouncilSchema.h"
 
 #include <chrono>
 #include <cstddef>

@@ -20,7 +20,7 @@ namespace ftxui
 
 namespace ao::tui
 {
-  struct NotificationDetailRowBox final
+  struct NotificationDetailRowHitRegion final
   {
     rt::NotificationId id{};
     bool dismissible = false;
@@ -30,6 +30,6 @@ namespace ao::tui
   std::int32_t notificationCenterPanelColumns(uimodel::ActivityStatusViewState const& state,
                                               std::int32_t terminalColumns);
   ftxui::Element notificationCenterPanel(uimodel::ActivityStatusViewState const& state,
-                                         std::vector<NotificationDetailRowBox>* rowBoxes = nullptr,
+                                         std::vector<NotificationDetailRowHitRegion>* rowHitRegions = nullptr,
                                          std::int32_t columns = 0);
 } // namespace ao::tui

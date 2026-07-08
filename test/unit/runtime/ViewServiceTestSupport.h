@@ -8,7 +8,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <memory>
 
@@ -21,16 +21,16 @@ namespace ao::rt::test
     async::Runtime runtime;
     LibraryChanges changes;
     LibraryWriter writer;
-    std::unique_ptr<ListSourceStore> storePtr;
+    std::unique_ptr<TrackSourceCache> cachePtr;
 
     ViewServiceTestEnv()
       : runtime{executor}
       , changes{}
       , writer{library.library(), changes}
-      , storePtr{std::make_unique<ListSourceStore>(library.library(), changes)}
+      , cachePtr{std::make_unique<TrackSourceCache>(library.library(), changes)}
     {
     }
 
-    ViewService makeService() { return ViewService{executor, library.library(), *storePtr}; }
+    ViewService makeService() { return ViewService{executor, library.library(), *cachePtr}; }
   };
 } // namespace ao::rt::test

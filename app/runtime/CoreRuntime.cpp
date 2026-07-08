@@ -9,7 +9,7 @@
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <filesystem>
 #include <memory>
@@ -27,7 +27,7 @@ namespace ao::rt
     LibraryChanges libraryChanges;
     Library libraryFacade;
     CompletionService completionService;
-    ListSourceStore listSourceStore;
+    TrackSourceCache trackSourceCache;
     NotificationService notificationService;
 
     Impl(std::unique_ptr<async::Executor> execPtr, std::filesystem::path musicRoot, std::filesystem::path databasePath)
@@ -39,7 +39,7 @@ namespace ao::rt
       , libraryChanges{}
       , libraryFacade{asyncRuntime, musicLibrary, libraryChanges}
       , completionService{musicLibrary, libraryChanges}
-      , listSourceStore{musicLibrary, libraryChanges}
+      , trackSourceCache{musicLibrary, libraryChanges}
       , notificationService{}
     {
     }
@@ -84,9 +84,9 @@ namespace ao::rt
     return _implPtr->completionService;
   }
 
-  ListSourceStore& CoreRuntime::sources() noexcept
+  TrackSourceCache& CoreRuntime::sources() noexcept
   {
-    return _implPtr->listSourceStore;
+    return _implPtr->trackSourceCache;
   }
 
   NotificationService& CoreRuntime::notifications() noexcept

@@ -3,7 +3,7 @@
 
 #include "CommandCompletion.h"
 
-#include "ShellModel.h"
+#include "ShellInteractionModel.h"
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionText.h>

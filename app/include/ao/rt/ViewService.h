@@ -34,7 +34,7 @@ namespace ao::async
 
 namespace ao::rt
 {
-  class ListSourceStore;
+  class TrackSourceCache;
   class TrackSource;
   class WorkspaceService;
   class LibraryChanges;
@@ -82,7 +82,7 @@ namespace ao::rt
       TrackPresentationSpec presentation{};
     };
 
-    ViewService(async::Executor& executor, library::MusicLibrary& library, ListSourceStore& sources);
+    ViewService(async::Executor& executor, library::MusicLibrary& library, TrackSourceCache& sources);
     ~ViewService();
 
     ViewService(ViewService const&) = delete;

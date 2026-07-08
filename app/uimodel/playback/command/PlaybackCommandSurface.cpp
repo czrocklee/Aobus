@@ -8,7 +8,7 @@
 #include <ao/rt/Subscription.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <cstddef>
 #include <functional>
@@ -74,9 +74,9 @@ namespace ao::uimodel
   } // namespace
 
   PlaybackCommandSurface::PlaybackCommandSurface(rt::PlaybackService& playback,
-                                                 PlaybackQueueModel* queue,
+                                                 PlaybackQueueSession* queueSession,
                                                  std::function<void()> playSelection)
-    : _playback{playback}, _queue{queue}, _playSelection{std::move(playSelection)}
+    : _playback{playback}, _queueSession{queueSession}, _playSelection{std::move(playSelection)}
   {
     subscribeAvailabilityEvents();
   }
@@ -125,17 +125,17 @@ namespace ao::uimodel
       case PlaybackCommand::Stop: _playback.stop(); break;
 
       case PlaybackCommand::Next:
-        if (_queue != nullptr)
+        if (_queueSession != nullptr)
         {
-          _queue->next();
+          _queueSession->next();
         }
 
         break;
 
       case PlaybackCommand::Previous:
-        if (_queue != nullptr)
+        if (_queueSession != nullptr)
         {
-          _queue->previous();
+          _queueSession->previous();
         }
 
         break;
@@ -157,8 +157,8 @@ namespace ao::uimodel
       case PlaybackCommand::Pause: return state.ready && isActivePlayback(state.transport);
       case PlaybackCommand::PlayPause: return canPlayPause(state);
       case PlaybackCommand::Stop: return canStop(state);
-      case PlaybackCommand::Next: return state.ready && _queue != nullptr && _queue->hasNext();
-      case PlaybackCommand::Previous: return state.ready && _queue != nullptr && _queue->hasPrevious();
+      case PlaybackCommand::Next: return state.ready && _queueSession != nullptr && _queueSession->hasNext();
+      case PlaybackCommand::Previous: return state.ready && _queueSession != nullptr && _queueSession->hasPrevious();
       case PlaybackCommand::ToggleShuffle:
       case PlaybackCommand::CycleRepeat: return state.ready;
     }

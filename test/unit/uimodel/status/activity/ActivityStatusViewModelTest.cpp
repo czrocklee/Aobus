@@ -8,7 +8,7 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryTasks.h>
+#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -118,8 +118,8 @@ namespace ao::uimodel::test
     auto testLib = rt::test::TestMusicLibrary{};
     auto executor = rt::test::MockExecutor{};
     auto runtime = async::Runtime{executor};
-    auto tasks = rt::LibraryTasks{runtime, testLib.library(), changes};
-    auto applyTask = [](rt::LibraryTasks* service) -> async::Task<Result<rt::ScanApplyResult>>
+    auto taskService = rt::LibraryTaskService{runtime, testLib.library(), changes};
+    auto applyTask = [](rt::LibraryTaskService* service) -> async::Task<Result<rt::ScanApplyResult>>
     {
       auto plan = rt::ScanPlan{};
       plan.items.push_back(rt::ScanItem{.uri = "file:///fake/first.flac",
@@ -129,7 +129,7 @@ namespace ao::uimodel::test
       co_return co_await service->applyScanPlanAsync(std::move(plan));
     };
 
-    auto const result = runtime.spawn(applyTask(&tasks)).get();
+    auto const result = runtime.spawn(applyTask(&taskService)).get();
 
     REQUIRE(result);
     CHECK(result->failureCount == 1);

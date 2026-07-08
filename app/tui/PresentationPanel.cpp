@@ -3,11 +3,11 @@
 
 #include "PresentationPanel.h"
 
-#include "Model.h"
 #include "SelectableList.h"
-#include "ShellModel.h"
+#include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
+#include "TrackPresentationNavigation.h"
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
@@ -27,7 +27,7 @@ namespace ao::tui
     constexpr std::int32_t kPresentationPanelMarkerColumns = 2;
     constexpr std::int32_t kPresentationPanelScrollIndicatorColumns = 1;
 
-    std::string presentationPanelRowText(PresentationNavItem const& item)
+    std::string presentationPanelRowText(TrackPresentationNavEntry const& item)
     {
       auto label = item.label;
 
@@ -41,14 +41,15 @@ namespace ao::tui
     }
   } // namespace
 
-  std::int32_t presentationPanelColumns(std::vector<PresentationNavItem> const& items,
+  std::int32_t presentationPanelColumns(std::vector<TrackPresentationNavEntry> const& items,
                                         std::string_view const activePresentationId,
                                         std::int32_t const terminalColumns)
   {
     auto contentColumns = std::max(cellWidth("No views available") + kPresentationPanelScrollIndicatorColumns,
                                    cellWidth(overlayHint(Overlay::PresentationPanel)));
-    contentColumns = std::max(
-      contentColumns, cellWidth("Views") + cellWidth(" · ") + cellWidth(presentationDisplayId(activePresentationId)));
+    contentColumns =
+      std::max(contentColumns,
+               cellWidth("Views") + cellWidth(" · ") + cellWidth(trackPresentationDisplayId(activePresentationId)));
 
     for (auto const& item : items)
     {
@@ -60,10 +61,10 @@ namespace ao::tui
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
-  ftxui::Element presentationPanel(std::vector<PresentationNavItem> const& items,
+  ftxui::Element presentationPanel(std::vector<TrackPresentationNavEntry> const& items,
                                    std::string_view const activePresentationId,
                                    std::int32_t const selectedIndex,
-                                   std::vector<PresentationRowBox>* const rowBoxes,
+                                   std::vector<PresentationRowHitRegion>* const rowHitRegions,
                                    std::int32_t const columns)
   {
     using namespace ftxui;
@@ -74,10 +75,10 @@ namespace ao::tui
     auto listRows = std::vector<SelectableListRow>{};
     std::int32_t focusRow = 0;
 
-    if (rowBoxes != nullptr)
+    if (rowHitRegions != nullptr)
     {
-      rowBoxes->clear();
-      rowBoxes->reserve(items.size());
+      rowHitRegions->clear();
+      rowHitRegions->reserve(items.size());
     }
 
     listRows.reserve(items.size());
@@ -100,10 +101,10 @@ namespace ao::tui
         focusRow = static_cast<std::int32_t>(listRows.size());
       }
 
-      if (rowBoxes != nullptr)
+      if (rowHitRegions != nullptr)
       {
-        rowBoxes->push_back(PresentationRowBox{.rowIndex = static_cast<std::int32_t>(index)});
-        rowBox = &rowBoxes->back().box;
+        rowHitRegions->push_back(PresentationRowHitRegion{.rowIndex = static_cast<std::int32_t>(index)});
+        rowBox = &rowHitRegions->back().box;
       }
 
       listRows.push_back(SelectableListRow{.elementPtr = std::move(rowPtr), .selected = selected, .box = rowBox});
@@ -116,7 +117,7 @@ namespace ao::tui
     rows.push_back(separator());
     rows.push_back(style::panelFooterHint(overlayHint(Overlay::PresentationPanel)));
 
-    auto activePresentationLabel = presentationDisplayId(activePresentationId);
+    auto activePresentationLabel = trackPresentationDisplayId(activePresentationId);
     return style::popupPanel(
              "Views", vbox(std::move(rows)), style::PanelOptions{.rightTitle = activePresentationLabel}) |
            size(WIDTH, EQUAL, panelColumns);

@@ -63,9 +63,9 @@ namespace ao::gtk
                             [this](std::string_view text, std::size_t cursor) { return complete(text, cursor); }}
     , _debounceScheduler{std::move(debounceScheduler)}
     , _textChangedConn{_entry.signal_changed().connect(sigc::mem_fun(*this, &TrackQuickFilter::onFilterTextChanged))}
-    , _controller{_runtime.views(),
-                  _runtime.workspace(),
-                  [this](ao::uimodel::TrackFilterViewState const& state) { applyState(state); }}
+    , _filterViewModel{_runtime.views(),
+                       _runtime.workspace(),
+                       [this](ao::uimodel::TrackFilterViewState const& state) { applyState(state); }}
   {
     add_css_class("ao-quick-filter");
     set_hexpand(true);
@@ -156,7 +156,7 @@ namespace ao::gtk
     _debounceTimer.disconnect();
     auto callback = sigc::slot<bool()>{[this]
                                        {
-                                         _controller.updateFilter(_entry.get_text().raw());
+                                         _filterViewModel.updateFilter(_entry.get_text().raw());
                                          return false;
                                        }};
 

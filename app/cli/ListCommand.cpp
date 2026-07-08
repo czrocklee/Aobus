@@ -21,8 +21,8 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>

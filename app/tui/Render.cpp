@@ -4,9 +4,10 @@
 #include "Render.h"
 
 #include "CoverArt.h"
-#include "Model.h"
 #include "Style.h"
 #include "TextCell.h"
+#include "TrackDetailLines.h"
+#include "TrackListEntry.h"
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
@@ -104,7 +105,7 @@ namespace ao::tui
     });
   }
 
-  std::int32_t detailPaneColumns(TrackListItem const* const selectedTrack, std::int32_t const terminalColumns)
+  std::int32_t detailPaneColumns(TrackListEntry const* const selectedTrack, std::int32_t const terminalColumns)
   {
     auto contentColumns = std::max(kCoverArtPanelColumns, cellWidth("Track Detail"));
 
@@ -123,7 +124,7 @@ namespace ao::tui
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
-  ftxui::Element detailPane(TrackListItem const* selectedTrack, ftxui::Element coverElementPtr, std::int32_t columns)
+  ftxui::Element detailPane(TrackListEntry const* selectedTrack, ftxui::Element coverElementPtr, std::int32_t columns)
   {
     using namespace ftxui;
 

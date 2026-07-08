@@ -24,7 +24,7 @@ namespace ao::lmdb
 
 namespace ao::uimodel
 {
-  class PlaybackQueueModel;
+  class PlaybackQueueSession;
 }
 namespace Gtk
 {
@@ -57,7 +57,7 @@ namespace ao::gtk
   public:
     TrackPageHost(Gtk::Stack& stack,
                   rt::AppRuntime& runtime,
-                  uimodel::PlaybackQueueModel* queueModel,
+                  uimodel::PlaybackQueueSession* queueSession,
                   TagEditController& tagEditController,
                   ListNavigationController& listNavigation,
                   uimodel::TrackColumnLayoutStore& layoutStore);
@@ -69,7 +69,7 @@ namespace ao::gtk
     TrackPageHost(TrackPageHost&&) = delete;
     TrackPageHost& operator=(TrackPageHost&&) = delete;
 
-    void setPlaybackQueueModel(uimodel::PlaybackQueueModel& controller) { _playbackQueueModel = &controller; }
+    void setPlaybackQueueSession(uimodel::PlaybackQueueSession& session) { _playbackQueueSession = &session; }
 
     Gtk::Stack& stack() { return _stack; }
     uimodel::TrackColumnLayoutStore& layoutStore() { return _layoutStore; }
@@ -99,7 +99,7 @@ namespace ao::gtk
     void tryRevealTrackInView(rt::ViewId viewId, TrackId trackId);
     Gtk::Stack& _stack;
     rt::AppRuntime& _runtime;
-    uimodel::PlaybackQueueModel* _playbackQueueModel;
+    uimodel::PlaybackQueueSession* _playbackQueueSession;
     TagEditController& _tagEditController;
     ListNavigationController& _listNavigation;
     uimodel::TrackColumnLayoutStore& _layoutStore;

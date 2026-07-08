@@ -55,7 +55,7 @@ namespace ao::rt
       return transport == audio::Transport::Idle || transport == audio::Transport::Error;
     }
 
-    OutputProfileSnapshot toOutputProfileSnapshot(audio::BackendProvider::ProfileMetadata const& source)
+    OutputProfileSnapshot toOutputProfileSnapshot(audio::BackendProvider::ProfileDescriptor const& source)
     {
       return OutputProfileSnapshot{.id = source.id, .name = source.name, .description = source.description};
     }
@@ -73,9 +73,9 @@ namespace ao::rt
     OutputBackendSnapshot toOutputBackendSnapshot(audio::BackendProvider::Status const& source)
     {
       auto profiles = std::vector<OutputProfileSnapshot>{};
-      profiles.reserve(source.metadata.supportedProfiles.size());
+      profiles.reserve(source.descriptor.supportedProfiles.size());
 
-      for (auto const& prof : source.metadata.supportedProfiles)
+      for (auto const& prof : source.descriptor.supportedProfiles)
       {
         profiles.push_back(toOutputProfileSnapshot(prof));
       }
@@ -88,10 +88,10 @@ namespace ao::rt
         devices.push_back(toOutputDeviceSnapshot(dev));
       }
 
-      return OutputBackendSnapshot{.id = source.metadata.id,
-                                   .name = source.metadata.name,
-                                   .description = source.metadata.description,
-                                   .iconName = source.metadata.iconName,
+      return OutputBackendSnapshot{.id = source.descriptor.id,
+                                   .name = source.descriptor.name,
+                                   .description = source.descriptor.description,
+                                   .iconName = source.descriptor.iconName,
                                    .supportedProfiles = std::move(profiles),
                                    .devices = std::move(devices)};
     }
@@ -482,12 +482,12 @@ namespace ao::rt
       auto const& device = backend.devices.front();
       auto profileId = audio::ProfileId{audio::kProfileShared};
 
-      if (!backend.metadata.supportedProfiles.empty())
+      if (!backend.descriptor.supportedProfiles.empty())
       {
-        profileId = backend.metadata.supportedProfiles.front().id;
+        profileId = backend.descriptor.supportedProfiles.front().id;
       }
 
-      if (auto const result = playerPtr->setOutputDevice(backend.metadata.id, device.id, profileId); !result)
+      if (auto const result = playerPtr->setOutputDevice(backend.descriptor.id, device.id, profileId); !result)
       {
         APP_LOG_ERROR("Failed to select audio output device: {}", result.error().message);
       }
@@ -1376,8 +1376,8 @@ namespace ao::rt
     {
       auto const status = providerPtr->status();
       APP_LOG_INFO("Audio backend provider registered: backend={} name='{}' devices={}",
-                   status.metadata.id,
-                   status.metadata.name,
+                   status.descriptor.id,
+                   status.descriptor.name,
                    status.devices.size());
     }
 

@@ -3,7 +3,7 @@
 
 #include "council/ProcessRunner.h"
 
-#include "council/Model.h"
+#include "council/CouncilSchema.h"
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/buffer.hpp>

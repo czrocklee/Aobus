@@ -5,7 +5,7 @@
 
 #include "LibraryController.h"
 #include "OutputDeviceController.h"
-#include "ShellModel.h"
+#include "ShellInteractionModel.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
 #include <ao/rt/NotificationState.h>
@@ -50,7 +50,7 @@ namespace ao::tui
   {
   public:
     EventController(ftxui::ScreenInteractive& screen,
-                    ShellModel& shell,
+                    ShellInteractionModel& shell,
                     LibraryController& library,
                     rt::PlaybackService& playback,
                     EventControllerBindings bindings = {});
@@ -97,7 +97,7 @@ namespace ao::tui
     {};
 
     ftxui::ScreenInteractive& _screen;
-    ShellModel& _shell;
+    ShellInteractionModel& _shell;
     LibraryController& _library;
     rt::PlaybackService& _playback;
     OutputDeviceController* _outputDevices = nullptr;

@@ -119,7 +119,7 @@ namespace ao::gtk
 
     if (get_visible())
     {
-      _controllerPtr =
+      _soulViewModelPtr =
         std::make_unique<ao::uimodel::AobusSoulViewModel>(*_playback,
                                                           [this](ao::uimodel::AobusSoulViewState const& view)
                                                           {
@@ -135,7 +135,7 @@ namespace ao::gtk
 
     if (_playback != nullptr)
     {
-      _controllerPtr =
+      _soulViewModelPtr =
         std::make_unique<ao::uimodel::AobusSoulViewModel>(*_playback,
                                                           [this](ao::uimodel::AobusSoulViewState const& view)
                                                           {
@@ -147,7 +147,7 @@ namespace ao::gtk
 
   void AobusSoulWindow::on_hide()
   {
-    _controllerPtr.reset();
+    _soulViewModelPtr.reset();
     Gtk::Window::on_hide();
   }
 } // namespace ao::gtk

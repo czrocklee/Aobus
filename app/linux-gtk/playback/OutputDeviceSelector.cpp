@@ -43,33 +43,33 @@ namespace ao::gtk
                                              std::function<void(rt::OutputDeviceSelection const&)> onSelected)
     : _playback{playback}
     , _onSelected{std::move(onSelected)}
-    , _outputDeviceController{_playback,
-                              [this](ao::uimodel::OutputDeviceViewState const& view)
-                              {
-                                _storePtr->remove_all();
+    , _outputDeviceViewModel{_playback,
+                             [this](ao::uimodel::OutputDeviceViewState const& view)
+                             {
+                               _storePtr->remove_all();
 
-                                for (auto const& row : view.rows)
-                                {
-                                  if (row.kind == ao::uimodel::OutputDeviceRow::Kind::BackendHeader)
-                                  {
-                                    _storePtr->append(OutputBackendItem::create(row.backendId, row.title));
-                                  }
-                                  else if (row.kind == ao::uimodel::OutputDeviceRow::Kind::DeviceProfile)
-                                  {
-                                    auto audioDevice = audio::Device{
-                                      .id = row.deviceId,
-                                      .displayName = row.title,
-                                      .description = row.description,
-                                      .backendId = row.backendId,
-                                    };
+                               for (auto const& row : view.rows)
+                               {
+                                 if (row.kind == ao::uimodel::OutputDeviceRow::Kind::BackendHeader)
+                                 {
+                                   _storePtr->append(OutputBackendItem::create(row.backendId, row.title));
+                                 }
+                                 else if (row.kind == ao::uimodel::OutputDeviceRow::Kind::DeviceProfile)
+                                 {
+                                   auto audioDevice = audio::Device{
+                                     .id = row.deviceId,
+                                     .displayName = row.title,
+                                     .description = row.description,
+                                     .backendId = row.backendId,
+                                   };
 
-                                    auto const itemPtr = OutputDeviceItem::create(
-                                      row.backendId, audioDevice, row.profileId, badgeForOutputDevice(row));
-                                    itemPtr->setActive(row.isActive);
-                                    _storePtr->append(itemPtr);
-                                  }
-                                }
-                              }}
+                                   auto const itemPtr = OutputDeviceItem::create(
+                                     row.backendId, audioDevice, row.profileId, badgeForOutputDevice(row));
+                                   itemPtr->setActive(row.isActive);
+                                   _storePtr->append(itemPtr);
+                                 }
+                               }
+                             }}
   {
     set_autohide(true);
     set_position(position);
@@ -101,7 +101,7 @@ namespace ao::gtk
 
           if (auto const deviceItemPtr = std::dynamic_pointer_cast<OutputDeviceItem>(itemPtr); deviceItemPtr)
           {
-            _outputDeviceController.selectOutputDevice(
+            _outputDeviceViewModel.selectOutputDevice(
               deviceItemPtr->backendId(), deviceItemPtr->id(), deviceItemPtr->profileId());
 
             if (_onSelected)
@@ -114,7 +114,7 @@ namespace ao::gtk
         }
       });
 
-    signal_show().connect([this] { _outputDeviceController.refresh(); });
+    signal_show().connect([this] { _outputDeviceViewModel.refresh(); });
   }
 
   OutputDeviceSelector::~OutputDeviceSelector() = default;

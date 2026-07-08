@@ -44,6 +44,270 @@ Test case names and Catch2 tags are covered separately in
 - Use `indices` for positional-index collections. Use `indexes` only for
   database/search index entities.
 
+## Class And File Role Names
+
+Role suffixes are architectural vocabulary. Choose the narrowest suffix that
+describes the type's contract; do not add a suffix because the type is near UI
+code, holds state, or needs a nicer-sounding filename. When a role would need a
+one-off exception, prefer renaming the type or moving the responsibility.
+A role name is a contract, not a required suffix; prefer a plain domain noun
+when it is clearer than any listed role.
+Do not introduce static-only production classes to simulate namespace scope.
+Use a real stateful type when there is state, identity, lifecycle, or
+invariants; use domain-prefixed free functions for pure formatting, resolving,
+conversion, or factory helpers.
+
+### Model Names
+
+`Model` is the broadest stateful role name and should be rare. Use it only when
+the public contract owns in-memory state, exposes behavior over that state, and
+no narrower role below describes the contract.
+
+- `*ViewModel` is toolkit-neutral UI-facing state plus user commands,
+  presentation decisions, or render callbacks. It belongs in `uimodel`, not in
+  GTK code, services, stores, or durable persistence boundaries.
+- `*InteractionModel` is toolkit-neutral transient input or gesture state, such
+  as drag, seek, resize, or selection interaction. It should not own runtime
+  service subscriptions or durable application state.
+- `*EditorModel` and `*FormModel` are stateful draft/editing contracts with
+  field state, validation, option selection, and collect/build methods for the
+  resulting domain change.
+- `*SessionModel` is active in-memory application session state that can be
+  loaded, reset, applied, promoted, or snapshotted. If the type owns an external
+  resource conversation rather than only application state, use `*Session`.
+- A framework adapter may use `*Model` when the external API itself uses model
+  vocabulary, such as a GTK `Gio::ListModel` implementation. Keep that
+  vocabulary at the adapter boundary.
+- Bare `*Model` is a fallback for behavior-bearing domain state such as a
+  keymap. Do not use it for passive snapshots, derived read models, static
+  policy functions, formatter/resolver groups, schema records, or umbrella
+  headers.
+
+### Production Roles
+
+| Suffix | Use | Avoid |
+| --- | --- | --- |
+| `*Model` | Rare fallback for behavior-bearing in-memory domain state after the narrower model roles and non-model roles do not fit. | Passive `State`, derived `Projection`, static `Policy`, formatter/resolver groups, schema records, or umbrella files. |
+| `*InteractionModel` | Toolkit-neutral transient input or gesture state. | Runtime services, persistence, or long-lived application workflows. |
+| `*EditorModel` | Stateful editor draft with options, validation, and a collect/build result. | Static editor decisions or one-shot factory functions. |
+| `*FormModel` | Stateful form field collection with validation and patch/build output. | A single passive value or pure view state. |
+| `*SessionModel` | Active in-memory application session state. | External resource ownership, which should use `*Session`, or passive snapshots. |
+| `*State` | Passive snapshot or mutable state value. | Behavior-heavy objects or service-owned workflows. |
+| `*Snapshot` | Point-in-time copy captured from a live source. | Mutable live state or persisted session payloads. |
+| `*Cache` | Non-authoritative retained data or derived runtime objects keyed by lookup and invalidated for coherence. | Persistence, source-of-truth ownership, or registration APIs. |
+| `*Config` | Required construction or initialization input. | Optional tuning knobs or runtime-observed state. |
+| `*Options` | Optional knobs that alter an operation or construction path. | Required identity, durable state, or result data. |
+| `*Spec` | Declarative requested shape or desired configuration. | Observed runtime facts or persisted state. |
+| `*Descriptor` | Static declared capability, action, property, or registration metadata. | Runtime observations, user music metadata, or mutable registry entries. |
+| `*ViewModel` | UI-facing state plus user commands or presentation decisions; no GTK dependency or durable IO; belongs in `uimodel`. | GTK widgets, services, stores, or direct persistence logic. |
+| `*Projection` | Derived read model over runtime/library state. | A mutable source of truth or UI-only state holder. |
+| `*Source` | Ordered data, membership, or stream provider that backs projections or playback pipelines. | A generic owner, service boundary, or passive state value. |
+| `*Service` | Runtime/app business boundary with side effects, async work, subscriptions, lifecycle, or cross-store coordination. | UI adapters, pure formatters, or small local helpers. |
+| `*Store` | Source-of-truth state or persistence access boundary. | Ordinary caches, derived projections, or helper containers. |
+| `*Catalog` | Mostly static declared inventory. | Mutable runtime lookup or registration state. |
+| `*Registry` | Runtime mutable lookup or registration table. | Static descriptor lists. |
+| `*Policy` | Pure decision rule. | IO, lifecycle, ownership, formatting, building, or long-lived mutable state. |
+| `*Workflow` | A user/business flow with staged validation or multi-step state. | Plain helpers or one-shot actions. |
+| `*Operation` | One-shot stateful execution object for applying prepared work with progress, cancellation, or scoped resources. | Pure evaluation, reusable services, passive plans, or ordinary helper functions. |
+| `*Plan` | Computed work or execution description consumed by another step. | Mutable runtime state, service ownership, or result summaries. |
+| `*Compiler` | Converts a declarative input into an executable plan, bytecode, or lowered representation. | Parsing alone or direct evaluation. |
+| `*Evaluator` | Executes a plan, expression, or rule set against inputs. | Persistence, lifecycle, or source-of-truth ownership. |
+| `*Builder` | Incrementally constructs an object or aggregate. | Choosing implementations from a family. |
+| `*Factory` | Chooses and creates implementations or resources from a family. | Ordinary pure value construction, which should use `make*` functions. |
+| `*Reader` / `*Writer` | Transaction-scoped or boundary-scoped read/write access under a store or import/export workflow. | Long-lived runtime services or arbitrary file helpers. |
+| `*Importer` / `*Exporter` | Durable format import/export boundary. | In-memory conversion or presentation formatting. |
+| `*Formatter` | Creates presentation text. | Serialization or durable data conversion. |
+| `*Parser` | Converts syntax or binary representation into structured values. | Contextual lookup or binding. |
+| `*Resolver` | Binds names, ids, or references using context. | Searching a local list without binding semantics. |
+| `*Adapter` | Reshapes one interface into another. | External protocol/framework integration when `Bridge` is clearer. |
+| `*Bridge` | Adapts across an external protocol or framework boundary. | Ordinary intra-project forwarding. |
+| `*Provider` | Supplies a concrete implementation, capability, or backend family. | Generic value accessors. |
+| `*Session` | Owns a bounded active lifetime or conversation with a resource. | Passive state snapshots. |
+| `*View` | Non-owning read view over core data, or a domain workspace view where `view` is the product concept. | GTK widgets, panels, pages, or view-models. |
+| `*Request` | Input payload crossing a service, engine, process, or IPC boundary. | Local function argument bundles with no boundary meaning. |
+| `*Reply` | Domain-level response from a synchronous command or mutation API. | Long-running operation summaries, which should use `Result`. |
+| `*Result` | Operation outcome summary after work completes. | Exceptions/errors alone or command reply payloads. |
+| `*Progress` | In-flight progress payload. | Final operation summaries or durable state. |
+| `*Failure` | Structured recoverable failure payload. | Exception classes or generic error wrappers. |
+| `*Event` | Internal queued or emitted event payload. | Passive state snapshots or final results. |
+| `*Record` | Storage/log/foreign-system row or internally indexed entry. | Generic DTOs with no record identity or source. |
+| `*Info` | Observed facts from a runtime, decoder, parser, or external source. | Static declared capabilities, which should usually be `Descriptor`. |
+| `*Metadata` | User music metadata or real format/protocol metadata. | Generic descriptive fields for project-owned capabilities. |
+
+### Runtime And Core Roles
+
+Runtime and core library code should not introduce `*Model` just because a type
+owns state. Use the runtime role that describes the boundary instead.
+
+- For state-owning types, prefer this decision order: live resource or workflow
+  boundary uses `Service` or `Session`; authoritative persistence uses `Store`;
+  derived read state uses `Projection` or `Source`; retained derived lookup uses
+  `Cache`; passive values use `State`.
+- `*Service` owns runtime behavior: commands, side effects, subscriptions,
+  async callbacks, lifecycle, and cross-store coordination.
+- `*Store` owns source-of-truth or persistence access. Nested `Reader` and
+  `Writer` types are appropriate for transaction-scoped store access.
+- `*Projection` is a derived read model over runtime or library state. It can
+  publish deltas, but it must not become the mutable source of truth.
+- `*Source` supplies ordered membership or stream data to projections or
+  pipelines. A source can notify observers, but it is not a service boundary.
+- `*Cache` retains non-authoritative derived data or runtime objects for reuse
+  and invalidates them when their source changes. It must not become the source
+  of truth.
+- `*State` and `*SessionState` are passive snapshots, persisted records, or
+  restore payloads. They should not own subscriptions, callbacks, or resources.
+- `*Session` owns a bounded live resource/activity lifetime. `*SessionModel`
+  remains an application-state model, not an external resource session.
+- `*Plan`, `*Compiler`, and `*Evaluator` split query/scan pipelines: compile or
+  prepare a plan, then evaluate or apply it. Do not call a compiled plan a
+  model.
+- `*Operation` is appropriate when applying prepared work needs a bounded
+  execution object for progress, cancellation, transactions, or scoped
+  resources. Prefer a free function when the work is pure or stateless.
+- `*Provider` supplies a backend family or capability and creates concrete
+  implementations. It is not a generic accessor.
+- `*View` is allowed in core storage for non-owning typed views, and in runtime
+  workspace APIs where a user-visible workspace view is the domain object.
+  GTK surfaces still use `Widget`, `Panel`, `Page`, `Dialog`, or `Window`.
+
+### Data Payload Roles
+
+Payload suffixes describe where the data comes from and how long it is valid.
+Do not choose them by convenience or by field count.
+
+- `*State` is current observable state owned elsewhere. It may be mutable as a
+  value object, but it should not own subscriptions, callbacks, threads, or
+  resources.
+- `*SessionState` is a persisted or restorable session payload. Keep it stable
+  enough for config/schema handling and separate from live `*Session` objects.
+- `*Snapshot` is a point-in-time copy from a live source. It is not a source of
+  truth and should not imply persistence.
+- `*Config` supplies required construction/initialization data. `*Options`
+  supplies optional behavior knobs. `*Spec` describes a requested target shape.
+- `*Descriptor` is static declared metadata for capabilities, actions,
+  properties, components, or registrations.
+- `*Info` is observed information returned by a runtime, decoder, parser, or
+  external source. Prefer `Descriptor` for static declared capabilities.
+- `*Metadata` is reserved for user music metadata and real file/protocol
+  metadata. Do not use it as a generic synonym for description.
+- `*Request`, `*Reply`, `*Result`, `*Progress`, and `*Failure` name data that
+  crosses an operation boundary. Use the narrowest one that matches the phase:
+  input, synchronous response, completed summary, in-flight update, or
+  recoverable failure.
+- `*Record` is for persisted rows, log entries, external records, or internal
+  registry entries with record identity. Avoid it for arbitrary data bundles.
+- Avoid project-owned `*Data` unless the external format or API itself uses
+  that term. Prefer a domain noun plus one of the roles above.
+- When reviewing payload names, use this ordering before debating details:
+  static declared data is `Descriptor`; observed runtime or parsed data is
+  `Info`; user music or real protocol/file facts are `Metadata`; current
+  observable values are `State`; point-in-time copies are `Snapshot`.
+
+### UI Roles
+
+- `*Panel` is a stable UI region or overlay surface. `Panel` is not a synonym
+  for any grouped widgets.
+- `*Widget` is a concrete GTK widget or composite widget. It should expose a
+  widget contract, not application orchestration.
+- `*Dialog`, `*Window`, `*Popover`, and `*Page` use their ordinary UI meanings:
+  transient dialog, top-level window, transient popover, and navigable page.
+- `*Controller` is imperative UI or framework glue that routes events,
+  actions, widget lifecycle, or view/model binding. Do not use `Controller` for
+  backend resource wrappers or domain services.
+- `*Coordinator` orchestrates a multi-object workflow where no single
+  controller or service should own the sequence.
+- `*Component` is reserved for the declarative layout runtime's composable
+  units. Ordinary GTK widgets are not components unless they implement the
+  layout component contract.
+- `*Host` owns and embeds a surface, page, layout runtime, or component tree.
+
+### Uimodel Scope
+
+- Public `uimodel` declarations use the flat `ao::uimodel` namespace described
+  in `doc/design/uimodel-organization.md`; do not add feature-specific public
+  subnamespaces for local grouping.
+- Because folder context is not namespace context, public free functions in
+  `uimodel` must carry their feature or domain context in the function name
+  unless the parameter and return types already make the scope unambiguous:
+  `makeSmartListDraft()`, not `makeDraft()`.
+- In `uimodel`, avoid static-only scope classes especially aggressively because
+  they obscure whether a name is a stateful view model, a passive view state, or
+  pure presentation logic.
+
+### TUI Roles
+
+- `*InteractionModel` names toolkit-neutral transient TUI input state such as
+  command palette, focus, selection, or prompt state.
+- `*Entry` names passive selectable list/navigation rows in TUI presentation
+  data. Avoid generic `*Item` for project-owned TUI data.
+- `*Navigation` names construction and labeling of navigable TUI entry lists,
+  such as library or track-presentation choices. It should not own selection
+  state unless the type also has a stateful role name.
+- `*Formatter` names display-text formatting. Use it for playback status,
+  duration, and similar strings instead of collecting unrelated presentation
+  helpers into one file.
+- `*Style` names concrete visual styling values such as color/category mapping.
+  It should not also build navigation entries or track rows.
+- `*Section` names grouped track-table display data. Use a domain prefix such
+  as `TrackSection`; do not hide section data in a broad presentation module.
+- `*RowHitRegion` names rendered terminal row hit-test geometry. Avoid `*Box`
+  when the type is not a layout box with size and positioning behavior.
+- Do not add TUI umbrella files such as `TuiPresentation` that mix navigation,
+  track rows, detail lines, selection movement, playback labels, and style
+  mapping. Split by the concrete concept: `LibraryNavigation`,
+  `TrackListEntry`, `TrackDetailLines`, `TrackPresentationNavigation`,
+  `PlaybackStatusFormatter`, `QualityIndicatorStyle`, and
+  `SelectionNavigation`.
+
+### Test And Support Roles
+
+- `*Fixture` owns test state or lifecycle for a test case, test file, or narrow
+  behavior group. It should make arrange/setup explicit, not hide the behavior
+  under test.
+- `*TestSupport` groups reusable domain test scaffolding shared across multiple
+  files or suites. Before adding one, search nearby test support headers and
+  promote only genuinely common setup.
+- `Fake*` is a working controlled implementation with state or simplified real
+  behavior.
+- `Mock*` is for interaction expectations.
+- `Stub*` provides fixed or minimal responses.
+- `*Helpers` is allowed only for internal/detail/tooling free-function
+  collections tied to a clear owner or domain. Do not use it as a domain or
+  test junk drawer.
+- Do not add domain test helper files named `*Utils`, `*Util`, or `*Utility`.
+- The root `test/unit/TestUtils.h` header is reserved for low-level shared test
+  utilities.
+
+### File Names
+
+- Production file names normally match the primary public type. A file that
+  exposes a free-function role may still use a role noun such as
+  `TrackFilterResolver.h`, but do not create a wrapper class just to satisfy a
+  filename.
+- When a file holds multiple public declarations, the filename must name the
+  shared domain concept rather than a storage shape or a vague grouping word.
+- A `*Model.h` file should expose a matching primary model type. Avoid leaf
+  files named exactly `Model.h`; they usually hide schema records, presentation
+  structs, or formatter functions that deserve a concrete concept name.
+- Do not add new production `Utils`, `Util`, `Utility`, or `*Types` catch-all
+  files. If a header exists only to gather unrelated declarations, split it; if
+  the declarations share a real concept, name that concept directly.
+- Directory context may supply part of the name. A local leaf such as `File.h`
+  is acceptable when the parent directory is already the clear domain, such as a
+  specific tag format directory.
+- Tooling and adapter files may keep names that match external APIs,
+  clang-tidy check ids, file formats, protocols, or user-visible compatibility
+  surfaces.
+
+### Enforcement
+
+Mechanical class/file naming checks live in `./ao name-audit` and run from
+`./ao hygiene`. The audit intentionally enforces only rules that are stable
+without semantic inference: banned catch-all file names, layer placement for
+role suffixes such as `ViewModel`, `Service`, `Component`, `Dialog`, `Widget`,
+`Panel`, `Controller`, `Coordinator`, `Host`, and `Bridge`, and keeping
+`Fake*`, `Mock*`, and `Stub*` types in tests.
+
 ## Pointer Names
 
 - Managed pointers (`std::shared_ptr`, `std::unique_ptr`, `std::weak_ptr`,
@@ -281,9 +545,8 @@ Use the narrowest verb that describes the observable contract.
   or coordinate location. `*From*` names a source. `*Into*` names a write
   target.
 - Test arrangement may use `setup*`; cleanup may use `teardown*` when RAII is
-  not enough. `*Fixture` owns test state or lifecycle. `Fake*` is a working
-  controlled implementation with state or simplified real behavior. `Mock*` is
-  for interaction expectations. `Stub*` provides fixed or minimal responses.
+  not enough. Test type names such as `*Fixture`, `*TestSupport`, `Fake*`,
+  `Mock*`, and `Stub*` are defined in Class And File Role Names.
 - Do not add `*ForTest()` functions or methods. Existing `*ForTest()` APIs are
   design debt to remove through normal APIs, constructor injection, small
   interfaces, fixtures, or test support. GTK component child widgets and
@@ -354,36 +617,11 @@ Examples:
 - Existing CLI flags or serialized keys such as `--dict`, `--meta`, and
   YAML `meta:`.
 
-## File Names
-
-- Production file names use the primary type, responsibility, or adapter
-  boundary they contain. Prefer a concrete domain name over a generic container
-  name.
-- Do not add new production `Utils`, `Util`, `Utility`, or `*Types` catch-all
-  files. If a header exists only to gather unrelated declarations, split it; if
-  the declarations share a real concept, name that concept directly.
-- Directory context may supply part of the name. A local leaf such as `File.h`
-  is acceptable when the parent directory is already the clear domain, such as a
-  specific tag format directory.
-- Tooling and adapter files may keep names that match external APIs,
-  clang-tidy check ids, file formats, protocols, or user-visible compatibility
-  surfaces.
-
-## Helper And Support Names
-
-- Use `*Helpers` only for internal/detail/tooling free-function collections tied
-  to a clear owner or domain.
-- Do not add domain test helper files named `*Utils`, `*Util`, or `*Utility`.
-- In tests, `*Fixture` owns test state or lifecycle.
-- In tests, `*TestSupport` groups reusable domain test scaffolding.
-- The root `test/unit/TestUtils.h` header is reserved for low-level shared test
-  utilities.
-
 ## Review Practice
 
 - Prefer renaming unclear project-owned names in code over documenting narrow
   exceptions.
 - Document a boundary principle once when a repeated external vocabulary could
   confuse future reviewers.
-- Leave vocabulary audit tooling report-only until the code backlog is small and
-  the policy is settled.
+- Keep mechanical naming checks in `./ao name-audit`; leave semantic role
+  judgments to review unless they can be enforced without exception churn.

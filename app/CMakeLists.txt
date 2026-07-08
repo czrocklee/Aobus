@@ -17,9 +17,9 @@ add_library(ao_app_runtime STATIC
     runtime/library/AudioIdentityIndexer.cpp
     runtime/library/LibraryScan.cpp
     runtime/library/ScanPlanBuilder.cpp
-    runtime/library/ScanPlanApplier.cpp
-    runtime/library/LibraryTasks.cpp
-    runtime/source/ListSourceStore.cpp
+    runtime/library/ScanApplyOperation.cpp
+    runtime/library/LibraryTaskService.cpp
+    runtime/source/TrackSourceCache.cpp
     runtime/source/ManualListSource.cpp
     runtime/NavigationHistory.cpp
     runtime/WorkspaceService.cpp
@@ -44,7 +44,7 @@ target_link_libraries(ao_app_runtime PRIVATE Boost::headers)
 add_library(ao_app_uimodel STATIC
     uimodel/layout/action/LayoutActionCatalog.cpp
     uimodel/layout/action/LayoutActionValidator.cpp
-    uimodel/layout/component/AbsoluteCanvasModel.cpp
+    uimodel/layout/component/AbsoluteCanvasGeometry.cpp
     uimodel/layout/component/LayoutComponentCatalog.cpp
     uimodel/layout/component/LayoutComponentState.cpp
     uimodel/layout/component/LayoutStatePromoter.cpp
@@ -65,7 +65,11 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/detail/TrackFieldGridSchema.cpp
     uimodel/library/list/ListActionPolicy.cpp
     uimodel/library/list/ListTreeProjection.cpp
-    uimodel/library/list/SmartListEditorModel.cpp
+    uimodel/library/list/SmartListDraft.cpp
+    uimodel/library/list/SmartListEditorViewState.cpp
+    uimodel/library/list/SmartListExpression.cpp
+    uimodel/library/list/SmartListPreview.cpp
+    uimodel/library/list/SmartListTrackPresentationResolver.cpp
     uimodel/library/presentation/TrackColumnLayoutPolicy.cpp
     uimodel/library/presentation/TrackColumnLayoutStore.cpp
     uimodel/library/presentation/TrackColumnWidthSolver.cpp
@@ -87,7 +91,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/playback/output/OutputDeviceViewModel.cpp
     uimodel/playback/output/VolumeViewModel.cpp
     uimodel/playback/quality/AudioQualityFormatter.cpp
-    uimodel/playback/queue/PlaybackQueueModel.cpp
+    uimodel/playback/queue/PlaybackQueueSession.cpp
     uimodel/playback/seek/PlaybackPositionInterpolator.cpp
     uimodel/playback/seek/PlaybackTimeViewModel.cpp
     uimodel/playback/seek/SeekSliderInteractionModel.cpp

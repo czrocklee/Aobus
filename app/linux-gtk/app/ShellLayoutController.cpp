@@ -42,7 +42,7 @@
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <gtkmm/dialog.h>
 #include <gtkmm/object.h>
@@ -141,9 +141,9 @@ namespace ao::gtk
 
     auto const hasActiveQueue = [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
     {
-      if (auto* const queueModel = _context.playback.queueModel; queueModel != nullptr)
+      if (auto* const queueSession = _context.playback.queueSession; queueSession != nullptr)
       {
-        return uimodel::LayoutActionAvailability{.enabled = queueModel->isActive(), .disabledReason = ""};
+        return uimodel::LayoutActionAvailability{.enabled = queueSession->isActive(), .disabledReason = ""};
       }
 
       return uimodel::LayoutActionAvailability{.enabled = false, .disabledReason = ""};

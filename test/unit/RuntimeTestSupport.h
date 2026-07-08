@@ -39,7 +39,7 @@ namespace ao::rt::test
 {
   inline audio::BackendProvider::Status makeReadyAudioStatus()
   {
-    return {.metadata =
+    return {.descriptor =
               {
                 .id = audio::BackendId{"test_backend"},
                 .name = "Test Backend",
@@ -60,7 +60,7 @@ namespace ao::rt::test
   inline audio::BackendProvider::Status makePipeWireOutputStatus()
   {
     return {
-      .metadata =
+      .descriptor =
         {
           .id = audio::BackendId{"pipewire"},
           .name = "PipeWire",

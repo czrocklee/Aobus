@@ -29,7 +29,7 @@ namespace ao::tui
     return completeCommandDraft(
       draft,
       CommandCompletionContext{
-        .lists = _library.libraryItems(),
+        .lists = _library.libraryEntries(),
         .artists = _completion.valuesFor(rt::TrackField::Artist),
         .builtinPresentations = rt::builtinTrackPresentationPresets(),
         .customPresentations = _workspace.customPresets(),

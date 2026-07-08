@@ -265,8 +265,8 @@ namespace ao::rt::test
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto listSourceStore = ListSourceStore{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), listSourceStore};
+    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
+    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
     auto notificationService = NotificationService{};
     auto playbackService = PlaybackService{executor, viewService, testLib.library(), notificationService};
 

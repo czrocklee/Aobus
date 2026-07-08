@@ -16,7 +16,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryTasks.h>
+#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/ScanPlan.h>
 
 #include <cstdint>
@@ -152,7 +152,7 @@ namespace ao::gtk::portal
   {
     try
     {
-      auto result = co_await _runtime.library().tasks().backfillAudioIdentityAsync();
+      auto result = co_await _runtime.library().taskService().backfillAudioIdentityAsync();
 
       if (!result)
       {
@@ -187,7 +187,7 @@ namespace ao::gtk::portal
 
   async::Task<void> LibraryImportExportWorkflow::exportWorkflow(std::filesystem::path exportPath, rt::ExportMode mode)
   {
-    auto result = co_await _runtime.library().tasks().exportLibraryAsync(std::move(exportPath), mode);
+    auto result = co_await _runtime.library().taskService().exportLibraryAsync(std::move(exportPath), mode);
 
     if (!result)
     {
@@ -201,7 +201,7 @@ namespace ao::gtk::portal
   async::Task<void> LibraryImportExportWorkflow::importWorkflow(ImportExportCallbacks callbacks,
                                                                 std::filesystem::path importPath)
   {
-    auto result = co_await _runtime.library().tasks().importLibraryAsync(std::move(importPath));
+    auto result = co_await _runtime.library().taskService().importLibraryAsync(std::move(importPath));
 
     if (!result)
     {
@@ -219,7 +219,7 @@ namespace ao::gtk::portal
 
   async::Task<std::optional<rt::ScanPlan>> LibraryImportExportWorkflow::buildScanPlanOrReportFailure()
   {
-    auto result = co_await _runtime.library().tasks().buildScanPlanAsync();
+    auto result = co_await _runtime.library().taskService().buildScanPlanAsync();
 
     if (!result)
     {
@@ -267,7 +267,7 @@ namespace ao::gtk::portal
         options.audioIdentityPolicy = rt::AudioIdentityPolicy::DeferNew;
       }
 
-      auto result = co_await _runtime.library().tasks().applyScanPlanAsync(std::move(plan), options);
+      auto result = co_await _runtime.library().taskService().applyScanPlanAsync(std::move(plan), options);
 
       if (!result)
       {

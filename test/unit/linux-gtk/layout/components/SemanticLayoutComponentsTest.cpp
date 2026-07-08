@@ -25,7 +25,7 @@
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/menu.h>
@@ -536,8 +536,8 @@ namespace ao::gtk::layout::test
     auto navCallbacks = ListNavigationController::Callbacks{};
     auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
-    auto queueModel = uimodel::PlaybackQueueModel{runtime.playback(), runtime.notifications()};
-    auto pageHost = TrackPageHost{stack, runtime, &queueModel, tagEditController, listNavigation, layoutStore};
+    auto queueSession = uimodel::PlaybackQueueSession{runtime.playback(), runtime.notifications()};
+    auto pageHost = TrackPageHost{stack, runtime, &queueSession, tagEditController, listNavigation, layoutStore};
 
     runtime.workspace().navigateTo(rt::kAllTracksListId);
     drainGtkEvents();

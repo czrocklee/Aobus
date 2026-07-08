@@ -67,7 +67,7 @@ namespace ao::audio::backend
 
   BackendProvider::Status PipeWireProvider::status() const
   {
-    return {.metadata =
+    return {.descriptor =
               {.id = kBackendPipeWire,
                .name = "PipeWire",
                .description = "Modern Linux audio server with low latency",

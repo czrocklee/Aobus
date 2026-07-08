@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "Model.h"
+#include "TrackListEntry.h"
 #include <ao/CoreIds.h>
 
 #include <chrono>
@@ -18,12 +18,12 @@ namespace ao::rt
 namespace ao::tui
 {
   bool playSelected(rt::PlaybackService& playback,
-                    std::vector<TrackListItem> const& tracks,
+                    std::vector<TrackListEntry> const& tracks,
                     std::int32_t selected,
                     ListId sourceListId);
 
   bool togglePlayback(rt::PlaybackService& playback,
-                      std::vector<TrackListItem> const& tracks,
+                      std::vector<TrackListEntry> const& tracks,
                       std::int32_t selected,
                       ListId sourceListId);
 

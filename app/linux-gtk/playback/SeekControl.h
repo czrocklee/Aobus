@@ -67,7 +67,7 @@ namespace ao::gtk
     sigc::connection _debounceConnection;
     sigc::scoped_connection _mapConnection;
     sigc::scoped_connection _unmapConnection;
-    uimodel::SeekViewModel _controller;
+    uimodel::SeekViewModel _seekViewModel;
 
     friend class test::SeekControlTestPeer;
   };

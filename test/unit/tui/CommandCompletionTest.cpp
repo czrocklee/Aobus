@@ -5,7 +5,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "tui/Model.h"
+#include "tui/LibraryNavigation.h"
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -67,7 +67,7 @@ namespace ao::tui::test
   TEST_CASE("CommandCompletion - completes artists and lists for quick filters", "[tui][unit][completion]")
   {
     auto const lists =
-      std::vector<LibraryNavItem>{{.label = "[#] Road Trips", .detail = {}, .completionText = "Road Trips"}};
+      std::vector<LibraryNavEntry>{{.label = "[#] Road Trips", .detail = {}, .completionText = "Road Trips"}};
     auto const artists = std::vector<rt::VocabularyEntry>{{.value = "Aimer", .frequency = 7}};
 
     auto optResult = completeCommandDraft("Ai", CommandCompletionContext{.lists = lists, .artists = artists});
@@ -91,7 +91,7 @@ namespace ao::tui::test
             "[tui][unit][completion]")
   {
     auto const lists =
-      std::vector<LibraryNavItem>{{.label = "[#] Road Trips", .detail = {}, .completionText = "Road Trips"}};
+      std::vector<LibraryNavEntry>{{.label = "[#] Road Trips", .detail = {}, .completionText = "Road Trips"}};
     auto const artists = std::vector<rt::VocabularyEntry>{
       {.value = "Road The Beatles", .frequency = 1},
       {.value = "Road Trip Artist", .frequency = 1},

@@ -35,7 +35,7 @@ track end.
 
 Startup restore must not autoplay and must not open an audio route. The GTK
 coordinator reloads track sources, rebuilds the queue from the current source
-membership, and asks `PlaybackQueueModel`/`PlaybackService` to publish an idle
+membership, and asks `PlaybackQueueSession`/`PlaybackService` to publish an idle
 now-playing state. `PlaybackService` keeps the resolved playback request and
 position as a deferred resume token.
 

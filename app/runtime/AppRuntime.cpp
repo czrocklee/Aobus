@@ -13,7 +13,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <memory>
 #include <utility>

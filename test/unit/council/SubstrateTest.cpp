@@ -3,7 +3,7 @@
 
 #include "council/Substrate.h"
 
-#include "council/Model.h"
+#include "council/CouncilSchema.h"
 #include "council/ProcessRunner.h"
 #include "test/council/TestSupport.h"
 

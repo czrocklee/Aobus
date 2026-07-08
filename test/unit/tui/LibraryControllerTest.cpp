@@ -155,24 +155,24 @@ namespace ao::tui::test
     auto customSpec = rt::defaultTrackPresentationSpec();
     customSpec.id = "custom-songs";
 
-    auto const initialCount = controller.presentationItems().size();
+    auto const initialCount = controller.presentationEntries().size();
     fixture.runtime.workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
       .label = "Custom Songs",
       .basePresetId = "songs",
       .spec = customSpec,
     });
 
-    REQUIRE(controller.presentationItems().size() == initialCount + 1);
-    CHECK(controller.presentationItems().back().id == "custom-songs");
+    REQUIRE(controller.presentationEntries().size() == initialCount + 1);
+    CHECK(controller.presentationEntries().back().id == "custom-songs");
     CHECK(controller.selectedPresentation() == 0);
 
     CHECK_FALSE(controller.setSelectedPresentation(-1));
-    CHECK_FALSE(controller.setSelectedPresentation(static_cast<std::int32_t>(controller.presentationItems().size())));
-    REQUIRE(controller.setSelectedPresentation(static_cast<std::int32_t>(controller.presentationItems().size()) - 1));
+    CHECK_FALSE(controller.setSelectedPresentation(static_cast<std::int32_t>(controller.presentationEntries().size())));
+    REQUIRE(controller.setSelectedPresentation(static_cast<std::int32_t>(controller.presentationEntries().size()) - 1));
 
     CHECK(controller.selectSelectedPresentation() == "View: custom-songs");
     CHECK(fixture.runtime.views().trackListState(controller.activeViewId()).presentation.id == "custom-songs");
-    CHECK(controller.selectedPresentation() == static_cast<std::int32_t>(controller.presentationItems().size()) - 1);
+    CHECK(controller.selectedPresentation() == static_cast<std::int32_t>(controller.presentationEntries().size()) - 1);
   }
 
   TEST_CASE("LibraryController - setPresentation preserves selected track identity", "[tui][unit][library]")

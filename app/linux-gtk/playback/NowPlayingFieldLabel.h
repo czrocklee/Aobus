@@ -34,6 +34,6 @@ namespace ao::gtk
     Action _action;
     Gtk::Label _label;
 
-    uimodel::NowPlayingViewModel _controller;
+    uimodel::NowPlayingViewModel _nowPlayingViewModel;
   };
 } // namespace ao::gtk

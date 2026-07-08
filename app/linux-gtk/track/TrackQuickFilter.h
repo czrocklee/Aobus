@@ -85,6 +85,6 @@ namespace ao::gtk
     sigc::scoped_connection _debounceTimer;
 
     CreateSmartListSignal _signalCreateSmartListRequested;
-    uimodel::TrackFilterViewModel _controller;
+    uimodel::TrackFilterViewModel _filterViewModel;
   };
 } // namespace ao::gtk

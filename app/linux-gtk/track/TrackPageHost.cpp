@@ -21,7 +21,7 @@
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
@@ -40,13 +40,13 @@ namespace ao::gtk
 {
   TrackPageHost::TrackPageHost(Gtk::Stack& stack,
                                rt::AppRuntime& runtime,
-                               ao::uimodel::PlaybackQueueModel* queueModel,
+                               ao::uimodel::PlaybackQueueSession* queueSession,
                                TagEditController& tagEditController,
                                ListNavigationController& listNavigation,
                                uimodel::TrackColumnLayoutStore& layoutStore)
     : _stack{stack}
     , _runtime{runtime}
-    , _playbackQueueModel{queueModel}
+    , _playbackQueueSession{queueSession}
     , _tagEditController{tagEditController}
     , _listNavigation{listNavigation}
     , _layoutStore{layoutStore}
@@ -381,9 +381,9 @@ namespace ao::gtk
     page->signalTrackActivated().connect(
       [this, page](TrackId id)
       {
-        if (_playbackQueueModel)
+        if (_playbackQueueSession)
         {
-          _playbackQueueModel->playQueue(page->selectionController().visibleTrackIds(), id, page->listId());
+          _playbackQueueSession->playQueue(page->selectionController().visibleTrackIds(), id, page->listId());
         }
       });
 

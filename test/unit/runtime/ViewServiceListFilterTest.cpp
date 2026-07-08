@@ -56,7 +56,7 @@ namespace ao::rt::test
     auto env = ViewServiceTestEnv{};
     auto const oldTrackId = env.library.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
     auto const newTrackId = env.library.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
-    env.storePtr->reloadAllTracks();
+    env.cachePtr->reloadAllTracks();
 
     auto service = env.makeService();
     auto const result = service.createView({}, true);
@@ -132,7 +132,7 @@ namespace ao::rt::test
     auto env = ViewServiceTestEnv{};
     auto const oldTrackId = env.library.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
     auto const newTrackId = env.library.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
-    env.storePtr->reloadAllTracks();
+    env.cachePtr->reloadAllTracks();
 
     auto const oldListId = ao::test::requireValue(env.writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,

@@ -27,32 +27,32 @@ namespace ao::audio
     /**
      * @brief Human-readable description of an audio profile.
      */
-    struct ProfileMetadata final
+    struct ProfileDescriptor final
     {
       ProfileId id{};
       std::string name{};
       std::string description{};
 
-      bool operator==(ProfileMetadata const&) const = default;
+      bool operator==(ProfileDescriptor const&) const = default;
     };
 
     /**
      * @brief Static description of an audio backend.
      */
-    struct BackendMetadata final
+    struct BackendDescriptor final
     {
       BackendId id{};
       std::string name{};
       std::string description{};
       std::string iconName{};
-      std::vector<ProfileMetadata> supportedProfiles{};
+      std::vector<ProfileDescriptor> supportedProfiles{};
 
-      bool operator==(BackendMetadata const&) const = default;
+      bool operator==(BackendDescriptor const&) const = default;
     };
 
     struct Status final
     {
-      BackendMetadata metadata{};
+      BackendDescriptor descriptor{};
       std::vector<Device> devices{};
 
       bool operator==(Status const&) const = default;

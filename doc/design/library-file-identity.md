@@ -15,7 +15,7 @@ the whole tagged file, so external retagging does not break identity.
 
 `lib/library` is the primitive storage and schema layer: persisted stores,
 views, builders, and LMDB-backed library access. Runtime owns scan and
-reconcile application semantics. The scan planner/applier compose library
+reconcile application semantics. The scan planner and apply operation compose library
 primitives, but they are runtime-private `ao::rt` workflows, not public
 `ao::library` primitives. The frontend-shared scan entry point is
 `ao::rt::LibraryScan`; `ao::rt::AudioIdentityIndexer` and scan are both
@@ -89,7 +89,7 @@ preferred over stale or unverifiable identity.
 
 ## Scan Matching And Writes
 
-Runtime-private `ao::rt::ScanPlanApplier` normally writes payload length and
+Runtime-private `ao::rt::ScanApplyOperation` normally writes payload length and
 signature for New and Changed classifications. Fast bootstrap mode may defer
 New-item fingerprinting; those manifest rows are written as available with file
 size and mtime but a pending audio identity. Changed and Moved items remain
@@ -118,7 +118,7 @@ matching or explicit relink validation until backfill completes. The CLI relink
 path tells users to run `aobus lib fingerprint --pending` when a requested
 missing row has no audio signature.
 
-`ao::rt::ScanPlanApplier` applies a moved item by rebuilding the existing track
+`ao::rt::ScanApplyOperation` applies a moved item by rebuilding the existing track
 from the database record, setting the cold URI to the new root-relative URI,
 refreshing technical audio properties from the file, removing the old manifest
 row, and writing the new manifest row with the existing `TrackId`.
@@ -132,7 +132,7 @@ scan output and GTK scan completion notification use those counts to report
 `Relinked N moved file(s)` and `N missing file(s) need review` after the
 transaction commits.
 
-If scan application is cancelled, `ao::rt::ScanPlanApplier` stops between
+If scan application is cancelled, `ao::rt::ScanApplyOperation` stops between
 fingerprinting chunks and returns a cancelled result before committing its write
 transaction. LMDB aborts the uncommitted transaction, so partially processed
 tracks, manifest rows, signatures, and relinks are not persisted.
@@ -163,7 +163,7 @@ identity is pending and fills them in three phases per bounded batch:
 3. **Serial write-back.** The hashed rows of a batch are written back in a
    single write transaction, so the commit cost is amortized across the batch.
    The constructor-provided mutation mutex is locked only around this phase:
-   `LibraryTasks` passes its mutation mutex, so scans, imports, and exports
+   `LibraryTaskService` passes its mutation mutex, so scans, imports, and exports
    block on backfill only during these short write windows, never while files
    are being hashed. Inside the transaction each row is reread, rebuilt with
    `FileManifestBuilder::fromView()`, and written with
@@ -193,7 +193,7 @@ cannot be exact identity candidates.
 `aobus lib relink --from <old-uri> --to <new-uri>` validates that both sides are
 currently unresolved and that the audio payload length and signature match. The
 CLI apply path builds a one-item `Moved` scan plan and sends it through runtime
-`LibraryScan`, which uses runtime-private `ScanPlanApplier`; manual relinks
+`LibraryScan`, which uses runtime-private `ScanApplyOperation`; manual relinks
 preserve the same dual-rebind invariant as automatic relinks.
 `--dry-run` validates and reports the planned binding without mutating the
 library.

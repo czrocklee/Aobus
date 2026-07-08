@@ -39,13 +39,13 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
+#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/stack.h>
@@ -74,9 +74,9 @@ namespace ao::gtk
       : layoutConfig{runtime.musicLibrary().rootPath() / ".aobus"}
       , trackRowCache{runtime.library()}
       , imageCache{100}
-      , playbackQueueModel{runtime.playback(), runtime.notifications()}
+      , playbackQueueSession{runtime.playback(), runtime.notifications()}
       , playbackCommandSurface{runtime.playback(),
-                               &playbackQueueModel,
+                               &playbackQueueSession,
                                [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
       , trackPresentationCatalog{runtime.workspace()}
       , trackPresentationPreferences{trackPresentationCatalog}
@@ -108,7 +108,7 @@ namespace ao::gtk
                                  themeController}
       , trackPageHost{stack,
                       runtime,
-                      &playbackQueueModel,
+                      &playbackQueueSession,
                       tagEditController,
                       listNavigationController,
                       trackColumnLayouts}
@@ -202,20 +202,20 @@ namespace ao::gtk
         return;
       }
 
-      // ListSourceStore::sourceFor silently falls back to the all-tracks source
+      // TrackSourceCache::sourceFor silently falls back to the all-tracks source
       // when a list id no longer exists. Resolve the saved list id explicitly so
       // the queue receives the list id we actually want restored, instead of a
       // fallback we inferred from a pointer comparison.
       auto const sourceListId = resolveRestoreSourceListId(runtime, session.sourceListId);
 
       if (auto& source = runtime.sources().sourceFor(sourceListId);
-          !playbackQueueModel.restoreQueue(trackIdsFrom(source), session, sourceListId))
+          !playbackQueueSession.restoreQueue(trackIdsFrom(source), session, sourceListId))
       {
         APP_LOG_DEBUG("MainWindowCoordinator: Playback session restore skipped");
         return;
       }
 
-      if (auto const optRestoredTrackId = playbackQueueModel.nowPlayingTrackId(); optRestoredTrackId)
+      if (auto const optRestoredTrackId = playbackQueueSession.nowPlayingTrackId(); optRestoredTrackId)
       {
         auto const spec = presentationForList(sourceListId, runtime);
         runtime.workspace().navigateTo(sourceListId, {.optPresentation = spec});
@@ -292,7 +292,7 @@ namespace ao::gtk
     ThemeCoordinator themeController;
     TrackRowCache trackRowCache;
     ImageCache imageCache;
-    uimodel::PlaybackQueueModel playbackQueueModel;
+    uimodel::PlaybackQueueSession playbackQueueSession;
     uimodel::PlaybackCommandSurface playbackCommandSurface;
     ao::uimodel::TrackPresentationCatalog trackPresentationCatalog;
     ao::uimodel::ListPresentationPreferenceStore trackPresentationPreferences;
@@ -468,7 +468,7 @@ namespace ao::gtk
   {
     return GtkUiServices{.trackRowCache = &_implPtr->trackRowCache,
                          .imageCache = &_implPtr->imageCache,
-                         .playbackQueueModel = &_implPtr->playbackQueueModel,
+                         .playbackQueueSession = &_implPtr->playbackQueueSession,
                          .playbackCommandSurface = &_implPtr->playbackCommandSurface,
                          .tagEditController = &_implPtr->tagEditController,
                          .importExportCoordinator = &_implPtr->importExportCoordinator,
@@ -506,9 +506,9 @@ namespace ao::gtk
   {
     return &_implPtr->imageCache;
   }
-  uimodel::PlaybackQueueModel* MainWindowCoordinator::playbackQueueModel()
+  uimodel::PlaybackQueueSession* MainWindowCoordinator::playbackQueueSession()
   {
-    return &_implPtr->playbackQueueModel;
+    return &_implPtr->playbackQueueSession;
   }
   uimodel::PlaybackCommandSurface* MainWindowCoordinator::playbackCommandSurface()
   {

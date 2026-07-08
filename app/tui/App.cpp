@@ -11,17 +11,19 @@
 #include "EventController.h"
 #include "Executor.h"
 #include "LibraryController.h"
-#include "Model.h"
 #include "NotificationCenterPanel.h"
 #include "OutputDeviceController.h"
 #include "OutputDevicePanel.h"
 #include "PlaybackPanel.h"
+#include "PlaybackStatusFormatter.h"
 #include "PresentationPanel.h"
 #include "QualityPanel.h"
 #include "Render.h"
-#include "ShellModel.h"
+#include "SelectionNavigation.h"
+#include "ShellInteractionModel.h"
 #include "StatusBar.h"
 #include "Style.h"
+#include "TrackPresentationNavigation.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
 #include <ao/CoreIds.h>
@@ -97,7 +99,7 @@ namespace ao::tui
       }
     }
 
-    ftxui::Element commandPalettePopover(ShellModel const& shell,
+    ftxui::Element commandPalettePopover(ShellInteractionModel const& shell,
                                          std::int32_t const terminalColumns,
                                          std::int32_t const terminalRows)
     {
@@ -114,11 +116,11 @@ namespace ao::tui
                            ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, panelRows));
     }
 
-    ftxui::Element presentationPopover(ShellModel const& shell,
+    ftxui::Element presentationPopover(ShellInteractionModel const& shell,
                                        LibraryController const& library,
                                        ftxui::Box const& presentationButtonBox,
                                        std::int32_t const terminalColumns,
-                                       std::vector<PresentationRowBox>* rowBoxes)
+                                       std::vector<PresentationRowHitRegion>* rowHitRegions)
     {
       if (shell.overlay() != Overlay::PresentationPanel)
       {
@@ -127,24 +129,26 @@ namespace ao::tui
 
       auto const activePresentationId = library.activePresentationId();
       auto const panelColumns =
-        presentationPanelColumns(library.presentationItems(), activePresentationId, terminalColumns);
+        presentationPanelColumns(library.presentationEntries(), activePresentationId, terminalColumns);
 
-      return anchoredOverlay(
-        presentationPanel(
-          library.presentationItems(), activePresentationId, library.selectedPresentation(), rowBoxes, panelColumns) |
-          ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kPresentationPanelRows),
-        presentationButtonBox,
-        AnchoredOverlayPlacement::Above,
-        AnchoredOverlaySize{.columns = panelColumns, .rows = kPresentationPanelRows},
-        AnchoredOverlayTerminal{.columns = terminalColumns});
+      return anchoredOverlay(presentationPanel(library.presentationEntries(),
+                                               activePresentationId,
+                                               library.selectedPresentation(),
+                                               rowHitRegions,
+                                               panelColumns) |
+                               ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kPresentationPanelRows),
+                             presentationButtonBox,
+                             AnchoredOverlayPlacement::Above,
+                             AnchoredOverlaySize{.columns = panelColumns, .rows = kPresentationPanelRows},
+                             AnchoredOverlayTerminal{.columns = terminalColumns});
     }
 
-    ftxui::Element notificationPopover(ShellModel const& shell,
+    ftxui::Element notificationPopover(ShellInteractionModel const& shell,
                                        uimodel::ActivityStatusViewState const& state,
                                        ftxui::Box const& activityStatusBox,
                                        std::int32_t const terminalColumns,
                                        std::int32_t const terminalRows,
-                                       std::vector<NotificationDetailRowBox>* rowBoxes)
+                                       std::vector<NotificationDetailRowHitRegion>* rowHitRegions)
     {
       if (shell.overlay() != Overlay::Notifications)
       {
@@ -153,7 +157,7 @@ namespace ao::tui
 
       auto const panelColumns = notificationCenterPanelColumns(state, terminalColumns);
 
-      return anchoredOverlay(notificationCenterPanel(state, rowBoxes, panelColumns) |
+      return anchoredOverlay(notificationCenterPanel(state, rowHitRegions, panelColumns) |
                                ftxui::size(ftxui::WIDTH, ftxui::EQUAL, panelColumns) |
                                ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kNotificationCenterPanelRows),
                              activityStatusBox,
@@ -459,7 +463,7 @@ namespace ao::tui
     }
 
     void updateKittyCoverArt(KittyPaintState& state,
-                             ShellModel const& shell,
+                             ShellInteractionModel const& shell,
                              ResourceId const cachedCoverArtId,
                              ftxui::Box const& coverBox,
                              std::optional<std::vector<std::byte>> const& optKittyCoverArtPng)
@@ -515,7 +519,7 @@ namespace ao::tui
     registerPlatformAudioBackends(runtime);
 
     auto library = LibraryController{runtime};
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     auto cachedCoverArtId = kInvalidResourceId;
     auto optCoverArtPreview = std::optional<CoverArtRows>{};
     auto optKittyCoverArtPng = std::optional<std::vector<std::byte>>{};
@@ -631,10 +635,10 @@ namespace ao::tui
                          viewState.presentation,
                          TrackTableViewOptions{.columnWidths = &trackColumnWidthOverrides,
                                                .resizeHandles = &hitRegions.trackColumnResizeHandles,
-                                               .sectionRowBoxes = &hitRegions.trackSectionRows,
+                                               .sectionRowHitRegions = &hitRegions.trackSectionRows,
                                                .tableBox = &hitRegions.trackTableBox,
                                                .availableColumns = std::max(1, terminalColumns - 2)});
-        auto const presentationTitle = presentationDisplayId(viewState.presentation.id);
+        auto const presentationTitle = trackPresentationDisplayId(viewState.presentation.id);
         auto workspaceElementPtr =
           style::titledPanel(
             "",

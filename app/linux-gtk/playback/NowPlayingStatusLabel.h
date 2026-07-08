@@ -39,6 +39,6 @@ namespace ao::gtk
     rt::PlaybackService& _playbackService;
     Gtk::Label _label;
 
-    uimodel::NowPlayingViewModel _controller;
+    uimodel::NowPlayingViewModel _nowPlayingViewModel;
   };
 } // namespace ao::gtk

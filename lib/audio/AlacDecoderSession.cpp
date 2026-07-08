@@ -9,7 +9,7 @@
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
-#include <ao/audio/PcmConverter.h>
+#include <ao/audio/PcmConversion.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ByteView.h>
 
@@ -271,12 +271,12 @@ namespace ao::audio
       {
         auto const src = layout::viewArray<std::int16_t>(std::span{_implPtr->sourcePcm});
         auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_implPtr->targetPcm});
-        PcmConverter::pad<std::int16_t, std::int32_t>(src, dst, 16);
+        padPcmSamples<std::int16_t, std::int32_t>(src, dst, 16);
       }
       else if (sourceBps == 24 && targetBps == 32)
       {
         auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_implPtr->targetPcm});
-        PcmConverter::unpackS24(_implPtr->sourcePcm, dst, 8);
+        unpackS24PcmSamples(_implPtr->sourcePcm, dst, 8);
       }
       else
       {

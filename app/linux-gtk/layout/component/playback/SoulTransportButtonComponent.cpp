@@ -49,13 +49,13 @@ namespace ao::gtk::layout
     {
     public:
       SoulTransportButtonComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _transportController{ctx.runtime.playback(),
-                               commandSurface(ctx),
-                               TransportButton::Action::PlayPause,
-                               false,
-                               [this](uimodel::TransportViewState const& state) { applyTransportState(state); }}
-        , _soulController{ctx.runtime.playback(),
-                          [this](uimodel::AobusSoulViewState const& state) { applySoulState(state); }}
+        : _transportViewModel{ctx.runtime.playback(),
+                              commandSurface(ctx),
+                              TransportButton::Action::PlayPause,
+                              false,
+                              [this](uimodel::TransportViewState const& state) { applyTransportState(state); }}
+        , _soulViewModel{ctx.runtime.playback(),
+                         [this](uimodel::AobusSoulViewState const& state) { applySoulState(state); }}
         , _hasComplexTooltip{node.optTooltip.has_value()}
       {
         _button.set_child(_soul);
@@ -77,7 +77,7 @@ namespace ao::gtk::layout
           _soul.setInnerGlyphScale(static_cast<float>(glyphScale));
         }
 
-        _button.signal_clicked().connect([this] { _transportController.handleClick(); });
+        _button.signal_clicked().connect([this] { _transportViewModel.handleClick(); });
       }
 
       Gtk::Widget& widget() override { return _button; }
@@ -116,8 +116,8 @@ namespace ao::gtk::layout
 
       Gtk::Button _button;
       AobusSoul _soul;
-      uimodel::TransportViewModel _transportController;
-      uimodel::AobusSoulViewModel _soulController;
+      uimodel::TransportViewModel _transportViewModel;
+      uimodel::AobusSoulViewModel _soulViewModel;
       bool _hasComplexTooltip = false;
     };
 

@@ -131,10 +131,10 @@ namespace ao::rt::test
                     .isDefault = true,
                     .backendId = audio::BackendId{"mock_backend"}},
     };
-    fixture.status.metadata.supportedProfiles = {
-      audio::BackendProvider::ProfileMetadata{
+    fixture.status.descriptor.supportedProfiles = {
+      audio::BackendProvider::ProfileDescriptor{
         .id = audio::kProfileExclusive, .name = "Exclusive", .description = "Exclusive profile"},
-      audio::BackendProvider::ProfileMetadata{
+      audio::BackendProvider::ProfileDescriptor{
         .id = audio::kProfileShared, .name = "Shared", .description = "Shared profile"},
     };
     fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);

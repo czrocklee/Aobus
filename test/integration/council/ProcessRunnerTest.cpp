@@ -3,7 +3,7 @@
 
 #include "council/ProcessRunner.h"
 
-#include "council/Model.h"
+#include "council/CouncilSchema.h"
 #include "test/unit/TestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>

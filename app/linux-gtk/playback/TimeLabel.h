@@ -48,7 +48,7 @@ namespace ao::gtk
 
     Mode _mode;
     Gtk::Label _label;
-    uimodel::PlaybackTimeViewModel _controller;
+    uimodel::PlaybackTimeViewModel _timeViewModel;
     uimodel::PlaybackPositionInterpolator _interpolator;
 
     bool _isPreviewing = false;

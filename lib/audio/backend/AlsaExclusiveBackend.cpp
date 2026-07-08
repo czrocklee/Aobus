@@ -289,10 +289,10 @@ namespace ao::audio::backend
       return true;
     }
 
-    class AlsaMixerController final
+    class AlsaMixerSession final
     {
     public:
-      AlsaMixerController() = default;
+      AlsaMixerSession() = default;
 
       bool init(::snd_pcm_t* pcm)
       {
@@ -559,7 +559,7 @@ namespace ao::audio::backend
     mutable std::atomic<bool> fatalStreamError{false};
     bool canPause = false;
 
-    AlsaMixerController mixer;
+    AlsaMixerSession mixer;
     ::snd_pcm_format_t alsaFormat = SND_PCM_FORMAT_S16_LE;
     bool is3Byte24Bit = false;
 

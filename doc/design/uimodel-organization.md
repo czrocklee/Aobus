@@ -91,7 +91,9 @@ testable and prevents accidental God objects.
 | Suffix | Responsibility | Examples |
 |---|---|---|
 | `ViewModel` | Long-lived adapter-facing object; subscribes to runtime/services, produces view state, exposes user-action methods, returns commands or updates UI-local stores. | `ActivityStatusViewModel`, `NowPlayingViewModel`, `TransportViewModel`, `TrackPresentationPickerViewModel` |
-| `Model` | UI state machine or editor state holder; no platform widgets. | `SmartListEditorModel`, `TrackPropertiesFormModel` |
+| `InteractionModel` | Transient input or gesture state; no runtime service ownership. | `SeekSliderInteractionModel` |
+| `EditorModel` / `FormModel` | Stateful draft/editing contract with field state, validation, option selection, and collect/build methods. | `CustomPresentationEditorModel`, `TrackPropertiesFormModel` |
+| `Model` | Rare behavior-bearing UI state fallback when no narrower role fits. | `KeymapModel`, `PreferencesModel` |
 | `Workflow` | One user operation or operation family; stateless or short-lived. A type that owns subscriptions and renders state is a `ViewModel`, not a `Workflow`. | `TrackInlineEditWorkflow`, `TagEditWorkflow` |
 | `Store` | Owns UI-local preference/session state and emits changes. Does not persist config unless named as a config/persistence store. | `ListPresentationPreferenceStore`, `TrackColumnLayoutStore`, `KeymapStore` |
 | `Catalog` | Owns or exposes available options and lookups. Does not apply selections or navigate. | `TrackPresentationCatalog`, `LayoutActionCatalog`, `LayoutComponentCatalog` |

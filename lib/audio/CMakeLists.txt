@@ -16,7 +16,7 @@ add_library(ao_audio STATIC
     detail/TrackSession.cpp
     Engine.cpp
     FormatNegotiator.cpp
-    PcmConverter.cpp
+    PcmConversion.cpp
     PcmRingBuffer.cpp
     StreamingSource.cpp
     detail/RouteTracker.cpp

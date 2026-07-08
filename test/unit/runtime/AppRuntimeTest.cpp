@@ -42,7 +42,7 @@ namespace ao::rt::test
     [[maybe_unused]] auto& notifications = appPtr->notifications();
 
     appPtr->addAudioProvider(
-      makeReadyAudioProvider(audio::BackendProvider::Status{.metadata = {.id = audio::BackendId{"dummy"}}}));
+      makeReadyAudioProvider(audio::BackendProvider::Status{.descriptor = {.id = audio::BackendId{"dummy"}}}));
 
     // reloadAllTracks
     CHECK_NOTHROW(appPtr->reloadAllTracks());

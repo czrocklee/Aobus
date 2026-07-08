@@ -20,9 +20,9 @@
 #include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <chrono>
 #include <cstdint>
@@ -89,10 +89,10 @@ namespace ao::rt
 
     async::Executor& executor;
     library::MusicLibrary& library;
-    ListSourceStore& sources;
+    TrackSourceCache& sources;
 
-    Impl(async::Executor& exec, library::MusicLibrary& lib, ListSourceStore& sourceStore)
-      : executor{exec}, library{lib}, sources{sourceStore}
+    Impl(async::Executor& exec, library::MusicLibrary& lib, TrackSourceCache& sourceCache)
+      : executor{exec}, library{lib}, sources{sourceCache}
     {
     }
 
@@ -105,7 +105,7 @@ namespace ao::rt
     Signal<ViewService::ListChanged const&> listChangedSignal;
   };
 
-  ViewService::ViewService(async::Executor& executor, library::MusicLibrary& library, ListSourceStore& sources)
+  ViewService::ViewService(async::Executor& executor, library::MusicLibrary& library, TrackSourceCache& sources)
     : _implPtr{std::make_unique<Impl>(executor, library, sources)}
   {
   }

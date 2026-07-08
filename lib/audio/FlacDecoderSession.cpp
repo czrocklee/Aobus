@@ -10,7 +10,7 @@
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
-#include <ao/audio/PcmConverter.h>
+#include <ao/audio/PcmConversion.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ByteView.h>
 
@@ -473,7 +473,7 @@ namespace ao::audio
         impl->channelSpans[ch] = {buffer[ch], blockSize};
       }
 
-      PcmConverter::interleaveAndPad<std::int32_t, std::int32_t>(
+      interleaveAndPadPcmSamples<std::int32_t, std::int32_t>(
         impl->channelSpans, dst, static_cast<std::uint8_t>(32 - bps));
     }
     else

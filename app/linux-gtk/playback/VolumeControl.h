@@ -51,6 +51,6 @@ namespace ao::gtk
     sigc::connection _scrollBubbleTimeout;
 
     bool _updating = false;
-    uimodel::VolumeViewModel _controller;
+    uimodel::VolumeViewModel _volumeViewModel;
   };
 } // namespace ao::gtk

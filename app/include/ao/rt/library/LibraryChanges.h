@@ -14,7 +14,7 @@
 
 namespace ao::rt
 {
-  class LibraryTasks;
+  class LibraryTaskService;
   class LibraryWriter;
 
   class [[nodiscard]] LibraryChanges final
@@ -53,7 +53,7 @@ namespace ao::rt
     Subscription onLibraryTaskProgress(std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const;
 
   private:
-    friend class LibraryTasks;
+    friend class LibraryTaskService;
     friend class LibraryWriter;
 
     void notifyTracksMutated(std::vector<TrackId> trackIds);

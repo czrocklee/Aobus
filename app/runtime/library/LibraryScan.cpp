@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "ScanPlanApplier.h"
+#include "ScanApplyOperation.h"
 #include "ScanPlanBuilder.h"
 #include <ao/Error.h>
 #include <ao/rt/library/LibraryScan.h>
@@ -29,7 +29,7 @@ namespace ao::rt
                                                  FailureCallback failure,
                                                  std::stop_token stopToken)
   {
-    auto applier = ScanPlanApplier{_library, std::move(plan), std::move(progress), std::move(failure), options};
-    return applier.run(stopToken);
+    auto operation = ScanApplyOperation{_library, std::move(plan), std::move(progress), std::move(failure), options};
+    return operation.run(stopToken);
   }
 } // namespace ao::rt

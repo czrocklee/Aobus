@@ -152,7 +152,7 @@ already-spliced item remains until the advanced callback consumes it.
 If the engine takes the drain fallback instead, the existing idle path remains
 responsible for asking the queue to start the next track explicitly.
 
-`PlaybackQueueModel` owns queue policy. `peekNext()` decides and records one
+`PlaybackQueueSession` owns queue policy. `peekNext()` decides and records one
 pending successor, including shuffle choices, without moving the current cursor.
 The cursor is committed only after a matching now-playing change arrives from a
 natural advance or after an explicit fallback/manual play succeeds; then the

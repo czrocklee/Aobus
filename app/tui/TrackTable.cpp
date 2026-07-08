@@ -3,11 +3,12 @@
 
 #include "TrackTable.h"
 
-#include "Model.h"
 #include "SelectableList.h"
-#include "ShellModel.h"
+#include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
+#include "TrackListEntry.h"
+#include "TrackSection.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -310,7 +311,7 @@ namespace ao::tui
       return hbox(std::move(cells));
     }
 
-    ftxui::Element trackRow(TrackListItem const& track,
+    ftxui::Element trackRow(TrackListEntry const& track,
                             TrackId const playingTrackId,
                             std::vector<TrackColumn> const& columns)
     {
@@ -380,7 +381,7 @@ namespace ao::tui
     {
       using namespace ftxui;
 
-      auto const primary = sectionDisplayName(section);
+      auto const primary = trackSectionDisplayName(section);
       auto detail = sectionDetailText(section);
 
       return hbox({
@@ -472,7 +473,7 @@ namespace ao::tui
     return std::clamp(trackIndex, 0, maxTrackIndex);
   }
 
-  ftxui::Element trackTableView(std::span<TrackListItem const> const tracks,
+  ftxui::Element trackTableView(std::span<TrackListEntry const> const tracks,
                                 std::int32_t const selected,
                                 TrackId const playingTrackId,
                                 rt::TrackPresentationSpec const& presentation,
@@ -482,7 +483,7 @@ namespace ao::tui
       tracks, std::span<TrackSection const>{}, selected, playingTrackId, presentation, std::move(options));
   }
 
-  ftxui::Element trackTableView(std::span<TrackListItem const> const tracks,
+  ftxui::Element trackTableView(std::span<TrackListEntry const> const tracks,
                                 std::span<TrackSection const> const sections,
                                 std::int32_t const selected,
                                 TrackId const playingTrackId,
@@ -496,10 +497,10 @@ namespace ao::tui
     rows.reserve(tracks.size() + sections.size());
     std::size_t sectionIndex = 0;
 
-    if (options.sectionRowBoxes != nullptr)
+    if (options.sectionRowHitRegions != nullptr)
     {
-      options.sectionRowBoxes->clear();
-      options.sectionRowBoxes->reserve(sections.size());
+      options.sectionRowHitRegions->clear();
+      options.sectionRowHitRegions->reserve(sections.size());
     }
 
     for (std::size_t trackIndex = 0; trackIndex < tracks.size(); ++trackIndex)
@@ -508,13 +509,13 @@ namespace ao::tui
       {
         auto rowPtr = sectionHeaderRow(sections[sectionIndex]);
 
-        if (options.sectionRowBoxes != nullptr)
+        if (options.sectionRowHitRegions != nullptr)
         {
           // reflect() stores into the vector element during layout, so reserve()
           // above must keep row-box addresses stable while rows are built.
-          options.sectionRowBoxes->push_back(
-            TrackSectionRowBox{.sectionIndex = static_cast<std::int32_t>(sectionIndex), .box = {}});
-          rowPtr = std::move(rowPtr) | reflect(options.sectionRowBoxes->back().box);
+          options.sectionRowHitRegions->push_back(
+            TrackSectionRowHitRegion{.sectionIndex = static_cast<std::int32_t>(sectionIndex), .box = {}});
+          rowPtr = std::move(rowPtr) | reflect(options.sectionRowHitRegions->back().box);
         }
 
         rows.push_back(std::move(rowPtr));

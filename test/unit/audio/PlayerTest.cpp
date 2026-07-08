@@ -82,11 +82,11 @@ namespace ao::audio::test
 
     BackendProvider::Status pipeWireStatus()
     {
-      return BackendProvider::Status{.metadata = {.id = kBackendPipeWire,
-                                                  .name = "PipeWire",
-                                                  .description = "PipeWire Provider",
-                                                  .iconName = "audio-card-symbolic",
-                                                  .supportedProfiles = {}},
+      return BackendProvider::Status{.descriptor = {.id = kBackendPipeWire,
+                                                    .name = "PipeWire",
+                                                    .description = "PipeWire Provider",
+                                                    .iconName = "audio-card-symbolic",
+                                                    .supportedProfiles = {}},
                                      .devices = {}};
     }
   } // namespace
@@ -125,11 +125,11 @@ namespace ao::audio::test
           return Subscription{[] {}};
         });
     When(Method(mockProvider, status))
-      .AlwaysReturn(BackendProvider::Status{.metadata = {.id = kBackendNone,
-                                                         .name = "Mock",
-                                                         .description = "Mock",
-                                                         .iconName = "audio-card",
-                                                         .supportedProfiles = {}},
+      .AlwaysReturn(BackendProvider::Status{.descriptor = {.id = kBackendNone,
+                                                           .name = "Mock",
+                                                           .description = "Mock",
+                                                           .iconName = "audio-card",
+                                                           .supportedProfiles = {}},
                                             .devices = {}});
 
     auto executor = async::ImmediateExecutor{};
@@ -276,11 +276,11 @@ namespace ao::audio::test
     When(Method(mockProvider, createBackend))
       .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
     When(Method(mockProvider, status))
-      .AlwaysReturn(BackendProvider::Status{.metadata = {.id = kBackendPipeWire,
-                                                         .name = "PipeWire",
-                                                         .description = "PipeWire Provider",
-                                                         .iconName = "audio-card-symbolic",
-                                                         .supportedProfiles = {}},
+      .AlwaysReturn(BackendProvider::Status{.descriptor = {.id = kBackendPipeWire,
+                                                           .name = "PipeWire",
+                                                           .description = "PipeWire Provider",
+                                                           .iconName = "audio-card-symbolic",
+                                                           .supportedProfiles = {}},
                                             .devices = {}});
 
     auto executor = async::ImmediateExecutor{};
@@ -621,11 +621,11 @@ namespace ao::audio::test
 
       Status status() const override
       {
-        return {.metadata = {.id = kBackendAlsa,
-                             .name = "ALSA",
-                             .description = "ALSA",
-                             .iconName = "audio-card-symbolic",
-                             .supportedProfiles = {{kProfileExclusive, "Exclusive", "Exclusive"}}},
+        return {.descriptor = {.id = kBackendAlsa,
+                               .name = "ALSA",
+                               .description = "ALSA",
+                               .iconName = "audio-card-symbolic",
+                               .supportedProfiles = {{kProfileExclusive, "Exclusive", "Exclusive"}}},
                 .devices = {Device{.id = DeviceId{"alsa-device"},
                                    .displayName = "ALSA Device",
                                    .description = "ALSA",

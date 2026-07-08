@@ -3,8 +3,8 @@
 
 #include "council/Substrate.h"
 
+#include "council/CouncilSchema.h"
 #include "council/Hash.h"
-#include "council/Model.h"
 #include "council/ProcessRunner.h"
 #include "council/Serialization.h"
 #include <ao/Error.h>
@@ -685,6 +685,27 @@ namespace ao::council
     appendDirectory(argv, directories, std::filesystem::path{kSandboxHome});
     argv.insert(argv.end(), {"--bind", home.string(), std::string{kSandboxHome}});
     appendReviewToolBinds(argv, directories);
+
+    if (auto const* dbusAddress = std::getenv("DBUS_SESSION_BUS_ADDRESS"); dbusAddress != nullptr)
+    {
+      auto addressStr = std::string_view{dbusAddress};
+
+      if (auto const prefix = std::string_view{"unix:path="}; addressStr.starts_with(prefix))
+      {
+        auto socketPath = addressStr.substr(prefix.size());
+
+        if (auto const comma = socketPath.find(','); comma != std::string_view::npos)
+        {
+          socketPath = socketPath.substr(0, comma);
+        }
+
+        if (auto const path = std::filesystem::path{socketPath}; path.is_absolute() && std::filesystem::exists(path))
+        {
+          appendParentDirectories(argv, directories, path);
+          argv.insert(argv.end(), {"--bind", path.string(), path.string()});
+        }
+      }
+    }
 
     argv.insert(argv.end(),
                 {"--setenv",

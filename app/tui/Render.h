@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "Model.h"
+#include "TrackListEntry.h"
 
 #include <ftxui/screen/box.hpp>
 
@@ -24,8 +24,8 @@ namespace ao::tui
   void paintKittyCoverArt(ftxui::Box const& coverBox, std::vector<std::byte> const& png);
 
   ftxui::Element centerPopover(ftxui::Element popoverPtr);
-  std::int32_t detailPaneColumns(TrackListItem const* selectedTrack, std::int32_t terminalColumns);
-  ftxui::Element detailPane(TrackListItem const* selectedTrack,
+  std::int32_t detailPaneColumns(TrackListEntry const* selectedTrack, std::int32_t terminalColumns);
+  ftxui::Element detailPane(TrackListEntry const* selectedTrack,
                             ftxui::Element coverElementPtr,
                             std::int32_t columns = 0);
   std::int32_t helpPaneColumns(std::int32_t terminalColumns);

@@ -9,7 +9,7 @@
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
-#include <ao/audio/PcmConverter.h>
+#include <ao/audio/PcmConversion.h>
 #include <ao/audio/detail/AacConfigParser.h>
 #include <ao/audio/detail/DecoderError.h>
 
@@ -368,7 +368,7 @@ namespace ao::audio
       if (_implPtr->info.outputFormat.bitDepth == 32)
       {
         _implPtr->targetPcmBuffer.resize(samples);
-        PcmConverter::pad<INT_PCM, std::int32_t>(_implPtr->pcmBuffer, _implPtr->targetPcmBuffer, 16);
+        padPcmSamples<INT_PCM, std::int32_t>(_implPtr->pcmBuffer, _implPtr->targetPcmBuffer, 16);
 
         auto const bytes = std::as_bytes(std::span{_implPtr->targetPcmBuffer});
 

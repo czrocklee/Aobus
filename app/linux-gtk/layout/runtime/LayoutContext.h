@@ -46,7 +46,7 @@ namespace ao::uimodel
 namespace ao::uimodel
 {
   class PlaybackCommandSurface;
-  class PlaybackQueueModel;
+  class PlaybackQueueSession;
 }
 
 namespace ao::uimodel
@@ -85,7 +85,7 @@ namespace ao::gtk::layout
 
   struct PlaybackUiContext final
   {
-    uimodel::PlaybackQueueModel* queueModel = nullptr;
+    uimodel::PlaybackQueueSession* queueSession = nullptr;
     uimodel::PlaybackCommandSurface* commandSurface = nullptr;
   };
 
@@ -134,7 +134,7 @@ namespace ao::gtk::layout
     track.presentationPreferences = services.trackPresentationPreferences;
     track.trackRowCache = services.trackRowCache;
     list.navigationController = services.listNavigationController;
-    playback.queueModel = services.playbackQueueModel;
+    playback.queueSession = services.playbackQueueSession;
     playback.commandSurface = services.playbackCommandSurface;
     detail.imageCache = services.imageCache;
     tag.editController = services.tagEditController;

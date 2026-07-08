@@ -52,18 +52,18 @@ namespace ao::gtk
                                    Action action,
                                    bool showLabel,
                                    std::string const& size)
-    : _controller{playbackService,
-                  commands,
-                  action,
-                  showLabel,
-                  [this](ao::uimodel::TransportViewState const& state) { applyState(state); }}
+    : _transportViewModel{playbackService,
+                          commands,
+                          action,
+                          showLabel,
+                          [this](ao::uimodel::TransportViewState const& state) { applyState(state); }}
   {
     _button.set_has_frame(false);
     _button.add_css_class("ao-playback-button");
     applySizeClass(_button, size);
     _button.set_valign(Gtk::Align::CENTER);
 
-    _button.signal_clicked().connect([this] { _controller.handleClick(); });
+    _button.signal_clicked().connect([this] { _transportViewModel.handleClick(); });
   }
 
   TransportButton::~TransportButton() = default;

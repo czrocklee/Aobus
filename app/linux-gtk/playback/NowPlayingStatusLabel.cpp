@@ -16,7 +16,7 @@ namespace ao::gtk
 {
   NowPlayingStatusLabel::NowPlayingStatusLabel(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
-    , _controller{_playbackService, [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
+    , _nowPlayingViewModel{_playbackService, [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
   {
     _label.add_css_class("ao-nowplaying");
     _label.add_css_class("ao-clickable");

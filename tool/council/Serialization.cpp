@@ -3,7 +3,7 @@
 
 #include "council/Serialization.h"
 
-#include "council/Model.h"
+#include "council/CouncilSchema.h"
 #include "council/YamlEmit.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>

@@ -20,7 +20,7 @@ harnesses:
   antigravity:
     argv: [agy, -p, --new-project, --add-dir, ., --dangerously-skip-permissions, --model, "{model}"]
     prompt-delivery: stdin
-    environment-whitelist: [PATH, HOME, USER, GOOGLE_API_KEY]
+    environment-whitelist: [PATH, HOME, USER, DBUS_SESSION_BUS_ADDRESS]
     timeout-ms: 1200000
 agents:
   deepseek-pro:

@@ -4,7 +4,7 @@
 #include "CommandPalettePanel.h"
 
 #include "SelectableList.h"
-#include "ShellModel.h"
+#include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
 #include <ao/rt/completion/CompletionItem.h>
@@ -90,7 +90,7 @@ namespace ao::tui
       return item.detail;
     }
 
-    std::string commandCompletionSuffix(ShellModel const& shell)
+    std::string commandCompletionSuffix(ShellInteractionModel const& shell)
     {
       auto const& optCompletion = shell.commandCompletion();
 
@@ -200,7 +200,7 @@ namespace ao::tui
     return std::min(desiredRows, terminalRows);
   }
 
-  ftxui::Element commandPalettePanel(ShellModel const& shell, std::int32_t columns)
+  ftxui::Element commandPalettePanel(ShellInteractionModel const& shell, std::int32_t columns)
   {
     using namespace ftxui;
 

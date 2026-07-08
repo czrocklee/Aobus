@@ -8,13 +8,13 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "tui/LibraryController.h"
-#include "tui/Model.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/OutputDeviceController.h"
 #include "tui/OutputDevicePanel.h"
 #include "tui/PlaybackPanel.h"
 #include "tui/PresentationPanel.h"
-#include "tui/ShellModel.h"
+#include "tui/ShellInteractionModel.h"
+#include "tui/TrackSection.h"
 #include "tui/TrackTable.h"
 #include "tui/TuiHitRegions.h"
 #include <ao/CoreIds.h>
@@ -54,7 +54,7 @@ namespace ao::tui::test
       ao::test::TempDir tempDir{};
       rt::AppRuntime runtime{rt::test::makeRuntime(tempDir)};
       ftxui::ScreenInteractive screen{ftxui::ScreenInteractive::FixedSize(80, 24)};
-      ShellModel shell{};
+      ShellInteractionModel shell{};
 
       EventControllerFixture()
       {
@@ -306,7 +306,7 @@ namespace ao::tui::test
 
     CHECK(controller.handleEvent(ftxui::Event::Character("v")));
     CHECK(controller.handleEvent(ftxui::Event::End));
-    CHECK(library.selectedPresentation() == static_cast<std::int32_t>(library.presentationItems().size()) - 1);
+    CHECK(library.selectedPresentation() == static_cast<std::int32_t>(library.presentationEntries().size()) - 1);
 
     CHECK(controller.handleEvent(ftxui::Event::Home));
     CHECK(library.selectedPresentation() == 0);
@@ -428,11 +428,11 @@ namespace ao::tui::test
     auto hitRegions = TuiHitRegions{};
     hitRegions.outputDeviceButtonBox = ftxui::Box{.x_min = 4, .x_max = 9, .y_min = 0, .y_max = 0};
     hitRegions.outputDeviceRows = {
-      OutputDeviceRowBox{.rowIndex = 1,
-                         .backendId = outputRow.backendId,
-                         .deviceId = outputRow.deviceId,
-                         .profileId = outputRow.profileId,
-                         .box = ftxui::Box{.x_min = 2, .x_max = 30, .y_min = 3, .y_max = 3}}};
+      OutputDeviceRowHitRegion{.rowIndex = 1,
+                               .backendId = outputRow.backendId,
+                               .deviceId = outputRow.deviceId,
+                               .profileId = outputRow.profileId,
+                               .box = ftxui::Box{.x_min = 2, .x_max = 30, .y_min = 3, .y_max = 3}}};
     auto controller =
       EventController{fixture.screen,
                       fixture.shell,
@@ -470,11 +470,11 @@ namespace ao::tui::test
     outputDevices.refresh();
     auto hitRegions = TuiHitRegions{};
     hitRegions.outputDeviceRows = {
-      OutputDeviceRowBox{.rowIndex = 1,
-                         .backendId = audio::BackendId{"stale_backend"},
-                         .deviceId = audio::DeviceId{"stale_device"},
-                         .profileId = audio::kProfileShared,
-                         .box = ftxui::Box{.x_min = 2, .x_max = 30, .y_min = 3, .y_max = 3}}};
+      OutputDeviceRowHitRegion{.rowIndex = 1,
+                               .backendId = audio::BackendId{"stale_backend"},
+                               .deviceId = audio::DeviceId{"stale_device"},
+                               .profileId = audio::kProfileShared,
+                               .box = ftxui::Box{.x_min = 2, .x_max = 30, .y_min = 3, .y_max = 3}}};
     auto controller =
       EventController{fixture.screen,
                       fixture.shell,
@@ -624,7 +624,7 @@ namespace ao::tui::test
     auto hitRegions = TuiHitRegions{};
     hitRegions.presentationButtonBox = ftxui::Box{.x_min = 20, .x_max = 29, .y_min = 23, .y_max = 23};
     hitRegions.presentationRows = {
-      PresentationRowBox{.rowIndex = 2, .box = ftxui::Box{.x_min = 2, .x_max = 40, .y_min = 12, .y_max = 12}}};
+      PresentationRowHitRegion{.rowIndex = 2, .box = ftxui::Box{.x_min = 2, .x_max = 40, .y_min = 12, .y_max = 12}}};
     auto controller = EventController{fixture.screen,
                                       fixture.shell,
                                       library,
@@ -730,7 +730,7 @@ namespace ao::tui::test
       fixture.runtime.notifications().post(rt::NotificationSeverity::Warning, "Partial import");
     auto hitRegions = TuiHitRegions{};
     hitRegions.activityStatusBox = ftxui::Box{.x_min = 0, .x_max = 24, .y_min = 23, .y_max = 23};
-    hitRegions.notificationDetailRows = {NotificationDetailRowBox{
+    hitRegions.notificationDetailRows = {NotificationDetailRowHitRegion{
       .id = notificationId, .dismissible = true, .box = ftxui::Box{.x_min = 2, .x_max = 40, .y_min = 12, .y_max = 12}}};
     auto controller = EventController{
       fixture.screen,
@@ -981,7 +981,7 @@ namespace ao::tui::test
     auto const expected = library.sections()[1];
     auto hitRegions = TuiHitRegions{};
     hitRegions.trackSectionRows = {
-      TrackSectionRowBox{.sectionIndex = 1, .box = ftxui::Box{.x_min = 0, .x_max = 79, .y_min = 6, .y_max = 6}}};
+      TrackSectionRowHitRegion{.sectionIndex = 1, .box = ftxui::Box{.x_min = 0, .x_max = 79, .y_min = 6, .y_max = 6}}};
     auto controller = EventController{fixture.screen,
                                       fixture.shell,
                                       library,
@@ -1000,7 +1000,7 @@ namespace ao::tui::test
     REQUIRE(library.sections().empty());
     auto hitRegions = TuiHitRegions{};
     hitRegions.trackSectionRows = {
-      TrackSectionRowBox{.sectionIndex = 1, .box = ftxui::Box{.x_min = 0, .x_max = 79, .y_min = 6, .y_max = 6}}};
+      TrackSectionRowHitRegion{.sectionIndex = 1, .box = ftxui::Box{.x_min = 0, .x_max = 79, .y_min = 6, .y_max = 6}}};
     auto controller = EventController{fixture.screen,
                                       fixture.shell,
                                       library,
@@ -1217,7 +1217,7 @@ namespace ao::tui::test
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
                               .columns = 20}};
     hitRegions.trackSectionRows = {
-      TrackSectionRowBox{.sectionIndex = 1, .box = ftxui::Box{.x_min = 0, .x_max = 79, .y_min = 6, .y_max = 6}}};
+      TrackSectionRowHitRegion{.sectionIndex = 1, .box = ftxui::Box{.x_min = 0, .x_max = 79, .y_min = 6, .y_max = 6}}};
     auto widthOverrides = std::vector<TrackColumnWidthOverride>{};
     auto controller = EventController{
       fixture.screen,

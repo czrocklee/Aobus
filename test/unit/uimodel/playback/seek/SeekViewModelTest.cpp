@@ -12,7 +12,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/playback/seek/SeekViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -27,8 +27,8 @@ namespace ao::uimodel::test
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto listSourceStore = ListSourceStore{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), listSourceStore};
+    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
+    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
     auto notificationService = NotificationService{};
     auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
     addReadyAudioProvider(playback);

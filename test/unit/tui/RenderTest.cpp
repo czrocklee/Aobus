@@ -5,12 +5,13 @@
 
 #include "test/unit/tui/TuiRenderTestSupport.h"
 #include "tui/CommandPalettePanel.h"
-#include "tui/Model.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/PresentationPanel.h"
-#include "tui/ShellModel.h"
+#include "tui/ShellInteractionModel.h"
 #include "tui/StatusBar.h"
 #include "tui/Style.h"
+#include "tui/TrackListEntry.h"
+#include "tui/TrackPresentationNavigation.h"
 #include "tui/TuiHitRegions.h"
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackRow.h>
@@ -51,7 +52,7 @@ namespace ao::tui::test
   {
     auto row =
       rt::TrackRow{.id = TrackId{7}, .title = "A very long title that should widen detail content", .artist = "Artist"};
-    auto item = makeTrackListItem(row);
+    auto item = makeTrackListEntry(row);
 
     CHECK(helpPaneColumns(120) > 0);
     CHECK(helpPaneColumns(30) == 30);
@@ -210,7 +211,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - wide idle status bar reserves empty activity space without slot chrome", "[tui][unit][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     auto const rendered = renderElement(statusBar(StatusBarViewState{.shell = &shell}), 140, 1);
 
     CHECK(rendered.text.find("Ready") == std::string::npos);
@@ -241,7 +242,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - narrow idle status bar collapses empty activity slot", "[tui][unit][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     auto const rendered = renderElement(statusBar(StatusBarViewState{.terminalColumns = 80, .shell = &shell}), 140, 2);
 
     CHECK(rendered.text.find("Ready") == std::string::npos);
@@ -253,7 +254,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - status bar shows filter only when applied", "[tui][unit][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     auto const rendered = renderText(statusBar(StatusBarViewState{.filterDraft = "Aimer", .shell = &shell}));
 
     CHECK(rendered.find("Filter: Aimer") != std::string::npos);
@@ -281,7 +282,7 @@ namespace ao::tui::test
 
     for (auto const& item : cases)
     {
-      auto shell = ShellModel{};
+      auto shell = ShellInteractionModel{};
       shell.openOverlay(item.overlay);
 
       auto const rendered = renderText(statusBar(StatusBarViewState{.shell = &shell}));
@@ -294,7 +295,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - status slot shows activity compact state", "[tui][unit][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     auto activity = uimodel::ActivityStatusViewState{.compact = uimodel::ActivityCompactState{
                                                        .kind = uimodel::ActivityStatusKind::Warning,
                                                        .text = "Partial import",
@@ -317,7 +318,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - idle status bar clears stale activity hit box", "[tui][regression][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     auto activity = uimodel::ActivityStatusViewState{.compact = uimodel::ActivityCompactState{
                                                        .kind = uimodel::ActivityStatusKind::Info,
                                                        .text = "Ready",
@@ -342,7 +343,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - hovered status slot uses a readable interactive surface", "[tui][unit][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     auto activity = uimodel::ActivityStatusViewState{.compact = uimodel::ActivityCompactState{
                                                        .kind = uimodel::ActivityStatusKind::Warning,
                                                        .text = "Partial import",
@@ -379,23 +380,23 @@ namespace ao::tui::test
                                               .message = "Permission denied",
                                               .dismissible = true}},
       }};
-    auto rowBoxes = std::vector<NotificationDetailRowBox>{};
+    auto rowHitRegions = std::vector<NotificationDetailRowHitRegion>{};
 
-    auto const rendered = renderElement(notificationCenterPanel(state, &rowBoxes), 64, 12);
+    auto const rendered = renderElement(notificationCenterPanel(state, &rowHitRegions), 64, 12);
 
     CHECK(rendered.text.find("Notifications") != std::string::npos);
     CHECK(rendered.text.find("Scan failed") != std::string::npos);
     CHECK(rendered.text.find("Permission denied") != std::string::npos);
     CHECK(rendered.text.find("click clearable row") != std::string::npos);
-    REQUIRE(rowBoxes.size() == 1);
-    CHECK(rowBoxes.front().id == rt::NotificationId{9});
-    CHECK(rowBoxes.front().dismissible);
-    CHECK(rowBoxes.front().box.y_min > 0);
+    REQUIRE(rowHitRegions.size() == 1);
+    CHECK(rowHitRegions.front().id == rt::NotificationId{9});
+    CHECK(rowHitRegions.front().dismissible);
+    CHECK(rowHitRegions.front().box.y_min > 0);
   }
 
   TEST_CASE("Render - command mode leaves bottom status bar in workspace layout", "[tui][unit][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     shell.beginCommand("view albums");
 
     auto const rendered = renderText(statusBar(StatusBarViewState{.terminalColumns = 100, .shell = &shell}));
@@ -420,7 +421,7 @@ namespace ao::tui::test
     CHECK(commandPalettePanelRows(80) == 20);
     CHECK(commandPalettePanelRows(8) == 8);
 
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     shell.beginCommand("a");
     shell.setCommandCompletion(rt::CompletionResult{
       .replaceBegin = 0,
@@ -436,7 +437,7 @@ namespace ao::tui::test
   TEST_CASE("Render - command palette keeps selected completion visible in constrained height",
             "[tui][regression][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     auto items = std::vector<rt::CompletionItem>{};
 
     for (std::int32_t index = 0; index < 8; ++index)
@@ -462,7 +463,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - command palette shows input and inline completion suffix", "[tui][unit][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     shell.beginCommand("A");
     shell.setCommandCompletion(rt::CompletionResult{
       .replaceBegin = 0,
@@ -481,7 +482,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - command palette renders without completion matches", "[tui][unit][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     shell.beginCommand("view albums");
 
     auto const rendered = renderText(commandPalettePanel(shell));
@@ -493,7 +494,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - command palette keeps empty input separate from suggestions", "[tui][unit][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     shell.beginCommand();
     shell.setCommandCompletion(rt::CompletionResult{
       .replaceBegin = 0,
@@ -510,7 +511,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - command palette renders completion metadata and fallback details", "[tui][unit][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     shell.beginCommand();
     shell.setCommandCompletion(rt::CompletionResult{
       .items =
@@ -537,7 +538,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - command palette does not infer metadata for non-command items", "[tui][unit][render]")
   {
-    auto shell = ShellModel{};
+    auto shell = ShellInteractionModel{};
     shell.beginCommand();
     shell.setCommandCompletion(rt::CompletionResult{
       .items = {rt::CompletionItem{.displayText = "v", .insertText = "v", .detail = "artist"}},
@@ -553,31 +554,31 @@ namespace ao::tui::test
 
   TEST_CASE("Render - presentation panel renders selected and active views", "[tui][unit][render]")
   {
-    auto const items = std::vector<PresentationNavItem>{
+    auto const items = std::vector<TrackPresentationNavEntry>{
       {.id = "songs", .label = "Songs", .detail = "General-purpose song list."},
       {.id = "albums", .label = "Albums", .detail = "Grouped by album."},
     };
-    auto rowBoxes = std::vector<PresentationRowBox>{};
+    auto rowHitRegions = std::vector<PresentationRowHitRegion>{};
 
-    auto const rendered = renderElement(presentationPanel(items, "albums", 1, &rowBoxes), 48, 16);
+    auto const rendered = renderElement(presentationPanel(items, "albums", 1, &rowHitRegions), 48, 16);
 
     CHECK(rendered.text.find("Views") != std::string::npos);
     CHECK(rendered.text.find("albums") != std::string::npos);
     CHECK(rendered.text.find("* Albums") != std::string::npos);
     CHECK(rendered.text.find("Grouped by album.") != std::string::npos);
     CHECK(rendered.text.find("songs") == std::string::npos);
-    REQUIRE(rowBoxes.size() == 2);
-    CHECK(rowBoxes[1].rowIndex == 1);
-    CHECK_FALSE(rendered.screen.PixelAt(rowBoxes[1].box.x_min, rowBoxes[1].box.y_min).inverted);
-    CHECK(rendered.screen.PixelAt(rowBoxes[1].box.x_min, rowBoxes[1].box.y_min).foreground_color ==
+    REQUIRE(rowHitRegions.size() == 2);
+    CHECK(rowHitRegions[1].rowIndex == 1);
+    CHECK_FALSE(rendered.screen.PixelAt(rowHitRegions[1].box.x_min, rowHitRegions[1].box.y_min).inverted);
+    CHECK(rendered.screen.PixelAt(rowHitRegions[1].box.x_min, rowHitRegions[1].box.y_min).foreground_color ==
           ftxui::Color::Black);
-    CHECK(rendered.screen.PixelAt(rowBoxes[1].box.x_min, rowBoxes[1].box.y_min).background_color ==
+    CHECK(rendered.screen.PixelAt(rowHitRegions[1].box.x_min, rowHitRegions[1].box.y_min).background_color ==
           ftxui::Color::Yellow);
   }
 
   TEST_CASE("Render - presentation panel width follows content and terminal bounds", "[tui][unit][render]")
   {
-    auto const items = std::vector<PresentationNavItem>{
+    auto const items = std::vector<TrackPresentationNavEntry>{
       {.id = "wide",
        .label = "Wide View",
        .detail = "Detailed description long enough to widen the picker beyond the default."},
@@ -588,7 +589,7 @@ namespace ao::tui::test
     CHECK(wideColumns > kPresentationPanelColumns);
     CHECK(wideColumns <= 120);
     CHECK(presentationPanelColumns(items, "wide", 60) == 60);
-    CHECK(presentationPanelColumns({PresentationNavItem{.id = "x", .label = "X"}}, "x", 120) <
+    CHECK(presentationPanelColumns({TrackPresentationNavEntry{.id = "x", .label = "X"}}, "x", 120) <
           kPresentationPanelColumns);
 
     auto const rendered = renderElement(presentationPanel(items, "wide", 0, nullptr, wideColumns), wideColumns, 16);
@@ -598,19 +599,19 @@ namespace ao::tui::test
 
   TEST_CASE("Render - presentation panel handles empty and out-of-range selection", "[tui][unit][render]")
   {
-    auto rowBoxes = std::vector<PresentationRowBox>{};
-    auto rendered = renderElement(presentationPanel({}, "", 99, &rowBoxes), 48, 16);
+    auto rowHitRegions = std::vector<PresentationRowHitRegion>{};
+    auto rendered = renderElement(presentationPanel({}, "", 99, &rowHitRegions), 48, 16);
 
     CHECK(rendered.text.find("default") != std::string::npos);
     CHECK(rendered.text.find("No views available") != std::string::npos);
-    CHECK(rowBoxes.empty());
+    CHECK(rowHitRegions.empty());
 
-    auto const items = std::vector<PresentationNavItem>{
+    auto const items = std::vector<TrackPresentationNavEntry>{
       {.id = "songs", .label = "Songs", .detail = "General-purpose song list."},
     };
-    rendered = renderElement(presentationPanel(items, "songs", 99, &rowBoxes), 48, 16);
+    rendered = renderElement(presentationPanel(items, "songs", 99, &rowHitRegions), 48, 16);
 
-    REQUIRE(rowBoxes.size() == 1);
-    CHECK_FALSE(rendered.screen.PixelAt(rowBoxes[0].box.x_min, rowBoxes[0].box.y_min).inverted);
+    REQUIRE(rowHitRegions.size() == 1);
+    CHECK_FALSE(rendered.screen.PixelAt(rowHitRegions[0].box.x_min, rowHitRegions[0].box.y_min).inverted);
   }
 } // namespace ao::tui::test

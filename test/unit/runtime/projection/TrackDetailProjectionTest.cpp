@@ -18,7 +18,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
-#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -53,7 +53,7 @@ namespace ao::rt::test
       async::Runtime runtime;
       LibraryChanges changes;
       LibraryWriter writer;
-      ListSourceStore sources;
+      TrackSourceCache sources;
       ViewService views;
       ConfigStore config;
       NotificationService notifications;

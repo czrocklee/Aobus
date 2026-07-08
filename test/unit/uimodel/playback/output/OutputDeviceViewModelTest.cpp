@@ -11,7 +11,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -30,8 +30,8 @@ namespace ao::uimodel::test
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto listSourceStore = ListSourceStore{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), listSourceStore};
+    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
+    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
     auto notificationService = NotificationService{};
     auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
 
@@ -60,8 +60,8 @@ namespace ao::uimodel::test
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto listSourceStore = ListSourceStore{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), listSourceStore};
+    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
+    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
     auto notificationService = NotificationService{};
     auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
 
@@ -151,8 +151,8 @@ namespace ao::uimodel::test
     SECTION("multiple backends produce separate header rows")
     {
       auto status2 = makePipeWireOutputStatus();
-      status2.metadata.id = audio::BackendId{"alsa"};
-      status2.metadata.name = "ALSA";
+      status2.descriptor.id = audio::BackendId{"alsa"};
+      status2.descriptor.name = "ALSA";
       status2.devices[0].backendId = audio::BackendId{"alsa"};
       status2.devices[0].id = audio::DeviceId{"alsa-device1"};
 
@@ -185,8 +185,8 @@ namespace ao::uimodel::test
     SECTION("summary fields for ALSA exclusive output")
     {
       auto status = makePipeWireOutputStatus();
-      status.metadata.id = audio::BackendId{"alsa"};
-      status.metadata.name = "ALSA";
+      status.descriptor.id = audio::BackendId{"alsa"};
+      status.descriptor.name = "ALSA";
       status.devices[0].backendId = audio::BackendId{"alsa"};
       status.devices[0].displayName = "USB DAC";
 

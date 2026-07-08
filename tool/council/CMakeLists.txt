@@ -1,6 +1,6 @@
 add_library(ao_council STATIC
     Engine.cpp
-    Model.cpp
+    CouncilSchema.cpp
     ProcessRunner.cpp
     Serialization.cpp
     Substrate.cpp

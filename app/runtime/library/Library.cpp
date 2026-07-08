@@ -5,7 +5,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/library/LibraryTasks.h>
+#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <memory>
@@ -22,13 +22,13 @@ namespace ao::rt
     library::MusicLibrary& storage;
     LibraryChanges& changeBus;
     LibraryWriter writer;
-    LibraryTasks tasks;
+    LibraryTaskService taskService;
 
     Impl(async::Runtime& asyncRuntime, library::MusicLibrary& libraryStorage, LibraryChanges& changes)
       : storage{libraryStorage}
       , changeBus{changes}
       , writer{libraryStorage, changes}
-      , tasks{asyncRuntime, libraryStorage, changes}
+      , taskService{asyncRuntime, libraryStorage, changes}
     {
     }
   };
@@ -60,8 +60,8 @@ namespace ao::rt
     return _implPtr->writer;
   }
 
-  LibraryTasks& Library::tasks() noexcept
+  LibraryTaskService& Library::taskService() noexcept
   {
-    return _implPtr->tasks;
+    return _implPtr->taskService;
   }
 } // namespace ao::rt

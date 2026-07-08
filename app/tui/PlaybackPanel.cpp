@@ -3,8 +3,8 @@
 
 #include "PlaybackPanel.h"
 
-#include "Model.h"
 #include "OutputDevicePanel.h"
+#include "PlaybackStatusFormatter.h"
 #include "SoulButton.h"
 #include "Style.h"
 #include <ao/audio/Transport.h>

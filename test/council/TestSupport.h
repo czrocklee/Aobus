@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "council/Model.h"
+#include "council/CouncilSchema.h"
 #include "council/ProcessRunner.h"
 #include "test/unit/TestUtils.h"
 

@@ -14,7 +14,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -31,8 +31,8 @@ namespace ao::uimodel::test
       TestMusicLibrary testLib;
       MockExecutor executor;
       LibraryChanges changes;
-      ListSourceStore listSourceStore{testLib.library(), changes};
-      ViewService viewService{executor, testLib.library(), listSourceStore};
+      TrackSourceCache trackSourceCache{testLib.library(), changes};
+      ViewService viewService{executor, testLib.library(), trackSourceCache};
       NotificationService notifications;
       PlaybackService playback{executor, viewService, testLib.library(), notifications};
       WorkspaceService workspaceService{viewService, playback, changes, testLib.library()};

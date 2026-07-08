@@ -56,11 +56,11 @@ namespace ao::tui::test
   {
     auto regions = TuiHitRegions{};
     regions.libraryButtonBox = ftxui::Box{.x_min = 1, .x_max = 4, .y_min = 2, .y_max = 2};
-    regions.outputDeviceRows.push_back(OutputDeviceRowBox{.rowIndex = 1});
-    regions.presentationRows.push_back(PresentationRowBox{.rowIndex = 2});
-    regions.notificationDetailRows.push_back(NotificationDetailRowBox{.dismissible = true});
+    regions.outputDeviceRows.push_back(OutputDeviceRowHitRegion{.rowIndex = 1});
+    regions.presentationRows.push_back(PresentationRowHitRegion{.rowIndex = 2});
+    regions.notificationDetailRows.push_back(NotificationDetailRowHitRegion{.dismissible = true});
     regions.trackColumnResizeHandles.push_back(TrackColumnResizeHandle{});
-    regions.trackSectionRows.push_back(TrackSectionRowBox{.sectionIndex = 3});
+    regions.trackSectionRows.push_back(TrackSectionRowHitRegion{.sectionIndex = 3});
 
     regions.clearFrameLocalRows();
 

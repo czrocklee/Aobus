@@ -4,7 +4,7 @@
 #include "OutputDevicePanel.h"
 
 #include "SelectableList.h"
-#include "ShellModel.h"
+#include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
@@ -113,7 +113,7 @@ namespace ao::tui
 
   ftxui::Element outputDevicePanel(uimodel::OutputDeviceViewState const& view,
                                    std::int32_t const selectedRow,
-                                   std::vector<OutputDeviceRowBox>* const rowBoxes,
+                                   std::vector<OutputDeviceRowHitRegion>* const rowHitRegions,
                                    std::int32_t columns)
   {
     using namespace ftxui;
@@ -130,10 +130,10 @@ namespace ao::tui
     auto listRows = std::vector<SelectableListRow>{};
     std::int32_t focusRow = 0;
 
-    if (rowBoxes != nullptr)
+    if (rowHitRegions != nullptr)
     {
-      rowBoxes->clear();
-      rowBoxes->reserve(view.rows.size());
+      rowHitRegions->clear();
+      rowHitRegions->reserve(view.rows.size());
     }
 
     listRows.reserve(view.rows.size());
@@ -159,14 +159,14 @@ namespace ao::tui
         focusRow = static_cast<std::int32_t>(listRows.size());
       }
 
-      if (rowBoxes != nullptr)
+      if (rowHitRegions != nullptr)
       {
-        rowBoxes->push_back(OutputDeviceRowBox{.rowIndex = static_cast<std::int32_t>(index),
-                                               .backendId = row.backendId,
-                                               .deviceId = row.deviceId,
-                                               .profileId = row.profileId});
-        rowBox = &rowBoxes->back().box;
-        secondaryBox = &rowBoxes->back().secondaryBox;
+        rowHitRegions->push_back(OutputDeviceRowHitRegion{.rowIndex = static_cast<std::int32_t>(index),
+                                                          .backendId = row.backendId,
+                                                          .deviceId = row.deviceId,
+                                                          .profileId = row.profileId});
+        rowBox = &rowHitRegions->back().box;
+        secondaryBox = &rowHitRegions->back().secondaryBox;
       }
 
       listRows.push_back(SelectableListRow{.elementPtr = std::move(rowPtr), .selected = selected, .box = rowBox});

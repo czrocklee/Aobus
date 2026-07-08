@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "ShellModel.h"
+#include "ShellInteractionModel.h"
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -23,7 +23,7 @@ namespace ao::tui
     uimodel::ActivityStatusViewState const* activityStatus = nullptr;
     std::int32_t terminalColumns = kDefaultStatusBarColumns;
     std::string filterDraft{};
-    ShellModel const* shell = nullptr;
+    ShellInteractionModel const* shell = nullptr;
     ftxui::Box* activityStatusBox = nullptr;
     bool activityStatusHovered = false;
   };

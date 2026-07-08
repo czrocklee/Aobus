@@ -33,12 +33,12 @@ namespace ao::gtk::layout
     public:
       QualityIndicatorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
         : _runtime{ctx.runtime}
-        , _soulController{_runtime.playback(),
-                          [this](uimodel::AobusSoulViewState const& view)
-                          {
-                            _soul.breathe(view.isBreathing);
-                            _soul.setAura(AobusSoul::mapSoulAura(view.aura));
-                          }}
+        , _soulViewModel{_runtime.playback(),
+                         [this](uimodel::AobusSoulViewState const& view)
+                         {
+                           _soul.breathe(view.isBreathing);
+                           _soul.setAura(AobusSoul::mapSoulAura(view.aura));
+                         }}
       {
       }
 
@@ -47,7 +47,7 @@ namespace ao::gtk::layout
     private:
       rt::AppRuntime& _runtime;
       AobusSoul _soul{};
-      uimodel::AobusSoulViewModel _soulController;
+      uimodel::AobusSoulViewModel _soulViewModel;
     };
 
     std::unique_ptr<LayoutComponent> createQualityIndicator(LayoutContext& ctx, LayoutNode const& node)

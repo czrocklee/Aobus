@@ -14,8 +14,8 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
-#include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -88,7 +88,7 @@ namespace ao::gtk::layout
 
       TagEditor _tagEditor;
       rt::LibraryWriter& _writer;
-      rt::ListSourceStore& _sources;
+      rt::TrackSourceCache& _sources;
       std::vector<TrackId> _currentTrackIds;
       sigc::scoped_connection _scopeConn;
     };

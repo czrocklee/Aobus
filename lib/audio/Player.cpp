@@ -511,7 +511,7 @@ namespace ao::audio
     }
 
     auto const recordIt = std::ranges::find_if(
-      _implPtr->providers, [&](auto const& record) { return record->providerPtr->status().metadata.id == backend; });
+      _implPtr->providers, [&](auto const& record) { return record->providerPtr->status().descriptor.id == backend; });
 
     if (recordIt == _implPtr->providers.end())
     {

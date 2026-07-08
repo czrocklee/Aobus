@@ -43,6 +43,6 @@ namespace ao::gtk
     void applyState(uimodel::TransportViewState const& view);
 
     Gtk::Button _button;
-    uimodel::TransportViewModel _controller;
+    uimodel::TransportViewModel _transportViewModel;
   };
 } // namespace ao::gtk

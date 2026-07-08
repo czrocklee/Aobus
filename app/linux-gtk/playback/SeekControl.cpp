@@ -30,7 +30,7 @@ namespace ao::gtk
   } // namespace
 
   SeekControl::SeekControl(rt::PlaybackService& playbackService)
-    : _controller{playbackService, [this](ao::uimodel::SeekViewState const& view) { applyState(view); }}
+    : _seekViewModel{playbackService, [this](ao::uimodel::SeekViewState const& view) { applyState(view); }}
   {
     _scale.set_halign(Gtk::Align::FILL);
     _scale.set_hexpand(true);
@@ -167,7 +167,7 @@ namespace ao::gtk
     {
       case uimodel::SeekSliderAction::Preview:
         _interpolator.updateState(decision.elapsed, _interaction.duration(), false);
-        _controller.seekPreview(decision.elapsed);
+        _seekViewModel.seekPreview(decision.elapsed);
         break;
       case uimodel::SeekSliderAction::Commit: commitSeekFromScale(); break;
       case uimodel::SeekSliderAction::None: break;
@@ -180,7 +180,7 @@ namespace ao::gtk
 
     if (_interaction.duration() > std::chrono::milliseconds{0})
     {
-      _controller.seekFinal(scaleElapsed());
+      _seekViewModel.seekFinal(scaleElapsed());
     }
   }
 

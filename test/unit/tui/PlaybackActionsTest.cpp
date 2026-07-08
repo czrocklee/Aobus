@@ -7,7 +7,7 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
-#include "tui/Model.h"
+#include "tui/TrackListEntry.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/PlaybackState.h>
 
@@ -25,9 +25,9 @@ namespace ao::tui::test
       fixture.onDevicesChangedCb(fixture.status.devices);
     }
 
-    TrackListItem trackItem(TrackId const id)
+    TrackListEntry trackEntry(TrackId const id)
     {
-      return TrackListItem{.id = id};
+      return TrackListEntry{.id = id};
     }
   } // namespace
 
@@ -41,7 +41,7 @@ namespace ao::tui::test
     auto second = library::test::TrackSpec{.title = "Second", .artist = "Two", .uri = fixturePath};
     auto const firstId = fixture.testLib.addTrack(first);
     auto const secondId = fixture.testLib.addTrack(second);
-    auto const tracks = std::vector{trackItem(firstId), trackItem(secondId)};
+    auto const tracks = std::vector{trackEntry(firstId), trackEntry(secondId)};
 
     CHECK(playSelected(fixture.playbackService, tracks, -4, ListId{7}));
     CHECK(fixture.playbackService.state().nowPlaying.trackId == firstId);
@@ -75,7 +75,7 @@ namespace ao::tui::test
     };
 
     auto const trackId = fixture.testLib.addTrack(spec);
-    auto const tracks = std::vector{trackItem(trackId)};
+    auto const tracks = std::vector{trackEntry(trackId)};
 
     CHECK(togglePlayback(fixture.playbackService, tracks, 0, ListId{9}));
     CHECK(fixture.playbackService.state().nowPlaying.trackId == trackId);

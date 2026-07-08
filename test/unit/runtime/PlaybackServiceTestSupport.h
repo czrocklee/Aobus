@@ -20,7 +20,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/source/ListSourceStore.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <fakeit.hpp>
 
@@ -63,14 +63,14 @@ namespace ao::rt::test
   inline audio::BackendProvider::Status makeMockProviderStatus()
   {
     auto status = audio::BackendProvider::Status{};
-    status.metadata.id = audio::BackendId{"mock_backend"};
-    status.metadata.name = "Mock Backend";
+    status.descriptor.id = audio::BackendId{"mock_backend"};
+    status.descriptor.name = "Mock Backend";
     status.devices.push_back(audio::Device{.id = audio::DeviceId{"mock_device"},
                                            .displayName = "Mock Device",
                                            .description = "A mock audio device",
                                            .isDefault = true,
                                            .backendId = audio::BackendId{"mock_backend"}});
-    status.metadata.supportedProfiles.push_back(audio::BackendProvider::ProfileMetadata{
+    status.descriptor.supportedProfiles.push_back(audio::BackendProvider::ProfileDescriptor{
       .id = audio::ProfileId{audio::kProfileShared}, .name = "Shared", .description = "Shared profile"});
     return status;
   }
@@ -163,8 +163,8 @@ namespace ao::rt::test
     TestMusicLibrary testLib;
     ExecutorT executor;
     LibraryChanges changes;
-    ListSourceStore listSourceStore{testLib.library(), changes};
-    ViewService viewService{executor, testLib.library(), listSourceStore};
+    TrackSourceCache trackSourceCache{testLib.library(), changes};
+    ViewService viewService{executor, testLib.library(), trackSourceCache};
     NotificationService notificationService;
 
     std::shared_ptr<audio::test::SpyBackend<>> spyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();

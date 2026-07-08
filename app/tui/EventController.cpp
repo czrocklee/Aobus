@@ -5,14 +5,14 @@
 
 #include "LibraryController.h"
 #include "ListNavigation.h"
-#include "Model.h"
 #include "NotificationCenterPanel.h"
 #include "OutputDeviceController.h"
 #include "OutputDevicePanel.h"
 #include "PlaybackActions.h"
 #include "PlaybackPanel.h"
 #include "PresentationPanel.h"
-#include "ShellModel.h"
+#include "ShellInteractionModel.h"
+#include "TrackSection.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
 #include <ao/rt/NotificationService.h>
@@ -110,15 +110,15 @@ namespace ao::tui
       return overlay != Overlay::None;
     }
 
-    bool matchesOutputDeviceRow(uimodel::OutputDeviceRow const& row, OutputDeviceRowBox const& rowBox)
+    bool matchesOutputDeviceRow(uimodel::OutputDeviceRow const& row, OutputDeviceRowHitRegion const& hitRegion)
     {
-      return row.kind == uimodel::OutputDeviceRow::Kind::DeviceProfile && row.backendId == rowBox.backendId &&
-             row.deviceId == rowBox.deviceId && row.profileId == rowBox.profileId;
+      return row.kind == uimodel::OutputDeviceRow::Kind::DeviceProfile && row.backendId == hitRegion.backendId &&
+             row.deviceId == hitRegion.deviceId && row.profileId == hitRegion.profileId;
     }
   } // namespace
 
   EventController::EventController(ftxui::ScreenInteractive& screen,
-                                   ShellModel& shell,
+                                   ShellInteractionModel& shell,
                                    LibraryController& library,
                                    rt::PlaybackService& playback,
                                    EventControllerBindings bindings)
@@ -590,20 +590,20 @@ namespace ao::tui
 
     if (_shell.overlay() == Overlay::None && _hitRegions != nullptr)
     {
-      auto const rowBoxIt =
-        std::ranges::find_if(_hitRegions->trackSectionRows,
-                             [&](TrackSectionRowBox const& rowBox) { return contains(rowBox.box, mouse.x, mouse.y); });
+      auto const hitRegionIt = std::ranges::find_if(_hitRegions->trackSectionRows,
+                                                    [&](TrackSectionRowHitRegion const& hitRegion)
+                                                    { return contains(hitRegion.box, mouse.x, mouse.y); });
 
-      if (rowBoxIt != _hitRegions->trackSectionRows.end())
+      if (hitRegionIt != _hitRegions->trackSectionRows.end())
       {
-        if (rowBoxIt->sectionIndex < 0 ||
-            static_cast<std::size_t>(rowBoxIt->sectionIndex) >= _library.sections().size())
+        if (hitRegionIt->sectionIndex < 0 ||
+            static_cast<std::size_t>(hitRegionIt->sectionIndex) >= _library.sections().size())
         {
           postActivityNotification(rt::NotificationSeverity::Warning, "Section is no longer available");
           return true;
         }
 
-        _library.selectSection(rowBoxIt->sectionIndex);
+        _library.selectSection(hitRegionIt->sectionIndex);
         return true;
       }
     }
@@ -658,13 +658,13 @@ namespace ao::tui
 
     if (_shell.overlay() == Overlay::PresentationPanel && _hitRegions != nullptr)
     {
-      auto const rowBoxIt =
-        std::ranges::find_if(_hitRegions->presentationRows,
-                             [&](PresentationRowBox const& rowBox) { return contains(rowBox.box, mouse.x, mouse.y); });
+      auto const hitRegionIt = std::ranges::find_if(_hitRegions->presentationRows,
+                                                    [&](PresentationRowHitRegion const& hitRegion)
+                                                    { return contains(hitRegion.box, mouse.x, mouse.y); });
 
-      if (rowBoxIt != _hitRegions->presentationRows.end())
+      if (hitRegionIt != _hitRegions->presentationRows.end())
       {
-        if (_library.setSelectedPresentation(rowBoxIt->rowIndex))
+        if (_library.setSelectedPresentation(hitRegionIt->rowIndex))
         {
           selectPresentation();
           return true;
@@ -676,15 +676,15 @@ namespace ao::tui
 
     if (_shell.overlay() == Overlay::Notifications && _activityStatusViewModel != nullptr && _hitRegions != nullptr)
     {
-      auto const rowBoxIt = std::ranges::find_if(_hitRegions->notificationDetailRows,
-                                                 [&](NotificationDetailRowBox const& rowBox)
-                                                 { return contains(rowBox.box, mouse.x, mouse.y); });
+      auto const hitRegionIt = std::ranges::find_if(_hitRegions->notificationDetailRows,
+                                                    [&](NotificationDetailRowHitRegion const& hitRegion)
+                                                    { return contains(hitRegion.box, mouse.x, mouse.y); });
 
-      if (rowBoxIt != _hitRegions->notificationDetailRows.end())
+      if (hitRegionIt != _hitRegions->notificationDetailRows.end())
       {
-        if (rowBoxIt->dismissible)
+        if (hitRegionIt->dismissible)
         {
-          _activityStatusViewModel->dismissDetailNotificationFromActivity(rowBoxIt->id);
+          _activityStatusViewModel->dismissDetailNotificationFromActivity(hitRegionIt->id);
           return true;
         }
 
@@ -699,27 +699,27 @@ namespace ao::tui
       return false;
     }
 
-    auto const rowBoxIt = std::ranges::find_if(
+    auto const hitRegionIt = std::ranges::find_if(
       _hitRegions->outputDeviceRows,
-      [&](OutputDeviceRowBox const& rowBox)
-      { return contains(rowBox.box, mouse.x, mouse.y) || contains(rowBox.secondaryBox, mouse.x, mouse.y); });
+      [&](OutputDeviceRowHitRegion const& hitRegion)
+      { return contains(hitRegion.box, mouse.x, mouse.y) || contains(hitRegion.secondaryBox, mouse.x, mouse.y); });
 
-    if (rowBoxIt != _hitRegions->outputDeviceRows.end())
+    if (hitRegionIt != _hitRegions->outputDeviceRows.end())
     {
-      if (rowBoxIt->rowIndex < 0 ||
-          static_cast<std::size_t>(rowBoxIt->rowIndex) >= _outputDevices->viewState().rows.size())
+      if (hitRegionIt->rowIndex < 0 ||
+          static_cast<std::size_t>(hitRegionIt->rowIndex) >= _outputDevices->viewState().rows.size())
       {
         return true;
       }
 
-      auto const& row = _outputDevices->viewState().rows[static_cast<std::size_t>(rowBoxIt->rowIndex)];
+      auto const& row = _outputDevices->viewState().rows[static_cast<std::size_t>(hitRegionIt->rowIndex)];
 
-      if (!matchesOutputDeviceRow(row, *rowBoxIt))
+      if (!matchesOutputDeviceRow(row, *hitRegionIt))
       {
         return true;
       }
 
-      if (_outputDevices->selectRow(rowBoxIt->rowIndex))
+      if (_outputDevices->selectRow(hitRegionIt->rowIndex))
       {
         _shell.closeOverlay();
       }

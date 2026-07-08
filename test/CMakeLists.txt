@@ -147,7 +147,7 @@ add_executable(ao_core_test
     unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
     unit/audio/backend/detail/AlsaPcmErrorTest.cpp
     unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
-    unit/audio/PcmConverterTest.cpp
+    unit/audio/PcmConversionTest.cpp
     unit/audio/PlayerTest.cpp
     unit/audio/EngineDrainTest.cpp
     unit/audio/EngineErrorTest.cpp
@@ -172,7 +172,7 @@ add_executable(ao_core_test
     unit/uimodel/preferences/PreferencesModelTest.cpp
     unit/uimodel/layout/action/LayoutActionCatalogTest.cpp
     unit/uimodel/layout/action/LayoutActionValidatorTest.cpp
-    unit/uimodel/layout/component/AbsoluteCanvasModelTest.cpp
+    unit/uimodel/layout/component/AbsoluteCanvasGeometryTest.cpp
     unit/uimodel/layout/component/LayoutComponentCatalogTest.cpp
     unit/uimodel/layout/component/LayoutComponentStateTest.cpp
     unit/uimodel/layout/component/LayoutStatePromoterTest.cpp
@@ -184,7 +184,11 @@ add_executable(ao_core_test
     unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp
     unit/uimodel/library/list/ListActionPolicyTest.cpp
     unit/uimodel/library/list/ListTreeProjectionTest.cpp
-    unit/uimodel/library/list/SmartListEditorModelTest.cpp
+    unit/uimodel/library/list/SmartListDraftTest.cpp
+    unit/uimodel/library/list/SmartListEditorViewStateTest.cpp
+    unit/uimodel/library/list/SmartListExpressionTest.cpp
+    unit/uimodel/library/list/SmartListPreviewTest.cpp
+    unit/uimodel/library/list/SmartListTrackPresentationResolverTest.cpp
     unit/uimodel/library/presentation/CustomPresentationEditorModelTest.cpp
     unit/uimodel/library/presentation/ListPresentationPreferenceStoreTest.cpp
     unit/uimodel/library/presentation/TrackColumnLayoutPolicyTest.cpp
@@ -207,7 +211,7 @@ add_executable(ao_core_test
     unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp
     unit/uimodel/playback/output/VolumeViewModelTest.cpp
     unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp
-    unit/uimodel/playback/queue/PlaybackQueueModelTest.cpp
+    unit/uimodel/playback/queue/PlaybackQueueSessionTest.cpp
     unit/uimodel/playback/seek/PlaybackPositionInterpolatorTest.cpp
     unit/uimodel/playback/seek/PlaybackTimeViewModelTest.cpp
     unit/uimodel/playback/seek/SeekSliderInteractionModelTest.cpp
@@ -250,13 +254,13 @@ add_executable(ao_core_test
     unit/runtime/PlaybackServiceSelectionTest.cpp
     unit/runtime/PlaybackServiceTest.cpp
     unit/runtime/source/AllTracksSourceTest.cpp
-    unit/runtime/source/ListSourceStoreTest.cpp
+    unit/runtime/source/TrackSourceCacheTest.cpp
     unit/runtime/projection/TrackDetailProjectionTest.cpp
     unit/runtime/library/AudioIdentityIndexerTest.cpp
     unit/runtime/library/LibraryScanTest.cpp
     unit/runtime/library/ScanPlanBuilderTest.cpp
-    unit/runtime/library/ScanPlanApplierTest.cpp
-    unit/runtime/library/LibraryTasksTest.cpp
+    unit/runtime/library/ScanApplyOperationTest.cpp
+    unit/runtime/library/LibraryTaskServiceTest.cpp
     unit/runtime/library/LibraryWriterTest.cpp
     unit/runtime/completion/MetadataValueCompleterTest.cpp
     unit/runtime/NotificationServiceTest.cpp
@@ -295,12 +299,19 @@ add_executable(ao_tui_test
     unit/tui/ExecutorTest.cpp
     unit/tui/LibraryControllerTest.cpp
     unit/tui/ListNavigationTest.cpp
-    unit/tui/ModelTest.cpp
+    unit/tui/LibraryNavigationTest.cpp
+    unit/tui/PlaybackStatusFormatterTest.cpp
+    unit/tui/QualityIndicatorStyleTest.cpp
+    unit/tui/SelectionNavigationTest.cpp
+    unit/tui/TrackDetailLinesTest.cpp
+    unit/tui/TrackListEntryTest.cpp
+    unit/tui/TrackPresentationNavigationTest.cpp
+    unit/tui/TrackSectionTest.cpp
     unit/tui/OutputDeviceControllerTest.cpp
     unit/tui/PlaybackActionsTest.cpp
     unit/tui/PlaybackPanelTest.cpp
     unit/tui/RenderTest.cpp
-    unit/tui/ShellModelTest.cpp
+    unit/tui/ShellInteractionModelTest.cpp
     unit/tui/SoulButtonTest.cpp
     unit/tui/TextCellTest.cpp
     unit/tui/TrackTableTest.cpp
@@ -322,7 +333,7 @@ add_test(NAME ao_cli_test COMMAND ao_cli_test)
 
 # ao_council_test: council tool unit and integration tests
 add_executable(ao_council_test
-    unit/council/ModelTest.cpp
+    unit/council/CouncilSchemaTest.cpp
     unit/council/IntentSerializationTest.cpp
     unit/council/RegistrySerializationTest.cpp
     unit/council/SchedulerTest.cpp

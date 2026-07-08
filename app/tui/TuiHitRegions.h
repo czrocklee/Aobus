@@ -51,11 +51,11 @@ namespace ao::tui
     ftxui::Box seekRailBox{};
     ftxui::Box trackTableBox{};
 
-    std::vector<OutputDeviceRowBox> outputDeviceRows{};
-    std::vector<PresentationRowBox> presentationRows{};
-    std::vector<NotificationDetailRowBox> notificationDetailRows{};
+    std::vector<OutputDeviceRowHitRegion> outputDeviceRows{};
+    std::vector<PresentationRowHitRegion> presentationRows{};
+    std::vector<NotificationDetailRowHitRegion> notificationDetailRows{};
     std::vector<TrackColumnResizeHandle> trackColumnResizeHandles{};
-    std::vector<TrackSectionRowBox> trackSectionRows{};
+    std::vector<TrackSectionRowHitRegion> trackSectionRows{};
 
     void clearFrameLocalRows();
     ButtonHitTestResult hitTestButton(std::int32_t column, std::int32_t row, HitTestContext context = {}) const;

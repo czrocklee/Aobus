@@ -35,12 +35,12 @@ namespace ao::gtk::layout
     {
     public:
       SoulButtonComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _soulController{ctx.runtime.playback(),
-                          [this](uimodel::AobusSoulViewState const& state)
-                          {
-                            _soul.breathe(state.isBreathing);
-                            _soul.setAura(AobusSoul::mapSoulAura(state.aura));
-                          }}
+        : _soulViewModel{ctx.runtime.playback(),
+                         [this](uimodel::AobusSoulViewState const& state)
+                         {
+                           _soul.breathe(state.isBreathing);
+                           _soul.setAura(AobusSoul::mapSoulAura(state.aura));
+                         }}
       {
         _button.set_has_frame(false);
         _button.add_css_class("ao-soul-button");
@@ -78,7 +78,7 @@ namespace ao::gtk::layout
     private:
       Gtk::Button _button;
       AobusSoul _soul;
-      uimodel::AobusSoulViewModel _soulController;
+      uimodel::AobusSoulViewModel _soulViewModel;
     };
 
     std::unique_ptr<LayoutComponent> createSoulButton(LayoutContext& ctx, LayoutNode const& node)

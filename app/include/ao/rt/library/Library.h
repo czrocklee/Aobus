@@ -19,12 +19,12 @@ namespace ao::rt
 {
   class LibraryChanges;
   class LibraryReader;
-  class LibraryTasks;
+  class LibraryTaskService;
   class LibraryWriter;
 
   // CQRS façade over the music library, exposing four cooperating roles:
   // reader (consistent point-in-time reads), writer (synchronous mutations),
-  // tasks (long-running async operations) and changes (the mutation event bus).
+  // task service (long-running async operations) and changes (the mutation event bus).
   // Library owns none of its collaborators: the MusicLibrary storage, async
   // Runtime and LibraryChanges bus are injected by reference and outlive it.
   // It merely wires them together and hands out the role objects.
@@ -43,7 +43,7 @@ namespace ao::rt
     LibraryChanges const& changes() const noexcept;
     LibraryChanges& changes() noexcept;
     LibraryWriter& writer() noexcept;
-    LibraryTasks& tasks() noexcept;
+    LibraryTaskService& taskService() noexcept;
 
   private:
     struct Impl;

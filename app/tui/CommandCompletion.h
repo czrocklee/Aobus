@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "Model.h"
+#include "LibraryNavigation.h"
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
@@ -18,7 +18,7 @@ namespace ao::tui
 {
   struct CommandCompletionContext final
   {
-    std::span<LibraryNavItem const> lists{};
+    std::span<LibraryNavEntry const> lists{};
     std::span<rt::VocabularyEntry const> artists{};
     std::span<rt::TrackPresentationPreset const> builtinPresentations{};
     std::span<rt::CustomTrackPresentationPreset const> customPresentations{};

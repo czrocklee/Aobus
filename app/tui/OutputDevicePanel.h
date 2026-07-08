@@ -21,7 +21,7 @@ namespace ftxui
 
 namespace ao::tui
 {
-  struct OutputDeviceRowBox final
+  struct OutputDeviceRowHitRegion final
   {
     std::int32_t rowIndex = -1;
     audio::BackendId backendId{};
@@ -35,6 +35,6 @@ namespace ao::tui
   std::int32_t outputDevicePanelColumns(uimodel::OutputDeviceViewState const& view, std::int32_t terminalColumns);
   ftxui::Element outputDevicePanel(uimodel::OutputDeviceViewState const& view,
                                    std::int32_t selectedRow,
-                                   std::vector<OutputDeviceRowBox>* rowBoxes = nullptr,
+                                   std::vector<OutputDeviceRowHitRegion>* rowHitRegions = nullptr,
                                    std::int32_t columns = 0);
 } // namespace ao::tui

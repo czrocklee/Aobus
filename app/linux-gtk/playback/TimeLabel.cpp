@@ -18,7 +18,7 @@ namespace ao::gtk
 {
   TimeLabel::TimeLabel(rt::PlaybackService& playbackService, Mode mode)
     : _mode{mode}
-    , _controller{playbackService, [this](ao::uimodel::PlaybackTimeViewState const& view) { applyState(view); }}
+    , _timeViewModel{playbackService, [this](ao::uimodel::PlaybackTimeViewState const& view) { applyState(view); }}
   {
     _label.set_halign(Gtk::Align::CENTER);
     _label.set_valign(Gtk::Align::CENTER);

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "Model.h"
+#include "TrackPresentationNavigation.h"
 
 #include <ftxui/screen/box.hpp>
 
@@ -25,18 +25,18 @@ namespace ao::tui
   inline constexpr std::int32_t kPresentationPanelChromeRows = 6;
   inline constexpr std::int32_t kPresentationPanelRows = kPresentationPanelListRows + kPresentationPanelChromeRows;
 
-  struct PresentationRowBox final
+  struct PresentationRowHitRegion final
   {
     std::int32_t rowIndex = -1;
     ftxui::Box box{};
   };
 
-  std::int32_t presentationPanelColumns(std::vector<PresentationNavItem> const& items,
+  std::int32_t presentationPanelColumns(std::vector<TrackPresentationNavEntry> const& items,
                                         std::string_view activePresentationId,
                                         std::int32_t terminalColumns);
-  ftxui::Element presentationPanel(std::vector<PresentationNavItem> const& items,
+  ftxui::Element presentationPanel(std::vector<TrackPresentationNavEntry> const& items,
                                    std::string_view activePresentationId,
                                    std::int32_t selectedIndex,
-                                   std::vector<PresentationRowBox>* rowBoxes = nullptr,
+                                   std::vector<PresentationRowHitRegion>* rowHitRegions = nullptr,
                                    std::int32_t columns = 0);
 } // namespace ao::tui

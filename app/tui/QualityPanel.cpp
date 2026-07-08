@@ -3,8 +3,8 @@
 
 #include "QualityPanel.h"
 
-#include "Model.h"
-#include "ShellModel.h"
+#include "QualityIndicatorStyle.h"
+#include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
 #include <ao/audio/QualityAnalyzer.h>

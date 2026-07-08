@@ -3,7 +3,7 @@
 
 #include "StatusBar.h"
 
-#include "ShellModel.h"
+#include "ShellInteractionModel.h"
 #include "Style.h"
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -156,7 +156,7 @@ namespace ao::tui
     };
 
     auto const hasActivity = hasVisibleActivity(state.activityStatus);
-    auto fallbackShell = ShellModel{};
+    auto fallbackShell = ShellInteractionModel{};
     auto const& shell = state.shell == nullptr ? fallbackShell : *state.shell;
 
     if (!hasActivity && state.activityStatusBox != nullptr)

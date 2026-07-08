@@ -393,7 +393,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - output device panel renders grouped selectable rows", "[tui][unit][playback]")
   {
-    auto rowBoxes = std::vector<OutputDeviceRowBox>{};
+    auto rowHitRegions = std::vector<OutputDeviceRowHitRegion>{};
     auto const view = uimodel::OutputDeviceViewState{
       .rows =
         std::vector{
@@ -425,7 +425,7 @@ namespace ao::tui::test
       .hasActiveOutputDevice = true,
     };
 
-    auto const text = renderPlaybackText(outputDevicePanel(view, 2, &rowBoxes));
+    auto const text = renderPlaybackText(outputDevicePanel(view, 2, &rowHitRegions));
 
     CHECK(text.find("Output Devices") != std::string::npos);
     CHECK(text.find("PipeWire") != std::string::npos);
@@ -433,13 +433,13 @@ namespace ao::tui::test
     CHECK(text.find("USB interface") != std::string::npos);
     CHECK(text.find("PipeWire: Studio DAC") != std::string::npos);
     CHECK(text.find("Enter select") != std::string::npos);
-    REQUIRE(rowBoxes.size() == 2);
-    CHECK(rowBoxes[0].rowIndex == 1);
-    CHECK(rowBoxes[0].backendId == audio::BackendId{"pipewire"});
-    CHECK(rowBoxes[0].deviceId == audio::DeviceId{"studio"});
-    CHECK(rowBoxes[0].profileId == audio::kProfileShared);
-    CHECK(rowBoxes[1].rowIndex == 2);
-    CHECK(rowBoxes[1].profileId == audio::kProfileExclusive);
+    REQUIRE(rowHitRegions.size() == 2);
+    CHECK(rowHitRegions[0].rowIndex == 1);
+    CHECK(rowHitRegions[0].backendId == audio::BackendId{"pipewire"});
+    CHECK(rowHitRegions[0].deviceId == audio::DeviceId{"studio"});
+    CHECK(rowHitRegions[0].profileId == audio::kProfileShared);
+    CHECK(rowHitRegions[1].rowIndex == 2);
+    CHECK(rowHitRegions[1].profileId == audio::kProfileExclusive);
   }
 
   TEST_CASE("PlaybackPanel - output device panel width follows content and terminal bounds", "[tui][unit][playback]")

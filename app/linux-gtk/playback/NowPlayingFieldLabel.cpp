@@ -39,7 +39,8 @@ namespace ao::gtk
     : _runtime{runtime}
     , _field{field}
     , _action{action}
-    , _controller{_runtime.playback(), [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
+    , _nowPlayingViewModel{_runtime.playback(),
+                           [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
   {
     _label.set_ellipsize(Pango::EllipsizeMode::END);
 
@@ -70,7 +71,7 @@ namespace ao::gtk
                   static_cast<int>(_field),
                   static_cast<int>(_action));
 
-    auto const cmd = _controller.resolveAction(_action, _field);
+    auto const cmd = _nowPlayingViewModel.resolveAction(_action, _field);
 
     using Type = uimodel::NowPlayingActionCommand::Type;
 
