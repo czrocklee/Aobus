@@ -10,7 +10,8 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ActivityStatusFeedState projects compact state from runtime priority", "[uimodel][unit][status][activity]")
+  TEST_CASE("ActivityStatusFeedState - projects compact state from runtime priority",
+            "[uimodel][unit][status][activity]")
   {
     auto feedState = ActivityStatusFeedState{};
 

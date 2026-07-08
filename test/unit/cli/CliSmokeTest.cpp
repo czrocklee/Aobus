@@ -68,12 +68,13 @@ namespace ao::cli::test
     std::size_t countJsonLinesWithField(std::string_view lines, std::string_view field, std::string_view value)
     {
       std::size_t count = 0;
-      std::size_t pos = 0;
+      std::size_t lineStart = 0;
 
-      while (pos < lines.size())
+      while (lineStart < lines.size())
       {
-        auto const end = lines.find('\n', pos);
-        auto const line = lines.substr(pos, end == std::string_view::npos ? std::string_view::npos : end - pos);
+        auto const end = lines.find('\n', lineStart);
+        auto const line =
+          lines.substr(lineStart, end == std::string_view::npos ? std::string_view::npos : end - lineStart);
 
         if (!line.empty())
         {
@@ -91,7 +92,7 @@ namespace ao::cli::test
           break;
         }
 
-        pos = end + 1;
+        lineStart = end + 1;
       }
 
       return count;
@@ -107,12 +108,12 @@ namespace ao::cli::test
     std::size_t countOccurrences(std::string_view text, std::string_view needle)
     {
       std::size_t count = 0;
-      std::size_t pos = 0;
+      std::size_t searchPosition = 0;
 
-      while ((pos = text.find(needle, pos)) != std::string_view::npos)
+      while ((searchPosition = text.find(needle, searchPosition)) != std::string_view::npos)
       {
         ++count;
-        pos += needle.size();
+        searchPosition += needle.size();
       }
 
       return count;
@@ -657,7 +658,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "Test Title"));
   }
 
-  TEST_CASE("CLI - init dry-run reports scan plan without importing tracks", "[cli][workflow][init][dryrun]")
+  TEST_CASE("CLI - init dry-run reports scan plan without importing tracks", "[cli][workflow][init][dry-run]")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -1375,7 +1376,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["custom"]["energy"]) == "high");
   }
 
-  TEST_CASE("CLI - track mutations support dry-run reports", "[cli][workflow][track][dryrun]")
+  TEST_CASE("CLI - track mutations support dry-run reports", "[cli][workflow][track][dry-run]")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -1440,7 +1441,7 @@ namespace ao::cli::test
     CHECK(result.out.empty());
   }
 
-  TEST_CASE("CLI - tag mutations support dry-run reports", "[cli][workflow][tag][dryrun]")
+  TEST_CASE("CLI - tag mutations support dry-run reports", "[cli][workflow][tag][dry-run]")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -1487,7 +1488,7 @@ namespace ao::cli::test
     CHECK_FALSE(contains(result.out, "Favorite"));
   }
 
-  TEST_CASE("CLI - list mutations support dry-run reports", "[cli][workflow][list][dryrun]")
+  TEST_CASE("CLI - list mutations support dry-run reports", "[cli][workflow][list][dry-run]")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");

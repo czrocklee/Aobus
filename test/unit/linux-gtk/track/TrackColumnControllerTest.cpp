@@ -65,7 +65,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackColumnController builds and updates visible track columns", "[gtk][unit][track][column]")
+  TEST_CASE("TrackColumnController - builds and updates visible track columns", "[gtk][unit][track][column]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto layoutStore = uimodel::TrackColumnLayoutStore{};

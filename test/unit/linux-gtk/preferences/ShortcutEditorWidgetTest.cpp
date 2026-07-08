@@ -35,7 +35,7 @@ namespace ao::gtk::test
     uimodel::KeyChord chord(std::string const& text)
     {
       auto const optChord = uimodel::KeyChord::parse(text);
-      REQUIRE(optChord.has_value());
+      REQUIRE(optChord);
       return *optChord;
     }
 
@@ -113,7 +113,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("ShortcutEditorWidget lists only shortcut-eligible actions", "[gtk][unit][preferences][shortcut]")
+  TEST_CASE("ShortcutEditorWidget - lists only shortcut-eligible actions", "[gtk][unit][preferences][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -127,7 +127,7 @@ namespace ao::gtk::test
     CHECK_FALSE(contains(ids, "track.editTags"));
   }
 
-  TEST_CASE("ShortcutEditorWidget renders the effective chords for each action", "[gtk][unit][preferences][shortcut]")
+  TEST_CASE("ShortcutEditorWidget - renders the effective chords for each action", "[gtk][unit][preferences][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -140,7 +140,7 @@ namespace ao::gtk::test
     CHECK(findLabelByText(editor, "Play/Pause") != nullptr);
   }
 
-  TEST_CASE("ShortcutEditorWidget routes shortcut button events to keymap changes",
+  TEST_CASE("ShortcutEditorWidget - routes shortcut button events to keymap changes",
             "[gtk][unit][preferences][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -165,7 +165,7 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       CHECK(changeCount == 1);
-      REQUIRE(optLastModel.has_value());
+      REQUIRE(optLastModel);
       CHECK(optLastModel->actionFor(chord("Ctrl+N")) == std::optional<std::string>{"playback.next"});
       CHECK(findLabelByText(editor, "Ctrl+N") != nullptr);
     }
@@ -188,7 +188,7 @@ namespace ao::gtk::test
 
       CHECK(ownerLabel == "Play/Pause");
       CHECK(chordText == "Ctrl+P");
-      REQUIRE(optLastModel.has_value());
+      REQUIRE(optLastModel);
       CHECK(hasChord(optLastModel->chordsFor("playback.next"), chord("Ctrl+P")));
       CHECK_FALSE(hasChord(optLastModel->chordsFor("playback.playPause"), chord("Ctrl+P")));
       CHECK(optLastModel->conflicts().empty());
@@ -204,7 +204,7 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       CHECK(changeCount == 0);
-      CHECK_FALSE(optLastModel.has_value());
+      CHECK_FALSE(optLastModel);
       CHECK(findLabelByText(editor, "Ctrl+P") != nullptr);
     }
 
@@ -214,7 +214,7 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       CHECK(changeCount == 1);
-      REQUIRE(optLastModel.has_value());
+      REQUIRE(optLastModel);
       CHECK_FALSE(hasChord(optLastModel->chordsFor("playback.playPause"), chord("Ctrl+P")));
       CHECK(findLabelByText(editor, "Ctrl+P") == nullptr);
     }
@@ -235,7 +235,7 @@ namespace ao::gtk::test
       clickButtonByLabel(editedEditor, "Reset", 1);
       drainGtkEvents();
 
-      REQUIRE(optLastModel.has_value());
+      REQUIRE(optLastModel);
       CHECK_FALSE(hasChord(optLastModel->chordsFor("playback.next"), chord("Ctrl+N")));
       CHECK(hasChord(optLastModel->chordsFor("playback.next"), chord("Ctrl+Right")));
     }
@@ -256,13 +256,13 @@ namespace ao::gtk::test
       clickButtonByLabel(editedEditor, "Reset All");
       drainGtkEvents();
 
-      REQUIRE(optLastModel.has_value());
+      REQUIRE(optLastModel);
       CHECK(hasChord(optLastModel->chordsFor("playback.playPause"), chord("Ctrl+P")));
       CHECK_FALSE(hasChord(optLastModel->chordsFor("playback.next"), chord("Ctrl+N")));
     }
   }
 
-  TEST_CASE("ShortcutEditorWidget ignores conflict responses after destruction", "[gtk][unit][preferences][shortcut]")
+  TEST_CASE("ShortcutEditorWidget - ignores conflict responses after destruction", "[gtk][unit][preferences][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -287,7 +287,7 @@ namespace ao::gtk::test
     CHECK(changeCount == 0);
   }
 
-  TEST_CASE("ShortcutEditorWidget parents capture popups to the injected host", "[gtk][unit][preferences][shortcut]")
+  TEST_CASE("ShortcutEditorWidget - parents capture popups to the injected host", "[gtk][unit][preferences][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -305,7 +305,7 @@ namespace ao::gtk::test
     CHECK(editor.captureWindowForTest() == nullptr);
   }
 
-  TEST_CASE("ShortcutEditorWidget old capture teardown does not close a replacement popup",
+  TEST_CASE("ShortcutEditorWidget - old capture teardown does not close a replacement popup",
             "[gtk][unit][preferences][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();

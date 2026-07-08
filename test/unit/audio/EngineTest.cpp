@@ -216,7 +216,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[audio][unit][engine][format]")
+  TEST_CASE("Engine - unsupported backend sample rate fails without resampler", "[audio][unit][engine][format]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 

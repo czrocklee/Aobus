@@ -19,7 +19,7 @@
 namespace ao::library::test
 {
   TEST_CASE("TrackBuilder - hot serialization rejects values that exceed header fields",
-            "[library][unit][track][builder][serialization][overflow][error]")
+            "[library][unit][track-builder][overflow]")
   {
     constexpr std::size_t kUint16Max = std::numeric_limits<std::uint16_t>::max();
 
@@ -62,7 +62,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("TrackBuilder - cold serialization rejects values that exceed header fields",
-            "[library][unit][track][builder][serialization][overflow][error]")
+            "[library][unit][track-builder][overflow]")
   {
     constexpr std::size_t kUint16Max = std::numeric_limits<std::uint16_t>::max();
     constexpr auto kUint16Overflow = kUint16Max + 1;

@@ -59,10 +59,10 @@ namespace ao::query::detail::test
       return result;
     }
 
-    std::string withInsertedSpace(std::string_view text, std::size_t pos)
+    std::string withInsertedSpace(std::string_view text, std::size_t insertOffset)
     {
       auto result = std::string{text};
-      result.insert(pos, 1, ' ');
+      result.insert(insertOffset, 1, ' ');
       return result;
     }
 

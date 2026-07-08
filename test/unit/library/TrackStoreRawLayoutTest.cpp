@@ -29,7 +29,7 @@ namespace ao::library::test
 
     auto rtxn = beginReadTransaction(fixture.env);
     auto optView = fixture.store.reader(rtxn).get(id);
-    REQUIRE(optView.has_value());
+    REQUIRE(optView);
     CHECK(optView->property().duration() == std::chrono::minutes{3});
     CHECK(optView->metadata().trackNumber() == 1);
     CHECK(optView->metadata().trackTotal() == 10);
@@ -85,7 +85,7 @@ namespace ao::library::test
 
     auto rtxn = beginReadTransaction(fixture.env);
     auto optView = fixture.store.reader(rtxn).get(id);
-    REQUIRE(optView.has_value());
+    REQUIRE(optView);
     CHECK(optView->metadata().artistId() == DictionaryId{99});
     CHECK(optView->property().duration() == std::chrono::seconds{200});
     CHECK(optView->metadata().trackNumber() == 2);
@@ -113,12 +113,12 @@ namespace ao::library::test
     auto wtxn = beginWriteTransaction(fixture.env);
     auto writer = fixture.store.writer(wtxn);
     auto optHot = writer.get(id, TrackStore::Reader::LoadMode::Hot);
-    REQUIRE(optHot.has_value());
+    REQUIRE(optHot);
     CHECK(optHot->isHotValid());
     CHECK_FALSE(optHot->isColdValid());
 
     auto optCold = writer.get(id, TrackStore::Reader::LoadMode::Cold);
-    REQUIRE(optCold.has_value());
+    REQUIRE(optCold);
     CHECK_FALSE(optCold->isHotValid());
     CHECK(optCold->isColdValid());
     CHECK(optCold->property().duration() == std::chrono::minutes{4});
@@ -192,7 +192,7 @@ namespace ao::library::test
 
     auto rtxn = beginReadTransaction(fixture.env);
     auto optView = fixture.store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Hot);
-    REQUIRE(optView.has_value());
+    REQUIRE(optView);
     CHECK(optView->isHotValid());
     CHECK_FALSE(optView->isColdValid());
     CHECK(optView->metadata().artistId() == DictionaryId{42});
@@ -208,7 +208,7 @@ namespace ao::library::test
 
     auto rtxn = beginReadTransaction(fixture.env);
     auto optView = fixture.store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Cold);
-    REQUIRE(optView.has_value());
+    REQUIRE(optView);
     CHECK_FALSE(optView->isHotValid());
     CHECK(optView->isColdValid());
     CHECK(optView->property().duration() == std::chrono::minutes{6});
@@ -289,6 +289,6 @@ namespace ao::library::test
 
     auto rtxn = beginReadTransaction(fixture.env);
     auto optView = fixture.store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Both);
-    CHECK_FALSE(optView.has_value());
+    CHECK_FALSE(optView);
   }
 } // namespace ao::library::test

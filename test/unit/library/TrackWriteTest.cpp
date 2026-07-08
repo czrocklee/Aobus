@@ -73,7 +73,7 @@ namespace ao::library::test
     REQUIRE(updateResult);
 
     auto optView = writer.get(trackId, TrackStore::Reader::LoadMode::Both);
-    REQUIRE(optView.has_value());
+    REQUIRE(optView);
     CHECK(optView->metadata().title() == "Updated Track");
     CHECK(optView->property().uri() == "/tmp/updated.flac");
   }

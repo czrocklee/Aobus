@@ -56,7 +56,7 @@ namespace ao::gtk
     _trackActivatedConn =
       _selectionControllerPtr->signalTrackActivated().connect([this](TrackId id) { _trackActivatedSignal.emit(id); });
     _contextMenuRequestedConn = _selectionControllerPtr->signalContextMenuRequested().connect(
-      [this](double xPos, double yPos) { _contextMenuRequestedSignal.emit(xPos, yPos); });
+      [this](double xPosition, double yPosition) { _contextMenuRequestedSignal.emit(xPosition, yPosition); });
     _tagEditRequestedConn = _selectionControllerPtr->signalTagEditRequested().connect(
       [this](std::vector<TrackId> const& ids, Gtk::Widget* widget) { _tagEditRequestedSignal.emit(ids, widget); });
   }

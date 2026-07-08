@@ -47,13 +47,14 @@ namespace ao::gtk
     // Drag
     auto const dragPtr = Gtk::GestureDrag::create();
     dragPtr->signal_drag_begin().connect([this](double, double) { _dragStartVolume = _volume; });
-    dragPtr->signal_drag_update().connect([this](double posX, double posY) { handleDragUpdate(posX, posY); });
+    dragPtr->signal_drag_update().connect([this](double xPosition, double yPosition)
+                                          { handleDragUpdate(xPosition, yPosition); });
     add_controller(dragPtr);
 
     // Click
     auto const clickPtr = Gtk::GestureClick::create();
-    clickPtr->signal_pressed().connect([this](std::int32_t, double posX, double posY)
-                                       { handleAbsoluteClick(posX, posY); });
+    clickPtr->signal_pressed().connect([this](std::int32_t, double xPosition, double yPosition)
+                                       { handleAbsoluteClick(xPosition, yPosition); });
     add_controller(clickPtr);
 
     // Scroll
@@ -215,18 +216,18 @@ namespace ao::gtk
     float const segmentThickness = thickness * kSoulStrokeRatio;
     float const minGap = std::max(1.5F, segmentThickness * 0.6F);
 
-    std::int32_t numSegments = 1;
+    std::int32_t segmentCount = 1;
     float segmentGap = 0.0F;
 
     if (length > segmentThickness)
     {
       float const rawSegments = (length + minGap) / (segmentThickness + minGap);
-      numSegments = std::max<std::int32_t>(1, static_cast<std::int32_t>(std::floor(rawSegments)));
+      segmentCount = std::max<std::int32_t>(1, static_cast<std::int32_t>(std::floor(rawSegments)));
 
-      if (numSegments > 1)
+      if (segmentCount > 1)
       {
         segmentGap =
-          (length - (static_cast<float>(numSegments) * segmentThickness)) / static_cast<float>(numSegments - 1);
+          (length - (static_cast<float>(segmentCount) * segmentThickness)) / static_cast<float>(segmentCount - 1);
       }
     }
 
@@ -242,14 +243,14 @@ namespace ao::gtk
     crPtr->save();
     crPtr->begin_new_path();
 
-    for (std::int32_t idx = 0; idx < numSegments; ++idx)
+    for (std::int32_t idx = 0; idx < segmentCount; ++idx)
     {
-      float const pos = (static_cast<float>(idx) * (segmentThickness + segmentGap));
+      float const position = (static_cast<float>(idx) * (segmentThickness + segmentGap));
       crPtr->begin_new_sub_path();
 
       if (_orientation == Gtk::Orientation::HORIZONTAL)
       {
-        float const segmentX = hPadding + pos;
+        float const segmentX = hPadding + position;
         crPtr->arc(segmentX + segmentRadius, vPadding + segmentRadius, segmentRadius, kAngle180, kAngle270);
         crPtr->arc(
           segmentX + segmentThickness - segmentRadius, vPadding + segmentRadius, segmentRadius, kAngle270, kAngle360);
@@ -262,7 +263,7 @@ namespace ao::gtk
       }
       else
       {
-        float const segmentY = vPadding + drawHeight - pos - segmentThickness;
+        float const segmentY = vPadding + drawHeight - position - segmentThickness;
         crPtr->arc(hPadding + segmentRadius, segmentY + segmentRadius, segmentRadius, kAngle180, kAngle270);
         crPtr->arc(hPadding + drawWidth - segmentRadius, segmentY + segmentRadius, segmentRadius, kAngle270, kAngle360);
         crPtr->arc(hPadding + drawWidth - segmentRadius,
@@ -315,7 +316,7 @@ namespace ao::gtk
     crPtr->restore();
   }
 
-  void VolumeBar::handleAbsoluteClick(double posX, double posY)
+  void VolumeBar::handleAbsoluteClick(double xPosition, double yPosition)
   {
     float const hPadding = static_cast<float>(get_style_context()->get_padding().get_left());
     float const vPadding = static_cast<float>(get_style_context()->get_padding().get_top());
@@ -326,7 +327,7 @@ namespace ao::gtk
 
       if (drawWidth > 0)
       {
-        _volume = std::clamp(static_cast<float>(posX - hPadding) / drawWidth, 0.0F, 1.0F);
+        _volume = std::clamp(static_cast<float>(xPosition - hPadding) / drawWidth, 0.0F, 1.0F);
       }
     }
     else
@@ -335,7 +336,7 @@ namespace ao::gtk
 
       if (drawHeight > 0)
       {
-        _volume = std::clamp(1.0F - (static_cast<float>(posY - vPadding) / drawHeight), 0.0F, 1.0F);
+        _volume = std::clamp(1.0F - (static_cast<float>(yPosition - vPadding) / drawHeight), 0.0F, 1.0F);
       }
     }
 
@@ -344,7 +345,7 @@ namespace ao::gtk
     queue_draw();
   }
 
-  void VolumeBar::handleDragUpdate(double posX, double posY)
+  void VolumeBar::handleDragUpdate(double xPosition, double yPosition)
   {
     float const hPadding = static_cast<float>(get_style_context()->get_padding().get_left());
     float const vPadding = static_cast<float>(get_style_context()->get_padding().get_top());
@@ -355,7 +356,7 @@ namespace ao::gtk
 
       if (drawWidth > 0)
       {
-        _volume = std::clamp(_dragStartVolume + (static_cast<float>(posX) / drawWidth), 0.0F, 1.0F);
+        _volume = std::clamp(_dragStartVolume + (static_cast<float>(xPosition) / drawWidth), 0.0F, 1.0F);
       }
     }
     else
@@ -364,7 +365,7 @@ namespace ao::gtk
 
       if (drawHeight > 0)
       {
-        _volume = std::clamp(_dragStartVolume - (static_cast<float>(posY) / drawHeight), 0.0F, 1.0F);
+        _volume = std::clamp(_dragStartVolume - (static_cast<float>(yPosition) / drawHeight), 0.0F, 1.0F);
       }
     }
 

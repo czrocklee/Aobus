@@ -17,7 +17,7 @@ namespace ao::rt::test
   // Reset forwarding
   // =============================================================================
   TEST_CASE("ManualListSource - upstream reset is ignored without upstream source",
-            "[runtime][unit][source][manual-list][observer][reset]")
+            "[runtime][unit][manual-list][reset]")
   {
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
     auto mls = ManualListSource{lv.view()};
@@ -35,7 +35,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - upstream reset filters stale IDs and notifies observers",
-            "[runtime][unit][source][manual-list][observer][reset]")
+            "[runtime][unit][manual-list][reset]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -62,7 +62,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - upstream reset clears all tracks when source becomes empty",
-            "[runtime][unit][source][manual-list][observer][reset]")
+            "[runtime][unit][manual-list][reset]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -85,7 +85,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - upstream reset keeps retained tracks still present in source",
-            "[runtime][unit][source][manual-list][observer][reset]")
+            "[runtime][unit][manual-list][reset]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -112,7 +112,7 @@ namespace ao::rt::test
 
   // =============================================================================
   TEST_CASE("ManualListSource - upstream insertion does not mutate manual membership",
-            "[runtime][unit][source][manual-list][observer][insert]")
+            "[runtime][unit][manual-list][insert]")
   {
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
     auto mls = ManualListSource{lv.view()};
@@ -130,7 +130,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - upstream batch insertion does not mutate manual membership",
-            "[runtime][unit][source][manual-list][observer][insert]")
+            "[runtime][unit][manual-list][insert]")
   {
     auto lv = ListViewOwner{{TrackId{1}}};
     auto mls = ManualListSource{lv.view()};
@@ -151,7 +151,7 @@ namespace ao::rt::test
   // Update forwarding
   // =============================================================================
   TEST_CASE("ManualListSource - upstream update forwards member tracks with local index",
-            "[runtime][unit][source][manual-list][observer][update]")
+            "[runtime][unit][manual-list][update]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -182,8 +182,7 @@ namespace ao::rt::test
     mls.detach(&spy);
   }
 
-  TEST_CASE("ManualListSource - upstream update ignores non-member tracks",
-            "[runtime][unit][source][manual-list][observer][update]")
+  TEST_CASE("ManualListSource - upstream update ignores non-member tracks", "[runtime][unit][manual-list][update]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -204,7 +203,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - upstream batch update forwards matching members only",
-            "[runtime][unit][source][manual-list][observer][update]")
+            "[runtime][unit][manual-list][update]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -231,7 +230,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - upstream batch update ignores batches without matching members",
-            "[runtime][unit][source][manual-list][observer][update]")
+            "[runtime][unit][manual-list][update]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -250,8 +249,7 @@ namespace ao::rt::test
     mls.detach(&spy);
   }
 
-  TEST_CASE("ManualListSource - upstream batch update ignores empty batches",
-            "[runtime][unit][source][manual-list][observer][update]")
+  TEST_CASE("ManualListSource - upstream batch update ignores empty batches", "[runtime][unit][manual-list][update]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -270,7 +268,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - upstream batch update forwards all matching IDs",
-            "[runtime][unit][source][manual-list][observer][update]")
+            "[runtime][unit][manual-list][update]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -300,7 +298,7 @@ namespace ao::rt::test
   // Removal forwarding
   // =============================================================================
   TEST_CASE("ManualListSource - upstream removal deletes member and reports local index",
-            "[runtime][unit][source][manual-list][observer][remove]")
+            "[runtime][unit][manual-list][remove]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{10});
@@ -327,7 +325,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - upstream removal reports first element index before erasure",
-            "[runtime][unit][source][manual-list][observer][remove]")
+            "[runtime][unit][manual-list][remove]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -351,8 +349,7 @@ namespace ao::rt::test
     mls.detach(&spy);
   }
 
-  TEST_CASE("ManualListSource - upstream removal ignores non-member tracks",
-            "[runtime][unit][source][manual-list][observer][remove]")
+  TEST_CASE("ManualListSource - upstream removal ignores non-member tracks", "[runtime][unit][manual-list][remove]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -374,7 +371,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - upstream batch removal deletes matching members and notifies observers",
-            "[runtime][unit][source][manual-list][observer][remove]")
+            "[runtime][unit][manual-list][remove]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -405,7 +402,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - upstream batch removal ignores batches without matching members",
-            "[runtime][unit][source][manual-list][observer][remove]")
+            "[runtime][unit][manual-list][remove]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -425,8 +422,7 @@ namespace ao::rt::test
     mls.detach(&spy);
   }
 
-  TEST_CASE("ManualListSource - upstream batch removal ignores empty batches",
-            "[runtime][unit][source][manual-list][observer][remove]")
+  TEST_CASE("ManualListSource - upstream batch removal ignores empty batches", "[runtime][unit][manual-list][remove]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -445,7 +441,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - upstream batch removal deletes all matching IDs",
-            "[runtime][unit][source][manual-list][observer][remove]")
+            "[runtime][unit][manual-list][remove]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -475,8 +471,7 @@ namespace ao::rt::test
   // =============================================================================
   // Sequential removals
   // =============================================================================
-  TEST_CASE("ManualListSource - sequential removals maintain correct indices",
-            "[runtime][unit][source][manual-list][observer][remove]")
+  TEST_CASE("ManualListSource - sequential removals maintain correct indices", "[runtime][unit][manual-list][remove]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -525,7 +520,7 @@ namespace ao::rt::test
   // Batch then single operations
   // =============================================================================
   TEST_CASE("ManualListSource - batch removal leaves later single removal indexed correctly",
-            "[runtime][unit][source][manual-list][observer][batch]")
+            "[runtime][unit][manual-list][batch]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -561,7 +556,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - batch update leaves later single update indexed correctly",
-            "[runtime][unit][source][manual-list][observer][batch]")
+            "[runtime][unit][manual-list][batch]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -593,8 +588,7 @@ namespace ao::rt::test
   // =============================================================================
   // Destruction
   // =============================================================================
-  TEST_CASE("ManualListSource - destructor detaches from upstream source",
-            "[runtime][unit][source][manual-list][lifetime]")
+  TEST_CASE("ManualListSource - destructor detaches from upstream source", "[runtime][unit][manual-list][lifetime]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -617,7 +611,7 @@ namespace ao::rt::test
   // Multiple observers
   // =============================================================================
   TEST_CASE("ManualListSource - attached observers receive events until detached",
-            "[runtime][unit][source][manual-list][observer]")
+            "[runtime][unit][manual-list][observer]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -645,8 +639,7 @@ namespace ao::rt::test
     mls.detach(&spy2);
   }
 
-  TEST_CASE("ManualListSource - detached observers no longer receive events",
-            "[runtime][unit][source][manual-list][observer]")
+  TEST_CASE("ManualListSource - detached observers no longer receive events", "[runtime][unit][manual-list][observer]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -672,7 +665,7 @@ namespace ao::rt::test
   // Chained ManualListSources
   // =============================================================================
   TEST_CASE("ManualListSource - chained manual lists propagate upstream removals",
-            "[runtime][unit][source][manual-list][observer][chain]")
+            "[runtime][unit][manual-list][chain]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -702,8 +695,7 @@ namespace ao::rt::test
     outer.detach(&outerSpy);
   }
 
-  TEST_CASE("ManualListSource - chained manual lists propagate upstream resets",
-            "[runtime][unit][source][manual-list][observer][chain]")
+  TEST_CASE("ManualListSource - chained manual lists propagate upstream resets", "[runtime][unit][manual-list][chain]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -736,7 +728,7 @@ namespace ao::rt::test
   // Destructor with null source
   // =============================================================================
   TEST_CASE("ManualListSource - destructor is safe without an upstream source",
-            "[runtime][unit][source][manual-list][lifetime]")
+            "[runtime][unit][manual-list][lifetime]")
   {
     {
       auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};

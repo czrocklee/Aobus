@@ -52,7 +52,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("ShellLayoutSessionModel manages reusable layout session policy", "[uimodel][unit][layout][shell]")
+  TEST_CASE("ShellLayoutSessionModel - manages reusable layout session policy", "[uimodel][unit][layout][shell]")
   {
     SECTION("preset selection accepts supported ids and falls back for unknown non-empty ids")
     {
@@ -122,7 +122,7 @@ namespace ao::uimodel::test
 
       auto optPromotion = model.preparePanelSizePromotion(stateDoc);
 
-      REQUIRE(optPromotion.has_value());
+      REQUIRE(optPromotion);
       CHECK(optPromotion->presetId == "modern");
       CHECK(optPromotion->result.promotedCount == 1);
       CHECK(optPromotion->componentState.components.empty());

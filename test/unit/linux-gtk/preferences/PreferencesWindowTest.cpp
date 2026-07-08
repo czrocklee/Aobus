@@ -125,14 +125,14 @@ namespace ao::gtk::test
     prefs.lastOutputBackendId = "existing-backend";
     window.refreshPreferences(prefs, nullptr);
     CHECK(window.selectedThemeForTest() == "classic");
-    CHECK_FALSE(optPersisted.has_value());
+    CHECK_FALSE(optPersisted);
 
     window.setThemeForTest("modern");
 
-    REQUIRE(optPersisted.has_value());
+    REQUIRE(optPersisted);
     CHECK(optPersisted->lastThemePreset == "modern");
     CHECK(optPersisted->lastOutputBackendId == "existing-backend");
-    REQUIRE(optTheme.has_value());
+    REQUIRE(optTheme);
     CHECK(*optTheme == rt::ThemePresetId::Modern);
   }
 
@@ -152,11 +152,11 @@ namespace ao::gtk::test
     prefs.lastOutputBackendId = "existing-backend";
     window.refreshPreferences(prefs, nullptr);
     CHECK(window.selectedLayoutPresetForTest() == "classic");
-    CHECK_FALSE(optPersisted.has_value());
+    CHECK_FALSE(optPersisted);
 
     window.setLayoutPresetForTest("modern");
 
-    REQUIRE(optPersisted.has_value());
+    REQUIRE(optPersisted);
     CHECK(optPersisted->lastLayoutPreset == "modern");
     CHECK(optPersisted->lastThemePreset == "classic");
     CHECK(optPersisted->lastOutputBackendId == "existing-backend");
@@ -195,7 +195,7 @@ namespace ao::gtk::test
 
     emitRowActivated(*listBox, *deviceRow);
 
-    REQUIRE(optPersisted.has_value());
+    REQUIRE(optPersisted);
     CHECK(optPersisted->lastThemePreset == "modern");
     CHECK(optPersisted->lastLayoutPreset == "classic");
     CHECK(optPersisted->lastOutputBackendId == "test_backend");

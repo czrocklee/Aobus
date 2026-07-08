@@ -60,7 +60,7 @@ namespace ao::rt::test
     CHECK(result.error().code == Error::Code::IoError);
   }
 
-  TEST_CASE("LibraryTasks - buildScanPlanAsync succeeds", "[runtime][unit][library][task][scan]")
+  TEST_CASE("LibraryTasks - buildScanPlanAsync succeeds", "[runtime][unit][library-task][scan]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -74,7 +74,7 @@ namespace ao::rt::test
     REQUIRE(result);
   }
 
-  TEST_CASE("LibraryTasks - applyScanPlanAsync succeeds with empty plan", "[runtime][unit][library][task][scan]")
+  TEST_CASE("LibraryTasks - applyScanPlanAsync succeeds with empty plan", "[runtime][unit][library-task][scan]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -151,7 +151,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryTasks - applyScanPlanAsync reports progress while applying plan",
-            "[runtime][unit][library][task][scan]")
+            "[runtime][unit][library-task][scan]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};
@@ -201,7 +201,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryTasks - applyScanPlanAsync forwards cancellation to scan executor",
-            "[runtime][unit][library][task][scan][cancellation]")
+            "[runtime][unit][library-task][scan]")
   {
     auto testLib = TestMusicLibrary{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");

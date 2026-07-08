@@ -12,7 +12,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator matches existence predicates by field storage semantics", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches existence predicates by field storage semantics", "[query][unit][plan-evaluator]")
   {
     auto evaluator = PlanEvaluator{};
 
@@ -134,7 +134,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator matches list membership across scalar and string fields", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches list membership across scalar and string fields", "[query][unit][plan-evaluator]")
   {
     auto spec = TrackSpec{};
     spec.artist = "Bach";
@@ -205,8 +205,8 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator matches inclusive ranges across numeric and duration fields",
-            "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches inclusive ranges across numeric and duration fields",
+            "[query][unit][plan-evaluator]")
   {
     auto spec = TrackSpec{};
     spec.year = 1994;
@@ -235,7 +235,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator matches custom metadata equality and LIKE expressions", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches custom metadata equality and LIKE expressions", "[query][unit][plan-evaluator]")
   {
     auto const spec = TrackSpec{.customPairs = {{"isrc", "US-RC1-12-00001"}, {"label", "Deutsche Grammophon"}}};
 

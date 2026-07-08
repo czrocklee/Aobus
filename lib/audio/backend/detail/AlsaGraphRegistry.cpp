@@ -67,7 +67,7 @@ namespace ao::audio::backend::detail
       }
 
       graph.nodes.push_back(std::move(sink));
-      graph.connections.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink", .isActive = true});
+      graph.connections.push_back({.sourceId = "alsa-stream", .destinationId = "alsa-sink", .isActive = true});
 
       return graph;
     }

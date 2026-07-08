@@ -84,7 +84,7 @@ namespace ao::uimodel::test
     CHECK(resolveSoulAura(true, true, rt::QualityState{.overall = audio::Quality::Clipped}) == SoulAura::Burning);
   }
 
-  TEST_CASE("AobusSoul brand tokens match the asset source of truth", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - brand tokens match the asset source of truth", "[uimodel][unit][playback][soul]")
   {
     CHECK(kAobusSoulBrandCyan == AobusSoulRgb{.red = 0x06, .green = 0xB6, .blue = 0xD4});
     CHECK(kAobusSoulUiCyan == AobusSoulRgb{.red = 0x00, .green = 0xE5, .blue = 0xFF});
@@ -98,7 +98,7 @@ namespace ao::uimodel::test
     CHECK(kAobusSoulNightField == AobusSoulRgb{.red = 0x11, .green = 0x18, .blue = 0x27});
   }
 
-  TEST_CASE("AobusSoul motion recipe exposes the shared GTK and TUI timing phases", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - motion recipe exposes the shared GTK and TUI timing phases", "[uimodel][unit][playback][soul]")
   {
     auto const initial = aobusSoulMotionAt(std::chrono::duration<double>{0.0});
     CHECK(initial.breath == Catch::Approx{0.5});

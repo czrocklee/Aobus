@@ -250,22 +250,22 @@ namespace ao::rt::test
         out << R"(  "schema": "aobus-performance-baseline/v1",)" << "\n";
         out << "  \"records\": [\n";
 
-        for (std::size_t recordIdx = 0; recordIdx < _records.size(); ++recordIdx)
+        for (std::size_t recordIndex = 0; recordIndex < _records.size(); ++recordIndex)
         {
-          auto const& record = _records[recordIdx];
+          auto const& record = _records[recordIndex];
 
           out << "    {\n";
           out << R"(      "benchmark": ")" << jsonEscape(record.benchmark) << R"(",)" << "\n";
           out << "      \"metrics\": [\n";
 
-          for (std::size_t metricIdx = 0; metricIdx < record.metrics.size(); ++metricIdx)
+          for (std::size_t metricIndex = 0; metricIndex < record.metrics.size(); ++metricIndex)
           {
-            auto const& metric = record.metrics[metricIdx];
+            auto const& metric = record.metrics[metricIndex];
 
             out << R"(        {"name": ")" << jsonEscape(metric.name) << R"(", "value": )" << metric.value
                 << R"(, "unit": ")" << jsonEscape(metric.unit) << R"("})";
 
-            if (metricIdx + 1 < record.metrics.size())
+            if (metricIndex + 1 < record.metrics.size())
             {
               out << ",";
             }
@@ -276,7 +276,7 @@ namespace ao::rt::test
           out << "      ]\n";
           out << "    }";
 
-          if (recordIdx + 1 < _records.size())
+          if (recordIndex + 1 < _records.size())
           {
             out << ",";
           }
@@ -406,7 +406,7 @@ namespace ao::rt::test
       for (std::size_t idx = 0; idx < count; ++idx)
       {
         auto const scrambled = (idx * 48271 + 9973) % count;
-        auto const poolIdx = [poolSize = pool.size()](std::size_t value, std::size_t salt) -> std::size_t
+        auto const poolIndex = [poolSize = pool.size()](std::size_t value, std::size_t salt) -> std::size_t
         { return (value * 1103515245 + salt * 12345) % poolSize; };
 
         entries.push_back(SortCacheOrderEntry{
@@ -418,21 +418,21 @@ namespace ao::rt::test
               .trackNumber = static_cast<std::uint16_t>(1 + (scrambled % 20)),
               .movementNumber = static_cast<std::uint16_t>(scrambled % 12),
               .duration = std::chrono::milliseconds{180000 + static_cast<std::int64_t>(scrambled % 420000)},
-              .titleKey = pool[poolIdx(scrambled, 1)],
-              .artistKey = pool[poolIdx(scrambled / 50, 2)],
-              .albumKey = pool[poolIdx(scrambled / 200, 3)],
-              .albumArtistKey = pool[poolIdx(scrambled / 75, 4)],
-              .genreKey = pool[poolIdx(scrambled % 20, 5)],
-              .composerKey = pool[poolIdx(scrambled / 400, 6)],
-              .conductorKey = pool[poolIdx(scrambled / 450, 7)],
-              .ensembleKey = pool[poolIdx(scrambled / 300, 8)],
-              .workKey = pool[poolIdx(scrambled / 500, 9)],
-              .soloistKey = pool[poolIdx(scrambled / 350, 10)],
+              .titleKey = pool[poolIndex(scrambled, 1)],
+              .artistKey = pool[poolIndex(scrambled / 50, 2)],
+              .albumKey = pool[poolIndex(scrambled / 200, 3)],
+              .albumArtistKey = pool[poolIndex(scrambled / 75, 4)],
+              .genreKey = pool[poolIndex(scrambled % 20, 5)],
+              .composerKey = pool[poolIndex(scrambled / 400, 6)],
+              .conductorKey = pool[poolIndex(scrambled / 450, 7)],
+              .ensembleKey = pool[poolIndex(scrambled / 300, 8)],
+              .workKey = pool[poolIndex(scrambled / 500, 9)],
+              .soloistKey = pool[poolIndex(scrambled / 350, 10)],
             },
-          .groupKey = pool[poolIdx(scrambled / 50, 11)],
-          .primaryText = pool[poolIdx(scrambled, 12)],
-          .secondaryText = pool[poolIdx(scrambled / 200, 13)],
-          .tertiaryText = pool[poolIdx(scrambled / 400, 14)],
+          .groupKey = pool[poolIndex(scrambled / 50, 11)],
+          .primaryText = pool[poolIndex(scrambled, 12)],
+          .secondaryText = pool[poolIndex(scrambled / 200, 13)],
+          .tertiaryText = pool[poolIndex(scrambled / 400, 14)],
           .imageId = ResourceId{static_cast<std::uint32_t>(scrambled % 1024)},
         });
       }
@@ -1221,7 +1221,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("Phase 0 — 10k Baseline", "[baseline][unit]")
+  TEST_CASE("PerformanceBaseline - phase 0 10k baseline", "[perf][unit][baseline]")
   {
     Log::init(LogLevel::Info);
     constexpr int kN = 10000;
@@ -1254,7 +1254,7 @@ namespace ao::rt::test
     CHECK(t.indexOfLookupDuration < std::chrono::microseconds{500000});
   }
 
-  TEST_CASE("Phase 0 — Query IN threshold sweep", "[baseline][unit][query]")
+  TEST_CASE("PerformanceBaseline - phase 0 query IN threshold sweep", "[perf][unit][baseline][query]")
   {
     Log::init(LogLevel::Info);
     constexpr int kN = 10000;
@@ -1286,7 +1286,8 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Phase 0 — OrderEntry direct entry sort cache pressure", "[baseline][unit][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry direct entry sort cache pressure",
+            "[perf][unit][baseline][projection]")
   {
     Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -1316,7 +1317,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Phase 0 — OrderEntry comparator dispatch cost", "[baseline][unit][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry comparator dispatch cost", "[perf][unit][baseline][projection]")
   {
     Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -1346,7 +1347,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Phase 0 — OrderEntry ranked integer key sort", "[baseline][unit][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry ranked integer key sort", "[perf][unit][baseline][projection]")
   {
     Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -1380,7 +1381,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Phase 0 — OrderEntry compact active key sort", "[baseline][unit][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry compact active key sort", "[perf][unit][baseline][projection]")
   {
     Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -1412,7 +1413,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Phase 0 — OrderEntry index sort cache pressure", "[baseline][unit][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry index sort cache pressure", "[perf][unit][baseline][projection]")
   {
     Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -1447,7 +1448,8 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Phase 0 — OrderEntry index materialize cache pressure", "[baseline][unit][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry index materialize cache pressure",
+            "[perf][unit][baseline][projection]")
   {
     Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -1482,7 +1484,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Phase 0 — Projection rebuild stage timing", "[baseline][unit][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 projection rebuild stage timing", "[perf][unit][baseline][projection]")
   {
     Log::init(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -1517,7 +1519,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Phase 0 — Projection sort field timing", "[baseline][unit][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 projection sort field timing", "[perf][unit][baseline][projection]")
   {
     Log::init(LogLevel::Info);
     constexpr int kN = 1000000;
@@ -1551,7 +1553,7 @@ namespace ao::rt::test
     CHECK(genreDuration < std::chrono::minutes{5});
   }
 
-  TEST_CASE("Phase 0 — Projection preset timing", "[baseline][unit][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 projection preset timing", "[perf][unit][baseline][projection]")
   {
     Log::init(LogLevel::Info);
     constexpr int kN = 1000000;
@@ -1574,7 +1576,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Phase 0 — 100k Baseline", "[baseline][unit]")
+  TEST_CASE("PerformanceBaseline - phase 0 100k baseline", "[perf][unit][baseline]")
   {
     Log::init(LogLevel::Info);
     constexpr int kN = 100000;
@@ -1607,7 +1609,7 @@ namespace ao::rt::test
     CHECK(t.indexOfLookupDuration < std::chrono::microseconds{500000});
   }
 
-  TEST_CASE("Phase 0 — 1M Baseline", "[baseline][unit]")
+  TEST_CASE("PerformanceBaseline - phase 0 1M baseline", "[perf][unit][baseline]")
   {
     Log::init(LogLevel::Info);
     constexpr int kN = 1000000;

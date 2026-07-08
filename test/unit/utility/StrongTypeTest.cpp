@@ -20,7 +20,7 @@ namespace ao::utility::test
     using IntId = StrongType<std::int32_t, struct IntIdTag>;
   }
 
-  TEST_CASE("StrongType - string-backed wrappers expose value semantics", "[utility][unit][strong_type]")
+  TEST_CASE("StrongType - string-backed wrappers expose value semantics", "[utility][unit][strong-type]")
   {
     auto id1 = StringId{"test"};
     auto id2 = StringId{"test"};
@@ -52,7 +52,7 @@ namespace ao::utility::test
     CHECK(formatted == "test");
   }
 
-  TEST_CASE("StrongType - integer-backed wrappers expose numeric semantics", "[utility][unit][strong_type]")
+  TEST_CASE("StrongType - integer-backed wrappers expose numeric semantics", "[utility][unit][strong-type]")
   {
     auto id1 = IntId{42};
     auto id2 = IntId{42};

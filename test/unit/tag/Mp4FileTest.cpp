@@ -516,7 +516,7 @@ namespace ao::tag::mp4::test
     CHECK(utility::xxh3Hash128(baselinePayloadResult->bytes) == utility::xxh3Hash128(retaggedPayloadResult->bytes));
   }
 
-  TEST_CASE("MP4 File - single covr with two data boxes", "[tag][unit][mp4][file][cover]")
+  TEST_CASE("MP4 File - single covr with two data boxes", "[tag][unit][mp4-file][cover-art]")
   {
     // Standard iTunes encoding: one covr atom containing two data children.
     // Each data child has: [length(4)]["data"(4)][type_indicator(4)][locale(4)][payload]

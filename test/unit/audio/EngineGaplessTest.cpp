@@ -159,7 +159,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - consecutive gapless splices reclaim retired sources without restarting backend",
-            "[audio][unit][engine][gapless][reclaim]")
+            "[audio][unit][engine-gapless][reclaim]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<CapturingBackend>();
@@ -226,7 +226,7 @@ namespace ao::audio::test
     CHECK(countBackendEvents(events, "start") == 1);
   }
 
-  TEST_CASE("Engine - stop frees an armed but unspliced successor", "[audio][unit][engine][gapless][cancel]")
+  TEST_CASE("Engine - stop frees an armed but unspliced successor", "[audio][unit][engine-gapless][cancel]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<CapturingBackend>();
@@ -256,7 +256,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - control command entry settles a pending splice before acting",
-            "[audio][unit][engine][gapless][window]")
+            "[audio][unit][engine-gapless][window]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<CapturingBackend>();
@@ -456,7 +456,7 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - transport and route changes cancel prepared successor", "[audio][unit][engine][gapless][cancel]")
+  TEST_CASE("Engine - transport and route changes cancel prepared successor", "[audio][unit][engine-gapless][cancel]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<CapturingBackend>();

@@ -29,7 +29,7 @@ namespace ao::audio::test
   static_assert(noexcept(std::declval<IDecoderSession const&>().streamInfo()));
   static_assert(noexcept(std::declval<ISource&>().seek(std::declval<std::chrono::milliseconds>())));
 
-  TEST_CASE("throwDecoderError(Error) preserves the original error's source location", "[audio][unit][decoder][error]")
+  TEST_CASE("throwDecoderError - preserves the original error's source location", "[audio][unit][decoder][error]")
   {
     auto const origin = std::source_location::current();
     auto const error = Error{.code = Error::Code::DecodeFailed, .message = "propagated failure", .location = origin};
@@ -49,7 +49,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("throwDecoderError(code, message) captures the call site", "[audio][unit][decoder][error]")
+  TEST_CASE("throwDecoderError - captures the call site", "[audio][unit][decoder][error]")
   {
     auto const here = std::source_location::current();
 
@@ -70,7 +70,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("DecoderException exposes its Error through what() and location()", "[audio][unit][decoder][error]")
+  TEST_CASE("DecoderException - exposes its Error through what() and location()", "[audio][unit][decoder][error]")
   {
     auto const ex = detail::DecoderException{Error::Code::SeekFailed, "seek boom"};
 

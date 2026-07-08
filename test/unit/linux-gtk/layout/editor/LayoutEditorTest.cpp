@@ -32,7 +32,7 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   // LayoutEditorDialog
   // ---------------------------------------------------------------------------
-  TEST_CASE("LayoutEditorDialog renders and edits the current layout document", "[gtk][unit][layout][editor]")
+  TEST_CASE("LayoutEditorDialog - renders and edits the current layout document", "[gtk][unit][layout][editor]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_test");
 

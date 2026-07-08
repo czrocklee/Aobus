@@ -84,7 +84,7 @@ Weak:
 
 ```cpp
 REQUIRE(result);
-CHECK(optView.has_value());
+CHECK(optView);
 CHECK(count == 3);
 ```
 
@@ -94,7 +94,7 @@ Better:
 REQUIRE(result);
 CHECK(result->state == ExpectedState::Ready);
 
-REQUIRE(optView.has_value());
+REQUIRE(optView);
 CHECK(optView->metadata().title() == "After");
 CHECK(optView->property().duration() == std::chrono::minutes{3});
 

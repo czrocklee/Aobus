@@ -247,9 +247,9 @@ namespace ao::rt
         newByIdentity[key].push_back(index);
       }
 
-      auto matchedMissingIndexes = std::unordered_set<std::size_t>{};
+      auto matchedMissingIndices = std::unordered_set<std::size_t>{};
 
-      for (auto const& [key, newIndexes] : newByIdentity)
+      for (auto const& [key, newIndices] : newByIdentity)
       {
         auto const missingIt = missingByIdentity.find(key);
 
@@ -258,32 +258,32 @@ namespace ao::rt
           continue;
         }
 
-        auto const& missingIndexes = missingIt->second;
+        auto const& missingIndices = missingIt->second;
 
-        if (newIndexes.size() != 1 || missingIndexes.size() != 1)
+        if (newIndices.size() != 1 || missingIndices.size() != 1)
         {
           continue;
         }
 
-        auto& newItem = plan.items[newIndexes.front()];
-        auto const& missingItem = plan.items[missingIndexes.front()];
+        auto& newItem = plan.items[newIndices.front()];
+        auto const& missingItem = plan.items[missingIndices.front()];
         newItem.classification = ScanClassification::Moved;
         newItem.oldUri = missingItem.uri;
         newItem.trackId = missingItem.trackId;
-        matchedMissingIndexes.insert(missingIndexes.front());
+        matchedMissingIndices.insert(missingIndices.front());
       }
 
-      if (matchedMissingIndexes.empty())
+      if (matchedMissingIndices.empty())
       {
         return;
       }
 
       auto items = std::vector<ScanItem>{};
-      items.reserve(plan.items.size() - matchedMissingIndexes.size());
+      items.reserve(plan.items.size() - matchedMissingIndices.size());
 
       for (std::size_t index = 0; index < plan.items.size(); ++index)
       {
-        if (!matchedMissingIndexes.contains(index))
+        if (!matchedMissingIndices.contains(index))
         {
           items.push_back(std::move(plan.items[index]));
         }

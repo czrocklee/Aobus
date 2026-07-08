@@ -54,7 +54,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("ListNavigationController binds navigation actions to library state", "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - binds navigation actions to library state", "[gtk][unit][list]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

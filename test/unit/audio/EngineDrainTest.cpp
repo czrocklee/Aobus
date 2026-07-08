@@ -155,7 +155,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - play ignores stale pending drain from retired session", "[audio][unit][engine][drain][window]")
+  TEST_CASE("Engine - play ignores stale pending drain from retired session", "[audio][unit][engine-drain][window]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<CapturingBackend>();
@@ -221,8 +221,7 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Playing);
   }
 
-  TEST_CASE("Engine - seek ignores stale pending drain and keeps session playing",
-            "[audio][unit][engine][seek][drain][window]")
+  TEST_CASE("Engine - seek ignores stale pending drain and keeps session playing", "[audio][unit][engine-seek][drain]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<CapturingBackend>();
@@ -291,7 +290,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - seek landing at end of stream retires the render session before quiescing",
-            "[audio][unit][engine][seek][drain]")
+            "[audio][unit][engine-seek][drain]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<DrainOnStopBackend>();

@@ -303,7 +303,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackService control - restores deferred session without opening backend",
-            "[runtime][unit][playback][control][session]")
+            "[runtime][unit][playback-control][session]")
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
@@ -377,8 +377,7 @@ namespace ao::rt::test
     Verify(Method(fixture.spyBackendPtr->mock(), open)).Once();
   }
 
-  TEST_CASE("PlaybackService control - sanitizes restored session values",
-            "[runtime][unit][playback][control][session]")
+  TEST_CASE("PlaybackService control - sanitizes restored session values", "[runtime][unit][playback-control][session]")
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
@@ -418,7 +417,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackService control - restore failure does not overwrite persisted session",
-            "[runtime][unit][playback][control][session]")
+            "[runtime][unit][playback-control][session]")
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();

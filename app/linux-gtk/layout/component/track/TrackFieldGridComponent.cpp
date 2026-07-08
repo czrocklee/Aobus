@@ -896,7 +896,7 @@ namespace ao::gtk::layout
       {
         _addMetadataButton.popdown();
         clearGrid();
-        std::int32_t rowIdx = 0;
+        std::int32_t rowIndex = 0;
 
         refreshColumnWidthAnchors();
         _grid.attach(_keyColumnWidthAnchor, 0, 0, 1, 1);
@@ -913,37 +913,37 @@ namespace ao::gtk::layout
         if (shouldRenderMetadataSection(sectionAvailability))
         {
           _metadataHeader.setExpanded(_metadataExpanded);
-          _grid.attach(_metadataHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
+          _grid.attach(_metadataHeader.button, 0, rowIndex++, 1 + kValueColWidth, 1);
 
-          attachBuiltInGroup(_metadataRows, rowIdx, _metadataExpanded);
+          attachBuiltInGroup(_metadataRows, rowIndex, _metadataExpanded);
 
           for (auto& row : _compositeRows)
           {
-            attachCompositeRow(row, rowIdx++);
+            attachCompositeRow(row, rowIndex++);
             row.labelSlot.set_visible(_metadataExpanded);
             row.valueSlot.set_visible(_metadataExpanded);
           }
 
           for (auto& row : _customRows)
           {
-            _grid.attach(row.labelSlot, 0, rowIdx, 1, 1);
-            _grid.attach(row.valueSlot, 1, rowIdx, kValueColWidth, 1);
+            _grid.attach(row.labelSlot, 0, rowIndex, 1, 1);
+            _grid.attach(row.valueSlot, 1, rowIndex, kValueColWidth, 1);
             row.labelSlot.set_visible(_metadataExpanded);
             row.valueSlot.set_visible(_metadataExpanded);
-            rowIdx++;
+            rowIndex++;
           }
 
           _showAllFieldsButton.set_visible(sectionAvailability.hasMetadataFields);
           _addMetadataButton.button().set_visible(shouldRenderCustomMetadataArea(sectionAvailability));
-          _grid.attach(_metadataActionSlot, 0, rowIdx++, 1 + kValueColWidth, 1);
+          _grid.attach(_metadataActionSlot, 0, rowIndex++, 1 + kValueColWidth, 1);
           _metadataActionSlot.set_visible(_metadataExpanded);
         }
 
         if (shouldRenderTechnicalSection(sectionAvailability))
         {
           _technicalHeader.setExpanded(_technicalExpanded);
-          _grid.attach(_technicalHeader.button, 0, rowIdx++, 1 + kValueColWidth, 1);
-          attachBuiltInGroup(_technicalRows, rowIdx, _technicalExpanded);
+          _grid.attach(_technicalHeader.button, 0, rowIndex++, 1 + kValueColWidth, 1);
+          attachBuiltInGroup(_technicalRows, rowIndex, _technicalExpanded);
         }
       }
 
@@ -967,11 +967,11 @@ namespace ao::gtk::layout
         _grid.attach(row.valueSlot, 1, rowNum, kValueColWidth, 1);
       }
 
-      void attachBuiltInGroup(std::deque<BuiltInRow>& rows, std::int32_t& rowIdx, bool const expanded)
+      void attachBuiltInGroup(std::deque<BuiltInRow>& rows, std::int32_t& rowIndex, bool const expanded)
       {
         for (auto& row : rows)
         {
-          attachBuiltInRow(row, rowIdx++);
+          attachBuiltInRow(row, rowIndex++);
           row.labelSlot.set_visible(expanded);
           row.valueSlot.set_visible(expanded);
         }

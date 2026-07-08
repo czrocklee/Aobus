@@ -92,7 +92,7 @@ namespace ao::gtk::layout::editor::test
     }
   } // namespace
 
-  TEST_CASE("LayoutEditorDialog - preset session cache preserves dirty edits", "[gtk][unit][layout][editor][session]")
+  TEST_CASE("LayoutEditorDialog - preset session cache preserves dirty edits", "[gtk][unit][layout-editor][session]")
   {
     auto fixture = DialogSessionFixture{};
     std::int32_t loadCount = 0;
@@ -146,7 +146,7 @@ namespace ao::gtk::layout::editor::test
   }
 
   TEST_CASE("LayoutEditorDialog - reset default records reset and modified preset",
-            "[gtk][unit][layout][editor][session]")
+            "[gtk][unit][layout-editor][session]")
   {
     auto fixture = DialogSessionFixture{};
     auto const customLoader = [](std::string_view presetId) { return presetRootDocument(presetId); };
@@ -179,7 +179,7 @@ namespace ao::gtk::layout::editor::test
     dialog.close();
   }
 
-  TEST_CASE("LayoutEditorDialog - dirty invalid background preset blocks save", "[gtk][unit][layout][editor][session]")
+  TEST_CASE("LayoutEditorDialog - dirty invalid background preset blocks save", "[gtk][unit][layout-editor][session]")
   {
     auto fixture = DialogSessionFixture{};
     std::int32_t loadCount = 0;
@@ -230,7 +230,7 @@ namespace ao::gtk::layout::editor::test
   }
 
   TEST_CASE("LayoutEditorDialog - active preset reset is saved without switching",
-            "[gtk][unit][layout][editor][session]")
+            "[gtk][unit][layout-editor][session]")
   {
     auto fixture = DialogSessionFixture{};
     auto dialog = LayoutEditorDialog{
@@ -256,7 +256,7 @@ namespace ao::gtk::layout::editor::test
     dialog.close();
   }
 
-  TEST_CASE("LayoutEditorDialog - reset default ignores missing active preset", "[gtk][unit][layout][editor][session]")
+  TEST_CASE("LayoutEditorDialog - reset default ignores missing active preset", "[gtk][unit][layout-editor][session]")
   {
     auto fixture = DialogSessionFixture{};
     auto dialog = LayoutEditorDialog{

@@ -18,8 +18,8 @@ namespace ao::tag::mpeg::test
   {
     std::array<std::uint8_t, 4> createHeader(VersionID version,
                                              LayerDescription layer,
-                                             std::uint8_t bitrateIdx,
-                                             std::uint8_t samplingIdx,
+                                             std::uint8_t bitrateIndex,
+                                             std::uint8_t samplingIndex,
                                              ChannelMode mode = ChannelMode::Stereo,
                                              bool padding = false)
     {
@@ -30,8 +30,8 @@ namespace ao::tag::mpeg::test
       data[1] |= (static_cast<std::uint8_t>(layer) << 1);
       data[1] |= 1; // No CRC
 
-      data[2] = (bitrateIdx << 4);
-      data[2] |= (samplingIdx << 2);
+      data[2] = (bitrateIndex << 4);
+      data[2] |= (samplingIndex << 2);
       data[2] |= (padding ? 2 : 0);
 
       data[3] = (static_cast<std::uint8_t>(mode) << 6);
@@ -153,7 +153,7 @@ namespace ao::tag::mpeg::test
 
     auto const view = FrameView{buffer.data(), buffer.size()};
     auto const optXing = view.xingInfo();
-    REQUIRE(optXing.has_value());
+    REQUIRE(optXing);
     CHECK(optXing->frames == 1234);
     CHECK(optXing->bytes == 56789);
   }
@@ -179,9 +179,9 @@ namespace ao::tag::mpeg::test
     *frames = 98765;
 
     auto const optView = locate(buffer.data(), buffer.size());
-    REQUIRE(optView.has_value());
+    REQUIRE(optView);
     auto const optXing = optView->xingInfo();
-    REQUIRE(optXing.has_value());
+    REQUIRE(optXing);
     CHECK(optXing->frames == 0);
   }
 
@@ -190,7 +190,7 @@ namespace ao::tag::mpeg::test
     auto buffer =
       std::vector<std::uint8_t>{0x00, 0x11, 0x22, 0xFF, 0xFB, 0x90, 0x44}; // Some garbage, then a frame sync
     auto const optView = locate(buffer.data(), buffer.size());
-    REQUIRE(optView.has_value());
+    REQUIRE(optView);
     CHECK(optView->isValid());
   }
 } // namespace ao::tag::mpeg::test

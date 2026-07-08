@@ -22,7 +22,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ActivityStatusViewModel projects runtime feed updates", "[uimodel][unit][status][activity]")
+  TEST_CASE("ActivityStatusViewModel - projects runtime feed updates", "[uimodel][unit][status][activity]")
   {
     auto notifications = rt::NotificationService{};
     auto now = std::chrono::steady_clock::time_point{};
@@ -83,22 +83,22 @@ namespace ao::uimodel::test
 
       CHECK(latest.compact.kind == ActivityStatusKind::Processing);
       CHECK(latest.compact.text == "Updating library");
-      REQUIRE(latest.compact.optProgressFraction.has_value());
+      REQUIRE(latest.compact.optProgressFraction);
       CHECK(*latest.compact.optProgressFraction == 0.625);
-      REQUIRE(latest.detail.optLibraryTask.has_value());
+      REQUIRE(latest.detail.optLibraryTask);
       CHECK(latest.detail.optLibraryTask->message == "Updating: status-progress.flac");
 
       viewModel.onLibraryTaskCompleted(4);
 
       CHECK(latest.compact.kind == ActivityStatusKind::Success);
       CHECK(latest.compact.text == "Scan complete: 4 tracks added");
-      CHECK_FALSE(latest.compact.optProgressFraction.has_value());
+      CHECK_FALSE(latest.compact.optProgressFraction);
     }
 
     CHECK(renderCount > 0);
   }
 
-  TEST_CASE("ActivityStatusViewModel projects library task events from LibraryChanges",
+  TEST_CASE("ActivityStatusViewModel - projects library task events from LibraryChanges",
             "[uimodel][regression][status][activity]")
   {
     auto notifications = rt::NotificationService{};
@@ -147,7 +147,7 @@ namespace ao::uimodel::test
 
     REQUIRE(progressView != nullptr);
     CHECK(progressView->compact.text == "Updating library");
-    REQUIRE(progressView->detail.optLibraryTask.has_value());
+    REQUIRE(progressView->detail.optLibraryTask);
     CHECK(progressView->detail.optLibraryTask->message == "Updating: first.flac");
     CHECK(latest.compact.kind == ActivityStatusKind::Success);
     CHECK(latest.compact.text == "Library is up to date");

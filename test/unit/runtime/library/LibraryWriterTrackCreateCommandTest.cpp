@@ -44,8 +44,8 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryWriter createTrackFromFile imports a valid file and publishes a mutation",
-            "[runtime][unit][library][mutation][track][create]")
+  TEST_CASE("LibraryWriter - createTrackFromFile imports a valid file and publishes a mutation",
+            "[runtime][unit][library][track-create]")
   {
     auto testLib = TestMusicLibrary{};
     auto changes = LibraryChanges{};
@@ -84,8 +84,7 @@ namespace ao::rt::test
     CHECK(duplicateResult.error().message.find("already imported") != std::string::npos);
   }
 
-  TEST_CASE("LibraryWriter createTrackFromFile accepts root-relative paths",
-            "[runtime][unit][library][mutation][track][create]")
+  TEST_CASE("LibraryWriter - createTrackFromFile accepts root-relative paths", "[runtime][unit][library][track-create]")
   {
     auto testLib = TestMusicLibrary{};
     auto changes = LibraryChanges{};
@@ -109,8 +108,8 @@ namespace ao::rt::test
     CHECK(optTrackView->property().uri() == "relative.flac");
   }
 
-  TEST_CASE("LibraryWriter createTrackFromFile rejects unsupported files with Result errors",
-            "[runtime][unit][library][mutation][track][create]")
+  TEST_CASE("LibraryWriter - createTrackFromFile rejects unsupported files with Result errors",
+            "[runtime][unit][library][track-create]")
   {
     auto testLib = TestMusicLibrary{};
     auto changes = LibraryChanges{};
@@ -127,8 +126,8 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
-  TEST_CASE("LibraryWriter createTrackFromFile rejects invalid path boundaries",
-            "[runtime][unit][library][mutation][track][create]")
+  TEST_CASE("LibraryWriter - createTrackFromFile rejects invalid path boundaries",
+            "[runtime][unit][library][track-create]")
   {
     auto testLib = TestMusicLibrary{};
     auto changes = LibraryChanges{};

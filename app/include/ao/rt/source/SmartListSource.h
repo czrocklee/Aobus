@@ -59,7 +59,7 @@ namespace ao::rt
     using TrackSource::notifyUpdated;
     void notifyUpdated(TrackId id) override;
 
-    bool hasError() const { return static_cast<bool>(_current.optError); }
+    bool hasError() const { return _current.optError.has_value(); }
     std::optional<Error> const& error() const { return _current.optError; }
     std::string const& expression() const { return _current.expression; }
     TrackSource& source() const { return _source; }

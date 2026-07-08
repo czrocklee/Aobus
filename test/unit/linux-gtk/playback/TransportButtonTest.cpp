@@ -12,7 +12,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TransportButton renders transport action state and dispatches clicks", "[gtk][unit][playback]")
+  TEST_CASE("TransportButton - renders transport action state and dispatches clicks", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

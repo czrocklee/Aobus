@@ -558,7 +558,7 @@ namespace ao::tui
       runtime.notifications(),
       [&](uimodel::ActivityStatusViewState const& view)
       {
-        activityAutoDismissActive.store(static_cast<bool>(view.compact.optAutoDismissTimeout));
+        activityAutoDismissActive.store(view.compact.optAutoDismissTimeout.has_value());
         requestRefresh();
       },
       uimodel::ActivityStatusViewModelOptions{.libraryChanges = &runtime.library().changes()}};

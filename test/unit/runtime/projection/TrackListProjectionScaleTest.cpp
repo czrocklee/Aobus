@@ -63,7 +63,7 @@ namespace ao::rt::test
       for (auto const id : newIds)
       {
         auto const optIndex = proj.indexOf(id);
-        REQUIRE(optIndex.has_value());
+        REQUIRE(optIndex);
         CHECK(proj.trackIdAt(*optIndex) == id);
       }
     }

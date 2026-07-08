@@ -49,8 +49,11 @@ namespace ao::rt::test
     bool trackExists(TestMusicLibrary& testLib, TrackId trackId)
     {
       auto txn = testLib.library().readTransaction();
-      return static_cast<bool>(
-        testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both));
+      return testLib.library()
+        .tracks()
+        .reader(txn)
+        .get(trackId, library::TrackStore::Reader::LoadMode::Both)
+        .has_value();
     }
 
     std::size_t trackCount(TestMusicLibrary& testLib)
@@ -88,7 +91,7 @@ namespace ao::rt::test
     bool listExists(TestMusicLibrary& testLib, ListId listId)
     {
       auto txn = testLib.library().readTransaction();
-      return static_cast<bool>(testLib.library().lists().reader(txn).get(listId));
+      return testLib.library().lists().reader(txn).get(listId).has_value();
     }
 
     std::size_t listCount(TestMusicLibrary& testLib)
@@ -152,8 +155,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryWriter dry-run previews metadata updates without committing",
-            "[runtime][unit][library][mutation][dryrun]")
+  TEST_CASE("LibraryWriter - dry-run previews metadata updates without committing", "[runtime][unit][library][dry-run]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Before");
@@ -179,7 +181,7 @@ namespace ao::rt::test
     CHECK(recorder.tracksMutated == 1);
   }
 
-  TEST_CASE("LibraryWriter dry-run previews tag edits without committing", "[runtime][unit][library][mutation][dryrun]")
+  TEST_CASE("LibraryWriter - dry-run previews tag edits without committing", "[runtime][unit][library][dry-run]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Track");
@@ -203,8 +205,7 @@ namespace ao::rt::test
     CHECK(recorder.tracksMutated == 1);
   }
 
-  TEST_CASE("LibraryWriter dry-run previews list creation without committing",
-            "[runtime][unit][library][mutation][dryrun]")
+  TEST_CASE("LibraryWriter - dry-run previews list creation without committing", "[runtime][unit][library][dry-run]")
   {
     auto testLib = TestMusicLibrary{};
     auto changes = LibraryChanges{};
@@ -224,8 +225,7 @@ namespace ao::rt::test
     CHECK(recorder.listsMutated == 1);
   }
 
-  TEST_CASE("LibraryWriter dry-run previews list updates without committing",
-            "[runtime][unit][library][mutation][dryrun]")
+  TEST_CASE("LibraryWriter - dry-run previews list updates without committing", "[runtime][unit][library][dry-run]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Track");
@@ -254,8 +254,7 @@ namespace ao::rt::test
     CHECK(recorder.listsMutated == 1);
   }
 
-  TEST_CASE("LibraryWriter dry-run previews list deletion without committing",
-            "[runtime][unit][library][mutation][dryrun]")
+  TEST_CASE("LibraryWriter - dry-run previews list deletion without committing", "[runtime][unit][library][dry-run]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Track");
@@ -280,8 +279,7 @@ namespace ao::rt::test
     CHECK(recorder.listsMutated == 1);
   }
 
-  TEST_CASE("LibraryWriter dry-run previews track deletion without committing",
-            "[runtime][unit][library][mutation][dryrun]")
+  TEST_CASE("LibraryWriter - dry-run previews track deletion without committing", "[runtime][unit][library][dry-run]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Delete Track");
@@ -312,8 +310,7 @@ namespace ao::rt::test
     CHECK(recorder.listsMutated == 1);
   }
 
-  TEST_CASE("LibraryWriter dry-run previews track creation without committing",
-            "[runtime][unit][library][mutation][dryrun]")
+  TEST_CASE("LibraryWriter - dry-run previews track creation without committing", "[runtime][unit][library][dry-run]")
   {
     auto testLib = TestMusicLibrary{};
     auto changes = LibraryChanges{};

@@ -13,7 +13,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("VolumeControl renders model state into the button", "[gtk][unit][playback]")
+  TEST_CASE("VolumeControl - renders model state into the button", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

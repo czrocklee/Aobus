@@ -17,7 +17,8 @@ namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel;
 
-  TEST_CASE("Component descriptor validation covers all standard layout components", "[gtk][unit][layout][editor]")
+  TEST_CASE("LayoutEditorDescriptor - descriptor validation covers all standard layout components",
+            "[gtk][unit][layout][editor]")
   {
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -74,9 +75,9 @@ namespace ao::gtk::layout::editor::test
     {
       auto const optDesc = registry.descriptor("split");
 
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
       CHECK(optDesc->minChildren == 2);
-      REQUIRE(optDesc->optMaxChildren.has_value());
+      REQUIRE(optDesc->optMaxChildren);
       CHECK(*optDesc->optMaxChildren == 2);
     }
 
@@ -84,9 +85,9 @@ namespace ao::gtk::layout::editor::test
     {
       auto const optDesc = registry.descriptor("scroll");
 
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
       CHECK(optDesc->minChildren == 1);
-      REQUIRE(optDesc->optMaxChildren.has_value());
+      REQUIRE(optDesc->optMaxChildren);
       CHECK(*optDesc->optMaxChildren == 1);
     }
 
@@ -94,16 +95,16 @@ namespace ao::gtk::layout::editor::test
     {
       auto const optDesc = registry.descriptor("tabs");
 
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
       CHECK(optDesc->minChildren == 1);
-      CHECK(!optDesc->optMaxChildren.has_value()); // unbounded
+      CHECK(!optDesc->optMaxChildren); // unbounded
     }
 
     SECTION("box has orientation, spacing, homogeneous props")
     {
       auto const optDesc = registry.descriptor("box");
 
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
       CHECK(uimodel::isContainer(*optDesc));
 
       auto const hasProp = [&](std::string const& name)
@@ -118,7 +119,7 @@ namespace ao::gtk::layout::editor::test
     {
       auto const optDesc = registry.descriptor("playback.playPauseButton");
 
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
       CHECK(optDesc->category == LayoutComponentCategory::Playback);
 
       auto const hasProp = [&](std::string const& name)
@@ -132,7 +133,7 @@ namespace ao::gtk::layout::editor::test
     {
       auto const optDesc = registry.descriptor("playback.qualityIndicator");
 
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
       CHECK(optDesc->category == LayoutComponentCategory::Playback);
 
       auto const hasProp = [&](std::string const& name)
@@ -149,7 +150,7 @@ namespace ao::gtk::layout::editor::test
     SECTION("descriptor returns nullopt for unknown type")
     {
       auto const optDesc = registry.descriptor("nonexistent.component");
-      CHECK(!optDesc.has_value());
+      CHECK(!optDesc);
     }
 
     SECTION("categories span expected groups")
@@ -204,7 +205,7 @@ namespace ao::gtk::layout::editor::test
       for (auto const& type : types)
       {
         auto const optDesc = registry.descriptor(std::string{type});
-        CHECK(optDesc.has_value());
+        CHECK(optDesc);
       }
     }
   }

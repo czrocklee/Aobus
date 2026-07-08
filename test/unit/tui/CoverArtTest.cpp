@@ -45,7 +45,7 @@ namespace ao::tui::test
   {
     auto const optPreview = decodeCoverArtPreview(onePixelRedPng(), 3, 2);
 
-    REQUIRE(optPreview.has_value());
+    REQUIRE(optPreview);
     REQUIRE(optPreview->size() == 2);
     REQUIRE((*optPreview)[0].size() == 3);
 
@@ -62,7 +62,7 @@ namespace ao::tui::test
   {
     auto const optPng = decodeCoverArtPng(onePixelRedPng(), 8, 4);
 
-    REQUIRE(optPng.has_value());
+    REQUIRE(optPng);
     REQUIRE(optPng->size() > 8);
     CHECK((*optPng)[0] == std::byte{0x89});
     CHECK((*optPng)[1] == std::byte{0x50});

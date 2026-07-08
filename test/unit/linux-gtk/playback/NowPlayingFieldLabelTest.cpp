@@ -39,7 +39,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("NowPlayingFieldLabel binds model field text and css", "[gtk][unit][playback][field-label]")
+  TEST_CASE("NowPlayingFieldLabel - binds model field text and css", "[gtk][unit][playback][field-label]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

@@ -99,7 +99,7 @@ struct ao::yaml::ReflectNameOverrides<ao::yaml::test::ReflectFixtureDto>
 
 namespace ao::yaml::test
 {
-  TEST_CASE("Yaml reflect writes reflected DTOs as YAML and JSON", "[core][unit][yaml][reflect]")
+  TEST_CASE("YamlReflect - writes reflected DTOs as YAML and JSON", "[core][unit][yaml][reflect]")
   {
     auto dto = ReflectFixtureDto{
       .text = "quote \" slash \\ newline\n tab\t",

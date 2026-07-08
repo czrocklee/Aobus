@@ -190,10 +190,10 @@ namespace ao::tag::mpeg::id3v2
       auto text = decodeFrameText(version, data, size);
 
       // TXXX format is "description\0value"
-      if (auto const nullPos = text.find('\0'); nullPos != std::string_view::npos)
+      if (auto const nullOffset = text.find('\0'); nullOffset != std::string_view::npos)
       {
-        auto const key = text.substr(0, nullPos);
-        auto const value = text.substr(nullPos + 1);
+        auto const key = text.substr(0, nullOffset);
+        auto const value = text.substr(nullOffset + 1);
 
         auto const equalsKey = [](std::string_view lhs, std::string_view rhs)
         {

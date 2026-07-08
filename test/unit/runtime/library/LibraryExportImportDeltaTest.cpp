@@ -60,8 +60,8 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("LibraryYaml delta export writes changed and unreadable tracks",
-            "[runtime][workflow][import-export][yaml][delta]")
+  TEST_CASE("LibraryYaml - delta export writes changed and unreadable tracks",
+            "[runtime][workflow][import-export][delta]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -156,8 +156,8 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml delta export reports filesystem inspection errors",
-            "[runtime][workflow][import-export][yaml][delta][error]")
+  TEST_CASE("LibraryYaml - delta export reports filesystem inspection errors",
+            "[runtime][workflow][import-export][delta]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -190,8 +190,8 @@ namespace ao::rt::test
     CHECK(result.error().code == Error::Code::IoError);
   }
 
-  TEST_CASE("LibraryYaml delta import reports filesystem inspection errors",
-            "[runtime][workflow][import-export][yaml][delta][error]")
+  TEST_CASE("LibraryYaml - delta import reports filesystem inspection errors",
+            "[runtime][workflow][import-export][delta]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};

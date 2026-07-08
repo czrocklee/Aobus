@@ -242,7 +242,7 @@ namespace ao::audio
       return makeError(Error::Code::DecodeFailed, "Invalid ALAC format calculation");
     }
 
-    std::uint32_t numFrames = 0;
+    std::uint32_t frameCount = 0;
 
     // Reuse member buffers to avoid per-block allocations
     if (sourceBps != targetBps)
@@ -252,19 +252,19 @@ namespace ao::audio
       ::BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
 
       auto const status = _implPtr->decoderPtr->Decode(
-        &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_implPtr->sourcePcm}), maxFrames, channels, &numFrames);
+        &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_implPtr->sourcePcm}), maxFrames, channels, &frameCount);
 
       if (status != 0)
       {
         return makeError(Error::Code::DecodeFailed, "ALAC decode failed");
       }
 
-      if (numFrames == 0 || numFrames > maxFrames)
+      if (frameCount == 0 || frameCount > maxFrames)
       {
         return makeError(Error::Code::DecodeFailed, "Invalid ALAC decoded frame count");
       }
 
-      _implPtr->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
+      _implPtr->targetPcm.resize(static_cast<std::size_t>(frameCount) * targetBytesPerFrame);
 
       if (sourceBps == 16 && targetBps == 32)
       {
@@ -288,7 +288,7 @@ namespace ao::audio
       return PcmBlock{
         .bytes = _implPtr->targetPcm,
         .bitDepth = targetBps,
-        .frames = numFrames,
+        .frames = frameCount,
         .firstFrameIndex = firstFrameIndex,
         .endOfStream = _implPtr->packetSource.atEnd(),
       };
@@ -301,25 +301,25 @@ namespace ao::audio
     ::BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
 
     auto const status = _implPtr->decoderPtr->Decode(
-      &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_implPtr->targetPcm}), maxFrames, channels, &numFrames);
+      &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_implPtr->targetPcm}), maxFrames, channels, &frameCount);
 
     if (status != 0)
     {
       return makeError(Error::Code::DecodeFailed, "ALAC decode failed");
     }
 
-    if (numFrames == 0 || numFrames > maxFrames)
+    if (frameCount == 0 || frameCount > maxFrames)
     {
       return makeError(Error::Code::DecodeFailed, "Invalid ALAC decoded frame count");
     }
 
-    _implPtr->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
+    _implPtr->targetPcm.resize(static_cast<std::size_t>(frameCount) * targetBytesPerFrame);
     _implPtr->packetSource.advance();
 
     return PcmBlock{
       .bytes = _implPtr->targetPcm,
       .bitDepth = targetBps,
-      .frames = numFrames,
+      .frames = frameCount,
       .firstFrameIndex = firstFrameIndex,
       .endOfStream = _implPtr->packetSource.atEnd(),
     };

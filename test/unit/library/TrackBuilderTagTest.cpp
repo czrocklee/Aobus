@@ -12,7 +12,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("TrackBuilder - tags builder adds removes and clears names", "[library][unit][track][builder][tag]")
+  TEST_CASE("TrackBuilder - tags builder adds removes and clears names", "[library][unit][track-builder][tag]")
   {
     auto builder = TrackBuilder::createNew();
 
@@ -32,7 +32,7 @@ namespace ao::library::test
     CHECK(builder.tags().names().empty());
   }
 
-  TEST_CASE("TrackBuilder - serializes empty tag data", "[library][unit][track][builder][tag]")
+  TEST_CASE("TrackBuilder - serializes empty tag data", "[library][unit][track-builder][tag]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -45,7 +45,7 @@ namespace ao::library::test
     CHECK(header->tagBloom == 0);
   }
 
-  TEST_CASE("TrackBuilder - serializes multiple tags", "[library][unit][track][builder][tag]")
+  TEST_CASE("TrackBuilder - serializes multiple tags", "[library][unit][track-builder][tag]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -59,7 +59,7 @@ namespace ao::library::test
     CHECK(header->tagBloom != 0);   // Bloom should be computed from tag IDs
   }
 
-  TEST_CASE("TrackBuilder - serializes one tag", "[library][unit][track][builder][tag]")
+  TEST_CASE("TrackBuilder - serializes one tag", "[library][unit][track-builder][tag]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -72,7 +72,7 @@ namespace ao::library::test
     CHECK(header->tagLength == 4); // 1 tag * 4 bytes
   }
 
-  TEST_CASE("TrackBuilder - computes tag bloom filters with tags", "[library][unit][track][builder][tag]")
+  TEST_CASE("TrackBuilder - computes tag bloom filters with tags", "[library][unit][track-builder][tag]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -86,7 +86,7 @@ namespace ao::library::test
     CHECK(header->tagBloom != 0);
   }
 
-  TEST_CASE("TrackBuilder - serializeHot writes tag header data", "[library][unit][track][builder][tag]")
+  TEST_CASE("TrackBuilder - serializeHot writes tag header data", "[library][unit][track-builder][tag]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test Title");

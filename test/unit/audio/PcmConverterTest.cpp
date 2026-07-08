@@ -13,7 +13,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("PcmConverter -pad (Linear)", "[audio][unit][pcm]")
+  TEST_CASE("PcmConverter - pads linear PCM samples", "[audio][unit][pcm]")
   {
     SECTION("16-bit to 32-bit padding")
     {
@@ -49,16 +49,16 @@ namespace ao::audio::test
       CHECK(destination[0] == 0x10000);
       CHECK(destination[1] == 0x20000);
 
-      auto largeDest = std::array<std::int32_t, 4>{0, 0, 0, 0};
-      PcmConverter::pad<std::int16_t, std::int32_t>(source, largeDest, 16);
-      CHECK(largeDest[0] == 0x10000);
-      CHECK(largeDest[1] == 0x20000);
-      CHECK(largeDest[2] == 0x30000);
-      CHECK(largeDest[3] == 0x00000);
+      auto largeDestination = std::array<std::int32_t, 4>{0, 0, 0, 0};
+      PcmConverter::pad<std::int16_t, std::int32_t>(source, largeDestination, 16);
+      CHECK(largeDestination[0] == 0x10000);
+      CHECK(largeDestination[1] == 0x20000);
+      CHECK(largeDestination[2] == 0x30000);
+      CHECK(largeDestination[3] == 0x00000);
     }
   }
 
-  TEST_CASE("PcmConverter -interleaveAndPad", "[audio][unit][pcm]")
+  TEST_CASE("PcmConverter - interleaves channels and pads frames", "[audio][unit][pcm]")
   {
     SECTION("Stereo 16-bit to 32-bit interleaved")
     {
@@ -101,7 +101,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("PcmConverter -unpackS24", "[audio][unit][pcm]")
+  TEST_CASE("PcmConverter - unpacks signed 24-bit samples", "[audio][unit][pcm]")
   {
     SECTION("Unpack S24_LE to S32_LE (with 8-bit shift)")
     {

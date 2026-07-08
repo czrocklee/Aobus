@@ -84,7 +84,7 @@ namespace ao::library::test
     // Read by ID
     auto rtxn = beginReadTransaction(env);
     auto const optFound = store.reader(rtxn).get(id);
-    REQUIRE(optFound.has_value());
+    REQUIRE(optFound);
     CHECK(optFound->tracks().size() == 10);
   }
 

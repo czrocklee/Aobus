@@ -23,7 +23,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("FlacDecoderSession - Happy Path", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - decodes happy path", "[audio][unit][flac]")
   {
     auto const testFile = requireAudioFixture("hires.flac");
 
@@ -101,7 +101,7 @@ namespace ao::audio::test
     CHECK(readUntilStableEndOfStream(decoder, 512) > 0);
   }
 
-  TEST_CASE("FlacDecoderSession - Error Paths", "[audio][unit][flac][error]")
+  TEST_CASE("FlacDecoderSession - reports error paths", "[audio][unit][flac][error]")
   {
     auto decoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
 

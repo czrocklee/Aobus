@@ -51,8 +51,8 @@ namespace ao::gtk
     friend class VolumeBarTestPeer;
 
     void updateTooltip();
-    void handleAbsoluteClick(double posX, double posY);
-    void handleDragUpdate(double posX, double posY);
+    void handleAbsoluteClick(double xPosition, double yPosition);
+    void handleDragUpdate(double xPosition, double yPosition);
     void handleScroll(double dx, double dy);
 
     float _volume = 1.0F;

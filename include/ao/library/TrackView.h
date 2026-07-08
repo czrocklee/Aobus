@@ -400,12 +400,12 @@ namespace ao::library
 
     Iterator() = default;
 
-    Iterator(CustomMetadataProxy::Entry const* pos, std::span<std::byte const> payload) noexcept
-      : _pos{pos}, _payload{payload}
+    Iterator(CustomMetadataProxy::Entry const* entry, std::span<std::byte const> payload) noexcept
+      : _entry{entry}, _payload{payload}
     {
     }
 
-    value_type operator*() const noexcept { return {_pos->keyId, CustomMetadataProxy::value(_payload, *_pos)}; }
+    value_type operator*() const noexcept { return {_entry->keyId, CustomMetadataProxy::value(_payload, *_entry)}; }
 
     struct ArrowProxy
     {
@@ -417,21 +417,21 @@ namespace ao::library
 
     Iterator& operator++() noexcept
     {
-      ++_pos;
+      ++_entry;
       return *this;
     }
 
     Iterator operator++(std::int32_t) noexcept
     {
       auto result = *this;
-      ++_pos;
+      ++_entry;
       return result;
     }
 
-    bool operator==(Iterator const& other) const noexcept { return _pos == other._pos; }
+    bool operator==(Iterator const& other) const noexcept { return _entry == other._entry; }
 
   private:
-    CustomMetadataProxy::Entry const* _pos = nullptr;
+    CustomMetadataProxy::Entry const* _entry = nullptr;
     std::span<std::byte const> _payload{};
   };
 
@@ -445,29 +445,29 @@ namespace ao::library
     using iterator_category = std::forward_iterator_tag;
 
     Iterator() = default;
-    explicit Iterator(CoverArtEntry const* pos)
-      : _pos{pos}
+    explicit Iterator(CoverArtEntry const* entry)
+      : _entry{entry}
     {
     }
 
-    value_type operator*() const { return {.resourceId = _pos->id, .type = static_cast<PictureType>(_pos->type)}; }
+    value_type operator*() const { return {.resourceId = _entry->id, .type = static_cast<PictureType>(_entry->type)}; }
 
     Iterator& operator++()
     {
-      ++_pos;
+      ++_entry;
       return *this;
     }
 
     Iterator operator++(std::int32_t)
     {
       auto result = *this;
-      ++_pos;
+      ++_entry;
       return result;
     }
 
-    bool operator==(Iterator const& other) const { return _pos == other._pos; }
+    bool operator==(Iterator const& other) const { return _entry == other._entry; }
 
   private:
-    CoverArtEntry const* _pos = nullptr;
+    CoverArtEntry const* _entry = nullptr;
   };
 } // namespace ao::library

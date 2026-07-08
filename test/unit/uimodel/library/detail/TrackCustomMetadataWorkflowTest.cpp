@@ -58,7 +58,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(undoValueForDeletedTrackCustomMetadata(snap, "Missing").has_value());
   }
 
-  TEST_CASE("custom metadata patch helpers write update and delete payloads", "[uimodel][unit][library][detail]")
+  TEST_CASE("custom - metadata patch helpers write update and delete payloads", "[uimodel][unit][library][detail]")
   {
     auto const updatePatch = makeCustomMetadataUpdatePatch("Mood", "Bright");
     REQUIRE(updatePatch.customUpdates.size() == 1);

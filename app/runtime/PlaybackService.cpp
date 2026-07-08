@@ -51,43 +51,43 @@ namespace ao::rt
       return transport == audio::Transport::Idle || transport == audio::Transport::Error;
     }
 
-    OutputProfileSnapshot toOutputProfileSnapshot(audio::IBackendProvider::ProfileMetadata const& src)
+    OutputProfileSnapshot toOutputProfileSnapshot(audio::IBackendProvider::ProfileMetadata const& source)
     {
-      return OutputProfileSnapshot{.id = src.id, .name = src.name, .description = src.description};
+      return OutputProfileSnapshot{.id = source.id, .name = source.name, .description = source.description};
     }
 
-    OutputDeviceSnapshot toOutputDeviceSnapshot(audio::Device const& src)
+    OutputDeviceSnapshot toOutputDeviceSnapshot(audio::Device const& source)
     {
-      return OutputDeviceSnapshot{.id = src.id,
-                                  .displayName = src.displayName,
-                                  .description = src.description,
-                                  .isDefault = src.isDefault,
-                                  .backendId = src.backendId,
-                                  .capabilities = src.capabilities};
+      return OutputDeviceSnapshot{.id = source.id,
+                                  .displayName = source.displayName,
+                                  .description = source.description,
+                                  .isDefault = source.isDefault,
+                                  .backendId = source.backendId,
+                                  .capabilities = source.capabilities};
     }
 
-    OutputBackendSnapshot toOutputBackendSnapshot(audio::IBackendProvider::Status const& src)
+    OutputBackendSnapshot toOutputBackendSnapshot(audio::IBackendProvider::Status const& source)
     {
       auto profiles = std::vector<OutputProfileSnapshot>{};
-      profiles.reserve(src.metadata.supportedProfiles.size());
+      profiles.reserve(source.metadata.supportedProfiles.size());
 
-      for (auto const& prof : src.metadata.supportedProfiles)
+      for (auto const& prof : source.metadata.supportedProfiles)
       {
         profiles.push_back(toOutputProfileSnapshot(prof));
       }
 
       auto devices = std::vector<OutputDeviceSnapshot>{};
-      devices.reserve(src.devices.size());
+      devices.reserve(source.devices.size());
 
-      for (auto const& dev : src.devices)
+      for (auto const& dev : source.devices)
       {
         devices.push_back(toOutputDeviceSnapshot(dev));
       }
 
-      return OutputBackendSnapshot{.id = src.metadata.id,
-                                   .name = src.metadata.name,
-                                   .description = src.metadata.description,
-                                   .iconName = src.metadata.iconName,
+      return OutputBackendSnapshot{.id = source.metadata.id,
+                                   .name = source.metadata.name,
+                                   .description = source.metadata.description,
+                                   .iconName = source.metadata.iconName,
                                    .supportedProfiles = std::move(profiles),
                                    .devices = std::move(devices)};
     }

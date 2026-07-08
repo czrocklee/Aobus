@@ -14,7 +14,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("GtkLayoutConfig persists track column layouts to gtk_layout.yaml", "[gtk][unit][track][presentation]")
+  TEST_CASE("GtkLayoutConfig - persists track column layouts to gtk_layout.yaml", "[gtk][unit][track][presentation]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configDir = std::filesystem::path{tempDir.path()} / ".aobus";

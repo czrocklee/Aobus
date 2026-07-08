@@ -74,7 +74,7 @@ namespace ao::uimodel::test
         TrackInlineEditRequest{.field = rt::TrackField::Title, .oldText = "Old Title", .newText = "Old Title"}, hooks);
 
       CHECK(result.outcome == TrackInlineEditOutcome::NoChange);
-      CHECK_FALSE(committedPatch.optTitle.has_value());
+      CHECK_FALSE(committedPatch.optTitle);
     }
 
     SECTION("missing hooks report not editable")
@@ -107,7 +107,7 @@ namespace ao::uimodel::test
       CHECK(result.outcome == TrackInlineEditOutcome::Applied);
       CHECK(textFrom(currentValue) == "New Title");
       CHECK(appliedValue == "New Title");
-      REQUIRE(committedPatch.optTitle.has_value());
+      REQUIRE(committedPatch.optTitle);
       CHECK(*committedPatch.optTitle == "New Title");
     }
 

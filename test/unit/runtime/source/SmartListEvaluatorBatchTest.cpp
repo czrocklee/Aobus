@@ -16,8 +16,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("SmartListEvaluator - batch operations emit batch notifications",
-            "[runtime][unit][source][smart-list][batch]")
+  TEST_CASE("SmartListEvaluator - batch operations emit batch notifications", "[runtime][unit][smart-list][batch]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto engine = SmartListEvaluator{testLibrary.library()};
@@ -58,8 +57,7 @@ namespace ao::rt::test
     list.detach(&spy);
   }
 
-  TEST_CASE("SmartListEvaluator - batch mutations trigger flat_set optimizations",
-            "[runtime][unit][source][smart-list][batch]")
+  TEST_CASE("SmartListEvaluator - batch mutations trigger flat_set optimizations", "[runtime][unit][smart-list][batch]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto engine = SmartListEvaluator{testLibrary.library()};

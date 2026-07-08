@@ -23,7 +23,9 @@ Rules are numbered for easy reference in reviews and tooling.
     - 2.2.7. Pointers follow semantic ownership naming:
       - Managed pointers (`std::shared_ptr`, `std::unique_ptr`, `std::weak_ptr`, `Glib::RefPtr`) MUST end with the `Ptr` suffix (e.g., `trackPtr`).
       - Raw pointers (`T*`) MUST NOT use the `Ptr` suffix, as they represent non-owning observers or iterators.
+      - This suffix rule applies to variables, fields, and parameters that hold pointer values. Raw-pointer-returning helper functions may use established names such as `asPtr()` when the function name describes a view/conversion contract rather than ownership.
       - Hungarian notation is prohibited for all pointer types (e.g., avoid `pBuffer`, `_pRow`). Use semantic names like `bufferData` or `_activeRow`.
+    - 2.2.8. Use `cancelled` for Aobus domain state, user-facing domain text, and async control-flow names. Use `canceled` only when matching external API, framework, or protocol spelling, such as GTK-style signal names.
   - 2.3. Headers
     - 2.3.1. Use `#pragma once`
   - 2.4. Includes
@@ -40,6 +42,7 @@ Rules are numbered for easy reference in reviews and tooling.
     - 2.6.1. Use nested namespace syntax: `namespace ao::core { ... }`
     - 2.6.2. Prefer anonymous namespaces to `static` for internal linkage
     - 2.6.3. Prefix external C library functions and types with `::`: `::mdb_cursor_open()`, `::pw_core_sync()`, `::snd_pcm_format_t`
+      - 2.6.3.1. Keep external C vocabulary spelling when declaring or naming external API types, such as LMDB `MDB_*` forward declarations.
     - 2.6.4. For C functions and types also available in the C++ standard library (e.g., from `<cstring>`, `<cmath>`, `<cstddef>`), use the `std::` prefix: `std::memcpy()`, `std::abs()`, `std::size_t`
     - 2.6.5. Avoid redundant namespace qualification when the usage is already within that namespace (or a sub-namespace).
       - Inside `namespace ao`, use `Foo` instead of `ao::Foo`.
@@ -73,7 +76,7 @@ Rules are numbered for easy reference in reviews and tooling.
     - 3.1.8. Use `std::jthread` and `std::stop_token` for background threads that need cooperative cancellation
   - 3.2. C++17 Features and Attributes
     - 3.2.1. Use `std::optional` for nullable return values where absence is not an error (e.g., lookups, optional fields); do not use it to report failures — use `std::expected` instead (see 3.3.1)
-      - 3.2.1.1. Optional Mandatory Naming: All `std::optional` variables (locals, members, and parameters) MUST use an `opt` prefix (e.g., `optUri`, `optView`). Existence checks MUST use the concise `if (optVar)` or `if (!optVar)` form; do not use `.has_value()`.
+      - 3.2.1.1. Optional Mandatory Naming: All `std::optional` variables (locals, members, and parameters) MUST use an `opt` prefix (e.g., `optUri`, `optView`). Existence checks on named optional variables and fields MUST use concise boolean conversion, such as `if (optVar)` or `if (!optVar)`. Temporary optional expressions may use `.has_value()` when that makes the absence check clearer, such as `reader.get(id).has_value()`. Do not use `static_cast<bool>(optional)`; use the optional directly in boolean contexts and `.has_value()` when materializing a `bool`.
     - 3.2.2. Use `std::variant` for type-safe unions
     - 3.2.3. Use `std::string_view` for non-owning string parameters
     - 3.2.4. Use `if constexpr` to remove compile-time branches
@@ -103,7 +106,7 @@ Rules are numbered for easy reference in reviews and tooling.
       - **Non-primitive types**: prefer `auto x = T{args};` or `auto x = T{};`.
         - The `auto` + braces style avoids narrowing and most-vexing-parse.
         - **Exception for containers**: For containers where braced initialization is ambiguous with `std::initializer_list` (e.g., `std::vector`, `std::string`), use `auto x = T(args);` unless you explicitly intend to perform list initialization.
-      - **Primitive types** (`int`, `std::size_t`, `float`, etc.): use `T x = val;` (e.g., `std::size_t pos = 0;`, `auto count = 0;`). Do not use brace initialization for primitives.
+      - **Primitive types** (`int`, `std::size_t`, `float`, etc.): use `T x = val;` (e.g., `std::size_t offset = 0;`, `auto count = 0;`). Do not use brace initialization for primitives.
       - **Strings and String Views**: Prefer standard literals over explicit construction for constants.
         - Use `using namespace std::string_literals;` and `using namespace std::string_view_literals;` (often in an anonymous namespace).
         - Prefer `auto str = "text"s;` over `auto str = std::string("text");`.

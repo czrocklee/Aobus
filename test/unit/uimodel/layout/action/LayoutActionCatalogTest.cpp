@@ -8,7 +8,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("LayoutActionCatalog duplicate registration preserves the original descriptor",
+  TEST_CASE("LayoutActionCatalog - duplicate registration preserves the original descriptor",
             "[uimodel][unit][layout][action]")
   {
     auto catalog = LayoutActionCatalog{};
@@ -23,7 +23,7 @@ namespace ao::uimodel::test
       CHECK(registered == true);
 
       auto const optDesc = catalog.descriptor("playback.playPause");
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
       CHECK(optDesc->id == "playback.playPause");
       CHECK(optDesc->label == "Play/Pause");
       CHECK(optDesc->category == "Playback");
@@ -39,7 +39,7 @@ namespace ao::uimodel::test
         false);
 
       auto const optDesc = catalog.descriptor("test");
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
       CHECK(optDesc->id == "test");
       CHECK(optDesc->label == "A");
       CHECK(optDesc->category == "X");
@@ -54,7 +54,7 @@ namespace ao::uimodel::test
     SECTION("returns nullopt for unknown id")
     {
       auto const optDesc = catalog.descriptor("nonexistent");
-      CHECK(optDesc.has_value() == false);
+      CHECK_FALSE(optDesc);
     }
 
     SECTION("returns all descriptors in registration order")
@@ -69,7 +69,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutActionCatalog canBind rejects actions missing required context", "[uimodel][unit][layout][action]")
+  TEST_CASE("LayoutActionCatalog - canBind rejects actions missing required context", "[uimodel][unit][layout][action]")
   {
     auto catalog = LayoutActionCatalog{};
 
@@ -126,7 +126,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutActionCatalog tryBind returns a bound action when context is valid",
+  TEST_CASE("LayoutActionCatalog - tryBind returns a bound action when context is valid",
             "[uimodel][unit][layout][action]")
   {
     auto catalog = LayoutActionCatalog{};

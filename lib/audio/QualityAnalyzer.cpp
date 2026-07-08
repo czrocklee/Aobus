@@ -25,37 +25,39 @@ namespace ao::audio
   {
     constexpr float kGainEpsilon = 1e-4F;
 
-    bool isLosslessBitDepthChange(Format const& src, Format const& dst) noexcept
+    bool isLosslessBitDepthChange(Format const& sourceFormat, Format const& destinationFormat) noexcept
     {
-      if (src.isFloat == dst.isFloat)
+      if (sourceFormat.isFloat == destinationFormat.isFloat)
       {
-        return effectiveBits(src) <= effectiveBits(dst);
+        return effectiveBits(sourceFormat) <= effectiveBits(destinationFormat);
       }
 
-      if (!src.isFloat && dst.isFloat)
+      if (!sourceFormat.isFloat && destinationFormat.isFloat)
       {
-        if (dst.bitDepth == 32)
+        if (destinationFormat.bitDepth == 32)
         {
-          return effectiveBits(src) <= 24;
+          return effectiveBits(sourceFormat) <= 24;
         }
 
-        if (dst.bitDepth == 64)
+        if (destinationFormat.bitDepth == 64)
         {
-          return effectiveBits(src) <= 32;
+          return effectiveBits(sourceFormat) <= 32;
         }
       }
 
       return false;
     }
 
-    bool hasKnownEffectiveBitChange(Format const& src, Format const& dst) noexcept
+    bool hasKnownEffectiveBitChange(Format const& sourceFormat, Format const& destinationFormat) noexcept
     {
-      return src.validBits != 0U && dst.validBits != 0U && effectiveBits(src) != effectiveBits(dst);
+      return sourceFormat.validBits != 0U && destinationFormat.validBits != 0U &&
+             effectiveBits(sourceFormat) != effectiveBits(destinationFormat);
     }
 
-    bool hasFormatPrecisionChange(Format const& src, Format const& dst) noexcept
+    bool hasFormatPrecisionChange(Format const& sourceFormat, Format const& destinationFormat) noexcept
     {
-      return src.bitDepth != dst.bitDepth || src.isFloat != dst.isFloat || hasKnownEffectiveBitChange(src, dst);
+      return sourceFormat.bitDepth != destinationFormat.bitDepth || sourceFormat.isFloat != destinationFormat.isFloat ||
+             hasKnownEffectiveBitChange(sourceFormat, destinationFormat);
     }
 
     void addFinding(NodeQualityAssessment& assessment, QualityFinding finding)
@@ -124,7 +126,7 @@ namespace ao::audio
 
         if (linkIt != graph.connections.end())
         {
-          nextId = linkIt->destId;
+          nextId = linkIt->destinationId;
         }
 
         currentId = nextId;
@@ -145,14 +147,14 @@ namespace ao::audio
         auto otherAppNames = std::vector<std::string>{};
         bool hasExternalSource = false;
 
-        for (auto const& srcId : sources)
+        for (auto const& sourceId : sources)
         {
-          bool const isInternal = std::ranges::contains(path, srcId, &flow::Node::id);
+          bool const isInternal = std::ranges::contains(path, sourceId, &flow::Node::id);
 
           if (!isInternal)
           {
             hasExternalSource = true;
-            auto const it = std::ranges::find(graph.nodes, srcId, &flow::Node::id);
+            auto const it = std::ranges::find(graph.nodes, sourceId, &flow::Node::id);
 
             if (it != graph.nodes.end() && !it->name.empty())
             {
@@ -223,17 +225,17 @@ namespace ao::audio
       }
     }
 
-    void assessFormatTransition(flow::Node const& prevNode,
+    void assessFormatTransition(flow::Node const& previousNode,
                                 flow::Node const& currentNode,
                                 NodeQualityAssessment& targetAssessment,
                                 std::optional<std::uint8_t> optProvenPrecision)
     {
-      if (!prevNode.optFormat || !currentNode.optFormat)
+      if (!previousNode.optFormat || !currentNode.optFormat)
       {
         return;
       }
 
-      auto const& f1 = *prevNode.optFormat;
+      auto const& f1 = *previousNode.optFormat;
       auto const& f2 = *currentNode.optFormat;
 
       if (f1.sampleRate != f2.sampleRate)
@@ -330,7 +332,7 @@ namespace ao::audio
     {
       if (link.isActive)
       {
-        inputSources[link.destId].insert(link.sourceId);
+        inputSources[link.destinationId].insert(link.sourceId);
       }
     }
 
@@ -364,7 +366,7 @@ namespace ao::audio
 
       if (i > 0)
       {
-        auto const* const prevNode = path[i - 1];
+        auto const* const previousNode = path[i - 1];
         auto optTransitionPrecision = optProvenPrecision;
 
         if (!node->optFormat || hasPrecisionInvalidatingFinding(assessment))
@@ -372,7 +374,7 @@ namespace ao::audio
           optTransitionPrecision.reset();
         }
 
-        assessFormatTransition(*prevNode, *node, assessment, optTransitionPrecision);
+        assessFormatTransition(*previousNode, *node, assessment, optTransitionPrecision);
       }
 
       if (assessment.findings.empty())

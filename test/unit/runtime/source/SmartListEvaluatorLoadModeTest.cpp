@@ -15,7 +15,7 @@
 namespace ao::rt::test
 {
   TEST_CASE("SmartListEvaluator - load mode optimization supports mixed access profiles",
-            "[runtime][unit][source][smart-list][load-mode]")
+            "[runtime][unit][smart-list][load-mode]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto engine = SmartListEvaluator{testLibrary.library()};
@@ -39,7 +39,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("SmartListEvaluator - hot and cold access profile optimization uses both readers",
-            "[runtime][unit][source][smart-list][load-mode]")
+            "[runtime][unit][smart-list][load-mode]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto engine = SmartListEvaluator{testLibrary.library()};

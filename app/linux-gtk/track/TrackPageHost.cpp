@@ -359,11 +359,11 @@ namespace ao::gtk
       });
 
     page->signalContextMenuRequested().connect(
-      [this, page](double posX, double posY)
+      [this, page](double xPosition, double yPosition)
       {
         auto const sel = TrackSelectionContext{
           .listId = page->listId(), .selectedIds = page->selectionController().selectedTrackIds()};
-        _tagEditController.showTrackContextMenu(*page, sel, posX, posY);
+        _tagEditController.showTrackContextMenu(*page, sel, xPosition, yPosition);
       });
 
     page->signalTagEditRequested().connect(

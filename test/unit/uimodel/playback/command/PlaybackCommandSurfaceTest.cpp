@@ -98,7 +98,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("PlaybackCommandSurface - owns availability and queue command policy",
-            "[uimodel][unit][playback][command][queue]")
+            "[uimodel][unit][playback-command][queue]")
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);

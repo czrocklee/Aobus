@@ -12,7 +12,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("GtkStyleRuntime initializes providers and emits reload notifications", "[gtk][unit][app][style]")
+  TEST_CASE("GtkStyleRuntime - initializes providers and emits reload notifications", "[gtk][unit][app][style]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

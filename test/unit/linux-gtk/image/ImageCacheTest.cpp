@@ -10,7 +10,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ImageCache keeps most-recently-used pixbuf entries", "[gtk][unit][image]")
+  TEST_CASE("ImageCache - keeps most-recently-used pixbuf entries", "[gtk][unit][image]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     constexpr auto kResource1 = ResourceId{1};

@@ -24,7 +24,7 @@ namespace ao::gtk::test
 {
   // Menu population semantics are covered by TrackPresentationCatalog and workflow tests. The widget
   // keeps a focused adapter smoke: it binds services, renders the menu, and dispatches selection.
-  TEST_CASE("TrackPresentationButton rebuilds presentation actions when focus changes",
+  TEST_CASE("TrackPresentationButton - rebuilds presentation actions when focus changes",
             "[gtk][unit][track][presentation]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -62,7 +62,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("TrackPresentationButton cancels pending presentation apply when destroyed", "[gtk][unit][regression]")
+  TEST_CASE("TrackPresentationButton - cancels pending presentation apply when destroyed", "[gtk][unit][regression]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

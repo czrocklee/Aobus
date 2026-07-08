@@ -24,7 +24,19 @@ class CliParseTest(unittest.TestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             self.assertEqual(main(["help"]), 0)
-        for command in ("build", "check", "test", "coverage", "tidy", "analyze", "format", "hygiene", "run", "council"):
+        for command in (
+            "build",
+            "check",
+            "test",
+            "test-audit",
+            "coverage",
+            "tidy",
+            "analyze",
+            "format",
+            "hygiene",
+            "run",
+            "council",
+        ):
             self.assertIn(command, buffer.getvalue())
         self.assertNotIn("selftest", buffer.getvalue())
         self.assertNotIn("pycheck", buffer.getvalue())
@@ -87,6 +99,11 @@ class CliParseTest(unittest.TestCase):
     def test_test_defaults_to_default_suite_group(self):
         args = self.parse(["test"])
         self.assertEqual(args.suite, "default")
+
+    def test_test_audit_arguments(self):
+        args = self.parse(["test-audit", "--fail-on-issue", "test/unit/query"])
+        self.assertTrue(args.fail_on_issue)
+        self.assertEqual(args.paths, ["test/unit/query"])
 
     def test_test_suite_targets_use_suite_name_suffixes(self):
         self.assertEqual(

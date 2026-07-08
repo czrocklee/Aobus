@@ -13,7 +13,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("CenterBox component places start, center, and end children", "[gtk][unit][layout][container]")
+  TEST_CASE("CenterBox - places start, center, and end children", "[gtk][unit][layout][container]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

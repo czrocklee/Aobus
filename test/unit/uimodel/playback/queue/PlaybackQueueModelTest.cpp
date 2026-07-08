@@ -392,7 +392,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("PlaybackQueueModel - restored queue resumes playback on explicit play",
-            "[uimodel][unit][playback][queue][session]")
+            "[uimodel][unit][playback-queue][session]")
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
@@ -424,7 +424,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("PlaybackQueueModel - non-gapless prepared successor advances through idle fallback",
-            "[uimodel][unit][playback][queue][gapless]")
+            "[uimodel][unit][playback-queue][gapless]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -464,7 +464,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("PlaybackQueueModel - recoverable playback failure skips to next track",
-            "[uimodel][unit][playback][queue][error]")
+            "[uimodel][unit][playback-queue][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -487,7 +487,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("PlaybackQueueModel - repeated recoverable playback failures stop the queue",
-            "[uimodel][unit][playback][queue][error]")
+            "[uimodel][unit][playback-queue][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -511,7 +511,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("PlaybackQueueModel - explicit skip resets recoverable failure streak",
-            "[uimodel][unit][playback][queue][error]")
+            "[uimodel][unit][playback-queue][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -539,7 +539,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("PlaybackQueueModel - global synchronous playback failure stops without scanning queue",
-            "[uimodel][unit][playback][queue][error]")
+            "[uimodel][unit][playback-queue][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -565,7 +565,7 @@ namespace ao::uimodel::test
     CHECK(notificationCount(fixture.notificationService, NotificationSeverity::Error, "Could not start playback") == 1);
   }
 
-  TEST_CASE("PlaybackQueueModel - device playback failure stops the queue", "[uimodel][unit][playback][queue][error]")
+  TEST_CASE("PlaybackQueueModel - device playback failure stops the queue", "[uimodel][unit][playback-queue][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);

@@ -92,7 +92,7 @@ namespace ao::rt::test
     auto snap = projPtr->snapshot();
     CHECK(snap.selectionKind == SelectionKind::Single);
     auto const& titleAgg = snap.fields[static_cast<std::size_t>(F::Title)];
-    REQUIRE(titleAgg.optValue.has_value());
+    REQUIRE(titleAgg.optValue);
     CHECK(getString(titleAgg) == "Before");
 
     // Mutate the track in the library using the service
@@ -152,7 +152,7 @@ namespace ao::rt::test
     // Artists are the same
     auto const& artistAgg = snap.fields[static_cast<std::size_t>(F::Artist)];
     CHECK_FALSE(artistAgg.mixed);
-    REQUIRE(artistAgg.optValue.has_value());
+    REQUIRE(artistAgg.optValue);
     CHECK(getString(artistAgg) == "Same");
 
     // Albums differ
@@ -172,7 +172,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackDetailProjection - focused view target follows focused view selection",
-            "[runtime][unit][projection][detail][workspace]")
+            "[runtime][unit][track-detail][workspace]")
   {
     auto env = Env{};
     auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Song A"});
@@ -209,7 +209,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackDetailProjection - focused view target initializes from active selection",
-            "[runtime][unit][projection][detail][workspace]")
+            "[runtime][unit][track-detail][workspace]")
   {
     auto env = Env{};
     auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Already Selected"});
@@ -223,7 +223,7 @@ namespace ao::rt::test
 
     CHECK(snap.selectionKind == SelectionKind::Single);
     auto const& titleAgg = snap.fields[static_cast<std::size_t>(F::Title)];
-    REQUIRE(titleAgg.optValue.has_value());
+    REQUIRE(titleAgg.optValue);
     CHECK(getString(titleAgg) == "Already Selected");
   }
 
@@ -234,11 +234,10 @@ namespace ao::rt::test
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{TrackId{9999}}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
     CHECK(snap.selectionKind == SelectionKind::Single);
-    CHECK_FALSE(snap.fields[static_cast<std::size_t>(F::Title)].optValue.has_value());
+    CHECK_FALSE(snap.fields[static_cast<std::size_t>(F::Title)].optValue);
   }
 
-  TEST_CASE("TrackDetailProjection - tag aggregation exposes common tag ids",
-            "[runtime][unit][projection][detail][tags]")
+  TEST_CASE("TrackDetailProjection - tag aggregation exposes common tag ids", "[runtime][unit][track-detail][tag]")
   {
     auto env = Env{};
     auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Song A"});
@@ -329,7 +328,7 @@ namespace ao::rt::test
       CHECK(item->presentOnAny);
       CHECK(item->presentOnAll);
       CHECK(item->value.mixed);
-      CHECK_FALSE(item->value.optValue.has_value());
+      CHECK_FALSE(item->value.optValue);
     }
   }
 } // namespace ao::rt::test

@@ -49,7 +49,7 @@ namespace ao::uimodel::test
     };
   } // namespace
 
-  TEST_CASE("TrackFilterViewModel - initial render produces disabled state", "[uimodel][unit][track_filter]")
+  TEST_CASE("TrackFilterViewModel - initial render produces disabled state", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
 
@@ -58,7 +58,7 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().entryText.empty());
   }
 
-  TEST_CASE("TrackFilterViewModel - empty filter text keeps creation disabled", "[uimodel][unit][track_filter]")
+  TEST_CASE("TrackFilterViewModel - empty filter text keeps creation disabled", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
 
@@ -71,7 +71,7 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().canCreateSmartList == false);
   }
 
-  TEST_CASE("TrackFilterViewModel - expression syntax becomes the resolved expression", "[uimodel][unit][track_filter]")
+  TEST_CASE("TrackFilterViewModel - expression syntax becomes the resolved expression", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     fixture.focusAllTracksView();
@@ -86,7 +86,7 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
   }
 
-  TEST_CASE("TrackFilterViewModel - plain text resolves to quick search expression", "[uimodel][unit][track_filter]")
+  TEST_CASE("TrackFilterViewModel - plain text resolves to quick search expression", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     fixture.focusAllTracksView();
@@ -99,7 +99,7 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
   }
 
-  TEST_CASE("TrackFilterViewModel - multiple plain text terms resolve to conjunction", "[uimodel][unit][track_filter]")
+  TEST_CASE("TrackFilterViewModel - multiple plain text terms resolve to conjunction", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     fixture.focusAllTracksView();
@@ -111,7 +111,7 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
   }
 
-  TEST_CASE("TrackFilterViewModel - focused track view enables filtering", "[uimodel][unit][track_filter]")
+  TEST_CASE("TrackFilterViewModel - focused track view enables filtering", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     auto config = rt::TrackListViewConfig{
@@ -124,7 +124,7 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().enabled == true);
   }
 
-  TEST_CASE("TrackFilterViewModel - filter edits update the focused view", "[uimodel][unit][track_filter]")
+  TEST_CASE("TrackFilterViewModel - filter edits update the focused view", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     fixture.focusAllTracksView();
@@ -138,7 +138,7 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
   }
 
-  TEST_CASE("TrackFilterViewModel - filter edits preserve focused view presentation", "[uimodel][unit][track_filter]")
+  TEST_CASE("TrackFilterViewModel - filter edits preserve focused view presentation", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId};
@@ -156,7 +156,7 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().resolvedExpression == "artist == 'Muse'");
   }
 
-  TEST_CASE("TrackFilterViewModel - quoted plain text is escaped in quick search", "[uimodel][unit][track_filter]")
+  TEST_CASE("TrackFilterViewModel - quoted plain text is escaped in quick search", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     fixture.focusAllTracksView();
@@ -168,7 +168,7 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
   }
 
-  TEST_CASE("TrackFilterViewModel - losing focus clears filter state", "[uimodel][unit][track_filter]")
+  TEST_CASE("TrackFilterViewModel - losing focus clears filter state", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     fixture.focusAllTracksView();

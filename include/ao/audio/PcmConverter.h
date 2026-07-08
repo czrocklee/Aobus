@@ -21,23 +21,23 @@ namespace ao::audio
     /**
      * @brief Pads samples from a lower bit depth to a higher bit depth with correct alignment.
      *
-     * @tparam TSrc Source sample type
-     * @tparam TDst Destination sample type
+     * @tparam TSource Source sample type
+     * @tparam TDestination Destination sample type
      * @param source Source samples span
      * @param destination Destination samples span
      * @param shift Number of bits to shift left
      */
-    template<typename TSrc, typename TDst>
-    static void pad(std::span<TSrc const> source, std::span<TDst> destination, std::uint8_t shift) noexcept
+    template<typename TSource, typename TDestination>
+    static void pad(std::span<TSource const> source, std::span<TDestination> destination, std::uint8_t shift) noexcept
     {
       auto const count = std::min(source.size(), destination.size());
 
       for (std::size_t i = 0; i < count; ++i)
       {
-        using UnsignedDestination = std::make_unsigned_t<TDst>;
-        auto bits = static_cast<UnsignedDestination>(static_cast<TDst>(source[i]));
+        using UnsignedDestination = std::make_unsigned_t<TDestination>;
+        auto bits = static_cast<UnsignedDestination>(static_cast<TDestination>(source[i]));
         bits <<= shift;
-        destination[i] = std::bit_cast<TDst>(bits);
+        destination[i] = std::bit_cast<TDestination>(bits);
       }
     }
 
@@ -45,15 +45,15 @@ namespace ao::audio
      * @brief Interleaves multiple non-interleaved channel buffers into a single destination buffer
      * while performing bit-depth padding.
      *
-     * @tparam TSrc Source sample type
-     * @tparam TDst Destination sample type
+     * @tparam TSource Source sample type
+     * @tparam TDestination Destination sample type
      * @param channels Array of spans, one for each channel
      * @param destination Destination interleaved buffer
      * @param shift Number of bits to shift left
      */
-    template<typename TSrc, typename TDst>
-    static void interleaveAndPad(std::span<std::span<TSrc const> const> channels,
-                                 std::span<TDst> destination,
+    template<typename TSource, typename TDestination>
+    static void interleaveAndPad(std::span<std::span<TSource const> const> channels,
+                                 std::span<TDestination> destination,
                                  std::uint8_t shift) noexcept
     {
       if (channels.empty())
@@ -68,10 +68,10 @@ namespace ao::audio
       {
         for (std::size_t ch = 0; ch < channelCount; ++ch)
         {
-          using UnsignedDestination = std::make_unsigned_t<TDst>;
-          auto bits = static_cast<UnsignedDestination>(static_cast<TDst>(channels[ch][i]));
+          using UnsignedDestination = std::make_unsigned_t<TDestination>;
+          auto bits = static_cast<UnsignedDestination>(static_cast<TDestination>(channels[ch][i]));
           bits <<= shift;
-          destination[(i * channelCount) + ch] = std::bit_cast<TDst>(bits);
+          destination[(i * channelCount) + ch] = std::bit_cast<TDestination>(bits);
         }
       }
     }

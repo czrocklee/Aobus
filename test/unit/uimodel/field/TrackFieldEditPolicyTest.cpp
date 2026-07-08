@@ -76,7 +76,7 @@ namespace ao::uimodel::test
     auto const numericValue = TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(7)};
 
     CHECK_FALSE(writeTrackFieldPatch(textPatch, rt::TrackField::Title, numericValue));
-    REQUIRE(textPatch.optTitle.has_value());
+    REQUIRE(textPatch.optTitle);
     CHECK(*textPatch.optTitle == "Before");
 
     auto numberPatch = rt::MetadataPatch{};
@@ -84,7 +84,7 @@ namespace ao::uimodel::test
     auto const stringValue = TrackFieldEditValue{std::in_place_type<std::string>, "Not a number"};
 
     CHECK_FALSE(writeTrackFieldPatch(numberPatch, rt::TrackField::Year, stringValue));
-    REQUIRE(numberPatch.optYear.has_value());
+    REQUIRE(numberPatch.optYear);
     CHECK(*numberPatch.optYear == 1999);
   }
 
@@ -103,7 +103,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(writeTrackFieldPatch(patch, rt::TrackField::Duration, value));
     CHECK_FALSE(writeTrackFieldPatch(patch, rt::TrackField::Quality, value));
 
-    REQUIRE(patch.optTitle.has_value());
+    REQUIRE(patch.optTitle);
     CHECK(*patch.optTitle == "Before");
   }
 } // namespace ao::uimodel::test

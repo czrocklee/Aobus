@@ -25,7 +25,8 @@ namespace ao::gtk::layout::test
   using namespace uimodel;
   using ao::gtk::test::emitClicked;
 
-  TEST_CASE("YAML semantic layout documents build GTK components", "[gtk][unit][layout][component][yaml]")
+  TEST_CASE("LayoutComponentYaml - YAML semantic layout documents build GTK components",
+            "[gtk][unit][layout-component][yaml]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();
@@ -84,14 +85,14 @@ namespace ao::gtk::layout::test
     SECTION("app.actionButton exposes enum properties for editor")
     {
       auto const optDesc = registry.descriptor("app.actionButton");
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
 
       auto const it = std::find_if(
         optDesc->props.begin(), optDesc->props.end(), [](auto const& p) { return p.name == "primaryAction"; });
       REQUIRE(it != optDesc->props.end());
       CHECK(it->kind == LayoutPropertyKind::Enum);
       CHECK(it->enumValues.empty());
-      REQUIRE(it->optActionBinding.has_value());
+      REQUIRE(it->optActionBinding);
       CHECK(it->optActionBinding->slot == LayoutActionSlot::PrimaryClick);
     }
 

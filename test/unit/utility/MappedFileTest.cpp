@@ -12,7 +12,7 @@
 
 namespace ao::utility::test
 {
-  TEST_CASE("MappedFile - maps files and reports failed mappings", "[utility][unit][mapped_file]")
+  TEST_CASE("MappedFile - maps files and reports failed mappings", "[utility][unit][mapped-file]")
   {
     auto const tempDir = std::filesystem::temp_directory_path() / "ao_mapped_file_test";
     std::filesystem::create_directories(tempDir);

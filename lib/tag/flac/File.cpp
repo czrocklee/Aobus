@@ -133,11 +133,11 @@ namespace ao::tag::flac
             VorbisCommentBlockView{iter->data()}.visitComments(
               [&](std::string_view comment)
               {
-                if (auto const pos = comment.find('='); pos != std::string_view::npos)
+                if (auto const equalsOffset = comment.find('='); equalsOffset != std::string_view::npos)
                 {
-                  auto const key = comment.substr(0, pos);
+                  auto const key = comment.substr(0, equalsOffset);
 
-                  if (auto const value = comment.substr(pos + 1);
+                  if (auto const value = comment.substr(equalsOffset + 1);
                       auto const* entry = FlacVorbisDispatchTable::lookupVorbisField(key.data(), key.size()))
                   {
                     entry->handler(builder, value);

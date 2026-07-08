@@ -179,7 +179,7 @@ namespace ao::gtk::layout
     ThemeUiContext theme{};
 
     std::function<sigc::connection(std::chrono::milliseconds, sigc::slot<bool()>)> timeoutScheduler{};
-    std::function<void(std::string const& nodeId, std::int32_t posX, std::int32_t posY)> onNodeMoved{};
+    std::function<void(std::string const& nodeId, std::int32_t xPosition, std::int32_t yPosition)> onNodeMoved{};
     bool editMode = false;
 
     void bind(GtkUiServices const& services)

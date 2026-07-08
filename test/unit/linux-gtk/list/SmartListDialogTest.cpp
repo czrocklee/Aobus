@@ -15,7 +15,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("SmartListDialog renders the initial smart-list draft", "[gtk][unit][list][dialog]")
+  TEST_CASE("SmartListDialog - renders the initial smart-list draft", "[gtk][unit][list][dialog]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

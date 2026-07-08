@@ -47,7 +47,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("ShellLayoutComponentStateStore persists component state by layout id", "[gtk][unit][app][layout-state]")
+  TEST_CASE("ShellLayoutComponentStateStore - persists component state by layout id", "[gtk][unit][app][layout-state]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";
@@ -67,7 +67,7 @@ namespace ao::gtk::test
       store.save("classic", doc);
 
       auto const optLoaded = store.load("classic");
-      REQUIRE(optLoaded.has_value());
+      REQUIRE(optLoaded);
       CHECK(optLoaded->preset == "classic");
       REQUIRE(optLoaded->components.contains("main-paned"));
       CHECK(optLoaded->components.at("main-paned").state.at("positionPercent").asDouble() == 0.35);
@@ -123,7 +123,7 @@ namespace ao::gtk::test
       store.prune("classic", layoutDoc);
 
       auto const optLoaded = store.load("classic");
-      REQUIRE(optLoaded.has_value());
+      REQUIRE(optLoaded);
       REQUIRE(optLoaded->components.size() == 1);
       CHECK(optLoaded->components.contains("live-split"));
     }

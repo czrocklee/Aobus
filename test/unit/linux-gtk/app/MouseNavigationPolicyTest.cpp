@@ -12,14 +12,14 @@ namespace ao::gtk::test
     SECTION("button 8 navigates back")
     {
       auto const optNavigation = mouseButtonNavigation(8);
-      REQUIRE(optNavigation.has_value());
+      REQUIRE(optNavigation);
       CHECK(*optNavigation == WorkspaceNavigation::Back);
     }
 
     SECTION("button 9 navigates forward")
     {
       auto const optNavigation = mouseButtonNavigation(9);
-      REQUIRE(optNavigation.has_value());
+      REQUIRE(optNavigation);
       CHECK(*optNavigation == WorkspaceNavigation::Forward);
     }
 

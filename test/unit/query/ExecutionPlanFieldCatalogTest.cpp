@@ -12,7 +12,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("ExecutionPlan - maps property aliases to bitrate fields", "[query][unit][execution_plan][catalog]")
+  TEST_CASE("ExecutionPlan - maps property aliases to bitrate fields", "[query][unit][execution-plan][catalog]")
   {
     auto expr = parseOk("@br >= 320k");
     auto compiler = QueryCompiler{};
@@ -23,7 +23,7 @@ namespace ao::query::test
     CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::Bitrate));
   }
 
-  TEST_CASE("ExecutionPlan - maps metadata aliases to album artist fields", "[query][unit][execution_plan][catalog]")
+  TEST_CASE("ExecutionPlan - maps metadata aliases to album artist fields", "[query][unit][execution-plan][catalog]")
   {
     auto expr = parseOk("$aa = Bach");
     auto compiler = QueryCompiler{};
@@ -34,7 +34,7 @@ namespace ao::query::test
     CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::AlbumArtistId));
   }
 
-  TEST_CASE("ExecutionPlan - rejects unknown metadata fields", "[query][unit][execution_plan][catalog]")
+  TEST_CASE("ExecutionPlan - rejects unknown metadata fields", "[query][unit][execution-plan][catalog]")
   {
     auto expr = parseOk("$gerne = 'x'");
     auto compiler = QueryCompiler{};
@@ -44,7 +44,7 @@ namespace ao::query::test
     CHECK(error.message.find("$movement ($m)") != std::string::npos);
   }
 
-  TEST_CASE("ExecutionPlan - rejects unknown property fields", "[query][unit][execution_plan][catalog]")
+  TEST_CASE("ExecutionPlan - rejects unknown property fields", "[query][unit][execution-plan][catalog]")
   {
     auto expr = parseOk("@samplerate > 0");
     auto compiler = QueryCompiler{};
@@ -53,7 +53,7 @@ namespace ao::query::test
     CHECK(error.message.find("available property fields:") != std::string::npos);
   }
 
-  TEST_CASE("ExecutionPlan - rejects track ids as query fields", "[query][unit][execution_plan][catalog]")
+  TEST_CASE("ExecutionPlan - rejects track ids as query fields", "[query][unit][execution-plan][catalog]")
   {
     auto expr = parseOk("$id = 1");
     auto compiler = QueryCompiler{};
@@ -61,7 +61,7 @@ namespace ao::query::test
     CHECK(error.message.find("unknown metadata field '$id'") != std::string::npos);
   }
 
-  TEST_CASE("ExecutionPlan - maps every supported metadata catalog name", "[query][unit][execution_plan][catalog]")
+  TEST_CASE("ExecutionPlan - maps every supported metadata catalog name", "[query][unit][execution-plan][catalog]")
   {
     struct Case final
     {
@@ -118,7 +118,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - maps every supported property catalog name", "[query][unit][execution_plan][catalog]")
+  TEST_CASE("ExecutionPlan - maps every supported property catalog name", "[query][unit][execution-plan][catalog]")
   {
     struct Case final
     {

@@ -19,7 +19,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ImportExportCoordinator policy maps dialog choices", "[gtk][unit][portal][import-export]")
+  TEST_CASE("ImportExportCoordinator - policy maps dialog choices", "[gtk][unit][portal][import-export]")
   {
     SECTION("new library folders request an initial scan")
     {

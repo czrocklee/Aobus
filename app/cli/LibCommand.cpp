@@ -608,7 +608,7 @@ namespace ao::cli
 
     std::vector<RelinkCandidateDto> relinkCandidates(rt::ScanPlan const& plan)
     {
-      auto missingIndexes = std::vector<std::size_t>{};
+      auto missingIndices = std::vector<std::size_t>{};
       auto newIdentities = std::vector<std::pair<std::size_t, RelinkIdentity>>{};
 
       for (std::size_t index = 0; index < plan.items.size(); ++index)
@@ -616,7 +616,7 @@ namespace ao::cli
         if (auto const& item = plan.items[index];
             item.classification == rt::ScanClassification::Missing && rt::hasAudioIdentity(item))
         {
-          missingIndexes.push_back(index);
+          missingIndices.push_back(index);
         }
       }
 
@@ -637,7 +637,7 @@ namespace ao::cli
 
       auto candidates = std::vector<RelinkCandidateDto>{};
 
-      for (auto const missingIndex : missingIndexes)
+      for (auto const missingIndex : missingIndices)
       {
         auto const& missingItem = plan.items[missingIndex];
         auto const missingIdentity = relinkIdentityFromItem(missingItem);

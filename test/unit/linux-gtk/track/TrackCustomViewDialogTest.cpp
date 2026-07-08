@@ -14,7 +14,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackCustomViewDialog renders the initial custom-view draft", "[gtk][unit][track][dialog]")
+  TEST_CASE("TrackCustomViewDialog - renders the initial custom-view draft", "[gtk][unit][track][dialog]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto window = Gtk::Window{};

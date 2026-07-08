@@ -7,7 +7,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ImageRenderPolicy fits source dimensions into render target", "[gtk][unit][image]")
+  TEST_CASE("ImageRenderPolicy - fits source dimensions into render target", "[gtk][unit][image]")
   {
     SECTION("landscape source is constrained by target width")
     {
@@ -50,7 +50,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ImageRenderPolicy refreshes only after meaningful target-size changes", "[gtk][unit][image]")
+  TEST_CASE("ImageRenderPolicy - refreshes only after meaningful target-size changes", "[gtk][unit][image]")
   {
     auto const current = RenderTarget{.width = 100, .height = 100};
 

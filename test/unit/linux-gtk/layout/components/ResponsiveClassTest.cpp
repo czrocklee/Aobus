@@ -14,8 +14,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("ResponsiveClass component updates CSS classes from allocation breakpoints",
-            "[gtk][unit][layout][container]")
+  TEST_CASE("ResponsiveClass - updates CSS classes from allocation breakpoints", "[gtk][unit][layout][container]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

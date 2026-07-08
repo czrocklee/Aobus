@@ -55,7 +55,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("Playback UI components render initial GTK bindings", "[gtk][unit][playback]")
+  TEST_CASE("PlaybackUiComponents - render initial GTK bindings", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = TestEnvironment{};

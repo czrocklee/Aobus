@@ -13,7 +13,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("SelectionInfoLabel binds selection changes to summary text", "[gtk][unit][track][selection]")
+  TEST_CASE("SelectionInfoLabel - binds selection changes to summary text", "[gtk][unit][track][selection]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

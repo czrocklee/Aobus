@@ -174,9 +174,9 @@ namespace ao::gtk
 
     if (needsMove)
     {
-      for (::guint loopIdx = 0; loopIdx < columns->get_n_items(); ++loopIdx)
+      for (::guint loopIndex = 0; loopIndex < columns->get_n_items(); ++loopIndex)
       {
-        if (columns->get_object(loopIdx) == column)
+        if (columns->get_object(loopIndex) == column)
         {
           _columnView.remove_column(column);
           break;

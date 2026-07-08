@@ -18,7 +18,7 @@ namespace ao::gtk::test
     uimodel::KeyChord chord(std::string const& text)
     {
       auto const optChord = uimodel::KeyChord::parse(text);
-      REQUIRE(optChord.has_value());
+      REQUIRE(optChord);
       return *optChord;
     }
   }

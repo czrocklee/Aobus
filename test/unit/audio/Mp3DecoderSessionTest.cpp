@@ -21,7 +21,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("Mp3DecoderSession - Happy Path", "[audio][unit][mp3]")
+  TEST_CASE("Mp3DecoderSession - decodes happy path", "[audio][unit][mp3]")
   {
     auto const testFile = requireAudioFixture("hires.mp3");
 
@@ -52,7 +52,7 @@ namespace ao::audio::test
     CHECK(decoder.readNextBlock());
   }
 
-  TEST_CASE("Mp3DecoderSession - Empty Output Format Probes Native Stream", "[audio][unit][mp3]")
+  TEST_CASE("Mp3DecoderSession - empty output format probes native stream", "[audio][unit][mp3]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
@@ -73,7 +73,7 @@ namespace ao::audio::test
     CHECK(block->bytes.size() == static_cast<std::size_t>(block->frames) * 2U * 2U);
   }
 
-  TEST_CASE("Mp3DecoderSession - Floating Point Output", "[audio][unit][mp3]")
+  TEST_CASE("Mp3DecoderSession - handles floating point output", "[audio][unit][mp3]")
   {
     auto const testFile = requireAudioFixture("hires.mp3");
 
@@ -91,7 +91,7 @@ namespace ao::audio::test
     CHECK(block->bytes.size() == static_cast<std::size_t>(block->frames) * 2U * 4U);
   }
 
-  TEST_CASE("Mp3DecoderSession - Re-opening", "[audio][unit][mp3]")
+  TEST_CASE("Mp3DecoderSession - supports reopening", "[audio][unit][mp3]")
   {
     auto const testFile = requireAudioFixture("hires.mp3");
 
@@ -107,7 +107,7 @@ namespace ao::audio::test
     CHECK(block->firstFrameIndex == 0); // Should be reset
   }
 
-  TEST_CASE("Mp3DecoderSession - Read Until EOF", "[audio][unit][mp3]")
+  TEST_CASE("Mp3DecoderSession - reads until EOF", "[audio][unit][mp3]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
@@ -158,7 +158,7 @@ namespace ao::audio::test
     CHECK(recoveredBlock->frames > 0);
   }
 
-  TEST_CASE("Mp3DecoderSession - Error Paths", "[audio][unit][mp3][error]")
+  TEST_CASE("Mp3DecoderSession - reports error paths", "[audio][unit][mp3][error]")
   {
     auto decoder = Mp3DecoderSession{Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true}};
 

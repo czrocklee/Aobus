@@ -23,7 +23,7 @@ namespace ao::gtk::layout::test
   using namespace uimodel;
   namespace yaml = ao::yaml;
 
-  TEST_CASE("GTK built-in layout documents define stable preset contracts", "[gtk][unit][layout][model]")
+  TEST_CASE("LayoutModel - GTK built-in layout documents define stable preset contracts", "[gtk][unit][layout][model]")
   {
     SECTION("LayoutDocument round-trip via createDefaultLayout")
     {
@@ -165,7 +165,8 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // Built-in Presets
   // ---------------------------------------------------------------------------
-  TEST_CASE("Built-in layout presets preserve preset-specific root classes", "[gtk][unit][layout][presets]")
+  TEST_CASE("LayoutModel - built-in layout presets preserve preset-specific root classes",
+            "[gtk][unit][layout][preset]")
   {
     SECTION("Classic preset is the default and has no modern classes")
     {

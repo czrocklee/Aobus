@@ -68,14 +68,14 @@ namespace clang::tidy::readability
       return;
     }
 
-    unsigned const numArgs = findCall->getNumArgs();
+    unsigned const argumentCount = findCall->getNumArgs();
 
-    if (numArgs == 0)
+    if (argumentCount == 0)
     {
       return;
     }
 
-    if (numArgs >= 2)
+    if (argumentCount >= 2)
     {
       auto const* posArg = findCall->getArg(1);
 

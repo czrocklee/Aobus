@@ -40,7 +40,8 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("OutputDeviceSelector renders devices and routes selected output changes", "[gtk][unit][playback][output]")
+  TEST_CASE("OutputDeviceSelector - renders devices and routes selected output changes",
+            "[gtk][unit][playback][output]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -92,7 +93,7 @@ namespace ao::gtk::test
       CHECK(selected.backendId == audio::BackendId{"pipewire"});
       CHECK(selected.deviceId == audio::DeviceId{"device1"});
       CHECK(selected.profileId == audio::kProfileExclusive);
-      REQUIRE(optSelected.has_value());
+      REQUIRE(optSelected);
       CHECK(*optSelected == selected);
     }
   }

@@ -649,26 +649,26 @@ namespace ao::library
                .codec = _codec,
              });
 
-    auto pos = sizeof(TrackHotHeader);
+    auto offset = sizeof(TrackHotHeader);
 
     if (!_tagIds.empty())
     {
       auto const tagBytes = utility::bytes::view(std::span<DictionaryId const>{_tagIds});
-      std::memcpy(out.data() + pos, tagBytes.data(), tagBytes.size());
-      pos += tagBytes.size();
+      std::memcpy(out.data() + offset, tagBytes.data(), tagBytes.size());
+      offset += tagBytes.size();
     }
 
     // Write title
     if (!_title.empty())
     {
-      std::memcpy(out.data() + pos, _title.data(), _title.size());
-      pos += _title.size();
+      std::memcpy(out.data() + offset, _title.data(), _title.size());
+      offset += _title.size();
     }
 
     // Pad to 4 bytes
-    while (pos % 4 != 0)
+    while (offset % 4 != 0)
     {
-      out[pos++] = std::byte{0};
+      out[offset++] = std::byte{0};
     }
   }
 
@@ -767,14 +767,14 @@ namespace ao::library
 
     auto const payloadSize = checkedPayloadBytes(_coverArt.size(), sizeof(CoverArtEntry), "Cover art payload length");
     auto payload = std::vector<std::byte>(payloadSize, std::byte{0});
-    std::size_t pos = 0;
+    std::size_t offset = 0;
 
     for (auto const& cover : _coverArt)
     {
       writePod(std::span<std::byte>{payload},
-               pos,
+               offset,
                CoverArtEntry{.id = cover.resourceId, .type = static_cast<std::uint8_t>(cover.type)});
-      pos += sizeof(CoverArtEntry);
+      offset += sizeof(CoverArtEntry);
     }
 
     appendBlock(TrackColdBlockSlot::CoverArt, std::move(payload));
@@ -846,25 +846,25 @@ namespace ao::library
                                        .valueOffset = static_cast<std::uint16_t>(valueOffset),
                                        .payloadLength = static_cast<std::uint16_t>(payloadSize)});
 
-    auto entryPos = sizeof(CustomMetadataBlockHeader);
-    auto valuePos = valueOffset;
+    auto entryOffset = sizeof(CustomMetadataBlockHeader);
+    auto valueWriteOffset = valueOffset;
 
     for (auto const& [dictId, value] : resolvedPairs)
     {
-      checkedUint16(valuePos, "Custom metadata entry value offset");
+      checkedUint16(valueWriteOffset, "Custom metadata entry value offset");
       writePod(std::span<std::byte>{payload},
-               entryPos,
+               entryOffset,
                CustomMetadataEntry{.keyId = dictId,
-                                   .valueOffset = static_cast<std::uint16_t>(valuePos),
+                                   .valueOffset = static_cast<std::uint16_t>(valueWriteOffset),
                                    .valueLength = static_cast<std::uint16_t>(value.size())});
-      entryPos += sizeof(CustomMetadataEntry);
+      entryOffset += sizeof(CustomMetadataEntry);
 
       if (!value.empty())
       {
-        std::memcpy(payload.data() + valuePos, value.data(), value.size());
+        std::memcpy(payload.data() + valueWriteOffset, value.data(), value.size());
       }
 
-      valuePos += value.size();
+      valueWriteOffset += value.size();
     }
 
     appendBlock(TrackColdBlockSlot::CustomMetadata, std::move(payload));
@@ -872,30 +872,30 @@ namespace ao::library
 
   void TrackBuilder::PreparedCold::assignLayout(std::string_view uri)
   {
-    std::size_t pos = sizeof(TrackColdHeader);
+    std::size_t offset = sizeof(TrackColdHeader);
 
     for (auto const& block : _blocks)
     {
       auto const slotIndex = trackColdBlockSlotIndex(block.slot);
       gsl_Expects(slotIndex < kTrackColdKnownBlockSlotCount);
-      _blockOffsets[slotIndex] = checkedUint16(pos, "Cold block offset");
+      _blockOffsets[slotIndex] = checkedUint16(offset, "Cold block offset");
 
       auto const rawBlockLength = block.payload.size();
       auto const alignedBlockLength = align4(rawBlockLength);
 
-      if (alignedBlockLength < rawBlockLength || alignedBlockLength > kU16Max - pos)
+      if (alignedBlockLength < rawBlockLength || alignedBlockLength > kU16Max - offset)
       {
         detail::throwLibraryError(Error::Code::ValueTooLarge, "Cold block length exceeds uint16_t");
       }
 
-      pos += alignedBlockLength;
+      offset += alignedBlockLength;
     }
 
     auto const uriSize = uri.size();
     _uriLength = checkedUint16(uriSize, "URI length");
-    _uriOffset = checkedUint16(pos, "Cold record URI offset");
+    _uriOffset = checkedUint16(offset, "Cold record URI offset");
 
-    auto const unalignedSize = pos + uriSize;
+    auto const unalignedSize = offset + uriSize;
     auto const recordSize = align4(unalignedSize);
 
     if (recordSize < unalignedSize || recordSize > kU16Max)
@@ -946,34 +946,34 @@ namespace ao::library
                .reserved8 = 0,
              });
 
-    std::size_t pos = sizeof(TrackColdHeader);
+    std::size_t offset = sizeof(TrackColdHeader);
 
     for (auto const& block : _blocks)
     {
-      gsl_Assert(pos == _blockOffsets[trackColdBlockSlotIndex(block.slot)]);
+      gsl_Assert(offset == _blockOffsets[trackColdBlockSlotIndex(block.slot)]);
 
       if (!block.payload.empty())
       {
-        std::memcpy(out.data() + pos, block.payload.data(), block.payload.size());
-        pos += block.payload.size();
+        std::memcpy(out.data() + offset, block.payload.data(), block.payload.size());
+        offset += block.payload.size();
       }
 
-      pos = align4(pos);
+      offset = align4(offset);
     }
 
-    gsl_Assert(pos == _uriOffset);
+    gsl_Assert(offset == _uriOffset);
 
     // Write uri
     if (_uriLength > 0)
     {
-      std::memcpy(out.data() + pos, _uri.data(), _uriLength);
-      pos += _uriLength;
+      std::memcpy(out.data() + offset, _uri.data(), _uriLength);
+      offset += _uriLength;
     }
 
     // Pad to 4 bytes
-    while (pos % 4 != 0)
+    while (offset % 4 != 0)
     {
-      out[pos++] = std::byte{0};
+      out[offset++] = std::byte{0};
     }
   }
 

@@ -48,7 +48,8 @@ namespace ao::gtk::layout
         {
           _dragPtr = Gtk::GestureDrag::create();
           _dragPtr->set_button(GDK_BUTTON_PRIMARY);
-          _dragPtr->signal_drag_begin().connect([this](double posX, double posY) { onDragBegin(posX, posY); });
+          _dragPtr->signal_drag_begin().connect([this](double xPosition, double yPosition)
+                                                { onDragBegin(xPosition, yPosition); });
           _dragPtr->signal_drag_update().connect([this](double offsetX, double offsetY)
                                                  { onDragUpdate(offsetX, offsetY); });
           _dragPtr->signal_drag_end().connect([this](double offsetX, double offsetY) { onDragEnd(offsetX, offsetY); });
@@ -80,14 +81,25 @@ namespace ao::gtk::layout
 
       void addChild(std::string const& id,
                     Gtk::Widget& child,
-                    std::int32_t posX,
-                    std::int32_t posY,
+                    std::int32_t xPosition,
+                    std::int32_t yPosition,
                     std::int32_t width,
                     std::int32_t height,
                     std::int32_t zIndex)
       {
         child.set_parent(*this);
-        _children.push_back({id, &child, posX, posY, width, height, zIndex, _insertCount++, posX, posY, width, height});
+        _children.push_back({id,
+                             &child,
+                             xPosition,
+                             yPosition,
+                             width,
+                             height,
+                             zIndex,
+                             _insertCount++,
+                             xPosition,
+                             yPosition,
+                             width,
+                             height});
       }
 
       void setSelectedChild(std::string const& id)
@@ -159,13 +171,13 @@ namespace ao::gtk::layout
 
           if (orientation == Gtk::Orientation::HORIZONTAL)
           {
-            int const endPosition = child.posX + (child.reqWidth > 0 ? child.reqWidth : childNatural);
+            int const endPosition = child.x + (child.reqWidth > 0 ? child.reqWidth : childNatural);
             natural = std::max(natural, endPosition);
             minimum = std::max(minimum, endPosition);
           }
           else
           {
-            int const endPosition = child.posY + (child.reqHeight > 0 ? child.reqHeight : childNatural);
+            int const endPosition = child.y + (child.reqHeight > 0 ? child.reqHeight : childNatural);
             natural = std::max(natural, endPosition);
             minimum = std::max(minimum, endPosition);
           }
@@ -177,8 +189,8 @@ namespace ao::gtk::layout
         for (auto const& child : _children)
         {
           auto alloc = Gtk::Allocation{};
-          alloc.set_x(child.posX);
-          alloc.set_y(child.posY);
+          alloc.set_x(child.x);
+          alloc.set_y(child.y);
 
           std::int32_t minWidth = 0;
           std::int32_t naturalWidth = 0;
@@ -230,8 +242,8 @@ namespace ao::gtk::layout
             Gtk::Orientation::VERTICAL, width, minHeight, naturalHeight, minBaseline, naturalBaseline);
           int const height = child.reqHeight > 0 ? child.reqHeight : naturalHeight;
 
-          auto const rect = Gdk::Graphene::Rect{static_cast<float>(child.posX),
-                                                static_cast<float>(child.posY),
+          auto const rect = Gdk::Graphene::Rect{static_cast<float>(child.x),
+                                                static_cast<float>(child.y),
                                                 static_cast<float>(width),
                                                 static_cast<float>(height)};
           auto const crPtr = snapshot->append_cairo(rect);
@@ -317,16 +329,16 @@ namespace ao::gtk::layout
           }
 
           auto const rect = uimodel::nudgeAbsoluteCanvasRect(
-            {.x = child.posX, .y = child.posY, .width = child.reqWidth, .height = child.reqHeight},
+            {.x = child.x, .y = child.y, .width = child.reqWidth, .height = child.reqHeight},
             *optDirection,
             _snapToGrid,
             _gridSize);
-          child.posX = rect.x;
-          child.posY = rect.y;
+          child.x = rect.x;
+          child.y = rect.y;
 
           if (_onMoved && !_selectedId.empty())
           {
-            _onMoved(child.id, child.posX, child.posY);
+            _onMoved(child.id, child.x, child.y);
           }
 
           return true;
@@ -335,7 +347,7 @@ namespace ao::gtk::layout
         return false;
       }
 
-      void onDragBegin(double posX, double posY)
+      void onDragBegin(double xPosition, double yPosition)
       {
         _dragChild = nullptr;
         _resizeCorner = uimodel::AbsoluteCanvasResizeCorner::None;
@@ -359,13 +371,13 @@ namespace ao::gtk::layout
           int const height = child.reqHeight > 0 ? child.reqHeight : naturalHeight;
 
           hitItems.push_back({.id = child.id,
-                              .rect = {.x = child.posX, .y = child.posY, .width = width, .height = height},
+                              .rect = {.x = child.x, .y = child.y, .width = width, .height = height},
                               .zIndex = child.zIndex,
                               .insertOrder = child.insertOrder});
         }
 
-        auto const optHit =
-          uimodel::hitTestAbsoluteCanvas(hitItems, static_cast<std::int32_t>(posX), static_cast<std::int32_t>(posY));
+        auto const optHit = uimodel::hitTestAbsoluteCanvas(
+          hitItems, static_cast<std::int32_t>(xPosition), static_cast<std::int32_t>(yPosition));
 
         if (!optHit)
         {
@@ -376,8 +388,8 @@ namespace ao::gtk::layout
         auto const& rect = hitItems[*optHit].rect;
 
         _dragChild = &child;
-        child.startX = child.posX;
-        child.startY = child.posY;
+        child.startX = child.x;
+        child.startY = child.y;
         child.startReqWidth = rect.width;
         child.startReqHeight = rect.height;
 
@@ -385,7 +397,7 @@ namespace ao::gtk::layout
         queue_draw();
 
         _resizeCorner =
-          uimodel::detectAbsoluteCanvasResizeCorner(rect.width, rect.height, posX - child.posX, posY - child.posY);
+          uimodel::detectAbsoluteCanvasResizeCorner(rect.width, rect.height, xPosition - child.x, yPosition - child.y);
       }
 
       void onDragUpdate(double offsetX, double offsetY)
@@ -427,8 +439,8 @@ namespace ao::gtk::layout
                                                                     childNaturalHeight,
                                                                     _snapToGrid,
                                                                     _gridSize);
-          _dragChild->posX = rect.x;
-          _dragChild->posY = rect.y;
+          _dragChild->x = rect.x;
+          _dragChild->y = rect.y;
           _dragChild->reqWidth = rect.width;
           _dragChild->reqHeight = rect.height;
         }
@@ -440,8 +452,8 @@ namespace ao::gtk::layout
                                                                    .height = _dragChild->startReqHeight},
                                                                   offX,
                                                                   offY);
-          _dragChild->posX = rect.x;
-          _dragChild->posY = rect.y;
+          _dragChild->x = rect.x;
+          _dragChild->y = rect.y;
         }
 
         queue_allocate();
@@ -466,19 +478,17 @@ namespace ao::gtk::layout
                                                                   offY,
                                                                   _snapToGrid,
                                                                   _gridSize);
-          _dragChild->posX = rect.x;
-          _dragChild->posY = rect.y;
+          _dragChild->x = rect.x;
+          _dragChild->y = rect.y;
         }
         else
         {
-          auto const rect = uimodel::commitAbsoluteCanvasResizeDrag({.x = _dragChild->posX,
-                                                                     .y = _dragChild->posY,
-                                                                     .width = _dragChild->reqWidth,
-                                                                     .height = _dragChild->reqHeight},
-                                                                    _snapToGrid,
-                                                                    _gridSize);
-          _dragChild->posX = rect.x;
-          _dragChild->posY = rect.y;
+          auto const rect = uimodel::commitAbsoluteCanvasResizeDrag(
+            {.x = _dragChild->x, .y = _dragChild->y, .width = _dragChild->reqWidth, .height = _dragChild->reqHeight},
+            _snapToGrid,
+            _gridSize);
+          _dragChild->x = rect.x;
+          _dragChild->y = rect.y;
           _dragChild->reqWidth = rect.width;
           _dragChild->reqHeight = rect.height;
         }
@@ -488,7 +498,7 @@ namespace ao::gtk::layout
 
         if (_onMoved && !_dragChild->id.empty())
         {
-          _onMoved(_dragChild->id, _dragChild->posX, _dragChild->posY);
+          _onMoved(_dragChild->id, _dragChild->x, _dragChild->y);
         }
 
         _dragChild = nullptr;
@@ -499,8 +509,8 @@ namespace ao::gtk::layout
       {
         std::string id;
         Gtk::Widget* widget;
-        std::int32_t posX;
-        std::int32_t posY;
+        std::int32_t x;
+        std::int32_t y;
         std::int32_t reqWidth;
         std::int32_t reqHeight;
         std::int32_t zIndex;
@@ -537,13 +547,13 @@ namespace ao::gtk::layout
         {
           auto childPtr = ctx.registry.create(ctx, childNode);
 
-          int const posX = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("x", 0));
-          int const posY = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("y", 0));
+          int const xPosition = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("x", 0));
+          int const yPosition = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("y", 0));
           int const width = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("width", -1));
           int const height = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("height", -1));
           int const zIndex = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("zIndex", 0));
 
-          _canvas.addChild(childNode.id, childPtr->widget(), posX, posY, width, height, zIndex);
+          _canvas.addChild(childNode.id, childPtr->widget(), xPosition, yPosition, width, height, zIndex);
           _children.push_back(std::move(childPtr));
         }
 

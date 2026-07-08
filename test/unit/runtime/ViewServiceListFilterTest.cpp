@@ -70,7 +70,7 @@ namespace ao::rt::test
       [&](auto const& ev)
       {
         statusStr = ev.expression;
-        statusHasError = static_cast<bool>(ev.optError);
+        statusHasError = ev.optError.has_value();
       });
 
     auto projView = kInvalidViewId;
@@ -127,8 +127,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - openListInView with active filter preserves filter state",
-            "[runtime][unit][view][filter][list]")
+  TEST_CASE("ViewService - openListInView with active filter preserves filter state", "[runtime][unit][view][filter]")
   {
     auto env = ViewServiceTestEnv{};
     auto const oldTrackId = env.library.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});

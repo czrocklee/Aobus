@@ -65,14 +65,14 @@ namespace ao::gtk
     _clickPtr = Gtk::GestureClick::create();
     _clickPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
     _clickPtr->signal_pressed().connect(
-      [this](std::int32_t, double const xPos, double const yPos)
+      [this](std::int32_t, double const xPosition, double const yPosition)
       {
         if (_watchedWindow == nullptr)
         {
           return;
         }
 
-        if (pressIsInside(_watchedWindow->pick(xPos, yPos)))
+        if (pressIsInside(_watchedWindow->pick(xPosition, yPosition)))
         {
           return;
         }

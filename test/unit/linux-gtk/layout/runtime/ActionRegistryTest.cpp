@@ -20,7 +20,7 @@ namespace ao::gtk::layout::test
   using namespace uimodel;
   using ao::gtk::test::makeRuntime;
 
-  TEST_CASE("ActionRegistry binds and dispatches layout actions", "[gtk][unit][layout][action]")
+  TEST_CASE("ActionRegistry - binds and dispatches layout actions", "[gtk][unit][layout][action]")
   {
     auto registry = ActionRegistry{};
 

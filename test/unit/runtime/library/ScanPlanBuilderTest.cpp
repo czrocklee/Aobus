@@ -209,7 +209,7 @@ namespace ao::rt::test
     CHECK(foundMissing);
   }
 
-  TEST_CASE("ScanPlanBuilder - reports IO errors while scanning", "[runtime][unit][library][scan][error]")
+  TEST_CASE("ScanPlanBuilder - reports IO errors while scanning", "[runtime][unit][library-scan][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -282,7 +282,7 @@ namespace ao::rt::test
     CHECK(plan.items.empty());
   }
 
-  TEST_CASE("ScanPlanBuilder - treats missing roots as fatal", "[runtime][unit][library][scan][error]")
+  TEST_CASE("ScanPlanBuilder - treats missing roots as fatal", "[runtime][unit][library-scan][error]")
   {
     auto const temp = ao::test::TempDir{};
     // Point the library at a music root that does not exist. The database still
@@ -441,7 +441,7 @@ namespace ao::rt::test
     CHECK(plan.items.size() == 4);
   }
 
-  TEST_CASE("ScanPlanBuilder - canonicalizes URI edge cases", "[runtime][unit][library][scan][uri]")
+  TEST_CASE("ScanPlanBuilder - canonicalizes URI edge cases", "[runtime][unit][library-scan][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();

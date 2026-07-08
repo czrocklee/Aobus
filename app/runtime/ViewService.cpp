@@ -96,8 +96,8 @@ namespace ao::rt
     library::MusicLibrary& library;
     ListSourceStore& sources;
 
-    Impl(async::IExecutor& exec, library::MusicLibrary& lib, ListSourceStore& src)
-      : executor{exec}, library{lib}, sources{src}
+    Impl(async::IExecutor& exec, library::MusicLibrary& lib, ListSourceStore& sourceStore)
+      : executor{exec}, library{lib}, sources{sourceStore}
     {
     }
 

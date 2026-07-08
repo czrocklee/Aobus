@@ -33,7 +33,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TagEditController binds tag actions and routes submitted tag mutations", "[gtk][unit][tag]")
+  TEST_CASE("TagEditController - binds tag actions and routes submitted tag mutations", "[gtk][unit][tag]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

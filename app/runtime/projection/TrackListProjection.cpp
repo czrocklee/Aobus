@@ -89,67 +89,67 @@ namespace ao::rt
 
     constexpr std::size_t kArticleAnLength = 3;
 
-    void sortUniquePositions(std::vector<std::size_t>& positions)
+    void sortUniqueRowIndices(std::vector<std::size_t>& rowIndices)
     {
-      std::ranges::sort(positions);
-      positions.erase(std::ranges::unique(positions).begin(), positions.end());
+      std::ranges::sort(rowIndices);
+      rowIndices.erase(std::ranges::unique(rowIndices).begin(), rowIndices.end());
     }
 
     void appendAscendingRanges(boost::container::small_vector<TrackListProjectionDelta, 1>& deltas,
-                               std::vector<std::size_t>& positions,
+                               std::vector<std::size_t>& rowIndices,
                                auto makeDelta)
     {
-      if (positions.empty())
+      if (rowIndices.empty())
       {
         return;
       }
 
-      sortUniquePositions(positions);
+      sortUniqueRowIndices(rowIndices);
 
-      auto start = positions.front();
-      auto prev = start;
+      auto start = rowIndices.front();
+      auto previousRowIndex = start;
 
-      for (auto const pos : positions | std::views::drop(1))
+      for (auto const rowIndex : rowIndices | std::views::drop(1))
       {
-        if (pos == prev + 1)
+        if (rowIndex == previousRowIndex + 1)
         {
-          prev = pos;
+          previousRowIndex = rowIndex;
           continue;
         }
 
-        deltas.push_back(makeDelta(Range{.start = start, .count = prev - start + 1}));
-        start = pos;
-        prev = pos;
+        deltas.push_back(makeDelta(Range{.start = start, .count = previousRowIndex - start + 1}));
+        start = rowIndex;
+        previousRowIndex = rowIndex;
       }
 
-      deltas.push_back(makeDelta(Range{.start = start, .count = prev - start + 1}));
+      deltas.push_back(makeDelta(Range{.start = start, .count = previousRowIndex - start + 1}));
     }
 
     void appendRemovalRangesDescending(boost::container::small_vector<TrackListProjectionDelta, 1>& deltas,
-                                       std::vector<std::size_t>& positions)
+                                       std::vector<std::size_t>& rowIndices)
     {
-      if (positions.empty())
+      if (rowIndices.empty())
       {
         return;
       }
 
-      sortUniquePositions(positions);
-      std::ranges::reverse(positions);
+      sortUniqueRowIndices(rowIndices);
+      std::ranges::reverse(rowIndices);
 
-      auto high = positions.front();
+      auto high = rowIndices.front();
       auto low = high;
 
-      for (auto const pos : positions | std::views::drop(1))
+      for (auto const rowIndex : rowIndices | std::views::drop(1))
       {
-        if (pos + 1 == low)
+        if (rowIndex + 1 == low)
         {
-          low = pos;
+          low = rowIndex;
           continue;
         }
 
         deltas.push_back(ProjectionRemoveRange{Range{.start = low, .count = high - low + 1}});
-        high = pos;
-        low = pos;
+        high = rowIndex;
+        low = rowIndex;
       }
 
       deltas.push_back(ProjectionRemoveRange{Range{.start = low, .count = high - low + 1}});
@@ -627,7 +627,7 @@ namespace ao::rt
     // no per-entry node allocation. Values are plain indices that nobody aliases, so the
     // rehash-on-grow relocation is safe here (unlike the arena-backed views, which stay
     // valid only because the arena bytes never move).
-    boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>> positionIndex;
+    boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>> rowIndexByTrackId;
     std::vector<GroupSection> sections;
     std::uint64_t rev = 0;
     std::vector<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>> subscribers;
@@ -635,7 +635,7 @@ namespace ao::rt
 
     struct PendingMovedEntry final
     {
-      std::size_t oldPos = 0;
+      std::size_t oldRowIndex = 0;
       OrderEntry entry;
     };
 
@@ -675,10 +675,10 @@ namespace ao::rt
           orderIndex.end(), std::make_move_iterator(entries.begin()), std::make_move_iterator(entries.end()));
       }
 
-      rebuildPositionIndex();
+      rebuildRowIndex();
     }
 
-    std::vector<std::size_t> mergeEntriesAndCollectPositions(std::vector<OrderEntry>& entries)
+    std::vector<std::size_t> mergeEntriesAndCollectRowIndices(std::vector<OrderEntry>& entries)
     {
       auto ids = std::vector<TrackId>{};
       ids.reserve(entries.size());
@@ -695,18 +695,18 @@ namespace ao::rt
         buildGroupSections();
       }
 
-      auto positions = std::vector<std::size_t>{};
-      positions.reserve(ids.size());
+      auto rowIndices = std::vector<std::size_t>{};
+      rowIndices.reserve(ids.size());
 
       for (auto const id : ids)
       {
-        if (auto const optPos = findPosition(id); optPos)
+        if (auto const optRowIndex = findRowIndex(id); optRowIndex)
         {
-          positions.push_back(*optPos);
+          rowIndices.push_back(*optRowIndex);
         }
       }
 
-      return positions;
+      return rowIndices;
     }
 
     void rebuildGroups()
@@ -733,8 +733,8 @@ namespace ao::rt
       }
     }
 
-    Impl(ViewId vid, TrackSource& src, library::MusicLibrary& lib)
-      : viewId{vid}, source{src}, library{lib}
+    Impl(ViewId vid, TrackSource& trackSource, library::MusicLibrary& lib)
+      : viewId{vid}, source{trackSource}, library{lib}
     {
       rebuildOrderIndex();
     }
@@ -792,7 +792,7 @@ namespace ao::rt
     {
       auto const timer = rt::ScopedTimer{"TrackListProjection::rebuildOrderIndex"};
       orderIndex.clear();
-      positionIndex.clear();
+      rowIndexByTrackId.clear();
       sections.clear();
 
       // A full rebuild discards every container that holds an arena-backed view, so this is
@@ -826,24 +826,24 @@ namespace ao::rt
         std::ranges::sort(orderIndex, std::ref(comparator));
       }
 
-      rebuildPositionIndex();
+      rebuildRowIndex();
       buildGroupSections();
     }
 
-    void rebuildPositionIndex()
+    void rebuildRowIndex()
     {
-      positionIndex.clear();
-      positionIndex.reserve(orderIndex.size());
+      rowIndexByTrackId.clear();
+      rowIndexByTrackId.reserve(orderIndex.size());
 
       for (auto const& [idx, entry] : std::ranges::views::enumerate(orderIndex))
       {
-        positionIndex[entry.trackId] = static_cast<std::size_t>(idx);
+        rowIndexByTrackId[entry.trackId] = static_cast<std::size_t>(idx);
       }
     }
 
-    std::optional<std::size_t> findPosition(TrackId trackId) const
+    std::optional<std::size_t> findRowIndex(TrackId trackId) const
     {
-      if (auto it = positionIndex.find(trackId); it != positionIndex.end())
+      if (auto it = rowIndexByTrackId.find(trackId); it != rowIndexByTrackId.end())
       {
         return it->second;
       }
@@ -921,22 +921,22 @@ namespace ao::rt
       return static_cast<std::size_t>(it - sections.begin());
     }
 
-    void insertGroupSectionRow(std::size_t pos)
+    void insertGroupSectionRow(std::size_t rowIndex)
     {
       if (groupBy == TrackGroupKey::None)
       {
         return;
       }
 
-      auto const& entry = orderIndex[pos];
-      auto const leftSame = pos > 0 && orderIndex[pos - 1].groupKey == entry.groupKey;
-      auto const rightSame = pos + 1 < orderIndex.size() && orderIndex[pos + 1].groupKey == entry.groupKey;
-      auto const optLeftSection = leftSame ? findSectionIndexAt(pos - 1) : std::optional<std::size_t>{};
-      auto const optRightSection = rightSame ? findSectionIndexAt(pos) : std::optional<std::size_t>{};
+      auto const& entry = orderIndex[rowIndex];
+      auto const leftSame = rowIndex > 0 && orderIndex[rowIndex - 1].groupKey == entry.groupKey;
+      auto const rightSame = rowIndex + 1 < orderIndex.size() && orderIndex[rowIndex + 1].groupKey == entry.groupKey;
+      auto const optLeftSection = leftSame ? findSectionIndexAt(rowIndex - 1) : std::optional<std::size_t>{};
+      auto const optRightSection = rightSame ? findSectionIndexAt(rowIndex) : std::optional<std::size_t>{};
 
       for (auto& section : sections)
       {
-        if (section.rows.start >= pos)
+        if (section.rows.start >= rowIndex)
         {
           ++section.rows.start;
         }
@@ -951,44 +951,44 @@ namespace ao::rt
       if (optRightSection)
       {
         auto& section = sections[*optRightSection];
-        section.rows.start = pos;
+        section.rows.start = rowIndex;
         ++section.rows.count;
         assignSectionMetadata(section, entry);
         return;
       }
 
-      auto const insertAt = sectionInsertionIndex(pos);
-      sections.insert(sections.begin() + static_cast<std::ptrdiff_t>(insertAt), makeSection(pos, entry));
+      auto const insertAt = sectionInsertionIndex(rowIndex);
+      sections.insert(sections.begin() + static_cast<std::ptrdiff_t>(insertAt), makeSection(rowIndex, entry));
     }
 
-    void removeGroupSectionRow(std::size_t pos)
+    void removeGroupSectionRow(std::size_t rowIndex)
     {
       if (groupBy == TrackGroupKey::None)
       {
         return;
       }
 
-      auto const optSection = findSectionIndexAt(pos);
+      auto const optSection = findSectionIndexAt(rowIndex);
 
       if (!optSection)
       {
         return;
       }
 
-      auto const sectionIdx = *optSection;
-      auto& section = sections[sectionIdx];
-      auto shiftFrom = sectionIdx + 1;
+      auto const sectionIndex = *optSection;
+      auto& section = sections[sectionIndex];
+      auto shiftFrom = sectionIndex + 1;
 
       if (section.rows.count == 1)
       {
-        sections.erase(sections.begin() + static_cast<std::ptrdiff_t>(sectionIdx));
-        shiftFrom = sectionIdx;
+        sections.erase(sections.begin() + static_cast<std::ptrdiff_t>(sectionIndex));
+        shiftFrom = sectionIndex;
       }
       else
       {
-        if (section.rows.start == pos)
+        if (section.rows.start == rowIndex)
         {
-          assignSectionMetadata(section, orderIndex[pos + 1]);
+          assignSectionMetadata(section, orderIndex[rowIndex + 1]);
         }
 
         --section.rows.count;
@@ -1000,89 +1000,90 @@ namespace ao::rt
       }
     }
 
-    void updateGroupSectionRow(std::size_t pos, OrderEntry entry)
+    void updateGroupSectionRow(std::size_t rowIndex, OrderEntry entry)
     {
       if (groupBy == TrackGroupKey::None)
       {
-        orderIndex[pos] = std::move(entry);
+        orderIndex[rowIndex] = std::move(entry);
         return;
       }
 
-      if (auto const oldGroupKey = orderIndex[pos].groupKey; oldGroupKey == entry.groupKey)
+      if (auto const oldGroupKey = orderIndex[rowIndex].groupKey; oldGroupKey == entry.groupKey)
       {
-        orderIndex[pos] = std::move(entry);
+        orderIndex[rowIndex] = std::move(entry);
 
-        if (auto const optSection = findSectionIndexAt(pos); optSection && sections[*optSection].rows.start == pos)
+        if (auto const optSection = findSectionIndexAt(rowIndex);
+            optSection && sections[*optSection].rows.start == rowIndex)
         {
-          assignSectionMetadata(sections[*optSection], orderIndex[pos]);
+          assignSectionMetadata(sections[*optSection], orderIndex[rowIndex]);
         }
 
         return;
       }
 
-      removeGroupSectionRow(pos);
-      orderIndex[pos] = std::move(entry);
-      insertGroupSectionRow(pos);
+      removeGroupSectionRow(rowIndex);
+      orderIndex[rowIndex] = std::move(entry);
+      insertGroupSectionRow(rowIndex);
     }
 
     std::size_t insertBuiltEntry(OrderEntry entry)
     {
-      std::size_t pos = 0;
+      std::size_t rowIndex = 0;
 
       if (comparator)
       {
         auto it = std::ranges::lower_bound(orderIndex, entry, std::ref(comparator));
-        pos = static_cast<std::size_t>(it - orderIndex.begin());
+        rowIndex = static_cast<std::size_t>(it - orderIndex.begin());
         orderIndex.insert(it, std::move(entry));
       }
       else
       {
-        pos = orderIndex.size();
+        rowIndex = orderIndex.size();
         orderIndex.push_back(std::move(entry));
       }
 
-      insertGroupSectionRow(pos);
+      insertGroupSectionRow(rowIndex);
 
-      for (std::size_t idx = pos; idx < orderIndex.size(); ++idx)
+      for (std::size_t idx = rowIndex; idx < orderIndex.size(); ++idx)
       {
-        positionIndex[orderIndex[idx].trackId] = idx;
+        rowIndexByTrackId[orderIndex[idx].trackId] = idx;
       }
 
-      return pos;
+      return rowIndex;
     }
 
-    void eraseEntryAt(std::size_t pos)
+    void eraseEntryAt(std::size_t rowIndex)
     {
-      auto const id = orderIndex[pos].trackId;
-      removeGroupSectionRow(pos);
-      orderIndex.erase(orderIndex.begin() + static_cast<std::ptrdiff_t>(pos));
-      positionIndex.erase(id);
+      auto const id = orderIndex[rowIndex].trackId;
+      removeGroupSectionRow(rowIndex);
+      orderIndex.erase(orderIndex.begin() + static_cast<std::ptrdiff_t>(rowIndex));
+      rowIndexByTrackId.erase(id);
 
-      for (std::size_t idx = pos; idx < orderIndex.size(); ++idx)
+      for (std::size_t idx = rowIndex; idx < orderIndex.size(); ++idx)
       {
-        positionIndex[orderIndex[idx].trackId] = idx;
+        rowIndexByTrackId[orderIndex[idx].trackId] = idx;
       }
     }
 
-    void eraseEntriesAtPositions(std::vector<std::size_t>& positions)
+    void eraseEntriesAtRowIndices(std::vector<std::size_t>& rowIndices)
     {
-      if (positions.empty())
+      if (rowIndices.empty())
       {
         return;
       }
 
-      sortUniquePositions(positions);
+      sortUniqueRowIndices(rowIndices);
 
       auto retained = std::vector<OrderEntry>{};
-      retained.reserve(orderIndex.size() - positions.size());
+      retained.reserve(orderIndex.size() - rowIndices.size());
 
-      std::size_t removeIdx = 0;
+      std::size_t removeIndex = 0;
 
       for (std::size_t idx = 0; idx < orderIndex.size(); ++idx)
       {
-        if (removeIdx < positions.size() && positions[removeIdx] == idx)
+        if (removeIndex < rowIndices.size() && rowIndices[removeIndex] == idx)
         {
-          ++removeIdx;
+          ++removeIndex;
           continue;
         }
 
@@ -1090,7 +1091,7 @@ namespace ao::rt
       }
 
       orderIndex = std::move(retained);
-      rebuildPositionIndex();
+      rebuildRowIndex();
 
       if (groupBy != TrackGroupKey::None)
       {
@@ -1113,7 +1114,7 @@ namespace ao::rt
 
       auto entry = buildOrderEntry(trackId, *optView, dict);
       auto const oldSections = sections;
-      auto const pos = insertBuiltEntry(std::move(entry));
+      auto const rowIndex = insertBuiltEntry(std::move(entry));
 
       if (groupBy != TrackGroupKey::None)
       {
@@ -1129,7 +1130,7 @@ namespace ao::rt
 
       publishDelta(TrackListProjectionDeltaBatch{
         .revision = ++rev,
-        .deltas = {ProjectionInsertRange{Range{.start = pos, .count = 1}}},
+        .deltas = {ProjectionInsertRange{Range{.start = rowIndex, .count = 1}}},
       });
     }
 
@@ -1170,13 +1171,13 @@ namespace ao::rt
       if (groupBy != TrackGroupKey::None)
       {
         auto const oldSections = sections;
-        auto insertPositions = mergeEntriesAndCollectPositions(sortedNew);
+        auto insertRowIndices = mergeEntriesAndCollectRowIndices(sortedNew);
 
         if (sectionDescriptorsEqual(oldSections, sections))
         {
           auto batch = TrackListProjectionDeltaBatch{.revision = ++rev};
           appendAscendingRanges(batch.deltas,
-                                insertPositions,
+                                insertRowIndices,
                                 [](Range range) { return TrackListProjectionDelta{ProjectionInsertRange{range}}; });
           publishDelta(batch);
           return;
@@ -1200,16 +1201,16 @@ namespace ao::rt
 
     void removeEntry(TrackId trackId)
     {
-      auto const optPos = findPosition(trackId);
+      auto const optRowIndex = findRowIndex(trackId);
 
-      if (!optPos)
+      if (!optRowIndex)
       {
         return;
       }
 
-      std::size_t const pos = *optPos;
+      std::size_t const rowIndex = *optRowIndex;
       auto const oldSections = sections;
-      eraseEntryAt(pos);
+      eraseEntryAt(rowIndex);
 
       if (groupBy != TrackGroupKey::None)
       {
@@ -1225,7 +1226,7 @@ namespace ao::rt
 
       publishDelta(TrackListProjectionDeltaBatch{
         .revision = ++rev,
-        .deltas = {ProjectionRemoveRange{Range{.start = pos, .count = 1}}},
+        .deltas = {ProjectionRemoveRange{Range{.start = rowIndex, .count = 1}}},
       });
     }
 
@@ -1242,31 +1243,31 @@ namespace ao::rt
         return;
       }
 
-      auto positions = std::vector<std::size_t>{};
-      positions.reserve(ids.size());
+      auto rowIndices = std::vector<std::size_t>{};
+      rowIndices.reserve(ids.size());
 
       for (auto const id : ids)
       {
-        if (auto optPos = findPosition(id); optPos)
+        if (auto optRowIndex = findRowIndex(id); optRowIndex)
         {
-          positions.push_back(*optPos);
+          rowIndices.push_back(*optRowIndex);
         }
       }
 
-      if (positions.empty())
+      if (rowIndices.empty())
       {
         return;
       }
 
       auto const oldSections = sections;
-      eraseEntriesAtPositions(positions);
+      eraseEntriesAtRowIndices(rowIndices);
 
       if (groupBy != TrackGroupKey::None)
       {
         if (sectionDescriptorsEqual(oldSections, sections))
         {
           auto batch = TrackListProjectionDeltaBatch{.revision = ++rev};
-          appendRemovalRangesDescending(batch.deltas, positions);
+          appendRemovalRangesDescending(batch.deltas, rowIndices);
           publishDelta(batch);
           return;
         }
@@ -1280,15 +1281,15 @@ namespace ao::rt
 
     void updateEntry(TrackId trackId)
     {
-      auto optPos = findPosition(trackId);
+      auto optRowIndex = findRowIndex(trackId);
 
-      if (!optPos)
+      if (!optRowIndex)
       {
         return;
       }
 
-      auto oldPos = *optPos;
-      auto& oldEntry = orderIndex[oldPos];
+      auto oldRowIndex = *optRowIndex;
+      auto& oldEntry = orderIndex[oldRowIndex];
 
       auto const txn = library.readTransaction();
       auto const reader = library.tracks().reader(txn);
@@ -1308,16 +1309,17 @@ namespace ao::rt
         if (auto const oldSections = sections;
             comparator && comparator(oldEntry, newEntry) != comparator(newEntry, oldEntry))
         {
-          eraseEntryAt(oldPos);
+          eraseEntryAt(oldRowIndex);
 
-          if (auto const newPos = insertBuiltEntry(std::move(newEntry)); sectionDescriptorsEqual(oldSections, sections))
+          if (auto const newRowIndex = insertBuiltEntry(std::move(newEntry));
+              sectionDescriptorsEqual(oldSections, sections))
           {
             publishDelta(TrackListProjectionDeltaBatch{
               .revision = ++rev,
               .deltas =
                 {
-                  ProjectionRemoveRange{Range{.start = oldPos, .count = 1}},
-                  ProjectionInsertRange{Range{.start = newPos, .count = 1}},
+                  ProjectionRemoveRange{Range{.start = oldRowIndex, .count = 1}},
+                  ProjectionInsertRange{Range{.start = newRowIndex, .count = 1}},
                 },
             });
             return;
@@ -1325,13 +1327,13 @@ namespace ao::rt
         }
         else
         {
-          updateGroupSectionRow(oldPos, std::move(newEntry));
+          updateGroupSectionRow(oldRowIndex, std::move(newEntry));
 
           if (sectionDescriptorsEqual(oldSections, sections))
           {
             publishDelta(TrackListProjectionDeltaBatch{
               .revision = ++rev,
-              .deltas = {ProjectionUpdateRange{Range{.start = oldPos, .count = 1}}},
+              .deltas = {ProjectionUpdateRange{Range{.start = oldRowIndex, .count = 1}}},
             });
             return;
           }
@@ -1356,7 +1358,7 @@ namespace ao::rt
           oldEntry.keys = testEntry.keys;
           publishDelta(TrackListProjectionDeltaBatch{
             .revision = ++rev,
-            .deltas = {ProjectionUpdateRange{Range{.start = oldPos, .count = 1}}},
+            .deltas = {ProjectionUpdateRange{Range{.start = oldRowIndex, .count = 1}}},
           });
           return;
         }
@@ -1369,7 +1371,7 @@ namespace ao::rt
       oldEntry.keys = newKeys;
       publishDelta(TrackListProjectionDeltaBatch{
         .revision = ++rev,
-        .deltas = {ProjectionUpdateRange{Range{.start = oldPos, .count = 1}}},
+        .deltas = {ProjectionUpdateRange{Range{.start = oldRowIndex, .count = 1}}},
       });
     }
 
@@ -1384,8 +1386,8 @@ namespace ao::rt
 
       auto movedEntries = std::vector<PendingMovedEntry>{};
       movedEntries.reserve(ids.size());
-      auto updatePositions = std::vector<std::size_t>{};
-      updatePositions.reserve(ids.size());
+      auto updateRowIndices = std::vector<std::size_t>{};
+      updateRowIndices.reserve(ids.size());
       auto const oldSections = sections;
 
       for (auto const id : ids)
@@ -1395,9 +1397,9 @@ namespace ao::rt
           continue;
         }
 
-        auto const optPos = findPosition(id);
+        auto const optRowIndex = findRowIndex(id);
 
-        if (!optPos)
+        if (!optRowIndex)
         {
           continue;
         }
@@ -1412,45 +1414,45 @@ namespace ao::rt
 
         auto newEntry = buildOrderEntry(id, *optView, dict);
 
-        if (auto& oldEntry = orderIndex[*optPos];
+        if (auto& oldEntry = orderIndex[*optRowIndex];
             comparator && comparator(oldEntry, newEntry) != comparator(newEntry, oldEntry))
         {
-          movedEntries.push_back(PendingMovedEntry{.oldPos = *optPos, .entry = std::move(newEntry)});
+          movedEntries.push_back(PendingMovedEntry{.oldRowIndex = *optRowIndex, .entry = std::move(newEntry)});
           continue;
         }
 
-        updateGroupSectionRow(*optPos, std::move(newEntry));
-        updatePositions.push_back(*optPos);
+        updateGroupSectionRow(*optRowIndex, std::move(newEntry));
+        updateRowIndices.push_back(*optRowIndex);
       }
 
-      if (updatePositions.empty() && movedEntries.empty())
+      if (updateRowIndices.empty() && movedEntries.empty())
       {
         return;
       }
 
       if (!movedEntries.empty())
       {
-        auto removePositions = std::vector<std::size_t>{};
-        removePositions.reserve(movedEntries.size());
+        auto removeRowIndices = std::vector<std::size_t>{};
+        removeRowIndices.reserve(movedEntries.size());
 
         auto sortedNew = std::vector<OrderEntry>{};
         sortedNew.reserve(movedEntries.size());
 
         for (auto& moved : movedEntries)
         {
-          removePositions.push_back(moved.oldPos);
+          removeRowIndices.push_back(moved.oldRowIndex);
           sortedNew.push_back(std::move(moved.entry));
         }
 
-        eraseEntriesAtPositions(removePositions);
-        auto insertPositions = mergeEntriesAndCollectPositions(sortedNew);
+        eraseEntriesAtRowIndices(removeRowIndices);
+        auto insertRowIndices = mergeEntriesAndCollectRowIndices(sortedNew);
 
-        if (updatePositions.empty() && sectionDescriptorsEqual(oldSections, sections))
+        if (updateRowIndices.empty() && sectionDescriptorsEqual(oldSections, sections))
         {
           auto batch = TrackListProjectionDeltaBatch{.revision = ++rev};
-          appendRemovalRangesDescending(batch.deltas, removePositions);
+          appendRemovalRangesDescending(batch.deltas, removeRowIndices);
           appendAscendingRanges(batch.deltas,
-                                insertPositions,
+                                insertRowIndices,
                                 [](Range range) { return TrackListProjectionDelta{ProjectionInsertRange{range}}; });
           publishDelta(batch);
           return;
@@ -1461,7 +1463,7 @@ namespace ao::rt
       {
         auto batch = TrackListProjectionDeltaBatch{.revision = ++rev};
         appendAscendingRanges(batch.deltas,
-                              updatePositions,
+                              updateRowIndices,
                               [](Range range) { return TrackListProjectionDelta{ProjectionUpdateRange{range}}; });
         publishDelta(batch);
         return;
@@ -1477,31 +1479,31 @@ namespace ao::rt
                                     bool publishReset,
                                     TrackListProjectionDeltaBatch& batch)
     {
-      auto removePositions = std::vector<std::size_t>{};
-      removePositions.reserve(movedEntries.size());
+      auto removeRowIndices = std::vector<std::size_t>{};
+      removeRowIndices.reserve(movedEntries.size());
 
       auto sortedNew = std::vector<OrderEntry>{};
       sortedNew.reserve(movedEntries.size());
 
       for (auto& moved : movedEntries)
       {
-        removePositions.push_back(moved.oldPos);
+        removeRowIndices.push_back(moved.oldRowIndex);
         sortedNew.push_back(std::move(moved.entry));
       }
 
       if (publishReset)
       {
-        sortUniquePositions(removePositions);
-        std::ranges::reverse(removePositions);
+        sortUniqueRowIndices(removeRowIndices);
+        std::ranges::reverse(removeRowIndices);
       }
       else
       {
-        appendRemovalRangesDescending(batch.deltas, removePositions);
+        appendRemovalRangesDescending(batch.deltas, removeRowIndices);
       }
 
-      for (auto const pos : removePositions)
+      for (auto const rowIndex : removeRowIndices)
       {
-        orderIndex.erase(orderIndex.begin() + static_cast<std::ptrdiff_t>(pos));
+        orderIndex.erase(orderIndex.begin() + static_cast<std::ptrdiff_t>(rowIndex));
       }
 
       std::ranges::sort(sortedNew, std::ref(comparator));
@@ -1511,23 +1513,23 @@ namespace ao::rt
       std::ranges::merge(orderIndex, sortedNew, std::back_inserter(merged), std::ref(comparator));
 
       orderIndex = std::move(merged);
-      rebuildPositionIndex();
+      rebuildRowIndex();
 
-      auto insertPositions = std::vector<std::size_t>{};
-      insertPositions.reserve(sortedNew.size());
+      auto insertRowIndices = std::vector<std::size_t>{};
+      insertRowIndices.reserve(sortedNew.size());
 
       for (auto const& entry : sortedNew)
       {
-        if (auto const optPos = findPosition(entry.trackId); optPos)
+        if (auto const optRowIndex = findRowIndex(entry.trackId); optRowIndex)
         {
-          insertPositions.push_back(*optPos);
+          insertRowIndices.push_back(*optRowIndex);
         }
       }
 
       if (!publishReset)
       {
         appendAscendingRanges(batch.deltas,
-                              insertPositions,
+                              insertRowIndices,
                               [](Range range) { return TrackListProjectionDelta{ProjectionInsertRange{range}}; });
       }
     }
@@ -1541,8 +1543,8 @@ namespace ao::rt
       auto processed = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
       processed.reserve(ids.size());
 
-      auto updatePositions = std::vector<std::size_t>{};
-      updatePositions.reserve(ids.size());
+      auto updateRowIndices = std::vector<std::size_t>{};
+      updateRowIndices.reserve(ids.size());
 
       auto movedEntries = std::vector<PendingMovedEntry>{};
       movedEntries.reserve(ids.size());
@@ -1554,9 +1556,9 @@ namespace ao::rt
           continue;
         }
 
-        auto const optPos = findPosition(id);
+        auto const optRowIndex = findRowIndex(id);
 
-        if (!optPos)
+        if (!optRowIndex)
         {
           continue;
         }
@@ -1571,12 +1573,12 @@ namespace ao::rt
         auto newKeys = SortKeys{};
         fillSortKeys(newKeys, *optView, dict, sortBy, normCache, stringArena, normScratch);
 
-        auto& oldEntry = orderIndex[*optPos];
+        auto& oldEntry = orderIndex[*optRowIndex];
 
         if (!comparator)
         {
           oldEntry.keys = newKeys;
-          updatePositions.push_back(*optPos);
+          updateRowIndices.push_back(*optRowIndex);
           continue;
         }
 
@@ -1585,25 +1587,25 @@ namespace ao::rt
         if (comparator(oldEntry, testEntry) == comparator(testEntry, oldEntry))
         {
           oldEntry.keys = newKeys;
-          updatePositions.push_back(*optPos);
+          updateRowIndices.push_back(*optRowIndex);
           continue;
         }
 
-        movedEntries.push_back(PendingMovedEntry{.oldPos = *optPos, .entry = std::move(testEntry)});
+        movedEntries.push_back(PendingMovedEntry{.oldRowIndex = *optRowIndex, .entry = std::move(testEntry)});
       }
 
-      if (updatePositions.empty() && movedEntries.empty())
+      if (updateRowIndices.empty() && movedEntries.empty())
       {
         return;
       }
 
-      auto const publishReset = !updatePositions.empty() && !movedEntries.empty();
+      auto const publishReset = !updateRowIndices.empty() && !movedEntries.empty();
       auto batch = TrackListProjectionDeltaBatch{.revision = ++rev};
 
       if (!publishReset)
       {
         appendAscendingRanges(batch.deltas,
-                              updatePositions,
+                              updateRowIndices,
                               [](Range range) { return TrackListProjectionDelta{ProjectionUpdateRange{range}}; });
       }
 
@@ -1694,7 +1696,7 @@ namespace ao::rt
       _implPtr->sortBy = std::move(spec.sortBy);
       _implPtr->comparator = buildComparator(_implPtr->sortBy);
       std::ranges::reverse(_implPtr->orderIndex);
-      _implPtr->rebuildPositionIndex();
+      _implPtr->rebuildRowIndex();
 
       _implPtr->publishDelta(TrackListProjectionDeltaBatch{
         .revision = ++_implPtr->rev,
@@ -1733,7 +1735,7 @@ namespace ao::rt
 
   std::optional<std::size_t> TrackListProjection::indexOf(TrackId trackId) const noexcept
   {
-    if (auto const it = _implPtr->positionIndex.find(trackId); it != _implPtr->positionIndex.end())
+    if (auto const it = _implPtr->rowIndexByTrackId.find(trackId); it != _implPtr->rowIndexByTrackId.end())
     {
       return it->second;
     }

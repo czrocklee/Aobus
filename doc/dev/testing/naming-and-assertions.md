@@ -47,6 +47,12 @@ Recommended layer tags:
 - `[audio]`
 - `[tag]`
 - `[utility]`
+- `[cli]`
+- `[council]`
+- `[lmdb]`
+- `[media]`
+- `[perf]`
+- `[tui]`
 
 Recommended type tags:
 
@@ -70,6 +76,17 @@ tag second, and optional subsystem tags follow. Keep the total at 3–4 tags.
 
 Use singular form for all tags: `[component]` not `[components]`, `[shortcut]`
 not `[shortcuts]`.
+
+Use kebab case for multi-word tags: `[track-store]` not `[track_store]` or
+`[trackstore]`.
+
+Use the advisory audit when reviewing naming/tag cleanup or checking a focused
+directory:
+
+```bash
+./ao test-audit test/unit/query
+./ao test-audit --fail-on-issue test/unit/query/ParserTest.cpp
+```
 
 ## Test structure
 
@@ -103,7 +120,7 @@ Weak assertions:
 
 ```cpp
 REQUIRE(result);
-CHECK(optView.has_value());
+CHECK(optView);
 CHECK(count == 3);
 ```
 
@@ -114,7 +131,7 @@ REQUIRE(result);
 CHECK(result->id == expectedId);
 CHECK(result->state == ExpectedState::Ready);
 
-REQUIRE(optView.has_value());
+REQUIRE(optView);
 CHECK(optView->metadata().title() == "After");
 CHECK(optView->property().duration() == std::chrono::minutes{3});
 
@@ -134,7 +151,7 @@ Use `REQUIRE` for preconditions that make later checks meaningless:
 
 ```cpp
 auto optView = reader.get(id);
-REQUIRE(optView.has_value());
+REQUIRE(optView);
 CHECK(optView->metadata().title() == "After");
 ```
 

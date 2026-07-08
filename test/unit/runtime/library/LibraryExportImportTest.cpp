@@ -91,7 +91,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml round trip preserves tracks, covers, and lists", "[runtime][workflow][import-export][yaml]")
+  TEST_CASE("LibraryYaml - round trip preserves tracks, covers, and lists", "[runtime][workflow][import-export][yaml]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
@@ -241,7 +241,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml restore preserves classical metadata fields", "[runtime][workflow][import-export][yaml]")
+  TEST_CASE("LibraryYaml - restore preserves classical metadata fields", "[runtime][workflow][import-export][yaml]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
@@ -325,8 +325,8 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml merge updates existing tracks and adds new tracks",
-            "[runtime][workflow][import-export][yaml][merge]")
+  TEST_CASE("LibraryYaml - merge updates existing tracks and adds new tracks",
+            "[runtime][workflow][import-export][merge]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -400,8 +400,8 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml import reports counts and dry-run leaves target unchanged",
-            "[runtime][workflow][import-export][yaml][dryrun]")
+  TEST_CASE("LibraryYaml - import reports counts and dry-run leaves target unchanged",
+            "[runtime][workflow][import-export][dry-run]")
   {
     SECTION("restore into empty target")
     {
@@ -492,8 +492,8 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml import canonicalizes track URIs and recovers file sizes",
-            "[runtime][workflow][import-export][yaml][uri]")
+  TEST_CASE("LibraryYaml - import canonicalizes track URIs and recovers file sizes",
+            "[runtime][workflow][import-export][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -566,7 +566,7 @@ library:
     REQUIRE(optList->tracks().size() == 3);
   }
 
-  TEST_CASE("LibraryYaml import accepts metadata and delta-mode YAML examples",
+  TEST_CASE("LibraryYaml - import accepts metadata and delta-mode YAML examples",
             "[runtime][workflow][import-export][yaml]")
   {
     auto const temp = ao::test::TempDir{};
@@ -637,7 +637,7 @@ library:
     REQUIRE(resultDelta);
   }
 
-  TEST_CASE("LibraryYaml metadata import clears absent classical fields from file tags",
+  TEST_CASE("LibraryYaml - metadata import clears absent classical fields from file tags",
             "[runtime][regression][import-export][yaml]")
   {
     auto const temp = ao::test::TempDir{};

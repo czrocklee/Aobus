@@ -142,9 +142,9 @@ namespace ao::gtk::test
 
     workflow.scan();
 
-    REQUIRE(pumpGtkEventsUntil(
-      [&fixture, &optCompletedCount]
-      { return optCompletedCount.has_value() && !fixture.runtime().notifications().feed().entries.empty(); }));
+    REQUIRE(
+      pumpGtkEventsUntil([&fixture, &optCompletedCount]
+                         { return optCompletedCount && !fixture.runtime().notifications().feed().entries.empty(); }));
 
     CHECK(optCompletedCount == 0U);
     CHECK(mutationCallbackCount == 0);
@@ -175,7 +175,7 @@ namespace ao::gtk::test
     REQUIRE(pumpGtkEventsUntil(
       [&fixture, &mutationCallbackCount, &optCompletedCount, &progressEvents]
       {
-        return progressEvents.size() == 4 && optCompletedCount.has_value() && mutationCallbackCount == 1 &&
+        return progressEvents.size() == 4 && optCompletedCount && mutationCallbackCount == 1 &&
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete");
       }));
     CHECK(optCompletedCount == 1U);
@@ -200,7 +200,7 @@ namespace ao::gtk::test
     REQUIRE(pumpGtkEventsUntil(
       [&fixture, &optCompletedCount, &progressEvents]
       {
-        return progressEvents.size() == 1 && optCompletedCount.has_value() &&
+        return progressEvents.size() == 1 && optCompletedCount &&
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library is up to date");
       }));
 
@@ -336,7 +336,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("LibraryImportExportWorkflow - scan reports error-only plans without up-to-date success",
-            "[gtk][unit][workflow][scan][error]")
+            "[gtk][unit][workflow][scan]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

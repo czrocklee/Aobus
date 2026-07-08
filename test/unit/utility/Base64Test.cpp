@@ -22,7 +22,7 @@ namespace ao::utility::test
       // Decoding a valid (empty) input yields an engaged optional holding an empty vector,
       // distinct from the nullopt returned on malformed input.
       auto const optDecoded = base64Decode(encoded);
-      REQUIRE(optDecoded.has_value());
+      REQUIRE(optDecoded);
       CHECK(optDecoded->empty());
     }
 
@@ -35,7 +35,7 @@ namespace ao::utility::test
       CHECK(encoded == "SGVsbG8gQW9idXMh");
 
       auto const optDecoded = base64Decode(encoded);
-      REQUIRE(optDecoded.has_value());
+      REQUIRE(optDecoded);
       auto const result = std::string_view{reinterpret_cast<char const*>(optDecoded->data()), optDecoded->size()};
       CHECK(result == input);
     }
@@ -61,7 +61,7 @@ namespace ao::utility::test
 
       auto const encoded = base64Encode(data);
       auto const optDecoded = base64Decode(encoded);
-      REQUIRE(optDecoded.has_value());
+      REQUIRE(optDecoded);
       CHECK(optDecoded->size() == data.size());
       CHECK(optDecoded == data);
     }
@@ -69,14 +69,14 @@ namespace ao::utility::test
     SECTION("Invalid characters in decode")
     {
       auto const optInvalid = base64Decode("SGVsbG8h@#$");
-      CHECK_FALSE(optInvalid.has_value());
+      CHECK_FALSE(optInvalid);
     }
 
     SECTION("Ignore whitespace in decode")
     {
       auto const* const input = "SGVsbG8g\nQW9idXMh"; // Hello Aobus!
       auto const optDecoded = base64Decode(input);
-      REQUIRE(optDecoded.has_value());
+      REQUIRE(optDecoded);
       auto const result = std::string_view{reinterpret_cast<char const*>(optDecoded->data()), optDecoded->size()};
       CHECK(result == "Hello Aobus!");
     }

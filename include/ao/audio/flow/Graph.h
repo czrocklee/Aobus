@@ -53,7 +53,7 @@ namespace ao::audio::flow
   struct Connection final
   {
     std::string sourceId{};
-    std::string destId{};
+    std::string destinationId{};
     bool isActive = true;
 
     bool operator==(Connection const&) const = default;

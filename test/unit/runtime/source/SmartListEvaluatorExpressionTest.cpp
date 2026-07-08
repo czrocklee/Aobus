@@ -13,7 +13,7 @@
 namespace ao::rt::test
 {
   TEST_CASE("SmartListEvaluator - empty expression matches all tracks and maintains ID order",
-            "[runtime][unit][source][smart-list][expression]")
+            "[runtime][unit][smart-list][expression]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto first = testLibrary.addTrack(makeSmartListSpec("first", 2020));
@@ -43,7 +43,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("SmartListEvaluator - invalid expression remains empty while sibling list receives inserts",
-            "[runtime][unit][source][smart-list][expression]")
+            "[runtime][unit][smart-list][expression]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto first = testLibrary.addTrack(makeSmartListSpec("first", 2022));
@@ -88,7 +88,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("SmartListEvaluator - setting a valid expression clears invalid expression error",
-            "[runtime][unit][source][smart-list][expression]")
+            "[runtime][unit][smart-list][expression]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto first = testLibrary.addTrack(makeSmartListSpec("first", 2022));

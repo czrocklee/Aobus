@@ -128,10 +128,12 @@ namespace ao::query
       return &*iter;
     }
 
-    detail::CompletionToken const* tokenContaining(std::span<detail::CompletionToken const> tokens, std::size_t pos)
+    detail::CompletionToken const* tokenContaining(std::span<detail::CompletionToken const> tokens,
+                                                   std::size_t cursorPosition)
     {
-      auto iter = std::ranges::find_if(
-        tokens, [pos](detail::CompletionToken token) { return token.begin <= pos && pos < token.end; });
+      auto iter = std::ranges::find_if(tokens,
+                                       [cursorPosition](detail::CompletionToken token)
+                                       { return token.begin <= cursorPosition && cursorPosition < token.end; });
 
       if (iter == tokens.end())
       {
@@ -169,9 +171,9 @@ namespace ao::query
       return nullptr;
     }
 
-    std::size_t skipWhitespaceBefore(std::span<detail::CompletionToken const> tokens, std::size_t pos)
+    std::size_t skipWhitespaceBefore(std::span<detail::CompletionToken const> tokens, std::size_t cursorPosition)
     {
-      auto cursor = pos;
+      auto cursor = cursorPosition;
 
       for (;;)
       {
@@ -406,7 +408,7 @@ namespace ao::query
       // match) leaves parsed empty and degrades to "not a completed expression".
       auto const parsed = parse(expression);
 
-      return parsed.has_value() && detail::isPredicateExpression(*parsed);
+      return parsed && detail::isPredicateExpression(*parsed);
     }
 
     bool isOperatorCompletionPrefixToken(std::string_view text, detail::CompletionToken token)

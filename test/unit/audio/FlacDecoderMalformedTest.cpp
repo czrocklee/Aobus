@@ -17,7 +17,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("FlacDecoderSession - malformed stream handling", "[audio][unit][flac][error][malformed]")
+  TEST_CASE("FlacDecoderSession - malformed stream handling", "[audio][unit][flac][malformed]")
   {
     auto const fixture = requireAudioFixture("basic_metadata.flac");
     auto const source = readFileBytes(fixture);

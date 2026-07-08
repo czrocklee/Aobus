@@ -63,8 +63,8 @@ TEST_CASE("AlsaGraphRegistry - published negotiated format reaches stream and si
   registry.publish({.routeAnchor = "hw:0,0", .optFormat = negotiatedFormat});
 
   REQUIRE(receivedGraph.nodes.size() == 2);
-  REQUIRE(receivedGraph.nodes[0].optFormat.has_value());
-  REQUIRE(receivedGraph.nodes[1].optFormat.has_value());
+  REQUIRE(receivedGraph.nodes[0].optFormat);
+  REQUIRE(receivedGraph.nodes[1].optFormat);
   CHECK(*receivedGraph.nodes[0].optFormat == negotiatedFormat);
   CHECK(*receivedGraph.nodes[1].optFormat == negotiatedFormat);
 }

@@ -12,7 +12,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator matches bitrate comparisons", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches bitrate comparisons", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("@bitrate >= 320000");
     auto compiler = QueryCompiler{};
@@ -28,7 +28,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches sample-rate comparisons", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches sample-rate comparisons", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("@sampleRate >= 48000");
     auto compiler = QueryCompiler{};
@@ -44,7 +44,8 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator evaluates duration bitrate and sample-rate unit constants", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - evaluates duration bitrate and sample-rate unit constants",
+            "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("@duration >= 3m && @bitrate >= 256k && @sampleRate >= 44.1k");
     auto compiler = QueryCompiler{};
@@ -64,7 +65,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator scales duration and bitrate units before comparison", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - scales duration and bitrate units before comparison", "[query][unit][plan-evaluator]")
   {
     auto const spec = TrackSpec{
       .duration = std::chrono::minutes{3} + std::chrono::seconds{5}, // 3m 5s
@@ -80,7 +81,7 @@ namespace ao::query::test
     CHECK(evaluator.evaluateFull(compileOk(compiler, parseOk("@bitrate = 320k")), track.view()) == true);
   }
 
-  TEST_CASE("PlanEvaluator matches AAC codec expressions", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches AAC codec expressions", "[query][unit][plan-evaluator]")
   {
     auto spec = TrackSpec{};
     spec.codec = AudioCodec::Aac;

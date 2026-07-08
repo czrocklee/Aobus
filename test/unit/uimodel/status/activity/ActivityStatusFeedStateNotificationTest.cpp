@@ -12,7 +12,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ActivityStatusFeedState projects compact notifications and dismissal state",
+  TEST_CASE("ActivityStatusFeedState - projects compact notifications and dismissal state",
             "[uimodel][unit][status][activity]")
   {
     auto feedState = ActivityStatusFeedState{};

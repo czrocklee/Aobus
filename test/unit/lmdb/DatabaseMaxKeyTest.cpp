@@ -11,7 +11,7 @@
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("Database::Reader - maxKey returns zero for empty databases", "[lmdb][unit][database][reader][max-key]")
+  TEST_CASE("Database::Reader - maxKey returns zero for empty databases", "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -25,7 +25,7 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 0);
   }
 
-  TEST_CASE("Database::Reader - maxKey after append", "[lmdb][unit][database][reader][max-key]")
+  TEST_CASE("Database::Reader - maxKey after append", "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -44,7 +44,7 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == *id2);
   }
 
-  TEST_CASE("Database::Reader - maxKey tracks explicitly created keys", "[lmdb][unit][database][reader][max-key]")
+  TEST_CASE("Database::Reader - maxKey tracks explicitly created keys", "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -63,7 +63,7 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 10);
   }
 
-  TEST_CASE("Database::Reader - maxKey after delete", "[lmdb][unit][database][reader][max-key]")
+  TEST_CASE("Database::Reader - maxKey after delete", "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -89,7 +89,7 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 2);
   }
 
-  TEST_CASE("Database::Reader - maxKey after deleting middle element", "[lmdb][unit][database][reader][max-key]")
+  TEST_CASE("Database::Reader - maxKey after deleting middle element", "[lmdb][unit][database-reader][max-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});

@@ -20,7 +20,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("ExecutionPlan - compiles simple expressions", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles simple expressions", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("$artist = Bach");
     auto compiler = QueryCompiler{};
@@ -30,7 +30,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - compiles constant true expressions", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles constant true expressions", "[query][unit][execution-plan]")
   {
     // Note: matchesAll is not automatically set - it's a hint for optimization
     // The plan should still compile a constant true expression
@@ -42,7 +42,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.instructions.empty());
   }
 
-  TEST_CASE("ExecutionPlan - compiles metadata fields", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles metadata fields", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("$title = 'Test'");
     auto compiler = QueryCompiler{};
@@ -65,7 +65,7 @@ namespace ao::query::test
     CHECK(hasEq == true);
   }
 
-  TEST_CASE("ExecutionPlan - compiles property fields", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles property fields", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("@duration > 180000");
     auto compiler = QueryCompiler{};
@@ -88,7 +88,7 @@ namespace ao::query::test
     CHECK(hasGt == true);
   }
 
-  TEST_CASE("ExecutionPlan - compiles codec constants", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles codec constants", "[query][unit][execution-plan]")
   {
     auto compiler = QueryCompiler{};
     auto plan = compileOk(compiler, parseOk("@codec = WAV"));
@@ -99,14 +99,14 @@ namespace ao::query::test
     CHECK(std::cmp_equal(it->constValue, audioCodecStorageValue(AudioCodec::Wav)));
   }
 
-  TEST_CASE("ExecutionPlan - rejects unsupported codec constants", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - rejects unsupported codec constants", "[query][unit][execution-plan]")
   {
     auto compiler = QueryCompiler{};
 
     std::ignore = compileError(compiler, parseOk("@codec = OPUS"));
   }
 
-  TEST_CASE("ExecutionPlan - compiles logical and", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles logical and", "[query][unit][execution-plan]")
   {
     // Use && for logical and to ensure it's parsed correctly
     auto expr = parseOk("$artist = Bach && $genre = Classical");
@@ -127,7 +127,7 @@ namespace ao::query::test
     CHECK(hasAnd == true);
   }
 
-  TEST_CASE("ExecutionPlan - compiles logical or", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles logical or", "[query][unit][execution-plan]")
   {
     // Use || for logical or to ensure it's parsed correctly
     auto expr = parseOk("$artist = Bach || $artist = Mozart");
@@ -148,7 +148,7 @@ namespace ao::query::test
     CHECK(hasOr == true);
   }
 
-  TEST_CASE("ExecutionPlan - compiles logical not", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles logical not", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("not #favorite");
     auto compiler = QueryCompiler{};
@@ -168,7 +168,7 @@ namespace ao::query::test
     CHECK(hasNot == true);
   }
 
-  TEST_CASE("ExecutionPlan - compiles existence tests", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles existence tests", "[query][unit][execution-plan]")
   {
     auto compiler = QueryCompiler{};
 
@@ -218,7 +218,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - compiles relational operators", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles relational operators", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("$year < 2000");
     auto compiler = QueryCompiler{};
@@ -255,14 +255,14 @@ namespace ao::query::test
     CHECK(hasLe == true);
   }
 
-  TEST_CASE("ExecutionPlan - rejects add operators", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - rejects add operators", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("$title + $artist");
     auto compiler = QueryCompiler{};
     std::ignore = compileError(compiler, expr);
   }
 
-  TEST_CASE("ExecutionPlan - compiles boolean false to constant zero", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles boolean false to constant zero", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("false");
     auto compiler = QueryCompiler{};
@@ -273,7 +273,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - rejects invalid AST nodes", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - rejects invalid AST nodes", "[query][unit][execution-plan]")
   {
     auto compiler = QueryCompiler{};
 

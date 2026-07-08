@@ -87,15 +87,15 @@ namespace ao::query::detail
         previous[idx] = idx;
       }
 
-      for (std::size_t lhsIdx = 0; lhsIdx < lhs.size(); ++lhsIdx)
+      for (std::size_t lhsIndex = 0; lhsIndex < lhs.size(); ++lhsIndex)
       {
-        current[0] = lhsIdx + 1;
+        current[0] = lhsIndex + 1;
 
-        for (std::size_t rhsIdx = 0; rhsIdx < rhs.size(); ++rhsIdx)
+        for (std::size_t rhsIndex = 0; rhsIndex < rhs.size(); ++rhsIndex)
         {
-          auto const substitutionCost = lowerAscii(lhs[lhsIdx]) == lowerAscii(rhs[rhsIdx]) ? 0U : 1U;
-          current[rhsIdx + 1] =
-            std::min({previous[rhsIdx + 1] + 1, current[rhsIdx] + 1, previous[rhsIdx] + substitutionCost});
+          auto const substitutionCost = lowerAscii(lhs[lhsIndex]) == lowerAscii(rhs[rhsIndex]) ? 0U : 1U;
+          current[rhsIndex + 1] =
+            std::min({previous[rhsIndex + 1] + 1, current[rhsIndex] + 1, previous[rhsIndex] + substitutionCost});
         }
 
         previous.swap(current);

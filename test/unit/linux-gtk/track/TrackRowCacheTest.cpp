@@ -20,7 +20,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackRowCache loads cached rows from runtime track data", "[gtk][unit][track][row-cache]")
+  TEST_CASE("TrackRowCache - loads cached rows from runtime track data", "[gtk][unit][track][row-cache]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.row_cache_test");
     auto fixture = GtkRuntimeFixture{};
@@ -154,7 +154,7 @@ namespace ao::gtk::test
       auto provider = TrackRowCache{runtime.library()};
 
       auto const optUri = provider.uriPath(id);
-      REQUIRE(optUri.has_value());
+      REQUIRE(optUri);
       CHECK(optUri->string() == "/tmp/test.flac");
 
       CHECK(provider.coverArtId(id) == kInvalidResourceId);

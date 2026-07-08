@@ -163,7 +163,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("MainWindowCoordinator - restores playback session as idle queue state",
-            "[gtk][unit][main-window][playback][session]")
+            "[gtk][unit][main-window-playback][session]")
   {
     auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -203,7 +203,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("MainWindowCoordinator - persists playback session from playback events",
-            "[gtk][unit][main-window][playback][session]")
+            "[gtk][unit][main-window-playback][session]")
   {
     auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

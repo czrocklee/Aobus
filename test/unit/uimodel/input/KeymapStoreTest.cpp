@@ -20,7 +20,7 @@ namespace ao::uimodel::test
     KeyChord chord(std::string const& text)
     {
       auto const optChord = KeyChord::parse(text);
-      REQUIRE(optChord.has_value());
+      REQUIRE(optChord);
       return *optChord;
     }
 

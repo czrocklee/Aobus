@@ -105,9 +105,9 @@ namespace ao::gtk
       return std::nullopt;
     }
 
-    if (auto const optIdx = _projectionPtr->indexOf(trackId); optIdx)
+    if (auto const optIndex = _projectionPtr->indexOf(trackId); optIndex)
     {
-      return _projectionPtr->groupIndexAt(*optIdx);
+      return _projectionPtr->groupIndexAt(*optIndex);
     }
 
     return std::nullopt;
@@ -210,23 +210,23 @@ namespace ao::gtk
 
   void TrackListModel::applyInsertRange(rt::ProjectionInsertRange const& delta)
   {
-    auto const pos = static_cast<::guint>(delta.range.start);
+    auto const rowPosition = static_cast<::guint>(delta.range.start);
     auto const count = static_cast<::guint>(delta.range.count);
     _modelSize += count;
-    notifyInsert(pos, count);
+    notifyInsert(rowPosition, count);
   }
 
   void TrackListModel::applyRemoveRange(rt::ProjectionRemoveRange const& delta)
   {
-    auto const pos = static_cast<::guint>(delta.range.start);
+    auto const rowPosition = static_cast<::guint>(delta.range.start);
     auto const count = static_cast<::guint>(delta.range.count);
     _modelSize -= count;
-    notifyRemove(pos, count);
+    notifyRemove(rowPosition, count);
   }
 
   void TrackListModel::applyUpdateRange(rt::ProjectionUpdateRange const& delta)
   {
-    auto const pos = static_cast<::guint>(delta.range.start);
+    auto const rowPosition = static_cast<::guint>(delta.range.start);
     auto const count = static_cast<::guint>(delta.range.count);
 
     for (auto const idx : std::views::iota(delta.range.start, delta.range.start + delta.range.count))
@@ -234,7 +234,7 @@ namespace ao::gtk
       _provider->invalidate(_projectionPtr->trackIdAt(idx));
     }
 
-    notifyUpdate(pos, count);
+    notifyUpdate(rowPosition, count);
   }
 
   void TrackListModel::notifyReset(::guint oldSize, ::guint newSize)

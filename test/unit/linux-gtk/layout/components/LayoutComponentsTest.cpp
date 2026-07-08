@@ -14,8 +14,8 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("Standard layout registry creates status and semantic components",
-            "[gtk][unit][layout][component][registry]")
+  TEST_CASE("LayoutComponents - standard layout registry creates status and semantic components",
+            "[gtk][unit][layout-component][registry]")
   {
     auto fixture = LayoutRuntimeFixture{};
 

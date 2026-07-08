@@ -569,11 +569,11 @@ namespace ao::gtk
 
     _context.editMode = true;
     _context.onNodeMoved = [weakDialogPtr = std::weak_ptr{_editorDialogPtr}](
-                             std::string const& nodeId, std::int32_t posX, std::int32_t posY)
+                             std::string const& nodeId, std::int32_t xPosition, std::int32_t yPosition)
     {
       if (auto const sharedDialogPtr = weakDialogPtr.lock(); sharedDialogPtr != nullptr)
       {
-        sharedDialogPtr->updateNodePosition(nodeId, posX, posY);
+        sharedDialogPtr->updateNodePosition(nodeId, xPosition, yPosition);
       }
     };
 

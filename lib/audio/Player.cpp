@@ -295,8 +295,8 @@ namespace ao::audio
         },
       .connections =
         {
-          flow::Connection{.sourceId = "ao-source", .destId = "ao-decoder", .isActive = true},
-          flow::Connection{.sourceId = "ao-decoder", .destId = "ao-engine", .isActive = true},
+          flow::Connection{.sourceId = "ao-source", .destinationId = "ao-decoder", .isActive = true},
+          flow::Connection{.sourceId = "ao-decoder", .destinationId = "ao-engine", .isActive = true},
         },
     };
 
@@ -323,7 +323,7 @@ namespace ao::audio
 
     if (!streamNodeId.empty())
     {
-      mergedGraph.connections.push_back({.sourceId = "ao-engine", .destId = streamNodeId, .isActive = true});
+      mergedGraph.connections.push_back({.sourceId = "ao-engine", .destinationId = streamNodeId, .isActive = true});
     }
 
     qualityResult = analyzeAudioQuality(mergedGraph);

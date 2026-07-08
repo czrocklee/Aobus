@@ -42,7 +42,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("Layout component state file round-trips entries", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutComponentState - file round-trips entries", "[uimodel][unit][layout][component]")
   {
     auto const node = splitNode();
     auto original = stateDocFor(node);
@@ -60,7 +60,7 @@ namespace ao::uimodel::test
     CHECK(decoded.components.at("main-paned").state.at("positionPercent").asDouble() == 0.42);
   }
 
-  TEST_CASE("Layout component state resolver validates versions type and baseline",
+  TEST_CASE("LayoutComponentState - resolver validates versions type and baseline",
             "[uimodel][unit][layout][component]")
   {
     auto node = splitNode();
@@ -69,7 +69,7 @@ namespace ao::uimodel::test
     SECTION("matching state resolves")
     {
       auto const optResolved = resolveComponentState(stateDoc, node);
-      REQUIRE(optResolved.has_value());
+      REQUIRE(optResolved);
       CHECK(optResolved->state.at("positionPercent").asDouble() == 0.42);
     }
 
@@ -104,7 +104,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("Layout component baseline hash ignores non-semantic document changes",
+  TEST_CASE("LayoutComponentState - layout component baseline hash ignores non-semantic document changes",
             "[uimodel][unit][layout][component]")
   {
     SECTION("equivalent numeric spellings hash the same")
@@ -137,7 +137,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("Layout component state YAML decode handles corrupt files", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutComponentState - YAML decode handles corrupt files", "[uimodel][unit][layout][component]")
   {
     SECTION("malformed state root is rejected")
     {
@@ -176,7 +176,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("Layout component state pruning removes invalid entries", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutComponentState - pruning removes invalid entries", "[uimodel][unit][layout][component]")
   {
     auto liveNode = splitNode("live-split");
     auto doc = LayoutDocument{};

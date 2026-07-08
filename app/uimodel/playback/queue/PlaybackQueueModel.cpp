@@ -304,10 +304,10 @@ namespace ao::uimodel
 
     if (_queueStatePtr->currentIndex > 0)
     {
-      auto const prevIndex = _queueStatePtr->currentIndex - 1;
+      auto const previousIndex = _queueStatePtr->currentIndex - 1;
 
       for (auto [idx, trackId] :
-           _queueStatePtr->trackIds | std::views::take(prevIndex + 1) | std::views::enumerate | std::views::reverse)
+           _queueStatePtr->trackIds | std::views::take(previousIndex + 1) | std::views::enumerate | std::views::reverse)
       {
         std::ignore = trackId;
 

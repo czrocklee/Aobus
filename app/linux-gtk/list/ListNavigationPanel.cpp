@@ -187,15 +187,15 @@ namespace ao::gtk
     auto clickControllerPtr = Gtk::GestureClick::create();
     clickControllerPtr->set_button(GDK_BUTTON_SECONDARY);
     clickControllerPtr->signal_pressed().connect(
-      [this, listItem, rowBox](std::int32_t /*nPress*/, double xPos, double yPos)
+      [this, listItem, rowBox](std::int32_t /*nPress*/, double xPosition, double yPosition)
       {
         if (auto const position = listItem->get_position(); position != kInvalidListPosition)
         {
           _listSelectionModelPtr->set_selected(position);
         }
 
-        auto optPoint =
-          rowBox->compute_point(_listView, Gdk::Graphene::Point{static_cast<float>(xPos), static_cast<float>(yPos)});
+        auto optPoint = rowBox->compute_point(
+          _listView, Gdk::Graphene::Point{static_cast<float>(xPosition), static_cast<float>(yPosition)});
 
         if (!optPoint)
         {

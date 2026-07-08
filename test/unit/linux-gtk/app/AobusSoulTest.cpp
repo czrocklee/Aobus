@@ -15,7 +15,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("AobusSoul renders widget state and applies presentation setters", "[gtk][unit][app][soul]")
+  TEST_CASE("AobusSoul - renders widget state and applies presentation setters", "[gtk][unit][app][soul]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

@@ -13,7 +13,7 @@
 
 namespace ao::cli::test
 {
-  TEST_CASE("throwCommandError(Error) preserves the original error", "[cli][unit][error]")
+  TEST_CASE("throwCommandError - preserves the original error", "[cli][unit][error]")
   {
     auto const origin = std::source_location::current();
     auto const error = Error{.code = Error::Code::IoError, .message = "propagated failure", .location = origin};
@@ -34,7 +34,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("throwCommandError(Error, format) preserves code and source location", "[cli][unit][error]")
+  TEST_CASE("throwCommandError - preserves code and source location", "[cli][unit][error]")
   {
     auto const origin = std::source_location::current();
     auto const error = Error{.code = Error::Code::IoError, .message = "disk full", .location = origin};
@@ -53,7 +53,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("throwCommandError(code, message) captures the call site", "[cli][unit][error]")
+  TEST_CASE("throwCommandError - captures the call site", "[cli][unit][error]")
   {
     auto const here = std::source_location::current();
 

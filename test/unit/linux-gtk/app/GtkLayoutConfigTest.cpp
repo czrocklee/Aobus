@@ -15,7 +15,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("GtkLayoutConfig persists column layout preferences", "[gtk][unit][app][config]")
+  TEST_CASE("GtkLayoutConfig - persists column layout preferences", "[gtk][unit][app][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};

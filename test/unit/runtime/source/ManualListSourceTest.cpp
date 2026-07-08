@@ -16,7 +16,7 @@ namespace ao::rt::test
   // Construction
   // =============================================================================
   TEST_CASE("ManualListSource - empty source starts without tracks or upstream source",
-            "[runtime][unit][source][manual-list][construction]")
+            "[runtime][unit][manual-list][construction]")
   {
     auto mls = ManualListSource{};
 
@@ -26,7 +26,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - construction from ListView copies tracks without upstream source",
-            "[runtime][unit][source][manual-list][construction]")
+            "[runtime][unit][manual-list][construction]")
   {
     auto lv = ListViewOwner{{TrackId{10}, TrackId{20}, TrackId{30}}};
     auto mls = ManualListSource{lv.view()};
@@ -39,7 +39,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - construction from empty ListView creates empty list",
-            "[runtime][unit][source][manual-list][construction]")
+            "[runtime][unit][manual-list][construction]")
   {
     auto lv = ListViewOwner{{}};
     auto mls = ManualListSource{lv.view()};
@@ -49,7 +49,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - construction with upstream source attaches as observer",
-            "[runtime][unit][source][manual-list][construction]")
+            "[runtime][unit][manual-list][construction]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -77,7 +77,7 @@ namespace ao::rt::test
   // =============================================================================
   // TrackSource queries
   // =============================================================================
-  TEST_CASE("ManualListSource - size returns number of manual tracks", "[runtime][unit][source][manual-list][query]")
+  TEST_CASE("ManualListSource - size returns number of manual tracks", "[runtime][unit][manual-list][query]")
   {
     auto mls = ManualListSource{};
 
@@ -91,7 +91,7 @@ namespace ao::rt::test
     CHECK(mls.size() == 3);
   }
 
-  TEST_CASE("ManualListSource - trackIdAt returns IDs in list order", "[runtime][unit][source][manual-list][query]")
+  TEST_CASE("ManualListSource - trackIdAt returns IDs in list order", "[runtime][unit][manual-list][query]")
   {
     auto lv = ListViewOwner{{TrackId{100}, TrackId{200}, TrackId{300}}};
     auto mls = ManualListSource{lv.view()};
@@ -101,8 +101,7 @@ namespace ao::rt::test
     CHECK(mls.trackIdAt(2) == TrackId{300});
   }
 
-  TEST_CASE("ManualListSource - indexOf returns local index for member track",
-            "[runtime][unit][source][manual-list][query]")
+  TEST_CASE("ManualListSource - indexOf returns local index for member track", "[runtime][unit][manual-list][query]")
   {
     auto lv = ListViewOwner{{TrackId{5}, TrackId{10}, TrackId{15}}};
     auto mls = ManualListSource{lv.view()};
@@ -113,7 +112,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - indexOf returns nullopt for non-members and empty lists",
-            "[runtime][unit][source][manual-list][query]")
+            "[runtime][unit][manual-list][query]")
   {
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
     auto mls = ManualListSource{lv.view()};
@@ -124,8 +123,7 @@ namespace ao::rt::test
     CHECK(emptyMls.indexOf(TrackId{1}) == std::nullopt);
   }
 
-  TEST_CASE("ManualListSource - contains distinguishes members from non-members",
-            "[runtime][unit][source][manual-list][query]")
+  TEST_CASE("ManualListSource - contains distinguishes members from non-members", "[runtime][unit][manual-list][query]")
   {
     auto lv = ListViewOwner{{TrackId{42}, TrackId{43}}};
     auto mls = ManualListSource{lv.view()};
@@ -140,7 +138,7 @@ namespace ao::rt::test
   // ListView reload
   // =============================================================================
   TEST_CASE("ManualListSource - reload replaces tracks when no upstream source exists",
-            "[runtime][unit][source][manual-list][reload]")
+            "[runtime][unit][manual-list][reload]")
   {
     auto lv1 = ListViewOwner{{TrackId{1}, TrackId{2}}};
     auto mls = ManualListSource{lv1.view()};
@@ -154,8 +152,7 @@ namespace ao::rt::test
     CHECK(mls.trackIdAt(2) == TrackId{30});
   }
 
-  TEST_CASE("ManualListSource - reload filters tracks against upstream source",
-            "[runtime][unit][source][manual-list][reload]")
+  TEST_CASE("ManualListSource - reload filters tracks against upstream source", "[runtime][unit][manual-list][reload]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -173,7 +170,7 @@ namespace ao::rt::test
     CHECK(mls.trackIdAt(1) == TrackId{3});
   }
 
-  TEST_CASE("ManualListSource - reload notifies observers with reset", "[runtime][unit][source][manual-list][reload]")
+  TEST_CASE("ManualListSource - reload notifies observers with reset", "[runtime][unit][manual-list][reload]")
   {
     auto lv1 = ListViewOwner{{TrackId{7}, TrackId{8}}};
     auto mls = ManualListSource{lv1.view()};
@@ -193,7 +190,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - reload from empty view clears list and notifies reset",
-            "[runtime][unit][source][manual-list][reload]")
+            "[runtime][unit][manual-list][reload]")
   {
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
     auto mls = ManualListSource{lv.view()};
@@ -211,8 +208,7 @@ namespace ao::rt::test
     mls.detach(&spy);
   }
 
-  TEST_CASE("ManualListSource - reload re-filters after upstream removals",
-            "[runtime][unit][source][manual-list][reload]")
+  TEST_CASE("ManualListSource - reload re-filters after upstream removals", "[runtime][unit][manual-list][reload]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});
@@ -231,7 +227,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ManualListSource - reload filters all tracks absent from upstream source",
-            "[runtime][unit][source][manual-list][reload]")
+            "[runtime][unit][manual-list][reload]")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{1});

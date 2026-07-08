@@ -72,14 +72,14 @@ namespace ao::lmdb::test
     SECTION("Existing key returns data")
     {
       auto const optData = reader.get(42);
-      REQUIRE(optData.has_value());
+      REQUIRE(optData);
       REQUIRE(utility::bytes::stringView(*optData) == "answer");
     }
 
     SECTION("Missing key returns nullopt")
     {
       auto const optData = reader.get(999);
-      REQUIRE_FALSE(optData.has_value());
+      REQUIRE_FALSE(optData);
     }
   }
 

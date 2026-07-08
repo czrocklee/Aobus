@@ -316,9 +316,9 @@ namespace ao::gtk::layout::track_field_grid
   {
     _outsideClickPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
     _outsideClickPtr->signal_pressed().connect(
-      [this](std::int32_t, double const xPos, double const yPos)
+      [this](std::int32_t, double const xPosition, double const yPosition)
       {
-        if (auto* const target = _parentWindow.pick(xPos, yPos);
+        if (auto* const target = _parentWindow.pick(xPosition, yPosition);
             _activeEditor != nullptr && !isDescendantOf(target, *_activeEditor))
         {
           _activeEditor->stopEditing(true);

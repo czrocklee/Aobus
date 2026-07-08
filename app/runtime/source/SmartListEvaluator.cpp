@@ -326,11 +326,11 @@ namespace ao::rt
       }
     }
 
-    for (std::size_t listIdx = 0; listIdx < lists.size(); ++listIdx)
+    for (std::size_t listIndex = 0; listIndex < lists.size(); ++listIndex)
     {
-      std::ranges::sort(nextMembers[listIdx]);
+      std::ranges::sort(nextMembers[listIndex]);
       // NOLINTNEXTLINE(misc-include-cleaner)
-      lists[listIdx]->_members = std::flat_set{std::sorted_unique, std::move(nextMembers[listIdx])};
+      lists[listIndex]->_members = std::flat_set{std::sorted_unique, std::move(nextMembers[listIndex])};
     }
   }
 

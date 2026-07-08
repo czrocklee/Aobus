@@ -43,15 +43,15 @@ namespace ao::query::detail
     {
       auto const quote = text[quoteBegin];
 
-      for (auto pos = quoteBegin + 1; pos < text.size(); ++pos)
+      for (auto offset = quoteBegin + 1; offset < text.size(); ++offset)
       {
-        if (auto const ch = text[pos]; ch == '\\')
+        if (auto const ch = text[offset]; ch == '\\')
         {
           // An invalid or dangling escape makes the whole quoted literal unterminated,
           // so treat it as a PartialTail and do not let a later quote close it.
-          if (pos + 1 < text.size() && isStringEscapeChar(text[pos + 1]))
+          if (offset + 1 < text.size() && isStringEscapeChar(text[offset + 1]))
           {
-            ++pos;
+            ++offset;
           }
           else
           {
@@ -60,7 +60,7 @@ namespace ao::query::detail
         }
         else if (ch == quote)
         {
-          return pos;
+          return offset;
         }
       }
 
@@ -109,9 +109,9 @@ namespace ao::query::detail
       return !isQueryIdentifierChar(text[begin + 1]);
     }
 
-    constexpr std::size_t offsetFrom(std::string_view text, char const* pos)
+    constexpr std::size_t offsetFrom(std::string_view text, char const* address)
     {
-      return static_cast<std::size_t>(pos - text.data());
+      return static_cast<std::size_t>(address - text.data());
     }
 
     template<typename Scanner, typename Rule>

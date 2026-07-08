@@ -10,7 +10,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("OutputDeviceListItems expose GTK item identity and active state", "[gtk][unit][playback][output]")
+  TEST_CASE("OutputDeviceListItems - expose GTK item identity and active state", "[gtk][unit][playback][output]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

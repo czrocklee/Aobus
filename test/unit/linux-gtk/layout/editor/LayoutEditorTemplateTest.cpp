@@ -22,7 +22,8 @@ namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel;
 
-  TEST_CASE("Built-in layout templates expose expected component structure", "[gtk][unit][layout][editor]")
+  TEST_CASE("LayoutEditorTemplate - built-in layout templates expose expected component structure",
+            "[gtk][unit][layout][editor]")
   {
     SECTION("getBuiltInTemplates returns all 8 built-ins")
     {

@@ -9,7 +9,7 @@ using namespace ao::uimodel;
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackFilterResolver - Quick Search Terms", "[uimodel][unit][filter]")
+  TEST_CASE("TrackFilterResolver - resolves quick search terms", "[uimodel][unit][filter]")
   {
     SECTION("Empty filter")
     {
@@ -49,7 +49,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackFilterResolver - Complex Expressions", "[uimodel][unit][filter]")
+  TEST_CASE("TrackFilterResolver - resolves complex expressions", "[uimodel][unit][filter]")
   {
     SECTION("Expression starting with $")
     {

@@ -65,7 +65,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("TrackBuilder - serializes empty builders", "[library][unit][track][builder][serialization]")
+  TEST_CASE("TrackBuilder - serializes empty builders", "[library][unit][track-builder][serialization]")
   {
     auto builder = TrackBuilder::createNew();
     auto const [hotData, coldData] = serializeTestTrack(builder);
@@ -75,7 +75,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("TrackBuilder - serializes cold records without extension blocks",
-            "[library][unit][track][builder][serialization]")
+            "[library][unit][track-builder][serialization]")
   {
     auto context = TrackSerializationContext{};
 
@@ -109,7 +109,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackBuilder - serializes strings into hot payloads", "[library][unit][track][builder][serialization]")
+  TEST_CASE("TrackBuilder - serializes strings into hot payloads", "[library][unit][track-builder][serialization]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Hello World").year(2021);
@@ -128,7 +128,7 @@ namespace ao::library::test
     CHECK(std::strncmp(payloadStart, "Hello World", 11) == 0);
   }
 
-  TEST_CASE("TrackBuilder - serialize writes hot header fields", "[library][unit][track][builder][serialization]")
+  TEST_CASE("TrackBuilder - serialize writes hot header fields", "[library][unit][track-builder][serialization]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().year(1999);
@@ -142,7 +142,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("TrackBuilder - serializes strings with special characters",
-            "[library][unit][track][builder][serialization]")
+            "[library][unit][track-builder][serialization]")
   {
     auto builder = TrackBuilder::createNew();
     auto const* title = "Test: \"Quotes\" & 'Apostrophes'";
@@ -155,7 +155,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("TrackBuilder - serialization is stable across repeated calls",
-            "[library][unit][track][builder][serialization]")
+            "[library][unit][track-builder][serialization]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().title("Test");
@@ -168,7 +168,7 @@ namespace ao::library::test
     CHECK(hotData1 == hotData2);
   }
 
-  TEST_CASE("TrackBuilder - serialize writes cold header fields", "[library][unit][track][builder][serialization]")
+  TEST_CASE("TrackBuilder - serialize writes cold header fields", "[library][unit][track-builder][serialization]")
   {
     auto context = TrackSerializationContext{};
     auto builder = TrackBuilder::createNew();
@@ -200,7 +200,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("TrackBuilder - writes extension blocks in deterministic order",
-            "[library][unit][track][builder][serialization]")
+            "[library][unit][track-builder][serialization]")
   {
     auto context = TrackSerializationContext{};
     auto builder = TrackBuilder::createNew();
@@ -225,7 +225,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("TrackBuilder - writes custom block logical length and aligned padding",
-            "[library][unit][track][builder][serialization]")
+            "[library][unit][track-builder][serialization]")
   {
     auto context = TrackSerializationContext{};
     auto builder = TrackBuilder::createNew();
@@ -270,7 +270,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("TrackBuilder - writes classical block for standalone new classical fields",
-            "[library][unit][track][builder][serialization]")
+            "[library][unit][track-builder][serialization]")
   {
     auto expectSingleClassicalBlock = [](auto configure, auto check)
     {
@@ -311,7 +311,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackBuilder - serializeCold writes cold view data", "[library][unit][track][builder][serialization]")
+  TEST_CASE("TrackBuilder - serializeCold writes cold view data", "[library][unit][track-builder][serialization]")
   {
     auto builder = TrackBuilder::createNew();
     builder.metadata().trackNumber(3);
@@ -326,7 +326,7 @@ namespace ao::library::test
     CHECK(view.metadata().trackNumber() == 3);
   }
 
-  TEST_CASE("TrackBuilder - fromView reconstructs builder fields", "[library][unit][track][builder][serialization]")
+  TEST_CASE("TrackBuilder - fromView reconstructs builder fields", "[library][unit][track-builder][serialization]")
   {
     auto context = TrackSerializationContext{};
 
@@ -358,7 +358,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("TrackBuilder - serialized views expose property and metadata fields",
-            "[library][unit][track][builder][serialization]")
+            "[library][unit][track-builder][serialization]")
   {
     auto context = TrackSerializationContext{};
 

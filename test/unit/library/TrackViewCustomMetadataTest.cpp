@@ -176,7 +176,7 @@ namespace ao::library::test
 
     // DictionaryStore assigns: replaygain->1, isrc->2
     auto const optValue = view.customMetadata().get(DictionaryId{2});
-    REQUIRE(optValue.has_value());
+    REQUIRE(optValue);
     CHECK(*optValue == "USSM19999999");
   }
 
@@ -189,7 +189,7 @@ namespace ao::library::test
 
     // ID 99 was never assigned
     auto const optValue = view.customMetadata().get(DictionaryId{99});
-    CHECK(optValue.has_value() == false);
+    CHECK_FALSE(optValue);
   }
 
   TEST_CASE("TrackView - finds custom metadata keys case sensitively", "[library][unit][track][custom-metadata]")
@@ -201,7 +201,7 @@ namespace ao::library::test
 
     // "ISRC" is stored at ID 1, looking up by ID 1 returns the value
     auto const optValue = view.customMetadata().get(DictionaryId{1});
-    REQUIRE(optValue.has_value());
+    REQUIRE(optValue);
     CHECK(*optValue == "USSM19999999");
   }
 
@@ -219,15 +219,15 @@ namespace ao::library::test
     auto const view = makeColdTrackView(data);
 
     auto const optFirst = view.customMetadata().get(DictionaryId{1});
-    REQUIRE(optFirst.has_value());
+    REQUIRE(optFirst);
     CHECK(*optFirst == "value0");
 
     auto const optMiddle = view.customMetadata().get(DictionaryId{50});
-    REQUIRE(optMiddle.has_value());
+    REQUIRE(optMiddle);
     CHECK(*optMiddle == "value49");
 
     auto const optLast = view.customMetadata().get(DictionaryId{100});
-    REQUIRE(optLast.has_value());
+    REQUIRE(optLast);
     CHECK(*optLast == "value99");
     // Not found
     CHECK(view.customMetadata().get(DictionaryId{199}).has_value() == false);

@@ -85,7 +85,7 @@ namespace ao::gtk
     CreateSmartListRequestedSignal& signalCreateSmartListRequested() noexcept;
     rt::ITrackListProjection* projection() const noexcept { return _modelPtr ? _modelPtr->projection() : nullptr; }
 
-    void showTagPopover(TagPopover& popover, double posX, double posY);
+    void showTagPopover(TagPopover& popover, double xPosition, double yPosition);
     void setStatusMessage(std::string_view message);
     void clearStatusMessage();
 

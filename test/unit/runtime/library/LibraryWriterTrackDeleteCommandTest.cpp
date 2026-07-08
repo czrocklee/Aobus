@@ -18,8 +18,8 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("LibraryWriter deleteTrack removes an existing track and publishes a mutation",
-            "[runtime][unit][library][mutation][track][delete]")
+  TEST_CASE("LibraryWriter - deleteTrack removes an existing track and publishes a mutation",
+            "[runtime][unit][library][track-delete]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Test Track");
@@ -62,7 +62,7 @@ namespace ao::rt::test
     auto txn = testLib.library().readTransaction();
     auto const optTrackView =
       testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
-    CHECK_FALSE(optTrackView.has_value());
+    CHECK_FALSE(optTrackView);
     CHECK_FALSE(testLib.library().manifest().reader(txn).get("/tmp/test.flac"));
 
     auto listReader = testLib.library().lists().reader(txn);
@@ -70,14 +70,14 @@ namespace ao::rt::test
     for (auto const listId : listIds)
     {
       auto const optList = listReader.get(listId);
-      REQUIRE(optList.has_value());
+      REQUIRE(optList);
       CHECK(optList->tracks().empty());
     }
 
     CHECK(upsertedLists == listIds);
   }
 
-  TEST_CASE("LibraryWriter deleteTrack rejects missing tracks", "[runtime][unit][library][mutation][track][delete]")
+  TEST_CASE("LibraryWriter - deleteTrack rejects missing tracks", "[runtime][unit][library][track-delete]")
   {
     auto testLib = TestMusicLibrary{};
     [[maybe_unused]] auto const trackId = testLib.addTrack("Test Track");

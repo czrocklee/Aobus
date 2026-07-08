@@ -23,7 +23,7 @@ namespace ao::gtk::layout::test
   using namespace uimodel;
   using ao::gtk::test::emitClicked;
 
-  TEST_CASE("CollapsibleSplitComponent applies reveal sizing and persists panel state", "[gtk][unit][geometry]")
+  TEST_CASE("CollapsibleSplitComponent - applies reveal sizing and persists panel state", "[gtk][unit][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

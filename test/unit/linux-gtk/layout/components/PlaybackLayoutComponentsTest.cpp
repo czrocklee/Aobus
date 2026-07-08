@@ -20,7 +20,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("Playback layout components render idle GTK widgets", "[gtk][unit][layout][component][playback]")
+  TEST_CASE("PlaybackLayoutComponents - render idle GTK widgets", "[gtk][unit][layout-component][playback]")
   {
     auto fixture = LayoutRuntimeFixture{};
 

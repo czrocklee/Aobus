@@ -60,7 +60,7 @@ namespace ao::library::test
 
     auto rtxn = beginReadTransaction(fixture.env);
     auto optFound = fixture.store.reader(rtxn).get(id);
-    REQUIRE(optFound.has_value());
+    REQUIRE(optFound);
     CHECK(optFound->isHotValid());
     CHECK(optFound->isColdValid());
     CHECK(optFound->metadata().title() == "Lookup track");
@@ -84,7 +84,7 @@ namespace ao::library::test
 
     auto rtxn = beginReadTransaction(fixture.env);
     auto optView = fixture.store.reader(rtxn).get(id);
-    REQUIRE(optView.has_value());
+    REQUIRE(optView);
     CHECK(optView->metadata().title() == "After");
     CHECK(optView->metadata().artistId() == DictionaryId{2});
     CHECK(optView->metadata().albumId() == DictionaryId{3});

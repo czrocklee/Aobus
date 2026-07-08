@@ -26,7 +26,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("TrackPropertiesFormSpec projects editable metadata rows", "[uimodel][unit][library][property]")
+  TEST_CASE("TrackPropertiesFormSpec - projects editable metadata rows", "[uimodel][unit][library][property]")
   {
     auto const spec = buildTrackPropertiesFormSpec();
 
@@ -57,7 +57,7 @@ namespace ao::uimodel::test
     CHECK(spec.metadataRows[11].editorKind == TrackPropertiesFormEditorKind::Number);
   }
 
-  TEST_CASE("TrackPropertiesFormSpec projects readonly technical property rows", "[uimodel][unit][library][property]")
+  TEST_CASE("TrackPropertiesFormSpec - projects readonly technical property rows", "[uimodel][unit][library][property]")
   {
     auto const spec = buildTrackPropertiesFormSpec();
 

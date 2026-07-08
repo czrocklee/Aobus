@@ -333,17 +333,18 @@ namespace ao::query
         detail::throwQueryError("invalid unit literal '{}'", constant.lexeme);
       }
 
-      auto const dotPos = numberPart.find('.');
+      auto const dotOffset = numberPart.find('.');
 
-      if (dotPos != std::string_view::npos && numberPart.find('.', dotPos + 1) != std::string_view::npos)
+      if (dotOffset != std::string_view::npos && numberPart.find('.', dotOffset + 1) != std::string_view::npos)
       {
         detail::throwQueryError("invalid unit literal '{}'", constant.lexeme);
       }
 
-      auto const wholePart = numberPart.substr(0, dotPos);
-      auto const fractionPart = dotPos == std::string_view::npos ? std::string_view{} : numberPart.substr(dotPos + 1);
+      auto const wholePart = numberPart.substr(0, dotOffset);
+      auto const fractionPart =
+        dotOffset == std::string_view::npos ? std::string_view{} : numberPart.substr(dotOffset + 1);
 
-      if (wholePart.empty() || (dotPos != std::string_view::npos && fractionPart.empty()))
+      if (wholePart.empty() || (dotOffset != std::string_view::npos && fractionPart.empty()))
       {
         detail::throwQueryError("invalid unit literal '{}'", constant.lexeme);
       }
@@ -983,7 +984,7 @@ namespace ao::query
       popReg(leftReg); // Or result is now in *optAccumReg
     }
 
-    gsl_Expects(optAccumReg.has_value()); // non-empty list guarantees at least one comparison
+    gsl_Expects(optAccumReg); // non-empty list guarantees at least one comparison
     return *optAccumReg;
   }
 

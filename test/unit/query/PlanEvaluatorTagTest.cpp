@@ -28,8 +28,8 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator keeps OR candidates when only one branch uses tag bloom filtering",
-            "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - keeps OR candidates when only one branch uses tag bloom filtering",
+            "[query][unit][plan-evaluator]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -60,7 +60,7 @@ namespace ao::query::test
     CHECK(evaluator.matches(plan, noMatchTrack) == false);
   }
 
-  TEST_CASE("PlanEvaluator rejects tag queries when tracks have no tags", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - rejects tag queries when tracks have no tags", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("#rock");
     auto compiler = QueryCompiler{};
@@ -72,7 +72,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches tag queries when the tag is present", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches tag queries when the tag is present", "[query][unit][plan-evaluator]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -93,7 +93,7 @@ namespace ao::query::test
     CHECK(result == true);
   }
 
-  TEST_CASE("PlanEvaluator matches numeric tag names and quoted custom keys", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches numeric tag names and quoted custom keys", "[query][unit][plan-evaluator]")
   {
     auto spec = TrackSpec{};
     spec.tags.emplace_back("123");
@@ -106,7 +106,7 @@ namespace ao::query::test
     CHECK(PlanEvaluator{}.evaluateFull(plan, track.view()));
   }
 
-  TEST_CASE("PlanEvaluator rejects tag queries when the tag is absent", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - rejects tag queries when the tag is absent", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("#rock");
     auto compiler = QueryCompiler{};
@@ -119,7 +119,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator compiles tag fields into field loads", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - compiles tag fields into field loads", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("#tagname");
     auto compiler = QueryCompiler{};
@@ -129,7 +129,7 @@ namespace ao::query::test
     CHECK(plan.instructions[0].op == OpCode::LoadField);
   }
 
-  TEST_CASE("PlanEvaluator leaves tag bloom mask empty without a dictionary", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - leaves tag bloom mask empty without a dictionary", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("#mytag");
     auto compiler = QueryCompiler{};
@@ -138,7 +138,8 @@ namespace ao::query::test
     CHECK(plan.tagBloomMask == 0);
   }
 
-  TEST_CASE("PlanEvaluator leaves tag bloom mask empty when dictionary lookup misses", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - leaves tag bloom mask empty when dictionary lookup misses",
+            "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("#jazz");
     auto compiler = QueryCompiler{};
@@ -147,8 +148,8 @@ namespace ao::query::test
     CHECK(plan.tagBloomMask == 0);
   }
 
-  TEST_CASE("PlanEvaluator leaves tag bloom mask empty without interned compiler dictionary ids",
-            "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - leaves tag bloom mask empty without interned compiler dictionary ids",
+            "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("#rock");
     auto compiler = QueryCompiler{};
@@ -157,8 +158,8 @@ namespace ao::query::test
     CHECK(plan.tagBloomMask == 0);
   }
 
-  TEST_CASE("PlanEvaluator leaves multi-tag bloom mask empty without interned compiler dictionary ids",
-            "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - leaves multi-tag bloom mask empty without interned compiler dictionary ids",
+            "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("#rock && #jazz");
     auto compiler = QueryCompiler{};
@@ -167,7 +168,7 @@ namespace ao::query::test
     CHECK(plan.tagBloomMask == 0);
   }
 
-  TEST_CASE("PlanEvaluator reads track tag bloom bits from hot data", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - reads track tag bloom bits from hot data", "[query][unit][plan-evaluator]")
   {
     {
       auto h = library::TrackHotHeader{};
@@ -198,7 +199,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator rejects tag bloom fast-path misses", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - rejects tag bloom fast-path misses", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("#mytag");
     auto compiler = QueryCompiler{};
@@ -220,7 +221,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator still verifies tag membership after bloom fast-path hits", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - still verifies tag membership after bloom fast-path hits", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("#mytag");
     auto compiler = QueryCompiler{};
@@ -242,7 +243,8 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator verifies multi-tag bloom matches and collision candidates", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - verifies multi-tag bloom matches and collision candidates",
+            "[query][unit][plan-evaluator]")
   {
     auto const spec = TrackSpec{.tags = {"rock", "jazz", "blues"}};
     auto track = TrackFixture{spec};

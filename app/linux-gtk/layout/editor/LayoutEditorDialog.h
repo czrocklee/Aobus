@@ -79,7 +79,7 @@ namespace ao::gtk::layout::editor
     sigc::signal<void(std::string_view)>& signalThemePreview() { return _signalThemePreview; }
     sigc::signal<void(LayoutSaveResult const&)>& signalSaveRequest() { return _signalSaveRequest; }
 
-    void updateNodePosition(std::string_view nodeId, std::int32_t posX, std::int32_t posY);
+    void updateNodePosition(std::string_view nodeId, std::int32_t xPosition, std::int32_t yPosition);
 
   private:
     // Tree Model columns

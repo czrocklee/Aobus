@@ -25,7 +25,7 @@ namespace ao::gtk::layout::editor::test
   using namespace uimodel;
   using ao::gtk::test::makeRuntime;
 
-  TEST_CASE("absoluteCanvas component builds positioned child containers", "[gtk][unit][layout][editor]")
+  TEST_CASE("absoluteCanvas - builds positioned child containers", "[gtk][unit][layout][editor]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_test");
 
@@ -44,10 +44,10 @@ namespace ao::gtk::layout::editor::test
     {
       auto const optDesc = registry.descriptor("absoluteCanvas");
 
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
       CHECK(uimodel::isContainer(*optDesc));
       CHECK(optDesc->minChildren == 0);
-      CHECK(!optDesc->optMaxChildren.has_value());
+      CHECK(!optDesc->optMaxChildren);
     }
 
     SECTION("absoluteCanvas with no children builds a component")
@@ -68,7 +68,7 @@ namespace ao::gtk::layout::editor::test
 
       auto child = LayoutNode{};
       child.type = "spacer";
-      child.id = "pos-spacer";
+      child.id = "position-spacer";
       child.layout["x"] = LayoutValue{static_cast<std::int64_t>(50)};
       child.layout["y"] = LayoutValue{static_cast<std::int64_t>(100)};
       child.layout["width"] = LayoutValue{static_cast<std::int64_t>(200)};
@@ -83,7 +83,7 @@ namespace ao::gtk::layout::editor::test
     }
   }
 
-  TEST_CASE("absoluteCanvas geometry allocates children at configured coordinates", "[gtk][unit][geometry]")
+  TEST_CASE("absoluteCanvas - geometry allocates children at configured coordinates", "[gtk][unit][geometry]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_geometry_test");
 
@@ -103,7 +103,7 @@ namespace ao::gtk::layout::editor::test
 
     auto child = LayoutNode{};
     child.type = "spacer";
-    child.id = "pos-spacer";
+    child.id = "position-spacer";
     child.layout["x"] = LayoutValue{static_cast<std::int64_t>(50)};
     child.layout["y"] = LayoutValue{static_cast<std::int64_t>(100)};
     child.layout["width"] = LayoutValue{static_cast<std::int64_t>(200)};

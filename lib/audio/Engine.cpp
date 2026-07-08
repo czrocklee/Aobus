@@ -1622,7 +1622,7 @@ namespace ao::audio
 
   void Engine::Impl::resumeUnlocked()
   {
-    auto const srcPtr = currentSource();
+    auto const sourcePtr = currentSource();
     auto lock = std::unique_lock{stateMutex};
 
     if (status.transport != Transport::Paused)
@@ -1638,8 +1638,9 @@ namespace ao::audio
       return;
     }
 
-    if (auto const drained = !srcPtr || srcPtr->isDrained();
-        drained && (srcPtr ? srcPtr->bufferedDuration() : std::chrono::milliseconds{0}) == std::chrono::milliseconds{0})
+    if (auto const drained = !sourcePtr || sourcePtr->isDrained();
+        drained &&
+        (sourcePtr ? sourcePtr->bufferedDuration() : std::chrono::milliseconds{0}) == std::chrono::milliseconds{0})
     {
       retireRenderSession();
       resetEngine();

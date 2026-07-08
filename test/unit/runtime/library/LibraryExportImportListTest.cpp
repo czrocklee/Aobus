@@ -49,8 +49,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml list-only export restores lists by track URI",
-            "[runtime][workflow][import-export][yaml][list]")
+  TEST_CASE("LibraryYaml - list-only export restores lists by track URI", "[runtime][workflow][import-export][list]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
@@ -139,8 +138,8 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml import remaps list parents regardless of YAML order",
-            "[runtime][workflow][import-export][yaml][list][regression]")
+  TEST_CASE("LibraryYaml - import remaps list parents regardless of YAML order",
+            "[runtime][workflow][import-export][list]")
   {
     auto temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -207,7 +206,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml import drops dangling list references", "[runtime][workflow][import-export][yaml][list]")
+  TEST_CASE("LibraryYaml - import drops dangling list references", "[runtime][workflow][import-export][list]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};

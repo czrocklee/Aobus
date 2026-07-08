@@ -11,7 +11,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackFieldEditCodec preserves text edit input", "[uimodel][unit][field][codec]")
+  TEST_CASE("TrackFieldEditCodec - preserves text edit input", "[uimodel][unit][field][codec]")
   {
     auto const editValue = makeTextEditValue(" Test ");
     auto const* text = std::get_if<std::string>(&editValue);
@@ -25,7 +25,7 @@ namespace ao::uimodel::test
     CHECK(*parsedText == "New Title");
   }
 
-  TEST_CASE("TrackFieldEditCodec parses uint16 edit text", "[uimodel][unit][field][codec]")
+  TEST_CASE("TrackFieldEditCodec - parses uint16 edit text", "[uimodel][unit][field][codec]")
   {
     SECTION("valid number")
     {

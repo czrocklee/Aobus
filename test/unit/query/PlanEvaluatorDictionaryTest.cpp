@@ -22,7 +22,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator matches work metadata equality and LIKE expressions", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches work metadata equality and LIKE expressions", "[query][unit][plan-evaluator]")
   {
     auto trackWithWork = TestTrack{
       "Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", "Symphony No. 5"};
@@ -57,8 +57,8 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator matches movement metadata equality existence and LIKE expressions",
-            "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches movement metadata equality existence and LIKE expressions",
+            "[query][unit][plan-evaluator]")
   {
     auto specWithMovement = TrackSpec{};
     specWithMovement.movement = "Finale";
@@ -101,7 +101,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator matches composer metadata equality and LIKE expressions", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches composer metadata equality and LIKE expressions", "[query][unit][plan-evaluator]")
   {
     auto trackWithComposer = TestTrack{
       "Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "Beethoven", ""};
@@ -124,7 +124,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator resolves dictionary artist ids for LIKE expressions", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - resolves dictionary artist ids for LIKE expressions", "[query][unit][plan-evaluator]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -151,7 +151,7 @@ namespace ao::query::test
     CHECK(evaluator.evaluateFull(plan, missingArtistTrack) == false);
   }
 
-  TEST_CASE("PlanEvaluator matches dictionary-backed metadata and property fields", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches dictionary-backed metadata and property fields", "[query][unit][plan-evaluator]")
   {
     auto spec = TrackSpec{};
     spec.codec = AudioCodec::Flac;
@@ -296,7 +296,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator compares dictionary fields lexicographically by text", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - compares dictionary fields lexicographically by text", "[query][unit][plan-evaluator]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -383,7 +383,8 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator matches partial LIKE patterns on dictionary-backed fields", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches partial LIKE patterns on dictionary-backed fields",
+            "[query][unit][plan-evaluator]")
   {
     auto const spec = TrackSpec{.artist = "Johann Sebastian Bach"};
     auto track = TrackFixture{spec};

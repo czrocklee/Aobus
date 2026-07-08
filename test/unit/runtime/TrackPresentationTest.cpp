@@ -190,7 +190,7 @@ namespace ao::rt::test
     CHECK(spec.redundantFields[1] == TrackField::AlbumArtist);
   }
 
-  TEST_CASE("classical-composers preset has correct sort and visible fields", "[runtime][unit][presentation]")
+  TEST_CASE("classical-composers - preset has correct sort and visible fields", "[runtime][unit][presentation]")
   {
     auto const* preset = builtinTrackPresentationPreset("classical-composers");
     REQUIRE(preset != nullptr);
@@ -224,7 +224,7 @@ namespace ao::rt::test
     CHECK(spec.redundantFields[0] == TrackField::Composer);
   }
 
-  TEST_CASE("classical-works preset has correct group, sort, and redundant fields", "[runtime][unit][presentation]")
+  TEST_CASE("classical-works - preset has correct group, sort, and redundant fields", "[runtime][unit][presentation]")
   {
     auto const* preset = builtinTrackPresentationPreset("classical-works");
     REQUIRE(preset != nullptr);
@@ -365,7 +365,7 @@ namespace ao::rt::test
       auto const id = trackFieldId(field);
       auto const optParsed = trackFieldFromId(id);
 
-      REQUIRE(optParsed.has_value());
+      REQUIRE(optParsed);
       CHECK(*optParsed == field);
     }
   }

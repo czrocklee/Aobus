@@ -93,7 +93,7 @@ namespace ao::gtk
 
         if (_contextPage)
         {
-          showTagsPopover(*_contextPage, _contextPosX, _contextPosY);
+          showTagsPopover(*_contextPage, _contextXPosition, _contextYPosition);
         }
       });
     _contextActionGroupPtr->add_action(editTagsActionPtr);
@@ -127,8 +127,8 @@ namespace ao::gtk
 
   void TagEditController::showTrackContextMenu(TrackViewPage& page,
                                                TrackSelectionContext const& selection,
-                                               double posX,
-                                               double posY)
+                                               double xPosition,
+                                               double yPosition)
   {
     if (selection.selectedIds.empty())
     {
@@ -137,8 +137,8 @@ namespace ao::gtk
 
     _optActiveSelection = selection;
     _contextPage = &page;
-    _contextPosX = posX;
-    _contextPosY = posY;
+    _contextXPosition = xPosition;
+    _contextYPosition = yPosition;
 
     _contextPopoverPtr = std::make_unique<Gtk::PopoverMenu>();
 
@@ -152,12 +152,12 @@ namespace ao::gtk
     _contextPopoverPtr->set_parent(page);
     _contextPopoverPtr->set_has_arrow(false);
 
-    auto const rect = Gdk::Rectangle{static_cast<std::int32_t>(posX), static_cast<std::int32_t>(posY), 1, 1};
+    auto const rect = Gdk::Rectangle{static_cast<std::int32_t>(xPosition), static_cast<std::int32_t>(yPosition), 1, 1};
     _contextPopoverPtr->set_pointing_to(rect);
     _contextPopoverPtr->popup();
   }
 
-  void TagEditController::showTagsPopover(TrackViewPage& page, double posX, double posY)
+  void TagEditController::showTagsPopover(TrackViewPage& page, double xPosition, double yPosition)
   {
     if (!_optActiveSelection)
     {
@@ -170,7 +170,7 @@ namespace ao::gtk
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
-    page.showTagPopover(*_tagPopoverPtr, posX, posY);
+    page.showTagPopover(*_tagPopoverPtr, xPosition, yPosition);
   }
 
   void TagEditController::showPropertiesDialog()

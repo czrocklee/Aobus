@@ -57,8 +57,8 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml round trip deduplicates shared cover art resources",
-            "[runtime][workflow][import-export][yaml][cover]")
+  TEST_CASE("LibraryYaml - round trip deduplicates shared cover art resources",
+            "[runtime][workflow][import-export][cover]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
@@ -159,7 +159,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml merge replaces and removes cover art", "[runtime][workflow][import-export][yaml][cover]")
+  TEST_CASE("LibraryYaml - merge replaces and removes cover art", "[runtime][workflow][import-export][cover]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};

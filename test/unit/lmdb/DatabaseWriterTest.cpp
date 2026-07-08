@@ -34,7 +34,7 @@ namespace ao::lmdb::test
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
     auto const optData = reader.get(1);
-    REQUIRE(optData.has_value());
+    REQUIRE(optData);
     REQUIRE(utility::bytes::stringView(*optData) == "hello");
   }
 
@@ -60,7 +60,7 @@ namespace ao::lmdb::test
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
     auto const optData = reader.get(1);
-    REQUIRE(optData.has_value());
+    REQUIRE(optData);
     REQUIRE(optData->size() == 10);
     REQUIRE(utility::bytes::stringView(*optData) == std::string(10, 'x'));
   }
@@ -89,8 +89,8 @@ namespace ao::lmdb::test
     auto const reader = db.reader(rtxn);
     auto const optData1 = reader.get(1);
     auto const optData2 = reader.get(2);
-    REQUIRE(optData1.has_value());
-    REQUIRE(optData2.has_value());
+    REQUIRE(optData1);
+    REQUIRE(optData2);
     CHECK(utility::bytes::stringView(*optData1) == "first");
     CHECK(utility::bytes::stringView(*optData2) == "second");
   }
@@ -127,8 +127,8 @@ namespace ao::lmdb::test
     auto const reader = db.reader(rtxn);
     auto const optData1 = reader.get(1);
     auto const optData2 = reader.get(2);
-    REQUIRE(optData1.has_value());
-    REQUIRE(optData2.has_value());
+    REQUIRE(optData1);
+    REQUIRE(optData2);
     CHECK(utility::bytes::stringView(*optData1) == std::string(8, 'a'));
     CHECK(utility::bytes::stringView(*optData2) == std::string(12, 'b'));
   }
@@ -180,7 +180,7 @@ namespace ao::lmdb::test
     auto const rtxn = beginReadTransaction(env);
     auto const reader = db.reader(rtxn);
     auto const optData = reader.get(1);
-    REQUIRE(optData.has_value());
+    REQUIRE(optData);
     CHECK(optData->size() == 7);
     CHECK(utility::bytes::stringView(*optData) == "updated");
   }
@@ -201,7 +201,7 @@ namespace ao::lmdb::test
       auto const rtxn = beginReadTransaction(env);
       auto const reader = db.reader(rtxn);
       auto const optData1 = reader.get(1);
-      REQUIRE(optData1.has_value());
+      REQUIRE(optData1);
     }
 
     // Delete
@@ -217,7 +217,7 @@ namespace ao::lmdb::test
       auto const rtxn = beginReadTransaction(env);
       auto const reader = db.reader(rtxn);
       auto const optData = reader.get(1);
-      REQUIRE_FALSE(optData.has_value());
+      REQUIRE_FALSE(optData);
     }
   }
 

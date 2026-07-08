@@ -12,7 +12,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ActivityStatusFeedState applies notification activity presentation policy",
+  TEST_CASE("ActivityStatusFeedState - applies notification activity presentation policy",
             "[uimodel][unit][status][activity]")
   {
     auto feedState = ActivityStatusFeedState{};

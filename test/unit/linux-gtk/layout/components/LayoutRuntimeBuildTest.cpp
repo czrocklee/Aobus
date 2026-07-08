@@ -24,7 +24,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("LayoutRuntime builds documents into GTK widget trees", "[gtk][unit][layout][container]")
+  TEST_CASE("LayoutRuntime - builds documents into GTK widget trees", "[gtk][unit][layout][container]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

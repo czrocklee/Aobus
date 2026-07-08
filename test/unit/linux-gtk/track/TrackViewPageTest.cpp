@@ -46,7 +46,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackViewPage initializes list controls and geometry", "[gtk][unit][geometry]")
+  TEST_CASE("TrackViewPage - initializes list controls and geometry", "[gtk][unit][geometry]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

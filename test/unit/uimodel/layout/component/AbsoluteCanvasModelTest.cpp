@@ -10,7 +10,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("AbsoluteCanvasModel applies canvas geometry policy", "[uimodel][unit][layout][component]")
+  TEST_CASE("AbsoluteCanvasModel - applies canvas geometry policy", "[uimodel][unit][layout][component]")
   {
     SECTION("z ordering uses z-index before insertion order")
     {
@@ -38,7 +38,7 @@ namespace ao::uimodel::test
 
       auto const optHit = hitTestAbsoluteCanvas(items, 35, 45);
 
-      REQUIRE(optHit.has_value());
+      REQUIRE(optHit);
       CHECK(items[*optHit].id == "top");
       CHECK(!hitTestAbsoluteCanvas(items, 180, 45).has_value());
     }
@@ -51,7 +51,7 @@ namespace ao::uimodel::test
 
       auto const optHit = hitTestAbsoluteCanvas(items, 20, 20);
 
-      REQUIRE(optHit.has_value());
+      REQUIRE(optHit);
       CHECK(items[*optHit].id == "second");
     }
 

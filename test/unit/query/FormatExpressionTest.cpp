@@ -79,7 +79,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("FormatExpression - concatenates fields and literals", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - concatenates fields and literals", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
 
@@ -88,7 +88,7 @@ namespace ao::query::test
     CHECK(evaluate(R"($artist " - " $title)", fixture) == "Johann Sebastian Bach - Cello Suite");
   }
 
-  TEST_CASE("FormatExpression - formats cold fields custom metadata and properties", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - formats cold fields custom metadata and properties", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
 
@@ -100,7 +100,7 @@ namespace ao::query::test
     CHECK(evaluate(R"(%catalog + " " + @duration)", fixture) == "Archiv 123 143000");
   }
 
-  TEST_CASE("FormatExpression - rejects track ids as format fields", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - rejects track ids as format fields", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
     auto ast = parseOk(R"($id + ": " + $title)");
@@ -109,7 +109,7 @@ namespace ao::query::test
     CHECK(error.message.find("unknown metadata field '$id'") != std::string::npos);
   }
 
-  TEST_CASE("FormatExpression - formats unknown codecs as empty", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - formats unknown codecs as empty", "[query][unit][format-expression]")
   {
     auto spec = formatTrackSpec();
     spec.codec = AudioCodec::Unknown;
@@ -118,14 +118,14 @@ namespace ao::query::test
     CHECK(evaluate(R"("[" + @codec + "]")", fixture) == "[]");
   }
 
-  TEST_CASE("FormatExpression - keeps unit constants as literal text", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - keeps unit constants as literal text", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
 
     CHECK(evaluate(R"($title + " " + 3m)", fixture) == "Cello Suite 3m");
   }
 
-  TEST_CASE("FormatExpression - shares query literal keyword tokenization", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - shares query literal keyword tokenization", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
 
@@ -134,7 +134,7 @@ namespace ao::query::test
     CHECK_FALSE(::ao::query::parse("AND").has_value());
   }
 
-  TEST_CASE("FormatExpression - formats missing values as empty strings", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - formats missing values as empty strings", "[query][unit][format-expression]")
   {
     auto spec = formatTrackSpec();
     spec.albumArtist = {};
@@ -150,7 +150,7 @@ namespace ao::query::test
                    fixture) == "-----");
   }
 
-  TEST_CASE("FormatExpression - reports access profile", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - reports access profile", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
 
@@ -187,7 +187,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("FormatExpression - evaluates literal-only plans without track data", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - evaluates literal-only plans without track data", "[query][unit][format-expression]")
   {
     auto ast = parseOk(R"("literal")");
     auto compiler = FormatCompiler{};
@@ -198,7 +198,7 @@ namespace ao::query::test
     CHECK(evaluator.evaluate(plan, emptyTrack) == "literal");
   }
 
-  TEST_CASE("FormatExpression - returns empty when required track data is missing", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - returns empty when required track data is missing", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
     auto evaluator = FormatEvaluator{};
@@ -220,7 +220,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("FormatExpression - rejects query-only expressions", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - rejects query-only expressions", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
     auto compiler = FormatCompiler{&fixture.dictionary()};
@@ -231,7 +231,7 @@ namespace ao::query::test
     std::ignore = compileError(compiler, parseOk("$year in 1720..1730"));
   }
 
-  TEST_CASE("FormatExpression - rejects non-scalar fields", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - rejects non-scalar fields", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
     auto compiler = FormatCompiler{&fixture.dictionary()};
@@ -240,7 +240,7 @@ namespace ao::query::test
     std::ignore = compileError(compiler, parseOk("$coverArt"));
   }
 
-  TEST_CASE("FormatExpression - requires dictionary for dictionary-backed fields", "[query][unit][format_expression]")
+  TEST_CASE("FormatExpression - requires dictionary for dictionary-backed fields", "[query][unit][format-expression]")
   {
     auto compiler = FormatCompiler{};
 
@@ -249,7 +249,7 @@ namespace ao::query::test
     std::ignore = compileOk(compiler, parseOk(R"($title + " " + $year)"));
   }
 
-  TEST_CASE("compileFormat returns Result without throwing", "[query][unit][format_expression]")
+  TEST_CASE("compileFormat returns Result without throwing", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};
 

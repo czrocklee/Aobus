@@ -195,9 +195,9 @@ namespace ao::audio::test
       CHECK(snap.qualityFullyVerified == false);
 
       // The source node is labelled with the detected codec.
-      auto const srcIt = std::ranges::find(snap.flow.nodes, std::string_view{"ao-source"}, &flow::Node::id);
-      REQUIRE(srcIt != snap.flow.nodes.end());
-      CHECK(srcIt->name == "FLAC");
+      auto const sourceIt = std::ranges::find(snap.flow.nodes, std::string_view{"ao-source"}, &flow::Node::id);
+      REQUIRE(sourceIt != snap.flow.nodes.end());
+      CHECK(sourceIt->name == "FLAC");
     }
 
     SECTION("System nodes without reported formats are not backfilled")
@@ -212,20 +212,20 @@ namespace ao::audio::test
                         flow::Node{.id = "sys-sink", .type = flow::NodeType::Sink, .name = "Speakers"},
                       },
                     .connections = {
-                      flow::Connection{.sourceId = "sys-stream", .destId = "sys-sink", .isActive = true},
+                      flow::Connection{.sourceId = "sys-stream", .destinationId = "sys-sink", .isActive = true},
                     }});
 
       auto const snap = player.status();
       auto const streamIt = std::ranges::find(snap.flow.nodes, std::string_view{"sys-stream"}, &flow::Node::id);
       REQUIRE(streamIt != snap.flow.nodes.end());
-      CHECK_FALSE(streamIt->optFormat.has_value());
+      CHECK_FALSE(streamIt->optFormat);
       CHECK(snap.quality == Quality::BitwisePerfect);
       CHECK(snap.qualityFullyVerified == false);
 
       auto const assessmentIt =
         std::ranges::find(snap.qualityAssessments, std::string_view{"sys-stream"}, &NodeQualityAssessment::nodeId);
       REQUIRE(assessmentIt != snap.qualityAssessments.end());
-      CHECK_FALSE(assessmentIt->optFormat.has_value());
+      CHECK_FALSE(assessmentIt->optFormat);
     }
 
     SECTION("handleRouteChanged with stale generation is ignored")
@@ -542,7 +542,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Player - Subscription Unsubscribe", "[audio][unit][player][subscription]")
+  TEST_CASE("Player - subscription unsubscribe removes callback", "[audio][unit][player][subscription]")
   {
     bool called = false;
     auto sub = Subscription{[&] { called = true; }};

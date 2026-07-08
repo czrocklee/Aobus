@@ -59,7 +59,7 @@ namespace ao::uimodel::test
     };
   } // namespace
 
-  TEST_CASE("LayoutActionValidator reports invalid action bindings", "[uimodel][unit][layout][action]")
+  TEST_CASE("LayoutActionValidator - reports invalid action bindings", "[uimodel][unit][layout][action]")
   {
     auto const actions = makeTestCatalog();
     auto const components = makeCompCatalog();

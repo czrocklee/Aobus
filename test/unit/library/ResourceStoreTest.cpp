@@ -49,7 +49,7 @@ namespace ao::library::test
     CHECK(reader.maxKey() == id);
 
     auto const optStored = reader.get(id);
-    REQUIRE(optStored.has_value());
+    REQUIRE(optStored);
     CHECK(std::ranges::equal(*optStored, buffer));
 
     auto it = reader.begin();
@@ -157,7 +157,7 @@ namespace ao::library::test
     auto rtxn = beginReadTransaction(env);
     auto reader = store.reader(rtxn);
     auto const optStored = reader.get(id);
-    REQUIRE(optStored.has_value());
+    REQUIRE(optStored);
     CHECK(std::ranges::equal(*optStored, kData));
   }
 } // namespace ao::library::test

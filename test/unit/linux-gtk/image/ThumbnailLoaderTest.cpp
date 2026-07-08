@@ -21,7 +21,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ThumbnailLoader resolves image sources into pixbuf results", "[gtk][unit][image][thumbnail]")
+  TEST_CASE("ThumbnailLoader - resolves image sources into pixbuf results", "[gtk][unit][image][thumbnail]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

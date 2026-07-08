@@ -9,7 +9,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator matches unquoted title LIKE substrings", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches unquoted title LIKE substrings", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$title ~ Test");
     auto compiler = QueryCompiler{};
@@ -25,7 +25,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches title equality case-sensitively", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches title equality case-sensitively", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$title = 'Hello World'");
     auto compiler = QueryCompiler{};
@@ -45,7 +45,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches title inequality case-sensitively", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches title inequality case-sensitively", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$title != 'Hello'");
     auto compiler = QueryCompiler{};
@@ -61,7 +61,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator compares titles below a string bound", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - compares titles below a string bound", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$title < 'zoo'");
     auto compiler = QueryCompiler{};
@@ -81,7 +81,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator compares titles above a string bound case-sensitively", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - compares titles above a string bound case-sensitively", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$title > 'apple'");
     auto compiler = QueryCompiler{};
@@ -101,7 +101,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches quoted title LIKE substrings", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches quoted title LIKE substrings", "[query][unit][plan-evaluator]")
   {
     // Simple title LIKE test with quoted string
     auto expr = parseOk(R"($title ~ "Bach")");
@@ -125,7 +125,7 @@ namespace ao::query::test
     CHECK(result == true);
   }
 
-  TEST_CASE("PlanEvaluator matches quoted title LIKE on multi-field tracks", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches quoted title LIKE on multi-field tracks", "[query][unit][plan-evaluator]")
   {
     // Test LIKE with a Track that has multiple fields set
     auto expr = parseOk(R"($title ~ "Bach")");

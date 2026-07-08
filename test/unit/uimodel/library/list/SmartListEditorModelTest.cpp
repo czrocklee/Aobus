@@ -15,7 +15,7 @@ using namespace ao;
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("SmartListEditorModel composes visible filter expressions", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - composes visible filter expressions", "[uimodel][unit][list]")
   {
     SECTION("Display expression")
     {
@@ -40,7 +40,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("SmartListEditorModel projects preview state from source and query validity", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - projects preview state from source and query validity", "[uimodel][unit][list]")
   {
     SECTION("Preview source unavailable")
     {
@@ -179,7 +179,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("SmartListEditorModel formats smart-list preview track labels", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - formats smart-list preview track labels", "[uimodel][unit][list]")
   {
     CHECK(SmartListEditorModel::previewTrackLabel("Blue in Green", "Miles Davis", "Kind of Blue") ==
           "Blue in Green - Miles Davis (Kind of Blue)");
@@ -191,7 +191,7 @@ namespace ao::uimodel::test
     CHECK(SmartListEditorModel::previewTrackLabel("", "", "") == "(untitled)");
   }
 
-  TEST_CASE("SmartListEditorModel resolves presentation selection from dropdown state", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - resolves presentation selection from dropdown state", "[uimodel][unit][list]")
   {
     auto const presets = rt::builtinTrackPresentationPresets();
     REQUIRE(presets.size() >= 2);
@@ -229,14 +229,14 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("SmartListEditorModel - SmartListStatus enum values", "[uimodel][regression][list]")
+  TEST_CASE("SmartListEditorModel - exposes SmartListStatus enum values", "[uimodel][regression][list]")
   {
     CHECK(static_cast<int>(SmartListStatus::EmptySource) == 0);
     CHECK(static_cast<int>(SmartListStatus::Valid) == 1);
     CHECK(static_cast<int>(SmartListStatus::InvalidExpression) == 2);
   }
 
-  TEST_CASE("SmartListEditorModel allows submit only for named non-invalid drafts", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - allows submit only for named non-invalid drafts", "[uimodel][unit][list]")
   {
     SECTION("Valid name and status")
     {
@@ -264,7 +264,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("SmartListEditorModel createDraft preserves parent edit id and filter fields", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - createDraft preserves parent edit id and filter fields", "[uimodel][unit][list]")
   {
     auto const parentListId = ListId{10};
     auto const editListId = ListId{42};

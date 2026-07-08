@@ -9,7 +9,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator requires all AND operands to match", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - requires all AND operands to match", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$year = 2020 && @duration > 100000");
     auto compiler = QueryCompiler{};
@@ -29,7 +29,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches when any OR operand matches", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches when any OR operand matches", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$year = 2020 || $year = 2019");
     auto compiler = QueryCompiler{};
@@ -49,7 +49,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator negates grouped expressions", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - negates grouped expressions", "[query][unit][plan-evaluator]")
   {
     // Use "not(" for explicit grouping, or check if parser handles precedence
     auto expr = parseOk("!($year = 2020)");
@@ -66,7 +66,7 @@ namespace ao::query::test
     CHECK(result == true);
   }
 
-  TEST_CASE("PlanEvaluator combines duration and year comparisons", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - combines duration and year comparisons", "[query][unit][plan-evaluator]")
   {
     // Note: genre comparison requires dictionary resolution, so we use numeric genreId
     auto expr = parseOk("@duration > 180000 && $year >= 2020");
@@ -83,7 +83,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator treats true plans as matching every track", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - treats true plans as matching every track", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("true");
     auto compiler = QueryCompiler{};
@@ -101,8 +101,8 @@ namespace ao::query::test
     CHECK(result == true);
   }
 
-  TEST_CASE("PlanEvaluator matches OR expressions combining LIKE and comparison operands",
-            "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches OR expressions combining LIKE and comparison operands",
+            "[query][unit][plan-evaluator]")
   {
     // Test that $title ~ "Bach" or $year > 2021 evaluates correctly
     auto expr = parseOk(R"($title ~ "Bach" or $year > 2021)");
@@ -126,7 +126,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches OR expressions combining numeric comparisons", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches OR expressions combining numeric comparisons", "[query][unit][plan-evaluator]")
   {
     // Test $year > 2000 or $year > 1990 to verify OR works with two numeric comparisons
     auto expr = parseOk("$year > 2000 or $year > 1990");

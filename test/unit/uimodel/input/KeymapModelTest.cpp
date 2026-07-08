@@ -18,7 +18,7 @@ namespace ao::uimodel::test
     KeyChord chord(std::string const& text)
     {
       auto const optChord = KeyChord::parse(text);
-      REQUIRE(optChord.has_value());
+      REQUIRE(optChord);
       return *optChord;
     }
 
@@ -31,7 +31,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("KeymapModel exposes defaults when no overrides applied", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - exposes defaults when no overrides applied", "[uimodel][unit][input][keymap]")
   {
     auto const model = KeymapModel{sampleDefaults()};
     CHECK(model.chordsFor("playback.playPause").size() == 2);
@@ -39,7 +39,7 @@ namespace ao::uimodel::test
     CHECK(model.chordsFor("unknown").empty());
   }
 
-  TEST_CASE("KeymapModel override replaces a single action", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - override replaces a single action", "[uimodel][unit][input][keymap]")
   {
     auto model = KeymapModel{sampleDefaults()};
     auto const diagnostics = model.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N"}}});
@@ -50,14 +50,14 @@ namespace ao::uimodel::test
     CHECK(model.chordsFor("playback.playPause").size() == 2);
   }
 
-  TEST_CASE("KeymapModel empty override list means explicitly unbound", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - empty override list means explicitly unbound", "[uimodel][unit][input][keymap]")
   {
     auto model = KeymapModel{sampleDefaults()};
     model.applyOverrides(KeymapOverrides{{"playback.playPause", {}}});
     CHECK(model.chordsFor("playback.playPause").empty());
   }
 
-  TEST_CASE("KeymapModel reports unparseable override strings", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - reports unparseable override strings", "[uimodel][unit][input][keymap]")
   {
     auto model = KeymapModel{sampleDefaults()};
     auto const diagnostics = model.applyOverrides(KeymapOverrides{{"playback.next", {"Bogus+", "Ctrl+N"}}});
@@ -67,7 +67,7 @@ namespace ao::uimodel::test
     CHECK(model.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+N")});
   }
 
-  TEST_CASE("KeymapModel applyOverrides re-derives from defaults each call", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - applyOverrides re-derives from defaults each call", "[uimodel][unit][input][keymap]")
   {
     auto model = KeymapModel{sampleDefaults()};
     model.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N"}}});
@@ -75,14 +75,14 @@ namespace ao::uimodel::test
     CHECK(model.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+Right")});
   }
 
-  TEST_CASE("KeymapModel deduplicates chords within an override", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - deduplicates chords within an override", "[uimodel][unit][input][keymap]")
   {
     auto model = KeymapModel{sampleDefaults()};
     model.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N", "ctrl+n"}}});
     CHECK(model.chordsFor("playback.next").size() == 1);
   }
 
-  TEST_CASE("KeymapModel actionFor returns the action bound to a chord", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - actionFor returns the action bound to a chord", "[uimodel][unit][input][keymap]")
   {
     auto const model = KeymapModel{sampleDefaults()};
     CHECK(model.actionFor(chord("Media:Play")) == "playback.playPause");
@@ -90,7 +90,7 @@ namespace ao::uimodel::test
     CHECK(model.actionFor(chord("Ctrl+Z")).has_value() == false);
   }
 
-  TEST_CASE("KeymapModel detects conflicting chord bindings", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - detects conflicting chord bindings", "[uimodel][unit][input][keymap]")
   {
     auto model = KeymapModel{sampleDefaults()};
     model.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+P"}}}); // collides with playPause
@@ -101,7 +101,7 @@ namespace ao::uimodel::test
     CHECK(conflicts.front().actionIds == std::vector<std::string>{"playback.next", "playback.playPause"});
   }
 
-  TEST_CASE("KeymapModel validates action ids against a catalog", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - validates action ids against a catalog", "[uimodel][unit][input][keymap]")
   {
     auto catalog = LayoutActionCatalog{};
     catalog.registerActionDescriptor(LayoutActionDescriptor{.id = "playback.playPause", .label = "P", .category = "X"});
@@ -114,7 +114,7 @@ namespace ao::uimodel::test
     CHECK(model.unknownActionIds(catalog) == std::vector<std::string>{"playback.bogus"});
   }
 
-  TEST_CASE("KeymapModel bind and unbind mutate the effective map", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - bind and unbind mutate the effective map", "[uimodel][unit][input][keymap]")
   {
     auto model = KeymapModel{sampleDefaults()};
 
@@ -131,7 +131,7 @@ namespace ao::uimodel::test
     CHECK(model.bindings() == sampleDefaults());
   }
 
-  TEST_CASE("KeymapModel reset restores defaults", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - reset restores defaults", "[uimodel][unit][input][keymap]")
   {
     auto model = KeymapModel{sampleDefaults()};
     model.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N"}}});
@@ -145,7 +145,7 @@ namespace ao::uimodel::test
     CHECK(model.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+Right")});
   }
 
-  TEST_CASE("KeymapModel toOverrides returns only deltas", "[uimodel][unit][input][keymap]")
+  TEST_CASE("KeymapModel - toOverrides returns only deltas", "[uimodel][unit][input][keymap]")
   {
     auto model = KeymapModel{sampleDefaults()};
     CHECK(model.toOverrides().empty()); // identical to defaults

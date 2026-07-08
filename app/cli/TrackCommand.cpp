@@ -480,7 +480,7 @@ namespace ao::cli
       return result;
     }
 
-    std::optional<std::string> optionalDictName(library::DictionaryStore const& dict, DictionaryId id)
+    std::optional<std::string> dictionaryNameWhenPresent(library::DictionaryStore const& dict, DictionaryId id)
     {
       if (id == kInvalidDictionaryId)
       {
@@ -490,7 +490,7 @@ namespace ao::cli
       return std::string{resolveDict(dict, id)};
     }
 
-    std::optional<std::string> optionalString(std::string_view value)
+    std::optional<std::string> nonEmptyString(std::string_view value)
     {
       if (value.empty())
       {
@@ -500,7 +500,7 @@ namespace ao::cli
       return std::string{value};
     }
 
-    std::optional<std::uint16_t> optionalNumber(std::uint16_t value)
+    std::optional<std::uint16_t> nonZeroNumber(std::uint16_t value)
     {
       if (value == 0)
       {
@@ -510,7 +510,7 @@ namespace ao::cli
       return value;
     }
 
-    std::optional<std::uint64_t> optionalDuration(library::TrackDuration duration)
+    std::optional<std::uint64_t> positiveDurationMillis(library::TrackDuration duration)
     {
       if (duration.count() <= 0)
       {
@@ -520,7 +520,7 @@ namespace ao::cli
       return static_cast<std::uint64_t>(duration.count());
     }
 
-    std::optional<std::uint32_t> optionalSampleRate(SampleRate value)
+    std::optional<std::uint32_t> nonZeroSampleRate(SampleRate value)
     {
       if (value.raw() == 0)
       {
@@ -536,32 +536,32 @@ namespace ao::cli
 
       if (view.isHotValid())
       {
-        dto.optTitle = optionalString(view.metadata().title());
-        dto.optArtist = optionalDictName(dict, view.metadata().artistId());
-        dto.optAlbum = optionalDictName(dict, view.metadata().albumId());
-        dto.optAlbumArtist = optionalDictName(dict, view.metadata().albumArtistId());
-        dto.optGenre = optionalDictName(dict, view.metadata().genreId());
-        dto.optComposer = optionalDictName(dict, view.metadata().composerId());
-        dto.optYear = optionalNumber(view.metadata().year());
+        dto.optTitle = nonEmptyString(view.metadata().title());
+        dto.optArtist = dictionaryNameWhenPresent(dict, view.metadata().artistId());
+        dto.optAlbum = dictionaryNameWhenPresent(dict, view.metadata().albumId());
+        dto.optAlbumArtist = dictionaryNameWhenPresent(dict, view.metadata().albumArtistId());
+        dto.optGenre = dictionaryNameWhenPresent(dict, view.metadata().genreId());
+        dto.optComposer = dictionaryNameWhenPresent(dict, view.metadata().composerId());
+        dto.optYear = nonZeroNumber(view.metadata().year());
         dto.optTags = tagNames(view, dict);
       }
 
       if (view.isColdValid())
       {
-        dto.optConductor = optionalDictName(dict, view.classical().conductorId());
-        dto.optEnsemble = optionalDictName(dict, view.classical().ensembleId());
-        dto.optWork = optionalDictName(dict, view.classical().workId());
-        dto.optMovement = optionalDictName(dict, view.classical().movementId());
-        dto.optSoloist = optionalDictName(dict, view.classical().soloistId());
-        dto.optTrackNumber = optionalNumber(view.metadata().trackNumber());
-        dto.optTrackTotal = optionalNumber(view.metadata().trackTotal());
-        dto.optDiscNumber = optionalNumber(view.metadata().discNumber());
-        dto.optDiscTotal = optionalNumber(view.metadata().discTotal());
-        dto.optMovementNumber = optionalNumber(view.classical().movementNumber());
-        dto.optMovementTotal = optionalNumber(view.classical().movementTotal());
-        dto.optDuration = optionalDuration(view.property().duration());
-        dto.optSampleRate = optionalSampleRate(view.property().sampleRate());
-        dto.optUri = optionalString(view.property().uri());
+        dto.optConductor = dictionaryNameWhenPresent(dict, view.classical().conductorId());
+        dto.optEnsemble = dictionaryNameWhenPresent(dict, view.classical().ensembleId());
+        dto.optWork = dictionaryNameWhenPresent(dict, view.classical().workId());
+        dto.optMovement = dictionaryNameWhenPresent(dict, view.classical().movementId());
+        dto.optSoloist = dictionaryNameWhenPresent(dict, view.classical().soloistId());
+        dto.optTrackNumber = nonZeroNumber(view.metadata().trackNumber());
+        dto.optTrackTotal = nonZeroNumber(view.metadata().trackTotal());
+        dto.optDiscNumber = nonZeroNumber(view.metadata().discNumber());
+        dto.optDiscTotal = nonZeroNumber(view.metadata().discTotal());
+        dto.optMovementNumber = nonZeroNumber(view.classical().movementNumber());
+        dto.optMovementTotal = nonZeroNumber(view.classical().movementTotal());
+        dto.optDuration = positiveDurationMillis(view.property().duration());
+        dto.optSampleRate = nonZeroSampleRate(view.property().sampleRate());
+        dto.optUri = nonEmptyString(view.property().uri());
         dto.optCustom = customMap(view, dict);
       }
 

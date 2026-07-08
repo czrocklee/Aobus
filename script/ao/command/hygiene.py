@@ -1,13 +1,14 @@
-"""ao hygiene - the check-only commit gate: format --check, then tidy.
+"""ao hygiene - the check-only commit gate: format, test naming, and tidy checks.
 
 Deliberately never modifies files: rewriting sources mid-session disturbs in-flight work,
 and most clang-tidy findings have no safe auto-fix. The gate reports; fixes are applied
 explicitly (./ao format for formatting, manual edits for lint findings).
 
-Resolution order matters: format before acting on tidy findings. clang-format shifts line
-numbers, so lint findings collected against unformatted code go stale once you format, which
-forces another expensive clang-tidy pass. Formatting first holds clang-tidy to two runs
-(discover + verify); the failure message below spells this out.
+Resolution order matters: format before acting on tidy findings. clang-format shifts
+line numbers, so lint findings collected against unformatted code go stale once you
+format, which forces another expensive clang-tidy pass. Formatting first holds
+clang-tidy to two runs (discover + verify); the failure message below spells this
+out.
 """
 
 import argparse
@@ -16,9 +17,9 @@ from collections.abc import Callable
 
 from ..core import tidyengine
 from . import format as format_command
-from . import tidy
+from . import test_audit, tidy
 
-HELP = "Run the commit gate: format --check, then tidy (check-only, never edits files)"
+HELP = "Run the commit gate: format --check, test-audit, then tidy (check-only, never edits files)"
 
 EPILOG = """\
 With no paths, checks files changed against local main + working tree + staged + untracked.
@@ -84,15 +85,23 @@ def _tidy_args(args: argparse.Namespace) -> argparse.Namespace:
     )
 
 
+def _test_audit_args() -> argparse.Namespace:
+    return _subcommand_defaults(test_audit.register, "test-audit", paths=[], fail_on_issue=True)
+
+
 def run_command(args: argparse.Namespace) -> int:
     print("=== format --check ===")
     format_failed = format_command.run_command(_format_args(args)) != 0
 
     print()
+    print("=== test-audit ===")
+    test_audit_failed = test_audit.run_command(_test_audit_args()) != 0
+
+    print()
     print("=== tidy ===")
     tidy_failed = tidy.run_command(_tidy_args(args)) != 0
 
-    if not (format_failed or tidy_failed):
+    if not (format_failed or test_audit_failed or tidy_failed):
         return 0
 
     print("Hygiene issues found. This gate is check-only; fix and re-run.", file=sys.stderr)
@@ -105,7 +114,14 @@ def run_command(args: argparse.Namespace) -> int:
         print("  Then re-run ./ao hygiene to verify.", file=sys.stderr)
     elif format_failed:
         print("  - Formatting: run ./ao format on the same scope, then review and re-stage the diff.", file=sys.stderr)
-    else:  # tidy_failed only
+    elif tidy_failed:
         print("  - Lint findings: formatting is already clean, so line numbers are stable -", file=sys.stderr)
         print("    fix the findings manually, re-run scoped validation, then ./ao hygiene.", file=sys.stderr)
+
+    if test_audit_failed:
+        print(
+            "  - Test names/tags: fix the reported TEST_CASE names or tags, then rerun "
+            "./ao test-audit --fail-on-issue.",
+            file=sys.stderr,
+        )
     return 1

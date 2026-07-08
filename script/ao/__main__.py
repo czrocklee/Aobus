@@ -7,10 +7,10 @@ The `ao` shim at the repository root re-enters nix-shell before dispatching here
 import argparse
 import sys
 
-from .command import analyze, build, check, council, coverage, hygiene, run, test, tidy
+from .command import analyze, build, check, council, coverage, hygiene, run, test, test_audit, tidy
 from .command import format as format_command
 
-COMMAND_MODULES = (build, check, test, coverage, tidy, analyze, format_command, hygiene, run, council)
+COMMAND_MODULES = (build, check, test, test_audit, coverage, tidy, analyze, format_command, hygiene, run, council)
 
 
 def make_parser() -> argparse.ArgumentParser:

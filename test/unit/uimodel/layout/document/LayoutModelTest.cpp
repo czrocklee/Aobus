@@ -18,7 +18,7 @@ namespace ao::uimodel::test
 {
   namespace yaml = ao::yaml;
 
-  TEST_CASE("LayoutValue serializes scalar variants without type loss", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - serializes scalar variants without type loss", "[uimodel][unit][layout][document]")
   {
     SECTION("string value")
     {
@@ -67,7 +67,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutNode round-trips identity and properties", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutNode - round-trips identity and properties", "[uimodel][unit][layout][document]")
   {
     auto node = LayoutNode{};
     node.type = "box";
@@ -91,7 +91,7 @@ namespace ao::uimodel::test
     CHECK(decoded.children[0].type == "spacer");
   }
 
-  TEST_CASE("LayoutDocument round-trip preserves layout props and child order", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutDocument - round-trip preserves layout props and child order", "[uimodel][unit][layout][document]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "box";
@@ -126,7 +126,7 @@ namespace ao::uimodel::test
     CHECK(decoded.root.children[1].props.at("hscrollPolicy").asString() == "never");
   }
 
-  TEST_CASE("LayoutDocument round-trip preserves action-id props", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutDocument - round-trip preserves action-id props", "[uimodel][unit][layout][document]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "playback.qualityIndicator";
@@ -144,7 +144,7 @@ namespace ao::uimodel::test
     CHECK(decoded.root.props.at("secondaryAction").asString() == "shell.showSystemMenu");
   }
 
-  TEST_CASE("LayoutDocument round-trip preserves tooltip", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutDocument - round-trip preserves tooltip", "[uimodel][unit][layout][document]")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "playback.qualityIndicator";
@@ -162,13 +162,13 @@ namespace ao::uimodel::test
     REQUIRE(yaml::read(tree.rootref(), decoded));
 
     CHECK(decoded.root.type == "playback.qualityIndicator");
-    REQUIRE(decoded.root.optTooltip.has_value());
+    REQUIRE(decoded.root.optTooltip);
     REQUIRE(decoded.root.optTooltip->nodePtr != nullptr);
     CHECK(decoded.root.optTooltip->nodePtr->type == "playback.audioPipelinePanel");
     CHECK(decoded.root.optTooltip->nodePtr->props.at("variant").asString() == "tooltip");
   }
 
-  TEST_CASE("YAML decode tolerates missing optional fields", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutModel - YAML decode tolerates missing optional fields", "[uimodel][unit][layout][document]")
   {
     auto const* yaml = R"(
       version: 1
@@ -187,7 +187,7 @@ namespace ao::uimodel::test
     CHECK(decoded.root.props.empty());
   }
 
-  TEST_CASE("YAML decode tolerates fields set to empty string", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutModel - YAML decode tolerates fields set to empty string", "[uimodel][unit][layout][document]")
   {
     auto const* yaml = R"(
       version: 1
@@ -204,7 +204,7 @@ namespace ao::uimodel::test
     CHECK(decoded.root.id.empty());
   }
 
-  TEST_CASE("LayoutValue serializes and decodes double", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - serializes and decodes double", "[uimodel][unit][layout][document]")
   {
     auto const v = LayoutValue{3.14};
     auto tree = ryml::Tree{};
@@ -215,7 +215,7 @@ namespace ao::uimodel::test
     CHECK(decoded.asDouble() == 3.14);
   }
 
-  TEST_CASE("LayoutValue coercion returns typed optional values", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - coercion returns typed optional values", "[uimodel][unit][layout][document]")
   {
     SECTION("asString coerces bool")
     {
@@ -325,7 +325,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutNode property lookups distinguish props from layout props", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutNode - property lookups distinguish props from layout props", "[uimodel][unit][layout][document]")
   {
     auto node = LayoutNode{};
     node.props["label"] = LayoutValue{std::string{"hello"}};
@@ -361,7 +361,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("Layout stateful node ids reject ambiguous runtime keys", "[uimodel][unit][regression]")
+  TEST_CASE("LayoutModel - layout stateful node ids reject ambiguous runtime keys", "[uimodel][unit][regression]")
   {
     SECTION("duplicate stateful ids are errors")
     {
@@ -451,7 +451,8 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("Layout stateful node id generation avoids existing document ids", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutModel - layout stateful node id generation avoids existing document ids",
+            "[uimodel][unit][layout][document]")
   {
     SECTION("new stateful ids are stable and unique across root and templates")
     {

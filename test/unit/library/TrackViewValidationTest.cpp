@@ -46,15 +46,15 @@ namespace ao::library::test
     std::vector<std::byte> makeColdRecord(std::vector<RawColdBlock> const& blocks)
     {
       auto blockOffsets = std::array<std::uint16_t, kTrackColdBlockSlotCount>{};
-      std::size_t pos = sizeof(TrackColdHeader);
+      std::size_t offset = sizeof(TrackColdHeader);
 
       for (auto const& block : blocks)
       {
-        blockOffsets[trackColdBlockSlotIndex(block.slot)] = static_cast<std::uint16_t>(pos);
-        pos = alignToWord(pos + block.payload.size());
+        blockOffsets[trackColdBlockSlotIndex(block.slot)] = static_cast<std::uint16_t>(offset);
+        offset = alignToWord(offset + block.payload.size());
       }
 
-      auto const uriOffset = pos;
+      auto const uriOffset = offset;
       auto data = std::vector<std::byte>(uriOffset, std::byte{0});
       writePod(data,
                0,
@@ -63,17 +63,17 @@ namespace ao::library::test
                  .uriOffset = static_cast<std::uint16_t>(uriOffset),
                });
 
-      pos = sizeof(TrackColdHeader);
+      offset = sizeof(TrackColdHeader);
 
       for (auto const& block : blocks)
       {
         if (!block.payload.empty())
         {
-          REQUIRE(pos + block.payload.size() <= data.size());
-          std::memcpy(data.data() + pos, block.payload.data(), block.payload.size());
+          REQUIRE(offset + block.payload.size() <= data.size());
+          std::memcpy(data.data() + offset, block.payload.data(), block.payload.size());
         }
 
-        pos = alignToWord(pos + block.payload.size());
+        offset = alignToWord(offset + block.payload.size());
       }
 
       return data;

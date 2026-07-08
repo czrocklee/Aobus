@@ -168,12 +168,12 @@ namespace ao::rt::test
     REQUIRE(scope.valid());
 
     auto const optRow = scope.trackRow(seeded.trackId);
-    REQUIRE(optRow.has_value());
+    REQUIRE(optRow);
 
     auto const& row = *optRow;
     CHECK(row.id == seeded.trackId);
     CHECK(row.coverArtId == seeded.resourceId);
-    REQUIRE(row.optUriPath.has_value());
+    REQUIRE(row.optUriPath);
     CHECK(*row.optUriPath == (std::filesystem::path{tempDir.path()} / kTrackUri).lexically_normal());
     CHECK(row.title == "A Song");
     CHECK(row.artist == "An Artist");
@@ -233,7 +233,7 @@ namespace ao::rt::test
     CHECK(resolved == std::vector<std::string>{"An Artist", "The Album"});
 
     auto const optResource = scope.loadResource(seeded.resourceId);
-    REQUIRE(optResource.has_value());
+    REQUIRE(optResource);
     CHECK(*optResource == std::vector<std::byte>{kCoverBytes.begin(), kCoverBytes.end()});
     CHECK_FALSE(scope.loadResource(ResourceId{999999}).has_value());
   }
@@ -257,7 +257,7 @@ namespace ao::rt::test
     CHECK(manualIt->smartExpression.empty());
 
     auto const optManualNode = scope.listNode(seeded.manualListId);
-    REQUIRE(optManualNode.has_value());
+    REQUIRE(optManualNode);
     CHECK(optManualNode->name == "Manual List");
     CHECK(optManualNode->description == "Pinned songs");
 
@@ -271,7 +271,7 @@ namespace ao::rt::test
     CHECK(smartIt->smartExpression == "@artist = \"An Artist\"");
 
     auto const optMissingNode = scope.listNode(ListId{999999});
-    CHECK_FALSE(optMissingNode.has_value());
+    CHECK_FALSE(optMissingNode);
   }
 
   TEST_CASE("LibraryReader - reads stored list membership", "[runtime][unit][library][readmodel]")

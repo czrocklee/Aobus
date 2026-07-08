@@ -11,7 +11,7 @@
 
 namespace ao::tag::test
 {
-  TEST_CASE("throwTagError(Error) preserves the original error's source location", "[tag][unit][error]")
+  TEST_CASE("throwTagError - preserves the original error's source location", "[tag][unit][error]")
   {
     auto const origin = std::source_location::current();
     auto const error = Error{.code = Error::Code::CorruptData, .message = "propagated failure", .location = origin};
@@ -30,7 +30,7 @@ namespace ao::tag::test
     }
   }
 
-  TEST_CASE("throwTagError(code, message) captures the call site", "[tag][unit][error]")
+  TEST_CASE("throwTagError - captures the call site", "[tag][unit][error]")
   {
     auto const here = std::source_location::current();
 
@@ -49,7 +49,7 @@ namespace ao::tag::test
     }
   }
 
-  TEST_CASE("TagException exposes its Error through what() and location()", "[tag][unit][error]")
+  TEST_CASE("TagException - exposes its Error through what() and location()", "[tag][unit][error]")
   {
     auto const ex = detail::TagException{Error::Code::CorruptData, "corrupt tag data"};
 

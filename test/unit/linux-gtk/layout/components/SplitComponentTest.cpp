@@ -18,7 +18,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("SplitComponent applies sizing and persists panel state", "[gtk][unit][geometry]")
+  TEST_CASE("SplitComponent - applies sizing and persists panel state", "[gtk][unit][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

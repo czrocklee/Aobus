@@ -23,7 +23,7 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::emitClicked;
   using ao::gtk::test::findWidgetByClass;
 
-  TEST_CASE("Status bar components register status descriptors", "[gtk][unit][layout][status]")
+  TEST_CASE("StatusComponents - status bar components register status descriptors", "[gtk][unit][layout][status]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.status_test");
 
@@ -31,18 +31,18 @@ namespace ao::gtk::layout::test
     registerStatusComponents(registry);
 
     auto const optDesc = registry.descriptor("status.activityStatus");
-    REQUIRE(optDesc.has_value());
+    REQUIRE(optDesc);
     CHECK(optDesc->displayName == "Activity Status");
 
     auto const optSelectionDesc = registry.descriptor("status.selectionInfo");
-    REQUIRE(optSelectionDesc.has_value());
+    REQUIRE(optSelectionDesc);
     CHECK(optSelectionDesc->displayName == "Selection Info");
 
     CHECK_FALSE(registry.descriptor("status.statusSlot").has_value());
     CHECK_FALSE(registry.descriptor("status.notificationCenter").has_value());
   }
 
-  TEST_CASE("status.activityStatus routes notification actions through ActionRegistry", "[gtk][unit][status]")
+  TEST_CASE("status.activityStatus - routes notification actions through ActionRegistry", "[gtk][unit][status]")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
@@ -100,7 +100,7 @@ namespace ao::gtk::layout::test
     window.unset_child();
   }
 
-  TEST_CASE("status.activityStatus validates notification actions before rendering", "[gtk][unit][status]")
+  TEST_CASE("status.activityStatus - validates notification actions before rendering", "[gtk][unit][status]")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};

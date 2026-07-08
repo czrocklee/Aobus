@@ -11,7 +11,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ListRowObject exposes list row identity and metadata", "[gtk][unit][list][model]")
+  TEST_CASE("ListRowObject - exposes list row identity and metadata", "[gtk][unit][list][model]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -56,7 +56,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ListTreeItem exposes parent-child hierarchy state", "[gtk][unit][list][model]")
+  TEST_CASE("ListTreeItem - exposes parent-child hierarchy state", "[gtk][unit][list][model]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

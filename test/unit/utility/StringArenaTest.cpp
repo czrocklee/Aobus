@@ -14,7 +14,7 @@
 
 namespace ao::utility::test
 {
-  TEST_CASE("StringArena interns and deduplicates by content", "[utility][unit][arena]")
+  TEST_CASE("StringArena - interns and deduplicates by content", "[utility][unit][arena]")
   {
     auto arena = StringArena{};
 
@@ -62,7 +62,7 @@ namespace ao::utility::test
     }
   }
 
-  TEST_CASE("StringArena views stay valid across many insertions", "[utility][unit][arena]")
+  TEST_CASE("StringArena - views stay valid across many insertions", "[utility][unit][arena]")
   {
     auto arena = StringArena{};
 
@@ -85,7 +85,7 @@ namespace ao::utility::test
     }
   }
 
-  TEST_CASE("StringArena clear resets storage", "[utility][unit][arena]")
+  TEST_CASE("StringArena - clear resets storage", "[utility][unit][arena]")
   {
     auto arena = StringArena{};
 

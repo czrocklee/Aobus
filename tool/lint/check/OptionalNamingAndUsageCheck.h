@@ -16,7 +16,11 @@ namespace clang::tidy::readability
   /// Rule 1: std::optional variables (locals, members, parameters) must start
   /// with the 'opt' prefix (after any leading underscores for members like
   /// `_opt`).
-  /// Rule 2: Existence checks must use 'if (opt)' or 'if (!opt)', not '.has_value()'.
+  /// Rule 2: Existence checks on named optional variables and fields should use
+  /// boolean conversion, while temporary optional expressions may use
+  /// `.has_value()` when that reads more clearly.
+  /// Rule 3: `static_cast<bool>(optional)` is avoided. Use the optional
+  /// directly in boolean contexts, and `.has_value()` when materializing a bool.
   class OptionalNamingAndUsageCheck : public ClangTidyCheck
   {
   public:

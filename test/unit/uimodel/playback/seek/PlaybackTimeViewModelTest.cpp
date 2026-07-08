@@ -67,7 +67,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("PlaybackTimeViewModel formats display text for each label mode", "[uimodel][unit][playback]")
+  TEST_CASE("PlaybackTimeViewModel - formats display text for each label mode", "[uimodel][unit][playback]")
   {
     SECTION("template text reserves the widest idle label")
     {

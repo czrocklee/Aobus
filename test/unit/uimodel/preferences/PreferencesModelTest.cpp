@@ -63,12 +63,12 @@ namespace ao::uimodel::test
     };
     model.setOutputDeviceConfirmed(confirmed);
 
-    REQUIRE(optPersisted.has_value());
+    REQUIRE(optPersisted);
     CHECK(optPersisted->lastThemePreset == "modern");
     CHECK(optPersisted->lastOutputBackendId == "pipewire");
     CHECK(optPersisted->lastOutputDeviceId == "system-default");
     CHECK(optPersisted->lastOutputProfileId == audio::kProfileShared.raw());
-    REQUIRE(optApplied.has_value());
+    REQUIRE(optApplied);
     CHECK(*optApplied == confirmed);
   }
 
@@ -92,7 +92,7 @@ namespace ao::uimodel::test
 
     model.setLayoutPreset("modern");
 
-    REQUIRE(optPersisted.has_value());
+    REQUIRE(optPersisted);
     CHECK(optPersisted->lastLayoutPreset == "modern");
     CHECK(optPersisted->lastThemePreset == "modern");
     CHECK(optPersisted->lastOutputBackendId == "existing-backend");

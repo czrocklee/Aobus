@@ -56,7 +56,7 @@ namespace ao::gtk::layout
                                [this](uimodel::TransportViewState const& state) { applyTransportState(state); }}
         , _soulController{ctx.runtime.playback(),
                           [this](uimodel::AobusSoulViewState const& state) { applySoulState(state); }}
-        , _hasComplexTooltip{static_cast<bool>(node.optTooltip)}
+        , _hasComplexTooltip{node.optTooltip.has_value()}
       {
         _button.set_child(_soul);
         _button.set_has_frame(false);

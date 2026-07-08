@@ -25,10 +25,10 @@ EXTERNAL_DIAGNOSTIC = """\
 
 class DedupTest(unittest.TestCase):
     def _write_logs(self, *contents: str) -> list[Path]:
-        tmp = Path(tempfile.mkdtemp(prefix="ao-dedup-test-"))
+        temp_dir = Path(tempfile.mkdtemp(prefix="ao-dedup-test-"))
         logs = []
         for index, content in enumerate(contents):
-            log = tmp / f"{index}.log"
+            log = temp_dir / f"{index}.log"
             log.write_text(content, encoding="utf-8")
             logs.append(log)
         return logs

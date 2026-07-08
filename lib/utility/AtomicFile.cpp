@@ -41,7 +41,7 @@ namespace ao::utility
 
     Result<int> createTempFile(std::filesystem::path const& parentPath, std::vector<char>& tempPath)
     {
-      auto const tempTemplate = (parentPath / ".tmp.XXXXXX").string();
+      auto const tempTemplate = (parentPath / ".temp.XXXXXX").string();
       tempPath = std::vector<char>(tempTemplate.begin(), tempTemplate.end());
       tempPath.push_back('\0');
 

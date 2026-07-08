@@ -62,7 +62,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - builds metadata value vocabularies for supported fields",
-            "[runtime][unit][completion][vocabulary][value]")
+            "[runtime][unit][completion-vocabulary][value]")
   {
     auto testLib = TestMusicLibrary{};
     library::test::addTrack(testLib.library(),
@@ -150,7 +150,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - invalidates tag snapshots on track mutation",
-            "[runtime][unit][completion][vocabulary][cache]")
+            "[runtime][unit][completion-vocabulary][cache]")
   {
     auto testLib = TestMusicLibrary{};
     library::test::addTrack(testLib.library(), library::test::TrackSpec{.title = "One", .tags = {"Rock"}});
@@ -176,7 +176,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - invalidates metadata value vocabularies on track mutation",
-            "[runtime][unit][completion][vocabulary][cache][value]")
+            "[runtime][unit][completion-vocabulary][cache]")
   {
     auto testLib = TestMusicLibrary{};
     library::test::addTrack(
@@ -230,7 +230,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - lazily rebuilds dirty value vocabularies",
-            "[runtime][unit][completion][vocabulary][cache][value]")
+            "[runtime][unit][completion-vocabulary][cache]")
   {
     auto testLib = TestMusicLibrary{};
     library::test::addTrack(

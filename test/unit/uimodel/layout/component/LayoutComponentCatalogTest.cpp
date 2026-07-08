@@ -28,7 +28,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("LayoutComponentCatalog duplicate registration preserves the original descriptor",
+  TEST_CASE("LayoutComponentCatalog - duplicate registration preserves the original descriptor",
             "[uimodel][unit][layout][component]")
   {
     auto catalog = LayoutComponentCatalog{};
@@ -43,7 +43,7 @@ namespace ao::uimodel::test
       CHECK(registered == true);
 
       auto const optDesc = catalog.descriptor("playback.playPauseButton");
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
       CHECK(optDesc->type == "playback.playPauseButton");
       CHECK(optDesc->displayName == "Play/Pause Button");
       CHECK(optDesc->category == LayoutComponentCategory::Playback);
@@ -72,7 +72,7 @@ namespace ao::uimodel::test
                                                                           .minChildren = 0}) == false);
 
       auto const optDesc = catalog.descriptor("box");
-      REQUIRE(optDesc.has_value());
+      REQUIRE(optDesc);
       CHECK(optDesc->type == "box");
       CHECK(optDesc->displayName == "Box");
       CHECK(optDesc->category == LayoutComponentCategory::Container);
@@ -83,7 +83,7 @@ namespace ao::uimodel::test
       CHECK(optDesc->layoutProps.front().name == "grow");
       CHECK(optDesc->layoutProps.front().kind == LayoutPropertyKind::Bool);
       CHECK(optDesc->minChildren == 1);
-      REQUIRE(optDesc->optMaxChildren.has_value());
+      REQUIRE(optDesc->optMaxChildren);
       CHECK(*optDesc->optMaxChildren == 2);
       CHECK((optDesc->surfaces & static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Main)) != 0);
       CHECK((optDesc->surfaces & static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Tooltip)) != 0);
@@ -98,7 +98,7 @@ namespace ao::uimodel::test
     SECTION("returns nullopt for unknown type")
     {
       auto const optDesc = catalog.descriptor("nonexistent");
-      CHECK(optDesc.has_value() == false);
+      CHECK_FALSE(optDesc);
     }
 
     SECTION("returns descriptors in registration order")
@@ -133,30 +133,30 @@ namespace ao::uimodel::test
       REQUIRE(primary != nullptr);
       CHECK(primary->kind == LayoutPropertyKind::Enum);
       CHECK(primary->label == "Primary Action");
-      REQUIRE(primary->optActionBinding.has_value());
+      REQUIRE(primary->optActionBinding);
       CHECK(primary->optActionBinding->slot == LayoutActionSlot::PrimaryClick);
-      REQUIRE(primary->optDefaultActionId.has_value());
+      REQUIRE(primary->optDefaultActionId);
       CHECK(*primary->optDefaultActionId == "default.primary");
 
       auto const* primaryLong = propertyByName(descriptor, kPrimaryLongPressActionProp);
       REQUIRE(primaryLong != nullptr);
       CHECK(primaryLong->label == "Primary Long Press");
-      REQUIRE(primaryLong->optActionBinding.has_value());
+      REQUIRE(primaryLong->optActionBinding);
       CHECK(primaryLong->optActionBinding->slot == LayoutActionSlot::PrimaryLongPress);
-      CHECK_FALSE(primaryLong->optDefaultActionId.has_value());
+      CHECK_FALSE(primaryLong->optDefaultActionId);
 
       auto const* secondary = propertyByName(descriptor, kSecondaryActionProp);
       REQUIRE(secondary != nullptr);
       CHECK(secondary->label == "Secondary Action");
-      REQUIRE(secondary->optActionBinding.has_value());
+      REQUIRE(secondary->optActionBinding);
       CHECK(secondary->optActionBinding->slot == LayoutActionSlot::SecondaryClick);
 
       auto const* secondaryLong = propertyByName(descriptor, kSecondaryLongPressActionProp);
       REQUIRE(secondaryLong != nullptr);
       CHECK(secondaryLong->label == "Secondary Long Press");
-      REQUIRE(secondaryLong->optActionBinding.has_value());
+      REQUIRE(secondaryLong->optActionBinding);
       CHECK(secondaryLong->optActionBinding->slot == LayoutActionSlot::SecondaryLongPress);
-      REQUIRE(secondaryLong->optDefaultActionId.has_value());
+      REQUIRE(secondaryLong->optDefaultActionId);
       CHECK(*secondaryLong->optDefaultActionId == "default.secondaryLong");
     }
 

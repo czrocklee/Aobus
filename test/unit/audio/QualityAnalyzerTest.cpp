@@ -39,8 +39,10 @@ namespace ao::audio::test
                    .name = "Engine",
                    .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false}});
 
-      graph.connections.push_back(flow::Connection{.sourceId = "ao-source", .destId = "ao-decoder", .isActive = true});
-      graph.connections.push_back(flow::Connection{.sourceId = "ao-decoder", .destId = "ao-engine", .isActive = true});
+      graph.connections.push_back(
+        flow::Connection{.sourceId = "ao-source", .destinationId = "ao-decoder", .isActive = true});
+      graph.connections.push_back(
+        flow::Connection{.sourceId = "ao-decoder", .destinationId = "ao-engine", .isActive = true});
 
       // System nodes (simulating a simple output)
       graph.nodes.push_back(
@@ -55,8 +57,10 @@ namespace ao::audio::test
                    .name = "Sink",
                    .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false}});
 
-      graph.connections.push_back(flow::Connection{.sourceId = "ao-engine", .destId = "ao-stream", .isActive = true});
-      graph.connections.push_back(flow::Connection{.sourceId = "ao-stream", .destId = "ao-sink", .isActive = true});
+      graph.connections.push_back(
+        flow::Connection{.sourceId = "ao-engine", .destinationId = "ao-stream", .isActive = true});
+      graph.connections.push_back(
+        flow::Connection{.sourceId = "ao-stream", .destinationId = "ao-sink", .isActive = true});
 
       return graph;
     }
@@ -102,7 +106,7 @@ namespace ao::audio::test
 
     for (auto const& assessment : result.assessments)
     {
-      CHECK(assessment.optFormat.has_value());
+      CHECK(assessment.optFormat);
       CHECK(assessment.worstQuality == Quality::BitwisePerfect);
       CHECK(hasFinding(&assessment, QualityFindingKind::BitPerfect));
     }
@@ -118,11 +122,11 @@ namespace ao::audio::test
     CHECK(result.sourceQuality == Quality::LossySource);
     CHECK(result.pipelineQuality == Quality::BitwisePerfect);
 
-    auto const* src = findAssessment(result, "ao-source");
-    auto const* finding = findFinding(src, QualityFindingKind::LossySource);
+    auto const* sourceAssessment = findAssessment(result, "ao-source");
+    auto const* finding = findFinding(sourceAssessment, QualityFindingKind::LossySource);
     REQUIRE(finding != nullptr);
     CHECK(finding->quality == Quality::LossySource);
-    CHECK(src->worstQuality == Quality::LossySource);
+    CHECK(sourceAssessment->worstQuality == Quality::LossySource);
   }
 
   TEST_CASE("QualityAnalyzer - resampling marks engine as linear intervention", "[audio][unit][quality]")
@@ -154,8 +158,8 @@ namespace ao::audio::test
     CHECK(result.pipelineQuality == Quality::LinearIntervention);
     CHECK(result.overall == Quality::LossySource);
 
-    auto const* src = findAssessment(result, "ao-source");
-    CHECK(hasFinding(src, QualityFindingKind::LossySource));
+    auto const* sourceAssessment = findAssessment(result, "ao-source");
+    CHECK(hasFinding(sourceAssessment, QualityFindingKind::LossySource));
 
     auto const* eng = findAssessment(result, "ao-engine");
     CHECK(hasFinding(eng, QualityFindingKind::Resampling));
@@ -257,7 +261,8 @@ namespace ao::audio::test
     // Add an external source mixing into the sink
     graph.nodes.push_back(flow::Node{.id = "external-app", .type = flow::NodeType::ExternalSource, .name = "Firefox"});
 
-    graph.connections.push_back(flow::Connection{.sourceId = "external-app", .destId = "ao-sink", .isActive = true});
+    graph.connections.push_back(
+      flow::Connection{.sourceId = "external-app", .destinationId = "ao-sink", .isActive = true});
 
     auto const result = analyzeAudioQuality(graph);
     CHECK(result.overall == Quality::LinearIntervention);
@@ -277,7 +282,8 @@ namespace ao::audio::test
     auto graph = buildBaseMergedGraph();
 
     graph.nodes.push_back(flow::Node{.id = "external-app", .type = flow::NodeType::ExternalSource});
-    graph.connections.push_back(flow::Connection{.sourceId = "external-app", .destId = "ao-sink", .isActive = true});
+    graph.connections.push_back(
+      flow::Connection{.sourceId = "external-app", .destinationId = "ao-sink", .isActive = true});
 
     auto const result = analyzeAudioQuality(graph);
     CHECK(result.overall == Quality::LinearIntervention);
@@ -305,7 +311,7 @@ namespace ao::audio::test
     CHECK(eng->worstQuality == Quality::LosslessPadded);
   }
 
-  TEST_CASE("QualityAnalyzer - Source padded into wider container", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - source padded into wider container", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     // 16-bit source carried in a 32-bit container from the decoder onward: the
@@ -426,7 +432,7 @@ namespace ao::audio::test
 
     auto const* stream = findAssessment(result, "ao-stream");
     REQUIRE(stream != nullptr);
-    CHECK_FALSE(stream->optFormat.has_value());
+    CHECK_FALSE(stream->optFormat);
     CHECK(hasFinding(stream, QualityFindingKind::BitPerfect));
 
     auto const* sink = findAssessment(result, "ao-sink");
@@ -465,9 +471,9 @@ namespace ao::audio::test
     graph.nodes[4].type = flow::NodeType::Sink;
     graph.nodes[4].name = "hw:1,0";
     graph.nodes[4].optFormat = alsaFormat;
-    graph.connections[2].destId = "alsa-stream";
+    graph.connections[2].destinationId = "alsa-stream";
     graph.connections[3].sourceId = "alsa-stream";
-    graph.connections[3].destId = "alsa-sink";
+    graph.connections[3].destinationId = "alsa-sink";
 
     auto const result = analyzeAudioQuality(graph);
     CHECK(result.fullyVerified == true);

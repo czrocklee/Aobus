@@ -70,7 +70,7 @@ namespace clang::tidy::readability
         return false;
       }
 
-      std::uint32_t numSourceArgs = 0;
+      std::uint32_t sourceArgumentCount = 0;
       Expr const* firstArg = nullptr;
 
       for (std::uint32_t i = 0; i < construct->getNumArgs(); ++i)
@@ -82,21 +82,21 @@ namespace clang::tidy::readability
             firstArg = arg;
           }
 
-          numSourceArgs++;
+          sourceArgumentCount++;
         }
       }
 
-      if (numSourceArgs == 0)
+      if (sourceArgumentCount == 0)
       {
         return false;
       }
 
-      if (numSourceArgs >= 2)
+      if (sourceArgumentCount >= 2)
       {
         return true;
       }
 
-      if (numSourceArgs == 1 && firstArg != nullptr)
+      if (sourceArgumentCount == 1 && firstArg != nullptr)
       {
         QualType const argType = firstArg->IgnoreImplicit()->getType().getCanonicalType();
 

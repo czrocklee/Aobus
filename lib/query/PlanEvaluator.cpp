@@ -29,14 +29,14 @@ namespace ao::query
   namespace
   {
     // Get string constant from plan's string constants table
-    std::string_view getStringConstant(ExecutionPlan const* plan, std::int64_t stringIdx)
+    std::string_view getStringConstant(ExecutionPlan const* plan, std::int64_t stringIndex)
     {
-      if (plan == nullptr || stringIdx < 0)
+      if (plan == nullptr || stringIndex < 0)
       {
         return {};
       }
 
-      auto const idx = static_cast<size_t>(stringIdx);
+      auto const idx = static_cast<size_t>(stringIndex);
 
       if (idx >= plan->stringConstants.size())
       {
@@ -142,10 +142,10 @@ namespace ao::query
     {
       auto const field = static_cast<Field>(instr.field);
 
-      if (auto const stringIdx = reg(registers, instr.operand); isStringField(field))
+      if (auto const stringIndex = reg(registers, instr.operand); isStringField(field))
       {
         auto const fieldStr = loadStringFieldValue(track, field, instr.constValue);
-        auto const constantStr = getStringConstant(plan, stringIdx);
+        auto const constantStr = getStringConstant(plan, stringIndex);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
       else if (isDictionaryField(field) && isOrderedComparison(instr.op))
@@ -153,13 +153,13 @@ namespace ao::query
         // Dictionary fields hold interned IDs whose order is arbitrary, so an
         // ordered comparison resolves the ID back to text and compares that.
         auto const fieldStr = loadDictionaryFieldValue(track, field, plan);
-        auto const constantStr = getStringConstant(plan, stringIdx);
+        auto const constantStr = getStringConstant(plan, stringIndex);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
       else
       {
         // Numeric comparison
-        auto rhs = stringIdx;
+        auto rhs = stringIndex;
         auto lhs = reg(registers, instr.operand - 1);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), lhs, rhs) ? 1 : 0;
       }
@@ -179,10 +179,10 @@ namespace ao::query
       }
       else
       {
-        if (auto stringIdx = reg(registers, instr.operand); isStringField(field))
+        if (auto stringIndex = reg(registers, instr.operand); isStringField(field))
         {
           auto const fieldStr = loadStringFieldValue(track, field, instr.constValue);
-          auto const constantStr = getStringConstant(plan, stringIdx);
+          auto const constantStr = getStringConstant(plan, stringIndex);
           reg(registers, instr.operand - 1) = (fieldStr == constantStr) ? 1 : 0;
         }
         else
@@ -289,15 +289,15 @@ namespace ao::query
         return;
       }
 
-      auto const setIdx = static_cast<std::size_t>(instr.constValue);
+      auto const setIndex = static_cast<std::size_t>(instr.constValue);
 
-      if (setIdx >= plan->inSets.size())
+      if (setIndex >= plan->inSets.size())
       {
         reg(registers, instr.operand) = 0;
         return;
       }
 
-      auto const& set = plan->inSets[setIdx];
+      auto const& set = plan->inSets[setIndex];
 
       if (set.stringValues)
       {

@@ -226,9 +226,9 @@ namespace ao::media::flac
 
     MetadataBlockViewIterator operator++(std::int32_t)
     {
-      auto tmp = *this;
+      auto temp = *this;
       increment();
-      return tmp;
+      return temp;
     }
 
     bool operator==(MetadataBlockViewIterator const& other) const { return _view._data == other._view._data; }

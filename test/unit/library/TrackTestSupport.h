@@ -201,7 +201,7 @@ namespace ao::library::test
     auto reader = library.tracks().reader(txn);
     auto writer = library.tracks().writer(txn);
     auto optView = reader.get(id, TrackStore::Reader::LoadMode::Both);
-    REQUIRE(optView.has_value());
+    REQUIRE(optView);
 
     auto builder = TrackBuilder::fromView(*optView, library.dictionary());
     mutate(builder);
@@ -223,7 +223,7 @@ namespace ao::library::test
       auto txn = library.readTransaction();
       auto reader = library.tracks().reader(txn);
       auto optView = reader.get(id, TrackStore::Reader::LoadMode::Both);
-      REQUIRE(optView.has_value());
+      REQUIRE(optView);
       spec = trackSpecFromView(library, *optView);
     }
 

@@ -18,7 +18,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackQuickFilter renders action buttons and follows focused view", "[gtk][unit][track][quick-filter]")
+  TEST_CASE("TrackQuickFilter - renders action buttons and follows focused view", "[gtk][unit][track][quick-filter]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

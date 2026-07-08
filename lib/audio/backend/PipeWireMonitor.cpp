@@ -838,11 +838,11 @@ namespace ao::audio::backend
 
     for (std::size_t i = 0; i < ctx.reachableNodes.size(); ++i)
     {
-      auto curr = ctx.reachableNodes[i];
+      auto const currentNodeId = ctx.reachableNodes[i];
 
       for (auto const& [_, link] : links)
       {
-        if (!isActiveLink(static_cast<::pw_link_state>(link.state)) || link.outputNodeId != curr ||
+        if (!isActiveLink(static_cast<::pw_link_state>(link.state)) || link.outputNodeId != currentNodeId ||
             link.inputNodeId == PW_ID_ANY)
         {
           continue;
@@ -955,7 +955,7 @@ namespace ao::audio::backend
           ctx.fullSet.contains(link.inputNodeId))
       {
         graph.connections.push_back({.sourceId = std::format("{}", link.outputNodeId),
-                                     .destId = std::format("{}", link.inputNodeId),
+                                     .destinationId = std::format("{}", link.inputNodeId),
                                      .isActive = true});
       }
     }

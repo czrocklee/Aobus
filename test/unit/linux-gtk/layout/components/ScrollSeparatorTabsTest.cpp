@@ -19,7 +19,8 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("Scroll, separator, and tabs components render container geometry", "[gtk][unit][geometry]")
+  TEST_CASE("ScrollSeparatorTabs - scroll, separator, and tabs components render container geometry",
+            "[gtk][unit][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

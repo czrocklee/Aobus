@@ -12,7 +12,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("ExecutionPlan - preserves field enum values", "[query][unit][execution_plan][contract]")
+  TEST_CASE("ExecutionPlan - preserves field enum values", "[query][unit][execution-plan][contract]")
   {
     // String fields
     CHECK(static_cast<std::uint8_t>(Field::Title) == 0);
@@ -49,7 +49,7 @@ namespace ao::query::test
     CHECK(static_cast<std::uint8_t>(Field::SoloistId) == 30);
   }
 
-  TEST_CASE("ExecutionPlan - preserves opcode enum values", "[query][unit][execution_plan][contract]")
+  TEST_CASE("ExecutionPlan - preserves opcode enum values", "[query][unit][execution-plan][contract]")
   {
     CHECK(static_cast<std::uint8_t>(OpCode::Nop) == 0);
     CHECK(static_cast<std::uint8_t>(OpCode::LoadField) == 1);
@@ -58,7 +58,7 @@ namespace ao::query::test
     CHECK(static_cast<std::uint8_t>(OpCode::Ne) == 4);
   }
 
-  TEST_CASE("compileQuery returns Result without throwing", "[query][unit][execution_plan][contract]")
+  TEST_CASE("compileQuery returns Result without throwing", "[query][unit][execution-plan][contract]")
   {
     SECTION("Valid predicate yields a plan")
     {

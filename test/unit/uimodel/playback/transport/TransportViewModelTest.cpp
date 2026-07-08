@@ -189,7 +189,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TransportViewModel stops rendering after destruction", "[uimodel][unit][playback]")
+  TEST_CASE("TransportViewModel - stops rendering after destruction", "[uimodel][unit][playback]")
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);

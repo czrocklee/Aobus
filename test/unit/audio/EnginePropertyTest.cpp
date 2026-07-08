@@ -67,7 +67,7 @@ namespace ao::audio::test
     CHECK(engine.status().volumeAvailable == true);
   }
 
-  TEST_CASE("Engine - Property API", "[audio][unit][engine][property]")
+  TEST_CASE("Engine - exposes property API", "[audio][unit][engine][property]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",

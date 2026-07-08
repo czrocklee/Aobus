@@ -14,7 +14,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("DecoderFactory - Creates sessions based on extension", "[audio][unit][decoder]")
+  TEST_CASE("DecoderFactory - creates sessions based on extension", "[audio][unit][decoder]")
   {
     auto const format =
       Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true};

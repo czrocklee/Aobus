@@ -23,14 +23,14 @@ namespace
 
 namespace ao::rt::test
 {
-  TEST_CASE("TrackField registry contains exactly kTrackFieldCount definitions", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - registry contains exactly kTrackFieldCount definitions", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
 
     CHECK(defs.size() == kTrackFieldCount);
   }
 
-  TEST_CASE("TrackField registry has no duplicate ids", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - registry has no duplicate ids", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
     auto seen = std::unordered_set<std::string_view>{};
@@ -42,7 +42,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackField registry has no duplicate field values", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - registry has no duplicate field values", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
     auto seen = std::unordered_set<std::uint8_t>{};
@@ -79,7 +79,7 @@ namespace ao::rt::test
       auto const optParsed = trackFieldFromId(id);
 
       INFO("Field: " << def.id);
-      REQUIRE(optParsed.has_value());
+      REQUIRE(optParsed);
       CHECK(*optParsed == def.field);
     }
   }
@@ -107,7 +107,7 @@ namespace ao::rt::test
     CHECK_FALSE(trackFieldFromId("Track").has_value());
   }
 
-  TEST_CASE("TrackField registry exposes expected category counts", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - registry exposes expected category counts", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
 
@@ -124,7 +124,7 @@ namespace ao::rt::test
     CHECK(syntheticCount == 3);
   }
 
-  TEST_CASE("TrackField registry marks all fields presentable", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - registry marks all fields presentable", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
 
@@ -135,7 +135,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackField editable fields match metadata text and numeric fields", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - editable fields match metadata text and numeric fields", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
 
@@ -154,7 +154,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackField sortable fields have valid optSortField", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - sortable fields have valid optSortField", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
 
@@ -164,17 +164,17 @@ namespace ao::rt::test
 
       if (def.sortable)
       {
-        REQUIRE(static_cast<bool>(def.optSortField));
+        REQUIRE(def.optSortField);
         CHECK(static_cast<std::size_t>(*def.optSortField) < kTrackSortFieldCount);
       }
       else
       {
-        CHECK_FALSE(static_cast<bool>(def.optSortField));
+        CHECK_FALSE(def.optSortField);
       }
     }
   }
 
-  TEST_CASE("TrackField groupable fields have valid optGroupKey", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - groupable fields have valid optGroupKey", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
 
@@ -184,17 +184,17 @@ namespace ao::rt::test
 
       if (def.groupable)
       {
-        REQUIRE(static_cast<bool>(def.optGroupKey));
+        REQUIRE(def.optGroupKey);
         CHECK(static_cast<std::size_t>(*def.optGroupKey) < kTrackGroupKeyCount);
       }
       else
       {
-        CHECK_FALSE(static_cast<bool>(def.optGroupKey));
+        CHECK_FALSE(def.optGroupKey);
       }
     }
   }
 
-  TEST_CASE("TrackField synthetic fields are DisplayTrackNumber, TechnicalSummary, Quality",
+  TEST_CASE("TrackField - synthetic fields are DisplayTrackNumber, TechnicalSummary, Quality",
             "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
@@ -215,7 +215,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackField definitions map fields to sort keys", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - definitions map fields to sort keys", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldDefinition(TrackField::Title)->optSortField == TrackSortField::Title);
     CHECK(trackFieldDefinition(TrackField::Artist)->optSortField == TrackSortField::Artist);
@@ -235,7 +235,7 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::Duration)->optSortField == TrackSortField::Duration);
   }
 
-  TEST_CASE("TrackField definitions map fields to group keys", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - definitions map fields to group keys", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldDefinition(TrackField::Artist)->optGroupKey == TrackGroupKey::Artist);
     CHECK(trackFieldDefinition(TrackField::Album)->optGroupKey == TrackGroupKey::Album);
@@ -249,7 +249,7 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::Year)->optGroupKey == TrackGroupKey::Year);
   }
 
-  TEST_CASE("TrackField definitions expose stable labels", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - definitions expose stable labels", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldDefinition(TrackField::Title)->label == "Title");
     CHECK(trackFieldDefinition(TrackField::Artist)->label == "Artist");
@@ -284,7 +284,7 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::Quality)->label == "Quality");
   }
 
-  TEST_CASE("TrackField definitions expose filter expression variables", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - definitions expose filter expression variables", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldFilterExpressionVariable(TrackField::Title) == "$title");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Artist) == "$artist");
@@ -309,7 +309,7 @@ namespace ao::rt::test
     CHECK(trackFieldFilterExpressionVariable(TrackField::Bitrate) == "@bitrate");
   }
 
-  TEST_CASE("TrackField helpers report filter expression support", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - helpers report filter expression support", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldSupportsFilterExpression(TrackField::Artist));
     CHECK(trackFieldSupportsFilterExpression(TrackField::AlbumArtist));
@@ -320,7 +320,7 @@ namespace ao::rt::test
     CHECK_FALSE(trackFieldSupportsFilterExpression(TrackField::Quality));
   }
 
-  TEST_CASE("TrackField helpers report value completion support", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - helpers report value completion support", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldSupportsValueCompletion(TrackField::Artist));
     CHECK(trackFieldSupportsValueCompletion(TrackField::Album));
@@ -338,7 +338,7 @@ namespace ao::rt::test
     CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Tags));
   }
 
-  TEST_CASE("TrackField helpers return empty values for invalid fields", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - helpers return empty values for invalid fields", "[runtime][unit][trackfield]")
   {
     auto const invalidField = static_cast<TrackField>(255);
     CHECK(trackFieldId(invalidField).empty());

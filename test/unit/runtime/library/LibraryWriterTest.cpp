@@ -214,7 +214,7 @@ namespace ao::rt::test
     CHECK(std::ranges::distance(optView->customMetadata()) == 0);
   }
 
-  TEST_CASE("LibraryWriter - editTags reports mutations for tag edits", "[runtime][unit][library][mutation][tags]")
+  TEST_CASE("LibraryWriter - editTags reports mutations for tag edits", "[runtime][unit][library][tag]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Track");
@@ -230,8 +230,7 @@ namespace ao::rt::test
     CHECK_FALSE(result->mutatedIds.empty());
   }
 
-  TEST_CASE("LibraryWriter - editTags skips missing tracks without mutations",
-            "[runtime][unit][library][mutation][tags]")
+  TEST_CASE("LibraryWriter - editTags skips missing tracks without mutations", "[runtime][unit][library][tag]")
   {
     auto testLib = TestMusicLibrary{};
     auto changes = LibraryChanges{};
@@ -244,7 +243,7 @@ namespace ao::rt::test
     CHECK(result->mutatedIds.empty());
   }
 
-  TEST_CASE("LibraryWriter - manual lists can be created and updated", "[runtime][unit][library][mutation][list]")
+  TEST_CASE("LibraryWriter - manual lists can be created and updated", "[runtime][unit][library][list]")
   {
     auto testLib = TestMusicLibrary{};
     auto const t1 = testLib.addTrack("A");
@@ -291,7 +290,7 @@ namespace ao::rt::test
     CHECK(upserted[0] == listId);
   }
 
-  TEST_CASE("LibraryWriter - rejects invalid list drafts", "[runtime][unit][library][mutation][list]")
+  TEST_CASE("LibraryWriter - rejects invalid list drafts", "[runtime][unit][library][list]")
   {
     auto testLib = TestMusicLibrary{};
     auto changes = LibraryChanges{};
@@ -368,7 +367,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryWriter - updateList skips unchanged drafts", "[runtime][unit][library][mutation][list]")
+  TEST_CASE("LibraryWriter - updateList skips unchanged drafts", "[runtime][unit][library][list]")
   {
     auto testLib = TestMusicLibrary{};
     auto changes = LibraryChanges{};
@@ -388,7 +387,7 @@ namespace ao::rt::test
     CHECK(upserted.empty());
   }
 
-  TEST_CASE("LibraryWriter - updateList reports missing lists as NotFound", "[runtime][unit][library][mutation][list]")
+  TEST_CASE("LibraryWriter - updateList reports missing lists as NotFound", "[runtime][unit][library][list]")
   {
     auto testLib = TestMusicLibrary{};
     auto changes = LibraryChanges{};

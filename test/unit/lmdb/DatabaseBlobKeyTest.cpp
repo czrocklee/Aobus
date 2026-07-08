@@ -83,7 +83,7 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("Database::Reader::KeyView - coercion throws on non-uint32 key", "[lmdb][unit][database][reader][blob]")
+  TEST_CASE("Database::Reader::KeyView - coercion throws on non-uint32 key", "[lmdb][unit][database-reader][blob]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});

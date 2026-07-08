@@ -17,8 +17,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("LibraryWriter editTags adds a new tag and publishes a mutation",
-            "[runtime][unit][library][mutation][tags]")
+  TEST_CASE("LibraryWriter - editTags adds a new tag and publishes a mutation", "[runtime][unit][library][tag]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Test Track");
@@ -41,12 +40,12 @@ namespace ao::rt::test
     auto txn = testLib.library().readTransaction();
     auto const optTrackView =
       testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
-    REQUIRE(optTrackView.has_value());
+    REQUIRE(optTrackView);
     auto builder = library::TrackBuilder::fromView(*optTrackView, testLib.library().dictionary());
     CHECK(std::ranges::contains(builder.tags().names(), std::string_view{"Favorite"}));
   }
 
-  TEST_CASE("LibraryWriter editTags ignores an existing tag", "[runtime][unit][library][mutation][tags]")
+  TEST_CASE("LibraryWriter - editTags ignores an existing tag", "[runtime][unit][library][tag]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Test Track");
@@ -68,8 +67,7 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
-  TEST_CASE("LibraryWriter editTags ignores tag additions for missing tracks",
-            "[runtime][unit][library][mutation][tags]")
+  TEST_CASE("LibraryWriter - editTags ignores tag additions for missing tracks", "[runtime][unit][library][tag]")
   {
     auto testLib = TestMusicLibrary{};
     [[maybe_unused]] auto const trackId = testLib.addTrack("Test Track");
@@ -87,8 +85,8 @@ namespace ao::rt::test
     CHECK(reply->mutatedIds.empty());
   }
 
-  TEST_CASE("LibraryWriter editTags removes an existing tag and publishes a mutation",
-            "[runtime][unit][library][mutation][tags]")
+  TEST_CASE("LibraryWriter - editTags removes an existing tag and publishes a mutation",
+            "[runtime][unit][library][tag]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Test Track");
@@ -111,7 +109,7 @@ namespace ao::rt::test
     CHECK(mutated[0] == trackId);
   }
 
-  TEST_CASE("LibraryWriter editTags ignores missing tags", "[runtime][unit][library][mutation][tags]")
+  TEST_CASE("LibraryWriter - editTags ignores missing tags", "[runtime][unit][library][tag]")
   {
     auto testLib = TestMusicLibrary{};
     auto const trackId = testLib.addTrack("Test Track");
@@ -129,8 +127,7 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
-  TEST_CASE("LibraryWriter editTags ignores tag removals for missing tracks",
-            "[runtime][unit][library][mutation][tags]")
+  TEST_CASE("LibraryWriter - editTags ignores tag removals for missing tracks", "[runtime][unit][library][tag]")
   {
     auto testLib = TestMusicLibrary{};
     [[maybe_unused]] auto const trackId = testLib.addTrack("Test Track");

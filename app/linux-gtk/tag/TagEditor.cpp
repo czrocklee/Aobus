@@ -99,25 +99,25 @@ namespace ao::gtk
       }
 
       auto rowTops = std::vector<std::int32_t>(rowHeights.size(), 0);
-      std::int32_t yPos = 0;
+      std::int32_t yPosition = 0;
 
-      for (std::size_t rowIdx = 0; rowIdx < rowHeights.size(); ++rowIdx)
+      for (std::size_t rowIndex = 0; rowIndex < rowHeights.size(); ++rowIndex)
       {
-        if (rowIdx > 0)
+        if (rowIndex > 0)
         {
-          yPos += spacing;
+          yPosition += spacing;
         }
 
-        rowTops[rowIdx] = yPos;
-        yPos += rowHeights[rowIdx];
+        rowTops[rowIndex] = yPosition;
+        yPosition += rowHeights[rowIndex];
       }
 
-      auto size = FlowSize{.naturalWidth = 0, .height = yPos};
+      auto size = FlowSize{.naturalWidth = 0, .height = yPosition};
 
       for (auto const& item : items)
       {
-        auto const rowIdx = static_cast<std::size_t>(item.row);
-        place(item.widget, item.x, rowTops[rowIdx], item.width, rowHeights[rowIdx]);
+        auto const rowIndex = static_cast<std::size_t>(item.row);
+        place(item.widget, item.x, rowTops[rowIndex], item.width, rowHeights[rowIndex]);
         size.naturalWidth = std::max(size.naturalWidth, item.x + item.width);
       }
 
@@ -408,12 +408,15 @@ namespace ao::gtk
 
   void TagEditor::size_allocate_vfunc(int width, int /*height*/, int /*baseline*/)
   {
-    layoutFlow(
-      get_first_child(),
-      width,
-      chipFlowGap(*this),
-      [](Gtk::Widget* child, std::int32_t xPos, std::int32_t yPos, std::int32_t childWidth, std::int32_t childHeight)
-      { child->size_allocate(Gtk::Allocation{xPos, yPos, childWidth, childHeight}, -1); });
+    layoutFlow(get_first_child(),
+               width,
+               chipFlowGap(*this),
+               [](Gtk::Widget* child,
+                  std::int32_t xPosition,
+                  std::int32_t yPosition,
+                  std::int32_t childWidth,
+                  std::int32_t childHeight)
+               { child->size_allocate(Gtk::Allocation{xPosition, yPosition, childWidth, childHeight}, -1); });
   }
 
   void TagEditor::setup(rt::Library const& reads, std::vector<TrackId> selectedTrackIds)

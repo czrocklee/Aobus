@@ -29,8 +29,8 @@ namespace ao::tag::test
   TEST_CASE("Decoder - parseSlashPair splits primary/secondary", "[tag][unit][decoder]")
   {
     auto const both = parseSlashPair("3/12");
-    REQUIRE(both.optPrimary.has_value());
-    REQUIRE(both.optSecondary.has_value());
+    REQUIRE(both.optPrimary);
+    REQUIRE(both.optSecondary);
     CHECK(*both.optPrimary == 3U);
     CHECK(*both.optSecondary == 12U);
   }
@@ -38,24 +38,24 @@ namespace ao::tag::test
   TEST_CASE("Decoder - parseSlashPair handles a bare primary", "[tag][unit][decoder]")
   {
     auto const single = parseSlashPair("5");
-    REQUIRE(single.optPrimary.has_value());
+    REQUIRE(single.optPrimary);
     CHECK(*single.optPrimary == 5U);
-    CHECK_FALSE(single.optSecondary.has_value());
+    CHECK_FALSE(single.optSecondary);
   }
 
   TEST_CASE("Decoder - parseSlashPair tolerates missing or invalid components", "[tag][unit][decoder]")
   {
     // Empty primary before the slash.
     auto const leadingSlash = parseSlashPair("/7");
-    CHECK_FALSE(leadingSlash.optPrimary.has_value());
-    REQUIRE(leadingSlash.optSecondary.has_value());
+    CHECK_FALSE(leadingSlash.optPrimary);
+    REQUIRE(leadingSlash.optSecondary);
     CHECK(*leadingSlash.optSecondary == 7U);
 
     // Wholly empty and non-numeric inputs yield no values.
-    CHECK_FALSE(parseSlashPair("").optPrimary.has_value());
-    CHECK_FALSE(parseSlashPair("abc").optPrimary.has_value());
+    CHECK_FALSE(parseSlashPair("").optPrimary);
+    CHECK_FALSE(parseSlashPair("abc").optPrimary);
 
     // Out-of-range for uint16 is rejected (not silently truncated).
-    CHECK_FALSE(parseSlashPair("70000").optPrimary.has_value());
+    CHECK_FALSE(parseSlashPair("70000").optPrimary);
   }
 } // namespace ao::tag::test

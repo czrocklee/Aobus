@@ -106,7 +106,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("TrackDetail cover art keeps square sizing under constrained width", "[gtk][unit][geometry]")
+  TEST_CASE("TrackDetail - cover art keeps square sizing under constrained width", "[gtk][unit][geometry]")
   {
     int const targetSize = 250;
 
@@ -118,7 +118,7 @@ namespace ao::gtk::layout::test
     CHECK(coverArtSideForWidth(180, 0) == 0);
   }
 
-  TEST_CASE("DetailFieldEditor coordinates edit sessions", "[gtk][unit][track]")
+  TEST_CASE("DetailFieldEditor - coordinates edit sessions", "[gtk][unit][track]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.detail_editor_test");
     auto window = Gtk::Window{};
@@ -156,7 +156,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(secondEntry.get_child_visible());
   }
 
-  TEST_CASE("AddCustomMetadataButton submits popover values", "[gtk][unit][track]")
+  TEST_CASE("AddCustomMetadataButton - submits popover values", "[gtk][unit][track]")
   {
     auto windowFixture = ao::gtk::test::GtkWindowFixture{};
     auto addButton = track_field_grid::AddCustomMetadataButton{};
@@ -188,7 +188,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackFieldGrid maintains constrained value-column geometry", "[gtk][unit][geometry]")
+  TEST_CASE("TrackFieldGrid - maintains constrained value-column geometry", "[gtk][unit][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& registry = fixture.components();

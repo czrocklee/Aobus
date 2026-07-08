@@ -48,7 +48,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("NavigationHistory - zero max size is accepted as an empty history",
-            "[runtime][unit][navigation][lifecycle][capacity]")
+            "[runtime][unit][navigation][lifecycle]")
   {
     auto const h = NavigationHistory{0};
     // Should not crash; max size is clamped to at least 1 internally.
@@ -76,7 +76,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("NavigationHistory - committing a second point enables backward navigation",
-            "[runtime][unit][navigation][commit][traversal]")
+            "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
     h.commit(makePoint(ListId{10}));
@@ -104,8 +104,7 @@ namespace ao::rt::test
     CHECK_FALSE(h.canGoForward());
   }
 
-  TEST_CASE("NavigationHistory - committing the current point is deduplicated",
-            "[runtime][unit][navigation][commit][dedup]")
+  TEST_CASE("NavigationHistory - committing the current point is deduplicated", "[runtime][unit][navigation][dedup]")
   {
     auto h = NavigationHistory{};
     auto const point = makePoint(ListId{10});
@@ -116,8 +115,7 @@ namespace ao::rt::test
     CHECK(h.currentIndex() == 0);
   }
 
-  TEST_CASE("NavigationHistory - presentation changes create distinct points",
-            "[runtime][unit][navigation][commit][dedup]")
+  TEST_CASE("NavigationHistory - presentation changes create distinct points", "[runtime][unit][navigation][dedup]")
   {
     auto h = NavigationHistory{};
     auto const pointA = makePoint(ListId{10}, {}, makeSpec("songs"));
@@ -128,7 +126,7 @@ namespace ao::rt::test
     CHECK(h.size() == 2);
   }
 
-  TEST_CASE("NavigationHistory - filter changes create distinct points", "[runtime][unit][navigation][commit][dedup]")
+  TEST_CASE("NavigationHistory - filter changes create distinct points", "[runtime][unit][navigation][dedup]")
   {
     auto h = NavigationHistory{};
     h.commit(makePoint(ListId{10}));
@@ -137,7 +135,7 @@ namespace ao::rt::test
     CHECK(h.size() == 2);
   }
 
-  TEST_CASE("NavigationHistory - list changes create distinct points", "[runtime][unit][navigation][commit][dedup]")
+  TEST_CASE("NavigationHistory - list changes create distinct points", "[runtime][unit][navigation][dedup]")
   {
     auto h = NavigationHistory{};
     h.commit(makePoint(ListId{10}));
@@ -156,7 +154,7 @@ namespace ao::rt::test
     h.commit(b);
 
     auto const optResult = h.back();
-    REQUIRE(optResult.has_value());
+    REQUIRE(optResult);
     CHECK(*optResult == a);
     CHECK(h.currentIndex() == 0);
     CHECK_FALSE(h.canGoBack());
@@ -172,7 +170,7 @@ namespace ao::rt::test
     h.commit(makePoint(ListId{30}));
 
     auto const optResult = h.back();
-    REQUIRE(optResult.has_value());
+    REQUIRE(optResult);
     CHECK(optResult->listId == ListId{20});
     CHECK(h.currentIndex() == 1);
     CHECK(h.canGoBack());
@@ -180,18 +178,17 @@ namespace ao::rt::test
   }
 
   TEST_CASE("NavigationHistory - back at the first point leaves the current index unchanged",
-            "[runtime][unit][navigation][traversal][boundary]")
+            "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
     h.commit(makePoint(ListId{10}));
 
     auto const optResult = h.back();
-    CHECK_FALSE(optResult.has_value());
+    CHECK_FALSE(optResult);
     CHECK(h.currentIndex() == 0);
   }
 
-  TEST_CASE("NavigationHistory - back on empty history returns no point",
-            "[runtime][unit][navigation][traversal][boundary]")
+  TEST_CASE("NavigationHistory - back on empty history returns no point", "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
     CHECK_FALSE(h.back().has_value());
@@ -206,14 +203,14 @@ namespace ao::rt::test
     h.back();
 
     auto const optResult = h.forward();
-    REQUIRE(optResult.has_value());
+    REQUIRE(optResult);
     CHECK(optResult->listId == ListId{30});
     CHECK(h.currentIndex() == 2);
     CHECK_FALSE(h.canGoForward());
   }
 
   TEST_CASE("NavigationHistory - forward at the newest point leaves the current index unchanged",
-            "[runtime][unit][navigation][traversal][boundary]")
+            "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
     h.commit(makePoint(ListId{10}));
@@ -222,8 +219,7 @@ namespace ao::rt::test
     CHECK(h.currentIndex() == 0);
   }
 
-  TEST_CASE("NavigationHistory - forward on empty history returns no point",
-            "[runtime][unit][navigation][traversal][boundary]")
+  TEST_CASE("NavigationHistory - forward on empty history returns no point", "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
     CHECK_FALSE(h.forward().has_value());
@@ -241,7 +237,7 @@ namespace ao::rt::test
     h.back();                        // to C
     h.back();                        // to B
     auto const optFwd = h.forward(); // to C
-    REQUIRE(optFwd.has_value());
+    REQUIRE(optFwd);
     CHECK(optFwd->listId == ListId{30});
   }
 
@@ -257,12 +253,12 @@ namespace ao::rt::test
     h.back();                        // to A
     h.forward();                     // to B
     auto const optFwd = h.forward(); // to C
-    REQUIRE(optFwd.has_value());
+    REQUIRE(optFwd);
     CHECK(optFwd->listId == ListId{30});
   }
 
   TEST_CASE("NavigationHistory - committing after back truncates forward history",
-            "[runtime][unit][navigation][commit][traversal]")
+            "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
     h.commit(makePoint(ListId{10})); // A
@@ -280,7 +276,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("NavigationHistory - committing from the first point removes all future entries",
-            "[runtime][unit][navigation][commit][traversal]")
+            "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
     h.commit(makePoint(ListId{10})); // A
@@ -296,8 +292,7 @@ namespace ao::rt::test
     CHECK(h.current()->listId == ListId{40});
   }
 
-  TEST_CASE("NavigationHistory - capacity eviction removes the oldest point",
-            "[runtime][unit][navigation][capacity][eviction]")
+  TEST_CASE("NavigationHistory - capacity eviction removes the oldest point", "[runtime][unit][navigation][eviction]")
   {
     auto h = NavigationHistory{3};
     h.commit(makePoint(ListId{10})); // A
@@ -310,12 +305,11 @@ namespace ao::rt::test
     CHECK(h.current()->listId == ListId{40});
 
     auto const optFirstBack = h.back();
-    REQUIRE(optFirstBack.has_value());
+    REQUIRE(optFirstBack);
     CHECK(optFirstBack->listId == ListId{30});
   }
 
-  TEST_CASE("NavigationHistory - capacity one keeps only the newest point",
-            "[runtime][unit][navigation][capacity][eviction]")
+  TEST_CASE("NavigationHistory - capacity one keeps only the newest point", "[runtime][unit][navigation][eviction]")
   {
     auto h = NavigationHistory{1};
     h.commit(makePoint(ListId{10}));
@@ -328,7 +322,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("NavigationHistory - capacity one never enables backward navigation",
-            "[runtime][unit][navigation][capacity][traversal]")
+            "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{1};
     h.commit(makePoint(ListId{10}));
@@ -373,7 +367,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("NavigationHistory - committing at the first point truncates forward history",
-            "[runtime][unit][navigation][commit][traversal][boundary]")
+            "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
     h.commit(makePoint(ListId{10})); // A

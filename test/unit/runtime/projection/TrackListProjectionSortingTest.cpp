@@ -98,7 +98,7 @@ namespace ao::rt::test
         auto reader = env.lib.library().tracks().reader(txn);
         auto const optV = reader.get(proj.trackIdAt(idx), TrackStore::Reader::LoadMode::Hot);
 
-        REQUIRE(optV.has_value());
+        REQUIRE(optV);
         CHECK(optV->metadata().year() == expectedYear);
       }
     };
@@ -118,8 +118,8 @@ namespace ao::rt::test
         auto const optA = reader.get(proj.trackIdAt(idx), TrackStore::Reader::LoadMode::Hot);
         auto const optB = reader.get(proj.trackIdAt(idx + 1), TrackStore::Reader::LoadMode::Hot);
 
-        REQUIRE(optA.has_value());
-        REQUIRE(optB.has_value());
+        REQUIRE(optA);
+        REQUIRE(optB);
         CHECK(std::string{optA->metadata().title()} <= std::string{optB->metadata().title()});
       }
     }
@@ -181,9 +181,9 @@ namespace ao::rt::test
 
     // Verify monotonic: album non-decreasing, disc non-decreasing within album,
     // track non-decreasing within disc.
-    auto prevAlbum = std::string{};
-    std::uint16_t prevDisc = 0;
-    std::uint16_t prevTrack = 0;
+    auto previousAlbum = std::string{};
+    std::uint16_t previousDisc = 0;
+    std::uint16_t previousTrack = 0;
 
     auto const& dict = env.lib.library().dictionary();
     auto txn = env.lib.library().readTransaction();
@@ -192,7 +192,7 @@ namespace ao::rt::test
     for (std::size_t i = 0; i < 15; ++i)
     {
       auto const optView = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
-      REQUIRE(optView.has_value());
+      REQUIRE(optView);
 
       auto const album = std::string{dict.get(optView->metadata().albumId())};
       auto const disc = optView->metadata().discNumber();
@@ -200,14 +200,14 @@ namespace ao::rt::test
 
       if (i > 0)
       {
-        auto const albumCmp = prevAlbum.compare(album);
-        CHECK((albumCmp < 0 || (albumCmp == 0 && disc >= prevDisc) ||
-               (albumCmp == 0 && disc == prevDisc && track >= prevTrack)));
+        auto const albumCmp = previousAlbum.compare(album);
+        CHECK((albumCmp < 0 || (albumCmp == 0 && disc >= previousDisc) ||
+               (albumCmp == 0 && disc == previousDisc && track >= previousTrack)));
       }
 
-      prevAlbum = album;
-      prevDisc = disc;
-      prevTrack = track;
+      previousAlbum = album;
+      previousDisc = disc;
+      previousTrack = track;
     }
   }
 
@@ -309,7 +309,7 @@ namespace ao::rt::test
     for (std::size_t i = 0; i < proj.size(); ++i)
     {
       auto const optView = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
-      REQUIRE(optView.has_value());
+      REQUIRE(optView);
       orderedAlbums.emplace_back(dict.get(optView->metadata().albumId()));
       orderedMovements.push_back(optView->classical().movementNumber());
     }
@@ -376,8 +376,8 @@ namespace ao::rt::test
         auto reader = env.lib.library().tracks().reader(txn);
         auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
         auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
-        REQUIRE(optA.has_value());
-        REQUIRE(optB.has_value());
+        REQUIRE(optA);
+        REQUIRE(optB);
         auto ay = optA->metadata().year();
 
         if (auto by = optB->metadata().year(); ascending)
@@ -431,8 +431,8 @@ namespace ao::rt::test
       auto reader = env.lib.library().tracks().reader(txn);
       auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
       auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
-      REQUIRE(optA.has_value());
-      REQUIRE(optB.has_value());
+      REQUIRE(optA);
+      REQUIRE(optB);
       CHECK(optA->metadata().year() <= optB->metadata().year());
     }
 
@@ -446,8 +446,8 @@ namespace ao::rt::test
       auto reader = env.lib.library().tracks().reader(txn);
       auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
       auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
-      REQUIRE(optA.has_value());
-      REQUIRE(optB.has_value());
+      REQUIRE(optA);
+      REQUIRE(optB);
       CHECK(std::string{optA->metadata().title()} <= std::string{optB->metadata().title()});
     }
   }

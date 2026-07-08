@@ -61,21 +61,21 @@ namespace clang::tidy::modernize
       // 2. Check if followed by a comma (e.g. [[nodiscard, deprecated]])
       if (endData[0] == ',')
       {
-        char const* curr = endData + 1;
+        char const* cursor = endData + 1;
 
-        while (*curr == ' ' || *curr == '\t')
+        while (*cursor == ' ' || *cursor == '\t')
         {
-          curr++;
+          cursor++;
         }
 
         // Reaching the NUL terminator means the attribute list is truncated at
         // EOF; fall back to removing just the attribute token.
-        if (*curr == '\0')
+        if (*cursor == '\0')
         {
           return CharSourceRange::getTokenRange(range);
         }
 
-        SourceLocation const fullEnd = tokenEndLoc.getLocWithOffset(static_cast<std::int32_t>(curr - endData));
+        SourceLocation const fullEnd = tokenEndLoc.getLocWithOffset(static_cast<std::int32_t>(cursor - endData));
 
         return CharSourceRange::getCharRange(beginLoc, fullEnd);
       }
@@ -85,16 +85,16 @@ namespace clang::tidy::modernize
 
       if (!invalid && fileStartData != nullptr && beginData > fileStartData)
       {
-        char const* curr = beginData - 1;
+        char const* cursor = beginData - 1;
 
-        while (curr > fileStartData && (*curr == ' ' || *curr == '\t'))
+        while (cursor > fileStartData && (*cursor == ' ' || *cursor == '\t'))
         {
-          curr--;
+          cursor--;
         }
 
-        if (curr >= fileStartData && *curr == ',')
+        if (cursor >= fileStartData && *cursor == ',')
         {
-          SourceLocation const fullBegin = beginLoc.getLocWithOffset(static_cast<std::int32_t>(curr - beginData));
+          SourceLocation const fullBegin = beginLoc.getLocWithOffset(static_cast<std::int32_t>(cursor - beginData));
 
           return CharSourceRange::getCharRange(fullBegin, tokenEndLoc);
         }

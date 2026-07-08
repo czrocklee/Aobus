@@ -22,7 +22,7 @@ namespace ao::query::test
 {
   using namespace ao::lmdb::test;
 
-  TEST_CASE("ExecutionPlan - compiles custom field existence with dictionary IDs", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles custom field existence with dictionary IDs", "[query][unit][execution-plan]")
   {
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -39,7 +39,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - compiles LIKE for artist ids", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles LIKE for artist ids", "[query][unit][execution-plan]")
   {
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -60,7 +60,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - interns tags missing from the dictionary", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - interns tags missing from the dictionary", "[query][unit][execution-plan]")
   {
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -103,7 +103,7 @@ namespace ao::query::test
     CHECK((plan.tagBloomMask & expectedBit) == expectedBit);
   }
 
-  TEST_CASE("ExecutionPlan - interns custom fields missing from the dictionary", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - interns custom fields missing from the dictionary", "[query][unit][execution-plan]")
   {
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -135,7 +135,7 @@ namespace ao::query::test
     CHECK(foundLoadField);
   }
 
-  TEST_CASE("ExecutionPlan - resolves dictionary-backed fields", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - resolves dictionary-backed fields", "[query][unit][execution-plan]")
   {
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});

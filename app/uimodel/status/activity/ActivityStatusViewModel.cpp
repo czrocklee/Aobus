@@ -154,7 +154,7 @@ namespace ao::uimodel
 
   bool ActivityStatusViewModel::hasPendingAutoDismiss() const noexcept
   {
-    return static_cast<bool>(_implPtr->optAutoDismissDeadline);
+    return _implPtr->optAutoDismissDeadline.has_value();
   }
 
   bool ActivityStatusViewModel::expireTransientIfDue()

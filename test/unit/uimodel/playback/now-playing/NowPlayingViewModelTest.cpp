@@ -163,7 +163,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("NowPlayingViewModel reports connecting stream info when audio engine is not ready",
+  TEST_CASE("NowPlayingViewModel - reports connecting stream info when audio engine is not ready",
             "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
@@ -181,7 +181,7 @@ namespace ao::uimodel::test
     CHECK(log.last().streamInfo == "Connecting to audio engine...");
   }
 
-  TEST_CASE("NowPlayingViewModel refreshes from playback events until destroyed", "[uimodel][unit][playback]")
+  TEST_CASE("NowPlayingViewModel - refreshes from playback events until destroyed", "[uimodel][unit][playback]")
   {
     auto testLib = TestMusicLibrary{};
     auto executor = MockExecutor{};

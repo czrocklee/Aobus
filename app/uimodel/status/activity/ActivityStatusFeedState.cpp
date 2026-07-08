@@ -379,7 +379,7 @@ namespace ao::uimodel
 
     auto items = std::vector<ActivityDetailItem>{};
     items.reserve(feed.entries.size());
-    bool hasActiveProgress = static_cast<bool>(_optLibraryProgress);
+    bool hasActiveProgress = _optLibraryProgress.has_value();
 
     for (auto const& entry : feed.entries)
     {
@@ -401,19 +401,18 @@ namespace ao::uimodel
       items.push_back(detailItem(entry));
     }
 
-    std::ranges::sort(items,
-                      [](auto const& lhs, auto const& rhs)
-                      {
-                        bool const lhsProgress = static_cast<bool>(lhs.optProgressMode);
-                        bool const rhsProgress = static_cast<bool>(rhs.optProgressMode);
+    std::ranges::sort(
+      items,
+      [](auto const& lhs, auto const& rhs)
+      {
+        if (bool const lhsProgress = lhs.optProgressMode.has_value(), rhsProgress = rhs.optProgressMode.has_value();
+            lhsProgress != rhsProgress)
+        {
+          return lhsProgress;
+        }
 
-                        if (lhsProgress != rhsProgress)
-                        {
-                          return lhsProgress;
-                        }
-
-                        return lhs.id > rhs.id;
-                      });
+        return lhs.id > rhs.id;
+      });
 
     auto optLibraryTask = std::optional<ActivityTaskDetail>{};
 

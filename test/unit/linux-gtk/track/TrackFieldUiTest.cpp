@@ -18,7 +18,7 @@ namespace ao::gtk::test
     auto const kAllFields = trackFieldDefinitions();
   } // namespace
 
-  TEST_CASE("TrackFieldUi registry exposes one adapter definition per runtime field", "[gtk][unit][track-field-ui]")
+  TEST_CASE("TrackFieldUi - registry exposes one adapter definition per runtime field", "[gtk][unit][track-field-ui]")
   {
     auto const uiDefs = trackFieldUiDefinitions();
     CHECK(uiDefs.size() == ao::rt::kTrackFieldCount);
@@ -30,7 +30,8 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackFieldUi registry wires inline-edit hooks for editable metadata fields", "[gtk][unit][track-field-ui]")
+  TEST_CASE("TrackFieldUi - registry wires inline-edit hooks for editable metadata fields",
+            "[gtk][unit][track-field-ui]")
   {
     for (auto const& rtDef : kAllFields)
     {
@@ -51,7 +52,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackFieldUi registry leaves future synthetic quality field read-only", "[gtk][unit][track-field-ui]")
+  TEST_CASE("TrackFieldUi - registry leaves future synthetic quality field read-only", "[gtk][unit][track-field-ui]")
   {
     auto const* def = trackFieldUiDefinition(TrackField::Quality);
 

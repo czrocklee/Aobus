@@ -67,7 +67,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("MetadataValueCompleter - rejects unsupported fields and limits results",
-            "[runtime][unit][completion][value][limit]")
+            "[runtime][unit][completion-value][limit]")
   {
     auto testLib = TestMusicLibrary{};
     addMetadataValueTrack(testLib, "Artist A", "Album A");
@@ -85,7 +85,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("MetadataValueCompleter - adapts entry text to whole-value replacement",
-            "[runtime][unit][completion][value][provider]")
+            "[runtime][unit][completion-value][provider]")
   {
     auto testLib = TestMusicLibrary{};
     addMetadataValueTrack(testLib, "Massive Attack", "Mezzanine");

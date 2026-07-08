@@ -20,19 +20,19 @@ namespace ao::gtk::test
     uimodel::KeyChord chord(std::string const& text)
     {
       auto const optChord = uimodel::KeyChord::parse(text);
-      REQUIRE(optChord.has_value());
+      REQUIRE(optChord);
       return *optChord;
     }
   }
 
-  TEST_CASE("GtkAccelTranslator maps neutral chords to GTK accelerators", "[gtk][unit][app][accel]")
+  TEST_CASE("GtkAccelTranslator - maps neutral chords to GTK accelerators", "[gtk][unit][app][accel]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     SECTION("ctrl letter")
     {
       auto const optAccel = toGtkAccel(chord("Ctrl+P"));
-      REQUIRE(optAccel.has_value());
+      REQUIRE(optAccel);
       // GTK lowercases the letter name in the canonical accel string.
       CHECK(*optAccel == "<Control>p");
     }
@@ -40,14 +40,14 @@ namespace ao::gtk::test
     SECTION("named navigation key")
     {
       auto const optAccel = toGtkAccel(chord("Ctrl+Right"));
-      REQUIRE(optAccel.has_value());
+      REQUIRE(optAccel);
       CHECK(*optAccel == "<Control>Right");
     }
 
     SECTION("media key without modifier")
     {
       auto const optAccel = toGtkAccel(chord("Media:Play"));
-      REQUIRE(optAccel.has_value());
+      REQUIRE(optAccel);
       CHECK(*optAccel == "AudioPlay");
     }
 
@@ -57,7 +57,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("GtkAccelTranslator parses GTK accelerators back to neutral chords", "[gtk][unit][app][accel]")
+  TEST_CASE("GtkAccelTranslator - parses GTK accelerators back to neutral chords", "[gtk][unit][app][accel]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -67,28 +67,28 @@ namespace ao::gtk::test
     CHECK(fromGtkAccel("not-an-accel").has_value() == false);
   }
 
-  TEST_CASE("GtkAccelTranslator converts live key presses to chords", "[gtk][unit][app][accel]")
+  TEST_CASE("GtkAccelTranslator - converts live key presses to chords", "[gtk][unit][app][accel]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     SECTION("letter with control modifier")
     {
       auto const optResult = fromGtkKeyval(GDK_KEY_p, Gdk::ModifierType::CONTROL_MASK);
-      REQUIRE(optResult.has_value());
+      REQUIRE(optResult);
       CHECK(*optResult == chord("Ctrl+P"));
     }
 
     SECTION("plain navigation key with no modifier")
     {
       auto const optResult = fromGtkKeyval(GDK_KEY_Right, Gdk::ModifierType{});
-      REQUIRE(optResult.has_value());
+      REQUIRE(optResult);
       CHECK(*optResult == chord("Right"));
     }
 
     SECTION("non-accelerator lock bits are dropped")
     {
       auto const optResult = fromGtkKeyval(GDK_KEY_a, Gdk::ModifierType::SHIFT_MASK | Gdk::ModifierType::LOCK_MASK);
-      REQUIRE(optResult.has_value());
+      REQUIRE(optResult);
       CHECK(*optResult == chord("Shift+A"));
     }
 
@@ -100,7 +100,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("GtkAccelTranslator round-trips the default keymap", "[gtk][unit][app][accel]")
+  TEST_CASE("GtkAccelTranslator - round-trips the default keymap", "[gtk][unit][app][accel]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -109,10 +109,10 @@ namespace ao::gtk::test
       for (auto const& original : chords)
       {
         auto const optAccel = toGtkAccel(original);
-        REQUIRE(optAccel.has_value());
+        REQUIRE(optAccel);
 
         auto const optParsed = fromGtkAccel(*optAccel);
-        REQUIRE(optParsed.has_value());
+        REQUIRE(optParsed);
         CHECK(*optParsed == original);
       }
     }

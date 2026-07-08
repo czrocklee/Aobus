@@ -66,7 +66,7 @@ namespace ao::tui::test
 
     auto const optPopupBox = findTextCells(rendered.screen, "Popup");
 
-    REQUIRE(optPopupBox.has_value());
+    REQUIRE(optPopupBox);
     CHECK(optPopupBox->x_min == 8);
     CHECK(optPopupBox->y_min == 3);
   }
@@ -116,11 +116,11 @@ namespace ao::tui::test
     auto const optViewLabelBox = findTextCells(rendered.screen, "view");
     auto const optViewValueBox = findTextCells(rendered.screen, "albums");
     auto const optFooterBox = findTextCells(rendered.screen, "3 / 8 tracks");
-    REQUIRE(optListLabelBox.has_value());
-    REQUIRE(optListValueBox.has_value());
-    REQUIRE(optViewLabelBox.has_value());
-    REQUIRE(optViewValueBox.has_value());
-    REQUIRE(optFooterBox.has_value());
+    REQUIRE(optListLabelBox);
+    REQUIRE(optListValueBox);
+    REQUIRE(optViewLabelBox);
+    REQUIRE(optViewValueBox);
+    REQUIRE(optFooterBox);
     CHECK(rendered.text.find("view:") == std::string::npos);
     CHECK(optListLabelBox->y_min == 4);
     CHECK(optListValueBox->y_min == 4);
@@ -176,9 +176,9 @@ namespace ao::tui::test
     auto const optListLabelBox = findTextCells(rendered.screen, "list");
     auto const optListValueBox = findTextCells(rendered.screen, "All Tracks");
     auto const optViewValueBox = findTextCells(rendered.screen, "albums");
-    REQUIRE(optListLabelBox.has_value());
-    REQUIRE(optListValueBox.has_value());
-    REQUIRE(optViewValueBox.has_value());
+    REQUIRE(optListLabelBox);
+    REQUIRE(optListValueBox);
+    REQUIRE(optViewValueBox);
 
     auto const hoveredPixel = rendered.screen.PixelAt(optListLabelBox->x_min, optListLabelBox->y_min);
     checkInteractiveSurface(hoveredPixel);
@@ -202,8 +202,8 @@ namespace ao::tui::test
     auto const optUnpaddedBody = findTextCells(unpadded.screen, "Body");
     auto const optPaddedBody = findTextCells(padded.screen, "Body");
 
-    REQUIRE(optUnpaddedBody.has_value());
-    REQUIRE(optPaddedBody.has_value());
+    REQUIRE(optUnpaddedBody);
+    REQUIRE(optPaddedBody);
     CHECK(optUnpaddedBody->x_min == 1);
     CHECK(optPaddedBody->x_min == 2);
   }
@@ -230,7 +230,7 @@ namespace ao::tui::test
     CHECK(rendered.text.find("view:") == std::string::npos);
 
     auto const optShortcutBox = findTextCells(rendered.screen, "/ command");
-    REQUIRE(optShortcutBox.has_value());
+    REQUIRE(optShortcutBox);
     CHECK(optShortcutBox->x_min > 0);
     CHECK(rendered.text.find("│") == std::string::npos);
 
@@ -356,7 +356,7 @@ namespace ao::tui::test
       1);
 
     auto const optWarnBox = findTextCells(rendered.screen, "warn");
-    REQUIRE(optWarnBox.has_value());
+    REQUIRE(optWarnBox);
     auto const pixel = rendered.screen.PixelAt(optWarnBox->x_min, optWarnBox->y_min);
     checkInteractiveSurface(pixel);
   }
@@ -530,7 +530,7 @@ namespace ao::tui::test
     CHECK(rendered.text.find("Aimer") != std::string::npos);
     CHECK(rendered.text.find("artist") != std::string::npos);
     auto const optSelected = findTextCells(rendered.screen, "Aimer");
-    REQUIRE(optSelected.has_value());
+    REQUIRE(optSelected);
     CHECK_FALSE(rendered.screen.PixelAt(optSelected->x_min, optSelected->y_min).inverted);
     checkInteractiveSurface(rendered.screen.PixelAt(optSelected->x_min, optSelected->y_min));
   }

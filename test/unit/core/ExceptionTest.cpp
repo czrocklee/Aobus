@@ -11,7 +11,7 @@
 
 namespace ao::test
 {
-  TEST_CASE("Exception - Fatal exception infrastructure", "[core][unit][error]")
+  TEST_CASE("Exception - fatal exception infrastructure", "[core][unit][error]")
   {
     SECTION("ao::Exception tracks source location accurately")
     {

@@ -72,7 +72,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("Semantic layout components render missing-service errors", "[gtk][unit][layout][component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - render missing-service errors", "[gtk][unit][layout-component][semantic]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();
@@ -122,7 +122,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("Semantic layout components render configured GTK widgets", "[gtk][unit][layout][component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - render configured GTK widgets", "[gtk][unit][layout-component][semantic]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();
@@ -335,7 +335,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("TrackDetailUndoController restores deleted custom metadata", "[gtk][unit][layout][component][semantic]")
+  TEST_CASE("TrackDetailUndoController - restores deleted custom metadata", "[gtk][unit][layout-component][semantic]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_test"};
     auto& musicLibrary = fixture.runtime().musicLibrary();
@@ -355,7 +355,7 @@ namespace ao::gtk::layout::test
     CHECK(spec.customMetadata[0].second == "Bright");
   }
 
-  TEST_CASE("TrackDetailUndoController clears pending undo after timeout", "[gtk][unit][layout][component][semantic]")
+  TEST_CASE("TrackDetailUndoController - clears pending undo after timeout", "[gtk][unit][layout-component][semantic]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_timeout_test"};
     auto timeoutCallback = sigc::slot<bool()>{};
@@ -376,8 +376,8 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(controller.pendingCustomMetadataUndo());
   }
 
-  TEST_CASE("TrackDetailScope clears pending detail undo when selection changes",
-            "[gtk][unit][layout][component][semantic]")
+  TEST_CASE("TrackDetailScope - clears pending detail undo when selection changes",
+            "[gtk][unit][layout-component][semantic]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_scope_test"};
     auto& runtime = fixture.runtime();
@@ -415,8 +415,8 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(undoBar->get_visible());
   }
 
-  TEST_CASE("TrackDetailUndoBar restores deleted custom metadata from button",
-            "[gtk][unit][layout][component][semantic]")
+  TEST_CASE("TrackDetailUndoBar - restores deleted custom metadata from button",
+            "[gtk][unit][layout-component][semantic]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_button_test"};
     auto& runtime = fixture.runtime();
@@ -459,8 +459,8 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(undoBar->get_visible());
   }
 
-  TEST_CASE("TrackFieldGrid add custom metadata writes metadata and clears stale delete undo",
-            "[gtk][unit][layout][component][semantic]")
+  TEST_CASE("TrackFieldGrid - add custom metadata writes metadata and clears stale delete undo",
+            "[gtk][unit][layout-component][semantic]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_add_custom_test"};
     auto& runtime = fixture.runtime();
@@ -519,7 +519,7 @@ namespace ao::gtk::layout::test
     fixture.window().unset_child();
   }
 
-  TEST_CASE("track.quickFilter component wires create smart list action", "[gtk][unit][layout][component][semantic]")
+  TEST_CASE("track.quickFilter - wires create smart list action", "[gtk][unit][layout-component][semantic]")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};

@@ -13,7 +13,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("ExecutionPlan - scales duration unit constants", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - scales duration unit constants", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("@duration >= 3m");
     auto compiler = QueryCompiler{};
@@ -25,7 +25,7 @@ namespace ao::query::test
     CHECK(it->constValue == 180000);
   }
 
-  TEST_CASE("ExecutionPlan - scales bitrate unit constants", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - scales bitrate unit constants", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("@bitrate >= 2m");
     auto compiler = QueryCompiler{};
@@ -37,7 +37,7 @@ namespace ao::query::test
     CHECK(it->constValue == 2000000);
   }
 
-  TEST_CASE("ExecutionPlan - scales sample-rate unit constants", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - scales sample-rate unit constants", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("@sampleRate = 44.1k");
     auto compiler = QueryCompiler{};
@@ -49,7 +49,7 @@ namespace ao::query::test
     CHECK(it->constValue == 44100);
   }
 
-  TEST_CASE("ExecutionPlan - rejects unit constants on unsupported fields", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - rejects unit constants on unsupported fields", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("$year >= 3m");
     auto compiler = QueryCompiler{};
@@ -57,7 +57,7 @@ namespace ao::query::test
     std::ignore = compileError(compiler, expr);
   }
 
-  TEST_CASE("ExecutionPlan - scales unit literals", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - scales unit literals", "[query][unit][execution-plan]")
   {
     auto compiler = QueryCompiler{};
 
@@ -110,7 +110,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - rejects invalid unit literals", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - rejects invalid unit literals", "[query][unit][execution-plan]")
   {
     auto compiler = QueryCompiler{};
 

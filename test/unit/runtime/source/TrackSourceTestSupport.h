@@ -37,14 +37,14 @@ namespace ao::rt::test
     void update(TrackId id)
     {
       auto const optIndex = indexOf(id);
-      REQUIRE(optIndex.has_value());
+      REQUIRE(optIndex);
       notifyUpdated(id, *optIndex);
     }
 
     void remove(TrackId id)
     {
       auto const optIndex = indexOf(id);
-      REQUIRE(optIndex.has_value());
+      REQUIRE(optIndex);
       _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*optIndex));
       notifyRemoved(id, *optIndex);
     }

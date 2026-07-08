@@ -37,7 +37,7 @@ namespace ao::audio::test
   } // namespace
 
   TEST_CASE("StreamingSource - initialize starts decode thread after successful preroll",
-            "[audio][unit][streaming_source]")
+            "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic{0};
@@ -57,7 +57,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("StreamingSource - initialize accepts EOF during preroll without reporting an error",
-            "[audio][unit][streaming_source]")
+            "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic{0};
@@ -78,7 +78,7 @@ namespace ao::audio::test
     CHECK(errorCount.load() == 0);
   }
 
-  TEST_CASE("StreamingSource - initialize reports preroll decode failure", "[audio][unit][streaming_source]")
+  TEST_CASE("StreamingSource - initialize reports preroll decode failure", "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic{0};
@@ -95,7 +95,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("StreamingSource - seek clears buffered data and prerolls the requested offset",
-            "[audio][unit][streaming_source]")
+            "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic{0};
@@ -116,7 +116,7 @@ namespace ao::audio::test
     CHECK(errorCount.load() == 0);
   }
 
-  TEST_CASE("StreamingSource - seek reports decoder failure", "[audio][unit][streaming_source]")
+  TEST_CASE("StreamingSource - seek reports decoder failure", "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic{0};
@@ -136,7 +136,7 @@ namespace ao::audio::test
     CHECK(errorCount.load() == 1);
   }
 
-  TEST_CASE("StreamingSource - background decode failure notifies error callback", "[audio][unit][streaming_source]")
+  TEST_CASE("StreamingSource - background decode failure notifies error callback", "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic{0};
@@ -164,7 +164,7 @@ namespace ao::audio::test
     CHECK(errorCount.load() == 1);
   }
 
-  TEST_CASE("StreamingSource - read drains source after EOF is reached", "[audio][unit][streaming_source]")
+  TEST_CASE("StreamingSource - read drains source after EOF is reached", "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic{0};

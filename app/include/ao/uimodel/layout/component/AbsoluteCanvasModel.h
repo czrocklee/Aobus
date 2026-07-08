@@ -52,8 +52,8 @@ namespace ao::uimodel
   bool absoluteCanvasZOrderLess(AbsoluteCanvasItem const& itemA, AbsoluteCanvasItem const& itemB);
 
   std::optional<std::size_t> hitTestAbsoluteCanvas(std::span<AbsoluteCanvasItem const> items,
-                                                   std::int32_t posX,
-                                                   std::int32_t posY);
+                                                   std::int32_t xPosition,
+                                                   std::int32_t yPosition);
 
   AbsoluteCanvasResizeCorner detectAbsoluteCanvasResizeCorner(std::int32_t width,
                                                               std::int32_t height,

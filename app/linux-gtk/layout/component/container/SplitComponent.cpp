@@ -129,10 +129,10 @@ namespace ao::gtk::layout
           return;
         }
 
-        std::int32_t const newPos =
+        std::int32_t const newPosition =
           std::max(0, static_cast<std::int32_t>(static_cast<double>(total) * _initialPercent));
         auto const suppress = ScopedPositionSaveSuppressor{*this};
-        _paned.set_position(newPos);
+        _paned.set_position(newPosition);
         _initialPositionSet = true;
         _allocationRoot.setAllocatedCallback({});
       }

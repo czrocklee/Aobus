@@ -96,9 +96,9 @@ namespace ao::utility
     StrongType operator++(std::int32_t)
       requires std::is_integral_v<T>
     {
-      auto tmp = *this;
+      auto temp = *this;
       ++_value;
-      return tmp;
+      return temp;
     }
 
     StrongType& operator--()
@@ -111,9 +111,9 @@ namespace ao::utility
     StrongType operator--(std::int32_t)
       requires std::is_integral_v<T>
     {
-      auto tmp = *this;
+      auto temp = *this;
       --_value;
-      return tmp;
+      return temp;
     }
 
     friend std::ostream& operator<<(std::ostream& os, StrongType const& val)

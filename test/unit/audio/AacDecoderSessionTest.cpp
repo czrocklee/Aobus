@@ -20,7 +20,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("AacDecoderSession - Happy Path", "[audio][unit][aac]")
+  TEST_CASE("AacDecoderSession - decodes happy path", "[audio][unit][aac]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
@@ -42,7 +42,7 @@ namespace ao::audio::test
     CHECK(block->firstFrameIndex == 0);
   }
 
-  TEST_CASE("AacDecoderSession - Seek", "[audio][unit][aac][seek]")
+  TEST_CASE("AacDecoderSession - seeks within decoded MP4 samples", "[audio][unit][aac][seek]")
   {
     auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
 
@@ -91,7 +91,7 @@ namespace ao::audio::test
           static_cast<std::size_t>(block->frames) * info.outputFormat.channels * sizeof(std::int32_t));
   }
 
-  TEST_CASE("AacDecoderSession - Error Paths", "[audio][unit][aac][error]")
+  TEST_CASE("AacDecoderSession - reports error paths", "[audio][unit][aac][error]")
   {
     auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
 
@@ -217,7 +217,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AacDecoderSession - End of stream", "[audio][unit][aac]")
+  TEST_CASE("AacDecoderSession - reports end of stream", "[audio][unit][aac]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 

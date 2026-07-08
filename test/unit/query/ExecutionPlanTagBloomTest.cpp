@@ -18,7 +18,7 @@ namespace ao::query::test
 {
   using namespace ao::lmdb::test;
 
-  TEST_CASE("ExecutionPlan - compiles tag bloom masks", "[query][unit][execution_plan]")
+  TEST_CASE("ExecutionPlan - compiles tag bloom masks", "[query][unit][execution-plan]")
   {
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});

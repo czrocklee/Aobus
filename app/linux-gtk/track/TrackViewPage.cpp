@@ -545,9 +545,9 @@ namespace ao::gtk
     return _createSmartListRequested;
   }
 
-  void TrackViewPage::showTagPopover(TagPopover& popover, double posX, double posY)
+  void TrackViewPage::showTagPopover(TagPopover& popover, double xPosition, double yPosition)
   {
-    auto const rect = Gdk::Rectangle{static_cast<std::int32_t>(posX), static_cast<std::int32_t>(posY), 1, 1};
+    auto const rect = Gdk::Rectangle{static_cast<std::int32_t>(xPosition), static_cast<std::int32_t>(yPosition), 1, 1};
 
     if (popover.get_parent() != &_viewHostPtr->columnView())
     {

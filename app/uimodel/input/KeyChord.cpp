@@ -73,16 +73,16 @@ namespace ao::uimodel
 
     while (true)
     {
-      auto const pos = trimmed.find('+', start);
+      auto const separatorOffset = trimmed.find('+', start);
 
-      if (pos == std::string_view::npos)
+      if (separatorOffset == std::string_view::npos)
       {
         segments.push_back(trimmed.substr(start));
         break;
       }
 
-      segments.push_back(trimmed.substr(start, pos - start));
-      start = pos + 1;
+      segments.push_back(trimmed.substr(start, separatorOffset - start));
+      start = separatorOffset + 1;
     }
 
     // The literal '+' key collides with the separator: toString() writes it as a trailing "++"

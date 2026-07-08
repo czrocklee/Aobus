@@ -102,19 +102,23 @@ class HygieneCommandTest(unittest.TestCase):
         args = _hygiene_args(files=["script/foo.py"])
 
         with mock.patch.object(hygiene.format_command, "run_command", return_value=0) as format_run:
-            with mock.patch.object(hygiene.tidy, "run_command", return_value=0) as tidy_run:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    self.assertEqual(hygiene.run_command(args), 0)
+            with mock.patch.object(hygiene.test_audit, "run_command", return_value=0) as audit_run:
+                with mock.patch.object(hygiene.tidy, "run_command", return_value=0) as tidy_run:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(hygiene.run_command(args), 0)
 
         self.assertTrue(format_run.call_args.args[0].check)
         self.assertEqual(format_run.call_args.args[0].files, ["script/foo.py"])
         self.assertEqual(format_run.call_args.args[0].folder, [])
+        self.assertTrue(audit_run.call_args.args[0].fail_on_issue)
+        self.assertEqual(audit_run.call_args.args[0].paths, [])
         self.assertEqual(tidy_run.call_args.args[0].files, ["script/foo.py"])
 
     def test_subcommand_args_cannot_drift_from_the_real_parsers(self):
         args = _hygiene_args(jobs=4)
         for register_command, name, build in (
             (format_command.register, "format", hygiene._format_args),
+            (hygiene.test_audit.register, "test-audit", lambda _: hygiene._test_audit_args()),
             (tidy.register, "tidy", hygiene._tidy_args),
         ):
             parser = argparse.ArgumentParser()
@@ -131,13 +135,28 @@ class HygieneCommandTest(unittest.TestCase):
         stderr = io.StringIO()
 
         with mock.patch.object(hygiene.format_command, "run_command", return_value=1):
-            with mock.patch.object(hygiene.tidy, "run_command", return_value=1):
-                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
-                    self.assertEqual(hygiene.run_command(args), 1)
+            with mock.patch.object(hygiene.test_audit, "run_command", return_value=1):
+                with mock.patch.object(hygiene.tidy, "run_command", return_value=1):
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+                        self.assertEqual(hygiene.run_command(args), 1)
 
         self.assertIn("check-only", stderr.getvalue())
         self.assertIn("./ao format", stderr.getvalue())
         self.assertIn("Fix the lint findings manually", stderr.getvalue())
+        self.assertIn("./ao test-audit --fail-on-issue", stderr.getvalue())
+
+    def test_test_audit_failure_does_not_claim_tidy_failed(self):
+        args = _hygiene_args()
+        stderr = io.StringIO()
+
+        with mock.patch.object(hygiene.format_command, "run_command", return_value=0):
+            with mock.patch.object(hygiene.test_audit, "run_command", return_value=1):
+                with mock.patch.object(hygiene.tidy, "run_command", return_value=0):
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+                        self.assertEqual(hygiene.run_command(args), 1)
+
+        self.assertIn("Test names/tags", stderr.getvalue())
+        self.assertNotIn("Lint findings", stderr.getvalue())
 
 
 class TidyFixesDeduplicationTest(unittest.TestCase):

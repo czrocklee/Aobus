@@ -96,7 +96,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("ShellLayoutController attaches layout shell and persists panel state", "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - attaches layout shell and persists panel state", "[gtk][unit][app][shell]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -307,14 +307,14 @@ namespace ao::gtk::test
       controller.saveCurrentPanelSizesAsLayoutDefaults();
 
       auto optSavedDoc = storePtr->load("classic");
-      REQUIRE(optSavedDoc.has_value());
+      REQUIRE(optSavedDoc);
 
       auto const* savedSplit = findNodeById(optSavedDoc->root, "main-paned");
       REQUIRE(savedSplit != nullptr);
       CHECK(savedSplit->props.at("position").asInt() == 200);
 
       auto optUntouchedState = componentStateStorePtr->load("classic");
-      REQUIRE(optUntouchedState.has_value());
+      REQUIRE(optUntouchedState);
       CHECK(optUntouchedState->components.contains("main-paned"));
     }
 
@@ -353,7 +353,7 @@ namespace ao::gtk::test
       controller.saveCurrentPanelSizesAsLayoutDefaults();
 
       auto optSavedDoc = storePtr->load("classic");
-      REQUIRE(optSavedDoc.has_value());
+      REQUIRE(optSavedDoc);
 
       auto const* savedSplit = findNodeById(optSavedDoc->root, "main-paned");
       auto const* savedCollapsible = findNodeById(optSavedDoc->root, "detail-split");
@@ -366,7 +366,7 @@ namespace ao::gtk::test
       CHECK(savedCollapsible->props.find("initialPositionPercent") == savedCollapsible->props.end());
 
       auto optPromotedState = componentStateStorePtr->load("classic");
-      REQUIRE(optPromotedState.has_value());
+      REQUIRE(optPromotedState);
       CHECK_FALSE(optPromotedState->components.contains("main-paned"));
       REQUIRE(optPromotedState->components.contains("detail-split"));
       auto const& remainingEntry = optPromotedState->components.at("detail-split");

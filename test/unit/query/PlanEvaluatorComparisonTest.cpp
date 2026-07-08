@@ -9,7 +9,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator matches year equality and rejects different years", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches year equality and rejects different years", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$year = 2020");
     auto compiler = QueryCompiler{};
@@ -25,7 +25,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches duration above an exclusive threshold", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches duration above an exclusive threshold", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("@duration > 179000");
     auto compiler = QueryCompiler{};
@@ -41,7 +41,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches year inequality only for different years", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches year inequality only for different years", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$year != 2020");
     auto compiler = QueryCompiler{};
@@ -61,7 +61,7 @@ namespace ao::query::test
     CHECK(result == true);
   }
 
-  TEST_CASE("PlanEvaluator matches duration at an inclusive threshold", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches duration at an inclusive threshold", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("@duration >= 180000");
     auto compiler = QueryCompiler{};
@@ -77,7 +77,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches years below an exclusive threshold", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches years below an exclusive threshold", "[query][unit][plan-evaluator]")
   {
     auto expr = parseOk("$year < 2021");
     auto compiler = QueryCompiler{};
@@ -93,7 +93,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches year equality on multi-field tracks", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches year equality on multi-field tracks", "[query][unit][plan-evaluator]")
   {
     // Note: $trackNumber is a cold field, so we use $year instead which is hot
     auto expr = parseOk("$year = 2020");
@@ -110,7 +110,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator rejects year greater-than below threshold", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - rejects year greater-than below threshold", "[query][unit][plan-evaluator]")
   {
     // Verify $year > 2000 returns false for year 1980
     auto expr = parseOk("$year > 2000");
@@ -123,7 +123,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator matches year greater-than only above threshold", "[query][unit][plan_evaluator]")
+  TEST_CASE("PlanEvaluator - matches year greater-than only above threshold", "[query][unit][plan-evaluator]")
   {
     // Simple year > test to verify year comparison works
     auto expr = parseOk("$year > 2000");

@@ -13,7 +13,7 @@
 
 namespace ao::utility::test
 {
-  TEST_CASE("AtomicFile writes data atomically with owner-only permissions", "[utility][unit][atomicfile]")
+  TEST_CASE("AtomicFile - writes data atomically with owner-only permissions", "[utility][unit][atomicfile]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "config.yaml";
@@ -32,7 +32,7 @@ namespace ao::utility::test
     CHECK((perms & std::filesystem::perms::others_read) == std::filesystem::perms::none);
   }
 
-  TEST_CASE("AtomicFile overwrites existing file", "[utility][unit][atomicfile]")
+  TEST_CASE("AtomicFile - overwrites existing file", "[utility][unit][atomicfile]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "state.yaml";
@@ -45,7 +45,7 @@ namespace ao::utility::test
     CHECK(content == "new");
   }
 
-  TEST_CASE("AtomicFile fails when parent directory is not writable", "[utility][unit][atomicfile]")
+  TEST_CASE("AtomicFile - fails when parent directory is not writable", "[utility][unit][atomicfile]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const readonlyDir = std::filesystem::path{tempDir.path()} / "readonly";
@@ -62,7 +62,7 @@ namespace ao::utility::test
       readonlyDir, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
   }
 
-  TEST_CASE("AtomicFile fails to overwrite a directory", "[utility][unit][atomicfile]")
+  TEST_CASE("AtomicFile - fails to overwrite a directory", "[utility][unit][atomicfile]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "dir";

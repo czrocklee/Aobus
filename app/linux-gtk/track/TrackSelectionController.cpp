@@ -160,14 +160,14 @@ namespace ao::gtk
     primaryClickControllerPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
 
     primaryClickControllerPtr->signal_pressed().connect(
-      [this, primaryClickControllerPtr](std::int32_t nPress, double xPos, double yPos)
+      [this, primaryClickControllerPtr](std::int32_t nPress, double xPosition, double yPosition)
       {
         if (nPress != 2)
         {
           return;
         }
 
-        auto* const target = _columnView.pick(xPos, yPos, Gtk::PickFlags::NON_TARGETABLE);
+        auto* const target = _columnView.pick(xPosition, yPosition, Gtk::PickFlags::NON_TARGETABLE);
 
         if (!isTagsCellWidget(target))
         {
@@ -193,9 +193,9 @@ namespace ao::gtk
     longPressControllerPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
 
     longPressControllerPtr->signal_pressed().connect(
-      [this, longPressControllerPtr](double xPos, double yPos)
+      [this, longPressControllerPtr](double xPosition, double yPosition)
       {
-        auto* const target = _columnView.pick(xPos, yPos, Gtk::PickFlags::NON_TARGETABLE);
+        auto* const target = _columnView.pick(xPosition, yPosition, Gtk::PickFlags::NON_TARGETABLE);
         auto* const stack = findInlineEditStack(target);
 
         if (stack == nullptr)
@@ -219,14 +219,14 @@ namespace ao::gtk
     secondaryClickControllerPtr->set_button(GDK_BUTTON_SECONDARY);
 
     secondaryClickControllerPtr->signal_released().connect(
-      [this](std::int32_t, double xPos, double yPos)
+      [this](std::int32_t, double xPosition, double yPosition)
       {
         if (selectedTrackCount() == 0)
         {
           return;
         }
 
-        _contextMenuRequested.emit(xPos, yPos);
+        _contextMenuRequested.emit(xPosition, yPosition);
       });
 
     _columnView.add_controller(secondaryClickControllerPtr);
@@ -370,15 +370,15 @@ namespace ao::gtk
       return;
     }
 
-    auto const pos = static_cast<guint>(*optIndex);
-    _selectionModelPtr->select_item(pos, true);
+    auto const rowPosition = static_cast<guint>(*optIndex);
+    _selectionModelPtr->select_item(rowPosition, true);
 
     if (!_columnView.get_mapped())
     {
       return;
     }
 
-    _columnView.scroll_to(pos, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
+    _columnView.scroll_to(rowPosition, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
   }
 
   void TrackSelectionController::scrollToTrack(TrackId trackId)
@@ -390,8 +390,8 @@ namespace ao::gtk
       return;
     }
 
-    auto const pos = static_cast<guint>(*optIndex);
-    _columnView.scroll_to(pos, nullptr, Gtk::ListScrollFlags::NONE, {});
+    auto const rowPosition = static_cast<guint>(*optIndex);
+    _columnView.scroll_to(rowPosition, nullptr, Gtk::ListScrollFlags::NONE, {});
   }
 
   void TrackSelectionController::setPlayingTrackId(TrackId trackId)

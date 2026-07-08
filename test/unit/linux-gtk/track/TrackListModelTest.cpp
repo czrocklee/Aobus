@@ -59,14 +59,14 @@ namespace ao::gtk::test
       std::vector<Event> events;
       Glib::RefPtr<TrackListModel> modelPtr;
 
-      void onItemsChanged(::guint pos, ::guint rem, ::guint add)
+      void onItemsChanged(::guint position, ::guint removed, ::guint added)
       {
-        events.push_back({pos, rem, add, modelPtr->get_n_items()});
+        events.push_back({position, removed, added, modelPtr->get_n_items()});
       }
     };
   } // namespace
 
-  TEST_CASE("TrackListModel exposes projection rows and emits playing-track updates", "[gtk][unit][track][adapter]")
+  TEST_CASE("TrackListModel - exposes projection rows and emits playing-track updates", "[gtk][unit][track][adapter]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.list_model_test");
     auto fixture = GtkRuntimeFixture{};

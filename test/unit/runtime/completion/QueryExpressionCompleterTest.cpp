@@ -62,7 +62,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("QueryExpressionCompleter - completes field aliases from query prefixes",
-            "[runtime][unit][completion][query][field]")
+            "[runtime][unit][completion-query][field]")
   {
     auto testLib = TestMusicLibrary{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
@@ -86,7 +86,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("QueryExpressionCompleter - completes operators allowed after fields",
-            "[runtime][unit][completion][query][operator]")
+            "[runtime][unit][completion-query][operator]")
   {
     auto testLib = TestMusicLibrary{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
@@ -107,7 +107,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("QueryExpressionCompleter - completes logical operators after values",
-            "[runtime][unit][completion][query][operator]")
+            "[runtime][unit][completion-query][operator]")
   {
     auto testLib = TestMusicLibrary{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
@@ -140,7 +140,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("QueryExpressionCompleter - completes metadata values for value positions",
-            "[runtime][unit][completion][query][value]")
+            "[runtime][unit][completion-query][value]")
   {
     auto testLib = TestMusicLibrary{};
     auto tags = std::vector<std::string>{};
@@ -174,7 +174,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("QueryExpressionCompleter - completes tag and custom-key variables",
-            "[runtime][unit][completion][query][variable]")
+            "[runtime][unit][completion-query][variable]")
   {
     auto testLib = TestMusicLibrary{};
     auto tags = std::vector<std::string>{"90s Rock", "Rock"};
@@ -201,7 +201,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("QueryExpressionCompleter - respects limits and token boundaries",
-            "[runtime][unit][completion][query][boundary]")
+            "[runtime][unit][completion-query][boundary]")
   {
     auto testLib = TestMusicLibrary{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};

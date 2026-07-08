@@ -21,7 +21,7 @@ namespace ao::rt::test
 {
   using namespace ao::library;
 
-  TEST_CASE("LibraryYaml import reports invalid input errors", "[runtime][workflow][import-export][yaml][error]")
+  TEST_CASE("LibraryYaml - import reports invalid input errors", "[runtime][workflow][import-export][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};
@@ -235,7 +235,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml import handles structural corruption cases", "[runtime][workflow][import-export][yaml][error]")
+  TEST_CASE("LibraryYaml - import handles structural corruption cases", "[runtime][workflow][import-export][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = MusicLibrary{temp.path(), temp.path()};

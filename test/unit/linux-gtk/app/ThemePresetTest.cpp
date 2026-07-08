@@ -9,7 +9,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ThemePreset maps GTK CSS classes for each preset", "[gtk][unit][app][theme]")
+  TEST_CASE("ThemePreset - maps GTK CSS classes for each preset", "[gtk][unit][app][theme]")
   {
     CHECK(themeCssClass(rt::ThemePresetId::Classic) == "ao-theme-classic");
     CHECK(themeCssClass(rt::ThemePresetId::Modern) == "ao-theme-modern");

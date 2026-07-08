@@ -42,8 +42,8 @@ namespace ao::uimodel
   }
 
   std::optional<std::size_t> hitTestAbsoluteCanvas(std::span<AbsoluteCanvasItem const> items,
-                                                   std::int32_t posX,
-                                                   std::int32_t posY)
+                                                   std::int32_t xPosition,
+                                                   std::int32_t yPosition)
   {
     auto optHitIndex = std::optional<std::size_t>{};
 
@@ -51,8 +51,8 @@ namespace ao::uimodel
     {
       auto const& item = items[index];
 
-      if (auto const& rect = item.rect;
-          posX < rect.x || posX > (rect.x + rect.width) || posY < rect.y || posY > (rect.y + rect.height))
+      if (auto const& rect = item.rect; xPosition < rect.x || xPosition > (rect.x + rect.width) || yPosition < rect.y ||
+                                        yPosition > (rect.y + rect.height))
       {
         continue;
       }

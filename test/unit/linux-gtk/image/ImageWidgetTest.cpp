@@ -22,7 +22,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ImageWidget renders pixbufs at target and allocated sizes", "[gtk][unit][image]")
+  TEST_CASE("ImageWidget - renders pixbufs at target and allocated sizes", "[gtk][unit][image]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = ImageWidget{};
@@ -226,7 +226,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ResourceImageController binds placeholder and loaded image states", "[gtk][unit][image]")
+  TEST_CASE("ResourceImageController - binds placeholder and loaded image states", "[gtk][unit][image]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
