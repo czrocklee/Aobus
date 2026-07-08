@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <sigc++/signal.h>
 
@@ -12,15 +12,15 @@ namespace ao::gtk::layout
   /**
    * @brief Interface for track detail data scope providers.
    */
-  class ITrackDetailScope
+  class TrackDetailScope
   {
   public:
-    ITrackDetailScope() = default;
-    virtual ~ITrackDetailScope() = default;
-    ITrackDetailScope(ITrackDetailScope const&) = delete;
-    ITrackDetailScope& operator=(ITrackDetailScope const&) = delete;
-    ITrackDetailScope(ITrackDetailScope&&) = delete;
-    ITrackDetailScope& operator=(ITrackDetailScope&&) = delete;
+    TrackDetailScope() = default;
+    virtual ~TrackDetailScope() = default;
+    TrackDetailScope(TrackDetailScope const&) = delete;
+    TrackDetailScope& operator=(TrackDetailScope const&) = delete;
+    TrackDetailScope(TrackDetailScope&&) = delete;
+    TrackDetailScope& operator=(TrackDetailScope&&) = delete;
 
     virtual rt::TrackDetailSnapshot const& snapshot() const = 0;
 

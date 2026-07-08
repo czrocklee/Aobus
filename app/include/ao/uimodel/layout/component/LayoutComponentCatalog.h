@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionBinding.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/utility/TransparentStringHash.h>

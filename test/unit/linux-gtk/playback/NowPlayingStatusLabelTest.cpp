@@ -3,7 +3,7 @@
 
 #include "playback/NowPlayingStatusLabel.h"
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/PlaybackInput.h>
 #include <ao/rt/PlaybackService.h>

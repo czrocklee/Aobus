@@ -3,7 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/OutputDeviceSelector.h"
 #include <ao/rt/AppRuntime.h>
@@ -27,7 +27,7 @@ namespace ao::gtk::layout
     /**
      * @brief playback.outputDeviceSelector
      */
-    class OutputDeviceSelectorComponent final : public ILayoutComponent
+    class OutputDeviceSelectorComponent final : public LayoutComponent
     {
     public:
       OutputDeviceSelectorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
@@ -64,7 +64,7 @@ namespace ao::gtk::layout
       uimodel::OutputDeviceViewModel _viewModel;
     };
 
-    std::unique_ptr<ILayoutComponent> createOutputDeviceSelector(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createOutputDeviceSelector(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<OutputDeviceSelectorComponent>(ctx, node);
     }

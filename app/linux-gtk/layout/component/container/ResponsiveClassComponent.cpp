@@ -4,7 +4,7 @@
 #include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -25,14 +25,14 @@ namespace ao::gtk::layout
     constexpr std::int32_t kDefaultCompactMax = 820;
     constexpr std::int32_t kDefaultRegularMax = 1180;
 
-    class ResponsiveClassComponent final : public ILayoutComponent
+    class ResponsiveClassComponent final : public LayoutComponent
     {
     public:
       ResponsiveClassComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _axis{node.getProp<std::string>("axis", "width")}
-        , _compactMax{static_cast<std::int32_t>(node.getProp<std::int64_t>("compactMax", kDefaultCompactMax))}
-        , _regularMax{static_cast<std::int32_t>(node.getProp<std::int64_t>("regularMax", kDefaultRegularMax))}
-        , _classPrefix{node.getProp<std::string>("classPrefix", "ao-width")}
+        : _axis{node.propertyOr<std::string>("axis", "width")}
+        , _compactMax{static_cast<std::int32_t>(node.propertyOr<std::int64_t>("compactMax", kDefaultCompactMax))}
+        , _regularMax{static_cast<std::int32_t>(node.propertyOr<std::int64_t>("regularMax", kDefaultRegularMax))}
+        , _classPrefix{node.propertyOr<std::string>("classPrefix", "ao-width")}
       {
         if (node.children.size() != 1)
         {
@@ -145,10 +145,10 @@ namespace ao::gtk::layout
       std::string _classPrefix;
       Bucket _bucket = Bucket::None;
       std::unique_ptr<Gtk::Label> _errorPtr;
-      std::unique_ptr<ILayoutComponent> _childPtr;
+      std::unique_ptr<LayoutComponent> _childPtr;
     };
 
-    std::unique_ptr<ILayoutComponent> createResponsiveClass(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createResponsiveClass(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<ResponsiveClassComponent>(ctx, node);
     }

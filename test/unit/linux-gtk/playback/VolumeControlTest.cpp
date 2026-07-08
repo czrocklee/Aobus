@@ -3,7 +3,7 @@
 
 #include "playback/VolumeControl.h"
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>

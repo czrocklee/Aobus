@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <functional>

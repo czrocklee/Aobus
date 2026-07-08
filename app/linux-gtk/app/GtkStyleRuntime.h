@@ -41,11 +41,11 @@ namespace ao::gtk
     void syncGtkSettings();
     void reloadGtkUserCss();
 
-    void setupFileMonitors();
-    void setupGtkConfigMonitor();
-    void setupAobusConfigMonitor();
-    void setupDBusMonitor();
-    void setupSignalHandler();
+    void startFileMonitors();
+    void startGtkConfigMonitor();
+    void startAobusConfigMonitor();
+    void startDBusMonitor();
+    void installSignalHandler();
 
     bool _initialized = false;
 

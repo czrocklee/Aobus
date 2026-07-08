@@ -91,7 +91,7 @@ namespace ao::rt
       changed = true;
     }
 
-    void applyTextMetadataPatch(library::TrackBuilder::MetadataBuilder& meta,
+    void applyTextMetadataPatch(library::TrackBuilder::MetadataBuilder& metadata,
                                 MetadataPatch const& patch,
                                 PatchResult& result,
                                 std::vector<TrackFieldChange>& changes)
@@ -99,83 +99,83 @@ namespace ao::rt
       applyStringPatch(
         patch.optTitle,
         "title",
-        meta.title(),
-        [&meta](std::string_view value) { meta.title(value); },
+        metadata.title(),
+        [&metadata](std::string_view value) { metadata.title(value); },
         result.changedHot,
         changes);
       applyStringPatch(
         patch.optArtist,
         "artist",
-        meta.artist(),
-        [&meta](std::string_view value) { meta.artist(value); },
+        metadata.artist(),
+        [&metadata](std::string_view value) { metadata.artist(value); },
         result.changedHot,
         changes);
       applyStringPatch(
         patch.optAlbum,
         "album",
-        meta.album(),
-        [&meta](std::string_view value) { meta.album(value); },
+        metadata.album(),
+        [&metadata](std::string_view value) { metadata.album(value); },
         result.changedHot,
         changes);
       applyStringPatch(
         patch.optAlbumArtist,
         "albumArtist",
-        meta.albumArtist(),
-        [&meta](std::string_view value) { meta.albumArtist(value); },
+        metadata.albumArtist(),
+        [&metadata](std::string_view value) { metadata.albumArtist(value); },
         result.changedHot,
         changes);
       applyStringPatch(
         patch.optGenre,
         "genre",
-        meta.genre(),
-        [&meta](std::string_view value) { meta.genre(value); },
+        metadata.genre(),
+        [&metadata](std::string_view value) { metadata.genre(value); },
         result.changedHot,
         changes);
       applyStringPatch(
         patch.optComposer,
         "composer",
-        meta.composer(),
-        [&meta](std::string_view value) { meta.composer(value); },
+        metadata.composer(),
+        [&metadata](std::string_view value) { metadata.composer(value); },
         result.changedHot,
         changes);
       applyStringPatch(
         patch.optConductor,
         "conductor",
-        meta.conductor(),
-        [&meta](std::string_view value) { meta.conductor(value); },
+        metadata.conductor(),
+        [&metadata](std::string_view value) { metadata.conductor(value); },
         result.changedCold,
         changes);
       applyStringPatch(
         patch.optEnsemble,
         "ensemble",
-        meta.ensemble(),
-        [&meta](std::string_view value) { meta.ensemble(value); },
+        metadata.ensemble(),
+        [&metadata](std::string_view value) { metadata.ensemble(value); },
         result.changedCold,
         changes);
       applyStringPatch(
         patch.optWork,
         "work",
-        meta.work(),
-        [&meta](std::string_view value) { meta.work(value); },
+        metadata.work(),
+        [&metadata](std::string_view value) { metadata.work(value); },
         result.changedCold,
         changes);
       applyStringPatch(
         patch.optMovement,
         "movement",
-        meta.movement(),
-        [&meta](std::string_view value) { meta.movement(value); },
+        metadata.movement(),
+        [&metadata](std::string_view value) { metadata.movement(value); },
         result.changedCold,
         changes);
       applyStringPatch(
         patch.optSoloist,
         "soloist",
-        meta.soloist(),
-        [&meta](std::string_view value) { meta.soloist(value); },
+        metadata.soloist(),
+        [&metadata](std::string_view value) { metadata.soloist(value); },
         result.changedCold,
         changes);
     }
 
-    void applyNumberMetadataPatch(library::TrackBuilder::MetadataBuilder& meta,
+    void applyNumberMetadataPatch(library::TrackBuilder::MetadataBuilder& metadata,
                                   MetadataPatch const& patch,
                                   PatchResult& result,
                                   std::vector<TrackFieldChange>& changes)
@@ -183,50 +183,50 @@ namespace ao::rt
       applyUint16Patch(
         patch.optYear,
         "year",
-        meta.year(),
-        [&meta](std::uint16_t value) { meta.year(value); },
+        metadata.year(),
+        [&metadata](std::uint16_t value) { metadata.year(value); },
         result.changedHot,
         changes);
       applyUint16Patch(
         patch.optMovementNumber,
         "movementNumber",
-        meta.movementNumber(),
-        [&meta](std::uint16_t value) { meta.movementNumber(value); },
+        metadata.movementNumber(),
+        [&metadata](std::uint16_t value) { metadata.movementNumber(value); },
         result.changedCold,
         changes);
       applyUint16Patch(
         patch.optMovementTotal,
         "movementTotal",
-        meta.movementTotal(),
-        [&meta](std::uint16_t value) { meta.movementTotal(value); },
+        metadata.movementTotal(),
+        [&metadata](std::uint16_t value) { metadata.movementTotal(value); },
         result.changedCold,
         changes);
       applyUint16Patch(
         patch.optTrackNumber,
         "trackNumber",
-        meta.trackNumber(),
-        [&meta](std::uint16_t value) { meta.trackNumber(value); },
+        metadata.trackNumber(),
+        [&metadata](std::uint16_t value) { metadata.trackNumber(value); },
         result.changedCold,
         changes);
       applyUint16Patch(
         patch.optTrackTotal,
         "trackTotal",
-        meta.trackTotal(),
-        [&meta](std::uint16_t value) { meta.trackTotal(value); },
+        metadata.trackTotal(),
+        [&metadata](std::uint16_t value) { metadata.trackTotal(value); },
         result.changedCold,
         changes);
       applyUint16Patch(
         patch.optDiscNumber,
         "discNumber",
-        meta.discNumber(),
-        [&meta](std::uint16_t value) { meta.discNumber(value); },
+        metadata.discNumber(),
+        [&metadata](std::uint16_t value) { metadata.discNumber(value); },
         result.changedCold,
         changes);
       applyUint16Patch(
         patch.optDiscTotal,
         "discTotal",
-        meta.discTotal(),
-        [&meta](std::uint16_t value) { meta.discTotal(value); },
+        metadata.discTotal(),
+        [&metadata](std::uint16_t value) { metadata.discTotal(value); },
         result.changedCold,
         changes);
     }
@@ -276,11 +276,11 @@ namespace ao::rt
                                    MetadataPatch const& patch,
                                    std::vector<TrackFieldChange>& changes)
     {
-      auto& meta = builder.metadata();
+      auto& metadata = builder.metadata();
       auto result = PatchResult{};
 
-      applyTextMetadataPatch(meta, patch, result, changes);
-      applyNumberMetadataPatch(meta, patch, result, changes);
+      applyTextMetadataPatch(metadata, patch, result, changes);
+      applyNumberMetadataPatch(metadata, patch, result, changes);
       applyCustomMetadataPatch(builder, patch, result, changes);
 
       return result;
@@ -459,13 +459,13 @@ namespace ao::rt
     }
 
     Result<std::vector<ListId>> removeTrackFromManualLists(library::MusicLibrary& library,
-                                                           lmdb::WriteTransaction& txn,
+                                                           lmdb::WriteTransaction& transaction,
                                                            TrackId trackId)
     {
       auto updates = std::vector<std::pair<ListId, std::vector<std::byte>>>{};
 
       {
-        auto listReader = library.lists().reader(txn);
+        auto listReader = library.lists().reader(transaction);
 
         for (auto const& [listId, view] : listReader)
         {
@@ -480,7 +480,7 @@ namespace ao::rt
         }
       }
 
-      auto listWriter = library.lists().writer(txn);
+      auto listWriter = library.lists().writer(transaction);
       auto changed = std::vector<ListId>{};
       changed.reserve(updates.size());
 
@@ -500,7 +500,7 @@ namespace ao::rt
     std::vector<std::byte> payloadForDraft(LibraryWriter::ListDraft const& draft)
     {
       auto builder =
-        library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
+        library::ListBuilder::makeEmpty().name(draft.name).description(draft.description).parentId(draft.parentId);
 
       if (draft.kind == LibraryWriter::ListKind::Smart)
       {
@@ -710,8 +710,8 @@ namespace ao::rt
                                                                             MetadataPatch const& patch,
                                                                             MutationMode mode)
   {
-    auto txn = library.writeTransaction();
-    auto writer = library.tracks().writer(txn);
+    auto transaction = library.writeTransaction();
+    auto writer = library.tracks().writer(transaction);
     auto mutated = std::vector<TrackId>{};
     auto changes = std::vector<TrackChangeRecord>{};
 
@@ -735,7 +735,7 @@ namespace ao::rt
 
       if (patchResult.changedHot)
       {
-        auto hotDataResult = builder.serializeHot(txn, library.dictionary());
+        auto hotDataResult = builder.serializeHot(transaction, library.dictionary());
 
         if (!hotDataResult)
         {
@@ -750,7 +750,7 @@ namespace ao::rt
 
       if (patchResult.changedCold)
       {
-        auto coldDataResult = builder.serializeCold(txn, library.dictionary(), library.resources());
+        auto coldDataResult = builder.serializeCold(transaction, library.dictionary(), library.resources());
 
         if (!coldDataResult)
         {
@@ -778,7 +778,7 @@ namespace ao::rt
       return reply;
     }
 
-    if (auto result = txn.commit(); !result)
+    if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit metadata update", result.error());
     }
@@ -796,8 +796,8 @@ namespace ao::rt
                                                                 std::span<std::string const> tagsToRemove,
                                                                 MutationMode mode)
   {
-    auto txn = library.writeTransaction();
-    auto writer = library.tracks().writer(txn);
+    auto transaction = library.writeTransaction();
+    auto writer = library.tracks().writer(transaction);
     auto mutated = std::vector<TrackId>{};
     auto changes = std::vector<TrackTagsChange>{};
 
@@ -841,7 +841,7 @@ namespace ao::rt
         continue;
       }
 
-      auto hotDataResult = builder.serializeHot(txn, library.dictionary());
+      auto hotDataResult = builder.serializeHot(transaction, library.dictionary());
 
       if (!hotDataResult)
       {
@@ -865,7 +865,7 @@ namespace ao::rt
       return reply;
     }
 
-    if (auto result = txn.commit(); !result)
+    if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit tag update", result.error());
     }
@@ -880,8 +880,8 @@ namespace ao::rt
 
   Result<ListId> LibraryWriter::Impl::applyCreateList(ListDraft const& draft, MutationMode mode)
   {
-    auto txn = library.writeTransaction();
-    auto listWriter = library.lists().writer(txn);
+    auto transaction = library.writeTransaction();
+    auto listWriter = library.lists().writer(transaction);
 
     if (auto result = validateListDraft(library, listWriter, draft); !result)
     {
@@ -904,7 +904,7 @@ namespace ao::rt
       return listId;
     }
 
-    if (auto result = txn.commit(); !result)
+    if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit list creation", result.error());
     }
@@ -916,8 +916,8 @@ namespace ao::rt
 
   Result<UpdateListReply> LibraryWriter::Impl::applyUpdateList(ListDraft const& draft, MutationMode mode)
   {
-    auto txn = library.writeTransaction();
-    auto listWriter = library.lists().writer(txn);
+    auto transaction = library.writeTransaction();
+    auto listWriter = library.lists().writer(transaction);
     auto optExisting = listWriter.get(draft.listId);
 
     if (!optExisting)
@@ -950,7 +950,7 @@ namespace ao::rt
       return reply;
     }
 
-    if (auto result = txn.commit(); !result)
+    if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit list update", result.error());
     }
@@ -961,8 +961,8 @@ namespace ao::rt
 
   Result<DeleteListReply> LibraryWriter::Impl::applyDeleteList(ListId listId, MutationMode mode)
   {
-    auto txn = library.writeTransaction();
-    auto listWriter = library.lists().writer(txn);
+    auto transaction = library.writeTransaction();
+    auto listWriter = library.lists().writer(transaction);
     auto optView = listWriter.get(listId);
 
     if (!optView)
@@ -985,7 +985,7 @@ namespace ao::rt
       return reply;
     }
 
-    if (auto result = txn.commit(); !result)
+    if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit list delete", result.error());
     }
@@ -996,9 +996,9 @@ namespace ao::rt
 
   Result<DeleteTrackReply> LibraryWriter::Impl::applyDeleteTrack(TrackId trackId, MutationMode mode)
   {
-    auto txn = library.writeTransaction();
+    auto transaction = library.writeTransaction();
 
-    auto writer = library.tracks().writer(txn);
+    auto writer = library.tracks().writer(transaction);
     auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
@@ -1008,7 +1008,7 @@ namespace ao::rt
 
     auto const uri = std::string{optView->property().uri()};
     auto const title = std::string{optView->metadata().title()};
-    auto changedListsResult = removeTrackFromManualLists(library, txn, trackId);
+    auto changedListsResult = removeTrackFromManualLists(library, transaction, trackId);
 
     if (!changedListsResult)
     {
@@ -1020,7 +1020,7 @@ namespace ao::rt
 
     if (!uri.empty())
     {
-      if (auto result = library.manifest().writer(txn).remove(uri); !result)
+      if (auto result = library.manifest().writer(transaction).remove(uri); !result)
       {
         return storageError("Failed to remove file manifest entry", result.error());
       }
@@ -1036,7 +1036,7 @@ namespace ao::rt
       return reply;
     }
 
-    if (auto result = txn.commit(); !result)
+    if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit track delete", result.error());
     }
@@ -1076,9 +1076,9 @@ namespace ao::rt
       return std::unexpected{trackResult.error()};
     }
 
-    auto txn = library.writeTransaction();
-    auto writer = library.tracks().writer(txn);
-    auto manifestWriter = library.manifest().writer(txn);
+    auto transaction = library.writeTransaction();
+    auto writer = library.tracks().writer(transaction);
+    auto manifestWriter = library.manifest().writer(transaction);
 
     auto existingManifest = manifestWriter.get(target.uri);
 
@@ -1097,7 +1097,7 @@ namespace ao::rt
     auto const title = std::string{builder.metadata().title()};
     auto const artist = std::string{builder.metadata().artist()};
 
-    auto preparedResult = builder.prepare(txn, library.dictionary(), library.resources());
+    auto preparedResult = builder.prepare(transaction, library.dictionary(), library.resources());
 
     if (!preparedResult)
     {
@@ -1133,7 +1133,7 @@ namespace ao::rt
         std::format("failed to read track file timestamp '{}': {}", target.fullPath.string(), fileEc.message()));
     }
 
-    auto manifestBuilder = library::FileManifestBuilder::createNew();
+    auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
     manifestBuilder.trackId(id)
       .fileSize(static_cast<std::uint64_t>(fileSize))
       .mtime(static_cast<std::uint64_t>(
@@ -1151,7 +1151,7 @@ namespace ao::rt
       return reply;
     }
 
-    if (auto result = txn.commit(); !result)
+    if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit track creation", result.error());
     }

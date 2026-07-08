@@ -10,13 +10,14 @@
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
@@ -69,8 +70,8 @@ namespace ao::gtk
   {
     set_title("New List");
     configureForParent(parent);
-    setupUi();
-    setupPreview();
+    buildUi();
+    buildPreview();
     updatePreview();
   }
 
@@ -119,7 +120,7 @@ namespace ao::gtk
     updatePreview();
   }
 
-  void SmartListDialog::setupUi()
+  void SmartListDialog::buildUi()
   {
     constexpr std::int32_t kBoxSpacing = 12;
     constexpr int kPreviewMinContentWidth = 420;
@@ -146,14 +147,14 @@ namespace ao::gtk
     _leftPanel.set_vexpand(true);
     _leftPanel.add_css_class("ao-dialog-config-pane");
 
-    auto* const metaList = Gtk::make_managed<FormBoxedList>();
+    auto* const detailsList = Gtk::make_managed<FormBoxedList>();
     _nameEntry.set_placeholder_text("List name");
     _nameEntry.signal_changed().connect([this] { updateDialogState(); });
-    metaList->addEntryRow("Name", _nameEntry);
+    detailsList->addEntryRow("Name", _nameEntry);
 
     _descEntry.set_placeholder_text("Optional description");
-    metaList->addEntryRow("Description", _descEntry);
-    _leftPanel.append(*metaList);
+    detailsList->addEntryRow("Description", _descEntry);
+    _leftPanel.append(*detailsList);
 
     auto* const filterList = Gtk::make_managed<FormBoxedList>();
 
@@ -241,14 +242,14 @@ namespace ao::gtk
     setContentWidget(*mainBox);
   }
 
-  void SmartListDialog::setupPreview()
+  void SmartListDialog::buildPreview()
   {
     _previewEnginePtr = std::make_unique<rt::SmartListEvaluator>(_runtime.musicLibrary());
-    setupPreviewColumns();
+    configurePreviewColumns();
     rebuildPreviewSource();
   }
 
-  void SmartListDialog::setupPreviewColumns()
+  void SmartListDialog::configurePreviewColumns()
   {
     auto factoryPtr = Gtk::SignalListItemFactory::create();
 
@@ -303,7 +304,7 @@ namespace ao::gtk
         _previewFilteredListPtr =
           std::make_unique<rt::SmartListSource>(parentSource, _runtime.musicLibrary(), *_previewEnginePtr);
 
-        auto projPtr = std::make_shared<rt::TrackListProjection>(
+        auto projPtr = std::make_shared<rt::LiveTrackListProjection>(
           rt::kInvalidViewId, *_previewFilteredListPtr, _runtime.musicLibrary());
 
         _previewModelPtr = TrackListModel::create(_trackRowCache);
@@ -340,12 +341,12 @@ namespace ao::gtk
       }
     }
 
-    _inheritedExprLabel.set_text(uimodel::SmartListEditorModel::displayExpression(inheritedExpr));
+    _inheritedExprLabel.set_text(uimodel::SmartListEditorModel::formatExpressionDisplayText(inheritedExpr));
 
     auto const localExpr = std::string{_exprBox.entry().get_text()};
     auto const effectiveExpression =
       ao::uimodel::SmartListEditorModel::composeEffectiveExpression(inheritedExpr, localExpr);
-    _effectiveExprLabel.set_text(uimodel::SmartListEditorModel::displayExpression(effectiveExpression));
+    _effectiveExprLabel.set_text(uimodel::SmartListEditorModel::formatExpressionDisplayText(effectiveExpression));
   }
 
   void SmartListDialog::updateDialogState()
@@ -419,7 +420,7 @@ namespace ao::gtk
 
   rt::LibraryWriter::ListDraft SmartListDialog::draft() const
   {
-    return ao::uimodel::SmartListEditorModel::createDraft(
+    return ao::uimodel::SmartListEditorModel::makeDraft(
       _parentListId, _editListId, _nameEntry.get_text(), _descEntry.get_text(), _exprBox.entry().get_text());
   }
 } // namespace ao::gtk

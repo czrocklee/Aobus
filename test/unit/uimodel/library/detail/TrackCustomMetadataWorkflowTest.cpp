@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadataWorkflow.h>
 
@@ -12,12 +12,13 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("displayTextForTrackCustomMetadata formats aggregate custom metadata", "[uimodel][unit][library][detail]")
+  TEST_CASE("formatTrackCustomMetadataDisplayText formats aggregate custom metadata",
+            "[uimodel][unit][library][detail]")
   {
-    CHECK(displayTextForTrackCustomMetadata(rt::CustomMetadataItem{.key = "Mood", .value = {.optValue = "Bright"}}) ==
-          "Bright");
-    CHECK(displayTextForTrackCustomMetadata(rt::CustomMetadataItem{.key = "Mood"}).empty());
-    CHECK(displayTextForTrackCustomMetadata(rt::CustomMetadataItem{.key = "Mood", .value = {.mixed = true}}) ==
+    CHECK(formatTrackCustomMetadataDisplayText(
+            rt::CustomMetadataItem{.key = "Mood", .value = {.optValue = "Bright"}}) == "Bright");
+    CHECK(formatTrackCustomMetadataDisplayText(rt::CustomMetadataItem{.key = "Mood"}).empty());
+    CHECK(formatTrackCustomMetadataDisplayText(rt::CustomMetadataItem{.key = "Mood", .value = {.mixed = true}}) ==
           kMultipleTrackValuesText);
   }
 

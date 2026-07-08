@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackPresentation.h>
@@ -71,7 +71,7 @@ namespace ao::tui
 
   std::string formatDuration(std::chrono::milliseconds duration);
   std::string transportLabel(audio::Transport transport);
-  bool transportNeedsClockTick(audio::Transport transport);
+  bool needsTransportClockTick(audio::Transport transport);
   QualityIndicatorStyle qualityIndicatorStyle(uimodel::AudioQualityCategory category);
   QualityIndicatorStyle qualityIndicatorStyle(audio::Quality quality);
   std::string trackDisplayTitle(rt::TrackRow const& row);

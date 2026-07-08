@@ -4,10 +4,10 @@
 #include "playback/NowPlayingFieldLabel.h"
 
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 

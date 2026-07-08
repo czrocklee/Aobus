@@ -4,7 +4,7 @@
 #include "playback/OutputDeviceListItems.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/audio/Backend.h>
+#include <ao/audio/Device.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -29,7 +29,7 @@ namespace ao::gtk::test
       CHECK(itemPtr->name() == "Default");
       CHECK(itemPtr->badge() == "E");
       itemPtr->setActive(true);
-      CHECK(itemPtr->active() == true);
+      CHECK(itemPtr->isActive() == true);
     }
   }
 } // namespace ao::gtk::test

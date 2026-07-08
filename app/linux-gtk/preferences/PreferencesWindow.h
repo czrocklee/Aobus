@@ -63,15 +63,15 @@ namespace ao::gtk
                             rt::PlaybackService* playback,
                             Gtk::Window* targetWindow = nullptr);
 
-    bool hasPageForTest(std::string_view name) const;
-    std::string selectedThemeForTest() const { return _themeCombo.get_active_id(); }
-    void setThemeForTest(std::string_view themeId);
-    std::string selectedLayoutPresetForTest() const { return _layoutPresetCombo.get_active_id(); }
-    void setLayoutPresetForTest(std::string_view presetId);
-    std::string outputDeviceLabelForTest() const { return _outputDeviceLabel.get_text(); }
-    bool hasOutputSelectorForTest() const;
-    Gtk::Popover* outputSelectorForTest() { return _outputDeviceButton.get_popover(); }
-    Gtk::Popover const* outputSelectorForTest() const { return _outputDeviceButton.get_popover(); }
+    bool hasPage(std::string_view name) const;
+    std::string selectedThemeId() const { return _themeCombo.get_active_id(); }
+    void setSelectedThemeId(std::string_view themeId);
+    std::string selectedLayoutPresetId() const { return _layoutPresetCombo.get_active_id(); }
+    void setSelectedLayoutPresetId(std::string_view presetId);
+    std::string outputDeviceLabelText() const { return _outputDeviceLabel.get_text(); }
+    bool hasOutputSelector() const;
+    Gtk::Popover* outputSelector() { return _outputDeviceButton.get_popover(); }
+    Gtk::Popover const* outputSelector() const { return _outputDeviceButton.get_popover(); }
 
   private:
     Gtk::Box& addPage(std::string_view name, std::string_view title);

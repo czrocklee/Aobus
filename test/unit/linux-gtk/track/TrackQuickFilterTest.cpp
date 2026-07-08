@@ -5,7 +5,6 @@
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 
@@ -47,13 +46,13 @@ namespace ao::gtk::test
 
     filter.setText("artist == 'Muse'");
     drainGtkEvents();
-    CHECK(filter.getText() == "artist == 'Muse'");
+    CHECK(filter.text() == "artist == 'Muse'");
     CHECK(clearButton->get_visible());
 
     emitClicked(*clearButton);
     drainGtkEvents();
 
-    CHECK(filter.getText().empty());
+    CHECK(filter.text().empty());
     CHECK_FALSE(clearButton->get_visible());
   }
 
@@ -85,7 +84,7 @@ namespace ao::gtk::test
     filter.setPosition(3);
     drainGtkEvents();
 
-    CHECK(filter.getText() == "$al");
-    CHECK(filter.getPosition() == 3);
+    CHECK(filter.text() == "$al");
+    CHECK(filter.position() == 3);
   }
 } // namespace ao::gtk::test

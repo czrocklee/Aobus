@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "CorePrimitives.h"
+#include "NotificationIds.h"
 
 #include <chrono>
 #include <cstdint>

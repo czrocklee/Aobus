@@ -7,8 +7,9 @@
 #include "app/GtkAccelTranslator.h"
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -136,7 +137,7 @@ namespace ao::gtk
 
   bool ShortcutEditorWidget::bindChord(std::string const& actionId, uimodel::KeyChord const& chord)
   {
-    if (!chord.valid())
+    if (!chord.isValid())
     {
       return false;
     }

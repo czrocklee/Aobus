@@ -1,95 +1,87 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
-#include <ao/utility/StrongType.h>
+#include <ao/Error.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Property.h>
 
-#include <cstdint>
-#include <string>
-#include <vector>
+#include <concepts>
+#include <expected>
 
 namespace ao::audio
 {
-  /**
-   * @brief Type aliases for backend and profile identification.
-   */
-  using BackendId = utility::StrongType<std::string, struct BackendTag>;
-  using ProfileId = utility::StrongType<std::string, struct ProfileTag>;
-  using DeviceId = utility::StrongType<std::string, struct DeviceTag>;
+  struct Format;
+  class RenderTarget;
 
   /**
-   * @brief Standard Backend and Profile IDs.
+   * @brief Platform-specific audio output backend contract.
+   *
+   * Threading contract:
+   * - Engine serializes application control commands before calling backend public
+   *   methods, but backend callbacks may still be in flight while those methods
+   *   run. Implementations must protect native handles against public method /
+   *   callback interleavings.
+   * - Backends may call RenderTarget methods from their render or backend event
+   *   threads. They must not hold a native-handle lock while invoking a
+   *   RenderTarget callback if a public backend method can acquire that same
+   *   lock. Non-realtime Engine events are handed off internally, but the
+   *   backend must still avoid callback/native-lock reentrancy hazards.
+   * - close() is the render-target lifetime boundary. After close() returns, the
+   *   backend must not issue further callbacks to the RenderTarget passed to
+   *   open(), and all in-flight callbacks for that target must have returned.
+   * - stop() stops active rendering but does not revoke the open target; seek-like
+   *   flows may call stop(), flush(), and start() on the same target.
    */
-  inline BackendId const kBackendNone{""};
-  inline BackendId const kBackendPipeWire{"pipewire"};
-  inline BackendId const kBackendAlsa{"alsa"};
-
-  inline ProfileId const kProfileShared{"shared"};
-  inline ProfileId const kProfileExclusive{"exclusive"};
-
-  /**
-   * @brief A concrete PCM sample format supported by a device.
-   */
-  struct SampleFormatCapability final
+  class Backend
   {
-    std::uint8_t bitDepth = 0;
-    std::uint8_t validBits = 0;
-    bool isFloat = false;
+  public:
+    virtual ~Backend() = default;
 
-    bool operator==(SampleFormatCapability const&) const = default;
-  };
+    Backend(Backend const&) = delete;
+    Backend& operator=(Backend const&) = delete;
+    Backend(Backend&&) = delete;
+    Backend& operator=(Backend&&) = delete;
 
-  /**
-   * @brief Hardware capabilities of an audio device.
-   */
-  struct DeviceCapabilities final
-  {
-    std::vector<std::uint32_t> sampleRates{};
-    std::vector<SampleFormatCapability> sampleFormats{};
-    std::vector<std::uint8_t> bitDepths{};
-    std::vector<std::uint8_t> channelCounts{};
+    virtual Result<> open(Format const& format, RenderTarget* target) = 0;
 
-    bool operator==(DeviceCapabilities const&) const = default;
-  };
+    virtual void start() = 0;
+    virtual void pause() = 0;
+    virtual void resume() = 0;
+    virtual void flush() = 0;
+    virtual void stop() = 0;
+    virtual void close() = 0;
 
-  /**
-   * @brief Describes an available audio output device.
-   */
-  struct Device final
-  {
-    DeviceId id{};
-    std::string displayName{};
-    std::string description{};
-    bool isDefault = false;
-    BackendId backendId{};
-    DeviceCapabilities capabilities = {};
+    virtual Result<> setProperty(PropertyId id, PropertyValue const& value) = 0;
+    virtual Result<PropertyValue> property(PropertyId id) const = 0;
+    virtual PropertyInfo queryProperty(PropertyId id) const noexcept = 0;
 
-    bool operator==(Device const&) const = default;
-  };
+    template<typename T, PropertyId Id>
+      requires std::constructible_from<PropertyValue, T>
+    Result<> set(TypedProperty<T, Id> /*tag*/, T value)
+    {
+      return setProperty(Id, PropertyValue{value});
+    }
 
-  /**
-   * @brief Identifies a specific node in a backend's internal graph.
-   */
-  struct RouteAnchor final
-  {
-    BackendId backend;
-    std::string id;
+    template<typename T, PropertyId Id>
+      requires std::constructible_from<PropertyValue, T>
+    Result<T> get(TypedProperty<T, Id> /*tag*/) const
+    {
+      auto const result = property(Id);
 
-    bool operator==(RouteAnchor const&) const = default;
-  };
+      if (!result)
+      {
+        return std::unexpected{result.error()};
+      }
 
-  /**
-   * @brief Final conclusion on the quality of the current audio path.
-   */
-  enum class Quality : std::uint8_t
-  {
-    Unknown,
-    BitwisePerfect,
-    LosslessPadded,
-    LosslessFloat,
-    LinearIntervention,
-    LossySource,
-    Clipped,
+      return std::get<T>(*result);
+    }
+
+    virtual BackendId backendId() const noexcept = 0;
+    virtual ProfileId profileId() const noexcept = 0;
+
+  protected:
+    Backend() = default;
   };
 } // namespace ao::audio

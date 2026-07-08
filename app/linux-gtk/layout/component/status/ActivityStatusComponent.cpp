@@ -4,7 +4,7 @@
 #include "StatusComponentRegistrations.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "status/ActivityStatus.h"
 #include <ao/rt/AppRuntime.h>
@@ -57,11 +57,11 @@ namespace ao::gtk::layout
 
     ActivityStatusOptions optionsFromNode(LayoutNode const& node)
     {
-      auto const variant = parseVariant(node.getProp<std::string>("variant", "ambient"));
-      auto const rawMaxTextChars = node.getProp<std::int64_t>("maxTextChars", kDefaultMaxTextChars);
+      auto const variant = parseVariant(node.propertyOr<std::string>("variant", "ambient"));
+      auto const rawMaxTextChars = node.propertyOr<std::int64_t>("maxTextChars", kDefaultMaxTextChars);
       return ActivityStatusOptions{
         .variant = variant,
-        .idleBehavior = parseIdleBehavior(node.getProp<std::string>("idleBehavior", ""), variant),
+        .idleBehavior = parseIdleBehavior(node.propertyOr<std::string>("idleBehavior", ""), variant),
         .maxTextChars = static_cast<std::int32_t>(
           std::clamp(rawMaxTextChars, std::int64_t{kMaxTextCharsMin}, std::int64_t{kMaxTextCharsMax})),
       };
@@ -72,7 +72,7 @@ namespace ao::gtk::layout
       return node.id.empty() ? node.type : node.id;
     }
 
-    class ActivityStatusComponent final : public ILayoutComponent
+    class ActivityStatusComponent final : public LayoutComponent
     {
     public:
       ActivityStatusComponent(LayoutContext& ctx, LayoutNode const& node)
@@ -128,7 +128,7 @@ namespace ao::gtk::layout
       ActivityStatus _widget;
     };
 
-    std::unique_ptr<ILayoutComponent> createActivityStatus(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createActivityStatus(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<ActivityStatusComponent>(ctx, node);
     }

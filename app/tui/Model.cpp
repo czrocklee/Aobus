@@ -4,12 +4,12 @@
 #include "Model.h"
 
 #include <ao/CoreIds.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
@@ -40,7 +40,7 @@ namespace ao::tui
       return value == 0 ? std::string{"-"} : std::format("{}", value);
     }
 
-    std::string displayFallback(std::string value)
+    std::string textOrPlaceholder(std::string value)
     {
       return value.empty() ? std::string{"-"} : std::move(value);
     }
@@ -99,7 +99,7 @@ namespace ao::tui
     return "Unknown";
   }
 
-  bool transportNeedsClockTick(audio::Transport const transport)
+  bool needsTransportClockTick(audio::Transport const transport)
   {
     switch (transport)
     {
@@ -335,7 +335,7 @@ namespace ao::tui
 
   std::string trackTableLabel(rt::TrackRow const& row)
   {
-    auto trackNo = displayFallback(uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber));
+    auto trackNo = textOrPlaceholder(uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber));
     return std::format("{:>2}  {}  {}  {}",
                        trackNo == "-" ? std::string{"--"} : trackNo,
                        trackDisplayTitle(row),
@@ -372,11 +372,11 @@ namespace ao::tui
     lines.push_back({"Genre", blankFallback(row.genre)});
     lines.push_back({"Year", numberFallback(row.year)});
     lines.push_back(
-      {"Track", displayFallback(uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber))});
+      {"Track", textOrPlaceholder(uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber))});
     lines.push_back({"Duration", row.duration.count() > 0 ? formatDuration(row.duration) : std::string{"-"}});
-    lines.push_back({"Codec", displayFallback(uimodel::formatCodec(row.codec))});
-    lines.push_back({"Sample Rate", displayFallback(uimodel::formatSampleRate(row.sampleRate))});
-    lines.push_back({"Bit Depth", displayFallback(uimodel::formatBitDepth(row.bitDepth))});
+    lines.push_back({"Codec", textOrPlaceholder(uimodel::formatCodec(row.codec))});
+    lines.push_back({"Sample Rate", textOrPlaceholder(uimodel::formatSampleRate(row.sampleRate))});
+    lines.push_back({"Bit Depth", textOrPlaceholder(uimodel::formatBitDepth(row.bitDepth))});
     lines.push_back({"Tags", blankFallback(row.tags)});
     return lines;
   }

@@ -3,7 +3,7 @@
 
 #include "StatusComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/NowPlayingStatusLabel.h"
 #include <ao/rt/AppRuntime.h>
@@ -19,7 +19,7 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    class NowPlayingStatusComponent final : public ILayoutComponent
+    class NowPlayingStatusComponent final : public LayoutComponent
     {
     public:
       NowPlayingStatusComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
@@ -33,7 +33,7 @@ namespace ao::gtk::layout
       NowPlayingStatusLabel _widget;
     };
 
-    std::unique_ptr<ILayoutComponent> createNowPlayingStatus(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createNowPlayingStatus(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<NowPlayingStatusComponent>(ctx, node);
     }

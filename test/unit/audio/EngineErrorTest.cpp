@@ -5,8 +5,9 @@
 #include "EngineTestSupport.h"
 #include "ScriptedDecoderSession.h"
 #include <ao/Error.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PlaybackInput.h>
@@ -251,7 +252,7 @@ namespace ao::audio::test
     engine.play(item);
     REQUIRE(backend->target() != nullptr);
 
-    backend->fireBackendError("device disappeared");
+    backend->emitBackendError("device disappeared");
 
     auto const failure = requireFailure(failureFuture);
     CHECK(failure.kind == Engine::PlaybackFailureKind::DeviceLost);

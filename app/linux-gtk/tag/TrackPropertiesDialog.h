@@ -68,9 +68,9 @@ namespace ao::gtk
       std::unique_ptr<EntryCompletionController> controllerPtr;
     };
 
-    void setupUi();
-    void setupMetadataTab();
-    void setupPropertiesTab();
+    void buildUi();
+    void buildMetadataTab();
+    void buildPropertiesTab();
     void loadData();
     void loadFirstTrack(rt::LibraryReader const& scope, TrackId trackId);
     void loadSubsequentTrack(rt::LibraryReader const& scope, TrackId trackId);

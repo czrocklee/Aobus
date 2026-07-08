@@ -26,18 +26,18 @@ namespace ao::gtk::test
       CHECK(soul.get_visible() == true);
       CHECK(soul.has_css_class("ao-soul"));
       CHECK_FALSE(soul.isBreathing());
-      CHECK_FALSE(soul.showFullLogo());
+      CHECK_FALSE(soul.shouldShowFullLogo());
     }
 
     SECTION("breathe toggles animation state")
     {
       soul.breathe(true);
       CHECK(soul.isBreathing());
-      CHECK_FALSE(soul.isTickActiveForTest());
+      CHECK_FALSE(soul.isTickActive());
 
       soul.breathe(false);
       CHECK_FALSE(soul.isBreathing());
-      CHECK_FALSE(soul.isTickActiveForTest());
+      CHECK_FALSE(soul.isTickActive());
     }
 
     SECTION("tick lifecycle follows mapped breathing state")
@@ -46,19 +46,19 @@ namespace ao::gtk::test
       windowFixture.mount(soul);
 
       soul.breathe(true);
-      CHECK_FALSE(soul.isTickActiveForTest());
+      CHECK_FALSE(soul.isTickActive());
 
       windowFixture.present();
-      CHECK(soul.isTickActiveForTest());
+      CHECK(soul.isTickActive());
 
       soul.breathe(false);
-      CHECK_FALSE(soul.isTickActiveForTest());
+      CHECK_FALSE(soul.isTickActive());
 
       soul.breathe(true);
-      CHECK(soul.isTickActiveForTest());
+      CHECK(soul.isTickActive());
 
       windowFixture.unmount();
-      CHECK_FALSE(soul.isTickActiveForTest());
+      CHECK_FALSE(soul.isTickActive());
     }
 
     SECTION("setAura updates color")
@@ -81,10 +81,10 @@ namespace ao::gtk::test
     SECTION("setShowFullLogo updates render state")
     {
       soul.setShowFullLogo(true);
-      CHECK(soul.showFullLogo());
+      CHECK(soul.shouldShowFullLogo());
 
       soul.setShowFullLogo(false);
-      CHECK_FALSE(soul.showFullLogo());
+      CHECK_FALSE(soul.shouldShowFullLogo());
     }
 
     SECTION("Gtk::Widget sizing contract")

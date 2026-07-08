@@ -3,10 +3,10 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/audio/AlacDecoderSession.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/DecoderSession.h>
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/IDecoderSession.h>
 #include <ao/audio/Mp3DecoderSession.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -42,7 +42,7 @@ namespace ao::audio::test
      * @brief Extracts a specific number of samples from a decoder runtime for verification.
      */
     template<typename T>
-    std::vector<T> extractSamples(IDecoderSession& decoder, std::size_t count)
+    std::vector<T> extractSamples(DecoderSession& decoder, std::size_t count)
     {
       auto const block = decoder.readNextBlock();
 

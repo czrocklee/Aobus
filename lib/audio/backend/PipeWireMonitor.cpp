@@ -16,7 +16,8 @@ extern "C"
 #include <spa/utils/dict.h>
 }
 
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/backend/detail/PipeWireMonitorHelpers.h>

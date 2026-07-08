@@ -18,7 +18,7 @@ namespace ao::library
   // ListBuilder - factory methods
   //=============================================================================
 
-  ListBuilder ListBuilder::createNew()
+  ListBuilder ListBuilder::makeEmpty()
   {
     return ListBuilder{};
   }

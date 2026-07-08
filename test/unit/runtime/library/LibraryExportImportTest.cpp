@@ -3,7 +3,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -52,9 +52,9 @@ namespace ao::rt::test
     std::size_t trackCount(MusicLibrary& ml)
     {
       std::size_t count = 0;
-      auto txn = ml.readTransaction();
+      auto transaction = ml.readTransaction();
 
-      for ([[maybe_unused]] auto const& item : ml.tracks().reader(txn))
+      for ([[maybe_unused]] auto const& item : ml.tracks().reader(transaction))
       {
         ++count;
       }
@@ -65,9 +65,9 @@ namespace ao::rt::test
     std::size_t listCount(MusicLibrary& ml)
     {
       std::size_t count = 0;
-      auto txn = ml.readTransaction();
+      auto transaction = ml.readTransaction();
 
-      for ([[maybe_unused]] auto const& item : ml.lists().reader(txn))
+      for ([[maybe_unused]] auto const& item : ml.lists().reader(transaction))
       {
         ++count;
       }
@@ -77,9 +77,9 @@ namespace ao::rt::test
 
     std::string trackTitleForUri(MusicLibrary& ml, std::string_view uri)
     {
-      auto txn = ml.readTransaction();
+      auto transaction = ml.readTransaction();
 
-      for (auto const& [id, view] : ml.tracks().reader(txn))
+      for (auto const& [id, view] : ml.tracks().reader(transaction))
       {
         if (view.property().uri() == uri)
         {
@@ -102,14 +102,14 @@ namespace ao::rt::test
 
     // 1. Setup initial library
     {
-      auto txn = ml1.writeTransaction();
+      auto transaction = ml1.writeTransaction();
 
-      auto resWriter = ml1.resources().writer(txn);
+      auto resWriter = ml1.resources().writer(transaction);
       auto resIdResult = resWriter.create(lmdb::test::createTestData(100));
       REQUIRE(resIdResult);
       auto const resId = *resIdResult;
       REQUIRE(resWriter.create(lmdb::test::createTestData(64)));
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
       auto const trackId = library::test::addTrack(ml1,
                                                    library::test::TrackSpec{.title = "Test Title",
                                                                             .artist = "Test Artist",
@@ -127,16 +127,16 @@ namespace ao::rt::test
                                                                             .channels = Channels{},
                                                                             .bitDepth = BitDepth{24},
                                                                             .codec = AudioCodec::Flac});
-      auto listTxn = ml1.writeTransaction();
+      auto listTransaction = ml1.writeTransaction();
 
-      auto smartListBuilder = ListBuilder::createNew().name(smartListName).filter(smartFilter);
-      createList(ml1.lists().writer(listTxn), smartListBuilder.serialize());
+      auto smartListBuilder = ListBuilder::makeEmpty().name(smartListName).filter(smartFilter);
+      createList(ml1.lists().writer(listTransaction), smartListBuilder.serialize());
 
-      auto manualListBuilder = ListBuilder::createNew().name(manualListName).description(manualListDescription);
+      auto manualListBuilder = ListBuilder::makeEmpty().name(manualListName).description(manualListDescription);
       manualListBuilder.tracks().add(trackId);
-      createList(ml1.lists().writer(listTxn), manualListBuilder.serialize());
+      createList(ml1.lists().writer(listTransaction), manualListBuilder.serialize());
 
-      REQUIRE(listTxn.commit());
+      REQUIRE(listTransaction.commit());
     }
 
     // 2. Export to YAML
@@ -166,10 +166,10 @@ namespace ao::rt::test
 
     // 4. Verify
     {
-      auto txn = ml2.readTransaction();
-      auto reader = ml2.tracks().reader(txn);
-      auto const listReader = ml2.lists().reader(txn);
-      auto& dict = ml2.dictionary();
+      auto transaction = ml2.readTransaction();
+      auto reader = ml2.tracks().reader(transaction);
+      auto const listReader = ml2.lists().reader(transaction);
+      auto& dictionary = ml2.dictionary();
 
       // Check tracks
       auto tracks = std::vector<std::pair<TrackId, TrackView>>{};
@@ -186,7 +186,7 @@ namespace ao::rt::test
       CHECK(view.property().bitDepth() == 24);
       CHECK(view.property().codec() == AudioCodec::Flac);
       CHECK(view.metadata().title() == "Test Title");
-      CHECK(dict.get(view.metadata().artistId()) == "Test Artist");
+      CHECK(dictionary.get(view.metadata().artistId()) == "Test Artist");
 
       // Check tags
       auto const tags = view.tags();
@@ -194,7 +194,7 @@ namespace ao::rt::test
 
       for (auto tid : tags)
       {
-        tagNames.emplace_back(dict.get(tid));
+        tagNames.emplace_back(dictionary.get(tid));
       }
 
       CHECK(std::ranges::contains(tagNames, std::string_view{"rock"}));
@@ -206,7 +206,7 @@ namespace ao::rt::test
 
       for (auto [k, v] : custom)
       {
-        if (std::string{dict.get(k)} == "mood" && std::string{v} == "happy")
+        if (std::string{dictionary.get(k)} == "mood" && std::string{v} == "happy")
         {
           foundMood = true;
         }
@@ -269,13 +269,13 @@ namespace ao::rt::test
                                                                             .sampleRate = SampleRate{},
                                                                             .channels = Channels{},
                                                                             .bitDepth = BitDepth{}});
-      auto txn = ml1.writeTransaction();
-      auto manifestWriter = ml1.manifest().writer(txn);
-      auto builder = FileManifestBuilder::createNew();
+      auto transaction = ml1.writeTransaction();
+      auto manifestWriter = ml1.manifest().writer(transaction);
+      auto builder = FileManifestBuilder::makeEmpty();
       builder.trackId(trackId).mtime(123456789);
       REQUIRE(manifestWriter.put("full-fields.flac", builder.serialize()));
 
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
     }
 
     // 2. Export to YAML (Full mode)
@@ -293,10 +293,10 @@ namespace ao::rt::test
 
     // 4. Verify in ml2
     {
-      auto txn = ml2.readTransaction();
+      auto transaction = ml2.readTransaction();
 
-      auto reader = ml2.tracks().reader(txn);
-      auto& dict = ml2.dictionary();
+      auto reader = ml2.tracks().reader(transaction);
+      auto& dictionary = ml2.dictionary();
 
       auto tracks = std::vector<std::pair<TrackId, TrackView>>{};
 
@@ -313,13 +313,13 @@ namespace ao::rt::test
       CHECK(view.property().duration() == std::chrono::minutes{4});
 
       CHECK(std::string{view.metadata().title()} == "Test Title");
-      CHECK(std::string{dict.get(view.metadata().artistId())} == "Test Artist");
-      CHECK(std::string{dict.get(view.metadata().composerId())} == "Test Composer");
-      CHECK(std::string{dict.get(view.classical().conductorId())} == "Test Conductor");
-      CHECK(std::string{dict.get(view.classical().ensembleId())} == "Test Ensemble");
-      CHECK(std::string{dict.get(view.classical().workId())} == "Test Work");
-      CHECK(std::string{dict.get(view.classical().movementId())} == "Test Movement");
-      CHECK(std::string{dict.get(view.classical().soloistId())} == "Test Soloist");
+      CHECK(std::string{dictionary.get(view.metadata().artistId())} == "Test Artist");
+      CHECK(std::string{dictionary.get(view.metadata().composerId())} == "Test Composer");
+      CHECK(std::string{dictionary.get(view.classical().conductorId())} == "Test Conductor");
+      CHECK(std::string{dictionary.get(view.classical().ensembleId())} == "Test Ensemble");
+      CHECK(std::string{dictionary.get(view.classical().workId())} == "Test Work");
+      CHECK(std::string{dictionary.get(view.classical().movementId())} == "Test Movement");
+      CHECK(std::string{dictionary.get(view.classical().soloistId())} == "Test Soloist");
       CHECK(view.classical().movementNumber() == 2);
       CHECK(view.classical().movementTotal() == 4);
     }
@@ -349,11 +349,11 @@ namespace ao::rt::test
                                                                         .sampleRate = SampleRate{},
                                                                         .channels = Channels{},
                                                                         .bitDepth = BitDepth{}});
-      auto txn = ml.writeTransaction();
-      auto builder = FileManifestBuilder::createNew();
+      auto transaction = ml.writeTransaction();
+      auto builder = FileManifestBuilder::makeEmpty();
       builder.trackId(tid);
-      REQUIRE(ml.manifest().writer(txn).put(uri1, builder.serialize()));
-      REQUIRE(txn.commit());
+      REQUIRE(ml.manifest().writer(transaction).put(uri1, builder.serialize()));
+      REQUIRE(transaction.commit());
     }
 
     // 2. Prepare YAML with update for track 1 and addition of track 2
@@ -378,8 +378,8 @@ library:
 
     // 4. Verify results
     {
-      auto txn = ml.readTransaction();
-      auto reader = ml.tracks().reader(txn);
+      auto transaction = ml.readTransaction();
+      auto reader = ml.tracks().reader(transaction);
 
       auto tracks = std::unordered_map<std::string, TrackView>{};
 
@@ -410,11 +410,11 @@ library:
       auto const trackId =
         library::test::addTrack(source, library::test::TrackSpec{.title = "Source", .uri = "source.flac"});
 
-      auto listTxn = source.writeTransaction();
-      auto listBuilder = ListBuilder::createNew().name("Source List");
+      auto listTransaction = source.writeTransaction();
+      auto listBuilder = ListBuilder::makeEmpty().name("Source List");
       listBuilder.tracks().add(trackId);
-      createList(source.lists().writer(listTxn), listBuilder.serialize());
-      REQUIRE(listTxn.commit());
+      createList(source.lists().writer(listTransaction), listBuilder.serialize());
+      REQUIRE(listTransaction.commit());
 
       auto const yamlPath = std::filesystem::path{sourceTemp.path()} / "restore.yaml";
       REQUIRE(LibraryYamlExporter{source}.exportToYaml(yamlPath, ExportMode::Full));
@@ -442,11 +442,11 @@ library:
         library::test::addTrack(ml, library::test::TrackSpec{.title = "Original", .uri = "track1.flac"});
 
       {
-        auto txn = ml.writeTransaction();
-        auto builder = FileManifestBuilder::createNew();
+        auto transaction = ml.writeTransaction();
+        auto builder = FileManifestBuilder::makeEmpty();
         builder.trackId(existingTrackId);
-        REQUIRE(ml.manifest().writer(txn).put("track1.flac", builder.serialize()));
-        REQUIRE(txn.commit());
+        REQUIRE(ml.manifest().writer(transaction).put("track1.flac", builder.serialize()));
+        REQUIRE(transaction.commit());
       }
 
       auto const yamlPath = std::filesystem::path{temp.path()} / "merge-report.yaml";
@@ -530,9 +530,9 @@ library:
 
     REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
 
-    auto txn = ml.readTransaction();
-    auto const trackReader = ml.tracks().reader(txn);
-    auto const manifestReader = ml.manifest().reader(txn);
+    auto transaction = ml.readTransaction();
+    auto const trackReader = ml.tracks().reader(transaction);
+    auto const manifestReader = ml.manifest().reader(transaction);
 
     std::int32_t count = 0;
 
@@ -560,7 +560,7 @@ library:
     REQUIRE(manifestResult3);
     CHECK(manifestResult3->fileSize() == 0);
 
-    auto const listReader = ml.lists().reader(txn);
+    auto const listReader = ml.lists().reader(transaction);
     auto optList = listReader.get(ListId{1});
     REQUIRE(optList);
     REQUIRE(optList->tracks().size() == 3);
@@ -662,8 +662,8 @@ library:
     auto result = importer.importFromYaml(yamlPath);
     REQUIRE(result);
 
-    auto txn = ml.readTransaction();
-    auto reader = ml.tracks().reader(txn);
+    auto transaction = ml.readTransaction();
+    auto reader = ml.tracks().reader(transaction);
     auto const optView = reader.get(TrackId{1}, TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
     CHECK(optView->property().uri() == uri);

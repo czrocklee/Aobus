@@ -279,7 +279,7 @@ namespace ao::rt
 
     if (!evaluatableLists.empty())
     {
-      auto const mode = getUnionMode(evaluatableLists);
+      auto const mode = unionMode(evaluatableLists);
       evaluateMembers(lists.front()->_source, evaluatableLists, mode);
     }
 
@@ -301,15 +301,15 @@ namespace ao::rt
       return;
     }
 
-    auto const txn = _ml.readTransaction();
-    auto const reader = _ml.tracks().reader(txn);
+    auto const transaction = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(transaction);
     auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
 
     auto nextMembers = std::vector<std::vector<TrackId>>{lists.size()};
 
-    for (auto const idx : std::views::iota(0UZ, source.size()))
+    for (auto const index : std::views::iota(0UZ, source.size()))
     {
-      auto const id = source.trackIdAt(idx);
+      auto const id = source.trackIdAt(index);
       auto const optView = storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate smart list track");
 
       if (!optView)
@@ -359,9 +359,9 @@ namespace ao::rt
       return;
     }
 
-    auto const txn = _ml.readTransaction();
-    auto const reader = _ml.tracks().reader(txn);
-    auto const mode = getUnionMode(evaluatableLists);
+    auto const transaction = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(transaction);
+    auto const mode = unionMode(evaluatableLists);
     auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
     auto const optView =
       storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate inserted smart list track");
@@ -405,9 +405,9 @@ namespace ao::rt
       return;
     }
 
-    auto const txn = _ml.readTransaction();
-    auto const reader = _ml.tracks().reader(txn);
-    auto const mode = getUnionMode(evaluatableLists);
+    auto const transaction = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(transaction);
+    auto const mode = unionMode(evaluatableLists);
     auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
     auto const optView =
       storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate updated smart list track");
@@ -480,9 +480,9 @@ namespace ao::rt
       return;
     }
 
-    auto const txn = _ml.readTransaction();
-    auto const reader = _ml.tracks().reader(txn);
-    auto const mode = getUnionMode(evaluatableLists);
+    auto const transaction = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(transaction);
+    auto const mode = unionMode(evaluatableLists);
     auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
 
     auto matchedIds = std::vector<std::vector<TrackId>>{evaluatableLists.size()};
@@ -506,17 +506,17 @@ namespace ao::rt
       }
     }
 
-    for (std::size_t idx = 0; idx < evaluatableLists.size(); ++idx)
+    for (std::size_t index = 0; index < evaluatableLists.size(); ++index)
     {
-      if (!matchedIds[idx].empty())
+      if (!matchedIds[index].empty())
       {
-        auto& list = *evaluatableLists[idx];
-        std::ranges::sort(matchedIds[idx]);
-        auto const [first, last] = std::ranges::unique(matchedIds[idx]);
-        matchedIds[idx].erase(first, last);
+        auto& list = *evaluatableLists[index];
+        std::ranges::sort(matchedIds[index]);
+        auto const [first, last] = std::ranges::unique(matchedIds[index]);
+        matchedIds[index].erase(first, last);
 
-        list._members.insert(matchedIds[idx].begin(), matchedIds[idx].end());
-        list.TrackSource::notifyInserted(matchedIds[idx]);
+        list._members.insert(matchedIds[index].begin(), matchedIds[index].end());
+        list.TrackSource::notifyInserted(matchedIds[index]);
       }
     }
   }
@@ -545,9 +545,9 @@ namespace ao::rt
       return;
     }
 
-    auto const txn = _ml.readTransaction();
-    auto const reader = _ml.tracks().reader(txn);
-    auto const mode = getUnionMode(evaluatableLists);
+    auto const transaction = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(transaction);
+    auto const mode = unionMode(evaluatableLists);
     auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
 
     // Track transitions for each list
@@ -585,10 +585,10 @@ namespace ao::rt
       }
     }
 
-    for (std::size_t idx = 0; idx < evaluatableLists.size(); ++idx)
+    for (std::size_t index = 0; index < evaluatableLists.size(); ++index)
     {
-      auto& list = *evaluatableLists[idx];
-      auto& trans = transitions[idx];
+      auto& list = *evaluatableLists[index];
+      auto& trans = transitions[index];
 
       if (!trans.removed.empty())
       {
@@ -670,7 +670,7 @@ namespace ao::rt
     }
   }
 
-  SmartListEvaluator::TrackLoadMode SmartListEvaluator::getUnionMode(std::span<SmartListSource*> const lists)
+  SmartListEvaluator::TrackLoadMode SmartListEvaluator::unionMode(std::span<SmartListSource*> const lists)
   {
     bool needsHot = false;
     bool needsCold = false;

@@ -12,7 +12,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -60,18 +60,18 @@ namespace ao::rt::test
     // 1. Setup initial library
     {
       trackId = library::test::addTrack(ml1, library::test::makeEmptyTrackSpec(uri));
-      auto txn = ml1.writeTransaction();
+      auto transaction = ml1.writeTransaction();
 
-      auto manifestWriter = ml1.manifest().writer(txn);
-      auto builder = FileManifestBuilder::createNew();
+      auto manifestWriter = ml1.manifest().writer(transaction);
+      auto builder = FileManifestBuilder::makeEmpty();
       builder.trackId(trackId);
       REQUIRE(manifestWriter.put(uri, builder.serialize()));
 
-      auto listBuilder = ListBuilder::createNew().name("My URI List");
+      auto listBuilder = ListBuilder::makeEmpty().name("My URI List");
       listBuilder.tracks().add(trackId);
-      createList(ml1.lists().writer(txn), listBuilder.serialize());
+      createList(ml1.lists().writer(transaction), listBuilder.serialize());
 
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
     }
 
     // 2. Export in ListOnly mode
@@ -94,23 +94,23 @@ namespace ao::rt::test
 
     auto targetTrackId = kInvalidTrackId;
     {
-      auto txn = ml2.writeTransaction();
+      auto transaction = ml2.writeTransaction();
 
       // Create junk track first to ensure IDs don't match
-      REQUIRE(ml2.tracks().writer(txn).createHotCold(0, 0, [](auto, auto, auto) {}));
-      REQUIRE(txn.commit());
+      REQUIRE(ml2.tracks().writer(transaction).createHotCold(0, 0, [](auto, auto, auto) {}));
+      REQUIRE(transaction.commit());
     }
 
     {
       targetTrackId = library::test::addTrack(ml2, library::test::makeEmptyTrackSpec(uri));
-      auto txn = ml2.writeTransaction();
+      auto transaction = ml2.writeTransaction();
 
-      auto manifestWriter = ml2.manifest().writer(txn);
-      auto builder = FileManifestBuilder::createNew();
+      auto manifestWriter = ml2.manifest().writer(transaction);
+      auto builder = FileManifestBuilder::makeEmpty();
       builder.trackId(targetTrackId);
       REQUIRE(manifestWriter.put(uri, builder.serialize()));
 
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
     }
 
     auto importer = LibraryYamlImporter{ml2};
@@ -118,8 +118,8 @@ namespace ao::rt::test
 
     // 5. Verify list was restored and track remapped
     {
-      auto txn = ml2.readTransaction();
-      auto const listReader = ml2.lists().reader(txn);
+      auto transaction = ml2.readTransaction();
+      auto const listReader = ml2.lists().reader(transaction);
 
       std::int32_t listCount = 0;
 
@@ -134,7 +134,7 @@ namespace ao::rt::test
       CHECK(listCount == 1);
 
       // Verify tracks were NOT cleared
-      CHECK(ml2.tracks().reader(txn).begin() != ml2.tracks().reader(txn).end());
+      CHECK(ml2.tracks().reader(transaction).begin() != ml2.tracks().reader(transaction).end());
     }
   }
 
@@ -173,8 +173,8 @@ library:
     REQUIRE(importer.importFromYaml(yamlPath));
 
     {
-      auto txn = ml.readTransaction();
-      auto const listReader = ml.lists().reader(txn);
+      auto transaction = ml.readTransaction();
+      auto const listReader = ml.lists().reader(transaction);
 
       auto optParent = std::optional<ListView>{};
       auto optChild = std::optional<ListView>{};
@@ -236,8 +236,8 @@ library:
 
     REQUIRE(importer.importFromYaml(yamlPath));
 
-    auto txn = ml.readTransaction();
-    auto const listReader = ml.lists().reader(txn);
+    auto transaction = ml.readTransaction();
+    auto const listReader = ml.lists().reader(transaction);
 
     std::int32_t listCount = 0;
 

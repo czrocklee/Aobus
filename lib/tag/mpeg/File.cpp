@@ -171,7 +171,7 @@ namespace ao::tag::mpeg
     try
     {
       clearOwnedStrings();
-      auto builder = library::TrackBuilder::createNew();
+      auto builder = library::TrackBuilder::makeEmpty();
 
       void const* audioStart = address();
       std::size_t audioSize = size();

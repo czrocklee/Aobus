@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
-#include <ao/library/Meta.h>
-#include <ao/library/MetaStore.h>
+#include <ao/library/MetadataLayout.h>
+#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
@@ -23,18 +24,18 @@ namespace ao::library::test
 
   namespace
   {
-    void createLibraryMetaHeader(std::filesystem::path const& path, std::uint32_t libraryVersion)
+    void createLibraryMetadataHeader(std::filesystem::path const& path, std::uint32_t libraryVersion)
     {
       auto env = lmdb::test::openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
-      auto txn = lmdb::test::beginWriteTransaction(env);
-      auto metaStore = MetaStore{lmdb::test::openDatabase(txn, "meta")};
-      auto header = MetaHeader{.magic = kLibraryMetaMagic,
-                               .libraryVersion = libraryVersion,
-                               .flags = 0,
-                               .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1}},
-                               .libraryId = {}};
-      metaStore.create(txn, header);
-      REQUIRE(txn.commit());
+      auto transaction = lmdb::test::beginWriteTransaction(env);
+      auto metadataStore = MetadataStore{lmdb::test::openDatabase(transaction, "meta")};
+      auto header = MetadataHeader{.magic = kMetadataMagic,
+                                   .libraryVersion = libraryVersion,
+                                   .flags = 0,
+                                   .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1}},
+                                   .libraryId = {}};
+      metadataStore.create(transaction, header);
+      REQUIRE(transaction.commit());
     }
   } // namespace
 
@@ -45,16 +46,16 @@ namespace ao::library::test
     auto firstResult = MusicLibrary::open(temp.path(), temp.path());
     REQUIRE(firstResult);
     auto const& first = *firstResult;
-    auto const firstHeader = MetaHeader{first.metaHeader()};
+    auto const firstHeader = MetadataHeader{first.metadataHeader()};
 
-    CHECK(firstHeader.magic == kLibraryMetaMagic);
+    CHECK(firstHeader.magic == kMetadataMagic);
     CHECK(firstHeader.libraryVersion == kLibraryVersion);
 
     auto reopenedResult = MusicLibrary::open(temp.path(), temp.path());
     REQUIRE(reopenedResult);
     auto const& reopened = *reopenedResult;
-    CHECK(reopened.metaHeader().libraryId == firstHeader.libraryId);
-    CHECK(reopened.metaHeader().createdTime == firstHeader.createdTime);
+    CHECK(reopened.metadataHeader().libraryId == firstHeader.libraryId);
+    CHECK(reopened.metadataHeader().createdTime == firstHeader.createdTime);
   }
 
   TEST_CASE("MusicLibrary - reports unsupported library versions as CorruptData", "[library][unit][music-library]")
@@ -65,7 +66,7 @@ namespace ao::library::test
 
     SECTION("future version")
     {
-      createLibraryMetaHeader(temp.path(), kLibraryVersion + 1);
+      createLibraryMetadataHeader(temp.path(), kLibraryVersion + 1);
 
       auto const result = MusicLibrary::open(temp.path(), temp.path());
       REQUIRE_FALSE(result);
@@ -75,7 +76,7 @@ namespace ao::library::test
     SECTION("old version")
     {
       static_assert(kLegacyV1LibraryVersion != kLibraryVersion);
-      createLibraryMetaHeader(temp.path(), kLegacyV1LibraryVersion);
+      createLibraryMetadataHeader(temp.path(), kLegacyV1LibraryVersion);
 
       auto const result = MusicLibrary::open(temp.path(), temp.path());
       REQUIRE_FALSE(result);
@@ -85,7 +86,7 @@ namespace ao::library::test
     SECTION("previous cold layout version")
     {
       static_assert(kPreviousColdLayoutLibraryVersion != kLibraryVersion);
-      createLibraryMetaHeader(temp.path(), kPreviousColdLayoutLibraryVersion);
+      createLibraryMetadataHeader(temp.path(), kPreviousColdLayoutLibraryVersion);
 
       auto const result = MusicLibrary::open(temp.path(), temp.path());
       REQUIRE_FALSE(result);

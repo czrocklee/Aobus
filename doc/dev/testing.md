@@ -60,6 +60,7 @@ For assertion patterns and `REQUIRE` vs `CHECK` guidance, see
 Helpers should remove repetitive setup, not hide the behavior under test.
 Search existing `*TestSupport.h` files before creating new shared helpers.
 Prefer explicit expected values over duplicating production algorithms.
+For helper file naming, use `doc/dev/naming-conventions.md`.
 
 For fixture patterns and FakeIt guidance, see
 `doc/dev/testing/fixtures-and-helpers.md`.

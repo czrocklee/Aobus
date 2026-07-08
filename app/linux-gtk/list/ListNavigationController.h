@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/source/TrackSource.h>
 
@@ -39,7 +39,7 @@ namespace ao::gtk
       std::function<void(ListId)> onListSelected;
       std::function<rt::TrackSource*(ListId)> getListMembership;
       std::function<void(ListId, std::string)> onListPresentationSaved;
-      std::function<std::optional<std::string>(ListId)> getListPresentation;
+      std::function<std::optional<std::string>(ListId)> listPresentationCallback;
     };
 
     ListNavigationController(Gtk::Window& parent,
@@ -64,7 +64,7 @@ namespace ao::gtk
     void addActionsTo(Gio::ActionMap& actionMap);
 
   private:
-    void setupActions();
+    void createActions();
     void onContextMenuRequested(ListId listId, Gdk::Rectangle const& rect);
     void onSelectionChanged(ListId listId);
 

@@ -197,7 +197,7 @@ namespace ao::gtk::layout::track_field_grid
     }
   }
 
-  Glib::ustring DetailFieldEditor::getText() const
+  Glib::ustring DetailFieldEditor::text() const
   {
     return _editing ? _entry.get_text() : _text;
   }
@@ -217,12 +217,12 @@ namespace ao::gtk::layout::track_field_grid
     }
   }
 
-  bool DetailFieldEditor::getEditable() const
+  bool DetailFieldEditor::isEditable() const
   {
     return _editable;
   }
 
-  bool DetailFieldEditor::getEditing() const
+  bool DetailFieldEditor::isEditing() const
   {
     return _editing;
   }

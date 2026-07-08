@@ -26,7 +26,7 @@ namespace ao::rt::test
   private:
     static std::vector<std::byte> buildPayload(std::vector<TrackId> const& ids)
     {
-      auto builder = library::ListBuilder::createNew();
+      auto builder = library::ListBuilder::makeEmpty();
 
       for (auto id : ids)
       {

@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/rt/TrackMutation.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <cstdint>
 #include <optional>
@@ -20,7 +20,7 @@ namespace ao::uimodel
     ReservedTrackField,
   };
 
-  std::string displayTextForTrackCustomMetadata(rt::CustomMetadataItem const& item);
+  std::string formatTrackCustomMetadataDisplayText(rt::CustomMetadataItem const& item);
   bool isProtectedTrackCustomMetadataEditText(std::string_view newText);
 
   CustomMetadataAddValidation validateCustomMetadataAddition(rt::TrackDetailSnapshot const& snap, std::string_view key);

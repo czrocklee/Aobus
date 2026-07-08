@@ -9,7 +9,7 @@
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/VirtualListIds.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/liststore.h>
@@ -28,23 +28,23 @@ namespace ao::gtk::test
     auto idB = ListId{kInvalidListId};
 
     {
-      auto txn = library.writeTransaction();
-      auto writer = library.lists().writer(txn);
+      auto transaction = library.writeTransaction();
+      auto writer = library.lists().writer(transaction);
 
       // List A (Manual)
-      auto builderA = library::ListBuilder::createNew();
+      auto builderA = library::ListBuilder::makeEmpty();
       builderA.name("Manual List A");
       auto [id, _] = ao::test::requireValue(writer.create(builderA.serialize()));
       idA = id;
 
       // List B (Smart, child of A)
-      auto builderB = library::ListBuilder::createNew();
+      auto builderB = library::ListBuilder::makeEmpty();
       builderB.name("Smart Child B").parentId(idA).filter("genre:rock");
       builderB.tracks().isSmart(true);
       auto [id2, _] = ao::test::requireValue(writer.create(builderB.serialize()));
       idB = id2;
 
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
     }
 
     // 2. Build the model

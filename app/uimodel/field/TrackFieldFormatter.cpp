@@ -4,7 +4,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <chrono>
@@ -301,10 +301,10 @@ namespace ao::uimodel
     return {};
   }
 
-  std::string displayTextForTrackField(rt::TrackField field,
-                                       rt::TrackDetailSnapshot const& snap,
-                                       std::string_view mixedText,
-                                       bool showTechnicalUnknown)
+  std::string formatTrackFieldDisplayText(rt::TrackField field,
+                                          rt::TrackDetailSnapshot const& snap,
+                                          std::string_view mixedText,
+                                          bool showTechnicalUnknown)
   {
     auto const& agg = rt::trackFieldArrayAt(snap.fields, field);
     auto const* def = rt::trackFieldDefinition(field);

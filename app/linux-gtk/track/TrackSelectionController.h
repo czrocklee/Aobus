@@ -37,7 +37,7 @@ namespace ao::gtk
                              Glib::RefPtr<TrackListModel> modelPtr,
                              Glib::RefPtr<Gtk::MultiSelection> selectionModelPtr);
 
-    void setupActivation();
+    void configureActivation();
 
     std::vector<TrackId> selectedTrackIds() const noexcept;
     std::vector<Glib::RefPtr<TrackRowObject>> selectedRows() const noexcept;

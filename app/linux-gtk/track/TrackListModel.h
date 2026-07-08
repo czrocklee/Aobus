@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/Subscription.h>
+#include <ao/rt/projection/TrackListProjection.h>
 
 #include <giomm/listmodel.h>
 #include <glib-object.h>
@@ -29,10 +29,10 @@ namespace ao::gtk
   public:
     static Glib::RefPtr<TrackListModel> create(TrackRowCache const& provider);
 
-    void bindProjection(std::shared_ptr<rt::ITrackListProjection> projectionPtr);
+    void bindProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr);
     void clearProjection();
 
-    rt::ITrackListProjection* projection() const noexcept { return _projectionPtr.get(); }
+    rt::TrackListProjection* projection() const noexcept { return _projectionPtr.get(); }
 
     std::optional<std::size_t> indexOf(TrackId trackId) const noexcept;
     std::optional<std::size_t> groupIndexForTrack(TrackId trackId) const noexcept;
@@ -69,7 +69,7 @@ namespace ao::gtk
     void applyRemoveRange(rt::ProjectionRemoveRange const& delta);
     void applyUpdateRange(rt::ProjectionUpdateRange const& delta);
 
-    std::shared_ptr<rt::ITrackListProjection> _projectionPtr;
+    std::shared_ptr<rt::TrackListProjection> _projectionPtr;
     rt::Subscription _projectionSub;
     TrackRowCache const* _provider = nullptr;
     mutable ::GType _cachedItemType = G_TYPE_INVALID;

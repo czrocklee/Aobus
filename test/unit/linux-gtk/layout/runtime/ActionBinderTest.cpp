@@ -5,7 +5,9 @@
 
 #include "layout/runtime/ActionRegistry.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
+#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>

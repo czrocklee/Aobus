@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -48,10 +48,10 @@ namespace ao::rt::test
 
     bool trackExists(TestMusicLibrary& testLib, TrackId trackId)
     {
-      auto txn = testLib.library().readTransaction();
+      auto transaction = testLib.library().readTransaction();
       return testLib.library()
         .tracks()
-        .reader(txn)
+        .reader(transaction)
         .get(trackId, library::TrackStore::Reader::LoadMode::Both)
         .has_value();
     }
@@ -59,9 +59,9 @@ namespace ao::rt::test
     std::size_t trackCount(TestMusicLibrary& testLib)
     {
       std::size_t count = 0;
-      auto txn = testLib.library().readTransaction();
+      auto transaction = testLib.library().readTransaction();
 
-      for ([[maybe_unused]] auto const& item : testLib.library().tracks().reader(txn))
+      for ([[maybe_unused]] auto const& item : testLib.library().tracks().reader(transaction))
       {
         ++count;
       }
@@ -71,18 +71,18 @@ namespace ao::rt::test
 
     std::string trackTitle(TestMusicLibrary& testLib, TrackId trackId)
     {
-      auto txn = testLib.library().readTransaction();
+      auto transaction = testLib.library().readTransaction();
       auto const optView =
-        testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+        testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optView);
       return std::string{optView->metadata().title()};
     }
 
     bool trackHasTag(TestMusicLibrary& testLib, TrackId trackId, std::string_view tag)
     {
-      auto txn = testLib.library().readTransaction();
+      auto transaction = testLib.library().readTransaction();
       auto const optView =
-        testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+        testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optView);
       auto builder = library::TrackBuilder::fromView(*optView, testLib.library().dictionary());
       return std::ranges::contains(builder.tags().names(), tag);
@@ -90,16 +90,16 @@ namespace ao::rt::test
 
     bool listExists(TestMusicLibrary& testLib, ListId listId)
     {
-      auto txn = testLib.library().readTransaction();
-      return testLib.library().lists().reader(txn).get(listId).has_value();
+      auto transaction = testLib.library().readTransaction();
+      return testLib.library().lists().reader(transaction).get(listId).has_value();
     }
 
     std::size_t listCount(TestMusicLibrary& testLib)
     {
       std::size_t count = 0;
-      auto txn = testLib.library().readTransaction();
+      auto transaction = testLib.library().readTransaction();
 
-      for ([[maybe_unused]] auto const& item : testLib.library().lists().reader(txn))
+      for ([[maybe_unused]] auto const& item : testLib.library().lists().reader(transaction))
       {
         ++count;
       }
@@ -109,33 +109,33 @@ namespace ao::rt::test
 
     std::string listName(TestMusicLibrary& testLib, ListId listId)
     {
-      auto txn = testLib.library().readTransaction();
-      auto const optView = testLib.library().lists().reader(txn).get(listId);
+      auto transaction = testLib.library().readTransaction();
+      auto const optView = testLib.library().lists().reader(transaction).get(listId);
       REQUIRE(optView);
       return std::string{optView->name()};
     }
 
     bool listContainsTrack(TestMusicLibrary& testLib, ListId listId, TrackId trackId)
     {
-      auto txn = testLib.library().readTransaction();
-      auto const optView = testLib.library().lists().reader(txn).get(listId);
+      auto transaction = testLib.library().readTransaction();
+      auto const optView = testLib.library().lists().reader(transaction).get(listId);
       REQUIRE(optView);
       return std::ranges::contains(optView->tracks(), trackId);
     }
 
     ListId createManualList(TestMusicLibrary& testLib, std::string_view name, std::vector<TrackId> trackIds = {})
     {
-      auto txn = testLib.library().writeTransaction();
-      auto builder = library::ListBuilder::createNew().name(name);
+      auto transaction = testLib.library().writeTransaction();
+      auto builder = library::ListBuilder::makeEmpty().name(name);
 
       for (auto const trackId : trackIds)
       {
         builder.tracks().add(trackId);
       }
 
-      auto const createResult = testLib.library().lists().writer(txn).create(builder.serialize());
+      auto const createResult = testLib.library().lists().writer(transaction).create(builder.serialize());
       REQUIRE(createResult);
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
       return createResult->first;
     }
 

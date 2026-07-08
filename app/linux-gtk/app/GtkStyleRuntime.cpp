@@ -64,9 +64,9 @@ namespace ao::gtk
     syncGtkSettings();
     reloadGtkUserCss();
     loadUserCss();
-    setupFileMonitors();
-    setupDBusMonitor();
-    setupSignalHandler();
+    startFileMonitors();
+    startDBusMonitor();
+    installSignalHandler();
   }
 
   void GtkStyleRuntime::reload()
@@ -292,7 +292,7 @@ namespace ao::gtk
     }
   }
 
-  void GtkStyleRuntime::setupGtkConfigMonitor()
+  void GtkStyleRuntime::startGtkConfigMonitor()
   {
     auto const configDir = std::filesystem::path{Glib::get_user_config_dir()} / "gtk-4.0";
     auto const configFilePtr = Gio::File::create_for_path(configDir.string());
@@ -317,7 +317,7 @@ namespace ao::gtk
       });
   }
 
-  void GtkStyleRuntime::setupAobusConfigMonitor()
+  void GtkStyleRuntime::startAobusConfigMonitor()
   {
     auto const aobusDir = std::filesystem::path{Glib::get_user_config_dir()} / "aobus";
 
@@ -345,13 +345,13 @@ namespace ao::gtk
       });
   }
 
-  void GtkStyleRuntime::setupFileMonitors()
+  void GtkStyleRuntime::startFileMonitors()
   {
-    setupGtkConfigMonitor();
-    setupAobusConfigMonitor();
+    startGtkConfigMonitor();
+    startAobusConfigMonitor();
   }
 
-  void GtkStyleRuntime::setupDBusMonitor()
+  void GtkStyleRuntime::startDBusMonitor()
   {
     try
     {
@@ -380,7 +380,7 @@ namespace ao::gtk
     }
   }
 
-  void GtkStyleRuntime::setupSignalHandler()
+  void GtkStyleRuntime::installSignalHandler()
   {
     _sigusr1SourceId = ::g_unix_signal_add(
       SIGUSR1,

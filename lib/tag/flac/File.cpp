@@ -96,7 +96,7 @@ namespace ao::tag::flac
     try
     {
       clearOwnedStrings();
-      auto builder = library::TrackBuilder::createNew();
+      auto builder = library::TrackBuilder::makeEmpty();
 
       auto iter = MetadataBlockViewIterator{static_cast<char const*>(address()) + 4, size() - 4};
       auto const end = MetadataBlockViewIterator{};

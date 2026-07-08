@@ -3,7 +3,7 @@
 
 #include "check/CApiGlobalQualificationCheck.h"
 
-#include "check/CalleeQualificationUtil.h"
+#include "check/CalleeQualificationHelpers.h"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>

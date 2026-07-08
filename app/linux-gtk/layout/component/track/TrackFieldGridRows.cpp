@@ -23,7 +23,7 @@ namespace ao::gtk::layout::track_field_grid
     bool isFieldEditable(rt::TrackField field)
     {
       auto const* uiDef = trackFieldUiDefinition(field);
-      return uiDef != nullptr && uiDef->parseInlineEdit != nullptr && uimodel::trackFieldCanWritePatch(field);
+      return uiDef != nullptr && uiDef->parseInlineEdit != nullptr && uimodel::canWriteTrackFieldPatch(field);
     }
 
     bool isFieldTechnical(rt::TrackField field)

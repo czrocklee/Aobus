@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/library/AudioIdentity.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Hash128.h>

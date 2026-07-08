@@ -10,7 +10,7 @@
 #include <ao/Error.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/yaml/ConfigTraits.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <charconv>
 #include <cstdint>

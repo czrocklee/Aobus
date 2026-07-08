@@ -22,14 +22,14 @@ namespace ao::library
   {
   }
 
-  TrackStore::Reader TrackStore::reader(lmdb::ReadTransaction const& txn) const
+  TrackStore::Reader TrackStore::reader(lmdb::ReadTransaction const& transaction) const
   {
-    return Reader{_hotDb.reader(txn), _coldDb.reader(txn)};
+    return Reader{_hotDb.reader(transaction), _coldDb.reader(transaction)};
   }
 
-  TrackStore::Writer TrackStore::writer(lmdb::WriteTransaction& txn)
+  TrackStore::Writer TrackStore::writer(lmdb::WriteTransaction& transaction)
   {
-    return Writer{_hotDb.writer(txn), _coldDb.writer(txn)};
+    return Writer{_hotDb.writer(transaction), _coldDb.writer(transaction)};
   }
 
   // TrackStore::Reader implementation

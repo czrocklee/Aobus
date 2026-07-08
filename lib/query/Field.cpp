@@ -50,14 +50,14 @@ namespace ao::query::detail
         {
           result += " (";
 
-          for (std::size_t idx = 0; idx < spec.aliases.size(); ++idx)
+          for (std::size_t index = 0; index < spec.aliases.size(); ++index)
           {
-            if (idx > 0)
+            if (index > 0)
             {
               result += ", ";
             }
 
-            result += variableText(type, spec.aliases[idx]);
+            result += variableText(type, spec.aliases[index]);
           }
 
           result += ")";
@@ -82,9 +82,9 @@ namespace ao::query::detail
       auto previous = std::vector<std::size_t>(rhs.size() + 1);
       auto current = std::vector<std::size_t>(rhs.size() + 1);
 
-      for (std::size_t idx = 0; idx <= rhs.size(); ++idx)
+      for (std::size_t index = 0; index <= rhs.size(); ++index)
       {
-        previous[idx] = idx;
+        previous[index] = index;
       }
 
       for (std::size_t lhsIndex = 0; lhsIndex < lhs.size(); ++lhsIndex)
@@ -364,7 +364,7 @@ namespace ao::query
 
   std::string_view dictionaryFieldValue(library::TrackView const& track,
                                         Field field,
-                                        library::DictionaryStore const& dict)
+                                        library::DictionaryStore const& dictionary)
   {
     auto dictionaryId = kInvalidDictionaryId;
 
@@ -388,6 +388,6 @@ namespace ao::query
       return {};
     }
 
-    return dict.get(dictionaryId);
+    return dictionary.get(dictionaryId);
   }
 } // namespace ao::query

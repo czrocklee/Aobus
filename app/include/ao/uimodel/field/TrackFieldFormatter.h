@@ -6,7 +6,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <chrono>
 #include <cstdint>
@@ -39,8 +39,8 @@ namespace ao::uimodel
                                      std::uint16_t bitDepth,
                                      std::uint32_t bitrate);
   std::string formatTrackFieldRawValue(rt::TrackField field, rt::TrackFieldRawValue const& rawValue);
-  std::string displayTextForTrackField(rt::TrackField field,
-                                       rt::TrackDetailSnapshot const& snap,
-                                       std::string_view mixedText,
-                                       bool showTechnicalUnknown);
+  std::string formatTrackFieldDisplayText(rt::TrackField field,
+                                          rt::TrackDetailSnapshot const& snap,
+                                          std::string_view mixedText,
+                                          bool showTechnicalUnknown);
 } // namespace ao::uimodel

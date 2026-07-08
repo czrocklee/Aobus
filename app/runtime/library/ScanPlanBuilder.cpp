@@ -55,11 +55,11 @@ namespace ao::rt
       }
     };
 
-    void processEntry(std::filesystem::directory_entry const& entry,
-                      std::filesystem::path const& root,
-                      library::FileManifestStore::Reader const& manifestReader,
-                      std::unordered_set<std::string>& seenUris,
-                      ScanPlan& plan)
+    void scanEntry(std::filesystem::directory_entry const& entry,
+                   std::filesystem::path const& root,
+                   library::FileManifestStore::Reader const& manifestReader,
+                   std::unordered_set<std::string>& seenUris,
+                   ScanPlan& plan)
     {
       auto entryEc = std::error_code{};
       bool isFile = false;
@@ -314,8 +314,8 @@ namespace ao::rt
       return makeError(Error::Code::NotFound, "Library root path does not exist: " + root.string());
     }
 
-    auto txn = _ml.readTransaction();
-    auto const manifestReader = _ml.manifest().reader(txn);
+    auto transaction = _ml.readTransaction();
+    auto const manifestReader = _ml.manifest().reader(transaction);
 
     // Track which URIs we've seen on disk to identify MISSING tracks later
     auto seenUris = std::unordered_set<std::string>{};
@@ -371,7 +371,7 @@ namespace ao::rt
         }
       }
 
-      processEntry(entry, root, manifestReader, seenUris, plan);
+      scanEntry(entry, root, manifestReader, seenUris, plan);
 
       it.increment(ec);
 

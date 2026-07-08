@@ -4,12 +4,12 @@
 #include "PlaybackComponentRegistrations.h"
 #include "app/AobusSoul.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/TransportButton.h"
 #include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -45,7 +45,7 @@ namespace ao::gtk::layout
     /**
      * @brief playback.soulPlayPauseButton
      */
-    class SoulTransportButtonComponent final : public ILayoutComponent
+    class SoulTransportButtonComponent final : public LayoutComponent
     {
     public:
       SoulTransportButtonComponent(LayoutContext& ctx, LayoutNode const& node)
@@ -67,12 +67,12 @@ namespace ao::gtk::layout
         _soul.set_halign(Gtk::Align::FILL);
         _soul.set_valign(Gtk::Align::FILL);
 
-        if (auto const strokeWidth = node.getProp<double>("strokeWidth", 0.0); strokeWidth > 0.0)
+        if (auto const strokeWidth = node.propertyOr<double>("strokeWidth", 0.0); strokeWidth > 0.0)
         {
           _soul.setBaseStrokeWidth(static_cast<float>(strokeWidth));
         }
 
-        if (auto const glyphScale = node.getProp<double>("glyphScale", 0.0); glyphScale > 0.0)
+        if (auto const glyphScale = node.propertyOr<double>("glyphScale", 0.0); glyphScale > 0.0)
         {
           _soul.setInnerGlyphScale(static_cast<float>(glyphScale));
         }
@@ -121,7 +121,7 @@ namespace ao::gtk::layout
       bool _hasComplexTooltip = false;
     };
 
-    std::unique_ptr<ILayoutComponent> createSoulPlayPauseButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createSoulPlayPauseButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<SoulTransportButtonComponent>(ctx, node);
     }

@@ -2,13 +2,14 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/async/Executor.h> // NOLINT(misc-include-cleaner): unique_ptr<Executor> destruction needs the complete type.
 #include <ao/async/Runtime.h>
-#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/BackendProvider.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -97,7 +98,7 @@ namespace ao::rt
     return _implPtr->playbackService.playSelectionInView(focus.activeViewId);
   }
 
-  void AppRuntime::addAudioProvider(std::unique_ptr<audio::IBackendProvider> providerPtr)
+  void AppRuntime::addAudioProvider(std::unique_ptr<audio::BackendProvider> providerPtr)
   {
     _implPtr->playbackService.addProvider(std::move(providerPtr));
   }

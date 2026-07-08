@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "BackendTestSupport.h"
 #include "CapturingBackend.h"
 #include "EngineTestSupport.h"
 #include "ScriptedDecoderSession.h"
-#include "TestUtility.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/Error.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -151,7 +152,7 @@ namespace ao::audio::test
 
     When(Method(mockBackend, open))
       .AlwaysDo(
-        [&](Format const& format, IRenderTarget*)
+        [&](Format const& format, RenderTarget*)
         {
           openedFormats.push_back(format);
           return Result<>{};
@@ -236,7 +237,7 @@ namespace ao::audio::test
 
     When(Method(mockBackend, open))
       .AlwaysDo(
-        [&](Format const& format, IRenderTarget*)
+        [&](Format const& format, RenderTarget*)
         {
           openedFormats.push_back(format);
           return Result<>{};

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/backend/detail/AlsaProviderHelpers.h>
 #include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/utility/Raii.h>
@@ -88,7 +89,7 @@ namespace ao::audio::backend::detail
     return caps;
   }
 
-  std::vector<Device> doAlsaEnumerate()
+  std::vector<Device> enumerateAlsaPlaybackDevices()
   {
     auto devices = std::vector<Device>{};
 

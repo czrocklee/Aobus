@@ -49,7 +49,7 @@ namespace ao::uimodel
       return "";
     }
 
-    bool presentsAsPlaying(audio::Transport const transport) noexcept
+    bool isPresentedAsPlaying(audio::Transport const transport) noexcept
     {
       return transport == audio::Transport::Opening || transport == audio::Transport::Buffering ||
              transport == audio::Transport::Playing || transport == audio::Transport::Seeking;
@@ -61,7 +61,7 @@ namespace ao::uimodel
                                                bool showLabel)
     {
       auto view = TransportViewState{};
-      bool const isPlaying = presentsAsPlaying(state.transport);
+      bool const isPlaying = isPresentedAsPlaying(state.transport);
 
       view.icon = iconForAction(action);
       view.tooltip = labelForAction(action);
@@ -146,7 +146,7 @@ namespace ao::uimodel
   void TransportViewModel::refresh()
   {
     auto const command = commandForAction(_action);
-    auto const view = describeTransportButton(_action, _playback.state(), _commands.enabled(command), _showLabel);
+    auto const view = describeTransportButton(_action, _playback.state(), _commands.isEnabled(command), _showLabel);
 
     if (_onRender)
     {

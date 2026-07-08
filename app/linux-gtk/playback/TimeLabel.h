@@ -35,7 +35,7 @@ namespace ao::gtk
     ~TimeLabel();
 
     Gtk::Widget& widget() { return _label; }
-    bool isTickActiveForTest() const noexcept;
+    bool isTickActive() const noexcept;
 
   private:
     void applyState(uimodel::PlaybackTimeViewState const& view);

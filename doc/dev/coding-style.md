@@ -2,6 +2,7 @@
 
 This guide defines Aobus's C++ coding conventions.
 Rules are numbered for easy reference in reviews and tooling.
+Detailed naming policy lives in `doc/dev/naming-conventions.md`.
 
 - 1\. C++ Standard
   - 1.1. Target `C++26` without modules
@@ -14,18 +15,16 @@ Rules are numbered for easy reference in reviews and tooling.
       - Exception: if the previous line is a comment written specifically for an `if`, keep the comment directly above the `if`
       - Exception: if an `if` is the first effective line in a scope, do not add a leading blank line
   - 2.2. Naming Conventions
-    - 2.2.1. Types and classes use `PascalCase`: `TrackStore`, `Metadata`
-    - 2.2.2. Functions use `camelCase`: `loadMetadata()`, `getString()`
-    - 2.2.3. Variables use `camelCase`: `trackCount`, `filePath`
-    - 2.2.4. Non-static data members of classes use `_camelCase` (e.g., `_handle`, `_tracks`); members of structs (PODs, Impl, helper records) use plain `camelCase` (e.g., `trackId`, `year`)
-    - 2.2.5. Constants use `kCamelCase`: `kMaxSize`, `kDefaultFlags`
-    - 2.2.6. Enum values follow their scope: scoped enums use `PascalCase` (`Code::IoError`), unscoped constants use `kCamelCase`
-    - 2.2.7. Pointers follow semantic ownership naming:
-      - Managed pointers (`std::shared_ptr`, `std::unique_ptr`, `std::weak_ptr`, `Glib::RefPtr`) MUST end with the `Ptr` suffix (e.g., `trackPtr`).
-      - Raw pointers (`T*`) MUST NOT use the `Ptr` suffix, as they represent non-owning observers or iterators.
-      - This suffix rule applies to variables, fields, and parameters that hold pointer values. Raw-pointer-returning helper functions may use established names such as `asPtr()` when the function name describes a view/conversion contract rather than ownership.
-      - Hungarian notation is prohibited for all pointer types (e.g., avoid `pBuffer`, `_pRow`). Use semantic names like `bufferData` or `_activeRow`.
-    - 2.2.8. Use `cancelled` for Aobus domain state, user-facing domain text, and async control-flow names. Use `canceled` only when matching external API, framework, or protocol spelling, such as GTK-style signal names.
+    - 2.2.1. Detailed naming policy lives in
+      `doc/dev/naming-conventions.md`. Use that document for type/interface
+      naming, semantic vocabulary, pointer/optional naming, file names, and
+      helper/support allocation.
+    - 2.2.2. Common identifier shapes: types and classes use `PascalCase`;
+      functions and variables use `camelCase`; non-static class data members use
+      `_camelCase`; struct data members use plain `camelCase`; constants use
+      `kCamelCase`.
+    - 2.2.3. Test case names and Catch2 tags are covered in
+      `doc/dev/testing/naming-and-assertions.md`.
   - 2.3. Headers
     - 2.3.1. Use `#pragma once`
   - 2.4. Includes
@@ -76,7 +75,14 @@ Rules are numbered for easy reference in reviews and tooling.
     - 3.1.8. Use `std::jthread` and `std::stop_token` for background threads that need cooperative cancellation
   - 3.2. C++17 Features and Attributes
     - 3.2.1. Use `std::optional` for nullable return values where absence is not an error (e.g., lookups, optional fields); do not use it to report failures — use `std::expected` instead (see 3.3.1)
-      - 3.2.1.1. Optional Mandatory Naming: All `std::optional` variables (locals, members, and parameters) MUST use an `opt` prefix (e.g., `optUri`, `optView`). Existence checks on named optional variables and fields MUST use concise boolean conversion, such as `if (optVar)` or `if (!optVar)`. Temporary optional expressions may use `.has_value()` when that makes the absence check clearer, such as `reader.get(id).has_value()`. Do not use `static_cast<bool>(optional)`; use the optional directly in boolean contexts and `.has_value()` when materializing a `bool`.
+      - 3.2.1.1. Optional variables, fields, and parameters use the `opt`
+        prefix defined in `doc/dev/naming-conventions.md`. Existence checks on
+        named optional variables and fields MUST use concise boolean conversion,
+        such as `if (optVar)` or `if (!optVar)`. Temporary optional expressions
+        may use `.has_value()` when that makes the absence check clearer, such
+        as `reader.get(id).has_value()`. Do not use
+        `static_cast<bool>(optional)`; use the optional directly in boolean
+        contexts and `.has_value()` when materializing a `bool`.
     - 3.2.2. Use `std::variant` for type-safe unions
     - 3.2.3. Use `std::string_view` for non-owning string parameters
     - 3.2.4. Use `if constexpr` to remove compile-time branches
@@ -138,7 +144,7 @@ Rules are numbered for easy reference in reviews and tooling.
       - input parameters: `void addTrack(Track const& track);`
       - mandatory services: pass by reference, not smart pointer, to express non-nullability and lifetime requirements
   - 4.4. Threading
-    - 4.4.1. Name all background threads using `app::core::util::setCurrentThreadName()` for debuggability
+    - 4.4.1. Name all background threads using `ao::setCurrentThreadName()` for debuggability
     - 4.4.2. Use `std::jthread` with `std::stop_token` for cooperative cancellation — do not roll manual stop flags
     - 4.4.3. Access shared state through `std::mutex` + `std::scoped_lock`; prefer `std::unique_lock` only when needed for conditional unlocking
     - 4.4.4. Use `std::atomic` for simple flags and counters shared between threads; avoid `volatile`

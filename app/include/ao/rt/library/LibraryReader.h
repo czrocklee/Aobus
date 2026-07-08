@@ -40,7 +40,7 @@ namespace ao::rt
     LibraryReader& operator=(LibraryReader const&) = delete;
     ~LibraryReader();
 
-    bool valid() const noexcept;
+    bool isValid() const noexcept;
 
     // Tracks
     std::optional<TrackRow> trackRow(TrackId id) const;

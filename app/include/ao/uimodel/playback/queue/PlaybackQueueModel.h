@@ -5,8 +5,9 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/rt/PlaybackFailure.h>
+#include <ao/rt/Subscription.h>
 
 #include <cstddef>
 #include <memory>

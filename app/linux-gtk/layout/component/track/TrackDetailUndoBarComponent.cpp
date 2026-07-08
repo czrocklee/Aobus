@@ -4,7 +4,7 @@
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -24,7 +24,7 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    class TrackDetailUndoBarComponent final : public ILayoutComponent
+    class TrackDetailUndoBarComponent final : public LayoutComponent
     {
     public:
       TrackDetailUndoBarComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
@@ -96,7 +96,7 @@ namespace ao::gtk::layout
       sigc::connection _changedConn;
     };
 
-    std::unique_ptr<ILayoutComponent> createTrackDetailUndoBar(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackDetailUndoBar(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackDetailUndoBarComponent>(ctx, node);
     }

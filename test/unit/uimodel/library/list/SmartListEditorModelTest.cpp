@@ -19,8 +19,8 @@ namespace ao::uimodel::test
   {
     SECTION("Display expression")
     {
-      CHECK(SmartListEditorModel::displayExpression("") == "(none)");
-      CHECK(SmartListEditorModel::displayExpression("$genre = 'Jazz'") == "$genre = 'Jazz'");
+      CHECK(SmartListEditorModel::formatExpressionDisplayText("") == "(none)");
+      CHECK(SmartListEditorModel::formatExpressionDisplayText("$genre = 'Jazz'") == "$genre = 'Jazz'");
     }
 
     SECTION("Local expression only")
@@ -264,7 +264,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("SmartListEditorModel - createDraft preserves parent edit id and filter fields", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - makeDraft preserves parent edit id and filter fields", "[uimodel][unit][list]")
   {
     auto const parentListId = ListId{10};
     auto const editListId = ListId{42};
@@ -274,7 +274,7 @@ namespace ao::uimodel::test
 
     SECTION("Full draft with all fields")
     {
-      auto const draft = SmartListEditorModel::createDraft(parentListId, editListId, name, description, expression);
+      auto const draft = SmartListEditorModel::makeDraft(parentListId, editListId, name, description, expression);
 
       CHECK(draft.kind == rt::LibraryWriter::ListKind::Smart);
       CHECK(draft.parentId == parentListId);
@@ -286,7 +286,7 @@ namespace ao::uimodel::test
 
     SECTION("Draft for creating (listId = kInvalidListId)")
     {
-      auto const draft = SmartListEditorModel::createDraft(parentListId, kInvalidListId, name, description, expression);
+      auto const draft = SmartListEditorModel::makeDraft(parentListId, kInvalidListId, name, description, expression);
 
       CHECK(draft.kind == rt::LibraryWriter::ListKind::Smart);
       CHECK(draft.parentId == parentListId);
@@ -298,7 +298,7 @@ namespace ao::uimodel::test
 
     SECTION("Draft with empty strings")
     {
-      auto const draft = SmartListEditorModel::createDraft(kInvalidListId, kInvalidListId, "", "", "");
+      auto const draft = SmartListEditorModel::makeDraft(kInvalidListId, kInvalidListId, "", "", "");
 
       CHECK(draft.kind == rt::LibraryWriter::ListKind::Smart);
       CHECK(draft.parentId == kInvalidListId);

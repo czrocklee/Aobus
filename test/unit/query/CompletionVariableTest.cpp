@@ -366,18 +366,18 @@ namespace ao::query::test
     {
       REQUIRE(actual.size() == expected.size());
 
-      for (std::size_t idx = 0; auto const& spec : actual)
+      for (std::size_t index = 0; auto const& spec : actual)
       {
         DYNAMIC_SECTION("Spec: " << spec.canonicalName)
         {
-          auto const& exp = expected.at(idx);
+          auto const& exp = expected.at(index);
           CHECK(spec.type == exp.type);
           CHECK(spec.canonicalName == exp.canonicalName);
           CHECK(spec.field == exp.field);
           CHECK(std::ranges::equal(spec.aliases, exp.aliases));
         }
 
-        ++idx;
+        ++index;
       }
     };
 

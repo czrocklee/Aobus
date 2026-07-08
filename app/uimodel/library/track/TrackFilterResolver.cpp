@@ -152,9 +152,9 @@ namespace ao::uimodel
 
     auto expression = buildQuickTermExpression(terms.front());
 
-    for (std::size_t idx = 1; idx < terms.size(); ++idx)
+    for (std::size_t index = 1; index < terms.size(); ++index)
     {
-      expression = std::format("({}) and ({})", expression, buildQuickTermExpression(terms[idx]));
+      expression = std::format("({}) and ({})", expression, buildQuickTermExpression(terms[index]));
     }
 
     return ResolvedTrackFilter{.mode = TrackFilterMode::Quick, .expression = std::move(expression)};

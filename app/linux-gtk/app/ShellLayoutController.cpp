@@ -31,8 +31,11 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/projection/ProjectionTypes.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/uimodel/layout/action/LayoutActionActivation.h>
+#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutStatePromoter.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
@@ -85,7 +88,7 @@ namespace ao::gtk
 
       auto const presetId = layout::presetIdFromString(selection.presetId);
       auto optDoc = store.load(selection.presetId);
-      auto doc = optDoc ? std::move(*optDoc) : layout::createBuiltInLayout(presetId);
+      auto doc = optDoc ? std::move(*optDoc) : layout::makeBuiltInLayout(presetId);
       auto stateDoc = componentStateStore == nullptr
                         ? uimodel::ShellLayoutSessionModel::emptyComponentState(selection.presetId)
                         : componentStateStore->load(selection.presetId)
@@ -183,12 +186,12 @@ namespace ao::gtk
       return [this, command](layout::ActionActivationContext&) { commandSurface(_context.playback).execute(command); };
     };
 
-    auto const enabled = [this](uimodel::PlaybackCommand command)
+    auto const isEnabled = [this](uimodel::PlaybackCommand command)
     {
       return [this, command](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
       {
         return uimodel::LayoutActionAvailability{
-          .enabled = commandSurface(_context.playback).enabled(command), .disabledReason = ""};
+          .enabled = commandSurface(_context.playback).isEnabled(command), .disabledReason = ""};
       };
     };
 
@@ -199,56 +202,56 @@ namespace ao::gtk
                    "Playback",
                    uimodel::LayoutActionCapability::None,
                    execute(Command::Play),
-                   enabled(Command::Play));
+                   isEnabled(Command::Play));
 
     registerAction("playback.pause",
                    "Pause",
                    "Playback",
                    uimodel::LayoutActionCapability::None,
                    execute(Command::Pause),
-                   enabled(Command::Pause));
+                   isEnabled(Command::Pause));
 
     registerAction("playback.playPause",
                    "Play/Pause",
                    "Playback",
                    uimodel::LayoutActionCapability::None,
                    execute(Command::PlayPause),
-                   enabled(Command::PlayPause));
+                   isEnabled(Command::PlayPause));
 
     registerAction("playback.stop",
                    "Stop",
                    "Playback",
                    uimodel::LayoutActionCapability::None,
                    execute(Command::Stop),
-                   enabled(Command::Stop));
+                   isEnabled(Command::Stop));
 
     registerAction("playback.next",
                    "Next",
                    "Playback",
                    uimodel::LayoutActionCapability::None,
                    execute(Command::Next),
-                   enabled(Command::Next));
+                   isEnabled(Command::Next));
 
     registerAction("playback.previous",
                    "Previous",
                    "Playback",
                    uimodel::LayoutActionCapability::None,
                    execute(Command::Previous),
-                   enabled(Command::Previous));
+                   isEnabled(Command::Previous));
 
     registerAction("playback.toggleShuffle",
                    "Toggle Shuffle",
                    "Playback",
                    uimodel::LayoutActionCapability::None,
                    execute(Command::ToggleShuffle),
-                   enabled(Command::ToggleShuffle));
+                   isEnabled(Command::ToggleShuffle));
 
     registerAction("playback.cycleRepeat",
                    "Cycle Repeat",
                    "Playback",
                    uimodel::LayoutActionCapability::None,
                    execute(Command::CycleRepeat),
-                   enabled(Command::CycleRepeat));
+                   isEnabled(Command::CycleRepeat));
 
     registerAction("playback.showOutputDeviceSelector",
                    "Output Devices",
@@ -330,7 +333,7 @@ namespace ao::gtk
   void ShellLayoutController::registerTrackActions(RegisterActionFn const& registerAction)
   {
     registerAction(
-      "track.showProperties",
+      "track.presentProperties",
       "Properties",
       "Tracks",
       uimodel::LayoutActionCapability::None,
@@ -344,7 +347,7 @@ namespace ao::gtk
 
           if (auto const snap = projPtr->snapshot(); !snap.trackIds.empty())
           {
-            tagController->showProperties(
+            tagController->presentProperties(
               TrackSelectionContext{.listId = kInvalidListId, .selectedIds = snap.trackIds});
           }
         }
@@ -373,7 +376,7 @@ namespace ao::gtk
 
           if (auto const snap = projPtr->snapshot(); !snap.trackIds.empty())
           {
-            tagController->showTagEditor(
+            tagController->openTagEditor(
               TrackSelectionContext{.listId = kInvalidListId, .selectedIds = snap.trackIds}, ctx.anchorWidget);
           }
         }
@@ -552,7 +555,7 @@ namespace ao::gtk
         }
       }
 
-      return layout::createBuiltInLayout(layout::presetIdFromString(id));
+      return layout::makeBuiltInLayout(layout::presetIdFromString(id));
     };
 
     _editorDialogPtr =
@@ -757,17 +760,17 @@ namespace ao::gtk
 
   uimodel::LayoutActionActivationOutcome ShellLayoutController::activateAction(std::string_view id)
   {
-    auto ctx = getActionContext(id);
+    auto ctx = actionContext(id);
     return _actionRegistry.tryActivate(id, ctx);
   }
 
   uimodel::LayoutActionAvailability ShellLayoutController::actionAvailability(std::string_view id)
   {
-    auto ctx = getActionContext(id);
+    auto ctx = actionContext(id);
     return _actionRegistry.state(id, ctx);
   }
 
-  layout::ActionActivationContext ShellLayoutController::getActionContext(std::string_view componentId)
+  layout::ActionActivationContext ShellLayoutController::actionContext(std::string_view componentId)
   {
     return layout::ActionActivationContext{.runtime = _context.runtime,
                                            .parentWindow = _context.parentWindow,

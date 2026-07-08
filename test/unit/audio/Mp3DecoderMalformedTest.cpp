@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "DecoderTestUtils.h"
+#include "DecoderTestSupport.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/audio/Format.h>
 #include <ao/audio/Mp3DecoderSession.h>
 

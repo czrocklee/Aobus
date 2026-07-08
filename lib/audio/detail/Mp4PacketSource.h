@@ -26,7 +26,7 @@ namespace ao::audio::detail
     Result<> seek(std::chrono::milliseconds offset, std::uint32_t fallbackTimescale = 0);
 
     bool isOpen() const noexcept;
-    bool atEnd() const noexcept;
+    bool isAtEnd() const noexcept;
     std::span<std::byte const> packet() const;
     std::span<std::byte const> magicCookie() const;
     media::mp4::Demuxer::SampleEntry sampleInfo() const;

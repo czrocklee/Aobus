@@ -29,21 +29,21 @@ namespace ao::query
   namespace
   {
     // Get string constant from plan's string constants table
-    std::string_view getStringConstant(ExecutionPlan const* plan, std::int64_t stringIndex)
+    std::string_view stringConstant(ExecutionPlan const* plan, std::int64_t stringIndex)
     {
       if (plan == nullptr || stringIndex < 0)
       {
         return {};
       }
 
-      auto const idx = static_cast<size_t>(stringIndex);
+      auto const index = static_cast<size_t>(stringIndex);
 
-      if (idx >= plan->stringConstants.size())
+      if (index >= plan->stringConstants.size())
       {
         return {};
       }
 
-      return plan->stringConstants[idx];
+      return plan->stringConstants[index];
     }
 
     std::string_view loadDictionaryFieldValue(library::TrackView const& track, Field field, ExecutionPlan const* plan)
@@ -59,7 +59,7 @@ namespace ao::query
       return dictionaryFieldValue(track, field, *plan->dictionary);
     }
 
-    std::string_view loadStringFieldValue(library::TrackView const& track, Field field, std::int64_t customDictId)
+    std::string_view loadStringFieldValue(library::TrackView const& track, Field field, std::int64_t customDictionaryId)
     {
       switch (field)
       {
@@ -67,10 +67,10 @@ namespace ao::query
         case Field::Uri: return track.property().uri();
         case Field::Custom:
 
-          if (customDictId > 0)
+          if (customDictionaryId > 0)
           {
-            auto dictId = DictionaryId{static_cast<std::uint32_t>(customDictId)};
-            return track.customMetadata().get(dictId).value_or("");
+            auto dictionaryId = DictionaryId{static_cast<std::uint32_t>(customDictionaryId)};
+            return track.customMetadata().get(dictionaryId).value_or("");
           }
 
           return {};
@@ -145,7 +145,7 @@ namespace ao::query
       if (auto const stringIndex = reg(registers, instr.operand); isStringField(field))
       {
         auto const fieldStr = loadStringFieldValue(track, field, instr.constValue);
-        auto const constantStr = getStringConstant(plan, stringIndex);
+        auto const constantStr = stringConstant(plan, stringIndex);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
       else if (isDictionaryField(field) && isOrderedComparison(instr.op))
@@ -153,7 +153,7 @@ namespace ao::query
         // Dictionary fields hold interned IDs whose order is arbitrary, so an
         // ordered comparison resolves the ID back to text and compares that.
         auto const fieldStr = loadDictionaryFieldValue(track, field, plan);
-        auto const constantStr = getStringConstant(plan, stringIndex);
+        auto const constantStr = stringConstant(plan, stringIndex);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
       else
@@ -182,7 +182,7 @@ namespace ao::query
         if (auto stringIndex = reg(registers, instr.operand); isStringField(field))
         {
           auto const fieldStr = loadStringFieldValue(track, field, instr.constValue);
-          auto const constantStr = getStringConstant(plan, stringIndex);
+          auto const constantStr = stringConstant(plan, stringIndex);
           reg(registers, instr.operand - 1) = (fieldStr == constantStr) ? 1 : 0;
         }
         else
@@ -200,7 +200,7 @@ namespace ao::query
                      ExecutionPlan const* plan,
                      Instruction const& instr)
     {
-      // instr.field carries the left field; instr.constValue its Custom dictId (if any).
+      // instr.field carries the left field; instr.constValue its Custom dictionaryId (if any).
       auto field = static_cast<Field>(instr.field);
       auto rhs = reg(registers, instr.operand);
 
@@ -215,7 +215,7 @@ namespace ao::query
         fieldStr = loadDictionaryFieldValue(track, field, plan);
       }
 
-      auto const constantStr = getStringConstant(plan, rhs);
+      auto const constantStr = stringConstant(plan, rhs);
       auto found = fieldStr.contains(constantStr);
       reg(registers, instr.operand - 1) = found ? 1 : 0;
     }
@@ -301,7 +301,7 @@ namespace ao::query
 
       if (set.stringValues)
       {
-        // instr.field is the left field; instr.size carries its Custom dictId (if any).
+        // instr.field is the left field; instr.size carries its Custom dictionaryId (if any).
         auto const field = static_cast<Field>(instr.field);
         auto fieldValue = std::string_view{};
 

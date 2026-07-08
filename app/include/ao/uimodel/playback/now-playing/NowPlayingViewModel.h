@@ -4,9 +4,9 @@
 #pragma once
 
 #include <ao/audio/Transport.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 

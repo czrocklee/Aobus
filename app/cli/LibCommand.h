@@ -14,5 +14,5 @@ namespace ao::cli
 {
   class CliContext;
 
-  void setupLibCommand(CLI::App& app, CliContext& context);
+  void configureLibCommand(CLI::App& app, CliContext& context);
 }

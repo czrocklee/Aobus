@@ -4,7 +4,7 @@
 #include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/StatefulComponentState.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -34,7 +34,7 @@ namespace ao::gtk::layout
     /**
      * @brief A split container component (Gtk::Paned).
      */
-    class SplitComponent final : public ILayoutComponent
+    class SplitComponent final : public LayoutComponent
     {
     public:
       SplitComponent(LayoutContext& ctx, LayoutNode const& node)
@@ -51,7 +51,7 @@ namespace ao::gtk::layout
 
         auto orientation = Gtk::Orientation::VERTICAL;
 
-        if (node.getProp<std::string>("orientation", "") == "horizontal")
+        if (node.propertyOr<std::string>("orientation", "") == "horizontal")
         {
           orientation = Gtk::Orientation::HORIZONTAL;
         }
@@ -65,10 +65,10 @@ namespace ao::gtk::layout
         _endChildPtr = ctx.registry.create(ctx, node.children[1]);
         _paned.set_end_child(_endChildPtr->widget());
 
-        _paned.set_resize_start_child(node.getProp<bool>("resizeStart", true));
-        _paned.set_shrink_start_child(node.getProp<bool>("shrinkStart", false));
-        _paned.set_resize_end_child(node.getProp<bool>("resizeEnd", true));
-        _paned.set_shrink_end_child(node.getProp<bool>("shrinkEnd", false));
+        _paned.set_resize_start_child(node.propertyOr<bool>("resizeStart", true));
+        _paned.set_shrink_start_child(node.propertyOr<bool>("shrinkStart", false));
+        _paned.set_resize_end_child(node.propertyOr<bool>("resizeEnd", true));
+        _paned.set_shrink_end_child(node.propertyOr<bool>("shrinkEnd", false));
 
         if (auto const& optState = _state.restored(); optState && optState->state.contains("positionPercent"))
         {
@@ -202,11 +202,11 @@ namespace ao::gtk::layout
       bool _initialPositionSet = false;
       bool _suppressPositionSave = false;
       std::unique_ptr<Gtk::Label> _errorPtr;
-      std::unique_ptr<ILayoutComponent> _startChildPtr;
-      std::unique_ptr<ILayoutComponent> _endChildPtr;
+      std::unique_ptr<LayoutComponent> _startChildPtr;
+      std::unique_ptr<LayoutComponent> _endChildPtr;
     };
 
-    std::unique_ptr<ILayoutComponent> createSplit(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createSplit(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<SplitComponent>(ctx, node);
     }

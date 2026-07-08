@@ -4,7 +4,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
@@ -306,12 +306,12 @@ namespace ao::uimodel
     {
       auto const previousIndex = _queueStatePtr->currentIndex - 1;
 
-      for (auto [idx, trackId] :
+      for (auto [index, trackId] :
            _queueStatePtr->trackIds | std::views::take(previousIndex + 1) | std::views::enumerate | std::views::reverse)
       {
         std::ignore = trackId;
 
-        auto const played = playIndex(static_cast<std::size_t>(idx));
+        auto const played = playIndex(static_cast<std::size_t>(index));
 
         if (played)
         {
@@ -328,11 +328,11 @@ namespace ao::uimodel
     }
     else if (state.mode.repeat == rt::RepeatMode::All && !_queueStatePtr->trackIds.empty())
     {
-      for (auto [idx, trackId] : _queueStatePtr->trackIds | std::views::enumerate | std::views::reverse)
+      for (auto [index, trackId] : _queueStatePtr->trackIds | std::views::enumerate | std::views::reverse)
       {
         std::ignore = trackId;
 
-        auto const played = playIndex(static_cast<std::size_t>(idx));
+        auto const played = playIndex(static_cast<std::size_t>(index));
 
         if (played)
         {
@@ -579,11 +579,11 @@ namespace ao::uimodel
 
     auto const nextIndex = _queueStatePtr->currentIndex + 1;
 
-    for (auto [idx, trackId] : _queueStatePtr->trackIds | std::views::enumerate | std::views::drop(nextIndex))
+    for (auto [index, trackId] : _queueStatePtr->trackIds | std::views::enumerate | std::views::drop(nextIndex))
     {
       std::ignore = trackId;
 
-      if (tryAdvanceToIndex(static_cast<std::size_t>(idx)))
+      if (tryAdvanceToIndex(static_cast<std::size_t>(index)))
       {
         return;
       }
@@ -591,11 +591,11 @@ namespace ao::uimodel
 
     if (state.mode.repeat == rt::RepeatMode::All && !_queueStatePtr->trackIds.empty())
     {
-      for (auto [idx, trackId] : _queueStatePtr->trackIds | std::views::enumerate)
+      for (auto [index, trackId] : _queueStatePtr->trackIds | std::views::enumerate)
       {
         std::ignore = trackId;
 
-        if (tryAdvanceToIndex(static_cast<std::size_t>(idx)))
+        if (tryAdvanceToIndex(static_cast<std::size_t>(index)))
         {
           return;
         }

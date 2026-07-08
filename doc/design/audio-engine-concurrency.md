@@ -76,7 +76,7 @@ backend/source events. Public Engine control commands still execute
 synchronously on the caller's thread today; direct Engine callers may query after
 the command returns. `Player` marshals its asynchronous reactions (Engine
 state/route/terminal events, provider device events, and provider graph events)
-onto the `async::IExecutor` it is constructed with before touching executor-owned
+onto the `async::Executor` it is constructed with before touching executor-owned
 Player state. Layers that aggregate `Player` (e.g. `PlaybackService`) receive
 Player callbacks already on their executor thread rather than on Engine's worker
 or provider callback threads.
@@ -179,7 +179,7 @@ owning thread. The contract is enforced by an always-on guard (`ensureOnExecutor
 a cross-thread call would silently corrupt `PlaybackState` and the signal handler
 storage in a release build, so a violation logs a critical message and aborts
 rather than degrading to an unobserved data race. The check is a cheap thread-id
-comparison (`IExecutor::isCurrent()`). The `Subscription` handles they return must
+comparison (`Executor::isCurrent()`). The `Subscription` handles they return must
 likewise be reset on that thread, since they mutate the same unguarded signal
 handler storage that `emit` walks.
 `PlaybackState` is written in exactly two places —
@@ -202,13 +202,13 @@ own.
 
 ## Backend Responsibilities
 
-`IBackend` implementations protect their own native handles. Engine serializes
+`Backend` implementations protect their own native handles. Engine serializes
 application control commands before calling backend public methods, but backend
 callbacks can still be in flight while public methods run. A backend must
 therefore make public method / callback interleavings safe for its native API.
 
 `close()` is the render-target lifetime boundary. After `close()` returns, the
-backend must not call the `IRenderTarget` passed to `open()`, and callbacks that
+backend must not call the `RenderTarget` passed to `open()`, and callbacks that
 were already in flight for that target must have returned.
 
 `stop()` stops active rendering but does not revoke the current target. Seek-like
@@ -218,11 +218,11 @@ bounded retry path; Engine does not synchronously call `stop()` from a backend
 error callback.
 
 Backends must not hold locks that public methods also need while invoking
-`IRenderTarget` callbacks. Engine hands non-realtime events to its own worker,
+`RenderTarget` callbacks. Engine hands non-realtime events to its own worker,
 but callback/native-lock reentrancy inside the backend can still block shutdown.
 
 The render→event signal ring is single-producer: splice signals are pushed from
-`IRenderTarget::renderPcm`, and `onDrainComplete` pushes onto the same ring, so a
+`RenderTarget::renderPcm`, and `onDrainComplete` pushes onto the same ring, so a
 backend must not deliver drain completion concurrently with a render callback.
 Reporting it from a different thread (PipeWire's loop thread versus its data
 thread) is fine as long as the drained event is ordered after the last render

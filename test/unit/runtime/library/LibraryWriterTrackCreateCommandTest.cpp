@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/FileManifestStore.h>
@@ -71,12 +71,14 @@ namespace ao::rt::test
     REQUIRE(inserted.size() == 1);
     CHECK(inserted[0] == trackIdResult->trackId);
 
-    auto txn = testLib.library().readTransaction();
-    auto const optTrackView =
-      testLib.library().tracks().reader(txn).get(trackIdResult->trackId, library::TrackStore::Reader::LoadMode::Both);
+    auto transaction = testLib.library().readTransaction();
+    auto const optTrackView = testLib.library()
+                                .tracks()
+                                .reader(transaction)
+                                .get(trackIdResult->trackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optTrackView);
     CHECK(optTrackView->property().uri() == "music/song.flac");
-    CHECK(testLib.library().manifest().reader(txn).get("music/song.flac"));
+    CHECK(testLib.library().manifest().reader(transaction).get("music/song.flac"));
 
     auto const duplicateResult = writer.createTrackFromFile(absValidFile);
     REQUIRE(!duplicateResult);
@@ -101,9 +103,11 @@ namespace ao::rt::test
     auto const trackIdResult = writer.createTrackFromFile("relative.flac");
     REQUIRE(trackIdResult);
 
-    auto txn = testLib.library().readTransaction();
-    auto const optTrackView =
-      testLib.library().tracks().reader(txn).get(trackIdResult->trackId, library::TrackStore::Reader::LoadMode::Both);
+    auto transaction = testLib.library().readTransaction();
+    auto const optTrackView = testLib.library()
+                                .tracks()
+                                .reader(transaction)
+                                .get(trackIdResult->trackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optTrackView);
     CHECK(optTrackView->property().uri() == "relative.flac");
   }

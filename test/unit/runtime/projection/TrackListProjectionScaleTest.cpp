@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -30,17 +30,17 @@ namespace ao::rt::test
     auto ids = std::vector<TrackId>{};
     ids.reserve(kTrackCount);
 
-    for (std::int32_t idx = 0; idx < kTrackCount; ++idx)
+    for (std::int32_t index = 0; index < kTrackCount; ++index)
     {
-      ids.push_back(env.addTrack(library::test::TrackSpec{.title = std::format("Track {:05d}", idx),
-                                                          .artist = std::format("Artist {:03d}", idx % 100),
-                                                          .album = std::format("Album {:03d}", idx % 500)}));
+      ids.push_back(env.addTrack(library::test::TrackSpec{.title = std::format("Track {:05d}", index),
+                                                          .artist = std::format("Artist {:03d}", index % 100),
+                                                          .album = std::format("Album {:03d}", index % 500)}));
     }
 
     auto source = MutableTrackSource{};
     source.setInitial(ids);
 
-    auto proj = TrackListProjection{ViewId{1}, source, lib};
+    auto proj = LiveTrackListProjection{ViewId{1}, source, lib};
     proj.setPresentation(
       TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}});
 
@@ -51,9 +51,9 @@ namespace ao::rt::test
       auto newIds = std::vector<TrackId>{};
       newIds.reserve(100);
 
-      for (std::int32_t idx = 0; idx < 100; ++idx)
+      for (std::int32_t index = 0; index < 100; ++index)
       {
-        newIds.push_back(env.addTrack(library::test::TrackSpec{.title = std::format("New Track {:05d}", idx)}));
+        newIds.push_back(env.addTrack(library::test::TrackSpec{.title = std::format("New Track {:05d}", index)}));
       }
 
       source.batchInsert(newIds);

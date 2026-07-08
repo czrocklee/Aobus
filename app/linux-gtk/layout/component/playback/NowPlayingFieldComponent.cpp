@@ -3,7 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/NowPlayingFieldLabel.h"
 #include <ao/rt/TrackField.h>
@@ -23,13 +23,13 @@ namespace ao::gtk::layout
     /**
      * @brief Generic now-playing field label component.
      */
-    class NowPlayingFieldComponent final : public ILayoutComponent
+    class NowPlayingFieldComponent final : public LayoutComponent
     {
     public:
       NowPlayingFieldComponent(LayoutContext& ctx, LayoutNode const& node, rt::TrackField field)
         : _label{ctx.runtime,
                  field,
-                 [action = node.getProp<std::string>("action", "none")]
+                 [action = node.propertyOr<std::string>("action", "none")]
                  {
                    if (action == "reveal")
                    {
@@ -57,12 +57,12 @@ namespace ao::gtk::layout
       NowPlayingFieldLabel _label;
     };
 
-    std::unique_ptr<ILayoutComponent> createCurrentTitleLabel(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createCurrentTitleLabel(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<NowPlayingFieldComponent>(ctx, node, rt::TrackField::Title);
     }
 
-    std::unique_ptr<ILayoutComponent> createCurrentArtistLabel(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createCurrentArtistLabel(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<NowPlayingFieldComponent>(ctx, node, rt::TrackField::Artist);
     }

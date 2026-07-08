@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -330,11 +330,11 @@ namespace ao::audio::test
 
     // The padding is attributed to the decoder (destination of source -> decoder),
     // not the source itself.
-    auto const* dec = findAssessment(result, "ao-decoder");
-    CHECK(hasFinding(dec, QualityFindingKind::LosslessPadding));
+    auto const* decoderAssessment = findAssessment(result, "ao-decoder");
+    CHECK(hasFinding(decoderAssessment, QualityFindingKind::LosslessPadding));
 
-    auto const* src = findAssessment(result, "ao-source");
-    CHECK(hasFinding(src, QualityFindingKind::BitPerfect));
+    auto const* sourceAssessment = findAssessment(result, "ao-source");
+    CHECK(hasFinding(sourceAssessment, QualityFindingKind::BitPerfect));
   }
 
   TEST_CASE("QualityAnalyzer - valid-bit-only precision loss reports truncation", "[audio][unit][quality]")

@@ -86,7 +86,7 @@ namespace ao::gtk
   bool canInlineEdit(TrackFieldUiDefinition const& def)
   {
     return def.parseInlineEdit != nullptr && def.readRowEditValue != nullptr && def.applyRowEditValue != nullptr &&
-           uimodel::trackFieldCanWritePatch(def.field);
+           uimodel::canWriteTrackFieldPatch(def.field);
   }
 
   namespace
@@ -326,7 +326,7 @@ namespace ao::gtk
 
   TrackFieldUiDefinition const* trackFieldUiDefinition(rt::TrackField field)
   {
-    if (auto const idx = static_cast<std::size_t>(field); idx >= rt::kTrackFieldCount)
+    if (auto const index = static_cast<std::size_t>(field); index >= rt::kTrackFieldCount)
     {
       return nullptr;
     }

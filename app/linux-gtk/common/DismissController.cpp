@@ -72,7 +72,7 @@ namespace ao::gtk
           return;
         }
 
-        if (pressIsInside(_watchedWindow->pick(xPosition, yPosition)))
+        if (isPressInside(_watchedWindow->pick(xPosition, yPosition)))
         {
           return;
         }
@@ -98,7 +98,7 @@ namespace ao::gtk
     _onDismiss = {};
   }
 
-  bool DismissController::pressIsInside(Gtk::Widget const* target) const
+  bool DismissController::isPressInside(Gtk::Widget const* target) const
   {
     return isWidgetWithinAny(target, _insideWidgets);
   }

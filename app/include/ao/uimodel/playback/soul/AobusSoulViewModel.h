@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/Subscription.h>
 
 #include <chrono>
 #include <cstdint>

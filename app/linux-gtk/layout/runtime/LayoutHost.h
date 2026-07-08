@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutRuntime.h"
 
 #include <gtkmm/box.h>
@@ -37,6 +37,6 @@ namespace ao::gtk::layout
 
   private:
     LayoutRuntime _runtime;
-    std::unique_ptr<ILayoutComponent> _activeComponentPtr;
+    std::unique_ptr<LayoutComponent> _activeComponentPtr;
   };
 } // namespace ao::gtk::layout

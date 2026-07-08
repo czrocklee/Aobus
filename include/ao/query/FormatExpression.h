@@ -42,7 +42,7 @@ namespace ao::query
   {
   public:
     explicit FormatCompiler() = default;
-    explicit FormatCompiler(library::DictionaryStore* dict);
+    explicit FormatCompiler(library::DictionaryStore* dictionary);
 
     Result<FormatPlan> compile(Expression const& expr);
 
@@ -54,7 +54,7 @@ namespace ao::query
     void compileConstant(ConstantExpression const& constant);
 
     FormatPlan _plan;
-    library::DictionaryStore* _dict = nullptr;
+    library::DictionaryStore* _dictionary = nullptr;
     bool _hasHotAccess = false;
     bool _hasColdAccess = false;
   };
@@ -69,9 +69,9 @@ namespace ao::query
    * Compile a format expression AST into a FormatPlan (non-throwing entry point).
    *
    * @param expr The expression AST to compile.
-   * @param dict Optional DictionaryStore for resolving dictionary-backed fields; may be nullptr.
+   * @param dictionary Optional DictionaryStore for resolving dictionary-backed fields; may be nullptr.
    * @return The compiled FormatPlan, or an Error{Code::FormatRejected, ...} if @p expr is not a
    *         valid format expression. Never throws on invalid input.
    */
-  Result<FormatPlan> compileFormat(Expression const& expr, library::DictionaryStore* dict = nullptr);
+  Result<FormatPlan> compileFormat(Expression const& expr, library::DictionaryStore* dictionary = nullptr);
 } // namespace ao::query

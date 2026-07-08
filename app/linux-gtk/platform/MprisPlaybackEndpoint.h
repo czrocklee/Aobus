@@ -65,7 +65,7 @@ namespace ao::gtk::platform
         return true;
       }
 
-      if (relativeSeekPastEnd(state, offsetUs))
+      if (isRelativeSeekPastEnd(state, offsetUs))
       {
         _commands.execute(uimodel::PlaybackCommand::Next);
         return true;
@@ -149,22 +149,22 @@ namespace ao::gtk::platform
     {
       if (propertyName == "CanGoNext")
       {
-        return _commands.capable(uimodel::PlaybackCommand::Next);
+        return _commands.isCapable(uimodel::PlaybackCommand::Next);
       }
 
       if (propertyName == "CanGoPrevious")
       {
-        return _commands.capable(uimodel::PlaybackCommand::Previous);
+        return _commands.isCapable(uimodel::PlaybackCommand::Previous);
       }
 
       if (propertyName == "CanPlay")
       {
-        return _commands.capable(uimodel::PlaybackCommand::Play);
+        return _commands.isCapable(uimodel::PlaybackCommand::Play);
       }
 
       if (propertyName == "CanPause")
       {
-        return _commands.capable(uimodel::PlaybackCommand::Pause);
+        return _commands.isCapable(uimodel::PlaybackCommand::Pause);
       }
 
       if (propertyName == "CanControl")
@@ -176,7 +176,7 @@ namespace ao::gtk::platform
     }
 
   private:
-    static bool relativeSeekPastEnd(rt::PlaybackState const& state, std::int64_t const offsetUs) noexcept
+    static bool isRelativeSeekPastEnd(rt::PlaybackState const& state, std::int64_t const offsetUs) noexcept
     {
       if (state.duration <= std::chrono::milliseconds{0} || offsetUs <= 0)
       {

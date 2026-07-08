@@ -15,6 +15,7 @@ Read the human docs for project policy instead of duplicating them here:
 - `CONTRIBUTING.md` for contributor rules and review references.
 - `doc/README.md` for where documentation belongs.
 - `doc/dev/coding-style.md` for C++ style.
+- `doc/dev/naming-conventions.md` for identifier, type, file, and helper naming.
 - `doc/dev/testing.md` for testing policy.
 - `doc/dev/linting.md` for lint policy (warning fix/suppress rules, NOLINT playbook).
 - `doc/dev/commit-messages.md` for commit message rules.

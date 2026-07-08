@@ -38,24 +38,24 @@ namespace ao::library
     _header = header;
   }
 
-  std::string_view ListView::getString(std::uint16_t offset, std::uint16_t length) const noexcept
+  std::string_view ListView::stringAt(std::uint16_t offset, std::uint16_t length) const noexcept
   {
     return utility::bytes::stringView(_payload.subspan(kListHeaderSize + offset, length));
   }
 
   std::string_view ListView::name() const noexcept
   {
-    return _header == nullptr ? std::string_view{} : getString(_header->nameOffset, _header->nameLength);
+    return _header == nullptr ? std::string_view{} : stringAt(_header->nameOffset, _header->nameLength);
   }
 
   std::string_view ListView::description() const noexcept
   {
-    return _header == nullptr ? std::string_view{} : getString(_header->descOffset, _header->descLength);
+    return _header == nullptr ? std::string_view{} : stringAt(_header->descOffset, _header->descLength);
   }
 
   std::string_view ListView::filter() const noexcept
   {
-    return _header == nullptr ? std::string_view{} : getString(_header->filterOffset, _header->filterLength);
+    return _header == nullptr ? std::string_view{} : stringAt(_header->filterOffset, _header->filterLength);
   }
 
   ListId ListView::parentId() const noexcept

@@ -10,7 +10,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
-#include <ao/library/Meta.h>
+#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
@@ -21,7 +21,7 @@
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Base64.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <algorithm>
 #include <array>
@@ -319,20 +319,20 @@ namespace ao::rt
     Result<ImportReport> applyImportFromYaml(std::filesystem::path const& path, ImportMode mode, ImportRunMode runMode);
 
     void populateDeletionStats(ValidatedImport const& val, ImportReport& rep);
-    Result<> clearDatabase(ValidatedImport const& val, lmdb::WriteTransaction& writeTxn);
+    Result<> clearDatabase(ValidatedImport const& val, lmdb::WriteTransaction& writeTransaction);
 
     Result<ValidatedImport> validate(ryml::ConstNodeRef const& root) const;
     Result<> validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const;
     Result<> validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const;
 
     Result<> importTracks(std::vector<ValidatedTrack> const& tracks,
-                          lmdb::WriteTransaction& txn,
+                          lmdb::WriteTransaction& transaction,
                           std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
                           ImportMode strategy,
                           ExportMode payloadMode,
                           ImportReport& report);
     Result<> importTrackRecord(ValidatedTrack const& validatedTrack,
-                               lmdb::WriteTransaction& txn,
+                               lmdb::WriteTransaction& transaction,
                                library::TrackStore::Writer& trackWriter,
                                library::FileManifestStore::Writer& manifestWriter,
                                library::FileManifestStore::Reader const& manifestReader,
@@ -348,7 +348,7 @@ namespace ao::rt
                                library::TrackStore::Writer& trackWriter);
 
     Result<> importLists(std::vector<ValidatedList> const& lists,
-                         lmdb::WriteTransaction& txn,
+                         lmdb::WriteTransaction& transaction,
                          std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
                          ImportMode strategy,
                          ImportReport& report);
@@ -447,11 +447,11 @@ namespace ao::rt
       populateDeletionStats(validated, report);
     }
 
-    auto txn = ml.writeTransaction();
+    auto transaction = ml.writeTransaction();
 
     if (mode == ImportMode::Restore)
     {
-      if (auto const clearResult = clearDatabase(validated, txn); !clearResult)
+      if (auto const clearResult = clearDatabase(validated, transaction); !clearResult)
       {
         return std::unexpected{clearResult.error()};
       }
@@ -462,7 +462,7 @@ namespace ao::rt
     if (!validated.tracks.empty())
     {
       if (auto result =
-            importTracks(validated.tracks, txn, yamlTrackIdToInternalId, mode, validated.payloadMode, report);
+            importTracks(validated.tracks, transaction, yamlTrackIdToInternalId, mode, validated.payloadMode, report);
           !result)
       {
         return std::unexpected{result.error()};
@@ -471,7 +471,7 @@ namespace ao::rt
 
     if (!validated.lists.empty())
     {
-      if (auto result = importLists(validated.lists, txn, yamlTrackIdToInternalId, mode, report); !result)
+      if (auto result = importLists(validated.lists, transaction, yamlTrackIdToInternalId, mode, report); !result)
       {
         return std::unexpected{result.error()};
       }
@@ -482,16 +482,16 @@ namespace ao::rt
       return report;
     }
 
-    if (auto result = txn.commit(); !result)
+    if (auto result = transaction.commit(); !result)
     {
       return std::unexpected{result.error()};
     }
 
     if (mode == ImportMode::Restore && validated.optLibraryId)
     {
-      auto header = ml.metaHeader();
+      auto header = ml.metadataHeader();
       header.libraryId = parseUuid(*validated.optLibraryId);
-      ml.updateMetaHeader(header);
+      ml.updateMetadataHeader(header);
     }
 
     return report;
@@ -499,38 +499,39 @@ namespace ao::rt
 
   void LibraryYamlImporter::Impl::populateDeletionStats(ValidatedImport const& val, ImportReport& rep)
   {
-    auto readTxn = ml.readTransaction();
+    auto readTransaction = ml.readTransaction();
 
     if (val.payloadMode != ExportMode::ListOnly)
     {
-      for ([[maybe_unused]] auto const& row : ml.tracks().reader(readTxn))
+      for ([[maybe_unused]] auto const& row : ml.tracks().reader(readTransaction))
       {
         ++rep.tracksDeleted;
       }
     }
 
-    for ([[maybe_unused]] auto const& row : ml.lists().reader(readTxn))
+    for ([[maybe_unused]] auto const& row : ml.lists().reader(readTransaction))
     {
       ++rep.listsDeleted;
     }
   }
 
-  Result<> LibraryYamlImporter::Impl::clearDatabase(ValidatedImport const& val, lmdb::WriteTransaction& writeTxn)
+  Result<> LibraryYamlImporter::Impl::clearDatabase(ValidatedImport const& val,
+                                                    lmdb::WriteTransaction& writeTransaction)
   {
     if (val.payloadMode != ExportMode::ListOnly)
     {
-      if (auto result = ml.tracks().writer(writeTxn).clear(); !result)
+      if (auto result = ml.tracks().writer(writeTransaction).clear(); !result)
       {
         return result;
       }
 
-      if (auto result = ml.manifest().writer(writeTxn).clear(); !result)
+      if (auto result = ml.manifest().writer(writeTransaction).clear(); !result)
       {
         return result;
       }
     }
 
-    return ml.lists().writer(writeTxn).clear();
+    return ml.lists().writer(writeTransaction).clear();
   }
 
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
@@ -853,20 +854,20 @@ namespace ao::rt
   }
 
   Result<> LibraryYamlImporter::Impl::importTracks(std::vector<ValidatedTrack> const& tracks,
-                                                   lmdb::WriteTransaction& txn,
+                                                   lmdb::WriteTransaction& transaction,
                                                    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
                                                    ImportMode strategy,
                                                    ExportMode payloadMode,
                                                    ImportReport& report)
   {
-    auto trackWriter = ml.tracks().writer(txn);
-    auto manifestWriter = ml.manifest().writer(txn);
-    auto manifestReader = ml.manifest().reader(txn);
+    auto trackWriter = ml.tracks().writer(transaction);
+    auto manifestWriter = ml.manifest().writer(transaction);
+    auto manifestReader = ml.manifest().reader(transaction);
 
     for (auto const& validatedTrack : tracks)
     {
       if (auto result = importTrackRecord(validatedTrack,
-                                          txn,
+                                          transaction,
                                           trackWriter,
                                           manifestWriter,
                                           manifestReader,
@@ -885,7 +886,7 @@ namespace ao::rt
 
   Result<> LibraryYamlImporter::Impl::importTrackRecord(
     ValidatedTrack const& validatedTrack,
-    lmdb::WriteTransaction& txn,
+    lmdb::WriteTransaction& transaction,
     library::TrackStore::Writer& trackWriter,
     library::FileManifestStore::Writer& manifestWriter,
     library::FileManifestStore::Reader const& manifestReader,
@@ -894,7 +895,7 @@ namespace ao::rt
     std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
     ImportReport& report)
   {
-    auto& dict = ml.dictionary();
+    auto& dictionary = ml.dictionary();
     auto& resources = ml.resources();
 
     auto const& trackNode = validatedTrack.node;
@@ -920,7 +921,7 @@ namespace ao::rt
       return std::unexpected{result.error()};
     }
 
-    auto builder = optBuilder ? *optBuilder : library::TrackBuilder::createNew();
+    auto builder = optBuilder ? *optBuilder : library::TrackBuilder::makeEmpty();
 
     if (!optBuilder)
     {
@@ -951,7 +952,7 @@ namespace ao::rt
 
     auto decodedCoverBlobs = std::move(*decodedCoverBlobsResult);
 
-    auto preparedResult = builder.prepare(txn, dict, resources);
+    auto preparedResult = builder.prepare(transaction, dictionary, resources);
 
     if (!preparedResult)
     {
@@ -978,7 +979,7 @@ namespace ao::rt
       ++report.tracksCreated;
     }
 
-    auto manifestBuilder = library::FileManifestBuilder::createNew();
+    auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
     manifestBuilder.trackId(targetTrackId);
 
     if (auto result = applyFileMetadata(trackNode, uriStr, manifestReader, manifestBuilder); !result)
@@ -1286,26 +1287,32 @@ namespace ao::rt
     };
 
     constexpr auto kMetadataDispatch = std::to_array<Dispatch>({
-      {.field = rt::TrackField::Title, .stringSetter = [](auto& meta, auto value) { meta.title(value); }},
-      {.field = rt::TrackField::Artist, .stringSetter = [](auto& meta, auto value) { meta.artist(value); }},
-      {.field = rt::TrackField::Album, .stringSetter = [](auto& meta, auto value) { meta.album(value); }},
-      {.field = rt::TrackField::AlbumArtist, .stringSetter = [](auto& meta, auto value) { meta.albumArtist(value); }},
-      {.field = rt::TrackField::Composer, .stringSetter = [](auto& meta, auto value) { meta.composer(value); }},
-      {.field = rt::TrackField::Conductor, .stringSetter = [](auto& meta, auto value) { meta.conductor(value); }},
-      {.field = rt::TrackField::Ensemble, .stringSetter = [](auto& meta, auto value) { meta.ensemble(value); }},
-      {.field = rt::TrackField::Genre, .stringSetter = [](auto& meta, auto value) { meta.genre(value); }},
-      {.field = rt::TrackField::Work, .stringSetter = [](auto& meta, auto value) { meta.work(value); }},
-      {.field = rt::TrackField::Movement, .stringSetter = [](auto& meta, auto value) { meta.movement(value); }},
-      {.field = rt::TrackField::Soloist, .stringSetter = [](auto& meta, auto value) { meta.soloist(value); }},
-      {.field = rt::TrackField::Year, .numberSetter = [](auto& meta, auto value) { meta.year(value); }},
-      {.field = rt::TrackField::TrackNumber, .numberSetter = [](auto& meta, auto value) { meta.trackNumber(value); }},
-      {.field = rt::TrackField::TrackTotal, .numberSetter = [](auto& meta, auto value) { meta.trackTotal(value); }},
-      {.field = rt::TrackField::DiscNumber, .numberSetter = [](auto& meta, auto value) { meta.discNumber(value); }},
-      {.field = rt::TrackField::DiscTotal, .numberSetter = [](auto& meta, auto value) { meta.discTotal(value); }},
+      {.field = rt::TrackField::Title, .stringSetter = [](auto& metadata, auto value) { metadata.title(value); }},
+      {.field = rt::TrackField::Artist, .stringSetter = [](auto& metadata, auto value) { metadata.artist(value); }},
+      {.field = rt::TrackField::Album, .stringSetter = [](auto& metadata, auto value) { metadata.album(value); }},
+      {.field = rt::TrackField::AlbumArtist,
+       .stringSetter = [](auto& metadata, auto value) { metadata.albumArtist(value); }},
+      {.field = rt::TrackField::Composer, .stringSetter = [](auto& metadata, auto value) { metadata.composer(value); }},
+      {.field = rt::TrackField::Conductor,
+       .stringSetter = [](auto& metadata, auto value) { metadata.conductor(value); }},
+      {.field = rt::TrackField::Ensemble, .stringSetter = [](auto& metadata, auto value) { metadata.ensemble(value); }},
+      {.field = rt::TrackField::Genre, .stringSetter = [](auto& metadata, auto value) { metadata.genre(value); }},
+      {.field = rt::TrackField::Work, .stringSetter = [](auto& metadata, auto value) { metadata.work(value); }},
+      {.field = rt::TrackField::Movement, .stringSetter = [](auto& metadata, auto value) { metadata.movement(value); }},
+      {.field = rt::TrackField::Soloist, .stringSetter = [](auto& metadata, auto value) { metadata.soloist(value); }},
+      {.field = rt::TrackField::Year, .numberSetter = [](auto& metadata, auto value) { metadata.year(value); }},
+      {.field = rt::TrackField::TrackNumber,
+       .numberSetter = [](auto& metadata, auto value) { metadata.trackNumber(value); }},
+      {.field = rt::TrackField::TrackTotal,
+       .numberSetter = [](auto& metadata, auto value) { metadata.trackTotal(value); }},
+      {.field = rt::TrackField::DiscNumber,
+       .numberSetter = [](auto& metadata, auto value) { metadata.discNumber(value); }},
+      {.field = rt::TrackField::DiscTotal,
+       .numberSetter = [](auto& metadata, auto value) { metadata.discTotal(value); }},
       {.field = rt::TrackField::MovementNumber,
-       .numberSetter = [](auto& meta, auto value) { meta.movementNumber(value); }},
+       .numberSetter = [](auto& metadata, auto value) { metadata.movementNumber(value); }},
       {.field = rt::TrackField::MovementTotal,
-       .numberSetter = [](auto& meta, auto value) { meta.movementTotal(value); }},
+       .numberSetter = [](auto& metadata, auto value) { metadata.movementTotal(value); }},
     });
 
     for (auto const& map : kMetadataDispatch)
@@ -1479,20 +1486,20 @@ namespace ao::rt
 
   Result<> LibraryYamlImporter::Impl::importLists(
     std::vector<ValidatedList> const& lists,
-    lmdb::WriteTransaction& txn,
+    lmdb::WriteTransaction& transaction,
     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
     ImportMode /*strategy*/,
     ImportReport& report)
   {
-    auto listWriter = ml.lists().writer(txn);
-    auto manifestReader = ml.manifest().reader(txn);
+    auto listWriter = ml.lists().writer(transaction);
+    auto manifestReader = ml.manifest().reader(transaction);
 
     auto yamlListIdToNewListId = std::unordered_map<std::uint32_t, ListId>{};
     yamlListIdToNewListId.reserve(lists.size());
 
     for (auto const& importedList : lists)
     {
-      auto builder = library::ListBuilder::createNew().name(importedList.name).description(importedList.description);
+      auto builder = library::ListBuilder::makeEmpty().name(importedList.name).description(importedList.description);
 
       if (importedList.isSmart)
       {

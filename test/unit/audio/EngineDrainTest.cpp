@@ -6,11 +6,12 @@
 #include "ScriptedDecoderSession.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/DecoderTypes.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IRenderTarget.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -35,10 +36,10 @@ namespace ao::audio::test
     // A backend whose stop() synchronously delivers onDrainComplete to the
     // render target, modeling a drain callback that is already in flight when a
     // control command stops the stream.
-    class DrainOnStopBackend final : public IBackend
+    class DrainOnStopBackend final : public Backend
     {
     public:
-      Result<> open(Format const& /*format*/, IRenderTarget* target) override
+      Result<> open(Format const& /*format*/, RenderTarget* target) override
       {
         _target = target;
         ++_openCount;
@@ -77,12 +78,12 @@ namespace ao::audio::test
 
       PropertyInfo queryProperty(PropertyId /*id*/) const noexcept override { return {}; }
 
-      IRenderTarget* target() const { return _target; }
+      RenderTarget* target() const { return _target; }
       std::size_t openCount() const { return _openCount; }
       std::size_t closeCount() const { return _closeCount; }
 
     private:
-      IRenderTarget* _target = nullptr;
+      RenderTarget* _target = nullptr;
       std::size_t _openCount = 0;
       std::size_t _stopCount = 0;
       std::size_t _closeCount = 0;
@@ -130,7 +131,7 @@ namespace ao::audio::test
       auto trackEndedLatch = CallbackLatch{};
       engine.setOnTrackEnded([&] { trackEndedLatch.notify(); });
 
-      backendRaw->fireDrainComplete();
+      backendRaw->emitDrainComplete();
       CHECK(trackEndedLatch.waitForCount(1));
       CHECK(engine.status().transport == Transport::Idle);
     }
@@ -139,7 +140,7 @@ namespace ao::audio::test
     {
       engine.stop(); // resets everything
       trackEnded.store(false, std::memory_order_release);
-      backendRaw->fireDrainComplete();
+      backendRaw->emitDrainComplete();
       CHECK_FALSE(trackEnded.load(std::memory_order_acquire));
     }
 
@@ -148,7 +149,7 @@ namespace ao::audio::test
       auto stateChanged = CallbackLatch{};
       engine.setOnStateChanged([&] { stateChanged.notify(); });
 
-      backendRaw->fireBackendError("lost device");
+      backendRaw->emitBackendError("lost device");
       CHECK(stateChanged.waitForCount(1));
       CHECK(engine.status().transport == Transport::Error);
       CHECK(engine.status().statusText == "lost device");
@@ -197,13 +198,13 @@ namespace ao::audio::test
     auto* target = backendRaw->target();
     REQUIRE(target != nullptr);
 
-    backendRaw->fireRouteReady("first-anchor");
+    backendRaw->emitRouteReady("first-anchor");
     REQUIRE(routeEntered.waitForCount(1));
 
     auto out = std::array<std::byte, 4>{};
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
     CHECK(target->renderPcm(out).drained);
-    backendRaw->fireDrainComplete();
+    backendRaw->emitDrainComplete();
 
     // play() retires the drained render session while the event worker is still
     // parked. The old drain signal must not later surface as onTrackEnded for
@@ -214,7 +215,7 @@ namespace ao::audio::test
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
     CHECK(std::vector<std::byte>{out.begin(), out.end()} == secondData);
 
-    backendRaw->fireRouteReady("second-anchor");
+    backendRaw->emitRouteReady("second-anchor");
     releaseRoute.release();
     REQUIRE(secondRouteLatch.waitForCount(1));
     CHECK(endedLatch.count() == 0);
@@ -266,14 +267,14 @@ namespace ao::audio::test
     auto* const target = backendRaw->target();
     REQUIRE(target != nullptr);
 
-    backendRaw->fireRouteReady("before-seek");
+    backendRaw->emitRouteReady("before-seek");
     REQUIRE(routeEntered.waitForCount(1));
 
     auto out = std::array<std::byte, 4>{};
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
     CHECK(std::vector<std::byte>{out.begin(), out.end()} == initialData);
     CHECK(target->renderPcm(out).drained);
-    backendRaw->fireDrainComplete();
+    backendRaw->emitDrainComplete();
 
     // seek() keeps the same render session, so generation alone cannot identify
     // the old drain completion as stale. It must cancel that drain before
@@ -282,7 +283,7 @@ namespace ao::audio::test
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
     CHECK(std::vector<std::byte>{out.begin(), out.end()} == seekData);
 
-    backendRaw->fireRouteReady("after-seek");
+    backendRaw->emitRouteReady("after-seek");
     releaseRoute.release();
     REQUIRE(afterSeekRouteLatch.waitForCount(1));
     CHECK(endedLatch.count() == 0);

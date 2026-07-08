@@ -9,8 +9,9 @@
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/Subscription.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <map>
@@ -74,7 +75,7 @@ namespace ao::gtk
     uimodel::TrackColumnLayoutStore& layoutStore() { return _layoutStore; }
 
     void clear();
-    void rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn);
+    void rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& transaction);
 
     TrackPageContext* find(rt::ViewId viewId);
     TrackPageContext const* find(rt::ViewId viewId) const;

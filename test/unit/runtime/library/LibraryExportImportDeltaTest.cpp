@@ -9,7 +9,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -68,11 +68,11 @@ namespace ao::rt::test
 
     auto coverResourceId = kInvalidResourceId;
     {
-      auto txn = ml.writeTransaction();
-      auto result = ml.resources().writer(txn).create(std::vector{std::byte{1}, std::byte{2}, std::byte{3}});
+      auto transaction = ml.writeTransaction();
+      auto result = ml.resources().writer(transaction).create(std::vector{std::byte{1}, std::byte{2}, std::byte{3}});
       REQUIRE(result);
       coverResourceId = *result;
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
     }
     library::test::addTrack(ml,
                             library::test::TrackSpec{.title = "Should Export Fully",

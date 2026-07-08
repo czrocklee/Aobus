@@ -31,7 +31,7 @@ namespace ao::audio::detail
       {
         std::uint32_t value = 0;
 
-        for (std::uint8_t idx = 0; idx < bitCount; ++idx)
+        for (std::uint8_t index = 0; index < bitCount; ++index)
         {
           if (_bitOffset >= _bytes.size() * 8U)
           {

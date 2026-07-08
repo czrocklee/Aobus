@@ -108,7 +108,7 @@ namespace ao::rt
 
     void handleSourceDestroyed(SourceBucket& bucket);
 
-    static TrackLoadMode getUnionMode(std::span<SmartListSource*> lists);
+    static TrackLoadMode unionMode(std::span<SmartListSource*> lists);
 
     library::MusicLibrary& _ml;
     boost::unordered_flat_map<TrackSource*, std::unique_ptr<SourceBucket>> _buckets;

@@ -4,8 +4,8 @@
 #include "playback/AudioPipelinePanel.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
@@ -30,9 +30,9 @@ namespace ao::gtk
     {
     }
 
-    Gtk::Widget* getFirstChild() const { return _widget.get_first_child(); }
+    Gtk::Widget* firstChild() const { return _widget.get_first_child(); }
 
-    std::int32_t getChildCount() const
+    std::int32_t childCount() const
     {
       std::int32_t count = 0;
       auto* child = _widget.get_first_child();
@@ -112,7 +112,7 @@ namespace ao::gtk::test
     auto view = uimodel::AudioPipelineView{};
     widget.apply(view);
 
-    CHECK(peer.getChildCount() == 0);
+    CHECK(peer.childCount() == 0);
   }
 
   TEST_CASE("AudioPipelinePanel - renders pipeline nodes with header and conclusion", "[gtk][unit][playback]")

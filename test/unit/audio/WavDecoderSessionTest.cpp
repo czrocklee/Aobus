@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "DecoderTestUtils.h"
+#include "DecoderTestSupport.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/wav/TestWav.h"
 #include <ao/AudioCodec.h>
-#include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/WavDecoderSession.h>
 #include <ao/media/wav/Riff.h>

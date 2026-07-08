@@ -218,7 +218,7 @@ namespace ao::gtk
         set_valign(Gtk::Align::CENTER);
       }
 
-      std::string const& getTag() const { return _tag; }
+      std::string const& tag() const { return _tag; }
 
     private:
       static constexpr int kAddIconSize = 12;
@@ -362,7 +362,7 @@ namespace ao::gtk
   TagEditor::TagEditor()
   {
     set_overflow(Gtk::Overflow::HIDDEN);
-    setupUi();
+    buildUi();
   }
 
   TagEditor::~TagEditor()
@@ -428,7 +428,7 @@ namespace ao::gtk
     rebuildChips();
   }
 
-  void TagEditor::setupUi()
+  void TagEditor::buildUi()
   {
     add_css_class("ao-tag-editor");
 
@@ -603,7 +603,7 @@ namespace ao::gtk
       {
         // Suggested chips live-filter by a case-insensitive substring of the entry text; with no
         // query (entry closed or empty) every suggestion is shown.
-        child->set_visible(search.empty() || ao::utility::toLower(avail->getTag()).find(search) != std::string::npos);
+        child->set_visible(search.empty() || ao::utility::toLower(avail->tag()).find(search) != std::string::npos);
       }
       else
       {

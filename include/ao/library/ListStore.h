@@ -29,8 +29,8 @@ namespace ao::library
 
     explicit ListStore(lmdb::Database db);
 
-    Reader reader(lmdb::ReadTransaction const& txn) const;
-    Writer writer(lmdb::WriteTransaction& txn);
+    Reader reader(lmdb::ReadTransaction const& transaction) const;
+    Writer writer(lmdb::WriteTransaction& transaction);
 
   private:
     lmdb::Database _database;

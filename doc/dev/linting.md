@@ -47,9 +47,9 @@ style issue, a tool false positive, or an unavoidable external API shape.
 - Fix include findings by adding the direct header that provides the used
   symbol. Do not rely on transitive includes.
 - For RAII guards, explicitly delete copy/move or define the needed operations.
-- For naming and style findings, follow `doc/dev/coding-style.md`. Do not
-  rename public API, framework-required names, or vocabulary names just to
-  appease a generic rule.
+- For naming findings, follow `doc/dev/naming-conventions.md`; for language and
+  style findings, follow `doc/dev/coding-style.md`. Do not rename public API,
+  framework-required names, or vocabulary names just to appease a generic rule.
 - If the tool is consistently wrong for a project pattern, consider narrowing
   the check configuration or custom rule. Do not scatter many identical
   suppressions across the tree.

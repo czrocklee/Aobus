@@ -20,45 +20,46 @@ namespace ao::rt
 {
   namespace
   {
-    std::string resolve(library::DictionaryStore const& dict, DictionaryId id)
+    std::string resolve(library::DictionaryStore const& dictionary, DictionaryId id)
     {
       if (id.raw() == 0)
       {
         return {};
       }
 
-      return std::string{dict.getOrDefault(id)};
+      return std::string{dictionary.getOrDefault(id)};
     }
   } // namespace
 
   TrackFieldRawValue readTrackFieldRawValue(TrackField field,
                                             library::TrackView const& view,
-                                            library::DictionaryStore const& dict,
+                                            library::DictionaryStore const& dictionary,
                                             library::FileManifestStore::Reader const* manifestReader)
   {
     switch (field)
     {
       case TrackField::Title: return TrackFieldRawValue{std::in_place_type<std::string>, view.metadata().title()};
       case TrackField::Artist:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().artistId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.metadata().artistId())};
       case TrackField::Album:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().albumId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.metadata().albumId())};
       case TrackField::AlbumArtist:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().albumArtistId())};
+        return TrackFieldRawValue{
+          std::in_place_type<std::string>, resolve(dictionary, view.metadata().albumArtistId())};
       case TrackField::Genre:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().genreId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.metadata().genreId())};
       case TrackField::Composer:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.metadata().composerId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.metadata().composerId())};
       case TrackField::Conductor:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.classical().conductorId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.classical().conductorId())};
       case TrackField::Ensemble:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.classical().ensembleId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.classical().ensembleId())};
       case TrackField::Work:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.classical().workId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.classical().workId())};
       case TrackField::Movement:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.classical().movementId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.classical().movementId())};
       case TrackField::Soloist:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dict, view.classical().soloistId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.classical().soloistId())};
 
       case TrackField::Year: return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().year()};
       case TrackField::DiscNumber:

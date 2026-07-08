@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/audio/Backend.h>
-#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+#include <ao/audio/Quality.h>
+#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <gtkmm/widget.h>
 

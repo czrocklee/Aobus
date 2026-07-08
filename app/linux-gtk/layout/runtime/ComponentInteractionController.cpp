@@ -6,7 +6,7 @@
 #include "layout/runtime/ActionBinder.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -60,7 +60,7 @@ namespace ao::gtk::layout
 
     _primaryClick = binder.bind(node,
                                 uimodel::kPrimaryActionProp,
-                                policy.getDefault(uimodel::LayoutActionSlot::PrimaryClick),
+                                policy.defaultAction(uimodel::LayoutActionSlot::PrimaryClick),
                                 uimodel::LayoutActionSlot::PrimaryClick,
                                 target);
 
@@ -100,7 +100,7 @@ namespace ao::gtk::layout
 
     _secondaryClick = binder.bind(node,
                                   uimodel::kSecondaryActionProp,
-                                  policy.getDefault(uimodel::LayoutActionSlot::SecondaryClick),
+                                  policy.defaultAction(uimodel::LayoutActionSlot::SecondaryClick),
                                   uimodel::LayoutActionSlot::SecondaryClick,
                                   target);
 
@@ -140,7 +140,7 @@ namespace ao::gtk::layout
 
     _primaryLongPress = binder.bind(node,
                                     uimodel::kPrimaryLongPressActionProp,
-                                    policy.getDefault(uimodel::LayoutActionSlot::PrimaryLongPress),
+                                    policy.defaultAction(uimodel::LayoutActionSlot::PrimaryLongPress),
                                     uimodel::LayoutActionSlot::PrimaryLongPress,
                                     target);
 
@@ -177,7 +177,7 @@ namespace ao::gtk::layout
 
     _secondaryLongPress = binder.bind(node,
                                       uimodel::kSecondaryLongPressActionProp,
-                                      policy.getDefault(uimodel::LayoutActionSlot::SecondaryLongPress),
+                                      policy.defaultAction(uimodel::LayoutActionSlot::SecondaryLongPress),
                                       uimodel::LayoutActionSlot::SecondaryLongPress,
                                       target);
 

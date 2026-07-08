@@ -8,7 +8,7 @@
 #include "app/GtkUiServices.h"
 #include "app/MainWindow.h"
 #include "app/ThemeCoordinator.h"
-#include "app/UIState.h"
+#include "app/WindowState.h"
 #include "image/ImageCache.h"
 #include "list/ListNavigationController.h"
 #include "portal/ImportExportCallbacks.h"
@@ -26,7 +26,6 @@
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -34,7 +33,9 @@
 #include <ao/rt/PlaybackSessionState.h>
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -93,7 +94,7 @@ namespace ao::gtk
                                    { return &runtime.sources().sourceFor(listId); },
                                    .onListPresentationSaved = [this](ListId listId, std::string const& presentationId)
                                    { trackPresentationPreferences.setPresentationIdForList(listId, presentationId); },
-                                   .getListPresentation = [this](ListId listId) -> std::optional<std::string>
+                                   .listPresentationCallback = [this](ListId listId) -> std::optional<std::string>
                                    {
                                      if (auto const optPres =
                                            trackPresentationPreferences.presentationIdForList(listId);
@@ -120,8 +121,8 @@ namespace ao::gtk
                                   {
                                     trackRowCache.clearCache();
                                     runtime.reloadAllTracks();
-                                    auto const txn = runtime.musicLibrary().readTransaction();
-                                    coordinator->rebuildListPages(txn);
+                                    auto const transaction = runtime.musicLibrary().readTransaction();
+                                    coordinator->rebuildListPages(transaction);
                                   },
                                   .onTitleChanged = [&window](std::string const& title) { window.set_title(title); }},
                                 themeController}
@@ -138,9 +139,9 @@ namespace ao::gtk
         return filter;
       }
 
-      auto const readTxn = runtime.musicLibrary().readTransaction();
+      auto const readTransaction = runtime.musicLibrary().readTransaction();
 
-      if (auto const optView = runtime.musicLibrary().lists().reader(readTxn).get(listId);
+      if (auto const optView = runtime.musicLibrary().lists().reader(readTransaction).get(listId);
           optView && optView->isSmart())
       {
         filter = optView->filter();
@@ -229,9 +230,9 @@ namespace ao::gtk
         return rt::kAllTracksListId;
       }
 
-      auto const txn = runtime.musicLibrary().readTransaction();
+      auto const transaction = runtime.musicLibrary().readTransaction();
       auto const optView = rt::storageValueOrNullopt(
-        runtime.musicLibrary().lists().reader(txn).get(savedListId), "Restored playback session list lookup");
+        runtime.musicLibrary().lists().reader(transaction).get(savedListId), "Restored playback session list lookup");
 
       if (!optView)
       {
@@ -360,8 +361,8 @@ namespace ao::gtk
           _implPtr->trackPresentationPreferences.clearPresentationForList(deletedId);
         }
 
-        auto const txn = _runtime.musicLibrary().readTransaction();
-        rebuildListPages(txn);
+        auto const transaction = _runtime.musicLibrary().readTransaction();
+        rebuildListPages(transaction);
       });
 
     _runtime.notifications().post(rt::NotificationRequest{
@@ -370,8 +371,8 @@ namespace ao::gtk
       .activityPresentation = rt::NotificationActivityPresentation::Hidden,
     });
 
-    auto const txn = _runtime.musicLibrary().readTransaction();
-    rebuildListPages(txn);
+    auto const transaction = _runtime.musicLibrary().readTransaction();
+    rebuildListPages(transaction);
 
     _runtime.workspace().restoreSession(_runtime.configStore());
     _implPtr->applyPresentationPreferencesToOpenViews(_runtime);
@@ -478,10 +479,10 @@ namespace ao::gtk
                          .themeController = &_implPtr->themeController};
   }
 
-  void MainWindowCoordinator::rebuildListPages(lmdb::ReadTransaction const& txn)
+  void MainWindowCoordinator::rebuildListPages(lmdb::ReadTransaction const& transaction)
   {
     APP_LOG_DEBUG("rebuildListPages called");
-    _implPtr->trackPageHost.rebuild(_implPtr->trackRowCache, txn);
+    _implPtr->trackPageHost.rebuild(_implPtr->trackRowCache, transaction);
 
     _implPtr->listNavigationController.rebuildTree(_implPtr->trackRowCache);
   }

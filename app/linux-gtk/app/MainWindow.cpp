@@ -11,8 +11,8 @@
 #include "app/MouseNavigationPolicy.h"
 #include "app/PlaybackShortcutPolicy.h"
 #include "app/ShellLayoutComponentStateStore.h"
-#include "app/UIState.h"
 #include "app/WindowActionRegistry.h"
+#include "app/WindowState.h"
 #include "list/ListNavigationController.h"
 #include "platform/MprisArtUrlCache.h"
 #include "platform/MprisBridge.h"
@@ -121,7 +121,7 @@ namespace ao::gtk
           { answer(responseId == Gtk::ResponseType::YES); });
       });
 
-    setupPlaybackSpaceShortcut();
+    installPlaybackSpaceShortcut();
 
     // Mouse back/forward navigation (thumb buttons 8/9).
     auto mouseNavGesturePtr = Gtk::GestureClick::create();
@@ -235,7 +235,7 @@ namespace ao::gtk
     return _shellLayout.actionCatalog();
   }
 
-  void MainWindow::setupPlaybackSpaceShortcut()
+  void MainWindow::installPlaybackSpaceShortcut()
   {
     auto keyControllerPtr = Gtk::EventControllerKey::create();
     keyControllerPtr->signal_key_pressed().connect(

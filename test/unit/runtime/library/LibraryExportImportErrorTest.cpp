@@ -296,8 +296,8 @@ library:
       auto const result = importer.importFromYaml(yamlPath);
       REQUIRE(result);
 
-      auto txn = ml.readTransaction();
-      auto const optList = ml.lists().reader(txn).get(ListId{1});
+      auto transaction = ml.readTransaction();
+      auto const optList = ml.lists().reader(transaction).get(ListId{1});
       REQUIRE(optList);
       CHECK(optList->tracks().empty());
     }

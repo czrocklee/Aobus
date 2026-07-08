@@ -72,14 +72,14 @@ namespace ao::audio::detail
     return _demuxerPtr != nullptr;
   }
 
-  bool Mp4PacketSource::atEnd() const noexcept
+  bool Mp4PacketSource::isAtEnd() const noexcept
   {
     return !_demuxerPtr || _sampleIndex >= _demuxerPtr->sampleCount();
   }
 
   std::span<std::byte const> Mp4PacketSource::packet() const
   {
-    return atEnd() ? std::span<std::byte const>{} : _demuxerPtr->samplePayload(_sampleIndex);
+    return isAtEnd() ? std::span<std::byte const>{} : _demuxerPtr->samplePayload(_sampleIndex);
   }
 
   std::span<std::byte const> Mp4PacketSource::magicCookie() const
@@ -89,7 +89,7 @@ namespace ao::audio::detail
 
   media::mp4::Demuxer::SampleEntry Mp4PacketSource::sampleInfo() const
   {
-    return atEnd() ? media::mp4::Demuxer::SampleEntry{} : _demuxerPtr->sampleInfo(_sampleIndex);
+    return isAtEnd() ? media::mp4::Demuxer::SampleEntry{} : _demuxerPtr->sampleInfo(_sampleIndex);
   }
 
   std::uint32_t Mp4PacketSource::sampleIndex() const noexcept
@@ -122,7 +122,7 @@ namespace ao::audio::detail
   std::uint64_t Mp4PacketSource::firstFrameIndex(std::uint32_t sampleRate,
                                                  std::uint32_t fallbackFramesPerPacket) const noexcept
   {
-    if (atEnd())
+    if (isAtEnd())
     {
       return 0;
     }
@@ -140,7 +140,7 @@ namespace ao::audio::detail
 
   void Mp4PacketSource::advance() noexcept
   {
-    if (!atEnd())
+    if (!isAtEnd())
     {
       ++_sampleIndex;
     }

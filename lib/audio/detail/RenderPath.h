@@ -5,7 +5,7 @@
 
 #include "RenderTimeline.h"
 #include <ao/audio/Format.h>
-#include <ao/audio/IRenderTarget.h>
+#include <ao/audio/RenderTarget.h>
 
 #include <algorithm>
 #include <atomic>
@@ -119,15 +119,15 @@ namespace ao::audio::detail
 
     while (progress.bytesWritten < output.size())
     {
-      auto* const src = timeline.activeSource();
+      auto* const source = timeline.activeSource();
 
-      if (src == nullptr)
+      if (source == nullptr)
       {
         return progress.result(engineFrameBytes, progress.bytesWritten == 0);
       }
 
       auto tail = output.subspan(progress.bytesWritten);
-      auto const bytesRead = src->read(tail);
+      auto const bytesRead = source->read(tail);
       progress.advance(bytesRead);
 
       if (progress.bytesWritten == output.size())
@@ -135,7 +135,7 @@ namespace ao::audio::detail
         return progress.result(engineFrameBytes);
       }
 
-      if (!src->isDrained())
+      if (!source->isDrained())
       {
         return progress.result(engineFrameBytes);
       }

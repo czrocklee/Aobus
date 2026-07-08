@@ -44,19 +44,19 @@ namespace ao::council
     std::function<void(std::int64_t pid)> onLaunch = {};
   };
 
-  class IProcessRunner
+  class ProcessRunner
   {
   public:
-    IProcessRunner() = default;
-    IProcessRunner(IProcessRunner const&) = delete;
-    IProcessRunner& operator=(IProcessRunner const&) = delete;
-    IProcessRunner(IProcessRunner&&) = delete;
-    IProcessRunner& operator=(IProcessRunner&&) = delete;
-    virtual ~IProcessRunner() = default;
+    ProcessRunner() = default;
+    ProcessRunner(ProcessRunner const&) = delete;
+    ProcessRunner& operator=(ProcessRunner const&) = delete;
+    ProcessRunner(ProcessRunner&&) = delete;
+    ProcessRunner& operator=(ProcessRunner&&) = delete;
+    virtual ~ProcessRunner() = default;
     virtual ProcessResult run(ProcessRequest const& request) = 0;
   };
 
-  class BoostProcessRunner final : public IProcessRunner
+  class BoostProcessRunner final : public ProcessRunner
   {
   public:
     ProcessResult run(ProcessRequest const& request) override;

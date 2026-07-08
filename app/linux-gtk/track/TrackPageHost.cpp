@@ -10,15 +10,15 @@
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
@@ -203,7 +203,7 @@ namespace ao::gtk
     }
   }
 
-  void TrackPageHost::rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& /*txn*/)
+  void TrackPageHost::rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& /*transaction*/)
   {
     APP_LOG_DEBUG("TrackPageHost::rebuild called");
     clear();
@@ -363,7 +363,7 @@ namespace ao::gtk
       {
         auto const sel = TrackSelectionContext{
           .listId = page->listId(), .selectedIds = page->selectionController().selectedTrackIds()};
-        _tagEditController.showTrackContextMenu(*page, sel, xPosition, yPosition);
+        _tagEditController.openTrackContextMenu(*page, sel, xPosition, yPosition);
       });
 
     page->signalTagEditRequested().connect(
@@ -375,7 +375,7 @@ namespace ao::gtk
         }
 
         auto const sel = TrackSelectionContext{.listId = page->listId(), .selectedIds = ids};
-        _tagEditController.showTagEditor(sel, *relativeTo);
+        _tagEditController.openTagEditor(sel, *relativeTo);
       });
 
     page->signalTrackActivated().connect(

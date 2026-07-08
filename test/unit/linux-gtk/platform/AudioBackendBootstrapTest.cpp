@@ -4,7 +4,7 @@
 #include "platform/AudioBackendBootstrap.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>

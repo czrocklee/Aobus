@@ -56,10 +56,10 @@ namespace ao::rt
 
   Result<ScanApplyResult> ScanPlanApplier::run(std::stop_token stopToken)
   {
-    auto txn = _ml.writeTransaction();
-    auto trackWriter = _ml.tracks().writer(txn);
-    auto manifestWriter = _ml.manifest().writer(txn);
-    auto& dict = _ml.dictionary();
+    auto transaction = _ml.writeTransaction();
+    auto trackWriter = _ml.tracks().writer(transaction);
+    auto manifestWriter = _ml.manifest().writer(transaction);
+    auto& dictionary = _ml.dictionary();
 
     for (std::size_t i = 0; i < _plan.items.size(); ++i)
     {
@@ -69,7 +69,7 @@ namespace ao::rt
         break;
       }
 
-      processItem(i, txn, trackWriter, manifestWriter, dict, stopToken);
+      applyScanItem(i, transaction, trackWriter, manifestWriter, dictionary, stopToken);
 
       if (_abortTransaction)
       {
@@ -95,7 +95,7 @@ namespace ao::rt
       return _result;
     }
 
-    if (auto result = txn.commit(); !result)
+    if (auto result = transaction.commit(); !result)
     {
       // The transaction did not persist, so nothing was actually processed.
       _result.processedIds.clear();
@@ -107,25 +107,25 @@ namespace ao::rt
     return _result;
   }
 
-  void ScanPlanApplier::processItem(std::size_t itemIndex,
-                                    ao::lmdb::WriteTransaction& txn,
-                                    library::TrackStore::Writer& trackWriter,
-                                    library::FileManifestStore::Writer& manifestWriter,
-                                    library::DictionaryStore& dict,
-                                    std::stop_token stopToken)
+  void ScanPlanApplier::applyScanItem(std::size_t itemIndex,
+                                      ao::lmdb::WriteTransaction& transaction,
+                                      library::TrackStore::Writer& trackWriter,
+                                      library::FileManifestStore::Writer& manifestWriter,
+                                      library::DictionaryStore& dictionary,
+                                      std::stop_token stopToken)
   {
     auto const& item = _plan.items[itemIndex];
 
     reportProgress(item, itemIndex, ScanApplyProgressStage::Updating, 0.0);
 
-    if (processSkips(item))
+    if (skipNonActionableItem(item))
     {
       return;
     }
 
     if (item.classification == ScanClassification::Missing)
     {
-      processMissing(item, txn, manifestWriter);
+      applyMissingItem(item, transaction, manifestWriter);
       return;
     }
 
@@ -158,7 +158,7 @@ namespace ao::rt
         return;
       }
 
-      if (processChanged(item, txn, trackWriter, manifestWriter, dict, builder, *optFingerprint))
+      if (tryApplyChangedItem(item, transaction, trackWriter, manifestWriter, dictionary, builder, *optFingerprint))
       {
         return;
       }
@@ -168,7 +168,8 @@ namespace ao::rt
     {
       _abortTransaction = true;
 
-      if (optFingerprint && processMoved(item, txn, trackWriter, manifestWriter, dict, builder, *optFingerprint))
+      if (optFingerprint &&
+          applyMovedItem(item, transaction, trackWriter, manifestWriter, dictionary, builder, *optFingerprint))
       {
         _abortTransaction = false;
       }
@@ -176,10 +177,10 @@ namespace ao::rt
       return;
     }
 
-    processNew(item, txn, trackWriter, manifestWriter, dict, builder, optFingerprint);
+    applyNewItem(item, transaction, trackWriter, manifestWriter, dictionary, builder, optFingerprint);
   }
 
-  bool ScanPlanApplier::processSkips(ScanItem const& item)
+  bool ScanPlanApplier::skipNonActionableItem(ScanItem const& item)
   {
     if (item.classification == ScanClassification::Unchanged)
     {
@@ -210,11 +211,11 @@ namespace ao::rt
     }
   }
 
-  void ScanPlanApplier::processMissing(ScanItem const& item,
-                                       ao::lmdb::WriteTransaction& txn,
-                                       library::FileManifestStore::Writer& manifestWriter)
+  void ScanPlanApplier::applyMissingItem(ScanItem const& item,
+                                         ao::lmdb::WriteTransaction& transaction,
+                                         library::FileManifestStore::Writer& manifestWriter)
   {
-    auto manifestResult = _ml.manifest().reader(txn).get(item.uri);
+    auto manifestResult = _ml.manifest().reader(transaction).get(item.uri);
 
     if (!manifestResult)
     {
@@ -329,13 +330,13 @@ namespace ao::rt
     return AudioFingerprint{.signature = identity.signature, .payloadLength = identity.payloadLength};
   }
 
-  bool ScanPlanApplier::processChanged(ScanItem const& item,
-                                       ao::lmdb::WriteTransaction& txn,
-                                       library::TrackStore::Writer& trackWriter,
-                                       library::FileManifestStore::Writer& manifestWriter,
-                                       library::DictionaryStore& dict,
-                                       library::TrackBuilder& builder,
-                                       AudioFingerprint const& fingerprint)
+  bool ScanPlanApplier::tryApplyChangedItem(ScanItem const& item,
+                                            ao::lmdb::WriteTransaction& transaction,
+                                            library::TrackStore::Writer& trackWriter,
+                                            library::FileManifestStore::Writer& manifestWriter,
+                                            library::DictionaryStore& dictionary,
+                                            library::TrackBuilder& builder,
+                                            AudioFingerprint const& fingerprint)
   {
     auto optExisting = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
 
@@ -344,7 +345,7 @@ namespace ao::rt
       return false;
     }
 
-    auto merged = library::TrackBuilder::fromView(*optExisting, dict);
+    auto merged = library::TrackBuilder::fromView(*optExisting, dictionary);
     merged.property()
       .duration(builder.property().duration())
       .bitrate(builder.property().bitrate())
@@ -353,7 +354,7 @@ namespace ao::rt
       .codec(builder.property().codec())
       .bitDepth(builder.property().bitDepth());
 
-    auto optPrepared = prepareTrack(merged, txn, dict, item.uri);
+    auto optPrepared = prepareTrack(merged, transaction, dictionary, item.uri);
 
     if (!optPrepared)
     {
@@ -378,13 +379,13 @@ namespace ao::rt
     return true;
   }
 
-  bool ScanPlanApplier::processMoved(ScanItem const& item,
-                                     ao::lmdb::WriteTransaction& txn,
-                                     library::TrackStore::Writer& trackWriter,
-                                     library::FileManifestStore::Writer& manifestWriter,
-                                     library::DictionaryStore& dict,
-                                     library::TrackBuilder& builder,
-                                     AudioFingerprint const& fingerprint)
+  bool ScanPlanApplier::applyMovedItem(ScanItem const& item,
+                                       ao::lmdb::WriteTransaction& transaction,
+                                       library::TrackStore::Writer& trackWriter,
+                                       library::FileManifestStore::Writer& manifestWriter,
+                                       library::DictionaryStore& dictionary,
+                                       library::TrackBuilder& builder,
+                                       AudioFingerprint const& fingerprint)
   {
     if (item.trackId == kInvalidTrackId || item.oldUri.empty())
     {
@@ -412,7 +413,7 @@ namespace ao::rt
       return false;
     }
 
-    auto merged = library::TrackBuilder::fromView(*optExisting, dict);
+    auto merged = library::TrackBuilder::fromView(*optExisting, dictionary);
     merged.property()
       .uri(item.uri)
       .duration(builder.property().duration())
@@ -422,7 +423,7 @@ namespace ao::rt
       .codec(builder.property().codec())
       .bitDepth(builder.property().bitDepth());
 
-    auto optPrepared = prepareTrack(merged, txn, dict, item.uri);
+    auto optPrepared = prepareTrack(merged, transaction, dictionary, item.uri);
 
     if (!optPrepared)
     {
@@ -454,15 +455,15 @@ namespace ao::rt
     return true;
   }
 
-  void ScanPlanApplier::processNew(ScanItem const& item,
-                                   ao::lmdb::WriteTransaction& txn,
-                                   library::TrackStore::Writer& trackWriter,
-                                   library::FileManifestStore::Writer& manifestWriter,
-                                   library::DictionaryStore& dict,
-                                   library::TrackBuilder& builder,
-                                   std::optional<AudioFingerprint> const& optFingerprint)
+  void ScanPlanApplier::applyNewItem(ScanItem const& item,
+                                     ao::lmdb::WriteTransaction& transaction,
+                                     library::TrackStore::Writer& trackWriter,
+                                     library::FileManifestStore::Writer& manifestWriter,
+                                     library::DictionaryStore& dictionary,
+                                     library::TrackBuilder& builder,
+                                     std::optional<AudioFingerprint> const& optFingerprint)
   {
-    auto optPrepared = prepareTrack(builder, txn, dict, item.uri);
+    auto optPrepared = prepareTrack(builder, transaction, dictionary, item.uri);
 
     if (!optPrepared)
     {
@@ -490,11 +491,11 @@ namespace ao::rt
 
   std::optional<std::pair<library::TrackBuilder::PreparedHot, library::TrackBuilder::PreparedCold>>
   ScanPlanApplier::prepareTrack(library::TrackBuilder const& builder,
-                                ao::lmdb::WriteTransaction& txn,
-                                library::DictionaryStore& dict,
+                                ao::lmdb::WriteTransaction& transaction,
+                                library::DictionaryStore& dictionary,
                                 std::string const& uri)
   {
-    auto preparedResult = builder.prepare(txn, dict, _ml.resources());
+    auto preparedResult = builder.prepare(transaction, dictionary, _ml.resources());
 
     if (!preparedResult)
     {
@@ -510,7 +511,7 @@ namespace ao::rt
     TrackId trackId,
     std::optional<AudioFingerprint> const& optFingerprint)
   {
-    auto builder = library::FileManifestBuilder::createNew();
+    auto builder = library::FileManifestBuilder::makeEmpty();
     builder.trackId(trackId).status(library::FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
 
     if (optFingerprint)

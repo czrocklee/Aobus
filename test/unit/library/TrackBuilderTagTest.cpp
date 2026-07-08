@@ -14,7 +14,7 @@ namespace ao::library::test
 {
   TEST_CASE("TrackBuilder - tags builder adds removes and clears names", "[library][unit][track-builder][tag]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
 
     builder.tags().add("rock");
     builder.tags().add("jazz");
@@ -34,7 +34,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - serializes empty tag data", "[library][unit][track-builder][tag]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
     builder.property().uri("/test");
 
@@ -47,7 +47,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - serializes multiple tags", "[library][unit][track-builder][tag]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
     builder.property().uri("/test");
     builder.tags().add("tag1").add("tag2").add("tag3");
@@ -61,7 +61,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - serializes one tag", "[library][unit][track-builder][tag]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
     builder.property().uri("/test");
     builder.tags().add("tag42");
@@ -74,7 +74,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - computes tag bloom filters with tags", "[library][unit][track-builder][tag]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
     builder.property().uri("/test");
     builder.tags().add("tag1").add("tag2").add("tag3").add("tag4").add("tag5");
@@ -88,13 +88,13 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - serializeHot writes tag header data", "[library][unit][track-builder][tag]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test Title");
     builder.property().uri("/path/to/file.flac");
     builder.tags().add("tag10").add("tag20");
 
     auto context = TrackSerializationContext{};
-    auto hotDataResult = builder.serializeHot(context.txn(), context.dict());
+    auto hotDataResult = builder.serializeHot(context.transaction(), context.dictionary());
     REQUIRE(hotDataResult);
     auto const& hotData = *hotDataResult;
 

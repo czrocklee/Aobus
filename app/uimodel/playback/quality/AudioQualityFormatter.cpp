@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackState.h>
@@ -79,15 +79,15 @@ namespace ao::uimodel
       return firstFinding(state, kind) != nullptr;
     }
 
-    std::string gainDbLabel(float const gain)
+    std::string gainDecibelLabel(float const gain)
     {
       if (gain <= 0.0F || !std::isfinite(gain))
       {
         return {};
       }
 
-      auto const db = 20.0 * std::log10(static_cast<double>(gain));
-      return std::format("{:+.1f} dB", db);
+      auto const decibels = 20.0 * std::log10(static_cast<double>(gain));
+      return std::format("{:+.1f} dB", decibels);
     }
 
     AudioQualityPresentation diagnosticPresentation(rt::QualityState const& state)
@@ -166,16 +166,16 @@ namespace ao::uimodel
       case audio::QualityFindingKind::BitPerfect: return "";
       case audio::QualityFindingKind::LossySource: return "Lossy source";
       case audio::QualityFindingKind::SoftwareVolumeModification:
-        if (auto const dbLabel = gainDbLabel(finding.gain); !dbLabel.empty())
+        if (auto const decibelLabel = gainDecibelLabel(finding.gain); !decibelLabel.empty())
         {
-          return std::format("Software volume attenuation: {}", dbLabel);
+          return std::format("Software volume attenuation: {}", decibelLabel);
         }
 
         return "Software volume attenuation";
       case audio::QualityFindingKind::SoftwareAmplification:
-        if (auto const dbLabel = gainDbLabel(finding.gain); !dbLabel.empty())
+        if (auto const decibelLabel = gainDecibelLabel(finding.gain); !decibelLabel.empty())
         {
-          return std::format("Software amplification: {} gain (clipping risk)", dbLabel);
+          return std::format("Software amplification: {} gain (clipping risk)", decibelLabel);
         }
 
         return "Software amplification (clipping risk)";

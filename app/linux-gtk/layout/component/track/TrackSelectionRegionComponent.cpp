@@ -4,9 +4,9 @@
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/track/TrackSelectionRegionPolicy.h>
@@ -25,13 +25,13 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    class TrackSelectionRegionComponent final : public ILayoutComponent
+    class TrackSelectionRegionComponent final : public LayoutComponent
     {
     public:
       TrackSelectionRegionComponent(LayoutContext& ctx, LayoutNode const& node)
         : _box{Gtk::Orientation::VERTICAL, 0}
-        , _showWhen{node.getProp<std::string>("showWhen", "any")}
-        , _showPlaceholder{node.getProp<bool>("showPlaceholder", false)}
+        , _showWhen{node.propertyOr<std::string>("showWhen", "any")}
+        , _showPlaceholder{node.propertyOr<bool>("showPlaceholder", false)}
       {
         for (auto const& childNode : node.children)
         {
@@ -59,13 +59,13 @@ namespace ao::gtk::layout
       }
 
       Gtk::Box _box;
-      std::vector<std::unique_ptr<ILayoutComponent>> _children;
+      std::vector<std::unique_ptr<LayoutComponent>> _children;
       std::string _showWhen;
       bool _showPlaceholder = false;
       sigc::connection _scopeConn;
     };
 
-    std::unique_ptr<ILayoutComponent> createTrackSelectionRegion(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackSelectionRegion(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackSelectionRegionComponent>(ctx, node);
     }

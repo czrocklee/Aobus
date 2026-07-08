@@ -81,7 +81,7 @@ namespace ao::gtk
     configureForParent(parent);
     set_default_size(-1, -1);
 
-    setupUi();
+    buildUi();
     loadData();
 
     signal_response().connect([this](std::int32_t) { close(); });
@@ -89,7 +89,7 @@ namespace ao::gtk
 
   TrackPropertiesDialog::~TrackPropertiesDialog() = default;
 
-  void TrackPropertiesDialog::setupUi()
+  void TrackPropertiesDialog::buildUi()
   {
     addCancelAction("Close", Gtk::ResponseType::CLOSE);
     _saveButton = addPrimaryAction("Save", Gtk::ResponseType::OK);
@@ -99,13 +99,13 @@ namespace ao::gtk
     _notebook.add_css_class("ao-properties-notebook");
     _notebook.set_vexpand(true);
 
-    setupMetadataTab();
-    setupPropertiesTab();
+    buildMetadataTab();
+    buildPropertiesTab();
 
     setContentWidget(_notebook);
   }
 
-  void TrackPropertiesDialog::setupMetadataTab()
+  void TrackPropertiesDialog::buildMetadataTab()
   {
     _metadataScroll.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     _metadataScroll.set_propagate_natural_width(true);
@@ -137,7 +137,7 @@ namespace ao::gtk
     _notebook.append_page(_metadataScroll, "Metadata");
   }
 
-  void TrackPropertiesDialog::setupPropertiesTab()
+  void TrackPropertiesDialog::buildPropertiesTab()
   {
     _propertiesScroll.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     _propertiesScroll.set_propagate_natural_width(true);
@@ -188,7 +188,7 @@ namespace ao::gtk
     entry->set_hexpand(true);
     entry->signal_changed().connect([this, field, entry] { updateEditorValue(field, entry); });
 
-    if (rt::trackFieldSupportsValueCompletion(field))
+    if (rt::supportsTrackFieldValueCompletion(field))
     {
       _completionControllers.push_back(CompletionControllerBinding{
         .entry = entry,

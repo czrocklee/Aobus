@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "TestUtility.h"
-#include "test/unit/RuntimeTestUtils.h"
+#include "BackendTestSupport.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/async/ImmediateExecutor.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/IBackendProvider.h>
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Player.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
+#include <ao/audio/RouteAnchor.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -77,25 +80,25 @@ namespace ao::audio::test
                     .backendId = kBackendPipeWire};
     }
 
-    IBackendProvider::Status pipeWireStatus()
+    BackendProvider::Status pipeWireStatus()
     {
-      return IBackendProvider::Status{.metadata = {.id = kBackendPipeWire,
-                                                   .name = "PipeWire",
-                                                   .description = "PipeWire Provider",
-                                                   .iconName = "audio-card-symbolic",
-                                                   .supportedProfiles = {}},
-                                      .devices = {}};
+      return BackendProvider::Status{.metadata = {.id = kBackendPipeWire,
+                                                  .name = "PipeWire",
+                                                  .description = "PipeWire Provider",
+                                                  .iconName = "audio-card-symbolic",
+                                                  .supportedProfiles = {}},
+                                     .devices = {}};
     }
   } // namespace
 
   TEST_CASE("Player - lifecycle ignores stale route and graph updates", "[audio][unit][player][lifecycle]")
   {
-    auto mockProvider = Mock<IBackendProvider>{};
+    auto mockProvider = Mock<BackendProvider>{};
     Fake(Method(mockProvider, shutdown));
 
     When(Method(mockProvider, subscribeDevices))
       .AlwaysDo(
-        [&](IBackendProvider::OnDevicesChangedCallback const& cb)
+        [&](BackendProvider::OnDevicesChangedCallback const& cb)
         {
           if (cb)
           {
@@ -112,22 +115,22 @@ namespace ao::audio::test
 
     When(Method(mockProvider, createBackend))
       .AlwaysDo([&](Device const& b, ProfileId const& p) { return std::make_unique<TestBackend>(b.backendId, p); });
-    auto onGraphChanged = IBackendProvider::OnGraphChangedCallback{};
+    auto onGraphChanged = BackendProvider::OnGraphChangedCallback{};
 
     When(Method(mockProvider, subscribeGraph))
       .AlwaysDo(
-        [&](std::string_view, IBackendProvider::OnGraphChangedCallback const& cb)
+        [&](std::string_view, BackendProvider::OnGraphChangedCallback const& cb)
         {
           onGraphChanged = cb;
           return Subscription{[] {}};
         });
     When(Method(mockProvider, status))
-      .AlwaysReturn(IBackendProvider::Status{.metadata = {.id = kBackendNone,
-                                                          .name = "Mock",
-                                                          .description = "Mock",
-                                                          .iconName = "audio-card",
-                                                          .supportedProfiles = {}},
-                                             .devices = {}});
+      .AlwaysReturn(BackendProvider::Status{.metadata = {.id = kBackendNone,
+                                                         .name = "Mock",
+                                                         .description = "Mock",
+                                                         .iconName = "audio-card",
+                                                         .supportedProfiles = {}},
+                                            .devices = {}});
 
     auto executor = async::ImmediateExecutor{};
     auto player = Player{executor};
@@ -257,13 +260,13 @@ namespace ao::audio::test
 
   TEST_CASE("Player - pending output activates when matching device appears", "[audio][unit][player][pending]")
   {
-    auto mockProvider = Mock<IBackendProvider>{};
+    auto mockProvider = Mock<BackendProvider>{};
     Fake(Method(mockProvider, shutdown));
-    auto onOutputDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
+    auto onOutputDevicesChanged = BackendProvider::OnDevicesChangedCallback{};
 
     When(Method(mockProvider, subscribeDevices))
       .AlwaysDo(
-        [&](IBackendProvider::OnDevicesChangedCallback const& cb)
+        [&](BackendProvider::OnDevicesChangedCallback const& cb)
         {
           onOutputDevicesChanged = cb;
 
@@ -273,12 +276,12 @@ namespace ao::audio::test
     When(Method(mockProvider, createBackend))
       .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
     When(Method(mockProvider, status))
-      .AlwaysReturn(IBackendProvider::Status{.metadata = {.id = kBackendPipeWire,
-                                                          .name = "PipeWire",
-                                                          .description = "PipeWire Provider",
-                                                          .iconName = "audio-card-symbolic",
-                                                          .supportedProfiles = {}},
-                                             .devices = {}});
+      .AlwaysReturn(BackendProvider::Status{.metadata = {.id = kBackendPipeWire,
+                                                         .name = "PipeWire",
+                                                         .description = "PipeWire Provider",
+                                                         .iconName = "audio-card-symbolic",
+                                                         .supportedProfiles = {}},
+                                            .devices = {}});
 
     auto executor = async::ImmediateExecutor{};
     auto player = Player{executor};
@@ -323,11 +326,11 @@ namespace ao::audio::test
 
   TEST_CASE("Player - setOutputDevice rejects unknown backend", "[audio][unit][player][output]")
   {
-    auto mockProvider = Mock<IBackendProvider>{};
+    auto mockProvider = Mock<BackendProvider>{};
     Fake(Method(mockProvider, shutdown));
 
     When(Method(mockProvider, subscribeDevices))
-      .AlwaysDo([](IBackendProvider::OnDevicesChangedCallback const&) { return Subscription{}; });
+      .AlwaysDo([](BackendProvider::OnDevicesChangedCallback const&) { return Subscription{}; });
     When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
 
     auto executor = async::ImmediateExecutor{};
@@ -343,13 +346,13 @@ namespace ao::audio::test
 
   TEST_CASE("Player - provider callbacks are marshalled onto the executor", "[audio][unit][player][executor]")
   {
-    auto mockProvider = Mock<IBackendProvider>{};
+    auto mockProvider = Mock<BackendProvider>{};
     Fake(Method(mockProvider, shutdown));
 
-    auto onOutputDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
+    auto onOutputDevicesChanged = BackendProvider::OnDevicesChangedCallback{};
     When(Method(mockProvider, subscribeDevices))
       .AlwaysDo(
-        [&](IBackendProvider::OnDevicesChangedCallback const& cb)
+        [&](BackendProvider::OnDevicesChangedCallback const& cb)
         {
           onOutputDevicesChanged = cb;
           return Subscription{};
@@ -359,16 +362,16 @@ namespace ao::audio::test
       .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
     When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
     When(Method(mockProvider, subscribeGraph))
-      .AlwaysDo([](std::string_view, IBackendProvider::OnGraphChangedCallback const&) { return Subscription{}; });
+      .AlwaysDo([](std::string_view, BackendProvider::OnGraphChangedCallback const&) { return Subscription{}; });
 
     auto executor = QueuedExecutor{};
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
     std::int32_t deviceSignals = 0;
-    auto observedStatuses = std::vector<IBackendProvider::Status>{};
+    auto observedStatuses = std::vector<BackendProvider::Status>{};
     player.setOnOutputDevicesChanged(
-      [&](std::vector<IBackendProvider::Status> const& statuses)
+      [&](std::vector<BackendProvider::Status> const& statuses)
       {
         ++deviceSignals;
         observedStatuses = statuses;
@@ -395,13 +398,13 @@ namespace ao::audio::test
 
   TEST_CASE("Player - queued provider callback is ignored after teardown", "[audio][unit][player][executor]")
   {
-    auto mockProvider = Mock<IBackendProvider>{};
+    auto mockProvider = Mock<BackendProvider>{};
     Fake(Method(mockProvider, shutdown));
 
-    auto onOutputDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
+    auto onOutputDevicesChanged = BackendProvider::OnDevicesChangedCallback{};
     When(Method(mockProvider, subscribeDevices))
       .AlwaysDo(
-        [&](IBackendProvider::OnDevicesChangedCallback const& cb)
+        [&](BackendProvider::OnDevicesChangedCallback const& cb)
         {
           onOutputDevicesChanged = cb;
           return Subscription{};
@@ -411,7 +414,7 @@ namespace ao::audio::test
       .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
     When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
     When(Method(mockProvider, subscribeGraph))
-      .AlwaysDo([](std::string_view, IBackendProvider::OnGraphChangedCallback const&) { return Subscription{}; });
+      .AlwaysDo([](std::string_view, BackendProvider::OnGraphChangedCallback const&) { return Subscription{}; });
 
     auto executor = QueuedExecutor{};
     std::int32_t deviceSignals = 0;
@@ -419,7 +422,7 @@ namespace ao::audio::test
     {
       auto player = Player{executor};
       player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
-      player.setOnOutputDevicesChanged([&](std::vector<IBackendProvider::Status> const&) { ++deviceSignals; });
+      player.setOnOutputDevicesChanged([&](std::vector<BackendProvider::Status> const&) { ++deviceSignals; });
 
       REQUIRE(onOutputDevicesChanged);
       onOutputDevicesChanged({pipeWireDevice()});
@@ -431,13 +434,13 @@ namespace ao::audio::test
 
   TEST_CASE("Player - graph callbacks are marshalled onto the executor", "[audio][unit][player][executor]")
   {
-    auto mockProvider = Mock<IBackendProvider>{};
+    auto mockProvider = Mock<BackendProvider>{};
     Fake(Method(mockProvider, shutdown));
 
-    auto onOutputDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
+    auto onOutputDevicesChanged = BackendProvider::OnDevicesChangedCallback{};
     When(Method(mockProvider, subscribeDevices))
       .AlwaysDo(
-        [&](IBackendProvider::OnDevicesChangedCallback const& cb)
+        [&](BackendProvider::OnDevicesChangedCallback const& cb)
         {
           onOutputDevicesChanged = cb;
           return Subscription{};
@@ -447,10 +450,10 @@ namespace ao::audio::test
       .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
     When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
 
-    auto onGraphChanged = IBackendProvider::OnGraphChangedCallback{};
+    auto onGraphChanged = BackendProvider::OnGraphChangedCallback{};
     When(Method(mockProvider, subscribeGraph))
       .AlwaysDo(
-        [&](std::string_view, IBackendProvider::OnGraphChangedCallback const& cb)
+        [&](std::string_view, BackendProvider::OnGraphChangedCallback const& cb)
         {
           onGraphChanged = cb;
           return Subscription{[] {}};
@@ -563,8 +566,8 @@ namespace ao::audio::test
 
     struct LifetimeBackend final : NullBackend
     {
-      explicit LifetimeBackend(Events& eventsArg)
-        : events{eventsArg}
+      explicit LifetimeBackend(Events& eventsRef)
+        : events{eventsRef}
       {
       }
 
@@ -591,10 +594,10 @@ namespace ao::audio::test
       bool closed = false;
     };
 
-    struct LifetimeProvider final : IBackendProvider
+    struct LifetimeProvider final : BackendProvider
     {
-      explicit LifetimeProvider(Events& eventsArg)
-        : events{eventsArg}
+      explicit LifetimeProvider(Events& eventsRef)
+        : events{eventsRef}
       {
       }
 
@@ -629,7 +632,7 @@ namespace ao::audio::test
                                    .backendId = kBackendAlsa}}};
       }
 
-      std::unique_ptr<IBackend> createBackend(Device const& /*device*/, ProfileId const& /*profile*/) override
+      std::unique_ptr<Backend> createBackend(Device const& /*device*/, ProfileId const& /*profile*/) override
       {
         return std::make_unique<LifetimeBackend>(events);
       }

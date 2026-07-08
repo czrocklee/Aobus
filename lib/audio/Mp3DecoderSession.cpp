@@ -6,9 +6,10 @@
 #include "detail/TimeConversion.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/Mp3DecoderSession.h>
+#include <ao/audio/PcmBlock.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/audio/detail/Mpg123Runtime.h>
 #include <ao/utility/ByteView.h>

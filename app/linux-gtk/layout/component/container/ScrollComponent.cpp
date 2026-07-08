@@ -3,7 +3,7 @@
 
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -25,7 +25,7 @@ namespace ao::gtk::layout
     /**
      * @brief A scrollable container component (Gtk::ScrolledWindow).
      */
-    class ScrollComponent final : public ILayoutComponent
+    class ScrollComponent final : public LayoutComponent
     {
     public:
       ScrollComponent(LayoutContext& ctx, LayoutNode const& node)
@@ -42,7 +42,7 @@ namespace ao::gtk::layout
         _sw.set_child(_childPtr->widget());
 
         auto hpolicy = Gtk::PolicyType::AUTOMATIC;
-        auto const hscrollPolicy = node.getProp<std::string>("hscrollPolicy", "");
+        auto const hscrollPolicy = node.propertyOr<std::string>("hscrollPolicy", "");
 
         if (hscrollPolicy == "never")
         {
@@ -54,7 +54,7 @@ namespace ao::gtk::layout
         }
 
         auto vpolicy = Gtk::PolicyType::AUTOMATIC;
-        auto const vscrollPolicy = node.getProp<std::string>("vscrollPolicy", "");
+        auto const vscrollPolicy = node.propertyOr<std::string>("vscrollPolicy", "");
 
         if (vscrollPolicy == "never")
         {
@@ -67,11 +67,11 @@ namespace ao::gtk::layout
 
         _sw.set_policy(hpolicy, vpolicy);
 
-        _sw.set_min_content_width(static_cast<std::int32_t>(node.getProp<std::int64_t>("minContentWidth", -1)));
-        _sw.set_min_content_height(static_cast<std::int32_t>(node.getProp<std::int64_t>("minContentHeight", -1)));
+        _sw.set_min_content_width(static_cast<std::int32_t>(node.propertyOr<std::int64_t>("minContentWidth", -1)));
+        _sw.set_min_content_height(static_cast<std::int32_t>(node.propertyOr<std::int64_t>("minContentHeight", -1)));
 
-        _sw.set_propagate_natural_width(node.getProp<bool>("propagateNaturalWidth", false));
-        _sw.set_propagate_natural_height(node.getProp<bool>("propagateNaturalHeight", false));
+        _sw.set_propagate_natural_width(node.propertyOr<bool>("propagateNaturalWidth", false));
+        _sw.set_propagate_natural_height(node.propertyOr<bool>("propagateNaturalHeight", false));
       }
 
       Gtk::Widget& widget() override
@@ -82,10 +82,10 @@ namespace ao::gtk::layout
     private:
       Gtk::ScrolledWindow _sw;
       std::unique_ptr<Gtk::Label> _errorPtr;
-      std::unique_ptr<ILayoutComponent> _childPtr;
+      std::unique_ptr<LayoutComponent> _childPtr;
     };
 
-    std::unique_ptr<ILayoutComponent> createScroll(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createScroll(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<ScrollComponent>(ctx, node);
     }

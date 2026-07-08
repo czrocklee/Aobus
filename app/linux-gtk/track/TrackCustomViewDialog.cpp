@@ -141,21 +141,21 @@ namespace ao::gtk
 
     set_default_size(-1, -1);
 
-    setupUi();
+    buildUi();
     populateFromSpec(initialSpec, initialLabel);
   }
 
-  void TrackCustomViewDialog::setupUi()
+  void TrackCustomViewDialog::buildUi()
   {
     addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
     addPrimaryAction("Save", Gtk::ResponseType::OK);
 
     auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kBoxSpacing * 2);
 
-    // Section 1: Metadata Card
-    auto* metaList = Gtk::make_managed<FormBoxedList>();
+    // Section 1: View details.
+    auto* detailsList = Gtk::make_managed<FormBoxedList>();
     _nameEntry.set_placeholder_text("View label");
-    metaList->addEntryRow("Name", _nameEntry);
+    detailsList->addEntryRow("Name", _nameEntry);
 
     _groupDropdown.set_model(createGroupKeysModel(_model.groupOptions()));
     _groupDropdown.property_selected().signal_changed().connect(
@@ -166,8 +166,8 @@ namespace ao::gtk
           _model.setGroupKeyByOptionIndex(selected);
         }
       });
-    metaList->addRow("Group By", _groupDropdown);
-    mainBox->append(*metaList);
+    detailsList->addRow("Group By", _groupDropdown);
+    mainBox->append(*detailsList);
 
     auto* addSortBtn = Gtk::make_managed<Gtk::Button>();
     configureSectionAddButton(*addSortBtn, "Add sort field");

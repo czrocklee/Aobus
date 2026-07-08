@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/library/TestUtils.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/library/LibraryBinaryTestSupport.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/DictionaryStore.h>
@@ -34,12 +34,12 @@ namespace ao::query::test
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
-    auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    auto aimerId = ao::test::requireValue(dict.put(wtxn, "Aimer"));
+    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
+    auto aimerId = ao::test::requireValue(dictionary.put(wtxn, "Aimer"));
     REQUIRE(wtxn.commit());
 
     auto expr = parseOk(R"($artist ~ "Aimer" or #Aimer)");
-    auto compiler = QueryCompiler{&dict};
+    auto compiler = QueryCompiler{&dictionary};
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
@@ -78,12 +78,12 @@ namespace ao::query::test
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     auto wtxn = beginWriteTransaction(env);
-    auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    CHECK(dict.put(wtxn, "rock"));
+    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
+    CHECK(dictionary.put(wtxn, "rock"));
     REQUIRE(wtxn.commit());
 
     auto expr = parseOk("#rock");
-    auto compiler = QueryCompiler{&dict};
+    auto compiler = QueryCompiler{&dictionary};
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
@@ -265,10 +265,10 @@ namespace ao::query::test
 
     SECTION("Bloom Filter Collision - False Positive Mitigation")
     {
-      auto& dict = track.dictionary();
+      auto& dictionary = track.dictionary();
 
       auto const* tagA = "rock";
-      auto idA = dict.getOrIntern(tagA).raw();
+      auto idA = dictionary.getOrIntern(tagA).raw();
       auto bitIndex = idA % 32;
 
       auto tagB = std::string{};
@@ -277,7 +277,7 @@ namespace ao::query::test
       {
         auto const candidate = std::format("collision_tag_{}", i);
 
-        if (auto const idB = dict.getOrIntern(candidate).raw(); idB != idA && (idB % 32) == bitIndex)
+        if (auto const idB = dictionary.getOrIntern(candidate).raw(); idB != idA && (idB % 32) == bitIndex)
         {
           tagB = candidate;
           break;
@@ -287,7 +287,7 @@ namespace ao::query::test
       REQUIRE(!tagB.empty());
 
       auto const spec = TrackSpec{.tags = {tagA}};
-      auto trackA = TrackFixture{spec, &dict};
+      auto trackA = TrackFixture{spec, &dictionary};
 
       auto planB = compileOk(compiler, parseOk("#" + tagB));
 

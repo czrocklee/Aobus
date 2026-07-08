@@ -4,7 +4,7 @@
 #include "PlaybackComponentRegistrations.h"
 #include "app/AobusSoul.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
@@ -31,7 +31,7 @@ namespace ao::gtk::layout
     /**
      * @brief playback.soulButton
      */
-    class SoulButtonComponent final : public ILayoutComponent
+    class SoulButtonComponent final : public LayoutComponent
     {
     public:
       SoulButtonComponent(LayoutContext& ctx, LayoutNode const& node)
@@ -49,17 +49,17 @@ namespace ao::gtk::layout
         _soul.set_halign(Gtk::Align::FILL);
         _soul.set_valign(Gtk::Align::FILL);
 
-        if (auto const strokeWidth = node.getProp<double>("strokeWidth", 0.0); strokeWidth > 0.0)
+        if (auto const strokeWidth = node.propertyOr<double>("strokeWidth", 0.0); strokeWidth > 0.0)
         {
           _soul.setBaseStrokeWidth(static_cast<float>(strokeWidth));
         }
 
-        if (auto const glyphScale = node.getProp<double>("glyphScale", 0.0); glyphScale > 0.0)
+        if (auto const glyphScale = node.propertyOr<double>("glyphScale", 0.0); glyphScale > 0.0)
         {
           _soul.setInnerGlyphScale(static_cast<float>(glyphScale));
         }
 
-        auto const glyph = node.getProp<std::string>("glyph", "none");
+        auto const glyph = node.propertyOr<std::string>("glyph", "none");
 
         if (glyph == "sigil")
         {
@@ -70,7 +70,7 @@ namespace ao::gtk::layout
           _soul.setInnerGlyph(AobusSoul::InnerGlyph::Seal);
         }
 
-        _soul.setShowFullLogo(node.getProp<bool>("showFullLogo", false));
+        _soul.setShowFullLogo(node.propertyOr<bool>("showFullLogo", false));
       }
 
       Gtk::Widget& widget() override { return _button; }
@@ -81,7 +81,7 @@ namespace ao::gtk::layout
       uimodel::AobusSoulViewModel _soulController;
     };
 
-    std::unique_ptr<ILayoutComponent> createSoulButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createSoulButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<SoulButtonComponent>(ctx, node);
     }

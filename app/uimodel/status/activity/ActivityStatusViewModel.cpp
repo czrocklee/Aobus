@@ -2,8 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "ActivityStatusFeedState.h"
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -119,9 +120,9 @@ namespace ao::uimodel
       publish();
     }
 
-    void hideDetailNotificationFromActivity(rt::NotificationId const id)
+    void dismissDetailNotificationFromActivity(rt::NotificationId const id)
     {
-      feedState.hideDetailNotificationFromActivity(id, notifications.feed());
+      feedState.dismissDetailNotificationFromActivity(id, notifications.feed());
       publish();
     }
 
@@ -178,9 +179,9 @@ namespace ao::uimodel
     _implPtr->dismissCompact();
   }
 
-  void ActivityStatusViewModel::hideDetailNotificationFromActivity(rt::NotificationId const id)
+  void ActivityStatusViewModel::dismissDetailNotificationFromActivity(rt::NotificationId const id)
   {
-    _implPtr->hideDetailNotificationFromActivity(id);
+    _implPtr->dismissDetailNotificationFromActivity(id);
   }
 
   void ActivityStatusViewModel::onLibraryTaskProgress(std::string message, double const fraction)

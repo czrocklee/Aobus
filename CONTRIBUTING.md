@@ -9,7 +9,8 @@ page hard to scan.
 | Document | Scope |
 |---|---|
 | `doc/README.md` | Documentation tree organization and update expectations |
-| `doc/dev/coding-style.md` | C++ standard, formatting, naming, includes, language idioms, class design, const/threading rules |
+| `doc/dev/coding-style.md` | C++ standard, formatting, includes, language idioms, class design, const/threading rules |
+| `doc/dev/naming-conventions.md` | Identifier, type/contract, vocabulary, file, helper, and support naming |
 | `doc/dev/commit-messages.md` | Commit message format, scopes, subject/body guidance, and examples |
 | `doc/dev/linting.md` | Lint policy: warning triage, suppression rules, cleanup playbook, Python hygiene, automatic-fix guidance |
 | `doc/design/error-model.md` | Error contracts by layer and subsystem |
@@ -22,11 +23,14 @@ page hard to scan.
 - Use `PascalCase` for types and classes, `camelCase` for functions and
   variables, `_camelCase` for non-static class data members, and `kCamelCase` for
   constants.
+- Use `doc/dev/naming-conventions.md` for type/contract names, vocabulary,
+  pointer/optional naming, file names, and helper/support allocation.
 - Prefer modern C++ library facilities when they clarify intent; use ordinary
   loops when ranges obscure control flow, side effects, allocation, or debugging.
 - Prefer `ao::Result<T>` for recoverable failures, exceptions for programmer
   errors or impossible states, and `std::optional<T>` for legitimate absence.
-- See `doc/dev/coding-style.md` for the numbered rules used in reviews.
+- See `doc/dev/coding-style.md` and `doc/dev/naming-conventions.md` for the
+  rules used in reviews.
 
 ## Commit Message Highlights
 

@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/TestUtils.h"
-#include "test/unit/query/ExecutionPlanTestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
+#include "test/unit/query/ExecutionPlanTestSupport.h"
 #include <ao/library/DictionaryStore.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
@@ -23,10 +23,10 @@ namespace ao::query::test
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto dictionary = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
 
-    auto rockId = ao::test::requireValue(dict.put(wtxn, "rock"));
-    auto jazzId = ao::test::requireValue(dict.put(wtxn, "jazz"));
+    auto rockId = ao::test::requireValue(dictionary.put(wtxn, "rock"));
+    auto jazzId = ao::test::requireValue(dictionary.put(wtxn, "jazz"));
     REQUIRE(wtxn.commit());
 
     std::uint32_t const rockBit = std::uint32_t{1} << (rockId.raw() & 31);
@@ -34,25 +34,25 @@ namespace ao::query::test
 
     SECTION("Tag Bloom Mask For SingleTagWithDictionary")
     {
-      auto plan = compileOk(QueryCompiler{&dict}, parseOk("#rock"));
+      auto plan = compileOk(QueryCompiler{&dictionary}, parseOk("#rock"));
       CHECK(plan.tagBloomMask == rockBit);
     }
 
     SECTION("Tag Bloom Mask Ors Tags Across And")
     {
-      auto plan = compileOk(QueryCompiler{&dict}, parseOk("#rock and #jazz"));
+      auto plan = compileOk(QueryCompiler{&dictionary}, parseOk("#rock and #jazz"));
       CHECK(plan.tagBloomMask == (rockBit | jazzBit));
     }
 
     SECTION("Tag Bloom Mask Intersects Tags Across Or")
     {
-      auto plan = compileOk(QueryCompiler{&dict}, parseOk("#rock or #jazz"));
+      auto plan = compileOk(QueryCompiler{&dictionary}, parseOk("#rock or #jazz"));
       CHECK(plan.tagBloomMask == (rockBit & jazzBit));
     }
 
     SECTION("Tag Bloom Mask Clears Under Not")
     {
-      auto plan = compileOk(QueryCompiler{&dict}, parseOk("not #rock"));
+      auto plan = compileOk(QueryCompiler{&dictionary}, parseOk("not #rock"));
       CHECK(plan.tagBloomMask == 0);
     }
   }

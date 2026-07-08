@@ -3,16 +3,21 @@
 
 #pragma once
 
-#include "CorePrimitives.h"
+#include "Subscription.h"
 #include "TrackMutation.h"
 #include "TrackPresentation.h"
+#include "ViewIds.h"
 #include "ViewState.h"
-#include "projection/ProjectionTypes.h"
+#include "projection/TrackDetailProjection.h"
+#include "projection/TrackListProjection.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -24,7 +29,7 @@ namespace ao::library
 
 namespace ao::async
 {
-  class IExecutor;
+  class Executor;
 }
 
 namespace ao::rt
@@ -33,6 +38,22 @@ namespace ao::rt
   class TrackSource;
   class WorkspaceService;
   class LibraryChanges;
+
+  struct FilterStatusChanged final
+  {
+    ViewId viewId{};
+    std::string expression{};
+    bool pending = false;
+    std::optional<Error> optError = std::nullopt;
+    std::uint64_t revision = 0;
+  };
+
+  struct TrackListProjectionChanged final
+  {
+    ViewId viewId{};
+    std::shared_ptr<TrackListProjection> projectionPtr{};
+    std::uint64_t revision = 0;
+  };
 
   class ViewService final
   {
@@ -61,7 +82,7 @@ namespace ao::rt
       TrackPresentationSpec presentation{};
     };
 
-    ViewService(async::IExecutor& executor, library::MusicLibrary& library, ListSourceStore& sources);
+    ViewService(async::Executor& executor, library::MusicLibrary& library, ListSourceStore& sources);
     ~ViewService();
 
     ViewService(ViewService const&) = delete;
@@ -93,10 +114,10 @@ namespace ao::rt
     // an empty selection, or selected ids missing from the library.
     std::chrono::milliseconds selectionDuration(ViewId viewId) const;
 
-    std::shared_ptr<ITrackListProjection> trackListProjection(ViewId viewId);
-    std::unique_ptr<ITrackDetailProjection> detailProjection(DetailTarget const& target,
-                                                             WorkspaceService& workspace,
-                                                             LibraryChanges const& changes);
+    std::shared_ptr<TrackListProjection> trackListProjection(ViewId viewId);
+    std::unique_ptr<TrackDetailProjection> detailProjection(DetailTarget const& target,
+                                                            WorkspaceService& workspace,
+                                                            LibraryChanges const& changes);
 
   private:
     struct Impl;

@@ -4,7 +4,7 @@
 #pragma once
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>

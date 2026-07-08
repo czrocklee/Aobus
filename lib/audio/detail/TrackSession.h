@@ -4,11 +4,12 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/DecoderSession.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/IDecoderSession.h>
-#include <ao/audio/ISource.h>
+#include <ao/audio/PcmSource.h>
 
 #include <filesystem>
 #include <functional>
@@ -28,12 +29,12 @@ namespace ao::audio::detail
   {
   public:
     using DecoderFactoryFn =
-      std::function<std::unique_ptr<IDecoderSession>(std::filesystem::path const&, Format const&)>;
+      std::function<std::unique_ptr<DecoderSession>(std::filesystem::path const&, Format const&)>;
     using OnSourceErrorFn = std::function<void(Error const&)>;
 
     struct OpenedTrack
     {
-      std::shared_ptr<ISource> sourcePtr;
+      std::shared_ptr<PcmSource> sourcePtr;
       Format backendFormat;
       DecodedStreamInfo info;
     };
@@ -51,15 +52,15 @@ namespace ao::audio::detail
   private:
     static void negotiateFormat(std::filesystem::path const& path,
                                 DecodedStreamInfo& info,
-                                std::unique_ptr<IDecoderSession>& decoder,
+                                std::unique_ptr<DecoderSession>& decoder,
                                 Format& backendFormat,
                                 Device const& device,
                                 BackendId const& backendId,
                                 ProfileId const& profileId,
                                 DecoderFactoryFn const& decoderFactory);
 
-    static std::shared_ptr<ISource> createPcmSource(std::unique_ptr<IDecoderSession> decoderPtr,
-                                                    DecodedStreamInfo const& info,
-                                                    OnSourceErrorFn onSourceError);
+    static std::shared_ptr<PcmSource> createPcmSource(std::unique_ptr<DecoderSession> decoderPtr,
+                                                      DecodedStreamInfo const& info,
+                                                      OnSourceErrorFn onSourceError);
   };
 } // namespace ao::audio::detail

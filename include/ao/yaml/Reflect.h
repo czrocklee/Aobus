@@ -5,7 +5,7 @@
 
 #include <ao/utility/EnumName.h>
 #include <ao/utility/StrongType.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <boost/pfr.hpp>
 

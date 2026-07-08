@@ -6,12 +6,12 @@
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -55,8 +55,8 @@ namespace ao::gtk::layout
     }
 
     class TrackDetailScopeComponent final
-      : public ILayoutComponent
-      , public ITrackDetailScope
+      : public LayoutComponent
+      , public TrackDetailScope
     {
     public:
       TrackDetailScopeComponent(LayoutContext& ctx, LayoutNode const& node)
@@ -147,16 +147,16 @@ namespace ao::gtk::layout
 
       Gtk::Box _box;
       TrackDetailUndoController _undoController;
-      std::vector<std::unique_ptr<ILayoutComponent>> _children;
+      std::vector<std::unique_ptr<LayoutComponent>> _children;
 
-      std::unique_ptr<rt::ITrackDetailProjection> _projectionPtr;
+      std::unique_ptr<rt::TrackDetailProjection> _projectionPtr;
       rt::Subscription _sub;
       rt::TrackDetailSnapshot _currentSnap;
 
       sigc::signal<void(rt::TrackDetailSnapshot const&)> _signalSnapshotChanged;
     };
 
-    std::unique_ptr<ILayoutComponent> createTrackDetailScope(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackDetailScope(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackDetailScopeComponent>(ctx, node);
     }

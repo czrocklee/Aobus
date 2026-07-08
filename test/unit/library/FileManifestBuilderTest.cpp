@@ -13,7 +13,7 @@ namespace ao::library::test
   TEST_CASE("FileManifestBuilder - constructs valid payload", "[library][unit][manifest]")
   {
     auto const signature = utility::xxh3Hash128("audio payload");
-    auto builder = FileManifestBuilder::createNew();
+    auto builder = FileManifestBuilder::makeEmpty();
     builder.trackId(TrackId{100})
       .fileSize(999999)
       .mtime(888888)
@@ -37,7 +37,7 @@ namespace ao::library::test
   TEST_CASE("FileManifestBuilder - constructs from view", "[library][unit][manifest]")
   {
     auto const signature = utility::xxh3Hash128("copied payload");
-    auto builder1 = FileManifestBuilder::createNew();
+    auto builder1 = FileManifestBuilder::makeEmpty();
     builder1.trackId(TrackId{123})
       .fileSize(111)
       .mtime(222)

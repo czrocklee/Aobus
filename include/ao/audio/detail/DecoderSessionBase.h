@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/audio/IDecoderSession.h>
+#include <ao/audio/DecoderSession.h>
 
 #include <expected>
 #include <filesystem>
@@ -12,7 +12,7 @@
 namespace ao::audio::detail
 {
   template<typename Derived>
-  class DecoderSessionBase : public IDecoderSession
+  class DecoderSessionBase : public DecoderSession
   {
   public:
     Result<> open(std::filesystem::path const& filePath) noexcept override

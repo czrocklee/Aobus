@@ -3,7 +3,7 @@
 
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadataWorkflow.h>
 
@@ -14,7 +14,7 @@
 
 namespace ao::uimodel
 {
-  std::string displayTextForTrackCustomMetadata(rt::CustomMetadataItem const& item)
+  std::string formatTrackCustomMetadataDisplayText(rt::CustomMetadataItem const& item)
   {
     if (item.value.mixed)
     {

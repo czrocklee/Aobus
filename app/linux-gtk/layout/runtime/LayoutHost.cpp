@@ -3,7 +3,7 @@
 
 #include "layout/runtime/LayoutHost.h"
 
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 

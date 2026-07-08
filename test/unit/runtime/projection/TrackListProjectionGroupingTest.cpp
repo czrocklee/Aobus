@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackListProjection.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -160,10 +160,10 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == expectedOrder.size());
 
-    for (std::size_t idx = 0; idx < expectedOrder.size(); ++idx)
+    for (std::size_t index = 0; index < expectedOrder.size(); ++index)
     {
-      CHECK(proj.trackIdAt(idx) == expectedOrder[idx]);
-      CHECK(proj.indexOf(expectedOrder[idx]) == idx);
+      CHECK(proj.trackIdAt(index) == expectedOrder[index]);
+      CHECK(proj.indexOf(expectedOrder[index]) == index);
     }
 
     struct ExpectedGroup final

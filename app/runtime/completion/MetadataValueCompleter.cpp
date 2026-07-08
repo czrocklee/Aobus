@@ -26,7 +26,7 @@ namespace ao::rt
     {
       auto items = std::vector<CompletionItem>{};
 
-      if (limit == 0 || !trackFieldSupportsValueCompletion(field))
+      if (limit == 0 || !supportsTrackFieldValueCompletion(field))
       {
         return items;
       }

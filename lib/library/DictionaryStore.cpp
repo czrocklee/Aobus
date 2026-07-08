@@ -23,11 +23,11 @@ namespace ao::library
   // Initial bucket count for the string-to-id lookup map.
   constexpr std::uint32_t kInitialBucketCount = 1024;
 
-  DictionaryStore::DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& txn)
+  DictionaryStore::DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& transaction)
     : _database{std::move(db)}
     , _stringToId{kInitialBucketCount, DictHash{&_idToStringStorage}, DictEqual{&_idToStringStorage}}
   {
-    auto const reader = _database.reader(txn);
+    auto const reader = _database.reader(transaction);
 
     std::uint32_t expectedId = 1;
 
@@ -51,7 +51,7 @@ namespace ao::library
     }
   }
 
-  Result<DictionaryId> DictionaryStore::put(lmdb::WriteTransaction& txn, std::string_view value)
+  Result<DictionaryId> DictionaryStore::put(lmdb::WriteTransaction& transaction, std::string_view value)
   {
     auto const lock = std::scoped_lock{_mutex};
 
@@ -60,7 +60,7 @@ namespace ao::library
     {
       if (auto resIt = _reservedStrings.find(*it); resIt != _reservedStrings.end())
       {
-        auto writer = _database.writer(txn);
+        auto writer = _database.writer(transaction);
         auto data = utility::bytes::view(value);
 
         if (auto result = writer.create(it->raw(), data); !result)
@@ -75,7 +75,7 @@ namespace ao::library
     }
 
     // Not found in memory - write with ID that avoids getOrIntern collisions
-    auto writer = _database.writer(txn);
+    auto writer = _database.writer(transaction);
     auto data = utility::bytes::view(value);
     auto id = _freeIds.empty() ? kInvalidDictionaryId : _freeIds.back();
 
@@ -107,36 +107,36 @@ namespace ao::library
   std::string_view DictionaryStore::get(DictionaryId id) const
   {
     auto const lock = std::shared_lock{_mutex};
-    auto idx = id.raw();
+    auto index = id.raw();
 
     // 0 is null/invalid
-    if (idx == 0)
+    if (index == 0)
     {
       ao::throwException<Exception>("Invalid dictionary ID");
     }
 
-    if (idx - 1 >= _idToStringStorage.size())
+    if (index - 1 >= _idToStringStorage.size())
     {
       ao::throwException<Exception>("Invalid dictionary ID");
     }
 
-    return _idToStringStorage[idx - 1];
+    return _idToStringStorage[index - 1];
   }
 
   std::string_view DictionaryStore::getOrDefault(DictionaryId id, std::string_view defaultValue) const
   {
     auto const lock = std::shared_lock{_mutex};
-    auto idx = id.raw();
+    auto index = id.raw();
 
-    if (idx == 0 || idx - 1 >= _idToStringStorage.size())
+    if (index == 0 || index - 1 >= _idToStringStorage.size())
     {
       return defaultValue;
     }
 
-    return _idToStringStorage[idx - 1];
+    return _idToStringStorage[index - 1];
   }
 
-  DictionaryId DictionaryStore::getId(std::string_view str) const
+  DictionaryId DictionaryStore::lookupId(std::string_view str) const
   {
     auto const lock = std::shared_lock{_mutex};
 

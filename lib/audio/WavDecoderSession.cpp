@@ -4,8 +4,9 @@
 #include "detail/OutputFormatValidation.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/PcmBlock.h>
 #include <ao/audio/WavDecoderSession.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/media/wav/Riff.h>

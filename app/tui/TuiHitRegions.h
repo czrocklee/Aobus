@@ -27,14 +27,14 @@ namespace ao::tui
 
   struct HitTestContext final
   {
-    bool commandActive = false;
-    bool overlayActive = false;
+    bool isCommandActive = false;
+    bool isOverlayActive = false;
   };
 
   struct ButtonHitTestResult final
   {
     HoveredButton hoveredButton = HoveredButton::None;
-    bool qualityHoverVisible = false;
+    bool isQualityHoverVisible = false;
   };
 
   bool hasHitArea(ftxui::Box const& box);

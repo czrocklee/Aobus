@@ -33,7 +33,7 @@ namespace ao::tui
                                                    std::int32_t const row,
                                                    HitTestContext const context) const
   {
-    if (context.commandActive)
+    if (context.isCommandActive)
     {
       return {};
     }
@@ -49,7 +49,7 @@ namespace ao::tui
     if (contains(soulButtonBox, column, row))
     {
       result.hoveredButton = HoveredButton::Soul;
-      result.qualityHoverVisible = !context.overlayActive;
+      result.isQualityHoverVisible = !context.isOverlayActive;
       return result;
     }
 

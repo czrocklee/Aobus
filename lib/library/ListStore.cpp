@@ -21,14 +21,14 @@ namespace ao::library
   {
   }
 
-  ListStore::Reader ListStore::reader(lmdb::ReadTransaction const& txn) const
+  ListStore::Reader ListStore::reader(lmdb::ReadTransaction const& transaction) const
   {
-    return Reader{_database.reader(txn)};
+    return Reader{_database.reader(transaction)};
   }
 
-  ListStore::Writer ListStore::writer(lmdb::WriteTransaction& txn)
+  ListStore::Writer ListStore::writer(lmdb::WriteTransaction& transaction)
   {
-    return Writer{_database.writer(txn)};
+    return Writer{_database.writer(transaction)};
   }
 
   // Reader implementation

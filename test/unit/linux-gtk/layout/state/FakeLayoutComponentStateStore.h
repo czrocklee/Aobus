@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/component/ILayoutComponentStateStore.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 
 #include <cstdint>
 #include <optional>
@@ -18,7 +18,7 @@ namespace ao::uimodel
 
 namespace ao::gtk::layout::test
 {
-  class FakeLayoutComponentStateStore final : public uimodel::ILayoutComponentStateStore
+  class FakeLayoutComponentStateStore final : public uimodel::LayoutComponentStateStore
   {
   public:
     std::optional<uimodel::LayoutComponentStateDocument> load(std::string_view presetId) const override

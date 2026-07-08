@@ -30,7 +30,7 @@ add_executable(ao_core_test
     unit/utility/StrongTypeTest.cpp
     unit/utility/UuidTest.cpp
     unit/utility/YamlReflectTest.cpp
-    unit/utility/YamlUtilsTest.cpp
+    unit/utility/RymlAdapterTest.cpp
     unit/core/AudioCodecTest.cpp
     unit/core/ExceptionTest.cpp
     unit/core/ErrorTest.cpp
@@ -97,7 +97,7 @@ add_executable(ao_core_test
     unit/library/TrackBuilderSerializationTest.cpp
     unit/library/TrackBuilderOverflowTest.cpp
     unit/library/LibraryErrorTest.cpp
-    unit/library/MetaStoreTest.cpp
+    unit/library/MetadataStoreTest.cpp
     unit/library/ListLayoutTest.cpp
     unit/library/ListViewTest.cpp
     unit/library/DictionaryStoreTest.cpp
@@ -436,7 +436,7 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/components/LayoutComponentYamlTest.cpp
       unit/linux-gtk/layout/components/TrackFieldGridCollapsibleTest.cpp
       unit/linux-gtk/layout/components/TrackDetailConstrainedLayoutTest.cpp
-      unit/linux-gtk/layout/components/TrackFieldGridTextUtilsTest.cpp
+      unit/linux-gtk/layout/components/TrackFieldGridTextTest.cpp
       unit/linux-gtk/layout/components/PlaybackImageTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
       unit/linux-gtk/layout/editor/LayoutEditorAbsoluteCanvasTest.cpp

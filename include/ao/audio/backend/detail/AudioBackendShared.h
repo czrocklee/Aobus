@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/Backend.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
 
 #include <algorithm>

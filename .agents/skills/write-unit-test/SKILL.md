@@ -47,7 +47,7 @@ Read only the development doc that matches the task. Do not load every reference
 4. Arrange only necessary state.
 5. Act once unless the contract is about repeated calls, ordering, or idempotence.
 6. Assert observable outcomes and postconditions.
-7. Before adding shared helpers, search existing `*TestSupport.h` files and layer utilities such as `test/unit/RuntimeTestUtils.h`.
+7. Before adding shared helpers, search existing `*TestSupport.h` files and layer utilities such as `test/unit/RuntimeTestSupport.h`.
 8. Add new test files to `test/CMakeLists.txt`.
 9. Validate according to `doc/dev/testing/validation-and-review.md`.
 

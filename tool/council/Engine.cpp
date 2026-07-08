@@ -107,7 +107,7 @@ namespace ao::council
       return result.lexically_normal();
     }
 
-    bool sameOrDescendant(std::filesystem::path const& child, std::filesystem::path const& parent)
+    bool isSameOrDescendant(std::filesystem::path const& child, std::filesystem::path const& parent)
     {
       auto childIt = child.begin();
 
@@ -140,7 +140,7 @@ namespace ao::council
         return std::unexpected{normalizedOut.error()};
       }
 
-      if (sameOrDescendant(*normalizedOut, *normalizedRepo))
+      if (isSameOrDescendant(*normalizedOut, *normalizedRepo))
       {
         return makeError(Error::Code::InvalidState,
                          std::format("council output path '{}' must be outside repository '{}'",
@@ -311,7 +311,7 @@ namespace ao::council
       return hasChallenge(result.standardOutput) || hasChallenge(result.standardError);
     }
 
-    bool usableMemberResponse(ProcessResult const& result)
+    bool isUsableMemberResponse(ProcessResult const& result)
     {
       return result.status == ProcessStatus::Exited && result.exitCode == 0 &&
              hasNonWhitespace(memberReviewText(result)) && !looksLikeAuthenticationChallenge(result);
@@ -483,7 +483,7 @@ namespace ao::council
       auto out = std::ostringstream{};
       std::println(out, "status: {}", toString(result.status));
       std::print(out, "exit-code: {}\n\n", result.exitCode);
-      std::println(out, "usable: {}", usableMemberResponse(result) ? "true" : "false");
+      std::println(out, "usable: {}", isUsableMemberResponse(result) ? "true" : "false");
       std::println(out, "review-stream: {}", memberReviewStream(result));
       std::println(out, "stdout-truncated: {}", result.standardOutputTruncated ? "true" : "false");
       std::print(out, "stderr-truncated: {}\n\n", result.standardErrorTruncated ? "true" : "false");
@@ -561,7 +561,7 @@ namespace ao::council
 
           std::print(out, "\n### {}\n\n", member.agentId);
           std::print(out, "{}\n\n", processSummary(member.result));
-          std::print(out, "usable: {}\n\n", usableMemberResponse(member.result) ? "true" : "false");
+          std::print(out, "usable: {}\n\n", isUsableMemberResponse(member.result) ? "true" : "false");
           std::print(out, "stdout:\n{}\n", member.result.standardOutput);
 
           if (!member.result.standardError.empty())
@@ -609,7 +609,7 @@ namespace ao::council
           yaml_emit::scalarField(out, 8, "status", toString(member.result.status));
           yaml_emit::scalarField(out, 8, "exit-code", member.result.exitCode);
           yaml_emit::scalarField(out, 8, "signal", member.result.signal);
-          yaml_emit::boolField(out, 8, "usable", usableMemberResponse(member.result));
+          yaml_emit::boolField(out, 8, "usable", isUsableMemberResponse(member.result));
           yaml_emit::scalarField(out, 8, "review-stream", memberReviewStream(member.result));
           yaml_emit::boolField(out, 8, "stdout-truncated", member.result.standardOutputTruncated);
           yaml_emit::boolField(out, 8, "stderr-truncated", member.result.standardErrorTruncated);
@@ -1015,7 +1015,7 @@ namespace ao::council
           outcome.optInfrastructureError = *run.optError;
         }
 
-        if (usableMemberResponse(run.result))
+        if (isUsableMemberResponse(run.result))
         {
           outcome.usableRows.emplace_back(run.agentId, std::string{memberReviewText(run.result)});
         }
@@ -1373,7 +1373,7 @@ namespace ao::council
     return manifest;
   }
 
-  Runner::Runner(IProcessRunner& processRunner)
+  Runner::Runner(ProcessRunner& processRunner)
     : _processRunner{processRunner}
   {
   }

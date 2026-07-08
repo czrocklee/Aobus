@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
@@ -38,11 +38,11 @@ namespace ao::rt::test
   namespace
   {
     std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold> prepareTrack(TrackBuilder& builder,
-                                                                                  lmdb::WriteTransaction& txn,
-                                                                                  DictionaryStore& dict,
+                                                                                  lmdb::WriteTransaction& transaction,
+                                                                                  DictionaryStore& dictionary,
                                                                                   ResourceStore& resources)
     {
-      auto result = builder.prepare(txn, dict, resources);
+      auto result = builder.prepare(transaction, dictionary, resources);
       REQUIRE(result);
       return *result;
     }
@@ -70,36 +70,36 @@ namespace ao::rt::test
 
     // 1. Setup initial library with shared cover art
     {
-      auto txn = ml1.writeTransaction();
-      auto& dict = ml1.dictionary();
+      auto transaction = ml1.writeTransaction();
+      auto& dictionary = ml1.dictionary();
 
-      auto resIdResult = ml1.resources().writer(txn).create(coverData);
+      auto resIdResult = ml1.resources().writer(transaction).create(coverData);
       REQUIRE(resIdResult);
       resId = *resIdResult;
-      auto backResIdResult = ml1.resources().writer(txn).create(backCoverData);
+      auto backResIdResult = ml1.resources().writer(transaction).create(backCoverData);
       REQUIRE(backResIdResult);
       backResId = *backResIdResult;
 
-      auto trackBuilder1 = TrackBuilder::createNew();
+      auto trackBuilder1 = TrackBuilder::makeEmpty();
       trackBuilder1.property().uri("song1.flac");
       trackBuilder1.metadata().title("Song 1");
       trackBuilder1.coverArt().add(PictureType::BackCover, backResId);
       trackBuilder1.coverArt().add(PictureType::FrontCover, resId);
 
-      auto trackBuilder2 = TrackBuilder::createNew();
+      auto trackBuilder2 = TrackBuilder::makeEmpty();
       trackBuilder2.property().uri("song2.flac");
       trackBuilder2.metadata().title("Song 2");
       trackBuilder2.coverArt().add(PictureType::FrontCover, resId);
 
-      auto trackWriter = ml1.tracks().writer(txn);
+      auto trackWriter = ml1.tracks().writer(transaction);
 
-      auto const [p1h, p1c] = prepareTrack(trackBuilder1, txn, dict, ml1.resources());
+      auto const [p1h, p1c] = prepareTrack(trackBuilder1, transaction, dictionary, ml1.resources());
       createPreparedTrack(trackWriter, p1h, p1c);
 
-      auto const [p2h, p2c] = prepareTrack(trackBuilder2, txn, dict, ml1.resources());
+      auto const [p2h, p2c] = prepareTrack(trackBuilder2, transaction, dictionary, ml1.resources());
       createPreparedTrack(trackWriter, p2h, p2c);
 
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
     }
 
     // 2. Export to YAML
@@ -124,8 +124,8 @@ namespace ao::rt::test
 
     // 5. Verify deduplication and content
     {
-      auto txn = ml2.readTransaction();
-      auto reader = ml2.tracks().reader(txn);
+      auto transaction = ml2.readTransaction();
+      auto reader = ml2.tracks().reader(transaction);
       auto& resources = ml2.resources();
 
       auto tracks = std::unordered_map<std::string, TrackView>{};
@@ -148,12 +148,12 @@ namespace ao::rt::test
       CHECK(track1.coverArt().at(0).type == PictureType::BackCover);
       CHECK(track1.coverArt().at(1).type == PictureType::FrontCover);
 
-      auto const optImportedData = resources.reader(txn).get(optPrimary1->resourceId);
+      auto const optImportedData = resources.reader(transaction).get(optPrimary1->resourceId);
       REQUIRE(optImportedData);
       CHECK(optImportedData->size() == coverData.size());
       CHECK(std::ranges::equal(*optImportedData, coverData));
 
-      auto const optBackData = resources.reader(txn).get(track1.coverArt().at(0).resourceId);
+      auto const optBackData = resources.reader(transaction).get(track1.coverArt().at(0).resourceId);
       REQUIRE(optBackData);
       CHECK(std::ranges::equal(*optBackData, backCoverData));
     }
@@ -166,9 +166,9 @@ namespace ao::rt::test
     auto const uri = std::string{"song.flac"};
 
     {
-      auto txn = ml.writeTransaction();
-      auto& dict = ml.dictionary();
-      auto resWriter = ml.resources().writer(txn);
+      auto transaction = ml.writeTransaction();
+      auto& dictionary = ml.dictionary();
+      auto resWriter = ml.resources().writer(transaction);
       auto frontIdResult = resWriter.create(lmdb::test::createTestData(8));
       REQUIRE(frontIdResult);
       auto const frontId = *frontIdResult;
@@ -176,18 +176,18 @@ namespace ao::rt::test
       REQUIRE(backIdResult);
       auto const backId = *backIdResult;
 
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
       builder.property().uri(uri);
       builder.coverArt().add(PictureType::FrontCover, frontId);
       builder.coverArt().add(PictureType::BackCover, backId);
-      auto const [hot, cold] = prepareTrack(builder, txn, dict, ml.resources());
-      auto trackWriter = ml.tracks().writer(txn);
+      auto const [hot, cold] = prepareTrack(builder, transaction, dictionary, ml.resources());
+      auto trackWriter = ml.tracks().writer(transaction);
       auto const trackId = createPreparedTrack(trackWriter, hot, cold).first;
 
-      auto manifest = FileManifestBuilder::createNew();
+      auto manifest = FileManifestBuilder::makeEmpty();
       manifest.trackId(trackId);
-      REQUIRE(ml.manifest().writer(txn).put(uri, manifest.serialize()));
-      REQUIRE(txn.commit());
+      REQUIRE(ml.manifest().writer(transaction).put(uri, manifest.serialize()));
+      REQUIRE(transaction.commit());
     }
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "covers.yaml";
@@ -209,15 +209,16 @@ library:
     REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
 
     {
-      auto txn = ml.readTransaction();
-      auto const manifestResult = ml.manifest().reader(txn).get(uri);
+      auto transaction = ml.readTransaction();
+      auto const manifestResult = ml.manifest().reader(transaction).get(uri);
       REQUIRE(manifestResult);
-      auto const optView = ml.tracks().reader(txn).get(manifestResult->trackId(), TrackStore::Reader::LoadMode::Both);
+      auto const optView =
+        ml.tracks().reader(transaction).get(manifestResult->trackId(), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       REQUIRE(optView->coverArt().count() == 1);
       CHECK(optView->coverArt().at(0).type == PictureType::BackCover);
 
-      auto const optData = ml.resources().reader(txn).get(optView->coverArt().at(0).resourceId);
+      auto const optData = ml.resources().reader(transaction).get(optView->coverArt().at(0).resourceId);
       REQUIRE(optData);
       REQUIRE(optData->size() == 3);
       CHECK((*optData)[0] == std::byte{4});
@@ -240,10 +241,11 @@ library:
     REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
 
     {
-      auto txn = ml.readTransaction();
-      auto const manifestResult = ml.manifest().reader(txn).get(uri);
+      auto transaction = ml.readTransaction();
+      auto const manifestResult = ml.manifest().reader(transaction).get(uri);
       REQUIRE(manifestResult);
-      auto const optView = ml.tracks().reader(txn).get(manifestResult->trackId(), TrackStore::Reader::LoadMode::Both);
+      auto const optView =
+        ml.tracks().reader(transaction).get(manifestResult->trackId(), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       CHECK(optView->coverArt().count() == 0);
     }

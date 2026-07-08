@@ -5,10 +5,10 @@
 
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 
 #include <expected>
 #include <functional>
@@ -22,7 +22,7 @@
 
 namespace ao::audio::test
 {
-  class CapturingBackend final : public IBackend
+  class CapturingBackend final : public Backend
   {
   public:
     struct Event final
@@ -31,7 +31,7 @@ namespace ao::audio::test
       Format format;
     };
 
-    Result<> open(Format const& format, IRenderTarget* target) override
+    Result<> open(Format const& format, RenderTarget* target) override
     {
       auto const lock = std::scoped_lock{_mutex};
       recordEvent("open", format);
@@ -164,7 +164,7 @@ namespace ao::audio::test
       auto const lock = std::scoped_lock{_mutex};
       _eventObserver = std::move(observer);
     }
-    IRenderTarget* target() const
+    RenderTarget* target() const
     {
       auto const lock = std::scoped_lock{_mutex};
       return _target;
@@ -176,9 +176,9 @@ namespace ao::audio::test
     }
 
     // Trigger callbacks
-    void fireRouteReady(std::string_view anchor)
+    void emitRouteReady(std::string_view anchor)
     {
-      IRenderTarget* t = nullptr;
+      RenderTarget* t = nullptr;
       {
         auto const lock = std::scoped_lock{_mutex};
         t = _target;
@@ -190,9 +190,9 @@ namespace ao::audio::test
       }
     }
 
-    void fireFormatChanged(Format const& fmt)
+    void emitFormatChanged(Format const& fmt)
     {
-      IRenderTarget* t = nullptr;
+      RenderTarget* t = nullptr;
       {
         auto const lock = std::scoped_lock{_mutex};
         _format = fmt;
@@ -205,9 +205,9 @@ namespace ao::audio::test
       }
     }
 
-    void fireBackendError(std::string_view msg)
+    void emitBackendError(std::string_view msg)
     {
-      IRenderTarget* t = nullptr;
+      RenderTarget* t = nullptr;
       {
         auto const lock = std::scoped_lock{_mutex};
         t = _target;
@@ -219,9 +219,9 @@ namespace ao::audio::test
       }
     }
 
-    void fireDrainComplete()
+    void emitDrainComplete()
     {
-      IRenderTarget* t = nullptr;
+      RenderTarget* t = nullptr;
       {
         auto const lock = std::scoped_lock{_mutex};
         t = _target;
@@ -233,9 +233,9 @@ namespace ao::audio::test
       }
     }
 
-    void firePropertyChanged(PropertyId id)
+    void emitPropertyChanged(PropertyId id)
     {
-      IRenderTarget* t = nullptr;
+      RenderTarget* t = nullptr;
       {
         auto const lock = std::scoped_lock{_mutex};
         t = _target;
@@ -261,7 +261,7 @@ namespace ao::audio::test
     mutable std::mutex _mutex;
     std::vector<Event> _events;
     std::function<void(std::string_view)> _eventObserver;
-    IRenderTarget* _target = nullptr;
+    RenderTarget* _target = nullptr;
     Format _format{};
     Result<> _openResult{};
     std::optional<Error::Code> _optPropError{};

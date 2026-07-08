@@ -28,7 +28,7 @@ namespace ao::library::detail
   public:
     explicit TrackColdReader(std::span<std::byte const> coldBytes) noexcept;
 
-    bool valid() const noexcept { return _valid; }
+    bool isValid() const noexcept { return _valid; }
 
     TrackColdHeader const& header() const noexcept;
 

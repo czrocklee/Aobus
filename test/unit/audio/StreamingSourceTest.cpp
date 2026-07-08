@@ -3,7 +3,7 @@
 
 #include "ScriptedDecoderSession.h"
 #include <ao/Error.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/StreamingSource.h>
 

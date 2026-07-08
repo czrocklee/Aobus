@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <string_view>
 

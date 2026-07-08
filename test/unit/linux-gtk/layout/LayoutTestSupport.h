@@ -6,12 +6,12 @@
 #include "app/linux-gtk/layout/component/track/TrackDetailScope.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
-#include "app/linux-gtk/layout/runtime/ILayoutComponent.h"
+#include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
@@ -28,7 +28,7 @@
 
 namespace ao::gtk::layout::test
 {
-  class FakeTrackDetailScope final : public ITrackDetailScope
+  class FakeTrackDetailScope final : public TrackDetailScope
   {
   public:
     explicit FakeTrackDetailScope(rt::TrackDetailSnapshot snap = {})
@@ -86,7 +86,7 @@ namespace ao::gtk::layout::test
       return *_trackDetailScopePtr;
     }
 
-    std::unique_ptr<ILayoutComponent> create(uimodel::LayoutNode const& node) { return _components.create(_ctx, node); }
+    std::unique_ptr<LayoutComponent> create(uimodel::LayoutNode const& node) { return _components.create(_ctx, node); }
 
   private:
     Glib::RefPtr<Gtk::Application> _appPtr;

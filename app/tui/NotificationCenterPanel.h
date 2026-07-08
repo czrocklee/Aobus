@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <ftxui/screen/box.hpp>

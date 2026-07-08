@@ -6,10 +6,10 @@
 #include "MprisPlaybackEndpoint.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/Subscription.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -332,12 +332,13 @@ namespace ao::gtk::platform
         return;
       }
 
-      auto const params = Glib::Variant<PropertiesChangedPayload>::create(
+      auto const propertiesChangedPayload = Glib::Variant<PropertiesChangedPayload>::create(
         PropertiesChangedPayload{Glib::ustring{kPlayerInterface}, changed, std::vector<Glib::ustring>{}});
 
       try
       {
-        connectionPtr->emit_signal(kObjectPath, kPropertiesInterface, "PropertiesChanged", {}, params);
+        connectionPtr->emit_signal(
+          kObjectPath, kPropertiesInterface, "PropertiesChanged", {}, propertiesChangedPayload);
       }
       catch (Glib::Error const& e)
       {
@@ -352,12 +353,12 @@ namespace ao::gtk::platform
         return;
       }
 
-      auto const params =
+      auto const seekedPayload =
         Glib::Variant<SeekedPayload>::create(SeekedPayload{MprisBridge::microsecondsFromMilliseconds(elapsed)});
 
       try
       {
-        connectionPtr->emit_signal(kObjectPath, kPlayerInterface, "Seeked", {}, params);
+        connectionPtr->emit_signal(kObjectPath, kPlayerInterface, "Seeked", {}, seekedPayload);
       }
       catch (Glib::Error const& e)
       {
@@ -743,7 +744,7 @@ namespace ao::gtk::platform
     _implPtr->start();
   }
 
-  bool MprisBridge::active() const noexcept
+  bool MprisBridge::isActive() const noexcept
   {
     return _implPtr->nameAcquired;
   }

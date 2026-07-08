@@ -50,14 +50,14 @@ namespace ao::library
     }
   } // namespace
 
-  FileManifestStore::Reader FileManifestStore::reader(lmdb::ReadTransaction const& txn) const
+  FileManifestStore::Reader FileManifestStore::reader(lmdb::ReadTransaction const& transaction) const
   {
-    return Reader{_db.reader(txn)};
+    return Reader{_db.reader(transaction)};
   }
 
-  FileManifestStore::Writer FileManifestStore::writer(lmdb::WriteTransaction& txn) const
+  FileManifestStore::Writer FileManifestStore::writer(lmdb::WriteTransaction& transaction) const
   {
-    return Writer{_db.writer(txn)};
+    return Writer{_db.writer(transaction)};
   }
 
   Result<FileManifestView> FileManifestStore::Reader::get(std::string_view uri) const

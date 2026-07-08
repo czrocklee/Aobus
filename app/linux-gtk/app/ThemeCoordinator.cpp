@@ -53,8 +53,8 @@ namespace ao::gtk
       registration.weakRefActive = false;
     }
 
-    bool registrationMatchesWindow(std::shared_ptr<ThemeWindowRegistration> const& registrationPtr,
-                                   Gtk::Window const* const window)
+    bool matchesRegisteredWindow(std::shared_ptr<ThemeWindowRegistration> const& registrationPtr,
+                                 Gtk::Window const* const window)
     {
       return registrationPtr != nullptr && registrationPtr->window == window;
     }
@@ -180,7 +180,7 @@ namespace ao::gtk
     {
       bool const hasRemainingRegistration = std::ranges::any_of(
         _registeredWindows,
-        [window](auto const& candidatePtr) { return registrationMatchesWindow(candidatePtr, window); });
+        [window](auto const& candidatePtr) { return matchesRegisteredWindow(candidatePtr, window); });
 
       if (!hasRemainingRegistration)
       {

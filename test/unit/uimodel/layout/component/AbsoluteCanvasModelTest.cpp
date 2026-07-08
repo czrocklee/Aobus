@@ -21,7 +21,7 @@ namespace ao::uimodel::test
 
       std::ranges::stable_sort(items,
                                [](AbsoluteCanvasItem const& itemA, AbsoluteCanvasItem const& itemB)
-                               { return absoluteCanvasZOrderLess(itemA, itemB); });
+                               { return ordersAbsoluteCanvasBefore(itemA, itemB); });
 
       REQUIRE(items.size() == 3);
       CHECK(items[0].id == "back");

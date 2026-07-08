@@ -9,10 +9,11 @@
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
@@ -49,7 +50,7 @@ namespace ao::gtk
     };
 
     _panelPtr = std::make_unique<ListNavigationPanel>(std::move(panelCallbacks));
-    setupActions();
+    createActions();
 
     _focusSub = _runtime.workspace().onFocusedViewChanged(
       [this](rt::ViewId viewId)
@@ -71,7 +72,7 @@ namespace ao::gtk
     return _panelPtr->widget();
   }
 
-  void ListNavigationController::setupActions()
+  void ListNavigationController::createActions()
   {
     _newListActionPtr = Gio::SimpleAction::create("list-new-smart-list");
     _newListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
@@ -120,7 +121,7 @@ namespace ao::gtk
 
   void ListNavigationController::onSelectionChanged(ListId listId)
   {
-    auto const state = ao::uimodel::ListActionPolicy::describeActions(listId, _panelPtr->listHasChildren(listId));
+    auto const state = ao::uimodel::ListActionPolicy::describeActions(listId, _panelPtr->hasListChildren(listId));
 
     _newListActionPtr->set_enabled(state.canCreate);
     _deleteListActionPtr->set_enabled(state.canDelete);
@@ -134,7 +135,7 @@ namespace ao::gtk
 
   void ListNavigationController::onContextMenuRequested(ListId listId, Gdk::Rectangle const& rect)
   {
-    auto const state = ao::uimodel::ListActionPolicy::describeActions(listId, _panelPtr->listHasChildren(listId));
+    auto const state = ao::uimodel::ListActionPolicy::describeActions(listId, _panelPtr->hasListChildren(listId));
 
     if (_newListActionPtr)
     {
@@ -151,7 +152,7 @@ namespace ao::gtk
       _editListActionPtr->set_enabled(state.canEdit);
     }
 
-    _panelPtr->showContextMenu(rect);
+    _panelPtr->openContextMenu(rect);
   }
 
   void ListNavigationController::openNewSmartListDialog()
@@ -208,7 +209,8 @@ namespace ao::gtk
 
     if (auto const optNode = scope.listNode(listId); optNode)
     {
-      auto const optPres = _callbacks.getListPresentation ? _callbacks.getListPresentation(listId) : std::nullopt;
+      auto const optPres =
+        _callbacks.listPresentationCallback ? _callbacks.listPresentationCallback(listId) : std::nullopt;
       auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, optNode->parentId, *_dataProvider);
       auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
       dialog->populate(listId, *optNode, optPres);
@@ -319,7 +321,7 @@ namespace ao::gtk
       return;
     }
 
-    if (_panelPtr->listHasChildren(listId))
+    if (_panelPtr->hasListChildren(listId))
     {
       APP_LOG_ERROR("Cannot delete a list that still has child lists");
       return;

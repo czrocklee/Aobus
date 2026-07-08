@@ -10,5 +10,5 @@ namespace ao::cli
   class CliContext;
 
   void runScan(CliContext& context, bool dryRun, bool verbose, bool deferFingerprint = false);
-  void setupScanCommand(CLI::App& app, CliContext& context);
+  void configureScanCommand(CLI::App& app, CliContext& context);
 } // namespace ao::cli

@@ -319,7 +319,7 @@ namespace
     windows.clear();
   }
 
-  void setupUnixSignalHandlers(Glib::RefPtr<Gtk::Application>& app)
+  void installUnixSignalHandlers(Glib::RefPtr<Gtk::Application>& app)
   {
     auto const handler = [](void* data) -> ::gboolean
     {
@@ -535,9 +535,9 @@ namespace
     auto gtkArgv = std::vector<char*>{};
     gtkArgv.reserve(remaining.size());
 
-    for (auto& arg : remaining)
+    for (auto& argument : remaining)
     {
-      gtkArgv.push_back(arg.data());
+      gtkArgv.push_back(argument.data());
     }
 
     return gtkArgv;
@@ -605,7 +605,7 @@ namespace
     // terminate on a transient failure.
     Glib::add_exception_handler([appPtr] { onSignalException(appPtr); });
 
-    setupUnixSignalHandlers(appPtr);
+    installUnixSignalHandlers(appPtr);
 
     auto windows = std::vector<Glib::RefPtr<MainWindow>>{};
     auto preferencesWindowPtr = std::unique_ptr<PreferencesWindow>{};

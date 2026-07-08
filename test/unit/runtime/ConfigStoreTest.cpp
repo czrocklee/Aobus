@@ -99,7 +99,7 @@ namespace ao::rt::test
     struct WithEmptyContainers final
     {
       std::vector<int> numbers{};
-      std::map<std::string, int, std::less<>> dict{};
+      std::map<std::string, int, std::less<>> dictionary{};
     };
 
     struct DeepNested final
@@ -360,11 +360,11 @@ namespace ao::rt::test
       REQUIRE(configStore.flush());
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
-      auto loaded = WithEmptyContainers{.numbers = {42}, .dict = {{"z", 99}}};
+      auto loaded = WithEmptyContainers{.numbers = {42}, .dictionary = {{"z", 99}}};
       REQUIRE(reloaded.load("empty", loaded));
 
       CHECK(loaded.numbers.empty());
-      CHECK(loaded.dict.empty());
+      CHECK(loaded.dictionary.empty());
     }
 
     SECTION("Deeply nested aggregates")

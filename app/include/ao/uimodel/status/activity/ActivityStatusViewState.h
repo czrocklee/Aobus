@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 
 #include <chrono>

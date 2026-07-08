@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -80,7 +80,7 @@ namespace ao::rt::test
           .count());
     }
 
-    ScanItem newAudioItem(std::filesystem::path const& fullPath, std::string_view uri)
+    ScanItem makeNewAudioScanItem(std::filesystem::path const& fullPath, std::string_view uri)
     {
       return ScanItem{.uri = std::string{uri},
                       .oldUri = {},
@@ -122,12 +122,12 @@ namespace ao::rt::test
     CHECK(result.failureCount == 0);
     CHECK(counts.failed == 0);
 
-    auto txn = ml.readTransaction();
-    auto const optView = ml.tracks().reader(txn).get(result.processedIds[0]);
+    auto transaction = ml.readTransaction();
+    auto const optView = ml.tracks().reader(transaction).get(result.processedIds[0]);
     REQUIRE(optView);
     CHECK(optView->metadata().title() == "Test Title");
 
-    auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
+    auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK(manifestResult->audioPayloadLength() > 0);
     CHECK(manifestResult->audioSignature() != utility::Hash128{});
@@ -163,8 +163,8 @@ namespace ao::rt::test
     CHECK(runResult->failureCount == 0);
     CHECK(counts.failed == 0);
 
-    auto txn = ml.readTransaction();
-    auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
+    auto transaction = ml.readTransaction();
+    auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK(manifestResult->status() == library::FileStatus::Available);
     CHECK(manifestResult->fileSize() == std::filesystem::file_size(targetFile));
@@ -187,7 +187,7 @@ namespace ao::rt::test
     cachedSignature.bytes[15] = std::byte{0x42};
 
     auto plan = ScanPlan{};
-    auto item = newAudioItem(targetFile, "song.flac");
+    auto item = makeNewAudioScanItem(targetFile, "song.flac");
     item.audioPayloadLength = 12345;
     item.audioSignature = cachedSignature;
     plan.items.push_back(std::move(item));
@@ -206,8 +206,8 @@ namespace ao::rt::test
     CHECK(runResult->failureCount == 0);
     CHECK(counts.failed == 0);
 
-    auto txn = ml.readTransaction();
-    auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
+    auto transaction = ml.readTransaction();
+    auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK(manifestResult->audioPayloadLength() == 12345);
     CHECK(manifestResult->audioSignature() == cachedSignature);
@@ -294,9 +294,9 @@ namespace ao::rt::test
     CHECK(sawFingerprinting);
     CHECK(progressCount >= 2);
 
-    auto txn = ml.readTransaction();
-    auto trackReader = ml.tracks().reader(txn);
-    auto manifestReader = ml.manifest().reader(txn);
+    auto transaction = ml.readTransaction();
+    auto trackReader = ml.tracks().reader(transaction);
+    auto manifestReader = ml.manifest().reader(transaction);
     CHECK(trackReader.begin() == trackReader.end());
     CHECK(manifestReader.begin() == manifestReader.end());
   }
@@ -346,9 +346,9 @@ namespace ao::rt::test
     CHECK(counts.failed == 0);
     CHECK(sawChunkProgress);
 
-    auto txn = ml.readTransaction();
-    auto trackReader = ml.tracks().reader(txn);
-    auto manifestReader = ml.manifest().reader(txn);
+    auto transaction = ml.readTransaction();
+    auto trackReader = ml.tracks().reader(transaction);
+    auto manifestReader = ml.manifest().reader(transaction);
     CHECK(trackReader.begin() == trackReader.end());
     CHECK(manifestReader.begin() == manifestReader.end());
   }
@@ -377,7 +377,7 @@ namespace ao::rt::test
                                   .audioSignature = {},
                                   .trackId = kInvalidTrackId,
                                   .errorMessage = "corrupt input"});
-    plan.items.push_back(newAudioItem(targetFile, "song.flac"));
+    plan.items.push_back(makeNewAudioScanItem(targetFile, "song.flac"));
 
     auto stopSource = std::stop_source{};
     auto progress = std::move_only_function<void(ScanApplyProgress const&)>{
@@ -463,8 +463,8 @@ namespace ao::rt::test
     std::uint64_t oldPayloadLength = 0;
     auto oldSignature = utility::Hash128{};
     {
-      auto txn = ml.readTransaction();
-      auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
+      auto transaction = ml.readTransaction();
+      auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
       REQUIRE(manifestResult);
       oldPayloadLength = manifestResult->audioPayloadLength();
       oldSignature = manifestResult->audioSignature();
@@ -493,8 +493,8 @@ namespace ao::rt::test
     CHECK(result.failureCount == 0);
     CHECK(counts.failed == 0);
 
-    auto txn = ml.readTransaction();
-    auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
+    auto transaction = ml.readTransaction();
+    auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     auto const actualMtime =
       static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -538,8 +538,8 @@ namespace ao::rt::test
     auto runResult = executor.run();
     REQUIRE(runResult);
 
-    auto txn = ml.readTransaction();
-    auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
+    auto transaction = ml.readTransaction();
+    auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK(manifestResult->status() == library::FileStatus::Missing);
     CHECK(runResult->processedIds.empty());
@@ -575,8 +575,8 @@ namespace ao::rt::test
     std::uint64_t originalPayloadLength = 0;
     auto originalSignature = utility::Hash128{};
     {
-      auto txn = ml.readTransaction();
-      auto const manifestResult = ml.manifest().reader(txn).get("song.flac");
+      auto transaction = ml.readTransaction();
+      auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
       REQUIRE(manifestResult);
       originalPayloadLength = manifestResult->audioPayloadLength();
       originalSignature = manifestResult->audioSignature();
@@ -593,13 +593,13 @@ namespace ao::rt::test
 
     auto manualListId = kInvalidListId;
     {
-      auto txn = ml.writeTransaction();
-      auto listBuilder = library::ListBuilder::createNew();
+      auto transaction = ml.writeTransaction();
+      auto listBuilder = library::ListBuilder::makeEmpty();
       listBuilder.name("Manual").tracks().add(originalTrackId);
-      auto createResult = ml.lists().writer(txn).create(listBuilder.serialize());
+      auto createResult = ml.lists().writer(transaction).create(listBuilder.serialize());
       REQUIRE(createResult);
       manualListId = createResult->first;
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
     }
 
     auto const movedFile = musicRoot / "renamed" / "song.flac";
@@ -635,8 +635,8 @@ namespace ao::rt::test
     CHECK(counts.failed == 0);
     CHECK(sawFingerprinting);
 
-    auto txn = ml.readTransaction();
-    auto trackReader = ml.tracks().reader(txn);
+    auto transaction = ml.readTransaction();
+    auto trackReader = ml.tracks().reader(transaction);
     auto const optView = trackReader.get(originalTrackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
 
@@ -646,7 +646,7 @@ namespace ao::rt::test
     CHECK(hasTag(spec, "favorite"));
     CHECK(hasCustomMetadata(spec, "catalog", "AOB-42"));
 
-    auto manifestReader = ml.manifest().reader(txn);
+    auto manifestReader = ml.manifest().reader(transaction);
     auto const oldManifestResult = manifestReader.get("song.flac");
     REQUIRE_FALSE(oldManifestResult);
     CHECK(oldManifestResult.error().code == Error::Code::NotFound);
@@ -658,7 +658,7 @@ namespace ao::rt::test
     CHECK(newManifestResult->audioPayloadLength() == originalPayloadLength);
     CHECK(newManifestResult->audioSignature() == originalSignature);
 
-    auto const optManualList = ml.lists().reader(txn).get(manualListId);
+    auto const optManualList = ml.lists().reader(transaction).get(manualListId);
     REQUIRE(optManualList);
     REQUIRE(optManualList->tracks().size() == 1);
     CHECK(optManualList->tracks()[0] == originalTrackId);
@@ -725,12 +725,13 @@ namespace ao::rt::test
     CHECK(counts.failed == 1);
     CHECK(sawFingerprinting);
 
-    auto txn = ml.readTransaction();
-    auto const optView = ml.tracks().reader(txn).get(originalTrackId, library::TrackStore::Reader::LoadMode::Both);
+    auto transaction = ml.readTransaction();
+    auto const optView =
+      ml.tracks().reader(transaction).get(originalTrackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
     CHECK(optView->property().uri() == "song.flac");
 
-    auto manifestReader = ml.manifest().reader(txn);
+    auto manifestReader = ml.manifest().reader(transaction);
     CHECK(manifestReader.get("song.flac"));
     auto const newManifestResult = manifestReader.get("renamed.flac");
     REQUIRE_FALSE(newManifestResult);
@@ -765,11 +766,11 @@ namespace ao::rt::test
 
     std::filesystem::copy_file(sourceFile, movedFile);
 
-    auto txn = ml.readTransaction();
-    auto const originalManifestResult = ml.manifest().reader(txn).get("song.flac");
+    auto transaction = ml.readTransaction();
+    auto const originalManifestResult = ml.manifest().reader(transaction).get("song.flac");
     REQUIRE(originalManifestResult);
 
-    auto item = newAudioItem(movedFile, "renamed-again.flac");
+    auto item = makeNewAudioScanItem(movedFile, "renamed-again.flac");
     item.classification = ScanClassification::Moved;
     item.oldUri = std::string(501, 'x');
     item.trackId = originalTrackId;
@@ -789,13 +790,13 @@ namespace ao::rt::test
     CHECK(runResult->failureCount == 1);
     CHECK(counts.failed == 1);
 
-    auto verifyTxn = ml.readTransaction();
+    auto verifyTransaction = ml.readTransaction();
     auto const optView =
-      ml.tracks().reader(verifyTxn).get(originalTrackId, library::TrackStore::Reader::LoadMode::Both);
+      ml.tracks().reader(verifyTransaction).get(originalTrackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
     CHECK(optView->property().uri() == "song.flac");
 
-    auto manifestReader = ml.manifest().reader(verifyTxn);
+    auto manifestReader = ml.manifest().reader(verifyTransaction);
     CHECK(manifestReader.get("song.flac"));
     auto const newManifestResult = manifestReader.get("renamed-again.flac");
     REQUIRE_FALSE(newManifestResult);

@@ -8,7 +8,9 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>

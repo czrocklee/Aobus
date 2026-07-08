@@ -23,11 +23,11 @@ namespace ao::tui::test
     regions.activityStatusBox = ftxui::Box{.x_min = 20, .x_max = 39, .y_min = 10, .y_max = 10};
 
     CHECK(regions.hitTestButton(2, 0).hoveredButton == HoveredButton::OutputDevice);
-    CHECK(regions.hitTestButton(2, 0).qualityHoverVisible == false);
+    CHECK(regions.hitTestButton(2, 0).isQualityHoverVisible == false);
 
     auto const soulHit = regions.hitTestButton(7, 0);
     CHECK(soulHit.hoveredButton == HoveredButton::Soul);
-    CHECK(soulHit.qualityHoverVisible == true);
+    CHECK(soulHit.isQualityHoverVisible == true);
 
     CHECK(regions.hitTestButton(2, 10).hoveredButton == HoveredButton::Library);
     CHECK(regions.hitTestButton(12, 10).hoveredButton == HoveredButton::Presentation);
@@ -41,14 +41,15 @@ namespace ao::tui::test
     regions.outputDeviceButtonBox = ftxui::Box{.x_min = 1, .x_max = 5, .y_min = 0, .y_max = 0};
     regions.soulButtonBox = ftxui::Box{.x_min = 6, .x_max = 8, .y_min = 0, .y_max = 0};
 
-    auto const commandHit = regions.hitTestButton(2, 0, HitTestContext{.commandActive = true, .overlayActive = false});
+    auto const commandHit =
+      regions.hitTestButton(2, 0, HitTestContext{.isCommandActive = true, .isOverlayActive = false});
     CHECK(commandHit.hoveredButton == HoveredButton::None);
-    CHECK(commandHit.qualityHoverVisible == false);
+    CHECK(commandHit.isQualityHoverVisible == false);
 
     auto const overlaySoulHit =
-      regions.hitTestButton(7, 0, HitTestContext{.commandActive = false, .overlayActive = true});
+      regions.hitTestButton(7, 0, HitTestContext{.isCommandActive = false, .isOverlayActive = true});
     CHECK(overlaySoulHit.hoveredButton == HoveredButton::Soul);
-    CHECK(overlaySoulHit.qualityHoverVisible == false);
+    CHECK(overlaySoulHit.isQualityHoverVisible == false);
   }
 
   TEST_CASE("TuiHitRegions - clearFrameLocalRows keeps persistent button boxes", "[tui][unit][hit-region]")

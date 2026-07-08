@@ -17,6 +17,6 @@ namespace ao::rt
 {
   TrackFieldRawValue readTrackFieldRawValue(TrackField field,
                                             library::TrackView const& view,
-                                            library::DictionaryStore const& dict,
+                                            library::DictionaryStore const& dictionary,
                                             library::FileManifestStore::Reader const* manifestReader);
 } // namespace ao::rt

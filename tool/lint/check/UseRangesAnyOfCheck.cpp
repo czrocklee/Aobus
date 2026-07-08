@@ -3,7 +3,7 @@
 
 #include "UseRangesAnyOfCheck.h"
 
-#include "AstUtil.h"
+#include "AstHelpers.h"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Expr.h>
@@ -54,11 +54,11 @@ namespace clang::tidy::modernize
       return;
     }
 
-    auto rangeArg = expr().bind("range");
-    auto predArg = expr().bind("pred");
+    auto rangeMatcher = expr().bind("range");
+    auto predicateMatcher = expr().bind("pred");
 
-    auto algoCall =
-      cxxOperatorCallExpr(hasOverloadedOperatorName("()"), hasArgument(1, rangeArg), hasArgument(2, predArg));
+    auto algoCall = cxxOperatorCallExpr(
+      hasOverloadedOperatorName("()"), hasArgument(1, rangeMatcher), hasArgument(2, predicateMatcher));
     auto boundAlgoCall = expr(algoCall).bind("algo_call");
 
     auto endCall = anyOf(callExpr().bind("end_call"), cxxMemberCallExpr(callee(cxxMethodDecl(hasName("end")))));
@@ -93,10 +93,10 @@ namespace clang::tidy::modernize
       return;
     }
 
-    auto const* rangeArg = result.Nodes.getNodeAs<Expr>("range");
-    auto const* predArg = result.Nodes.getNodeAs<Expr>("pred");
+    auto const* rangeExpr = result.Nodes.getNodeAs<Expr>("range");
+    auto const* predicateExpr = result.Nodes.getNodeAs<Expr>("pred");
 
-    if (rangeArg == nullptr || predArg == nullptr)
+    if (rangeExpr == nullptr || predicateExpr == nullptr)
     {
       return;
     }
@@ -133,14 +133,14 @@ namespace clang::tidy::modernize
     auto const& sm = *result.SourceManager;
     auto const& langOpts = result.Context->getLangOpts();
 
-    auto const rangeStr = aobus::getExprSourceText(*rangeArg, sm, langOpts);
+    auto const rangeText = aobus::getExprSourceText(*rangeExpr, sm, langOpts);
 
-    if (!aobus::verifyEndObject(*endCall, rangeStr, sm, langOpts))
+    if (!aobus::verifyEndObject(*endCall, rangeText, sm, langOpts))
     {
       return;
     }
 
-    auto const predStr = aobus::getExprSourceText(*predArg, sm, langOpts);
+    auto const predicateText = aobus::getExprSourceText(*predicateExpr, sm, langOpts);
 
     auto replacement = std::string{};
     auto diagnosticMsg = std::string{};
@@ -150,13 +150,13 @@ namespace clang::tidy::modernize
       if (neOp != nullptr)
       {
         // find_if != end() -> any_of
-        replacement = "std::ranges::any_of(" + rangeStr + ", " + predStr + ")";
+        replacement = "std::ranges::any_of(" + rangeText + ", " + predicateText + ")";
         diagnosticMsg = "use std::ranges::any_of instead of std::ranges::find_if != end()";
       }
       else
       {
         // find_if == end() -> none_of
-        replacement = "std::ranges::none_of(" + rangeStr + ", " + predStr + ")";
+        replacement = "std::ranges::none_of(" + rangeText + ", " + predicateText + ")";
         diagnosticMsg = "use std::ranges::none_of instead of std::ranges::find_if == end()";
       }
     }
@@ -165,13 +165,13 @@ namespace clang::tidy::modernize
       if (eqOp != nullptr)
       {
         // find_if_not == end() -> all_of
-        replacement = "std::ranges::all_of(" + rangeStr + ", " + predStr + ")";
+        replacement = "std::ranges::all_of(" + rangeText + ", " + predicateText + ")";
         diagnosticMsg = "use std::ranges::all_of instead of std::ranges::find_if_not == end()";
       }
       else
       {
         // find_if_not != end() -> !all_of (less common, but handled as !all_of)
-        replacement = "!std::ranges::all_of(" + rangeStr + ", " + predStr + ")";
+        replacement = "!std::ranges::all_of(" + rangeText + ", " + predicateText + ")";
         diagnosticMsg = "use !std::ranges::all_of instead of std::ranges::find_if_not != end()";
       }
     }

@@ -101,7 +101,7 @@ namespace ao::tui
                                          std::int32_t const terminalColumns,
                                          std::int32_t const terminalRows)
     {
-      if (!shell.commandActive())
+      if (!shell.isCommandActive())
       {
         return {};
       }
@@ -196,7 +196,7 @@ namespace ao::tui
       return CoverArtMode::Auto;
     }
 
-    bool environmentSupportsKittyGraphics()
+    bool supportsKittyGraphics()
     {
       auto const* term = std::getenv("TERM");
       auto const* termProgram = std::getenv("TERM_PROGRAM");
@@ -206,27 +206,27 @@ namespace ao::tui
              (termProgram != nullptr && std::string_view{termProgram} == "WezTerm");
     }
 
-    bool useKittyCoverArt(CoverArtMode const mode)
+    bool shouldUseKittyCoverArt(CoverArtMode const mode)
     {
       if (mode == CoverArtMode::Kitty)
       {
         return true;
       }
 
-      return mode == CoverArtMode::Auto && environmentSupportsKittyGraphics();
+      return mode == CoverArtMode::Auto && supportsKittyGraphics();
     }
 
-    bool useBlockCoverArt(CoverArtMode const mode)
+    bool shouldUseBlockCoverArt(CoverArtMode const mode)
     {
-      return mode == CoverArtMode::Blocks || (mode == CoverArtMode::Auto && !environmentSupportsKittyGraphics());
+      return mode == CoverArtMode::Blocks || (mode == CoverArtMode::Auto && !supportsKittyGraphics());
     }
 
-    bool validBox(ftxui::Box const& box)
+    bool isValidBox(ftxui::Box const& box)
     {
       return box.x_max > box.x_min && box.y_max > box.y_min;
     }
 
-    bool sameBox(ftxui::Box const& left, ftxui::Box const& right)
+    bool isSameBox(ftxui::Box const& left, ftxui::Box const& right)
     {
       return left.x_min == right.x_min && left.x_max == right.x_max && left.y_min == right.y_min &&
              left.y_max == right.y_max;
@@ -453,9 +453,9 @@ namespace ao::tui
       ftxui::Box paintedCoverBox{};
     };
 
-    bool sameKittyImage(KittyPaintState const& state, ResourceId const coverArtId, ftxui::Box const& coverBox)
+    bool isSameKittyImage(KittyPaintState const& state, ResourceId const coverArtId, ftxui::Box const& coverBox)
     {
-      return state.visible && coverArtId == state.paintedCoverArtId && sameBox(coverBox, state.paintedCoverBox);
+      return state.visible && coverArtId == state.paintedCoverArtId && isSameBox(coverBox, state.paintedCoverBox);
     }
 
     void updateKittyCoverArt(KittyPaintState& state,
@@ -464,11 +464,11 @@ namespace ao::tui
                              ftxui::Box const& coverBox,
                              std::optional<std::vector<std::byte>> const& optKittyCoverArtPng)
     {
-      auto const shouldShow = shell.overlay() == Overlay::DetailPanel && optKittyCoverArtPng && validBox(coverBox);
+      auto const shouldShow = shell.overlay() == Overlay::DetailPanel && optKittyCoverArtPng && isValidBox(coverBox);
 
       if (shouldShow)
       {
-        if (state.visible && !sameKittyImage(state, cachedCoverArtId, coverBox))
+        if (state.visible && !isSameKittyImage(state, cachedCoverArtId, coverBox))
         {
           std::print("{}", kittyDeleteImageEscape(kKittyCoverArtImageId));
         }
@@ -495,8 +495,8 @@ namespace ao::tui
   std::int32_t run(Options const& options)
   {
     auto const coverArtMode = parseCoverArtMode(options.coverArtMode);
-    auto const kittyCoverArt = useKittyCoverArt(coverArtMode);
-    auto const blockCoverArt = useBlockCoverArt(coverArtMode);
+    auto const kittyCoverArt = shouldUseKittyCoverArt(coverArtMode);
+    auto const blockCoverArt = shouldUseBlockCoverArt(coverArtMode);
 
     std::filesystem::create_directories(options.configPath.parent_path());
     rt::Log::init(options.logLevel, options.libraryRoot / ".aobus" / "logs", rt::LogConsoleMode::Disabled);
@@ -525,7 +525,7 @@ namespace ao::tui
 
     auto& playback = runtime.playback();
     auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
-    auto clockTickActive = std::atomic_bool{transportNeedsClockTick(playback.state().transport)};
+    auto clockTickActive = std::atomic_bool{needsTransportClockTick(playback.state().transport)};
     auto activityAutoDismissActive = std::atomic_bool{false};
     auto playbackClock = uimodel::PlaybackPositionInterpolator{};
     auto optPreviewElapsed = std::optional<std::chrono::milliseconds>{};
@@ -533,7 +533,7 @@ namespace ao::tui
       uimodel::PlaybackTimeViewModel{playback,
                                      [&](uimodel::PlaybackTimeViewState const& view)
                                      {
-                                       clockTickActive.store(transportNeedsClockTick(playback.state().transport));
+                                       clockTickActive.store(needsTransportClockTick(playback.state().transport));
 
                                        if (view.duration == std::chrono::milliseconds{0})
                                        {
@@ -622,7 +622,7 @@ namespace ao::tui
         auto const terminalColumns = terminalSize.dimx;
         auto const terminalRows = terminalSize.dimy;
         auto const playbackRows = playbackBarRows(terminalRows);
-        auto const hoveredButton = shell.commandActive() ? HoveredButton::None : events.hoveredButton();
+        auto const hoveredButton = shell.isCommandActive() ? HoveredButton::None : events.hoveredButton();
         auto tableElementPtr =
           trackTableView(library.tracks(),
                          library.sections(),
@@ -727,8 +727,8 @@ namespace ao::tui
           }
         }
 
-        if (!shell.commandActive() && shell.overlay() == Overlay::None && popoverElementPtr == nullptr &&
-            events.qualityHoverVisible())
+        if (!shell.isCommandActive() && shell.overlay() == Overlay::None && popoverElementPtr == nullptr &&
+            events.isQualityHoverVisible())
         {
           auto const panelColumns = qualityPanelColumns(state, terminalColumns);
           popoverElementPtr = mainLayerPopover(hitRegions.soulButtonBox,

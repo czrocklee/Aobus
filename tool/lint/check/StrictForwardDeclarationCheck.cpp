@@ -38,9 +38,9 @@ namespace clang::tidy::aobus
       {
         for (std::uint32_t i = 0; i < tst->template_arguments().size(); ++i)
         {
-          if (auto const& arg = tst->template_arguments()[i]; arg.getKind() == TemplateArgument::Type)
+          if (auto const& argument = tst->template_arguments()[i]; argument.getKind() == TemplateArgument::Type)
           {
-            if (auto const* crd = getRecordDeclFromType(arg.getAsType()); crd != nullptr)
+            if (auto const* crd = getRecordDeclFromType(argument.getAsType()); crd != nullptr)
             {
               return dyn_cast<CXXRecordDecl>(crd->getCanonicalDecl());
             }

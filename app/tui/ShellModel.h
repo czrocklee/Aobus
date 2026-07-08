@@ -80,7 +80,7 @@ namespace ao::tui
   class ShellModel final
   {
   public:
-    bool commandActive() const noexcept;
+    bool isCommandActive() const noexcept;
     std::string const& commandDraft() const noexcept;
     std::optional<rt::CompletionResult> const& commandCompletion() const noexcept;
     std::int32_t commandCompletionSelection() const noexcept;

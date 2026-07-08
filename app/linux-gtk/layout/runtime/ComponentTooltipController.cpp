@@ -3,7 +3,7 @@
 
 #include "layout/runtime/ComponentTooltipController.h"
 
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 
 #include <glibmm/main.h>
 #include <gtkmm/enums.h>
@@ -28,7 +28,7 @@ namespace ao::gtk::layout
     detach();
   }
 
-  void ComponentTooltipController::attach(Gtk::Widget& target, ILayoutComponent& tooltipComponent)
+  void ComponentTooltipController::attach(Gtk::Widget& target, LayoutComponent& tooltipComponent)
   {
     detach();
 

@@ -6,12 +6,14 @@
 #include "app/linux-gtk/layout/runtime/LayoutContext.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
+#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -203,7 +205,7 @@ namespace ao::gtk::layout::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(yaml), &tree);
       auto doc = LayoutDocument{};
-      doc.templates = getBuiltInTemplates();
+      doc.templates = builtInTemplates();
       REQUIRE(yaml::read(tree.rootref(), doc));
 
       auto const compPtr = fixture.layoutRuntime().build(ctx, doc);

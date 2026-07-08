@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/IRenderTarget.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackService.h>

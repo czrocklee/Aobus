@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/Signal.h>
+#include <ao/rt/Subscription.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 
 #include <array>
@@ -31,8 +32,8 @@ namespace ao::uimodel
     PlaybackCommandSurface& operator=(PlaybackCommandSurface&&) = delete;
 
     void execute(PlaybackCommand command);
-    bool enabled(PlaybackCommand command) const;
-    bool capable(PlaybackCommand command) const;
+    bool isEnabled(PlaybackCommand command) const;
+    bool isCapable(PlaybackCommand command) const;
 
     rt::Subscription onAvailabilityChanged(std::move_only_function<void()> handler);
     rt::Subscription onAvailabilityChanged(PlaybackCommand command, std::move_only_function<void()> handler);

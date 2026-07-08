@@ -87,7 +87,7 @@ namespace ao::uimodel
 
     bool operator==(KeyChord const&) const = default;
 
-    bool valid() const { return !key.empty(); }
+    bool isValid() const { return !key.empty(); }
 
     /**
      * @brief Parses a canonical chord string such as "Ctrl+Shift+Right".

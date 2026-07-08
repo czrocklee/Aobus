@@ -38,7 +38,7 @@ namespace ao::tui
     _viewModel.refresh();
   }
 
-  bool OutputDeviceController::selectableRow(std::int32_t const rowIndex) const
+  bool OutputDeviceController::isSelectableRow(std::int32_t const rowIndex) const
   {
     return rowIndex >= 0 && std::cmp_less(rowIndex, _view.rows.size()) &&
            _view.rows[static_cast<std::size_t>(rowIndex)].kind == uimodel::OutputDeviceRow::Kind::DeviceProfile;
@@ -46,7 +46,7 @@ namespace ao::tui
 
   void OutputDeviceController::normalizeSelection()
   {
-    if (selectableRow(_selectedRow))
+    if (isSelectableRow(_selectedRow))
     {
       return;
     }
@@ -82,7 +82,7 @@ namespace ao::tui
 
     normalizeSelection();
 
-    if (!selectableRow(_selectedRow))
+    if (!isSelectableRow(_selectedRow))
     {
       return false;
     }
@@ -98,7 +98,7 @@ namespace ao::tui
       std::clamp<std::int64_t>(static_cast<std::int64_t>(_selectedRow) + static_cast<std::int64_t>(delta), 0, maxRow));
     auto const selectTarget = [this](std::int32_t const row)
     {
-      if (row != _selectedRow && selectableRow(row))
+      if (row != _selectedRow && isSelectableRow(row))
       {
         _selectedRow = row;
         return true;
@@ -154,7 +154,7 @@ namespace ao::tui
 
   bool OutputDeviceController::selectRow(std::int32_t const rowIndex)
   {
-    if (!selectableRow(rowIndex))
+    if (!isSelectableRow(rowIndex))
     {
       return false;
     }

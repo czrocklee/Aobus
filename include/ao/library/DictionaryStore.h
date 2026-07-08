@@ -32,10 +32,10 @@ namespace ao::library
     /**
      * Construct and load existing entries from the database.
      * Builds in-memory string → id index from existing data.
-     * @param txn Write transaction for loading existing entries (must remain alive)
-     * @param db Database name
+     * @param transaction Write transaction for loading existing entries (must remain alive)
+     * @param db Database handle
      */
-    DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& txn);
+    DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& transaction);
 
     DictionaryStore(DictionaryStore&&) = delete;
     DictionaryStore& operator=(DictionaryStore&&) = delete;
@@ -45,11 +45,11 @@ namespace ao::library
 
     /**
      * Store a string and auto-generate a unique ID.
-     * @param txn Write transaction that must remain alive
+     * @param transaction Write transaction that must remain alive
      * @param value The string to store
      * @return The generated ID, or a storage error if the LMDB write fails.
      */
-    Result<DictionaryId> put(lmdb::WriteTransaction& txn, std::string_view value);
+    Result<DictionaryId> put(lmdb::WriteTransaction& transaction, std::string_view value);
 
     /**
      * Look up a string by its ID using in-memory index.
@@ -73,7 +73,7 @@ namespace ao::library
      * @return The ID
      * @throws std::runtime_error if string is not found
      */
-    DictionaryId getId(std::string_view str) const;
+    DictionaryId lookupId(std::string_view str) const;
 
     /**
      * Check if a string exists.
@@ -122,7 +122,7 @@ namespace ao::library
       bool operator()(std::string_view str, DictionaryId id) const { return (*storage)[id.raw() - 1] == str; }
     };
 
-    struct PlainDictHash final
+    struct PlainDictionaryHash final
     {
       std::size_t operator()(DictionaryId id) const { return std::hash<std::uint32_t>{}(id.raw()); }
     };
@@ -142,7 +142,7 @@ namespace ao::library
     lmdb::Database _database;
 
     // Guards the in-memory indices below. A shared_mutex lets the read-mostly
-    // lookups (get/getId/contains) run concurrently while put/getOrIntern take
+    // lookups (get/lookupId/contains) run concurrently while put/getOrIntern take
     // exclusive ownership during mutation.
     mutable std::shared_mutex _mutex;
 
@@ -155,7 +155,7 @@ namespace ao::library
     boost::unordered_flat_set<DictionaryId, DictHash, DictEqual> _stringToId;
 
     // Track strings that were reserved but not yet persisted to DB
-    boost::unordered_flat_set<DictionaryId, PlainDictHash> _reservedStrings;
+    boost::unordered_flat_set<DictionaryId, PlainDictionaryHash> _reservedStrings;
 
     // Track previously freed/skipped IDs to recycle them and prevent gap accumulation
     std::vector<DictionaryId> _freeIds;

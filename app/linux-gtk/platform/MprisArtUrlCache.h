@@ -49,7 +49,7 @@ namespace ao::gtk::platform
 
     std::string cachedUrl(ResourceId resourceId) const;
     std::string exportResource(ResourceId resourceId);
-    static bool cacheEntryValid(CacheEntry const& entry) noexcept;
+    static bool isCacheEntryValid(CacheEntry const& entry) noexcept;
     static void removeStaleResourceFiles(std::filesystem::path const& cacheDir,
                                          ResourceId resourceId,
                                          std::filesystem::path const& keepPath);

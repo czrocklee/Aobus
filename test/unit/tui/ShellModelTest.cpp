@@ -66,13 +66,13 @@ namespace ao::tui::test
     model.beginCommand();
     model.appendCommandText("detail");
 
-    CHECK(model.commandActive());
+    CHECK(model.isCommandActive());
     CHECK(model.commandDraft() == "detail");
 
     auto command = model.submitCommand();
 
     CHECK(command.action == CommandAction::OpenDetail);
-    CHECK_FALSE(model.commandActive());
+    CHECK_FALSE(model.isCommandActive());
     CHECK(model.commandDraft().empty());
   }
 
@@ -83,7 +83,7 @@ namespace ao::tui::test
     model.beginCommand("help");
     model.cancelCommand();
 
-    CHECK_FALSE(model.commandActive());
+    CHECK_FALSE(model.isCommandActive());
     CHECK(model.commandDraft().empty());
   }
 

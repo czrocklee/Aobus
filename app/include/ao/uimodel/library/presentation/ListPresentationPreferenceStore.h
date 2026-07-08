@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Signal.h>
 #include <ao/rt/TrackPresentation.h>
 
 #include <map>

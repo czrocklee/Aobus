@@ -3,6 +3,7 @@
 
 #include "image/ImageWidget.h"
 
+#include "image/ImageRenderPolicy.h"
 #include "layout/LayoutConstants.h"
 
 #include <gdkmm/pixbuf.h>

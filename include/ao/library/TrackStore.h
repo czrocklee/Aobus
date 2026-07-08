@@ -27,7 +27,7 @@ namespace ao::library
 {
   namespace detail
   {
-    inline bool is4ByteAligned(std::span<std::byte const> bytes) noexcept
+    inline bool isFourByteAligned(std::span<std::byte const> bytes) noexcept
     {
       return utility::bytes::isAligned(bytes.data(), 4U);
     }
@@ -54,7 +54,7 @@ namespace ao::library
         return sizeResult;
       }
 
-      if (!is4ByteAligned(bytes))
+      if (!isFourByteAligned(bytes))
       {
         return makeError(Error::Code::CorruptData, std::string{label} + " track record pointer is not 4-byte aligned");
       }
@@ -79,8 +79,8 @@ namespace ao::library
 
     explicit TrackStore(lmdb::Database hotDb, lmdb::Database coldDb);
 
-    Reader reader(lmdb::ReadTransaction const& txn) const;
-    Writer writer(lmdb::WriteTransaction& txn);
+    Reader reader(lmdb::ReadTransaction const& transaction) const;
+    Writer writer(lmdb::WriteTransaction& transaction);
 
   private:
     lmdb::Database _hotDb;

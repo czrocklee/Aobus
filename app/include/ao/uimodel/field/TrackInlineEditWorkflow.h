@@ -6,7 +6,7 @@
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 
 #include <cstdint>

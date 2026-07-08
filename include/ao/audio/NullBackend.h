@@ -5,7 +5,7 @@
 
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/IBackend.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/Property.h>
 
 #include <expected>
@@ -13,14 +13,14 @@
 namespace ao::audio
 {
   struct Format;
-  class IRenderTarget;
+  class RenderTarget;
 
   /**
    * @brief A backend that does nothing (used when no hardware is selected).
    *
    * Not marked final — TestBackend (in PlayerTest.cpp) inherits from it.
    */
-  class NullBackend : public IBackend
+  class NullBackend : public Backend
   {
   public:
     NullBackend() = default;
@@ -31,7 +31,7 @@ namespace ao::audio
     NullBackend(NullBackend&&) = delete;
     NullBackend& operator=(NullBackend&&) = delete;
 
-    Result<> open(Format const& /*format*/, IRenderTarget* /*target*/) override { return {}; }
+    Result<> open(Format const& /*format*/, RenderTarget* /*target*/) override { return {}; }
     void start() override {}
     void pause() override {}
     void resume() override {}

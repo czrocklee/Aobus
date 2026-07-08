@@ -55,21 +55,21 @@ namespace ao::uimodel::test
     CHECK(defaultTrackFieldColumnWeight(rt::TrackField::Tags) > defaultTrackFieldColumnWeight(rt::TrackField::Genre));
   }
 
-  TEST_CASE("trackFieldIsVisibleByDefault follows the default presentation visible fields",
+  TEST_CASE("isTrackFieldVisibleByDefault follows the default presentation visible fields",
             "[uimodel][unit][library][presentation]")
   {
-    CHECK(trackFieldIsVisibleByDefault(rt::TrackField::Title));
-    CHECK(trackFieldIsVisibleByDefault(rt::TrackField::Artist));
-    CHECK(trackFieldIsVisibleByDefault(rt::TrackField::Album));
-    CHECK(trackFieldIsVisibleByDefault(rt::TrackField::Year));
-    CHECK(trackFieldIsVisibleByDefault(rt::TrackField::Duration));
-    CHECK(trackFieldIsVisibleByDefault(rt::TrackField::DisplayTrackNumber));
+    CHECK(isTrackFieldVisibleByDefault(rt::TrackField::Title));
+    CHECK(isTrackFieldVisibleByDefault(rt::TrackField::Artist));
+    CHECK(isTrackFieldVisibleByDefault(rt::TrackField::Album));
+    CHECK(isTrackFieldVisibleByDefault(rt::TrackField::Year));
+    CHECK(isTrackFieldVisibleByDefault(rt::TrackField::Duration));
+    CHECK(isTrackFieldVisibleByDefault(rt::TrackField::DisplayTrackNumber));
 
     // The default "library" view drops Tags; tags live in the tagging view.
-    CHECK_FALSE(trackFieldIsVisibleByDefault(rt::TrackField::Tags));
-    CHECK_FALSE(trackFieldIsVisibleByDefault(rt::TrackField::AlbumArtist));
-    CHECK_FALSE(trackFieldIsVisibleByDefault(rt::TrackField::Genre));
-    CHECK_FALSE(trackFieldIsVisibleByDefault(rt::TrackField::TrackNumber));
+    CHECK_FALSE(isTrackFieldVisibleByDefault(rt::TrackField::Tags));
+    CHECK_FALSE(isTrackFieldVisibleByDefault(rt::TrackField::AlbumArtist));
+    CHECK_FALSE(isTrackFieldVisibleByDefault(rt::TrackField::Genre));
+    CHECK_FALSE(isTrackFieldVisibleByDefault(rt::TrackField::TrackNumber));
   }
 
   TEST_CASE("trackFieldColumnTitle returns runtime field labels", "[uimodel][unit][library][presentation]")

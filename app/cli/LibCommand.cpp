@@ -6,7 +6,7 @@
 #include "CliContext.h"
 #include "CommandError.h"
 #include "DryRunFlag.h"
-#include "DumpUtils.h"
+#include "DumpOutput.h"
 #include "Output.h"
 #include "ScanOutput.h"
 #include <ao/CoreIds.h>
@@ -17,7 +17,7 @@
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
-#include <ao/library/Meta.h>
+#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
@@ -64,7 +64,7 @@ namespace ao::cli
       return std::format("{:%Y-%m-%d %H:%M:%S}", tp);
     }
 
-    struct LibraryMetaDto final
+    struct LibraryMetadataDto final
     {
       std::string libraryId{};
       std::uint64_t libraryVersion = 0;
@@ -79,18 +79,18 @@ namespace ao::cli
       std::string mode{};
     };
 
-    LibraryMetaDto libraryMetaDto(library::MusicLibrary& ml)
+    LibraryMetadataDto toLibraryMetadataDto(library::MusicLibrary& ml)
     {
-      auto const& header = ml.metaHeader();
-      return LibraryMetaDto{.libraryId = utility::formatUuid(header.libraryId),
-                            .libraryVersion = header.libraryVersion,
-                            .flags = std::format("0x{:x}", header.flags),
-                            .createdTime = formatTimestamp(header.createdTime)};
+      auto const& header = ml.metadataHeader();
+      return LibraryMetadataDto{.libraryId = utility::formatUuid(header.libraryId),
+                                .libraryVersion = header.libraryVersion,
+                                .flags = std::format("0x{:x}", header.flags),
+                                .createdTime = formatTimestamp(header.createdTime)};
     }
 
-    void showPlain(library::MusicLibrary& ml, std::ostream& os)
+    void printMetadataPlain(library::MusicLibrary& ml, std::ostream& os)
     {
-      auto const& header = ml.metaHeader();
+      auto const& header = ml.metadataHeader();
 
       std::println(os, "Library ID:    {}", utility::formatUuid(header.libraryId));
       std::println(os, "Library Version:  {}", header.libraryVersion);
@@ -98,15 +98,15 @@ namespace ao::cli
       std::println(os, "Created:      {}", formatTimestamp(header.createdTime));
     }
 
-    void show(library::MusicLibrary& ml, OutputFormat format, std::ostream& os)
+    void printMetadata(library::MusicLibrary& ml, OutputFormat format, std::ostream& os)
     {
       if (format == OutputFormat::Plain)
       {
-        showPlain(ml, os);
+        printMetadataPlain(ml, os);
         return;
       }
 
-      emitDocument(os, format, libraryMetaDto(ml));
+      emitDocument(os, format, toLibraryMetadataDto(ml));
     }
 
     void printLibraryTransfer(std::ostream& os,
@@ -326,31 +326,31 @@ namespace ao::cli
     {
       auto stats = LibraryStats{};
       {
-        auto const txn = ml.readTransaction();
+        auto const transaction = ml.readTransaction();
 
-        for ([[maybe_unused]] auto const& entry : ml.tracks().reader(txn))
+        for ([[maybe_unused]] auto const& entry : ml.tracks().reader(transaction))
         {
           ++stats.tracks;
         }
 
-        for ([[maybe_unused]] auto const& entry : ml.lists().reader(txn))
+        for ([[maybe_unused]] auto const& entry : ml.lists().reader(transaction))
         {
           ++stats.lists;
         }
 
-        for (auto const& [_, bytes] : ml.resources().reader(txn))
+        for (auto const& [_, bytes] : ml.resources().reader(transaction))
         {
           ++stats.resources;
           stats.resourceBytes += bytes.size();
         }
 
-        for ([[maybe_unused]] auto const& entry : ml.manifest().reader(txn))
+        for ([[maybe_unused]] auto const& entry : ml.manifest().reader(transaction))
         {
           ++stats.manifest;
         }
 
         auto tagIds = std::unordered_set<std::uint32_t>{};
-        auto const trackReader = ml.tracks().reader(txn);
+        auto const trackReader = ml.tracks().reader(transaction);
 
         for (auto const& [_, view] : trackReader.hot())
         {
@@ -438,7 +438,7 @@ namespace ao::cli
       std::vector<VerifyIssueDto> issues{};
     };
 
-    VerifyIssueDto verifyIssueDto(rt::ScanItem const& item)
+    VerifyIssueDto toVerifyIssueDto(rt::ScanItem const& item)
     {
       return VerifyIssueDto{.type = std::string{scanClassificationName(item.classification)},
                             .uri = item.uri,
@@ -454,7 +454,7 @@ namespace ao::cli
 
         for (auto const& item : issues)
         {
-          report.issues.push_back(verifyIssueDto(item));
+          report.issues.push_back(toVerifyIssueDto(item));
         }
 
         emitDocument(os, format, report);
@@ -567,7 +567,7 @@ namespace ao::cli
         .payloadLength = (*identityResult)->payloadLength, .signature = (*identityResult)->signature};
     }
 
-    bool sameRelinkIdentity(RelinkIdentity const& left, RelinkIdentity const& right)
+    bool hasSameRelinkIdentity(RelinkIdentity const& left, RelinkIdentity const& right)
     {
       return left.payloadLength == right.payloadLength && left.signature == right.signature;
     }
@@ -644,7 +644,7 @@ namespace ao::cli
 
         for (auto const& [newIndex, newIdentity] : newIdentities)
         {
-          if (!sameRelinkIdentity(missingIdentity, newIdentity))
+          if (!hasSameRelinkIdentity(missingIdentity, newIdentity))
           {
             continue;
           }
@@ -660,7 +660,7 @@ namespace ao::cli
       return candidates;
     }
 
-    RelinkListDto relinkListDto(rt::ScanPlan const& plan)
+    RelinkListDto toRelinkListDto(rt::ScanPlan const& plan)
     {
       auto dto = RelinkListDto{.candidates = relinkCandidates(plan)};
 
@@ -681,7 +681,7 @@ namespace ao::cli
 
     void printRelinkList(rt::ScanPlan const& plan, OutputFormat format, std::ostream& os)
     {
-      auto const dto = relinkListDto(plan);
+      auto const dto = toRelinkListDto(plan);
 
       if (format != OutputFormat::Plain)
       {
@@ -753,7 +753,7 @@ namespace ao::cli
       auto const missingIdentity = relinkIdentityFromItem(*missingItem);
       auto const newIdentity = readRelinkAudioIdentity(newItem->fullPath);
 
-      if (!sameRelinkIdentity(missingIdentity, newIdentity))
+      if (!hasSameRelinkIdentity(missingIdentity, newIdentity))
       {
         throwCommandError(Error::Code::InvalidInput, "audio identity mismatch: {} -> {}", oldUri, newUri);
       }
@@ -975,8 +975,8 @@ namespace ao::cli
 
     std::vector<ResourceRecordDto> resourceRecords(library::MusicLibrary& ml)
     {
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.resources().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.resources().reader(transaction);
       auto records = std::vector<ResourceRecordDto>{};
 
       for (auto const& [id, bytes] : reader)
@@ -995,8 +995,8 @@ namespace ao::cli
         return;
       }
 
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.resources().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.resources().reader(transaction);
 
       for (auto const& [id, bytes] : reader)
       {
@@ -1028,8 +1028,8 @@ namespace ao::cli
     {
       auto bytes = std::vector<std::byte>{};
       {
-        auto const txn = ml.readTransaction();
-        auto const reader = ml.resources().reader(txn);
+        auto const transaction = ml.readTransaction();
+        auto const reader = ml.resources().reader(transaction);
         auto const optBytes = reader.get(id);
 
         if (!optBytes)
@@ -1073,7 +1073,7 @@ namespace ao::cli
 
   struct LibraryDumpDto final
   {
-    std::optional<LibraryMetaDto> optMeta{};
+    std::optional<LibraryMetadataDto> optMetadata{};
     std::optional<std::map<std::string, std::string>> optDictionary{};
     std::optional<std::vector<ManifestRecordDto>> optManifest{};
     std::optional<std::vector<ResourceRecordDto>> optResources{};
@@ -1085,7 +1085,7 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::LibraryDumpDto>
 {
   static constexpr std::string_view keyFor(std::string_view memberName) noexcept
   {
-    if (memberName == "optMeta")
+    if (memberName == "optMetadata")
     {
       return "meta";
     }
@@ -1116,11 +1116,11 @@ namespace ao::cli
     std::map<std::string, std::string> dictionaryEntries(library::MusicLibrary& ml)
     {
       auto entries = std::map<std::string, std::string>{};
-      auto const& dict = ml.dictionary();
+      auto const& dictionary = ml.dictionary();
 
-      for (std::size_t i = 1; i <= dict.size(); ++i)
+      for (std::size_t i = 1; i <= dictionary.size(); ++i)
       {
-        entries.emplace(std::to_string(i), dict.get(DictionaryId{static_cast<std::uint32_t>(i)}));
+        entries.emplace(std::to_string(i), dictionary.get(DictionaryId{static_cast<std::uint32_t>(i)}));
       }
 
       return entries;
@@ -1129,8 +1129,8 @@ namespace ao::cli
     std::vector<ManifestRecordDto> manifestRecords(library::MusicLibrary& ml)
     {
       auto records = std::vector<ManifestRecordDto>{};
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.manifest().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.manifest().reader(transaction);
 
       for (auto const& [uri, view] : reader)
       {
@@ -1144,21 +1144,21 @@ namespace ao::cli
       return records;
     }
 
-    LibraryDumpDto libraryDumpDto(library::MusicLibrary& ml,
-                                  bool all,
-                                  bool dictFlag,
-                                  bool manifestFlag,
-                                  bool metaFlag,
-                                  bool resourcesFlag)
+    LibraryDumpDto toLibraryDumpDto(library::MusicLibrary& ml,
+                                    bool all,
+                                    bool dictionaryFlag,
+                                    bool manifestFlag,
+                                    bool metadataFlag,
+                                    bool resourcesFlag)
     {
       auto dto = LibraryDumpDto{};
 
-      if (all || metaFlag)
+      if (all || metadataFlag)
       {
-        dto.optMeta = libraryMetaDto(ml);
+        dto.optMetadata = toLibraryMetadataDto(ml);
       }
 
-      if (all || dictFlag)
+      if (all || dictionaryFlag)
       {
         dto.optDictionary = dictionaryEntries(ml);
       }
@@ -1176,35 +1176,35 @@ namespace ao::cli
       return dto;
     }
 
-    void dumpMeta(library::MusicLibrary& ml, bool raw, std::ostream& os)
+    void dumpMetadata(library::MusicLibrary& ml, bool raw, std::ostream& os)
     {
       std::println(os, "--- Meta ---");
 
       if (raw)
       {
-        auto const& header = ml.metaHeader();
+        auto const& header = ml.metadataHeader();
         hexDump(std::as_bytes(std::span{&header, 1}), os);
         return;
       }
 
-      showPlain(ml, os);
+      printMetadataPlain(ml, os);
     }
 
     void dumpDictionary(library::MusicLibrary& ml, std::ostream& os)
     {
-      auto const& dict = ml.dictionary();
-      std::println(os, "--- Dictionary ({} entries) ---", dict.size());
+      auto const& dictionary = ml.dictionary();
+      std::println(os, "--- Dictionary ({} entries) ---", dictionary.size());
 
-      for (std::size_t i = 1; i <= dict.size(); ++i)
+      for (std::size_t i = 1; i <= dictionary.size(); ++i)
       {
-        std::println(os, "  {}: {}", i, dict.get(DictionaryId{static_cast<std::uint32_t>(i)}));
+        std::println(os, "  {}: {}", i, dictionary.get(DictionaryId{static_cast<std::uint32_t>(i)}));
       }
     }
 
     void dumpManifest(library::MusicLibrary& ml, bool raw, std::ostream& os)
     {
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.manifest().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.manifest().reader(transaction);
       std::println(os, "--- Manifest ---");
 
       if (raw)
@@ -1231,8 +1231,8 @@ namespace ao::cli
 
     void dumpResources(library::MusicLibrary& ml, bool raw, std::ostream& os)
     {
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.resources().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.resources().reader(transaction);
       std::println(os, "--- Resources ---");
 
       if (raw)
@@ -1269,19 +1269,19 @@ namespace ao::cli
 
     void dumpLibSections(library::MusicLibrary& ml,
                          bool all,
-                         bool dictFlag,
+                         bool dictionaryFlag,
                          bool manifestFlag,
-                         bool metaFlag,
+                         bool metadataFlag,
                          bool resourcesFlag,
                          bool raw,
                          std::ostream& os)
     {
-      if (all || metaFlag)
+      if (all || metadataFlag)
       {
-        dumpMeta(ml, raw, os);
+        dumpMetadata(ml, raw, os);
       }
 
-      if (all || dictFlag)
+      if (all || dictionaryFlag)
       {
         dumpDictionary(ml, os);
       }
@@ -1298,9 +1298,9 @@ namespace ao::cli
     }
 
     void dumpLib(library::MusicLibrary& ml,
-                 bool dictFlag,
+                 bool dictionaryFlag,
                  bool manifestFlag,
-                 bool metaFlag,
+                 bool metadataFlag,
                  bool resourcesFlag,
                  bool raw,
                  OutputFormat format,
@@ -1311,25 +1311,25 @@ namespace ao::cli
         throwCommandError(Error::Code::InvalidInput, "lib dump --raw supports only plain output");
       }
 
-      bool const all = !(dictFlag || manifestFlag || metaFlag || resourcesFlag);
+      bool const all = !(dictionaryFlag || manifestFlag || metadataFlag || resourcesFlag);
 
       if (format != OutputFormat::Plain)
       {
-        emitDocument(os, format, libraryDumpDto(ml, all, dictFlag, manifestFlag, metaFlag, resourcesFlag));
+        emitDocument(os, format, toLibraryDumpDto(ml, all, dictionaryFlag, manifestFlag, metadataFlag, resourcesFlag));
         return;
       }
 
-      dumpLibSections(ml, all, dictFlag, manifestFlag, metaFlag, resourcesFlag, raw, os);
+      dumpLibSections(ml, all, dictionaryFlag, manifestFlag, metadataFlag, resourcesFlag, raw, os);
     }
   } // namespace
 
-  void setupLibCommand(CLI::App& app, CliContext& context)
+  void configureLibCommand(CLI::App& app, CliContext& context)
   {
     auto* lib = app.add_subcommand("lib", "Library management commands");
     lib->require_subcommand(1);
 
     lib->add_subcommand("show", "Show library information")
-      ->callback([&context] { show(context.musicLibrary(), context.options().format, context.io().out); });
+      ->callback([&context] { printMetadata(context.musicLibrary(), context.options().format, context.io().out); });
 
     lib->add_subcommand("stats", "Show library statistics")
       ->callback(
@@ -1412,19 +1412,19 @@ namespace ao::cli
       });
 
     auto* dumpCmd = lib->add_subcommand("dump", "Dump infrastructure databases");
-    auto* dumpDict = dumpCmd->add_flag("--dict", "dump dictionary only");
+    auto* dumpDictionary = dumpCmd->add_flag("--dict", "dump dictionary only");
     auto* dumpManifest = dumpCmd->add_flag("--manifest", "dump manifest only");
-    auto* dumpMeta = dumpCmd->add_flag("--meta", "dump meta only");
+    auto* dumpMetadataFlag = dumpCmd->add_flag("--meta", "dump metadata only");
     auto* dumpResources = dumpCmd->add_flag("--resources", "dump resources only");
     auto* dumpRaw = dumpCmd->add_flag("--raw", "hex dump raw bytes");
 
     dumpCmd->callback(
-      [&context, dumpDict, dumpManifest, dumpMeta, dumpResources, dumpRaw]
+      [&context, dumpDictionary, dumpManifest, dumpMetadataFlag, dumpResources, dumpRaw]
       {
         dumpLib(context.musicLibrary(),
-                dumpDict->count() > 0,
+                dumpDictionary->count() > 0,
                 dumpManifest->count() > 0,
-                dumpMeta->count() > 0,
+                dumpMetadataFlag->count() > 0,
                 dumpResources->count() > 0,
                 dumpRaw->count() > 0,
                 context.options().format,

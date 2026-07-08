@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "CorePrimitives.h"
 #include "TrackField.h"
 #include "TrackPresentation.h"
+#include "ViewIds.h"
 #include <ao/CoreIds.h>
 
 #include <cstdint>

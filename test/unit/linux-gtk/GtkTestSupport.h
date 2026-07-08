@@ -7,10 +7,10 @@
 #include "test/unit/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/Subscription.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <glib-object.h>
 #include <glibmm/main.h>
@@ -610,9 +610,9 @@ namespace ao::gtk::test
   }
 
   /**
-   * ManualTrackDetailMock - Manual mock for ITrackDetailProjection.
+   * ManualTrackDetailMock - Manual mock for TrackDetailProjection.
    */
-  class ManualTrackDetailMock final : public rt::ITrackDetailProjection
+  class ManualTrackDetailMock final : public rt::TrackDetailProjection
   {
   public:
     rt::TrackDetailSnapshot snapshot() const override { return _snap; }

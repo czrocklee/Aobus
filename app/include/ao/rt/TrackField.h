@@ -155,6 +155,6 @@ namespace ao::rt
   std::string_view trackFieldId(TrackField field);
 
   std::string_view trackFieldFilterExpressionVariable(TrackField field);
-  bool trackFieldSupportsFilterExpression(TrackField field);
-  bool trackFieldSupportsValueCompletion(TrackField field);
+  bool supportsTrackFieldFilterExpression(TrackField field);
+  bool supportsTrackFieldValueCompletion(TrackField field);
 } // namespace ao::rt

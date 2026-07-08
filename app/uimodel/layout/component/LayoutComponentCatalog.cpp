@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionBinding.h>
+#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 
 #include <algorithm>
@@ -29,7 +30,7 @@ namespace ao::uimodel
 
       auto optDefaultId = std::optional<std::string>{};
 
-      if (auto const id = descriptorPolicy.getDefault(slot); !id.empty())
+      if (auto const id = descriptorPolicy.defaultAction(slot); !id.empty())
       {
         optDefaultId = std::string{id};
       }

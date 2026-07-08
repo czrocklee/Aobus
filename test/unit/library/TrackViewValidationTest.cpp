@@ -124,7 +124,7 @@ namespace ao::library::test
     void expectVerifierRejects(std::vector<std::byte> const& data)
     {
       auto const reader = detail::TrackColdReader{data};
-      CHECK_FALSE(reader.valid());
+      CHECK_FALSE(reader.isValid());
     }
 
     /** The read gate must poison the whole cold side, record-granular. */
@@ -242,7 +242,7 @@ namespace ao::library::test
   {
     auto const data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
     auto const reader = detail::TrackColdReader{data};
-    REQUIRE(reader.valid());
+    REQUIRE(reader.isValid());
     CHECK(reader.classical().workId() == DictionaryId{1});
     CHECK(reader.classical().movementNumber() == 3);
   }

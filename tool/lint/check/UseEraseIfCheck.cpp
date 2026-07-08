@@ -3,7 +3,7 @@
 
 #include "check/UseEraseIfCheck.h"
 
-#include "check/AstUtil.h"
+#include "check/AstHelpers.h"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
@@ -55,8 +55,8 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const* arg0 = aobus::stripImplicitNodes(eraseCall->getArg(0));
-    auto const* removeCall = dyn_cast_or_null<CallExpr>(arg0);
+    auto const* firstArgument = aobus::stripImplicitNodes(eraseCall->getArg(0));
+    auto const* removeCall = dyn_cast_or_null<CallExpr>(firstArgument);
 
     if (removeCall == nullptr || removeCall->getNumArgs() < kMinArgsForRemoveCall)
     {
@@ -77,11 +77,11 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const* arg0Remove = aobus::stripImplicitNodes(removeCall->getArg(0));
-    auto const* arg1Remove = aobus::stripImplicitNodes(removeCall->getArg(1));
+    auto const* removeFirstArgument = aobus::stripImplicitNodes(removeCall->getArg(0));
+    auto const* removeSecondArgument = aobus::stripImplicitNodes(removeCall->getArg(1));
 
-    auto const* beginCall = dyn_cast_or_null<CXXMemberCallExpr>(arg0Remove);
-    auto const* endCall = dyn_cast_or_null<CXXMemberCallExpr>(arg1Remove);
+    auto const* beginCall = dyn_cast_or_null<CXXMemberCallExpr>(removeFirstArgument);
+    auto const* endCall = dyn_cast_or_null<CXXMemberCallExpr>(removeSecondArgument);
 
     if (beginCall == nullptr || endCall == nullptr)
     {
@@ -117,23 +117,23 @@ namespace clang::tidy::readability
 
     auto const& sm = *result.SourceManager;
     auto const& langOpts = result.Context->getLangOpts();
-    auto const argStr = aobus::getExprSourceText(*removeCall->getArg(2), sm, langOpts);
+    auto const argumentText = aobus::getExprSourceText(*removeCall->getArg(2), sm, langOpts);
 
-    if (argStr.empty())
+    if (argumentText.empty())
     {
       return;
     }
 
     if (calleeDecl->getName() == "remove_if")
     {
-      auto const replacement = "std::erase_if(" + containerStr + ", " + argStr + ")";
+      auto const replacement = "std::erase_if(" + containerStr + ", " + argumentText + ")";
 
       diag(eraseCall->getBeginLoc(), "use std::erase_if instead of erase-remove_if idiom")
         << FixItHint::CreateReplacement(eraseCall->getSourceRange(), replacement);
     }
     else
     {
-      auto const replacement = "std::erase(" + containerStr + ", " + argStr + ")";
+      auto const replacement = "std::erase(" + containerStr + ", " + argumentText + ")";
 
       diag(eraseCall->getBeginLoc(), "use std::erase instead of erase-remove idiom")
         << FixItHint::CreateReplacement(eraseCall->getSourceRange(), replacement);

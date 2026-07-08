@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/component/ILayoutComponentStateStore.h>
+#include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 
 #include <filesystem>
 #include <mutex>
@@ -18,7 +18,7 @@ namespace ao::uimodel
 
 namespace ao::gtk
 {
-  class ShellLayoutComponentStateStore final : public uimodel::ILayoutComponentStateStore
+  class ShellLayoutComponentStateStore final : public uimodel::LayoutComponentStateStore
   {
   public:
     explicit ShellLayoutComponentStateStore(std::filesystem::path stateDir);

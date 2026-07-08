@@ -2,7 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Signal.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/library/LibraryChanges.h>
 
 #include <cstddef>

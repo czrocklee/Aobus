@@ -3,7 +3,7 @@
 
 #include "check/UseStartsWithCheck.h"
 
-#include "check/AstUtil.h"
+#include "check/AstHelpers.h"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/DeclCXX.h>
@@ -77,10 +77,11 @@ namespace clang::tidy::readability
 
     if (argumentCount >= 2)
     {
-      auto const* posArg = findCall->getArg(1);
+      auto const* positionArgument = findCall->getArg(1);
 
-      if (auto evalResult = Expr::EvalResult{};
-          posArg == nullptr || !posArg->EvaluateAsInt(evalResult, *result.Context) || evalResult.Val.getInt() != 0)
+      if (auto evalResult = Expr::EvalResult{}; positionArgument == nullptr ||
+                                                !positionArgument->EvaluateAsInt(evalResult, *result.Context) ||
+                                                evalResult.Val.getInt() != 0)
       {
         return;
       }
@@ -94,10 +95,10 @@ namespace clang::tidy::readability
     auto const& sm = *result.SourceManager;
     auto const& langOpts = result.Context->getLangOpts();
 
-    auto const objStr = aobus::getExprSourceText(*obj, sm, langOpts);
-    auto const argStr = aobus::getExprSourceText(*findCall->getArg(0), sm, langOpts);
+    auto const objectText = aobus::getExprSourceText(*obj, sm, langOpts);
+    auto const argumentText = aobus::getExprSourceText(*findCall->getArg(0), sm, langOpts);
 
-    if (objStr.empty() || argStr.empty())
+    if (objectText.empty() || argumentText.empty())
     {
       return;
     }
@@ -108,11 +109,11 @@ namespace clang::tidy::readability
 
     if (isNegated)
     {
-      replacement = "!" + objStr + ".starts_with(" + argStr + ")";
+      replacement = "!" + objectText + ".starts_with(" + argumentText + ")";
     }
     else
     {
-      replacement = objStr + ".starts_with(" + argStr + ")";
+      replacement = objectText + ".starts_with(" + argumentText + ")";
     }
 
     diag(root->getBeginLoc(), "use std::starts_with instead of find-and-compare pattern")

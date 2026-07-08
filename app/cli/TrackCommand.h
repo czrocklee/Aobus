@@ -14,5 +14,5 @@ namespace ao::cli
 {
   class CliContext;
 
-  void setupTrackCommand(CLI::App& app, CliContext& context);
+  void configureTrackCommand(CLI::App& app, CliContext& context);
 }

@@ -89,7 +89,7 @@ namespace ao::tui
           return;
         }
 
-        if (auto const text = commandDisplayText(spec.prefix); rt::completionStartsWithInsensitive(text, prefix))
+        if (auto const text = commandDisplayText(spec.prefix); rt::startsWithCompletionPrefixInsensitive(text, prefix))
         {
           if (!appendItem(items, limit, "/" + std::string{text}, std::string{spec.prefix}, std::string{spec.detail}))
           {
@@ -105,7 +105,7 @@ namespace ao::tui
           return;
         }
 
-        if (rt::completionStartsWithInsensitive(spec.alias, prefix))
+        if (rt::startsWithCompletionPrefixInsensitive(spec.alias, prefix))
         {
           if (!appendItem(
                 items, limit, "/" + std::string{spec.alias}, std::string{spec.alias}, std::string{spec.detail}))
@@ -128,7 +128,7 @@ namespace ao::tui
           return;
         }
 
-        if (rt::completionStartsWithInsensitive(preset.spec.id, prefix))
+        if (rt::startsWithCompletionPrefixInsensitive(preset.spec.id, prefix))
         {
           if (!appendItem(items, limit, preset.spec.id, preset.spec.id, std::string{preset.label}))
           {
@@ -144,7 +144,7 @@ namespace ao::tui
           return;
         }
 
-        if (rt::completionStartsWithInsensitive(preset.spec.id, prefix))
+        if (rt::startsWithCompletionPrefixInsensitive(preset.spec.id, prefix))
         {
           if (!appendItem(items, limit, preset.spec.id, preset.spec.id, preset.label))
           {
@@ -166,7 +166,7 @@ namespace ao::tui
           return;
         }
 
-        if (rt::completionStartsWithInsensitive(artist.value, prefix))
+        if (rt::startsWithCompletionPrefixInsensitive(artist.value, prefix))
         {
           if (!appendItem(items, limit, artist.value, artist.value, "artist"))
           {
@@ -182,7 +182,7 @@ namespace ao::tui
           return;
         }
 
-        if (!list.completionText.empty() && rt::completionStartsWithInsensitive(list.completionText, prefix))
+        if (!list.completionText.empty() && rt::startsWithCompletionPrefixInsensitive(list.completionText, prefix))
         {
           if (!appendItem(items, limit, list.completionText, list.completionText, "list"))
           {
@@ -240,7 +240,7 @@ namespace ao::tui
 
     for (auto const& spec : commandPrefixSpecs())
     {
-      if (rt::completionStartsWithInsensitive(draft, spec.prefix))
+      if (rt::startsWithCompletionPrefixInsensitive(draft, spec.prefix))
       {
         auto const replaceBegin = argumentBegin(draft, spec.prefix);
         auto const argumentPrefix = draft.substr(replaceBegin);

@@ -12,7 +12,7 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/source/TrackSource.h>
 
@@ -32,12 +32,12 @@ namespace ao::gtk::test
   {
     ListId createList(library::MusicLibrary& library, std::string const& name, ListId parentId = kInvalidListId)
     {
-      auto txn = library.writeTransaction();
-      auto writer = library.lists().writer(txn);
-      auto builder = library::ListBuilder::createNew();
+      auto transaction = library.writeTransaction();
+      auto writer = library.lists().writer(transaction);
+      auto builder = library::ListBuilder::makeEmpty();
       builder.name(name).parentId(parentId);
       auto const listId = ao::test::requireValue(writer.create(builder.serialize())).first;
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
       return listId;
     }
 
@@ -48,8 +48,8 @@ namespace ao::gtk::test
 
     std::optional<library::ListView> findList(library::MusicLibrary& library, ListId listId)
     {
-      auto txn = library.readTransaction();
-      auto reader = library.lists().reader(txn);
+      auto transaction = library.readTransaction();
+      auto reader = library.lists().reader(transaction);
       return reader.get(listId);
     }
   } // namespace
@@ -73,7 +73,7 @@ namespace ao::gtk::test
                                             savedPresentationListId = id;
                                             savedPresentationId = std::move(presentationId);
                                           },
-                                          .getListPresentation = {}};
+                                          .listPresentationCallback = {}};
 
     auto themeController = ThemeCoordinator{};
     auto controller = ListNavigationController{window, fixture.runtime(), std::move(callbacks), themeController};

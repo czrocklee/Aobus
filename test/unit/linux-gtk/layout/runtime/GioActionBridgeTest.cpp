@@ -7,7 +7,9 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleactiongroup.h>
@@ -27,7 +29,7 @@ namespace ao::gtk::layout::test
 
   namespace
   {
-    class DummyContextProvider final : public IActionContextProvider
+    class DummyContextProvider final : public ActionContextProvider
     {
     public:
       DummyContextProvider(rt::AppRuntime& runtime, Gtk::Window& window, Gtk::Widget& widget)
@@ -35,7 +37,7 @@ namespace ao::gtk::layout::test
       {
       }
 
-      ActionActivationContext getActionContext(std::string_view componentId) override
+      ActionActivationContext actionContext(std::string_view componentId) override
       {
         return ActionActivationContext{.runtime = _runtime,
                                        .parentWindow = _window,

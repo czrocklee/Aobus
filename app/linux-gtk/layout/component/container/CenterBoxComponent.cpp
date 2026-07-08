@@ -3,7 +3,7 @@
 
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -26,14 +26,14 @@ namespace ao::gtk::layout
     /**
      * @brief A center box container component (Gtk::CenterBox).
      */
-    class CenterBoxComponent final : public ILayoutComponent
+    class CenterBoxComponent final : public LayoutComponent
     {
     public:
       CenterBoxComponent(LayoutContext& ctx, LayoutNode const& node)
       {
         auto orientation = Gtk::Orientation::HORIZONTAL;
 
-        if (node.getProp<std::string>("orientation", "") == "vertical")
+        if (node.propertyOr<std::string>("orientation", "") == "vertical")
         {
           orientation = Gtk::Orientation::VERTICAL;
         }
@@ -44,7 +44,7 @@ namespace ao::gtk::layout
         {
           auto childPtr = ctx.registry.create(ctx, childNode);
 
-          auto const slot = childNode.getLayout<std::string>("slot", "");
+          auto const slot = childNode.layoutOr<std::string>("slot", "");
 
           if (slot == "start")
           {
@@ -72,13 +72,13 @@ namespace ao::gtk::layout
 
     private:
       Gtk::CenterBox _centerBox;
-      std::unique_ptr<ILayoutComponent> _startChildPtr;
-      std::unique_ptr<ILayoutComponent> _centerChildPtr;
-      std::unique_ptr<ILayoutComponent> _endChildPtr;
-      std::vector<std::unique_ptr<ILayoutComponent>> _overflowChildren;
+      std::unique_ptr<LayoutComponent> _startChildPtr;
+      std::unique_ptr<LayoutComponent> _centerChildPtr;
+      std::unique_ptr<LayoutComponent> _endChildPtr;
+      std::vector<std::unique_ptr<LayoutComponent>> _overflowChildren;
     };
 
-    std::unique_ptr<ILayoutComponent> createCenterBox(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createCenterBox(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<CenterBoxComponent>(ctx, node);
     }

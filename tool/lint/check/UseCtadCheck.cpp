@@ -126,9 +126,9 @@ namespace clang::tidy::readability
 
       std::uint32_t count = 0;
 
-      for (auto const* arg : construct->arguments())
+      for (auto const* argument : construct->arguments())
       {
-        if (arg != nullptr && !isa<CXXDefaultArgExpr>(arg))
+        if (argument != nullptr && !isa<CXXDefaultArgExpr>(argument))
         {
           ++count;
         }
@@ -137,7 +137,7 @@ namespace clang::tidy::readability
       return count;
     }
 
-    Expr const* getSourceArg(CXXConstructExpr const* construct, std::uint32_t index)
+    Expr const* getSourceArgument(CXXConstructExpr const* construct, std::uint32_t index)
     {
       if (construct == nullptr)
       {
@@ -146,16 +146,16 @@ namespace clang::tidy::readability
 
       std::uint32_t sourceIndex = 0;
 
-      for (auto const* arg : construct->arguments())
+      for (auto const* argument : construct->arguments())
       {
-        if (arg == nullptr || isa<CXXDefaultArgExpr>(arg))
+        if (argument == nullptr || isa<CXXDefaultArgExpr>(argument))
         {
           continue;
         }
 
         if (sourceIndex == index)
         {
-          return arg;
+          return argument;
         }
 
         ++sourceIndex;
@@ -213,14 +213,14 @@ namespace clang::tidy::readability
     {
       for (std::uint32_t i = 0; i < tsLoc.getNumArgs(); ++i)
       {
-        auto const argLoc = tsLoc.getArgLoc(i);
+        auto const argumentLoc = tsLoc.getArgLoc(i);
 
-        if (argLoc.getArgument().getKind() != TemplateArgument::Type)
+        if (argumentLoc.getArgument().getKind() != TemplateArgument::Type)
         {
           continue;
         }
 
-        auto const range = argLoc.getSourceRange();
+        auto const range = argumentLoc.getSourceRange();
 
         if (range.isInvalid())
         {
@@ -269,14 +269,14 @@ namespace clang::tidy::readability
         return true;
       }
 
-      auto const* sourceArg = getSourceArg(construct, 0);
+      auto const* sourceArgument = getSourceArgument(construct, 0);
 
-      if (sourceArg == nullptr)
+      if (sourceArgument == nullptr)
       {
         return true;
       }
 
-      auto const* sourceExpr = sourceArg->IgnoreImplicit();
+      auto const* sourceExpr = sourceArgument->IgnoreImplicit();
 
       return sourceExpr == nullptr || !hasSameUnqualifiedCanonicalType(sourceExpr->getType(), valueType);
     }
@@ -297,8 +297,8 @@ namespace clang::tidy::readability
       }
 
       QualType const valueType = getFirstTemplateArgumentType(construct);
-      auto const* sourceArg = getSourceArg(construct, 0);
-      auto const* initList = findInitListExpr(sourceArg);
+      auto const* sourceArgument = getSourceArgument(construct, 0);
+      auto const* initList = findInitListExpr(sourceArgument);
 
       if (valueType.isNull() || initList == nullptr)
       {
@@ -317,26 +317,26 @@ namespace clang::tidy::readability
         return false;
       }
 
-      auto const* sourceArg0 = getSourceArg(construct, 0);
-      auto const* sourceArg1 = getSourceArg(construct, 1);
+      auto const* firstSourceArgument = getSourceArgument(construct, 0);
+      auto const* secondSourceArgument = getSourceArgument(construct, 1);
 
-      if (sourceArg0 == nullptr || sourceArg1 == nullptr)
+      if (firstSourceArgument == nullptr || secondSourceArgument == nullptr)
       {
         return false;
       }
 
-      auto const* arg0 = sourceArg0->IgnoreImplicit();
-      auto const* arg1 = sourceArg1->IgnoreImplicit();
+      auto const* firstExpression = firstSourceArgument->IgnoreImplicit();
+      auto const* secondExpression = secondSourceArgument->IgnoreImplicit();
 
-      if (arg0 == nullptr || arg1 == nullptr)
+      if (firstExpression == nullptr || secondExpression == nullptr)
       {
         return false;
       }
 
-      QualType const t0 = arg0->getType().getCanonicalType();
-      QualType const t1 = arg1->getType().getCanonicalType();
+      QualType const firstType = firstExpression->getType().getCanonicalType();
+      QualType const secondType = secondExpression->getType().getCanonicalType();
 
-      return (t0->isPointerType() || t0->isNullPtrType()) && t1->isIntegerType();
+      return (firstType->isPointerType() || firstType->isNullPtrType()) && secondType->isIntegerType();
     }
 
     bool isParenSizeConstructor(CXXConstructExpr const* construct)
@@ -347,21 +347,21 @@ namespace clang::tidy::readability
         return false;
       }
 
-      auto const* sourceArg0 = getSourceArg(construct, 0);
+      auto const* firstSourceArgument = getSourceArgument(construct, 0);
 
-      if (sourceArg0 == nullptr)
+      if (firstSourceArgument == nullptr)
       {
         return false;
       }
 
-      auto const* arg0 = sourceArg0->IgnoreImplicit();
+      auto const* firstExpression = firstSourceArgument->IgnoreImplicit();
 
-      if (arg0 == nullptr)
+      if (firstExpression == nullptr)
       {
         return false;
       }
 
-      return arg0->getType().getCanonicalType()->isIntegerType();
+      return firstExpression->getType().getCanonicalType()->isIntegerType();
     }
 
     bool isSingleSizeConstructor(CXXConstructExpr const* construct)
@@ -372,21 +372,21 @@ namespace clang::tidy::readability
         return false;
       }
 
-      auto const* sourceArg0 = getSourceArg(construct, 0);
+      auto const* firstSourceArgument = getSourceArgument(construct, 0);
 
-      if (sourceArg0 == nullptr)
+      if (firstSourceArgument == nullptr)
       {
         return false;
       }
 
-      auto const* arg0 = sourceArg0->IgnoreImplicit();
+      auto const* firstExpression = firstSourceArgument->IgnoreImplicit();
 
-      if (arg0 == nullptr)
+      if (firstExpression == nullptr)
       {
         return false;
       }
 
-      return arg0->getType().getCanonicalType()->isIntegerType();
+      return firstExpression->getType().getCanonicalType()->isIntegerType();
     }
 
     bool isSingleSameTypeConstructor(CXXConstructExpr const* construct)
@@ -396,21 +396,21 @@ namespace clang::tidy::readability
         return false;
       }
 
-      auto const* sourceArg0 = getSourceArg(construct, 0);
+      auto const* firstSourceArgument = getSourceArgument(construct, 0);
 
-      if (sourceArg0 == nullptr)
+      if (firstSourceArgument == nullptr)
       {
         return false;
       }
 
-      auto const* arg0 = sourceArg0->IgnoreImplicit();
+      auto const* firstExpression = firstSourceArgument->IgnoreImplicit();
 
-      if (arg0 == nullptr)
+      if (firstExpression == nullptr)
       {
         return false;
       }
 
-      return hasSameUnqualifiedCanonicalType(arg0->getType(), construct->getType());
+      return hasSameUnqualifiedCanonicalType(firstExpression->getType(), construct->getType());
     }
 
     bool isPairWithTypeChangingArgs(CXXConstructExpr const* construct)
@@ -430,14 +430,14 @@ namespace clang::tidy::readability
       for (std::uint32_t i = 0; i < sourceArgCount; ++i)
       {
         QualType const targetType = getTemplateArgumentType(construct, i);
-        auto const* sourceArg = getSourceArg(construct, i);
+        auto const* sourceArgument = getSourceArgument(construct, i);
 
-        if (targetType.isNull() || sourceArg == nullptr)
+        if (targetType.isNull() || sourceArgument == nullptr)
         {
           return true;
         }
 
-        if (auto const* sourceExpr = sourceArg->IgnoreImplicit();
+        if (auto const* sourceExpr = sourceArgument->IgnoreImplicit();
             sourceExpr == nullptr || !hasSameUnqualifiedCanonicalType(sourceExpr->getType(), targetType))
         {
           return true;
@@ -454,14 +454,14 @@ namespace clang::tidy::readability
         return false;
       }
 
-      QualType paramType = ctor->getParamDecl(0)->getType();
+      QualType parameterType = ctor->getParamDecl(0)->getType();
 
-      if (paramType->isReferenceType())
+      if (parameterType->isReferenceType())
       {
-        paramType = paramType->getPointeeType();
+        parameterType = parameterType->getPointeeType();
       }
 
-      auto const* record = paramType->getAsCXXRecordDecl();
+      auto const* record = parameterType->getAsCXXRecordDecl();
 
       return record != nullptr && record->getQualifiedNameAsString() == "std::initializer_list";
     }
@@ -488,11 +488,11 @@ namespace clang::tidy::readability
 
     constexpr std::int32_t kMaxTypeReferencesDepth = 64;
 
-    bool typeReferencesTemplateParam(QualType type, TemplateTypeParmDecl const* param, std::int32_t depth = 0);
+    bool referencesTemplateParameter(QualType type, TemplateTypeParmDecl const* parameter, std::int32_t depth = 0);
 
-    bool templateSpecializationArgsReferenceTemplateParam(TemplateSpecializationType const* tst,
-                                                          TemplateTypeParmDecl const* param,
-                                                          std::int32_t depth)
+    bool referencesTemplateParameter(TemplateSpecializationType const* tst,
+                                     TemplateTypeParmDecl const* parameter,
+                                     std::int32_t depth)
     {
       if (tst == nullptr)
       {
@@ -500,16 +500,16 @@ namespace clang::tidy::readability
       }
 
       return std::ranges::any_of(tst->template_arguments(),
-                                 [param, depth](TemplateArgument const& arg)
+                                 [parameter, depth](TemplateArgument const& argument)
                                  {
-                                   return arg.getKind() == TemplateArgument::Type &&
-                                          typeReferencesTemplateParam(arg.getAsType(), param, depth + 1);
+                                   return argument.getKind() == TemplateArgument::Type &&
+                                          referencesTemplateParameter(argument.getAsType(), parameter, depth + 1);
                                  });
     }
 
-    bool classTemplateArgsReferenceTemplateParam(ClassTemplateSpecializationDecl const* spec,
-                                                 TemplateTypeParmDecl const* param,
-                                                 std::int32_t depth)
+    bool referencesTemplateParameter(ClassTemplateSpecializationDecl const* spec,
+                                     TemplateTypeParmDecl const* parameter,
+                                     std::int32_t depth)
     {
       if (spec == nullptr)
       {
@@ -521,7 +521,7 @@ namespace clang::tidy::readability
       for (std::uint32_t i = 0; i < args.size(); ++i)
       {
         if (args[i].getKind() == TemplateArgument::Type &&
-            typeReferencesTemplateParam(args[i].getAsType(), param, depth + 1))
+            referencesTemplateParameter(args[i].getAsType(), parameter, depth + 1))
         {
           return true;
         }
@@ -542,9 +542,9 @@ namespace clang::tidy::readability
     }
 
     // Recursively check whether a QualType references a given TemplateTypeParmDecl.
-    bool typeReferencesTemplateParam(QualType type, TemplateTypeParmDecl const* param, std::int32_t depth)
+    bool referencesTemplateParameter(QualType type, TemplateTypeParmDecl const* parameter, std::int32_t depth)
     {
-      if (type.isNull() || param == nullptr || depth > kMaxTypeReferencesDepth)
+      if (type.isNull() || parameter == nullptr || depth > kMaxTypeReferencesDepth)
       {
         return false;
       }
@@ -554,7 +554,7 @@ namespace clang::tidy::readability
       // Direct match: the type *is* the template parameter.
       if (auto const* parmType = type->getAs<TemplateTypeParmType>(); parmType != nullptr)
       {
-        return parmType->getDepth() == param->getDepth() && parmType->getIndex() == param->getIndex();
+        return parmType->getDepth() == parameter->getDepth() && parmType->getIndex() == parameter->getIndex();
       }
 
       if (auto const* substParmType = type->getAs<SubstTemplateTypeParmType>(); substParmType != nullptr)
@@ -566,36 +566,35 @@ namespace clang::tidy::readability
           return false;
         }
 
-        return (replaced->getDepth() == param->getDepth() && replaced->getIndex() == param->getIndex()) ||
-               typeReferencesTemplateParam(substParmType->getReplacementType(), param, depth + 1);
+        return (replaced->getDepth() == parameter->getDepth() && replaced->getIndex() == parameter->getIndex()) ||
+               referencesTemplateParameter(substParmType->getReplacementType(), parameter, depth + 1);
       }
 
       // Pointer / array element type.
       if (type->isPointerType() || type->isArrayType())
       {
-        return typeReferencesTemplateParam(
-          type->getPointeeOrArrayElementType()->getCanonicalTypeInternal(), param, depth + 1);
+        return referencesTemplateParameter(
+          type->getPointeeOrArrayElementType()->getCanonicalTypeInternal(), parameter, depth + 1);
       }
 
       // Template specialization: check each template argument recursively.
       // Alias templates are not generally deducible in CTAD, so be conservative and do not
       // consider a parameter deducible merely because it appears in an alias template argument list.
       if (auto const* tst = type->getAs<TemplateSpecializationType>();
-          isNonAliasTemplateSpecialization(tst) && templateSpecializationArgsReferenceTemplateParam(tst, param, depth))
+          isNonAliasTemplateSpecialization(tst) && referencesTemplateParameter(tst, parameter, depth))
       {
         return true;
       }
 
       // Also try the desugared RecordType path (for type aliases / elaborated types).
-      if (auto const* spec = getTemplateSpecialization(type);
-          classTemplateArgsReferenceTemplateParam(spec, param, depth))
+      if (auto const* spec = getTemplateSpecialization(type); referencesTemplateParameter(spec, parameter, depth))
       {
         return true;
       }
 
       auto const desugared = type->getLocallyUnqualifiedSingleStepDesugaredType();
 
-      return desugared != type && typeReferencesTemplateParam(desugared, param, depth + 1);
+      return desugared != type && referencesTemplateParameter(desugared, parameter, depth + 1);
     }
 
     bool isSameTemplateArgument(TemplateArgument const& lhs, TemplateArgument const& rhs)
@@ -649,9 +648,9 @@ namespace clang::tidy::readability
                                               TemplateTypeParmDecl const* typeParm,
                                               std::uint32_t explicitTemplateArgCount)
     {
-      auto const paramIndex = typeParm->getIndex();
+      auto const parameterIndex = typeParm->getIndex();
 
-      if (paramIndex >= explicitTemplateArgCount)
+      if (parameterIndex >= explicitTemplateArgCount)
       {
         return false;
       }
@@ -663,12 +662,12 @@ namespace clang::tidy::readability
 
       auto const& args = spec->getTemplateArgs();
 
-      if (args.size() <= paramIndex)
+      if (args.size() <= parameterIndex)
       {
         return true;
       }
 
-      return !isSameTemplateArgument(args[paramIndex], typeParm->getDefaultArgument().getArgument());
+      return !isSameTemplateArgument(args[parameterIndex], typeParm->getDefaultArgument().getArgument());
     }
 
     CXXConstructorDecl const* getPrimaryConstructorPattern(CXXConstructorDecl const* ctor)
@@ -695,14 +694,14 @@ namespace clang::tidy::readability
     {
       if (auto const* ctorTemplate = primaryCtor->getDescribedTemplate(); ctorTemplate != nullptr)
       {
-        auto const* ctorParams = ctorTemplate->getTemplateParameters();
+        auto const* ctorParameters = ctorTemplate->getTemplateParameters();
 
-        if (ctorParams != nullptr)
+        if (ctorParameters != nullptr)
         {
-          return std::ranges::any_of(*ctorParams,
-                                     [](NamedDecl const* ctorParam)
+          return std::ranges::any_of(*ctorParameters,
+                                     [](NamedDecl const* ctorParameter)
                                      {
-                                       auto const* ctorTypeParm = dyn_cast<TemplateTypeParmDecl>(ctorParam);
+                                       auto const* ctorTypeParm = dyn_cast<TemplateTypeParmDecl>(ctorParameter);
                                        return ctorTypeParm != nullptr && ctorTypeParm->isParameterPack();
                                      });
         }
@@ -716,7 +715,7 @@ namespace clang::tidy::readability
     {
       for (std::uint32_t i = 0; i < primaryCtor->getNumParams(); ++i)
       {
-        if (typeReferencesTemplateParam(primaryCtor->getParamDecl(i)->getType(), typeParm))
+        if (referencesTemplateParameter(primaryCtor->getParamDecl(i)->getType(), typeParm))
         {
           return true;
         }
@@ -757,9 +756,9 @@ namespace clang::tidy::readability
         return false;
       }
 
-      auto const* paramList = tmpl->getTemplateParameters();
+      auto const* parameterList = tmpl->getTemplateParameters();
 
-      if (paramList == nullptr)
+      if (parameterList == nullptr)
       {
         return false;
       }
@@ -777,7 +776,7 @@ namespace clang::tidy::readability
       auto const* primaryCtor = getPrimaryConstructorPattern(ctor);
 
       return std::ranges::any_of(
-        *paramList,
+        *parameterList,
         [&](NamedDecl const* namedDecl)
         {
           auto const* typeParm = dyn_cast<TemplateTypeParmDecl>(namedDecl);

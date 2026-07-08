@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 
 #include <map>
 #include <string>
@@ -21,7 +21,7 @@ namespace ao::uimodel
 
     constexpr bool allows(LayoutActionSlot const slot) const { return (slotMask & slotBit(slot)) != 0; }
 
-    std::string_view getDefault(LayoutActionSlot const slot) const
+    std::string_view defaultAction(LayoutActionSlot const slot) const
     {
       if (auto const it = defaultActionIds.find(slot); it != defaultActionIds.end())
       {

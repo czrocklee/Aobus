@@ -5,7 +5,7 @@
 #include "lib/tag/mpeg/FrameLayout.h"
 #include "lib/tag/mpeg/id3v2/Layout.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
@@ -248,21 +248,21 @@ namespace ao::tag::mpeg::test
     auto const file = File{temp.path};
     auto builder = loadTrack(file);
 
-    auto const meta = builder.metadata();
-    CHECK(meta.title() == "Title");
-    CHECK(meta.artist() == "Artist");
-    CHECK(meta.album() == "Album");
-    CHECK(meta.conductor() == "Conductor");
-    CHECK(meta.year() == 2024);
-    CHECK(meta.trackNumber() == 1);
-    CHECK(meta.trackTotal() == 10);
-    CHECK(meta.genre() == "Genre");
-    CHECK(meta.work() == "WorkName");
-    CHECK(meta.movement() == "MovementName");
-    CHECK(meta.ensemble() == "Ensemble");
-    CHECK(meta.soloist() == "Soloist");
-    CHECK(meta.movementNumber() == 2);
-    CHECK(meta.movementTotal() == 4);
+    auto const metadata = builder.metadata();
+    CHECK(metadata.title() == "Title");
+    CHECK(metadata.artist() == "Artist");
+    CHECK(metadata.album() == "Album");
+    CHECK(metadata.conductor() == "Conductor");
+    CHECK(metadata.year() == 2024);
+    CHECK(metadata.trackNumber() == 1);
+    CHECK(metadata.trackTotal() == 10);
+    CHECK(metadata.genre() == "Genre");
+    CHECK(metadata.work() == "WorkName");
+    CHECK(metadata.movement() == "MovementName");
+    CHECK(metadata.ensemble() == "Ensemble");
+    CHECK(metadata.soloist() == "Soloist");
+    CHECK(metadata.movementNumber() == 2);
+    CHECK(metadata.movementTotal() == 4);
 
     CHECK(builder.customMetadata().pairs().empty());
 
@@ -295,16 +295,16 @@ namespace ao::tag::mpeg::test
   {
     auto const file = File{audio::test::requireAudioFixture("basic_metadata.mp3")};
     auto builder = loadTrack(file);
-    auto const meta = builder.metadata();
+    auto const metadata = builder.metadata();
 
-    CHECK(meta.title() == "Test Title");
-    CHECK(meta.artist() == "Test Artist");
-    CHECK(meta.album() == "Test Album");
-    CHECK(meta.genre() == "Rock");
-    CHECK(meta.composer() == "Test Composer");
-    CHECK(meta.work() == "Symphony No. 5");
-    CHECK(meta.trackNumber() == 1);
-    CHECK(meta.year() == 2024);
+    CHECK(metadata.title() == "Test Title");
+    CHECK(metadata.artist() == "Test Artist");
+    CHECK(metadata.album() == "Test Album");
+    CHECK(metadata.genre() == "Rock");
+    CHECK(metadata.composer() == "Test Composer");
+    CHECK(metadata.work() == "Symphony No. 5");
+    CHECK(metadata.trackNumber() == 1);
+    CHECK(metadata.year() == 2024);
   }
 
   TEST_CASE("MPEG File - audio payload range trims leading and trailing tags", "[tag][unit][mpeg][file]")
@@ -437,10 +437,10 @@ namespace ao::tag::mpeg::test
     auto const temp = TempFile{data};
     auto const file = File{temp.path};
     auto const builder = loadTrack(file);
-    auto const meta = builder.metadata();
+    auto const metadata = builder.metadata();
 
-    CHECK(meta.title() == longTitle);
-    CHECK(meta.artist() == "Artist");
+    CHECK(metadata.title() == longTitle);
+    CHECK(metadata.artist() == "Artist");
   }
 
   TEST_CASE("MPEG File - decodes ID3v2.4 UTF-8 and UTF-16BE text", "[tag][unit][mpeg][id3v2]")

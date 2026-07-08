@@ -47,7 +47,7 @@ namespace ao::gtk::layout
 
     std::optional<TrackDetailCustomMetadataUndo> const& pendingCustomMetadataUndo() const;
 
-    void showCustomMetadataDeleted(std::string key, std::vector<TrackId> trackIds, std::string value);
+    void presentCustomMetadataDeletedUndo(std::string key, std::vector<TrackId> trackIds, std::string value);
     void clearIfAffectsCustomMetadata(std::string_view key, std::vector<TrackId> const& trackIds);
     void clear();
     void undo();

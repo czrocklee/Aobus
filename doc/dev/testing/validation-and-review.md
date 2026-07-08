@@ -8,7 +8,7 @@ When creating a new test file:
 2. Add it to the correct target in `test/CMakeLists.txt`.
 3. Match namespace and include style of neighboring tests.
 4. Include only headers that are used.
-5. Check existing `*TestSupport.h` files and layer utilities such as `test/unit/RuntimeTestUtils.h` before creating a new shared helper.
+5. Check existing `*TestSupport.h` files and layer utilities such as `test/unit/RuntimeTestSupport.h` before creating a new shared helper.
 6. Keep file-scope helpers local unless multiple files need them.
 7. Do not create duplicate helper types and hide the conflict in a nested namespace; reuse or extend the existing helper instead.
 

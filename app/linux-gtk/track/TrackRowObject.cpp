@@ -59,26 +59,26 @@ namespace ao::gtk
 
   Glib::ustring const* TrackRowObject::stringField(rt::TrackField field) const noexcept
   {
-    auto const idx = static_cast<std::size_t>(field);
+    auto const index = static_cast<std::size_t>(field);
 
-    if (idx >= _text.size() || !isTextBackedField(field))
+    if (index >= _text.size() || !isTextBackedField(field))
     {
       return nullptr;
     }
 
-    return &_text.at(idx);
+    return &_text.at(index);
   }
 
   bool TrackRowObject::setStringField(rt::TrackField field, Glib::ustring const& value)
   {
-    auto const idx = static_cast<std::size_t>(field);
+    auto const index = static_cast<std::size_t>(field);
 
-    if (idx >= _text.size() || !isTextBackedField(field))
+    if (index >= _text.size() || !isTextBackedField(field))
     {
       return false;
     }
 
-    _text.at(idx) = value;
+    _text.at(index) = value;
     return true;
   }
 
@@ -153,9 +153,9 @@ namespace ao::gtk
   {
     static_assert(rt::kTrackFieldCount <= 32, "_computedFilled bitmask only covers up to 32 fields");
 
-    auto const idx = static_cast<std::size_t>(field);
+    auto const index = static_cast<std::size_t>(field);
 
-    if (idx >= _text.size())
+    if (index >= _text.size())
     {
       return nullptr;
     }
@@ -164,22 +164,22 @@ namespace ao::gtk
     // source of truth and never goes through the computed cache.
     if (isTextBackedField(field))
     {
-      return &_text.at(idx);
+      return &_text.at(index);
     }
 
     // UI-thread only. Computed field: format once into the slot and remember it
     // via the filled bit (so an empty formatter result is cached too, not re-run
     // every bind).
-    if (auto const bit = std::uint32_t{1} << idx; (_computedFilled & bit) == 0)
+    if (auto const bit = std::uint32_t{1} << index; (_computedFilled & bit) == 0)
     {
       auto const* uiDef = trackFieldUiDefinition(field);
-      _text.at(idx) = (uiDef != nullptr && uiDef->readRowText != nullptr)
-                        ? Glib::ustring{uiDef->readRowText(*this, *_provider)}
-                        : Glib::ustring{};
+      _text.at(index) = (uiDef != nullptr && uiDef->readRowText != nullptr)
+                          ? Glib::ustring{uiDef->readRowText(*this, *_provider)}
+                          : Glib::ustring{};
       _computedFilled |= bit;
     }
 
-    return &_text.at(idx);
+    return &_text.at(index);
   }
 
   Glib::ustring TrackRowObject::fieldText(rt::TrackField field) const

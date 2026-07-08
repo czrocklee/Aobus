@@ -3,9 +3,10 @@
 
 #pragma once
 
-#include <ao/audio/Backend.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/Subscription.h>
 
 #include <cstdint>
 #include <functional>

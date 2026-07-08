@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -59,9 +59,9 @@ namespace ao::rt::test
         REQUIRE(trackIds.size() == 1);
         CHECK(trackIds[0] == trackId);
 
-        auto txn = testLib.library().readTransaction();
+        auto transaction = testLib.library().readTransaction();
         auto const optView =
-          testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+          testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
         REQUIRE(optView);
         observedTitle = std::string{optView->metadata().title()};
       });
@@ -123,15 +123,15 @@ namespace ao::rt::test
     REQUIRE(result);
     CHECK_FALSE(result->mutatedIds.empty());
 
-    auto const txn = testLib.library().readTransaction();
+    auto const transaction = testLib.library().readTransaction();
     auto const optView =
-      testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
-    auto const& dict = testLib.library().dictionary();
-    CHECK(dict.get(optView->classical().conductorId()) == "Conductor");
-    CHECK(dict.get(optView->classical().ensembleId()) == "Ensemble");
-    CHECK(dict.get(optView->classical().movementId()) == "Movement");
-    CHECK(dict.get(optView->classical().soloistId()) == "Soloist");
+    auto const& dictionary = testLib.library().dictionary();
+    CHECK(dictionary.get(optView->classical().conductorId()) == "Conductor");
+    CHECK(dictionary.get(optView->classical().ensembleId()) == "Ensemble");
+    CHECK(dictionary.get(optView->classical().movementId()) == "Movement");
+    CHECK(dictionary.get(optView->classical().soloistId()) == "Soloist");
   }
 
   TEST_CASE("LibraryWriter - updateMetadata applies and removes custom metadata", "[runtime][unit][library][mutation]")
@@ -149,9 +149,9 @@ namespace ao::rt::test
       patch.customUpdates["MyKey"] = "MyValue";
       REQUIRE(service.updateMetadata(targetIds, patch));
 
-      auto const txn = testLib.library().readTransaction();
+      auto const transaction = testLib.library().readTransaction();
       auto const optView =
-        testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+        testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       auto const custom = optView->customMetadata();
       CHECK(std::ranges::distance(custom) == 1);
@@ -176,9 +176,9 @@ namespace ao::rt::test
         REQUIRE(service.updateMetadata(targetIds, patch));
       }
 
-      auto const txn = testLib.library().readTransaction();
+      auto const transaction = testLib.library().readTransaction();
       auto const optView =
-        testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+        testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       CHECK(std::ranges::distance(optView->customMetadata()) == 0);
     }
@@ -207,9 +207,9 @@ namespace ao::rt::test
 
     CHECK(mutated.empty());
 
-    auto const txn = testLib.library().readTransaction();
+    auto const transaction = testLib.library().readTransaction();
     auto const optView =
-      testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
     CHECK(std::ranges::distance(optView->customMetadata()) == 0);
   }

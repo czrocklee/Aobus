@@ -15,18 +15,18 @@ namespace ao::gtk::layout
 {
   using LayoutPresetId = GtkLayoutPresetId;
 
-  inline uimodel::LayoutDocument createDefaultLayout()
+  inline uimodel::LayoutDocument makeDefaultLayout()
   {
-    return createDefaultGtkLayout();
+    return makeDefaultGtkLayout();
   }
 
-  inline uimodel::LayoutDocument createBuiltInLayout(LayoutPresetId presetId)
+  inline uimodel::LayoutDocument makeBuiltInLayout(LayoutPresetId presetId)
   {
-    return createBuiltInGtkLayout(presetId);
+    return makeBuiltInGtkLayout(presetId);
   }
 
-  inline std::map<std::string, uimodel::LayoutNode, std::less<>> getBuiltInTemplates()
+  inline std::map<std::string, uimodel::LayoutNode, std::less<>> builtInTemplates()
   {
-    return getBuiltInGtkTemplates();
+    return builtInGtkTemplates();
   }
 } // namespace ao::gtk::layout

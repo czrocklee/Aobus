@@ -99,7 +99,7 @@ namespace ao::library
     std::span<std::byte const> rawData() const noexcept { return _payload; }
 
   private:
-    std::string_view getString(std::uint16_t offset, std::uint16_t length) const noexcept;
+    std::string_view stringAt(std::uint16_t offset, std::uint16_t length) const noexcept;
 
     std::span<std::byte const> _payload;
     ListHeader const* _header = nullptr;

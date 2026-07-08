@@ -73,9 +73,9 @@ namespace ao::uimodel
     rt::CustomTrackPresentationPreset collectState(std::string_view generatedId) const;
 
   private:
-    static std::vector<TrackGroupKeyOption> createGroupOptions();
-    static std::vector<TrackSortFieldOption> createSortFieldOptions();
-    static std::vector<TrackVisibleFieldOption> createVisibleFieldOptions();
+    static std::vector<TrackGroupKeyOption> makeGroupOptions();
+    static std::vector<TrackSortFieldOption> makeSortFieldOptions();
+    static std::vector<TrackVisibleFieldOption> makeVisibleFieldOptions();
 
     std::string _label;
     rt::TrackGroupKey _groupKey = rt::TrackGroupKey::None;

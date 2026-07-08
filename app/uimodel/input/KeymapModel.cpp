@@ -40,7 +40,7 @@ namespace ao::uimodel
 
       for (auto const& text : chordStrings)
       {
-        if (auto optChord = KeyChord::parse(text); optChord && optChord->valid())
+        if (auto optChord = KeyChord::parse(text); optChord && optChord->isValid())
         {
           if (!containsChord(chords, *optChord))
           {
@@ -135,7 +135,7 @@ namespace ao::uimodel
 
   bool KeymapModel::bind(std::string actionId, KeyChord chord)
   {
-    if (!chord.valid())
+    if (!chord.isValid())
     {
       return false;
     }

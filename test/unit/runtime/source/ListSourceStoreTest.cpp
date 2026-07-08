@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
@@ -53,11 +53,12 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto txn = testLib.library().writeTransaction();
-        auto builder = ListBuilder::createNew();
+        auto transaction = testLib.library().writeTransaction();
+        auto builder = ListBuilder::makeEmpty();
         builder.name("ManualList");
-        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
-        REQUIRE(txn.commit());
+        listId =
+          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+        REQUIRE(transaction.commit());
       }
 
       auto& source = store.sourceFor(listId);
@@ -72,12 +73,13 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto txn = testLib.library().writeTransaction();
-        auto builder = ListBuilder::createNew();
+        auto transaction = testLib.library().writeTransaction();
+        auto builder = ListBuilder::makeEmpty();
         builder.name("SmartList");
         builder.filter("title == \"foo\"");
-        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
-        REQUIRE(txn.commit());
+        listId =
+          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+        REQUIRE(transaction.commit());
       }
 
       auto& source = store.sourceFor(listId);
@@ -123,11 +125,12 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto txn = testLib.library().writeTransaction();
-        auto builder = ListBuilder::createNew();
+        auto transaction = testLib.library().writeTransaction();
+        auto builder = ListBuilder::makeEmpty();
         builder.name("Manual");
-        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
-        REQUIRE(txn.commit());
+        listId =
+          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+        REQUIRE(transaction.commit());
       }
 
       auto& source = store.sourceFor(listId);
@@ -137,12 +140,12 @@ namespace ao::rt::test
       store.reloadAllTracks(); // ensure parent source has it
 
       {
-        auto txn = testLib.library().writeTransaction();
-        auto optView = testLib.library().lists().reader(txn).get(listId);
+        auto transaction = testLib.library().writeTransaction();
+        auto optView = testLib.library().lists().reader(transaction).get(listId);
         auto builder = ListBuilder::fromView(*optView);
         builder.tracks().add(t1);
-        CHECK(testLib.library().lists().writer(txn).update(listId, builder.serialize()));
-        REQUIRE(txn.commit());
+        CHECK(testLib.library().lists().writer(transaction).update(listId, builder.serialize()));
+        REQUIRE(transaction.commit());
       }
 
       store.refreshList(listId);
@@ -154,12 +157,13 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto txn = testLib.library().writeTransaction();
-        auto builder = ListBuilder::createNew();
+        auto transaction = testLib.library().writeTransaction();
+        auto builder = ListBuilder::makeEmpty();
         builder.name("Smart");
         builder.filter("$year >= 2020");
-        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
-        REQUIRE(txn.commit());
+        listId =
+          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+        REQUIRE(transaction.commit());
       }
 
       auto& source = store.sourceFor(listId);
@@ -184,19 +188,20 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto txn = testLib.library().writeTransaction();
-        auto builder = ListBuilder::createNew();
+        auto transaction = testLib.library().writeTransaction();
+        auto builder = ListBuilder::makeEmpty();
         builder.name("DeleteMe");
-        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
-        REQUIRE(txn.commit());
+        listId =
+          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+        REQUIRE(transaction.commit());
       }
 
       store.sourceFor(listId);
 
       {
-        auto txn = testLib.library().writeTransaction();
-        testLib.library().lists().writer(txn).remove(listId);
-        REQUIRE(txn.commit());
+        auto transaction = testLib.library().writeTransaction();
+        testLib.library().lists().writer(transaction).remove(listId);
+        REQUIRE(transaction.commit());
       }
 
       // refreshList should detect the missing list and erase it from _sources
@@ -214,24 +219,24 @@ namespace ao::rt::test
       auto grandchildId = ListId{0};
 
       {
-        auto txn = testLib.library().writeTransaction();
-        auto writer = testLib.library().lists().writer(txn);
+        auto transaction = testLib.library().writeTransaction();
+        auto writer = testLib.library().lists().writer(transaction);
 
-        auto parentBuilder = ListBuilder::createNew();
+        auto parentBuilder = ListBuilder::makeEmpty();
         parentBuilder.name("Parent");
         parentId = ao::test::requireValue(writer.create(parentBuilder.serialize())).first;
 
-        auto childBuilder = ListBuilder::createNew();
+        auto childBuilder = ListBuilder::makeEmpty();
         childBuilder.name("Child");
         childBuilder.parentId(parentId);
         childId = ao::test::requireValue(writer.create(childBuilder.serialize())).first;
 
-        auto grandchildBuilder = ListBuilder::createNew();
+        auto grandchildBuilder = ListBuilder::makeEmpty();
         grandchildBuilder.name("Grandchild");
         grandchildBuilder.parentId(childId);
         grandchildId = ao::test::requireValue(writer.create(grandchildBuilder.serialize())).first;
 
-        REQUIRE(txn.commit());
+        REQUIRE(transaction.commit());
       }
 
       // Build the hierarchy in ListSourceStore
@@ -240,11 +245,11 @@ namespace ao::rt::test
       store.sourceFor(grandchildId);
 
       {
-        auto txn = testLib.library().writeTransaction();
-        testLib.library().lists().writer(txn).remove(grandchildId);
-        testLib.library().lists().writer(txn).remove(childId);
-        testLib.library().lists().writer(txn).remove(parentId);
-        REQUIRE(txn.commit());
+        auto transaction = testLib.library().writeTransaction();
+        testLib.library().lists().writer(transaction).remove(grandchildId);
+        testLib.library().lists().writer(transaction).remove(childId);
+        testLib.library().lists().writer(transaction).remove(parentId);
+        REQUIRE(transaction.commit());
       }
 
       store.eraseList(parentId);
@@ -259,11 +264,12 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto txn = testLib.library().writeTransaction();
-        auto builder = ListBuilder::createNew();
+        auto transaction = testLib.library().writeTransaction();
+        auto builder = ListBuilder::makeEmpty();
         builder.name("ToErase");
-        listId = ao::test::requireValue(testLib.library().lists().writer(txn).create(builder.serialize())).first;
-        REQUIRE(txn.commit());
+        listId =
+          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+        REQUIRE(transaction.commit());
       }
 
       store.sourceFor(listId);

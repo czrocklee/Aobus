@@ -3,7 +3,7 @@
 
 #include "ActivityStatusFeedState.h"
 
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -233,7 +233,7 @@ namespace ao::uimodel
     }
 
     if (auto const persistentKind = isPersistentCompact(_state.compact.kind);
-        persistentKind && compactSourceStillExists(_state.compact, feed) && !compactSourceIsDismissed(_state.compact))
+        persistentKind && hasPresentedCompactSource(_state.compact, feed) && !isCompactSourceDismissed(_state.compact))
     {
       projectPersistentCompact(feed);
       return;
@@ -252,7 +252,7 @@ namespace ao::uimodel
 
       bool const sourceStillValid =
         previousCompact.sourceNotificationIds.empty() ||
-        (compactSourceStillExists(previousCompact, feed) && !compactSourceIsDismissed(previousCompact));
+        (hasPresentedCompactSource(previousCompact, feed) && !isCompactSourceDismissed(previousCompact));
 
       if (_state.compact.kind == ActivityStatusKind::Idle && sourceStillValid)
       {
@@ -288,7 +288,7 @@ namespace ao::uimodel
 
     if (_state.compact.kind == ActivityStatusKind::Idle)
     {
-      showNotificationCompact(*iter);
+      projectNotificationCompact(*iter);
     }
   }
 
@@ -317,7 +317,7 @@ namespace ao::uimodel
 
     if (_state.compact.kind == ActivityStatusKind::Idle)
     {
-      showCompletionCompact(count);
+      projectCompletionCompact(count);
     }
   }
 
@@ -328,8 +328,8 @@ namespace ao::uimodel
     projectDetail(feed);
   }
 
-  void ActivityStatusFeedState::hideDetailNotificationFromActivity(rt::NotificationId const id,
-                                                                   rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::dismissDetailNotificationFromActivity(rt::NotificationId const id,
+                                                                      rt::NotificationFeedState const& feed)
   {
     auto const iter = std::ranges::find(feed.entries, id, &rt::NotificationEntry::id);
 
@@ -444,7 +444,7 @@ namespace ao::uimodel
         continue;
       }
 
-      if (compactSourceIsSuppressed(entry.id))
+      if (isCompactSourceSuppressed(entry.id))
       {
         continue;
       }
@@ -491,7 +491,7 @@ namespace ao::uimodel
     };
   }
 
-  void ActivityStatusFeedState::showNotificationCompact(rt::NotificationEntry const& entry)
+  void ActivityStatusFeedState::projectNotificationCompact(rt::NotificationEntry const& entry)
   {
     _state.compact = ActivityCompactState{
       .kind = kindForSeverity(entry.severity),
@@ -507,7 +507,7 @@ namespace ao::uimodel
     };
   }
 
-  void ActivityStatusFeedState::showCompletionCompact(std::size_t const count)
+  void ActivityStatusFeedState::projectCompletionCompact(std::size_t const count)
   {
     _state.compact = ActivityCompactState{
       .kind = ActivityStatusKind::Success,
@@ -516,8 +516,8 @@ namespace ao::uimodel
     };
   }
 
-  bool ActivityStatusFeedState::compactSourceStillExists(ActivityCompactState const& compact,
-                                                         rt::NotificationFeedState const& feed) const
+  bool ActivityStatusFeedState::hasPresentedCompactSource(ActivityCompactState const& compact,
+                                                          rt::NotificationFeedState const& feed) const
   {
     return std::ranges::any_of(compact.sourceNotificationIds,
                                [&feed](auto const id)
@@ -527,14 +527,14 @@ namespace ao::uimodel
                                });
   }
 
-  bool ActivityStatusFeedState::compactSourceIsDismissed(ActivityCompactState const& compact) const
+  bool ActivityStatusFeedState::isCompactSourceDismissed(ActivityCompactState const& compact) const
   {
     return !compact.sourceNotificationIds.empty() &&
            std::ranges::all_of(
-             compact.sourceNotificationIds, [this](auto const id) { return compactSourceIsSuppressed(id); });
+             compact.sourceNotificationIds, [this](auto const id) { return isCompactSourceSuppressed(id); });
   }
 
-  bool ActivityStatusFeedState::compactSourceIsSuppressed(rt::NotificationId const id) const
+  bool ActivityStatusFeedState::isCompactSourceSuppressed(rt::NotificationId const id) const
   {
     return std::ranges::contains(_compactDismissedNotificationIds, id) ||
            std::ranges::contains(_detailDismissedNotificationIds, id);

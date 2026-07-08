@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/Backend.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/query/Expression.h>
@@ -49,15 +50,15 @@ namespace ao::uimodel
     : _playback{playback}, _onRender{std::move(onRender)}
   {
     auto const refreshCallback = [this] { refresh(); };
-    auto const refreshCallbackWithArg = [this](auto const&) { refresh(); };
+    auto const refreshIgnoringPayload = [this](auto const&) { refresh(); };
 
     _startedSub = _playback.onStarted(refreshCallback);
     _pausedSub = _playback.onPaused(refreshCallback);
     _idleSub = _playback.onIdle(refreshCallback);
     _stoppedSub = _playback.onStopped(refreshCallback);
-    _outputDeviceChangedSub = _playback.onOutputDeviceChanged(refreshCallbackWithArg);
-    _qualityChangedSub = _playback.onQualityChanged(refreshCallbackWithArg);
-    _nowPlayingSub = _playback.onNowPlayingChanged(refreshCallbackWithArg);
+    _outputDeviceChangedSub = _playback.onOutputDeviceChanged(refreshIgnoringPayload);
+    _qualityChangedSub = _playback.onQualityChanged(refreshIgnoringPayload);
+    _nowPlayingSub = _playback.onNowPlayingChanged(refreshIgnoringPayload);
 
     refresh();
   }

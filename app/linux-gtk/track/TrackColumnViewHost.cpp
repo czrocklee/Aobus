@@ -39,14 +39,14 @@ namespace ao::gtk
     return _columnControllerPtr->cssProvider();
   }
 
-  void TrackColumnViewHost::setupColumns(FactoryProvider const& factoryProvider)
+  void TrackColumnViewHost::configureColumns(FactoryProvider const& factoryProvider)
   {
-    _columnControllerPtr->setupColumns(factoryProvider);
+    _columnControllerPtr->configureColumns(factoryProvider);
   }
 
-  void TrackColumnViewHost::setupSelectionActivation()
+  void TrackColumnViewHost::configureSelectionActivation()
   {
-    _selectionControllerPtr->setupActivation();
+    _selectionControllerPtr->configureActivation();
   }
 
   void TrackColumnViewHost::connectSelectionSignals()
@@ -77,7 +77,7 @@ namespace ao::gtk
     _columnViewPtr = std::move(newViewPtr);
 
     // Wire factories for the new columns
-    _columnControllerPtr->setupColumns(factoryProvider);
+    _columnControllerPtr->configureColumns(factoryProvider);
 
     // Reconnect forwarding signals to the new selection controller
     connectSelectionSignals();

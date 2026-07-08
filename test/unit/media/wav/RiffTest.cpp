@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/wav/TestWav.h"
 #include <ao/Error.h>
 #include <ao/media/wav/Riff.h>
@@ -44,7 +44,7 @@ namespace ao::media::wav::test
 
     for (auto const& chunk : parsed.chunks)
     {
-      hasInfoList = hasInfoList || chunkIdEquals(chunk, "LIST");
+      hasInfoList = hasInfoList || hasChunkId(chunk, "LIST");
     }
 
     CHECK(hasInfoList);

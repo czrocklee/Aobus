@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/source/AllTracksSource.h>
@@ -46,8 +46,8 @@ namespace ao::rt::test
       auto const t1 = testLib.addTrack("A");
       auto const t2 = testLib.addTrack("B");
 
-      auto const txn = testLib.library().readTransaction();
-      source.reloadFromStore(txn);
+      auto const transaction = testLib.library().readTransaction();
+      source.reloadFromStore(transaction);
 
       CHECK(listener.resets == 1);
       CHECK(source.size() == 2);

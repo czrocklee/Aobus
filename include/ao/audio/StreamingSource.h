@@ -4,10 +4,10 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/audio/DecoderTypes.h>
-#include <ao/audio/IDecoderSession.h>
-#include <ao/audio/ISource.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/DecoderSession.h>
 #include <ao/audio/PcmRingBuffer.h>
+#include <ao/audio/PcmSource.h>
 
 #include <atomic>
 #include <chrono>
@@ -23,7 +23,7 @@
 
 namespace ao::audio
 {
-  class StreamingSource final : public ISource
+  class StreamingSource final : public PcmSource
   {
   public:
     enum class DecodeBlockStatus : std::uint8_t
@@ -32,7 +32,7 @@ namespace ao::audio
       Stopped
     };
 
-    StreamingSource(std::unique_ptr<IDecoderSession> decoderPtr,
+    StreamingSource(std::unique_ptr<DecoderSession> decoderPtr,
                     DecodedStreamInfo streamInfo,
                     std::function<void(Error const&)> onError,
                     std::chrono::milliseconds prerollDuration,
@@ -61,7 +61,7 @@ namespace ao::audio
                     std::stop_token const& seekToken,
                     std::stop_token const* threadStopToken);
 
-    std::unique_ptr<IDecoderSession> _decoderPtr;
+    std::unique_ptr<DecoderSession> _decoderPtr;
     DecodedStreamInfo _streamInfo;
     std::function<void(Error const&)> _onError;
     PcmRingBuffer _ringBuffer;

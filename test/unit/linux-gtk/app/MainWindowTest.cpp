@@ -4,10 +4,11 @@
 #include "app/MainWindow.h"
 
 #include "app/AppConfig.h"
-#include "app/UIState.h"
-#include "test/unit/RuntimeTestUtils.h"
+#include "app/WindowState.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppPrefsState.h>
 

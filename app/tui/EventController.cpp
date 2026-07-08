@@ -105,12 +105,12 @@ namespace ao::tui
       it->columns = clampedColumns;
     }
 
-    bool overlayActive(Overlay const overlay) noexcept
+    bool isOverlayActive(Overlay const overlay) noexcept
     {
       return overlay != Overlay::None;
     }
 
-    bool outputDeviceRowMatches(uimodel::OutputDeviceRow const& row, OutputDeviceRowBox const& rowBox)
+    bool matchesOutputDeviceRow(uimodel::OutputDeviceRow const& row, OutputDeviceRowBox const& rowBox)
     {
       return row.kind == uimodel::OutputDeviceRow::Kind::DeviceProfile && row.backendId == rowBox.backendId &&
              row.deviceId == rowBox.deviceId && row.profileId == rowBox.profileId;
@@ -337,7 +337,7 @@ namespace ao::tui
 
   void EventController::refreshCommandCompletion()
   {
-    if (!_shell.commandActive() || !_commandCompletionCallback)
+    if (!_shell.isCommandActive() || !_commandCompletionCallback)
     {
       _shell.clearCommandCompletion();
       return;
@@ -421,7 +421,7 @@ namespace ao::tui
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   bool EventController::handleMouse(ftxui::Mouse const& mouse)
   {
-    auto const modalInputActive = _shell.commandActive() || overlayActive(_shell.overlay());
+    auto const modalInputActive = _shell.isCommandActive() || isOverlayActive(_shell.overlay());
 
     if (modalInputActive && _optSeekRailDrag)
     {
@@ -429,7 +429,7 @@ namespace ao::tui
       return false;
     }
 
-    if (_shell.commandActive())
+    if (_shell.isCommandActive())
     {
       _optTrackScrollbarDrag.reset();
       _optTrackColumnResizeDrag.reset();
@@ -522,8 +522,8 @@ namespace ao::tui
           ? ButtonHitTestResult{}
           : _hitRegions->hitTestButton(mouse.x,
                                        mouse.y,
-                                       HitTestContext{.commandActive = _shell.commandActive(),
-                                                      .overlayActive = overlayActive(_shell.overlay())});
+                                       HitTestContext{.isCommandActive = _shell.isCommandActive(),
+                                                      .isOverlayActive = isOverlayActive(_shell.overlay())});
       bool handled = false;
 
       if (_hoveredButton != buttonHit.hoveredButton)
@@ -532,9 +532,9 @@ namespace ao::tui
         handled = true;
       }
 
-      if (_qualityHoverVisible != buttonHit.qualityHoverVisible)
+      if (_qualityHoverVisible != buttonHit.isQualityHoverVisible)
       {
-        _qualityHoverVisible = buttonHit.qualityHoverVisible;
+        _qualityHoverVisible = buttonHit.isQualityHoverVisible;
         handled = true;
       }
 
@@ -684,7 +684,7 @@ namespace ao::tui
       {
         if (rowBoxIt->dismissible)
         {
-          _activityStatusViewModel->hideDetailNotificationFromActivity(rowBoxIt->id);
+          _activityStatusViewModel->dismissDetailNotificationFromActivity(rowBoxIt->id);
           return true;
         }
 
@@ -714,7 +714,7 @@ namespace ao::tui
 
       auto const& row = _outputDevices->viewState().rows[static_cast<std::size_t>(rowBoxIt->rowIndex)];
 
-      if (!outputDeviceRowMatches(row, *rowBoxIt))
+      if (!matchesOutputDeviceRow(row, *rowBoxIt))
       {
         return true;
       }
@@ -740,7 +740,7 @@ namespace ao::tui
       return handleMouse(mouseEvent.mouse());
     }
 
-    if (_shell.commandActive())
+    if (_shell.isCommandActive())
     {
       if (event == ftxui::Event::Escape)
       {
@@ -807,7 +807,7 @@ namespace ao::tui
       return true;
     }
 
-    if (overlayActive(_shell.overlay()))
+    if (isOverlayActive(_shell.overlay()))
     {
       switch (_shell.overlay())
       {

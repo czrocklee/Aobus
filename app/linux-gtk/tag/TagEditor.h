@@ -63,7 +63,7 @@ namespace ao::gtk
     void size_allocate_vfunc(int width, int height, int baseline) override;
 
   private:
-    void setupUi();
+    void buildUi();
     void collectTagData();
     void rebuildChips();
     void insertBeforeTrigger(Gtk::Widget& child);

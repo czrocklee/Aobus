@@ -15,7 +15,7 @@ namespace ao::async
   // a deferred task never starts inside the frame that scheduled it. Tasks are queued
   // and drained FIFO by the outermost defer call, so a task that defers further work
   // always finishes before that work begins.
-  class ImmediateExecutor final : public IExecutor
+  class ImmediateExecutor final : public Executor
   {
   public:
     ImmediateExecutor() = default;

@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
@@ -129,12 +129,12 @@ namespace ao::query::test
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
-    auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
-    auto bachId = ao::test::requireValue(dict.put(wtxn, "Johann Sebastian Bach"));
-    auto mozartId = ao::test::requireValue(dict.put(wtxn, "Wolfgang Amadeus Mozart"));
+    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
+    auto bachId = ao::test::requireValue(dictionary.put(wtxn, "Johann Sebastian Bach"));
+    auto mozartId = ao::test::requireValue(dictionary.put(wtxn, "Wolfgang Amadeus Mozart"));
 
     auto expr = parseOk(R"($artist ~ "Bach")");
-    auto compiler = QueryCompiler{&dict};
+    auto compiler = QueryCompiler{&dictionary};
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
@@ -168,8 +168,8 @@ namespace ao::query::test
     spec.soloist = "Test Soloist";
     auto track = TestTrack{spec};
 
-    auto& dict = track.dictionary();
-    auto compiler = QueryCompiler{&dict};
+    auto& dictionary = track.dictionary();
+    auto compiler = QueryCompiler{&dictionary};
     auto evaluator = PlanEvaluator{};
 
     SECTION("Album")
@@ -301,14 +301,14 @@ namespace ao::query::test
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
-    auto dict = DictionaryStore{openDatabase(wtxn, "dict"), wtxn};
+    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
 
-    auto zappaId = ao::test::requireValue(dict.put(wtxn, "Zappa"));
-    auto adeleId = ao::test::requireValue(dict.put(wtxn, "Adele"));
-    auto mozartId = ao::test::requireValue(dict.put(wtxn, "Mozart"));
-    auto kinksId = ao::test::requireValue(dict.put(wtxn, "Kinks"));
+    auto zappaId = ao::test::requireValue(dictionary.put(wtxn, "Zappa"));
+    auto adeleId = ao::test::requireValue(dictionary.put(wtxn, "Adele"));
+    auto mozartId = ao::test::requireValue(dictionary.put(wtxn, "Mozart"));
+    auto kinksId = ao::test::requireValue(dictionary.put(wtxn, "Kinks"));
 
-    auto compiler = QueryCompiler{&dict};
+    auto compiler = QueryCompiler{&dictionary};
     auto evaluator = PlanEvaluator{};
 
     auto adeleData = makeHotOnlyTrack(adeleId);

@@ -6,7 +6,7 @@
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
@@ -87,7 +87,7 @@ namespace ao::gtk::layout
     /**
      * @brief playback.image
      */
-    class PlaybackImageComponent final : public ILayoutComponent
+    class PlaybackImageComponent final : public LayoutComponent
     {
     public:
       enum class Action : std::uint8_t
@@ -111,9 +111,9 @@ namespace ao::gtk::layout
           std::make_unique<ResourceImageController>(*_imageWidgetPtr, ctx.runtime.library(), *ctx.detail.imageCache);
         _imageWidgetPtr->set_overflow(Gtk::Overflow::HIDDEN);
 
-        auto const targetSize = node.getProp<std::int64_t>("targetSize", kThumbnailSize);
+        auto const targetSize = node.propertyOr<std::int64_t>("targetSize", kThumbnailSize);
         _imageWidgetPtr->setTargetSize(static_cast<std::int32_t>(targetSize));
-        auto const forceSquare = node.getProp<bool>("forceSquare", false);
+        auto const forceSquare = node.propertyOr<bool>("forceSquare", false);
 
         if (forceSquare)
         {
@@ -128,7 +128,7 @@ namespace ao::gtk::layout
           }
         }
 
-        auto const actionStr = node.getProp<std::string>("action", "none");
+        auto const actionStr = node.propertyOr<std::string>("action", "none");
         APP_LOG_DEBUG("[PID {}] PlaybackImage: Parsing action property, raw value: '{}'", getpid(), actionStr);
 
         _action = [actionStr]
@@ -255,7 +255,7 @@ namespace ao::gtk::layout
       rt::Subscription _idleSub;
     };
 
-    std::unique_ptr<ILayoutComponent> createPlaybackImage(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createPlaybackImage(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<PlaybackImageComponent>(ctx, node);
     }

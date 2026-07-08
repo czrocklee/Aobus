@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/rt/TrackField.h>
@@ -139,13 +139,13 @@ namespace ao::rt::test
                                                              {"Yo-Yo Ma", 1},
                                                            });
 
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Composer));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Conductor));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Ensemble));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Movement));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Soloist));
-    CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Title));
-    CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Year));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Composer));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Conductor));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Ensemble));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Movement));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Soloist));
+    CHECK_FALSE(supportsTrackFieldValueCompletion(TrackField::Title));
+    CHECK_FALSE(supportsTrackFieldValueCompletion(TrackField::Year));
     CHECK(service.valuesFor(TrackField::Title).empty());
   }
 

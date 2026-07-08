@@ -14,5 +14,5 @@ namespace ao::cli
 {
   class CliContext;
 
-  void setupTagCommand(CLI::App& app, CliContext& context);
+  void configureTagCommand(CLI::App& app, CliContext& context);
 }

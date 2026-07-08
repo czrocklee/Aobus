@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -127,11 +127,11 @@ namespace ao::rt::test
 
     void putManifestEntry(library::MusicLibrary& ml, std::string_view uri, TrackId trackId, AudioIdentity identity)
     {
-      auto txn = ml.writeTransaction();
-      auto builder = library::FileManifestBuilder::createNew();
+      auto transaction = ml.writeTransaction();
+      auto builder = library::FileManifestBuilder::makeEmpty();
       builder.trackId(trackId).audioPayloadLength(identity.payloadLength).audioSignature(identity.signature);
-      REQUIRE(ml.manifest().writer(txn).put(uri, builder.serialize()));
-      REQUIRE(txn.commit());
+      REQUIRE(ml.manifest().writer(transaction).put(uri, builder.serialize()));
+      REQUIRE(transaction.commit());
     }
   } // namespace
 
@@ -151,12 +151,12 @@ namespace ao::rt::test
 
     // Setup manifest for existing files
     {
-      auto txn = ml.writeTransaction();
-      auto manifestWriter = ml.manifest().writer(txn);
+      auto transaction = ml.writeTransaction();
+      auto manifestWriter = ml.manifest().writer(transaction);
 
       // Unchanged
       char const* const unchangedUri = "unchanged.mp3";
-      auto builder1 = library::FileManifestBuilder::createNew();
+      auto builder1 = library::FileManifestBuilder::makeEmpty();
       builder1.trackId(TrackId{1})
         .fileSize(std::filesystem::file_size(musicRoot / unchangedUri))
         .mtime(
@@ -167,17 +167,17 @@ namespace ao::rt::test
 
       // Changed (different size)
       char const* const changedUri = "changed.m4a";
-      auto builder2 = library::FileManifestBuilder::createNew();
+      auto builder2 = library::FileManifestBuilder::makeEmpty();
       builder2.trackId(TrackId{2}).fileSize(99999).mtime(0);
       REQUIRE(manifestWriter.put(changedUri, builder2.serialize()));
 
       // Missing (in manifest but not on disk)
       char const* const missingUri = "missing.flac";
-      auto builder3 = library::FileManifestBuilder::createNew();
+      auto builder3 = library::FileManifestBuilder::makeEmpty();
       builder3.trackId(TrackId{3});
       REQUIRE(manifestWriter.put(missingUri, builder3.serialize()));
 
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
     }
 
     auto scanner = ScanPlanBuilder{ml};

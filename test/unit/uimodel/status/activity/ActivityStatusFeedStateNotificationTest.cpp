@@ -125,7 +125,7 @@ namespace ao::uimodel::test
       REQUIRE(feedState.viewState().detail.items.size() == 2);
       REQUIRE(feedState.viewState().compact.sourceNotificationIds.size() == 2);
 
-      feedState.hideDetailNotificationFromActivity(rt::NotificationId{24}, currentFeed);
+      feedState.dismissDetailNotificationFromActivity(rt::NotificationId{24}, currentFeed);
 
       CHECK(currentFeed.entries.size() == 2);
       REQUIRE(feedState.viewState().detail.items.size() == 1);

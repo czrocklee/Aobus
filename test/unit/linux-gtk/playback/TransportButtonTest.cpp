@@ -3,7 +3,7 @@
 
 #include "playback/TransportButton.h"
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 

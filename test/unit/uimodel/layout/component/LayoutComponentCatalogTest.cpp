@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 
@@ -88,7 +88,7 @@ namespace ao::uimodel::test
       CHECK((optDesc->surfaces & static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Main)) != 0);
       CHECK((optDesc->surfaces & static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Tooltip)) != 0);
       CHECK(optDesc->actionPolicy.allows(LayoutActionSlot::PrimaryClick));
-      CHECK(optDesc->actionPolicy.getDefault(LayoutActionSlot::PrimaryClick) == "valid.action");
+      CHECK(optDesc->actionPolicy.defaultAction(LayoutActionSlot::PrimaryClick) == "valid.action");
 
       auto const& all = catalog.descriptors();
       REQUIRE(all.size() == 1);

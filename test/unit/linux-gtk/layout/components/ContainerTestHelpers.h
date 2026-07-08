@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "app/linux-gtk/layout/runtime/ILayoutComponent.h"
+#include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <glibmm/main.h>
@@ -28,7 +28,7 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::measureWidget;
   using ao::gtk::test::WidgetMeasure;
 
-  inline Gtk::Box* collapsibleSplitBox(ILayoutComponent& component)
+  inline Gtk::Box* collapsibleSplitBox(LayoutComponent& component)
   {
     auto& root = component.widget();
 
@@ -40,7 +40,7 @@ namespace ao::gtk::layout::test
     return dynamic_cast<Gtk::Box*>(root.get_first_child());
   }
 
-  inline Gtk::Paned* splitPaned(ILayoutComponent& component)
+  inline Gtk::Paned* splitPaned(LayoutComponent& component)
   {
     auto& root = component.widget();
 

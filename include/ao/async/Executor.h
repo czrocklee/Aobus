@@ -7,15 +7,15 @@
 
 namespace ao::async
 {
-  class IExecutor
+  class Executor
   {
   public:
-    virtual ~IExecutor() = default;
+    virtual ~Executor() = default;
 
-    IExecutor(IExecutor const&) = delete;
-    IExecutor& operator=(IExecutor const&) = delete;
-    IExecutor(IExecutor&&) = delete;
-    IExecutor& operator=(IExecutor&&) = delete;
+    Executor(Executor const&) = delete;
+    Executor& operator=(Executor const&) = delete;
+    Executor(Executor&&) = delete;
+    Executor& operator=(Executor&&) = delete;
 
     virtual bool isCurrent() const noexcept = 0;
 
@@ -27,6 +27,6 @@ namespace ao::async
     virtual void defer(std::move_only_function<void()> task) = 0;
 
   protected:
-    IExecutor() = default;
+    Executor() = default;
   };
 } // namespace ao::async

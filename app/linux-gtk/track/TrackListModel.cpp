@@ -7,7 +7,7 @@
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ScopedTimer.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <giomm/listmodel.h>
@@ -28,7 +28,7 @@
 
 namespace
 {
-  Glib::Interface_Class const& getListModelIfaceClass()
+  Glib::Interface_Class const& listModelInterfaceClass()
   {
     static auto theClass = Gio::ListModel_Class{};
     return theClass.init();
@@ -57,7 +57,7 @@ namespace
 namespace ao::gtk
 {
   TrackListModel::TrackListModel()
-    : Glib::ObjectBase{typeid(TrackListModel)}, Gio::ListModel{getListModelIfaceClass()}
+    : Glib::ObjectBase{typeid(TrackListModel)}, Gio::ListModel{listModelInterfaceClass()}
   {
   }
 
@@ -68,7 +68,7 @@ namespace ao::gtk
     return modelPtr;
   }
 
-  void TrackListModel::bindProjection(std::shared_ptr<rt::ITrackListProjection> projectionPtr)
+  void TrackListModel::bindProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr)
   {
     _projectionSub.reset();
 
@@ -229,9 +229,9 @@ namespace ao::gtk
     auto const rowPosition = static_cast<::guint>(delta.range.start);
     auto const count = static_cast<::guint>(delta.range.count);
 
-    for (auto const idx : std::views::iota(delta.range.start, delta.range.start + delta.range.count))
+    for (auto const index : std::views::iota(delta.range.start, delta.range.start + delta.range.count))
     {
-      _provider->invalidate(_projectionPtr->trackIdAt(idx));
+      _provider->invalidate(_projectionPtr->trackIdAt(index));
     }
 
     notifyUpdate(rowPosition, count);

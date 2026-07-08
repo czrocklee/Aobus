@@ -77,12 +77,12 @@ namespace ao::query
     std::int32_t operand = 0;
 
     // LoadConstant: the constant value (or the string-constant index). Exists:
-    // the custom/tag dictId. InSet: the index into ExecutionPlan::inSets.
-    // Comparisons/Like: the left field's interned dictId when it is Field::Custom
+    // the custom/tag dictionaryId. InSet: the index into ExecutionPlan::inSets.
+    // Comparisons/Like: the left field's interned dictionaryId when it is Field::Custom
     // (0 otherwise).
     std::int64_t constValue = 0;
 
-    // InSet only: the left field's interned dictId when it is Field::Custom. InSet
+    // InSet only: the left field's interned dictionaryId when it is Field::Custom. InSet
     // spends constValue on the set index, so the Custom id rides here instead.
     std::uint32_t size = 0;
     char const* data = nullptr;

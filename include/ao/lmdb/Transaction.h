@@ -71,7 +71,7 @@ namespace ao::lmdb
     Result<> commit();
 
     // Check if transaction was committed (cursors are now invalid)
-    bool committed() const { return _cursorClosed; }
+    bool isCommitted() const { return _cursorClosed; }
 
   private:
     explicit WriteTransaction(TxnPtr txnPtr)

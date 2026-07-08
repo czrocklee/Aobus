@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
@@ -112,8 +112,8 @@ namespace ao::rt::test
 
     REQUIRE(result);
     REQUIRE(result->processedIds.size() == 1);
-    auto txn = testLib.library().readTransaction();
-    auto manifestResult = testLib.library().manifest().reader(txn).get("song.flac");
+    auto transaction = testLib.library().readTransaction();
+    auto manifestResult = testLib.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK_FALSE(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
   }
@@ -144,8 +144,8 @@ namespace ao::rt::test
     CHECK(backfillResult->failureCount == 0);
     CHECK_FALSE(backfillResult->cancelled);
 
-    auto txn = testLib.library().readTransaction();
-    auto manifestResult = testLib.library().manifest().reader(txn).get("song.flac");
+    auto transaction = testLib.library().readTransaction();
+    auto manifestResult = testLib.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
   }
@@ -259,9 +259,9 @@ namespace ao::rt::test
     REQUIRE(sawCancellation.waitUntil(true));
     CHECK(sawFingerprinting.get());
 
-    auto txn = testLib.library().readTransaction();
-    auto trackReader = testLib.library().tracks().reader(txn);
-    auto manifestReader = testLib.library().manifest().reader(txn);
+    auto transaction = testLib.library().readTransaction();
+    auto trackReader = testLib.library().tracks().reader(transaction);
+    auto manifestReader = testLib.library().manifest().reader(transaction);
     CHECK(trackReader.begin() == trackReader.end());
     CHECK(manifestReader.begin() == manifestReader.end());
 

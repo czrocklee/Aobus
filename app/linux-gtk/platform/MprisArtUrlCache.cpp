@@ -127,7 +127,7 @@ namespace ao::gtk::platform
   {
     auto const it = _cache.find(resourceId);
 
-    if (it == _cache.end() || !cacheEntryValid(it->second))
+    if (it == _cache.end() || !isCacheEntryValid(it->second))
     {
       return {};
     }
@@ -187,7 +187,7 @@ namespace ao::gtk::platform
     return url;
   }
 
-  bool MprisArtUrlCache::cacheEntryValid(CacheEntry const& entry) noexcept
+  bool MprisArtUrlCache::isCacheEntryValid(CacheEntry const& entry) noexcept
   {
     auto ec = std::error_code{};
 

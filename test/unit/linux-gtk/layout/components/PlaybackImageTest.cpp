@@ -3,8 +3,8 @@
 
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
-#include "app/linux-gtk/layout/runtime/ILayoutComponent.h"
-#include "test/unit/RuntimeTestUtils.h"
+#include "app/linux-gtk/layout/runtime/LayoutComponent.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
@@ -38,7 +38,7 @@ namespace ao::gtk::layout::test
 
   namespace
   {
-    class StaticWidgetComponent final : public ILayoutComponent
+    class StaticWidgetComponent final : public LayoutComponent
     {
     public:
       explicit StaticWidgetComponent(Gtk::Widget& widget)

@@ -8,7 +8,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 

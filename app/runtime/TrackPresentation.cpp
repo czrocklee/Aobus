@@ -16,7 +16,7 @@ namespace ao::rt
   {
     using F = TrackField;
 
-    std::vector<TrackPresentationPreset> const& getBuiltinPresets()
+    std::vector<TrackPresentationPreset> const& builtInPresets()
     {
       static auto const
         presets =
@@ -283,12 +283,12 @@ namespace ao::rt
 
   std::span<TrackPresentationPreset const> builtinTrackPresentationPresets()
   {
-    return getBuiltinPresets();
+    return builtInPresets();
   }
 
   TrackPresentationPreset const* builtinTrackPresentationPreset(std::string_view id)
   {
-    auto const& presets = getBuiltinPresets();
+    auto const& presets = builtInPresets();
     auto const iter =
       std::ranges::find(presets, id, [](TrackPresentationPreset const& preset) { return preset.spec.id; });
 
@@ -302,7 +302,7 @@ namespace ao::rt
 
   TrackPresentationSpec defaultTrackPresentationSpec()
   {
-    return getBuiltinPresets().front().spec;
+    return builtInPresets().front().spec;
   }
 
   TrackPresentationSpec normalizeTrackPresentationSpec(TrackPresentationSpec const& spec)

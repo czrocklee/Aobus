@@ -5,11 +5,11 @@
 #include "EngineTestSupport.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -29,10 +29,10 @@ namespace ao::audio::test
 {
   namespace
   {
-    class BlockingStopBackend final : public IBackend
+    class BlockingStopBackend final : public Backend
     {
     public:
-      Result<> open(Format const& format, IRenderTarget* target) override
+      Result<> open(Format const& format, RenderTarget* target) override
       {
         auto const lock = std::scoped_lock{_mutex};
         _format = format;
@@ -109,9 +109,9 @@ namespace ao::audio::test
         _cv.notify_all();
       }
 
-      void fireRouteReady(std::string_view routeAnchor)
+      void emitRouteReady(std::string_view routeAnchor)
       {
-        auto* target = static_cast<IRenderTarget*>(nullptr);
+        auto* target = static_cast<RenderTarget*>(nullptr);
         {
           auto const lock = std::scoped_lock{_mutex};
           target = _target;
@@ -126,7 +126,7 @@ namespace ao::audio::test
     private:
       mutable std::mutex _mutex;
       std::condition_variable _cv;
-      IRenderTarget* _target = nullptr;
+      RenderTarget* _target = nullptr;
       Format _format{};
       bool _blockStop = false;
       bool _stopEntered = false;
@@ -252,7 +252,7 @@ namespace ao::audio::test
         callbackThreadPromise.set_value(callbackThreadId);
       });
 
-    backendRaw->fireRouteReady("reentrant-anchor");
+    backendRaw->emitRouteReady("reentrant-anchor");
 
     REQUIRE(callbackThread.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
     CHECK(callbackThread.get() != backendCallbackThread);
@@ -277,7 +277,7 @@ namespace ao::audio::test
     auto stopFuture = std::async(std::launch::async, [&] { blockingEngine.stop(); });
     CHECK(blockingBackendRaw->waitForStopEntered(std::chrono::seconds{1}));
 
-    blockingBackendRaw->fireRouteReady("stale-anchor");
+    blockingBackendRaw->emitRouteReady("stale-anchor");
     CHECK_FALSE(routeChanged.load(std::memory_order_acquire));
 
     blockingBackendRaw->releaseStop();

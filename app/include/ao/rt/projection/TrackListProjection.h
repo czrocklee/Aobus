@@ -1,74 +1,97 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
-#include "../CorePrimitives.h"
+#include "../Subscription.h"
 #include "../TrackPresentation.h"
-#include "../source/TrackSource.h"
-#include "ProjectionTypes.h"
+#include "../ViewIds.h"
 #include <ao/CoreIds.h>
+
+#include <boost/container/small_vector.hpp>
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <memory>
 #include <optional>
-#include <span>
-
-namespace ao::library
-{
-  class MusicLibrary;
-}
+#include <string>
+#include <variant>
 
 namespace ao::rt
 {
-  class SmartListSource;
+  struct TrackRowRange final
+  {
+    std::size_t start = 0;
+    std::size_t count = 0;
+  };
 
-  class TrackListProjection final
-    : public ITrackListProjection
-    , private TrackSourceObserver
+  struct TrackGroupSectionSnapshot final
+  {
+    TrackRowRange rows{};
+    std::string primaryText{};
+    std::string secondaryText{};
+    std::string tertiaryText{};
+    ResourceId imageId{kInvalidResourceId};
+  };
+
+  struct ProjectionReset final
+  {
+    std::uint64_t revision = 0;
+  };
+
+  struct ProjectionInsertRange final
+  {
+    TrackRowRange range{};
+  };
+
+  struct ProjectionRemoveRange final
+  {
+    TrackRowRange range{};
+  };
+
+  struct ProjectionUpdateRange final
+  {
+    TrackRowRange range{};
+  };
+
+  using TrackListProjectionDelta =
+    std::variant<ProjectionReset, ProjectionInsertRange, ProjectionRemoveRange, ProjectionUpdateRange>;
+
+  struct TrackListProjectionDeltaBatch final
+  {
+    std::uint64_t revision = 0;
+
+    // Nearly every publish carries exactly one delta, so a small_vector with inline
+    // capacity for one element keeps the common case allocation-free. Larger batches
+    // (rare) spill to the heap transparently.
+    boost::container::small_vector<TrackListProjectionDelta, 1> deltas{};
+  };
+
+  class TrackListProjection
   {
   public:
-    TrackListProjection(ViewId viewId, TrackSource& source, library::MusicLibrary& library);
-    ~TrackListProjection() override;
+    virtual ~TrackListProjection() = default;
 
     TrackListProjection(TrackListProjection const&) = delete;
     TrackListProjection& operator=(TrackListProjection const&) = delete;
     TrackListProjection(TrackListProjection&&) = delete;
     TrackListProjection& operator=(TrackListProjection&&) = delete;
 
-    ViewId viewId() const noexcept override;
-    std::uint64_t revision() const noexcept override;
+    virtual ViewId viewId() const noexcept = 0;
+    virtual std::uint64_t revision() const noexcept = 0;
 
-    TrackPresentationSpec presentation() const override;
-    std::size_t groupCount() const noexcept override;
-    TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const override;
-    std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const override;
+    virtual TrackPresentationSpec presentation() const = 0;
+    virtual std::size_t groupCount() const noexcept = 0;
+    virtual TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const = 0;
+    virtual std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const = 0;
 
-    std::size_t size() const noexcept override;
-    TrackId trackIdAt(std::size_t index) const override;
-    std::optional<std::size_t> indexOf(TrackId trackId) const noexcept override;
+    virtual std::size_t size() const noexcept = 0;
+    virtual TrackId trackIdAt(std::size_t index) const = 0;
+    virtual std::optional<std::size_t> indexOf(TrackId trackId) const noexcept = 0;
 
-    void setPresentation(TrackPresentationSpec const& presentation);
+    virtual Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) = 0;
 
-    Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) override;
-
-  private:
-    void onReset() override;
-    void onInserted(TrackId id, std::size_t index) override;
-    void onUpdated(TrackId id, std::size_t index) override;
-    void onRemoved(TrackId id, std::size_t index) override;
-
-    void onBulkInserted(std::span<TrackId const> ids) override;
-    void onBulkUpdated(std::span<TrackId const> ids) override;
-    void onBulkRemoved(std::span<TrackId const> ids) override;
-
-    void onSourceDestroyed() override;
-
-    void publishDelta(TrackListProjectionDeltaBatch const& batch);
-
-    struct Impl;
-    std::unique_ptr<Impl> _implPtr;
+  protected:
+    TrackListProjection() = default;
   };
 } // namespace ao::rt

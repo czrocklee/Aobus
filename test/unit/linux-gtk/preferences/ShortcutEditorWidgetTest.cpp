@@ -6,8 +6,8 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdk/gdkkeysyms.h>
@@ -100,7 +100,7 @@ namespace ao::gtk::test
                              guint const keyval,
                              Gdk::ModifierType const modifiers = Gdk::ModifierType{})
     {
-      auto* const captureWindow = editor.captureWindowForTest();
+      auto* const captureWindow = editor.captureWindow();
       REQUIRE(captureWindow != nullptr);
 
       auto const keyControllerPtr = findController<Gtk::EventControllerKey>(*captureWindow);
@@ -296,13 +296,13 @@ namespace ao::gtk::test
 
     clickButtonByLabel(editor, "Add…", 1);
 
-    REQUIRE(editor.captureWindowForTest() != nullptr);
-    CHECK(editor.captureWindowForTest()->get_transient_for() == &host);
-    CHECK(editor.captureWindowForTest()->get_modal());
+    REQUIRE(editor.captureWindow() != nullptr);
+    CHECK(editor.captureWindow()->get_transient_for() == &host);
+    CHECK(editor.captureWindow()->get_modal());
 
     emitShortcutCapture(editor, GDK_KEY_Escape);
     drainGtkEvents();
-    CHECK(editor.captureWindowForTest() == nullptr);
+    CHECK(editor.captureWindow() == nullptr);
   }
 
   TEST_CASE("ShortcutEditorWidget - old capture teardown does not close a replacement popup",
@@ -314,16 +314,16 @@ namespace ao::gtk::test
     auto editor = ShortcutEditorWidget{makeCatalog(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
 
     clickButtonByLabel(editor, "Add…", 1);
-    auto* const firstCapture = editor.captureWindowForTest();
+    auto* const firstCapture = editor.captureWindow();
     REQUIRE(firstCapture != nullptr);
 
     clickButtonByLabel(editor, "Add…", 0);
-    auto* const secondCapture = editor.captureWindowForTest();
+    auto* const secondCapture = editor.captureWindow();
     REQUIRE(secondCapture != nullptr);
     REQUIRE(secondCapture != firstCapture);
 
     drainGtkEvents();
 
-    CHECK(editor.captureWindowForTest() == secondCapture);
+    CHECK(editor.captureWindow() == secondCapture);
   }
 } // namespace ao::gtk::test

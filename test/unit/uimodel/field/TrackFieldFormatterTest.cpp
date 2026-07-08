@@ -4,7 +4,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -155,14 +155,14 @@ namespace ao::uimodel::test
     CHECK(formatTrackFieldRawValue(TrackField::Quality, Raw{std::in_place_type<std::string>, "anything"}).empty());
   }
 
-  TEST_CASE("displayTextForTrackField resolves aggregate display text", "[uimodel][unit][field][formatter]")
+  TEST_CASE("formatTrackFieldDisplayText resolves aggregate display text", "[uimodel][unit][field][formatter]")
   {
     SECTION("mixed aggregate returns caller-provided mixed text")
     {
       auto snap = makeTrackDetailSnapshot();
       trackFieldArrayAt(snap.fields, TrackField::Title).mixed = true;
 
-      auto const result = displayTextForTrackField(TrackField::Title, snap, "<<<mixed>>>", true);
+      auto const result = formatTrackFieldDisplayText(TrackField::Title, snap, "<<<mixed>>>", true);
 
       CHECK(result == "<<<mixed>>>");
     }
@@ -173,15 +173,15 @@ namespace ao::uimodel::test
       auto const& def = *trackFieldDefinition(TrackField::Codec);
       REQUIRE(def.category == TrackFieldCategory::Technical);
 
-      CHECK(displayTextForTrackField(TrackField::Codec, snap, kMultipleTrackValuesText, true) == "Unknown");
-      CHECK(displayTextForTrackField(TrackField::Codec, snap, kMultipleTrackValuesText, false).empty());
+      CHECK(formatTrackFieldDisplayText(TrackField::Codec, snap, kMultipleTrackValuesText, true) == "Unknown");
+      CHECK(formatTrackFieldDisplayText(TrackField::Codec, snap, kMultipleTrackValuesText, false).empty());
     }
 
     SECTION("unset non-technical field returns empty text")
     {
       auto snap = makeTrackDetailSnapshot();
 
-      CHECK(displayTextForTrackField(TrackField::Title, snap, kMultipleTrackValuesText, true).empty());
+      CHECK(formatTrackFieldDisplayText(TrackField::Title, snap, kMultipleTrackValuesText, true).empty());
     }
 
     SECTION("populated aggregate uses raw field formatter policy")
@@ -191,9 +191,9 @@ namespace ao::uimodel::test
       trackFieldArrayAt(snap.fields, TrackField::Year).optValue = std::uint16_t{2024};
       trackFieldArrayAt(snap.fields, TrackField::Quality).optValue = std::string{"anything"};
 
-      CHECK(displayTextForTrackField(TrackField::Title, snap, kMultipleTrackValuesText, true) == "Hello");
-      CHECK(displayTextForTrackField(TrackField::Year, snap, kMultipleTrackValuesText, true) == "2024");
-      CHECK(displayTextForTrackField(TrackField::Quality, snap, kMultipleTrackValuesText, true).empty());
+      CHECK(formatTrackFieldDisplayText(TrackField::Title, snap, kMultipleTrackValuesText, true) == "Hello");
+      CHECK(formatTrackFieldDisplayText(TrackField::Year, snap, kMultipleTrackValuesText, true) == "2024");
+      CHECK(formatTrackFieldDisplayText(TrackField::Quality, snap, kMultipleTrackValuesText, true).empty());
     }
   }
 } // namespace ao::uimodel::test

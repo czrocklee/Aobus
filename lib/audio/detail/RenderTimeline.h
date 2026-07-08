@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/ISource.h>
+#include <ao/audio/PcmSource.h>
 
 #include <atomic>
 #include <cstdint>
@@ -19,7 +19,7 @@ namespace ao::audio::detail
   struct RenderTimelineNode final
   {
     Engine::PlaybackItem item;
-    std::shared_ptr<ISource> sourcePtr;
+    std::shared_ptr<PcmSource> sourcePtr;
     Format backendFormat;
     DecodedStreamInfo info;
     std::uint64_t sourceGeneration = 0;
@@ -30,7 +30,7 @@ namespace ao::audio::detail
   public:
     using Node = RenderTimelineNode;
 
-    ISource* activeSource() const noexcept
+    PcmSource* activeSource() const noexcept
     {
       auto* const node = _active.load(std::memory_order_acquire);
       return node != nullptr ? node->sourcePtr.get() : nullptr;
@@ -139,7 +139,7 @@ namespace ao::audio::detail
 
     // Copy the active source pointer for non-RT callers (status / seek /
     // resume), keeping it alive for the duration of their use.
-    std::shared_ptr<ISource> current() const
+    std::shared_ptr<PcmSource> current() const
     {
       auto const lock = std::scoped_lock{_mutex};
       auto* const node = _active.load(std::memory_order_acquire);

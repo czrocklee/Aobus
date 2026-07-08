@@ -11,9 +11,12 @@
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/LayoutHost.h"
 #include <ao/async/LifetimeScope.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Subscription.h>
+#include <ao/uimodel/layout/action/LayoutActionActivation.h>
+#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 #include <ao/uimodel/layout/component/LayoutStatePromoter.h>
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 
@@ -44,7 +47,7 @@ namespace ao::gtk
     class LayoutEditorDialog;
   }
 
-  class ShellLayoutController final : public layout::IActionContextProvider
+  class ShellLayoutController final : public layout::ActionContextProvider
   {
   public:
     using RegisterActionFn = std::function<void(std::string_view,
@@ -88,9 +91,9 @@ namespace ao::gtk
     uimodel::LayoutActionActivationOutcome activateAction(std::string_view id);
     uimodel::LayoutActionAvailability actionAvailability(std::string_view id);
 
-    layout::editor::LayoutEditorDialog* editorDialogForTest() const { return _editorDialogPtr.get(); }
+    layout::editor::LayoutEditorDialog* editorDialog() const { return _editorDialogPtr.get(); }
 
-    layout::ActionActivationContext getActionContext(std::string_view componentId) override;
+    layout::ActionActivationContext actionContext(std::string_view componentId) override;
     bool canProvideSafeAnchor(uimodel::LayoutActionDescriptor const& desc) const override;
 
   private:
@@ -113,8 +116,6 @@ namespace ao::gtk
                                              uimodel::LayoutComponentStateDocument componentState);
 
     void onEditorSaveRequest(layout::editor::LayoutSaveResult const& result);
-
-    static void setupCss();
 
     layout::ComponentRegistry _registry;
     layout::ActionRegistry _actionRegistry;

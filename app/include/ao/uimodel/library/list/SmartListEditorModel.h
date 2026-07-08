@@ -58,7 +58,7 @@ namespace ao::uimodel
   public:
     static constexpr std::size_t kAutoPresentationIndex = 0;
 
-    static std::string displayExpression(std::string_view expression);
+    static std::string formatExpressionDisplayText(std::string_view expression);
 
     static std::string composeEffectiveExpression(std::string_view parent, std::string_view local);
 
@@ -81,10 +81,10 @@ namespace ao::uimodel
                                              std::span<rt::TrackPresentationPreset const> builtinPresets,
                                              std::span<rt::CustomTrackPresentationPreset const> customPresets);
 
-    static rt::LibraryWriter::ListDraft createDraft(ListId parentListId,
-                                                    ListId editListId,
-                                                    std::string const& name,
-                                                    std::string const& description,
-                                                    std::string const& expression);
+    static rt::LibraryWriter::ListDraft makeDraft(ListId parentListId,
+                                                  ListId editListId,
+                                                  std::string const& name,
+                                                  std::string const& description,
+                                                  std::string const& expression);
   };
 } // namespace ao::uimodel

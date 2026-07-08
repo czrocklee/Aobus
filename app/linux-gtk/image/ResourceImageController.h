@@ -5,8 +5,8 @@
 
 #include "image/ThumbnailLoader.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/Subscription.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <cstdint>
 #include <memory>
@@ -36,7 +36,7 @@ namespace ao::gtk
     void load(ResourceId resourceId);
     void clear();
 
-    void bindToDetailProjection(std::unique_ptr<rt::ITrackDetailProjection> projectionPtr);
+    void bindToDetailProjection(std::unique_ptr<rt::TrackDetailProjection> projectionPtr);
 
   private:
     void onDetailSnapshot(rt::TrackDetailSnapshot const& snap);
@@ -47,7 +47,7 @@ namespace ao::gtk
     ImageWidget& _widget;
     rt::Library const& _reads;
     ImageCache& _cache;
-    std::unique_ptr<rt::ITrackDetailProjection> _detailProjectionPtr;
+    std::unique_ptr<rt::TrackDetailProjection> _detailProjectionPtr;
     rt::Subscription _detailSub;
 
     bool _thumbnailMode = false;

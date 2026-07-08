@@ -107,7 +107,7 @@ namespace ao::tui
       auto const current = std::string_view{shell.commandDraft()}.substr(replaceBegin, replaceEnd - replaceBegin);
 
       if (!current.empty() && replaceEnd == shell.commandDraft().size() &&
-          rt::completionStartsWithInsensitive(item.insertText, current))
+          rt::startsWithCompletionPrefixInsensitive(item.insertText, current))
       {
         return item.insertText.substr(current.size());
       }

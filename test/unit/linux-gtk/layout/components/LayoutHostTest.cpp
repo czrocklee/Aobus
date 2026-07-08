@@ -48,7 +48,7 @@ namespace ao::gtk::layout::test
 
     SECTION("setLayout with default document populates widget")
     {
-      host.setLayout(ctx, createDefaultLayout());
+      host.setLayout(ctx, makeDefaultLayout());
 
       auto* const child = host.get_first_child();
 
@@ -58,7 +58,7 @@ namespace ao::gtk::layout::test
 
     SECTION("setLayout replaces previous layout")
     {
-      host.setLayout(ctx, createDefaultLayout());
+      host.setLayout(ctx, makeDefaultLayout());
 
       auto* const first = host.get_first_child();
       CHECK(first != nullptr);

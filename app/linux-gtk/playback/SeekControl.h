@@ -38,7 +38,7 @@ namespace ao::gtk
     SeekControl& operator=(SeekControl&&) = delete;
 
     Gtk::Widget& widget() { return _scale; }
-    bool isTickActiveForTest() const noexcept;
+    bool isTickActive() const noexcept;
 
   private:
     void applyState(uimodel::SeekViewState const& view);

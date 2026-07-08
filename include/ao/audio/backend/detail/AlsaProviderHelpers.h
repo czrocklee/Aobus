@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/Backend.h>
+#include <ao/audio/Device.h>
 
 #include <string>
 #include <vector>
@@ -20,5 +20,5 @@ namespace ao::audio::backend::detail
    * @brief Enumerates all available ALSA playback devices (physical cards).
    * Returns a list of devices in both 'plughw' and 'hw' variants.
    */
-  std::vector<Device> doAlsaEnumerate();
+  std::vector<Device> enumerateAlsaPlaybackDevices();
 } // namespace ao::audio::backend::detail

@@ -4,7 +4,7 @@
 #include <ao/CoreIds.h>
 #include <ao/utility/EnumName.h>
 #include <ao/yaml/Reflect.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -34,9 +34,9 @@ namespace ao::query
     /**
      * Construct with a DictionaryStore for string resolution.
      *
-     * @param dict Pointer to DictionaryStore for resolving string constants to IDs, can be nullptr
+     * @param dictionary Pointer to DictionaryStore for resolving string constants to IDs, can be nullptr
      */
-    explicit QueryCompiler(library::DictionaryStore* dict);
+    explicit QueryCompiler(library::DictionaryStore* dictionary);
 
     /**
      * Compile an expression AST into an execution plan.
@@ -87,9 +87,9 @@ namespace ao::query
     // Member variables
     ExecutionPlan _plan;
     std::uint32_t _nextReg = 0;
-    library::DictionaryStore* _dict = nullptr;
+    library::DictionaryStore* _dictionary = nullptr;
     Field _lastField = Field::TagBloom; // Track last field for context
-    // Interned dictId of the last field when it is Field::Custom (0 otherwise). The
+    // Interned dictionaryId of the last field when it is Field::Custom (0 otherwise). The
     // comparison/membership instruction carries this so the evaluator can resolve the
     // custom key without a separate LoadField lookup.
     std::int64_t _lastFieldCustomId = 0;
@@ -102,9 +102,9 @@ namespace ao::query
    * Compile an expression AST into an execution plan (non-throwing entry point).
    *
    * @param expr The expression AST to compile.
-   * @param dict Optional DictionaryStore for resolving string constants to IDs; may be nullptr.
+   * @param dictionary Optional DictionaryStore for resolving string constants to IDs; may be nullptr.
    * @return The compiled ExecutionPlan, or an Error{Code::FormatRejected, ...} if @p expr is not
    *         a valid query predicate. Never throws on invalid input.
    */
-  Result<ExecutionPlan> compileQuery(Expression const& expr, library::DictionaryStore* dict = nullptr);
+  Result<ExecutionPlan> compileQuery(Expression const& expr, library::DictionaryStore* dictionary = nullptr);
 } // namespace ao::query

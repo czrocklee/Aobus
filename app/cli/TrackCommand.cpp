@@ -6,7 +6,7 @@
 #include "CliContext.h"
 #include "CommandError.h"
 #include "DryRunFlag.h"
-#include "DumpUtils.h"
+#include "DumpOutput.h"
 #include "Output.h"
 #include "QueryHelp.h"
 #include "TrackSelection.h"
@@ -51,25 +51,25 @@ namespace ao::cli
 {
   namespace
   {
-    bool assignStringOption(CLI::Option const* option, std::optional<std::string>& target)
+    bool assignStringOption(CLI::Option const* option, std::optional<std::string>& optTarget)
     {
       if (option->count() == 0)
       {
         return false;
       }
 
-      target = option->as<std::string>();
+      optTarget = option->as<std::string>();
       return true;
     }
 
-    bool assignUint16Option(CLI::Option const* option, std::optional<std::uint16_t>& target)
+    bool assignUint16Option(CLI::Option const* option, std::optional<std::uint16_t>& optTarget)
     {
       if (option->count() == 0)
       {
         return false;
       }
 
-      target = option->as<std::uint16_t>();
+      optTarget = option->as<std::uint16_t>();
       return true;
     }
 
@@ -456,38 +456,39 @@ namespace ao::cli
 {
   namespace
   {
-    std::vector<std::string> tagNames(library::TrackView const& view, library::DictionaryStore const& dict)
+    std::vector<std::string> tagNames(library::TrackView const& view, library::DictionaryStore const& dictionary)
     {
       auto names = std::vector<std::string>{};
 
       for (auto const tagId : view.tags())
       {
-        names.emplace_back(resolveDict(dict, tagId));
+        names.emplace_back(dictionaryText(dictionary, tagId));
       }
 
       return names;
     }
 
-    std::map<std::string, std::string> customMap(library::TrackView const& view, library::DictionaryStore const& dict)
+    std::map<std::string, std::string> customMap(library::TrackView const& view,
+                                                 library::DictionaryStore const& dictionary)
     {
       auto result = std::map<std::string, std::string>{};
 
       for (auto const& [customId, val] : view.customMetadata())
       {
-        result.emplace(std::string{resolveDict(dict, customId)}, val);
+        result.emplace(std::string{dictionaryText(dictionary, customId)}, val);
       }
 
       return result;
     }
 
-    std::optional<std::string> dictionaryNameWhenPresent(library::DictionaryStore const& dict, DictionaryId id)
+    std::optional<std::string> dictionaryNameWhenPresent(library::DictionaryStore const& dictionary, DictionaryId id)
     {
       if (id == kInvalidDictionaryId)
       {
         return std::nullopt;
       }
 
-      return std::string{resolveDict(dict, id)};
+      return std::string{dictionaryText(dictionary, id)};
     }
 
     std::optional<std::string> nonEmptyString(std::string_view value)
@@ -530,29 +531,31 @@ namespace ao::cli
       return value.raw();
     }
 
-    TrackRecordDto trackRecordDto(TrackId id, library::TrackView const& view, library::DictionaryStore const& dict)
+    TrackRecordDto toTrackRecordDto(TrackId id,
+                                    library::TrackView const& view,
+                                    library::DictionaryStore const& dictionary)
     {
       auto dto = TrackRecordDto{.id = id};
 
       if (view.isHotValid())
       {
         dto.optTitle = nonEmptyString(view.metadata().title());
-        dto.optArtist = dictionaryNameWhenPresent(dict, view.metadata().artistId());
-        dto.optAlbum = dictionaryNameWhenPresent(dict, view.metadata().albumId());
-        dto.optAlbumArtist = dictionaryNameWhenPresent(dict, view.metadata().albumArtistId());
-        dto.optGenre = dictionaryNameWhenPresent(dict, view.metadata().genreId());
-        dto.optComposer = dictionaryNameWhenPresent(dict, view.metadata().composerId());
+        dto.optArtist = dictionaryNameWhenPresent(dictionary, view.metadata().artistId());
+        dto.optAlbum = dictionaryNameWhenPresent(dictionary, view.metadata().albumId());
+        dto.optAlbumArtist = dictionaryNameWhenPresent(dictionary, view.metadata().albumArtistId());
+        dto.optGenre = dictionaryNameWhenPresent(dictionary, view.metadata().genreId());
+        dto.optComposer = dictionaryNameWhenPresent(dictionary, view.metadata().composerId());
         dto.optYear = nonZeroNumber(view.metadata().year());
-        dto.optTags = tagNames(view, dict);
+        dto.optTags = tagNames(view, dictionary);
       }
 
       if (view.isColdValid())
       {
-        dto.optConductor = dictionaryNameWhenPresent(dict, view.classical().conductorId());
-        dto.optEnsemble = dictionaryNameWhenPresent(dict, view.classical().ensembleId());
-        dto.optWork = dictionaryNameWhenPresent(dict, view.classical().workId());
-        dto.optMovement = dictionaryNameWhenPresent(dict, view.classical().movementId());
-        dto.optSoloist = dictionaryNameWhenPresent(dict, view.classical().soloistId());
+        dto.optConductor = dictionaryNameWhenPresent(dictionary, view.classical().conductorId());
+        dto.optEnsemble = dictionaryNameWhenPresent(dictionary, view.classical().ensembleId());
+        dto.optWork = dictionaryNameWhenPresent(dictionary, view.classical().workId());
+        dto.optMovement = dictionaryNameWhenPresent(dictionary, view.classical().movementId());
+        dto.optSoloist = dictionaryNameWhenPresent(dictionary, view.classical().soloistId());
         dto.optTrackNumber = nonZeroNumber(view.metadata().trackNumber());
         dto.optTrackTotal = nonZeroNumber(view.metadata().trackTotal());
         dto.optDiscNumber = nonZeroNumber(view.metadata().discNumber());
@@ -562,7 +565,7 @@ namespace ao::cli
         dto.optDuration = positiveDurationMillis(view.property().duration());
         dto.optSampleRate = nonZeroSampleRate(view.property().sampleRate());
         dto.optUri = nonEmptyString(view.property().uri());
-        dto.optCustom = customMap(view, dict);
+        dto.optCustom = customMap(view, dictionary);
       }
 
       return dto;
@@ -571,9 +574,9 @@ namespace ao::cli
     void emitJsonTrackRecord(std::ostream& os,
                              TrackId id,
                              library::TrackView const& view,
-                             library::DictionaryStore const& dict)
+                             library::DictionaryStore const& dictionary)
     {
-      emitDocument(os, OutputFormat::Json, trackRecordDto(id, view, dict));
+      emitDocument(os, OutputFormat::Json, toTrackRecordDto(id, view, dictionary));
     }
 
     void formatStructuredTracks(std::vector<TrackId> const& trackIds,
@@ -594,9 +597,9 @@ namespace ao::cli
       }
 
       std::size_t const end = (limit == 0) ? trackIds.size() : std::min(offset + limit, trackIds.size());
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.tracks().reader(txn);
-      auto const& dict = ml.dictionary();
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.tracks().reader(transaction);
+      auto const& dictionary = ml.dictionary();
 
       if (format == OutputFormat::Yaml)
       {
@@ -610,7 +613,7 @@ namespace ao::cli
 
           if (optView)
           {
-            dto.tracks.push_back(trackRecordDto(id, *optView, dict));
+            dto.tracks.push_back(toTrackRecordDto(id, *optView, dictionary));
           }
         }
 
@@ -626,7 +629,7 @@ namespace ao::cli
 
         if (optView)
         {
-          emitJsonTrackRecord(os, id, *optView, dict);
+          emitJsonTrackRecord(os, id, *optView, dictionary);
         }
       }
     }
@@ -643,8 +646,8 @@ namespace ao::cli
       }
 
       std::size_t const end = (limit == 0) ? trackIds.size() : std::min(offset + limit, trackIds.size());
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.tracks().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.tracks().reader(transaction);
 
       for (std::size_t i = offset; i < end; ++i)
       {
@@ -702,8 +705,8 @@ namespace ao::cli
 
         auto evaluator = query::FormatEvaluator{};
         std::size_t const end = (limit == 0) ? trackIds.size() : std::min(offset + limit, trackIds.size());
-        auto const txn = ml.readTransaction();
-        auto const reader = ml.tracks().reader(txn);
+        auto const transaction = ml.readTransaction();
+        auto const reader = ml.tracks().reader(transaction);
 
         for (std::size_t i = offset; i < end; ++i)
         {
@@ -792,7 +795,7 @@ namespace ao::cli
       std::println(os, "Cold Header:");
       hexDump(coldData.subspan(0, sizeof(library::TrackColdHeader)), os);
 
-      if (coldReader.valid())
+      if (coldReader.isValid())
       {
         dumpRawColdSections(coldData, coldReader, os);
         return;
@@ -816,7 +819,7 @@ namespace ao::cli
       dumpRawCold(view, coldData, os);
     }
 
-    void dumpPlainHot(library::TrackView const& view, library::DictionaryStore const& dict, std::ostream& os)
+    void dumpPlainHot(library::TrackView const& view, library::DictionaryStore const& dictionary, std::ostream& os)
     {
       if (!view.isHotValid())
       {
@@ -824,21 +827,24 @@ namespace ao::cli
       }
 
       std::println(os, "  Title: {}", view.metadata().title());
+      std::println(os,
+                   "  Artist: {} (ID: {})",
+                   dictionaryText(dictionary, view.metadata().artistId()),
+                   view.metadata().artistId());
       std::println(
-        os, "  Artist: {} (ID: {})", resolveDict(dict, view.metadata().artistId()), view.metadata().artistId());
-      std::println(os, "  Album: {} (ID: {})", resolveDict(dict, view.metadata().albumId()), view.metadata().albumId());
+        os, "  Album: {} (ID: {})", dictionaryText(dictionary, view.metadata().albumId()), view.metadata().albumId());
       std::println(os, "  Tag Bloom: 0x{:08x}", view.tags().bloom());
       std::print(os, "  Tags: ");
 
       for (auto const tagId : view.tags())
       {
-        std::print(os, "{} (ID: {}) ", resolveDict(dict, tagId), tagId);
+        std::print(os, "{} (ID: {}) ", dictionaryText(dictionary, tagId), tagId);
       }
 
       std::println(os);
     }
 
-    void dumpPlainCold(library::TrackView const& view, library::DictionaryStore const& dict, std::ostream& os)
+    void dumpPlainCold(library::TrackView const& view, library::DictionaryStore const& dictionary, std::ostream& os)
     {
       if (!view.isColdValid())
       {
@@ -851,26 +857,26 @@ namespace ao::cli
 
       for (auto const& [customId, val] : view.customMetadata())
       {
-        std::println(os, "  Custom [{}]: {}", resolveDict(dict, customId), val);
+        std::println(os, "  Custom [{}]: {}", dictionaryText(dictionary, customId), val);
       }
     }
 
     void dumpPlainTrack(TrackId id,
                         library::TrackView const& view,
-                        library::DictionaryStore const& dict,
+                        library::DictionaryStore const& dictionary,
                         std::ostream& os)
     {
       std::println(os, "Track ID: {}", id);
 
-      dumpPlainHot(view, dict, os);
-      dumpPlainCold(view, dict, os);
+      dumpPlainHot(view, dictionary, os);
+      dumpPlainCold(view, dictionary, os);
     }
 
-    void processTrackDump(TrackId id,
-                          library::TrackView const& view,
-                          library::DictionaryStore const& dict,
-                          bool raw,
-                          std::ostream& os)
+    void dumpTrack(TrackId id,
+                   library::TrackView const& view,
+                   library::DictionaryStore const& dictionary,
+                   bool raw,
+                   std::ostream& os)
     {
       if (raw)
       {
@@ -878,15 +884,15 @@ namespace ao::cli
         return;
       }
 
-      dumpPlainTrack(id, view, dict, os);
+      dumpPlainTrack(id, view, dictionary, os);
     }
 
     void dumpTracks(library::MusicLibrary& ml, std::uint32_t targetId, bool raw, std::ostream& os)
     {
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.tracks().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.tracks().reader(transaction);
 
-      if (auto const& dict = ml.dictionary(); targetId > 0)
+      if (auto const& dictionary = ml.dictionary(); targetId > 0)
       {
         auto const id = TrackId{targetId};
 
@@ -894,7 +900,7 @@ namespace ao::cli
               reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to dump track");
             optView)
         {
-          processTrackDump(id, *optView, dict, raw, os);
+          dumpTrack(id, *optView, dictionary, raw, os);
         }
         else
         {
@@ -905,12 +911,12 @@ namespace ao::cli
       {
         for (auto const& [id, view] : reader)
         {
-          processTrackDump(id, view, dict, raw, os);
+          dumpTrack(id, view, dictionary, raw, os);
         }
       }
     }
 
-    void setupTrackShowCommand(CLI::App& track, CliContext& context)
+    void configureTrackShowCommand(CLI::App& track, CliContext& context)
     {
       auto* showCmd = track.add_subcommand("show", "Show tracks by id or filter");
       auto* ids = showCmd->add_option("id", "track ids to show")->expected(0, -1);
@@ -937,7 +943,7 @@ namespace ao::cli
         });
     }
 
-    void setupTrackCreateCommand(CLI::App& track, CliContext& context)
+    void configureTrackCreateCommand(CLI::App& track, CliContext& context)
     {
       auto* create = track.add_subcommand("create", "Create a track from a file");
       auto* path = create->add_option("path", "audio file path")->required();
@@ -1080,7 +1086,7 @@ namespace ao::cli
       updateTracks(context, rawIds, filter, patch, isDryRun(options.dryRun));
     }
 
-    void setupTrackUpdateCommand(CLI::App& track, CliContext& context)
+    void configureTrackUpdateCommand(CLI::App& track, CliContext& context)
     {
       auto* update = track.add_subcommand("update", "Update track metadata");
       update->footer(trackUpdateHelpFooter());
@@ -1117,7 +1123,7 @@ namespace ao::cli
       update->callback([&context, options] { runTrackUpdateCommand(context, options); });
     }
 
-    void setupTrackDeleteCommand(CLI::App& track, CliContext& context)
+    void configureTrackDeleteCommand(CLI::App& track, CliContext& context)
     {
       auto* del = track.add_subcommand("delete", "Delete a track by id");
       auto* id = del->add_option("id", "track id")->required();
@@ -1153,7 +1159,7 @@ namespace ao::cli
         });
     }
 
-    void setupTrackDumpCommand(CLI::App& track, CliContext& context)
+    void configureTrackDumpCommand(CLI::App& track, CliContext& context)
     {
       auto* dumpCmd = track.add_subcommand("dump", "Dump tracks from database");
       auto* dumpId = dumpCmd->add_option("--id", "track id to dump");
@@ -1176,15 +1182,15 @@ namespace ao::cli
     }
   } // namespace
 
-  void setupTrackCommand(CLI::App& app, CliContext& context)
+  void configureTrackCommand(CLI::App& app, CliContext& context)
   {
     auto* track = app.add_subcommand("track", "Track management commands");
     track->footer(trackHelpFooter());
     track->require_subcommand(1);
-    setupTrackShowCommand(*track, context);
-    setupTrackCreateCommand(*track, context);
-    setupTrackUpdateCommand(*track, context);
-    setupTrackDeleteCommand(*track, context);
-    setupTrackDumpCommand(*track, context);
+    configureTrackShowCommand(*track, context);
+    configureTrackCreateCommand(*track, context);
+    configureTrackUpdateCommand(*track, context);
+    configureTrackDeleteCommand(*track, context);
+    configureTrackDumpCommand(*track, context);
   }
 } // namespace ao::cli

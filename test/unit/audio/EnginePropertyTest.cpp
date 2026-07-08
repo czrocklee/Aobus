@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "BackendTestSupport.h"
 #include "CapturingBackend.h"
 #include "EngineTestSupport.h"
 #include "ScriptedDecoderSession.h"
-#include "TestUtility.h"
 #include <ao/Error.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
@@ -154,7 +155,7 @@ namespace ao::audio::test
       auto stateChanged = CallbackLatch{};
       engine.setOnStateChanged([&] { stateChanged.notify(); });
 
-      backendRaw->firePropertyChanged(PropertyId::Volume);
+      backendRaw->emitPropertyChanged(PropertyId::Volume);
 
       CHECK(stateChanged.waitForCount(1));
       CHECK(engine.status().volume == Catch::Approx{1.0F});
@@ -166,8 +167,8 @@ namespace ao::audio::test
     SECTION("onPropertyChanged handles backend read errors gracefully")
     {
       backendRaw->setPropertyError(Error::Code::Generic);
-      backendRaw->firePropertyChanged(PropertyId::Volume);
-      backendRaw->firePropertyChanged(PropertyId::Muted);
+      backendRaw->emitPropertyChanged(PropertyId::Volume);
+      backendRaw->emitPropertyChanged(PropertyId::Muted);
 
       CHECK(engine.status().volumeAvailable);
       CHECK(engine.status().volume == Catch::Approx{1.0F});
@@ -176,7 +177,7 @@ namespace ao::audio::test
 
     SECTION("onPropertyChanged callback updates engine mute status")
     {
-      backendRaw->firePropertyChanged(PropertyId::Muted);
+      backendRaw->emitPropertyChanged(PropertyId::Muted);
 
       CHECK(engine.status().volumeAvailable);
       CHECK(engine.status().muted == false);
@@ -186,7 +187,7 @@ namespace ao::audio::test
     SECTION("onPropertyChanged callback for unknown property is ignored")
     {
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      backendRaw->firePropertyChanged(kUnknownId);
+      backendRaw->emitPropertyChanged(kUnknownId);
     }
 
     SECTION("Backend callbacks update engine state correctly")
@@ -195,14 +196,14 @@ namespace ao::audio::test
       auto stateChanged = CallbackLatch{};
       engine.setOnStateChanged([&] { stateChanged.notify(); });
 
-      backendRaw->fireBackendError("hardware failed");
+      backendRaw->emitBackendError("hardware failed");
       CHECK(stateChanged.waitForCount(1));
       CHECK(engine.status().transport == Transport::Error);
 
       engine.play(makePlaybackItem(desc));
       auto routeChanged = CallbackLatch{};
       engine.setOnRouteChanged([&](auto const&) { routeChanged.notify(); });
-      backendRaw->fireRouteReady("test-anchor");
+      backendRaw->emitRouteReady("test-anchor");
       CHECK(routeChanged.waitForCount(1));
     }
 

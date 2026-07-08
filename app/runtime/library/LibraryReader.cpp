@@ -39,23 +39,23 @@ namespace ao::rt
 {
   namespace
   {
-    std::string resolveDictionaryId(library::DictionaryStore const& dict, DictionaryId id)
+    std::string resolveDictionaryId(library::DictionaryStore const& dictionary, DictionaryId id)
     {
       if (id == kInvalidDictionaryId)
       {
         return {};
       }
 
-      return std::string{dict.getOrDefault(id)};
+      return std::string{dictionary.getOrDefault(id)};
     }
 
-    std::string joinResolvedTags(library::TrackView::TagProxy tags, library::DictionaryStore const& dict)
+    std::string joinResolvedTags(library::TrackView::TagProxy tags, library::DictionaryStore const& dictionary)
     {
       auto result = std::string{};
 
       for (auto const tagId : tags)
       {
-        auto const tag = dict.getOrDefault(tagId);
+        auto const tag = dictionary.getOrDefault(tagId);
 
         if (tag.empty())
         {
@@ -94,9 +94,9 @@ namespace ao::rt
     TrackRow rowDataFromView(TrackId id,
                              library::MusicLibrary& library,
                              library::TrackView const& view,
-                             lmdb::ReadTransaction const& txn)
+                             lmdb::ReadTransaction const& transaction)
     {
-      auto const& dict = library.dictionary();
+      auto const& dictionary = library.dictionary();
       auto const metadata = view.metadata();
       auto const property = view.property();
       auto const classical = view.classical();
@@ -107,7 +107,7 @@ namespace ao::rt
 
       if (auto const uri = property.uri(); !uri.empty())
       {
-        auto const manifestReader = library.manifest().reader(txn);
+        auto const manifestReader = library.manifest().reader(transaction);
 
         auto const optManifest = storageValueOrNullopt(manifestReader.get(uri), "Failed to load file manifest entry");
 
@@ -127,17 +127,17 @@ namespace ao::rt
                         .value_or(kInvalidResourceId),
         .optUriPath = resolveLibraryPath(library.rootPath(), property.uri()),
         .title = std::string{metadata.title()},
-        .artist = resolveDictionaryId(dict, metadata.artistId()),
-        .album = resolveDictionaryId(dict, metadata.albumId()),
-        .albumArtist = resolveDictionaryId(dict, metadata.albumArtistId()),
-        .genre = resolveDictionaryId(dict, metadata.genreId()),
-        .composer = resolveDictionaryId(dict, metadata.composerId()),
-        .conductor = resolveDictionaryId(dict, classical.conductorId()),
-        .ensemble = resolveDictionaryId(dict, classical.ensembleId()),
-        .work = resolveDictionaryId(dict, classical.workId()),
-        .movement = resolveDictionaryId(dict, classical.movementId()),
-        .soloist = resolveDictionaryId(dict, classical.soloistId()),
-        .tags = joinResolvedTags(view.tags(), dict),
+        .artist = resolveDictionaryId(dictionary, metadata.artistId()),
+        .album = resolveDictionaryId(dictionary, metadata.albumId()),
+        .albumArtist = resolveDictionaryId(dictionary, metadata.albumArtistId()),
+        .genre = resolveDictionaryId(dictionary, metadata.genreId()),
+        .composer = resolveDictionaryId(dictionary, metadata.composerId()),
+        .conductor = resolveDictionaryId(dictionary, classical.conductorId()),
+        .ensemble = resolveDictionaryId(dictionary, classical.ensembleId()),
+        .work = resolveDictionaryId(dictionary, classical.workId()),
+        .movement = resolveDictionaryId(dictionary, classical.movementId()),
+        .soloist = resolveDictionaryId(dictionary, classical.soloistId()),
+        .tags = joinResolvedTags(view.tags(), dictionary),
         .duration = property.duration(),
         .year = metadata.year(),
         .discNumber = metadata.discNumber(),
@@ -190,7 +190,7 @@ namespace ao::rt
   LibraryReader& LibraryReader::operator=(LibraryReader&&) noexcept = default;
   LibraryReader::~LibraryReader() = default;
 
-  bool LibraryReader::valid() const noexcept
+  bool LibraryReader::isValid() const noexcept
   {
     return _implPtr != nullptr;
   }
@@ -198,8 +198,8 @@ namespace ao::rt
   std::optional<TrackRow> LibraryReader::trackRow(TrackId id) const
   {
     auto& library = _implPtr->library;
-    auto const& txn = _implPtr->transaction;
-    auto const reader = library.tracks().reader(txn);
+    auto const& transaction = _implPtr->transaction;
+    auto const reader = library.tracks().reader(transaction);
     auto const optView =
       storageValueOrNullopt(reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to load track row");
 
@@ -208,7 +208,7 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    return rowDataFromView(id, library, *optView, txn);
+    return rowDataFromView(id, library, *optView, transaction);
   }
 
   ResourceId LibraryReader::trackCoverArtId(TrackId id) const
@@ -246,8 +246,8 @@ namespace ao::rt
   TrackFieldRawValue LibraryReader::trackField(TrackId id, TrackField field) const
   {
     auto& library = _implPtr->library;
-    auto const& txn = _implPtr->transaction;
-    auto const reader = library.tracks().reader(txn);
+    auto const& transaction = _implPtr->transaction;
+    auto const reader = library.tracks().reader(transaction);
     auto const optView =
       storageValueOrNullopt(reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to load track field");
 
@@ -256,7 +256,7 @@ namespace ao::rt
       return std::monostate{};
     }
 
-    auto const manifestReader = library.manifest().reader(txn);
+    auto const manifestReader = library.manifest().reader(transaction);
     return readTrackFieldRawValue(field, *optView, library.dictionary(), &manifestReader);
   }
 
@@ -267,13 +267,13 @@ namespace ao::rt
 
   std::vector<std::string> LibraryReader::resolveAll(std::span<DictionaryId const> ids) const
   {
-    auto const& dict = _implPtr->library.dictionary();
+    auto const& dictionary = _implPtr->library.dictionary();
     auto result = std::vector<std::string>{};
     result.reserve(ids.size());
 
     for (auto const id : ids)
     {
-      result.push_back(resolveDictionaryId(dict, id));
+      result.push_back(resolveDictionaryId(dictionary, id));
     }
 
     return result;

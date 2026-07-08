@@ -3,7 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/SeekControl.h"
 #include <ao/rt/AppRuntime.h>
@@ -22,7 +22,7 @@ namespace ao::gtk::layout
     /**
      * @brief playback.seekSlider
      */
-    class SeekSliderComponent final : public ILayoutComponent
+    class SeekSliderComponent final : public LayoutComponent
     {
     public:
       SeekSliderComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
@@ -36,7 +36,7 @@ namespace ao::gtk::layout
       SeekControl _control;
     };
 
-    std::unique_ptr<ILayoutComponent> createSeekSlider(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createSeekSlider(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<SeekSliderComponent>(ctx, node);
     }

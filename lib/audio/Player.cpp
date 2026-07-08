@@ -4,9 +4,10 @@
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/IBackendProvider.h>
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/Player.h>
 #include <ao/audio/QualityAnalyzer.h>
@@ -46,7 +47,7 @@ namespace ao::audio
   {
     struct ProviderRecord
     {
-      std::unique_ptr<IBackendProvider> providerPtr;
+      std::unique_ptr<BackendProvider> providerPtr;
       Subscription subscription;
       std::vector<Device> devices;
     };
@@ -69,7 +70,7 @@ namespace ao::audio
       void shutdown() noexcept { shuttingDown.store(true, std::memory_order_release); }
     };
 
-    explicit Impl(async::IExecutor& exec)
+    explicit Impl(async::Executor& exec)
       : executor{exec}
     {
     }
@@ -109,17 +110,17 @@ namespace ao::audio
       providers.clear();
     }
 
-    async::IExecutor& executor;
+    async::Executor& executor;
     std::atomic<std::uint64_t> playbackGeneration{1};
     std::vector<std::unique_ptr<ProviderRecord>> providers;
     std::optional<PendingOutputDeviceSelection> optPendingOutputDeviceSelection;
-    IBackendProvider* activeBackendProvider = nullptr;
+    BackendProvider* activeBackendProvider = nullptr;
     Subscription graphSubscription;
     std::unique_ptr<Engine> enginePtr;
     std::shared_ptr<CallbackGate> gatePtr = std::make_shared<CallbackGate>();
 
     mutable std::mutex backendsMutex;
-    mutable std::vector<IBackendProvider::Status> cachedBackends;
+    mutable std::vector<BackendProvider::Status> cachedBackends;
     mutable std::vector<Device> allDevices;
 
     mutable std::mutex graphMutex;
@@ -131,15 +132,15 @@ namespace ao::audio
     std::function<void(Engine::TrackAdvanced const&)> onTrackAdvanced;
     std::function<void(Engine::PlaybackFailure const&)> onPlaybackFailure;
     std::function<void()> onStateChanged;
-    std::function<void(std::vector<IBackendProvider::Status> const&)> onOutputDevicesChanged;
+    std::function<void(std::vector<BackendProvider::Status> const&)> onOutputDevicesChanged;
     std::function<void(QualityResult const&, bool)> onQualityChanged;
 
-    void handleOutputDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices);
+    void handleOutputDevicesChanged(Player* owner, BackendProvider* provider, std::vector<Device> const& devices);
     void handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation);
     void updateMergedGraph();
 
     template<typename Task>
-    static void dispatchInternal(async::IExecutor& executor, std::shared_ptr<CallbackGate> gatePtr, Task task)
+    static void dispatchInternal(async::Executor& executor, std::shared_ptr<CallbackGate> gatePtr, Task task)
     {
       executor.dispatch(
         [gatePtr = std::move(gatePtr), task = std::move(task)] mutable
@@ -180,7 +181,7 @@ namespace ao::audio
   };
 
   void Player::Impl::handleOutputDevicesChanged(Player* owner,
-                                                IBackendProvider* provider,
+                                                BackendProvider* provider,
                                                 std::vector<Device> const& devices)
   {
     // Update individual provider cache
@@ -194,7 +195,7 @@ namespace ao::audio
 
     // Rebuild global cache from all providers
     auto allDevicesList = std::vector<Device>{};
-    auto snapshots = std::vector<IBackendProvider::Status>{};
+    auto snapshots = std::vector<BackendProvider::Status>{};
 
     for (auto const& record : providers)
     {
@@ -237,7 +238,7 @@ namespace ao::audio
       std::ignore = owner->setOutputDevice(pending.backend, pending.deviceId, pending.profile);
     }
 
-    auto snapshot = std::vector<IBackendProvider::Status>{};
+    auto snapshot = std::vector<BackendProvider::Status>{};
     {
       auto const lock = std::scoped_lock{backendsMutex};
       snapshot = cachedBackends;
@@ -329,7 +330,7 @@ namespace ao::audio
     qualityResult = analyzeAudioQuality(mergedGraph);
   }
 
-  Player::Player(async::IExecutor& executor)
+  Player::Player(async::Executor& executor)
     : _implPtr{std::make_unique<Impl>(executor)}
   {
     // Start with a NullBackend until a provider provides something real
@@ -423,7 +424,7 @@ namespace ao::audio
     _implPtr->onStateChanged = std::move(callback);
   }
 
-  void Player::setOnOutputDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback)
+  void Player::setOnOutputDevicesChanged(std::function<void(std::vector<BackendProvider::Status> const&)> callback)
   {
     _implPtr->onOutputDevicesChanged = std::move(callback);
   }
@@ -435,7 +436,7 @@ namespace ao::audio
 
   Player::~Player() = default;
 
-  void Player::addProvider(std::unique_ptr<IBackendProvider> providerPtr)
+  void Player::addProvider(std::unique_ptr<BackendProvider> providerPtr)
   {
     if (!providerPtr)
     {

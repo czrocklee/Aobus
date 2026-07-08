@@ -4,8 +4,9 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
 #include <functional>

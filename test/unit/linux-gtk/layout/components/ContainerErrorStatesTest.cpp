@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/linux-gtk/layout/runtime/ILayoutComponent.h"
+#include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -22,7 +22,7 @@ namespace ao::gtk::layout::test
     auto& ctx = fixture.context();
     auto& layoutRuntime = fixture.layoutRuntime();
 
-    auto const checkError = [](ILayoutComponent& compPtr, std::string const& expectedFragment)
+    auto const checkError = [](LayoutComponent& compPtr, std::string const& expectedFragment)
     {
       auto* const label = dynamic_cast<Gtk::Label*>(&compPtr.widget());
       REQUIRE(label != nullptr);

@@ -4,8 +4,8 @@
 #include "portal/LibraryImportExportWorkflow.h"
 
 #include "portal/ImportExportCallbacks.h"
-#include "test/unit/RuntimeTestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
@@ -74,8 +74,8 @@ namespace ao::gtk::test
     std::vector<std::string> trackTitles(GtkRuntimeFixture& fixture)
     {
       auto titles = std::vector<std::string>{};
-      auto txn = fixture.runtime().musicLibrary().readTransaction();
-      auto reader = fixture.runtime().musicLibrary().tracks().reader(txn);
+      auto transaction = fixture.runtime().musicLibrary().readTransaction();
+      auto reader = fixture.runtime().musicLibrary().tracks().reader(transaction);
 
       for (auto const& [id, view] : reader)
       {
@@ -94,8 +94,8 @@ namespace ao::gtk::test
 
     bool manifestHasAudioIdentity(GtkRuntimeFixture& fixture, std::string_view uri)
     {
-      auto txn = fixture.runtime().musicLibrary().readTransaction();
-      auto manifestResult = fixture.runtime().musicLibrary().manifest().reader(txn).get(uri);
+      auto transaction = fixture.runtime().musicLibrary().readTransaction();
+      auto manifestResult = fixture.runtime().musicLibrary().manifest().reader(transaction).get(uri);
       REQUIRE(manifestResult);
       return library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature());
     }
@@ -103,8 +103,8 @@ namespace ao::gtk::test
     std::vector<std::string> trackUris(GtkRuntimeFixture& fixture)
     {
       auto uris = std::vector<std::string>{};
-      auto txn = fixture.runtime().musicLibrary().readTransaction();
-      auto reader = fixture.runtime().musicLibrary().tracks().reader(txn);
+      auto transaction = fixture.runtime().musicLibrary().readTransaction();
+      auto reader = fixture.runtime().musicLibrary().tracks().reader(transaction);
 
       for (auto const& [id, view] : reader)
       {

@@ -6,7 +6,7 @@
 #include "app/GtkUiServices.h"
 #include "app/ThemeCoordinator.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Subscription.h>
 
 #include <memory>
 #include <optional>
@@ -62,7 +62,7 @@ namespace ao::gtk
 
     GtkUiServices uiServices();
 
-    void rebuildListPages(lmdb::ReadTransaction const& txn);
+    void rebuildListPages(lmdb::ReadTransaction const& transaction);
 
     TrackRowCache* trackRowCache();
     ImageCache* imageCache();

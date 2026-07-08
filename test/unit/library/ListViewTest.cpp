@@ -17,14 +17,14 @@ namespace ao::library::test
 {
   TEST_CASE("ListView - constructs from serialized data", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::createNew().serialize();
+    auto const payload = ListBuilder::makeEmpty().serialize();
     auto const view = ListView{payload};
     CHECK(view.tracks().empty());
   }
 
   TEST_CASE("ListView - returns serialized field values", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::createNew().name("Test").description("Desc").parentId(ListId{9}).serialize();
+    auto const payload = ListBuilder::makeEmpty().name("Test").description("Desc").parentId(ListId{9}).serialize();
     auto const view = ListView{payload};
 
     CHECK(view.tracks().empty());
@@ -38,7 +38,7 @@ namespace ao::library::test
 
   TEST_CASE("ListView - returns track IDs for manual lists", "[library][unit][list]")
   {
-    auto builder = ListBuilder::createNew().name("My List").description("Description");
+    auto builder = ListBuilder::makeEmpty().name("My List").description("Description");
     builder.tracks().add(TrackId{100});
     builder.tracks().add(TrackId{200});
     builder.tracks().add(TrackId{300});
@@ -58,7 +58,7 @@ namespace ao::library::test
   TEST_CASE("ListView - returns filters for smart lists", "[library][unit][list]")
   {
     auto const payload =
-      ListBuilder::createNew().name("Smart List").description("A smart list").filter("@year > 2020").serialize();
+      ListBuilder::makeEmpty().name("Smart List").description("A smart list").filter("@year > 2020").serialize();
     auto const view = ListView{payload};
 
     CHECK(view.tracks().empty());
@@ -70,7 +70,7 @@ namespace ao::library::test
 
   TEST_CASE("ListView - returns empty strings when lengths are zero", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::createNew().serialize();
+    auto const payload = ListBuilder::makeEmpty().serialize();
     auto const view = ListView{payload};
 
     CHECK(view.name().empty());
@@ -119,24 +119,24 @@ namespace ao::library::test
 
   TEST_CASE("ListView - valid records report isValid", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::createNew().name("Test").serialize();
+    auto const payload = ListBuilder::makeEmpty().name("Test").serialize();
     CHECK(ListView{payload}.isValid());
   }
 
   TEST_CASE("ListView - isSmart", "[library][unit][list]")
   {
-    auto const manualPayload = ListBuilder::createNew().name("Manual").serialize();
+    auto const manualPayload = ListBuilder::makeEmpty().name("Manual").serialize();
     auto const manualView = ListView{manualPayload};
     CHECK(manualView.isSmart() == false);
 
-    auto const smartPayload = ListBuilder::createNew().name("Smart").filter("@year > 2020").serialize();
+    auto const smartPayload = ListBuilder::makeEmpty().name("Smart").filter("@year > 2020").serialize();
     auto const smartView = ListView{smartPayload};
     CHECK(smartView.isSmart() == true);
   }
 
   TEST_CASE("ListView - returns large track ID counts", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::createNew().name("Test").serialize();
+    auto const payload = ListBuilder::makeEmpty().name("Test").serialize();
     auto const view = ListView{payload};
     CHECK(view.tracks().empty());
   }

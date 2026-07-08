@@ -31,14 +31,14 @@ namespace ao::cli
       {
         text += "(";
 
-        for (std::size_t idx = 0; idx < summary.aliases.size(); ++idx)
+        for (std::size_t index = 0; index < summary.aliases.size(); ++index)
         {
-          if (idx > 0)
+          if (index > 0)
           {
             text += ",";
           }
 
-          text += variableText(summary.type, summary.aliases[idx]);
+          text += variableText(summary.type, summary.aliases[index]);
         }
 
         text += ")";

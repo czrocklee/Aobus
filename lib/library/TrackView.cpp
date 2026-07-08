@@ -179,14 +179,14 @@ namespace ao::library
     return utility::bytes::stringView(payload.subspan(valueOffset, valueLength));
   }
 
-  std::optional<std::string_view> CustomMetadataProxy::get(DictionaryId dictId) const noexcept
+  std::optional<std::string_view> CustomMetadataProxy::get(DictionaryId dictionaryId) const noexcept
   {
     constexpr std::size_t kSearchThreshold = 64;
     auto customEntries = entries();
 
     if (customEntries.size() < kSearchThreshold)
     {
-      if (auto it = std::ranges::find(customEntries, dictId, &Entry::keyId); it != customEntries.end())
+      if (auto it = std::ranges::find(customEntries, dictionaryId, &Entry::keyId); it != customEntries.end())
       {
         return value(_payload, *it);
       }
@@ -194,8 +194,8 @@ namespace ao::library
       return std::nullopt;
     }
 
-    if (auto it = std::ranges::lower_bound(customEntries, dictId, {}, &Entry::keyId);
-        it != customEntries.end() && it->keyId == dictId)
+    if (auto it = std::ranges::lower_bound(customEntries, dictionaryId, {}, &Entry::keyId);
+        it != customEntries.end() && it->keyId == dictionaryId)
     {
       return value(_payload, *it);
     }
@@ -203,18 +203,18 @@ namespace ao::library
     return std::nullopt;
   }
 
-  bool CustomMetadataProxy::contains(DictionaryId dictId) const noexcept
+  bool CustomMetadataProxy::contains(DictionaryId dictionaryId) const noexcept
   {
     constexpr std::size_t kSearchThreshold = 64;
     auto customEntries = entries();
 
     if (customEntries.size() < kSearchThreshold)
     {
-      return std::ranges::find(customEntries, dictId, &Entry::keyId) != customEntries.end();
+      return std::ranges::find(customEntries, dictionaryId, &Entry::keyId) != customEntries.end();
     }
 
-    auto it = std::ranges::lower_bound(customEntries, dictId, {}, &Entry::keyId);
-    return it != customEntries.end() && it->keyId == dictId;
+    auto it = std::ranges::lower_bound(customEntries, dictionaryId, {}, &Entry::keyId);
+    return it != customEntries.end() && it->keyId == dictionaryId;
   }
 
   CustomMetadataProxy::Iterator CustomMetadataProxy::begin() const

@@ -29,8 +29,8 @@ add_library(ao_app_runtime STATIC
     runtime/TrackPresentation.cpp
     runtime/TrackField.cpp
     runtime/TrackFieldReader.cpp
-    runtime/projection/TrackListProjection.cpp
-    runtime/projection/TrackDetailProjection.cpp
+    runtime/projection/LiveTrackListProjection.cpp
+    runtime/projection/LiveTrackDetailProjection.cpp
     runtime/source/TrackSource.cpp
     runtime/ViewService.cpp
     runtime/Log.cpp
@@ -132,8 +132,8 @@ add_dependencies(ao_app_uimodel ao_uimodel_organization_guardrail)
 # --- Layering boundary guardrails ---
 # Cleared boundaries run in enforce mode and are attached to the owning target.
 # ao_layering_boundary_report remains as an aggregate entry point.
-set(AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX "ao/audio/(Player|IBackend|IBackendProvider|Engine|NullBackend|backend/|detail/)")
-set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|IBackend|IBackendProvider|Engine|NullBackend|backend/|detail/)))")
+set(AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX "ao/audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/)")
+set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/)))")
 set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|${AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX})")
 set(AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView))")
 set(AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX [=[/platform/|/MainWindowCoordinator\.cpp|/AudioBackendBootstrap\.]=])

@@ -29,12 +29,12 @@ namespace ao::query::detail::test
 
       REQUIRE(tokens.size() == expected.size());
 
-      for (std::size_t idx = 0; idx < expected.size(); ++idx)
+      for (std::size_t index = 0; index < expected.size(); ++index)
       {
-        DYNAMIC_SECTION("Token " << idx << " in " << std::string{text})
+        DYNAMIC_SECTION("Token " << index << " in " << std::string{text})
         {
-          CHECK(tokens[idx].kind == expected[idx].kind);
-          CHECK(tokenText(text, tokens[idx]) == expected[idx].text);
+          CHECK(tokens[index].kind == expected[index].kind);
+          CHECK(tokenText(text, tokens[index]) == expected[index].text);
         }
       }
     }
@@ -321,29 +321,29 @@ namespace ao::query::detail::test
 
         auto const tokens = tokenizeCompletionQuery(expression);
 
-        for (std::size_t idx = 0; idx < tokens.size(); ++idx)
+        for (std::size_t index = 0; index < tokens.size(); ++index)
         {
-          DYNAMIC_SECTION("Token " << idx)
+          DYNAMIC_SECTION("Token " << index)
           {
-            CHECK_FALSE(isErrorToken(tokens[idx].kind));
-            CHECK(tokens[idx].begin < tokens[idx].end);
+            CHECK_FALSE(isErrorToken(tokens[index].kind));
+            CHECK(tokens[index].begin < tokens[index].end);
           }
         }
 
         auto const significant = significantTokens(tokens);
         CHECK_FALSE(significant.empty());
 
-        for (std::size_t idx = 0; idx + 1 < significant.size(); ++idx)
+        for (std::size_t index = 0; index + 1 < significant.size(); ++index)
         {
-          auto const left = significant[idx];
-          auto const right = significant[idx + 1];
+          auto const left = significant[index];
+          auto const right = significant[index + 1];
 
           if (left.end != right.begin || isTightlyBoundRangeBoundary(left, right))
           {
             continue;
           }
 
-          DYNAMIC_SECTION("Boundary " << idx << " at " << left.end)
+          DYNAMIC_SECTION("Boundary " << index << " at " << left.end)
           {
             CHECK(matchesExpressionSyntax(withInsertedSpace(expression, left.end)));
           }
@@ -377,10 +377,10 @@ namespace ao::query::detail::test
             CHECK(tokens.front().begin == 0);
             CHECK(tokens.back().end == len);
 
-            for (std::size_t idx = 0; idx + 1 < tokens.size(); ++idx)
+            for (std::size_t index = 0; index + 1 < tokens.size(); ++index)
             {
-              CHECK(tokens[idx].end == tokens[idx + 1].begin);
-              CHECK_FALSE(isErrorToken(tokens[idx].kind));
+              CHECK(tokens[index].end == tokens[index + 1].begin);
+              CHECK_FALSE(isErrorToken(tokens[index].kind));
             }
           }
         }

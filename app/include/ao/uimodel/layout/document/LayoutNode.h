@@ -190,7 +190,7 @@ namespace ao::uimodel
   struct LayoutNode final
   {
     template<typename T>
-    T getProp(std::string_view key, T defaultValue) const
+    T propertyOr(std::string_view key, T defaultValue) const
     {
       if (auto const it = props.find(key); it != props.end())
       {
@@ -201,7 +201,7 @@ namespace ao::uimodel
     }
 
     template<typename T>
-    T getLayout(std::string_view key, T defaultValue) const
+    T layoutOr(std::string_view key, T defaultValue) const
     {
       if (auto const it = layout.find(key); it != layout.end())
       {

@@ -2,12 +2,13 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/Error.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/DecoderSession.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/IDecoderSession.h>
+#include <ao/audio/PcmBlock.h>
 #include <ao/audio/StreamingSource.h>
 #include <ao/audio/detail/DecoderError.h>
-#include <ao/utility/ThreadUtils.h>
+#include <ao/utility/ThreadName.h>
 
 #include <atomic>
 #include <chrono>
@@ -40,7 +41,7 @@ namespace ao::audio
     }
   } // namespace
 
-  StreamingSource::StreamingSource(std::unique_ptr<IDecoderSession> decoderPtr,
+  StreamingSource::StreamingSource(std::unique_ptr<DecoderSession> decoderPtr,
                                    DecodedStreamInfo streamInfo,
                                    std::function<void(Error const&)> onError,
                                    std::chrono::milliseconds prerollDuration,

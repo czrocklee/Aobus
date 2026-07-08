@@ -5,7 +5,7 @@
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 
@@ -119,8 +119,8 @@ namespace ao::gtk::test
       mounted.drain();
 
       CHECK(status.widget().get_visible());
-      CHECK(status.labelForTest().get_text() == "Partial import");
-      CHECK(status.dismissButtonForTest().get_visible());
+      CHECK(status.label().get_text() == "Partial import");
+      CHECK(status.dismissButton().get_visible());
       CHECK(hasCssClass(status.widget(), "ao-activity-status-warning"));
     }
 
@@ -134,7 +134,7 @@ namespace ao::gtk::test
       mounted.drain();
 
       CHECK_FALSE(status.widget().get_visible());
-      CHECK(findWidgetByClass<Gtk::Label>(status.detailContentForTest(), "ao-activity-detail-title") == nullptr);
+      CHECK(findWidgetByClass<Gtk::Label>(status.detailContent(), "ao-activity-detail-title") == nullptr);
     }
   }
 
@@ -148,13 +148,12 @@ namespace ao::gtk::test
     mounted.drain();
     REQUIRE(status.widget().get_visible());
 
-    emitClicked(status.dismissButtonForTest());
+    emitClicked(status.dismissButton());
     mounted.drain();
 
     CHECK_FALSE(status.widget().get_visible());
     CHECK(runtime.notifications().feed().entries.size() == 1);
-    auto* const retainedTitle =
-      findWidgetByClass<Gtk::Label>(status.detailContentForTest(), "ao-activity-detail-title");
+    auto* const retainedTitle = findWidgetByClass<Gtk::Label>(status.detailContent(), "ao-activity-detail-title");
     REQUIRE(retainedTitle != nullptr);
     CHECK(retainedTitle->get_text() == "Scan failed");
   }
@@ -171,8 +170,8 @@ namespace ao::gtk::test
       mounted.drain();
 
       CHECK(hasCssClass(status.widget(), "ao-activity-status-openable"));
-      REQUIRE(status.detailButtonForTest().get_sensitive());
-      auto* const title = findWidgetByClass<Gtk::Label>(status.detailContentForTest(), "ao-activity-detail-title");
+      REQUIRE(status.detailButton().get_sensitive());
+      auto* const title = findWidgetByClass<Gtk::Label>(status.detailContent(), "ao-activity-detail-title");
       REQUIRE(title != nullptr);
       CHECK(title->get_text() == "Partial import");
     }
@@ -184,10 +183,10 @@ namespace ao::gtk::test
 
       CHECK(status.widget().get_visible());
       CHECK_FALSE(hasCssClass(status.widget(), "ao-activity-status-openable"));
-      CHECK_FALSE(status.detailButtonForTest().get_sensitive());
+      CHECK_FALSE(status.detailButton().get_sensitive());
       mounted.drain();
 
-      CHECK_FALSE(status.detailPopoverForTest().get_visible());
+      CHECK_FALSE(status.detailPopover().get_visible());
     }
 
     SECTION("detail-only notification has no hidden idle compact affordance")
@@ -200,9 +199,9 @@ namespace ao::gtk::test
       mounted.drain();
 
       CHECK_FALSE(status.widget().get_visible());
-      CHECK_FALSE(status.detailButtonForTest().get_sensitive());
+      CHECK_FALSE(status.detailButton().get_sensitive());
       CHECK_FALSE(hasCssClass(status.widget(), "ao-activity-status-openable"));
-      auto* const title = findWidgetByClass<Gtk::Label>(status.detailContentForTest(), "ao-activity-detail-title");
+      auto* const title = findWidgetByClass<Gtk::Label>(status.detailContent(), "ao-activity-detail-title");
       REQUIRE(title != nullptr);
       CHECK(title->get_text() == "Index diagnostic");
     }
@@ -215,20 +214,19 @@ namespace ao::gtk::test
         .content = rt::NotificationContentState{.title = "Import"},
       });
       mounted.drain();
-      REQUIRE(status.detailButtonForTest().get_sensitive());
+      REQUIRE(status.detailButton().get_sensitive());
 
-      status.detailPopoverForTest().popup();
+      status.detailPopover().popup();
       mounted.drain();
-      REQUIRE(status.detailPopoverForTest().get_visible());
+      REQUIRE(status.detailPopover().get_visible());
 
-      auto* const dismissButton =
-        findWidgetByClass<Gtk::Button>(status.detailContentForTest(), "ao-activity-detail-dismiss");
+      auto* const dismissButton = findWidgetByClass<Gtk::Button>(status.detailContent(), "ao-activity-detail-dismiss");
       REQUIRE(dismissButton != nullptr);
       emitClicked(*dismissButton);
       mounted.drain();
 
       CHECK_FALSE(status.widget().get_visible());
-      CHECK_FALSE(status.detailPopoverForTest().get_visible());
+      CHECK_FALSE(status.detailPopover().get_visible());
     }
   }
 
@@ -242,17 +240,16 @@ namespace ao::gtk::test
     runtime.notifications().post(rt::NotificationSeverity::Warning, "Partial import");
     mounted.drain();
 
-    auto* const dismissButton =
-      findWidgetByClass<Gtk::Button>(status.detailContentForTest(), "ao-activity-detail-dismiss");
+    auto* const dismissButton = findWidgetByClass<Gtk::Button>(status.detailContent(), "ao-activity-detail-dismiss");
     REQUIRE(dismissButton != nullptr);
 
     emitClicked(*dismissButton);
     mounted.drain();
 
     CHECK(runtime.notifications().feed().entries.size() == 1);
-    CHECK(findWidgetByClass<Gtk::Label>(status.detailContentForTest(), "ao-activity-detail-title") == nullptr);
+    CHECK(findWidgetByClass<Gtk::Label>(status.detailContent(), "ao-activity-detail-title") == nullptr);
     CHECK_FALSE(status.widget().get_visible());
-    CHECK_FALSE(status.detailButtonForTest().get_sensitive());
+    CHECK_FALSE(status.detailButton().get_sensitive());
   }
 
   TEST_CASE("ActivityStatus - detail actions require explicit handler", "[gtk][unit][status][activity]")
@@ -288,7 +285,7 @@ namespace ao::gtk::test
       auto const id = runtime.notifications().post(request);
       mounted.drain();
 
-      auto buttons = actionButtons(status.detailContentForTest());
+      auto buttons = actionButtons(status.detailContent());
       REQUIRE(buttons.size() == 2);
       CHECK(buttons[0]->get_label() == "Retry");
       CHECK(buttons[1]->get_label() == "Ignore");
@@ -312,7 +309,7 @@ namespace ao::gtk::test
       runtime.notifications().post(request);
       mounted.drain();
 
-      CHECK(actionButtons(status.detailContentForTest()).empty());
+      CHECK(actionButtons(status.detailContent()).empty());
     }
 
     SECTION("actions are not shown without a resolver")
@@ -324,7 +321,7 @@ namespace ao::gtk::test
       runtime.notifications().post(request);
       mounted.drain();
 
-      CHECK(actionButtons(status.detailContentForTest()).empty());
+      CHECK(actionButtons(status.detailContent()).empty());
     }
 
     SECTION("resolver hides unknown actions and disables unavailable actions")
@@ -348,7 +345,7 @@ namespace ao::gtk::test
       runtime.notifications().post(request);
       mounted.drain();
 
-      auto buttons = actionButtons(status.detailContentForTest());
+      auto buttons = actionButtons(status.detailContent());
       REQUIRE(buttons.size() == 1);
       CHECK(buttons[0]->get_label() == "Retry");
       CHECK_FALSE(buttons[0]->get_sensitive());
@@ -380,7 +377,7 @@ namespace ao::gtk::test
       });
       mounted.drain();
 
-      auto buttons = actionButtons(status.detailContentForTest());
+      auto buttons = actionButtons(status.detailContent());
       REQUIRE(buttons.size() == 1);
       CHECK(buttons[0]->get_label() == "Retry");
     }
@@ -395,7 +392,7 @@ namespace ao::gtk::test
     auto& status = mounted.status;
 
     CHECK(status.widget().get_visible());
-    CHECK(status.labelForTest().get_text().empty());
+    CHECK(status.label().get_text().empty());
     CHECK(hasCssClass(status.widget(), "ao-activity-status-classic-inline"));
     CHECK_FALSE(hasCssClass(status.widget(), "ao-activity-status-ambient"));
   }
@@ -408,26 +405,25 @@ namespace ao::gtk::test
     ActivityStatusTestPeer::renderLibraryTaskProgress(status, "Updating: status-progress.flac", 0.625);
 
     CHECK(status.widget().get_visible());
-    CHECK(status.labelForTest().get_text() == "Updating library");
-    CHECK(status.progressForTest().get_visible());
-    CHECK(status.progressForTest().get_fraction() == 0.625);
+    CHECK(status.label().get_text() == "Updating library");
+    CHECK(status.progress().get_visible());
+    CHECK(status.progress().get_fraction() == 0.625);
     CHECK(hasCssClass(status.widget(), "ao-activity-status-processing"));
-    CHECK(status.detailButtonForTest().get_sensitive());
+    CHECK(status.detailButton().get_sensitive());
 
-    auto* const taskMessage =
-      findWidgetByClass<Gtk::Label>(status.detailContentForTest(), "ao-activity-detail-message");
+    auto* const taskMessage = findWidgetByClass<Gtk::Label>(status.detailContent(), "ao-activity-detail-message");
     REQUIRE(taskMessage != nullptr);
     CHECK(taskMessage->get_text() == "Updating: status-progress.flac");
     auto* const taskProgress =
-      findWidgetByClass<Gtk::ProgressBar>(status.detailContentForTest(), "ao-activity-detail-progress");
+      findWidgetByClass<Gtk::ProgressBar>(status.detailContent(), "ao-activity-detail-progress");
     REQUIRE(taskProgress != nullptr);
     CHECK(taskProgress->get_fraction() == 0.625);
 
     ActivityStatusTestPeer::renderLibraryTaskCompleted(status, 4);
 
     CHECK(status.widget().get_visible());
-    CHECK(status.labelForTest().get_text() == "Scan complete: 4 tracks added");
-    CHECK_FALSE(status.progressForTest().get_visible());
+    CHECK(status.label().get_text() == "Scan complete: 4 tracks added");
+    CHECK_FALSE(status.progress().get_visible());
     CHECK(hasCssClass(status.widget(), "ao-activity-status-success"));
   }
 } // namespace ao::gtk::test

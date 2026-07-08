@@ -41,9 +41,9 @@ namespace ao::uimodel::test
       REQUIRE(optPrimary);
       CHECK(optPrimary->modifiers.has(KeyModifier::Ctrl));
 
-      auto const optMeta = KeyChord::parse("Meta+Cmd+Q");
-      REQUIRE(optMeta);
-      CHECK(optMeta->modifiers.has(KeyModifier::Super));
+      auto const optMetaChord = KeyChord::parse("Meta+Cmd+Q");
+      REQUIRE(optMetaChord);
+      CHECK(optMetaChord->modifiers.has(KeyModifier::Super));
     }
 
     SECTION("media key token preserved")

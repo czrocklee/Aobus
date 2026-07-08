@@ -266,7 +266,7 @@ namespace ao::lmdb
   Database::Writer::~Writer() noexcept
   {
     // When transaction is committed, LMDB automatically closes all cursors - release without closing
-    if (_txn->committed())
+    if (_txn->isCommitted())
     {
       std::ignore = _cursorPtr.release();
     }
@@ -274,7 +274,7 @@ namespace ao::lmdb
 
   void Database::Writer::ensureActive() const
   {
-    if (_txn->committed())
+    if (_txn->isCommitted())
     {
       throwException<Exception>("Database::Writer used after its transaction was committed");
     }

@@ -3,7 +3,7 @@
 
 #include "UseRangesProjectionCheck.h"
 
-#include "AstUtil.h"
+#include "AstHelpers.h"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
@@ -31,41 +31,41 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto param1 = parmVarDecl().bind("param1");
+    auto parameter1 = parmVarDecl().bind("parameter1");
     auto singleArgLambda =
       lambdaExpr(
         has(cxxRecordDecl(has(cxxMethodDecl(
           parameterCountIs(1),
-          hasParameter(0, param1),
+          hasParameter(0, parameter1),
           hasBody(compoundStmt(
             statementCountIs(1),
             hasAnySubstatement(returnStmt(hasReturnValue(ignoringParenImpCasts(anyOf(
               cxxMemberCallExpr(callee(cxxMethodDecl().bind("method")),
-                                on(ignoringParenImpCasts(declRefExpr(to(parmVarDecl(equalsBoundNode("param1")))))),
+                                on(ignoringParenImpCasts(declRefExpr(to(parmVarDecl(equalsBoundNode("parameter1")))))),
                                 argumentCountIs(0))
                 .bind("member_call"),
               memberExpr(
-                hasObjectExpression(ignoringParenImpCasts(declRefExpr(to(parmVarDecl(equalsBoundNode("param1")))))))
+                hasObjectExpression(ignoringParenImpCasts(declRefExpr(to(parmVarDecl(equalsBoundNode("parameter1")))))))
                 .bind("member_access")))))))))))))
         .bind("single_lambda");
 
-    auto paramA = parmVarDecl().bind("paramA");
-    auto paramB = parmVarDecl().bind("paramB");
+    auto parameterA = parmVarDecl().bind("parameterA");
+    auto parameterB = parmVarDecl().bind("parameterB");
     auto doubleArgLambda =
       lambdaExpr(has(cxxRecordDecl(has(cxxMethodDecl(
                    parameterCountIs(2),
-                   hasParameter(0, paramA),
-                   hasParameter(1, paramB),
+                   hasParameter(0, parameterA),
+                   hasParameter(1, parameterB),
                    hasBody(compoundStmt(
                      statementCountIs(1),
                      hasAnySubstatement(returnStmt(hasReturnValue(ignoringParenImpCasts(
                        binaryOperation(
                          hasOperatorName("<"),
                          hasLHS(ignoringParenImpCasts(memberExpr(hasObjectExpression(ignoringParenImpCasts(declRefExpr(
-                                                                   to(parmVarDecl(equalsBoundNode("paramA")))))))
+                                                                   to(parmVarDecl(equalsBoundNode("parameterA")))))))
                                                         .bind("memA"))),
                          hasRHS(ignoringParenImpCasts(memberExpr(hasObjectExpression(ignoringParenImpCasts(declRefExpr(
-                                                                   to(parmVarDecl(equalsBoundNode("paramB")))))))
+                                                                   to(parmVarDecl(equalsBoundNode("parameterB")))))))
                                                         .bind("memB"))))
                          .bind("less_than"))))))))))))
         .bind("double_lambda");
@@ -84,24 +84,24 @@ namespace clang::tidy::readability
 
     if (singleLambda != nullptr)
     {
-      auto const* param1 = result.Nodes.getNodeAs<ParmVarDecl>("param1");
+      auto const* parameter1 = result.Nodes.getNodeAs<ParmVarDecl>("parameter1");
       auto const* methodCall = result.Nodes.getNodeAs<CXXMemberCallExpr>("member_call");
       auto const* memberAccess = result.Nodes.getNodeAs<MemberExpr>("member_access");
 
-      if (param1 == nullptr)
+      if (parameter1 == nullptr)
       {
         return;
       }
 
       // A dependent parameter type (generic lambda) cannot be spelled in a
       // &Type::member projection.
-      if (param1->getType().getNonReferenceType()->isDependentType() ||
+      if (parameter1->getType().getNonReferenceType()->isDependentType() ||
           aobus::isInMacro(singleLambda->getSourceRange()))
       {
         return;
       }
 
-      auto const typeName = param1->getType().getNonReferenceType().getUnqualifiedType().getAsString(policy);
+      auto const typeName = parameter1->getType().getNonReferenceType().getUnqualifiedType().getAsString(policy);
       auto memberName = std::string{};
 
       if (methodCall != nullptr)
@@ -131,22 +131,22 @@ namespace clang::tidy::readability
     }
     else if (doubleLambda != nullptr)
     {
-      auto const* paramA = result.Nodes.getNodeAs<ParmVarDecl>("paramA");
+      auto const* parameterA = result.Nodes.getNodeAs<ParmVarDecl>("parameterA");
       auto const* memA = result.Nodes.getNodeAs<MemberExpr>("memA");
       auto const* memB = result.Nodes.getNodeAs<MemberExpr>("memB");
 
-      if (paramA == nullptr || memA == nullptr || memB == nullptr)
+      if (parameterA == nullptr || memA == nullptr || memB == nullptr)
       {
         return;
       }
 
-      if (paramA->getType().getNonReferenceType()->isDependentType() ||
+      if (parameterA->getType().getNonReferenceType()->isDependentType() ||
           aobus::isInMacro(doubleLambda->getSourceRange()))
       {
         return;
       }
 
-      auto const typeName = paramA->getType().getNonReferenceType().getUnqualifiedType().getAsString(policy);
+      auto const typeName = parameterA->getType().getNonReferenceType().getUnqualifiedType().getAsString(policy);
       auto const memAName = memA->getMemberDecl()->getNameAsString();
       auto const memBName = memB->getMemberDecl()->getNameAsString();
 

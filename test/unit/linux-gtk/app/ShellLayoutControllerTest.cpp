@@ -8,16 +8,16 @@
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
-#include "test/unit/RuntimeTestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/PlaybackSessionState.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
-#include <ao/uimodel/layout/component/ILayoutComponentStateStore.h>
+#include <ao/uimodel/layout/action/LayoutActionActivation.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
@@ -128,7 +128,7 @@ namespace ao::gtk::test
       controller.loadLayout(*configPtr);
       drainGtkEvents();
       CHECK(controller.context().componentStateStore ==
-            static_cast<uimodel::ILayoutComponentStateStore*>(componentStateStorePtr.get()));
+            static_cast<uimodel::LayoutComponentStateStore*>(componentStateStorePtr.get()));
     }
 
     SECTION("layout editor cancel rolls back theme preview without changing persisted theme")
@@ -146,11 +146,11 @@ namespace ao::gtk::test
       controller.openEditor(*configPtr);
       drainGtkEvents();
 
-      auto* const dialog = controller.editorDialogForTest();
+      auto* const dialog = controller.editorDialog();
       REQUIRE(dialog != nullptr);
       CHECK(dialog->selectedThemeId() == "classic");
 
-      dialog->setSelectedThemeIdForTest("modern");
+      dialog->setSelectedThemeId("modern");
       drainGtkEvents();
       CHECK(themeController.activeTheme() == rt::ThemePresetId::Modern);
 
@@ -180,10 +180,10 @@ namespace ao::gtk::test
       controller.openEditor(*configPtr);
       drainGtkEvents();
 
-      auto* const dialog = controller.editorDialogForTest();
+      auto* const dialog = controller.editorDialog();
       REQUIRE(dialog != nullptr);
 
-      dialog->setSelectedThemeIdForTest("modern");
+      dialog->setSelectedThemeId("modern");
       drainGtkEvents();
       CHECK(themeController.activeTheme() == rt::ThemePresetId::Modern);
 

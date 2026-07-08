@@ -1,6 +1,6 @@
 # ao_library
 add_library(ao_library STATIC
-    MetaStore.cpp
+    MetadataStore.cpp
     MusicLibrary.cpp
     ResourceStore.cpp
     DictionaryStore.cpp

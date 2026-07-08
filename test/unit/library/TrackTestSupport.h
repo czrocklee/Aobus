@@ -181,47 +181,47 @@ namespace ao::library::test
 
   inline TrackId addTrack(MusicLibrary& library, TrackSpec const& spec)
   {
-    auto txn = library.writeTransaction();
-    auto writer = library.tracks().writer(txn);
-    auto builder = TrackBuilder::createNew();
+    auto transaction = library.writeTransaction();
+    auto writer = library.tracks().writer(transaction);
+    auto builder = TrackBuilder::makeEmpty();
     applyTrackSpec(builder, spec);
 
-    auto data = builder.serialize(txn, library.dictionary(), library.resources());
+    auto data = builder.serialize(transaction, library.dictionary(), library.resources());
     REQUIRE(data);
     auto createResult = writer.createHotCold(data->first, data->second);
     REQUIRE(createResult);
     auto const [id, _] = *createResult;
-    REQUIRE(txn.commit());
+    REQUIRE(transaction.commit());
     return id;
   }
 
   inline void mutateTrack(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackBuilder&)> mutate)
   {
-    auto txn = library.writeTransaction();
-    auto reader = library.tracks().reader(txn);
-    auto writer = library.tracks().writer(txn);
+    auto transaction = library.writeTransaction();
+    auto reader = library.tracks().reader(transaction);
+    auto writer = library.tracks().writer(transaction);
     auto optView = reader.get(id, TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
 
     auto builder = TrackBuilder::fromView(*optView, library.dictionary());
     mutate(builder);
 
-    auto hotData = builder.serializeHot(txn, library.dictionary());
+    auto hotData = builder.serializeHot(transaction, library.dictionary());
     REQUIRE(hotData);
-    auto coldData = builder.serializeCold(txn, library.dictionary(), library.resources());
+    auto coldData = builder.serializeCold(transaction, library.dictionary(), library.resources());
     REQUIRE(coldData);
     REQUIRE(writer.updateHot(id, *hotData));
     REQUIRE(writer.updateCold(
       id, coldData->size(), [&](std::span<std::byte> buf) { std::ranges::copy(*coldData, buf.begin()); }));
-    REQUIRE(txn.commit());
+    REQUIRE(transaction.commit());
   }
 
   inline void updateTrackSpec(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackSpec&)> updater)
   {
     auto spec = TrackSpec{};
     {
-      auto txn = library.readTransaction();
-      auto reader = library.tracks().reader(txn);
+      auto transaction = library.readTransaction();
+      auto reader = library.tracks().reader(transaction);
       auto optView = reader.get(id, TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       spec = trackSpecFromView(library, *optView);

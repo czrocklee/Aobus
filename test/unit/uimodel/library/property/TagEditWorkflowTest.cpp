@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -21,8 +21,8 @@ namespace ao::uimodel::test
   {
     bool trackHasTag(TestMusicLibrary& testLib, TrackId trackId, std::string const& expectedTag)
     {
-      auto txn = testLib.library().readTransaction();
-      auto reader = testLib.library().tracks().reader(txn);
+      auto transaction = testLib.library().readTransaction();
+      auto reader = testLib.library().tracks().reader(transaction);
       auto const optView = reader.get(trackId);
 
       if (!optView)
@@ -38,8 +38,8 @@ namespace ao::uimodel::test
 
     std::vector<std::string> trackTagNames(TestMusicLibrary& testLib, TrackId trackId)
     {
-      auto txn = testLib.library().readTransaction();
-      auto reader = testLib.library().tracks().reader(txn);
+      auto transaction = testLib.library().readTransaction();
+      auto reader = testLib.library().tracks().reader(transaction);
       auto const optView = reader.get(trackId);
       REQUIRE(optView);
 

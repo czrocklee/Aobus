@@ -73,7 +73,7 @@ namespace ao::gtk::layout::editor
     uimodel::LayoutDocument const& document() const { return _document; }
     std::string selectedPresetId() const { return _comboPresets.get_active_id(); }
     std::string selectedThemeId() const { return _comboThemePresets.get_active_id(); }
-    void setSelectedThemeIdForTest(std::string_view themeId) { _comboThemePresets.set_active_id(std::string{themeId}); }
+    void setSelectedThemeId(std::string_view themeId) { _comboThemePresets.set_active_id(std::string{themeId}); }
 
     sigc::signal<void(uimodel::LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
     sigc::signal<void(std::string_view)>& signalThemePreview() { return _signalThemePreview; }
@@ -97,7 +97,7 @@ namespace ao::gtk::layout::editor
       Gtk::TreeModelColumn<uimodel::LayoutNode*> nodePtr;
     };
 
-    void setupUi();
+    void buildUi();
     void populateTree();
     void appendNodeToTree(Gtk::TreeModel::Row parentRow, uimodel::LayoutNode* node);
     void onSelectionChanged();
@@ -130,9 +130,9 @@ namespace ao::gtk::layout::editor
                                     uimodel::LayoutPropertyDescriptor const& prop,
                                     uimodel::LayoutValue const& currentVal,
                                     bool isLayoutProp);
-    Gtk::Widget* dispatchEditor(uimodel::LayoutNode* node,
-                                uimodel::LayoutPropertyDescriptor const& prop,
-                                bool isLayoutProp);
+    Gtk::Widget* renderPropertyEditor(uimodel::LayoutNode* node,
+                                      uimodel::LayoutPropertyDescriptor const& prop,
+                                      bool isLayoutProp);
 
     void addComponent(std::string type);
     void wrapNode(std::string containerType);

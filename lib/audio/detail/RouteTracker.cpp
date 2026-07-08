@@ -2,8 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/AudioCodec.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/RouteAnchor.h>
 #include <ao/audio/detail/RouteTracker.h>
 
 #include <mutex>

@@ -34,11 +34,11 @@ Always prioritize integration tests. You must define the expected behavior befor
 
 Header-only helpers live in `tool/lint/check/*.h` under `namespace clang::tidy::aobus` (no CMake changes needed). Reuse them; do not re-implement per-check copies:
 
-- **`AstUtil.h`**: `getExprSourceText`, `stripImplicitNodes` (implicit cast/construct/materialize chains), `isInMacro` (FixIt safety), `refersToVarDecl` (canonical-decl identity), `isWithinRewrittenOperator` (C++20 rewritten comparisons), `getRangesCpoName` (ranges niebloid identification), `isEndCall` / `verifyEndObject` (algo-vs-end comparison checks).
-- **`CalleeQualificationUtil.h`**: C standard library function list, callee extraction for qualification FixIts.
+- **`AstHelpers.h`**: `getExprSourceText`, `stripImplicitNodes` (implicit cast/construct/materialize chains), `isInMacro` (FixIt safety), `refersToVarDecl` (canonical-decl identity), `isWithinRewrittenOperator` (C++20 rewritten comparisons), `getRangesCpoName` (ranges niebloid identification), `isEndCall` / `verifyEndObject` (algo-vs-end comparison checks).
+- **`CalleeQualificationHelpers.h`**: C standard library function list, callee extraction for qualification FixIts.
 - **`RaiiHeuristics.h`**: RAII-type detection.
 
-If a new helper is general (used or usable by ≥2 checks), add it to `AstUtil.h` instead of an anonymous namespace.
+If a new helper is general (used or usable by ≥2 checks), add it to `AstHelpers.h` instead of an anonymous namespace.
 
 ## Hardening Checklist for FixIt-Emitting Checks
 

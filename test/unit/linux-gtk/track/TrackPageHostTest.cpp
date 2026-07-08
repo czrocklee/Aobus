@@ -9,7 +9,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
@@ -54,8 +54,8 @@ namespace ao::gtk::test
       runtime.workspace().navigateTo(rt::kAllTracksListId);
       drainGtkEvents();
 
-      auto txn = library.readTransaction();
-      host.rebuild(cache, txn);
+      auto transaction = library.readTransaction();
+      host.rebuild(cache, transaction);
       drainGtkEvents();
 
       // Should have created a page for All Tracks

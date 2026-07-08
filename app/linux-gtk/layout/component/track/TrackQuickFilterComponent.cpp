@@ -3,7 +3,7 @@
 
 #include "TrackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "list/ListNavigationController.h"
 #include "track/TrackPageHost.h"
@@ -28,7 +28,7 @@ namespace ao::gtk::layout
     /**
      * @brief track.quickFilter component wrapper
      */
-    class TrackQuickFilterComponent final : public ILayoutComponent
+    class TrackQuickFilterComponent final : public LayoutComponent
     {
     public:
       TrackQuickFilterComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
@@ -71,7 +71,7 @@ namespace ao::gtk::layout
       sigc::scoped_connection _createSmartListConn;
     };
 
-    std::unique_ptr<ILayoutComponent> createTrackQuickFilter(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackQuickFilter(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackQuickFilterComponent>(ctx, node);
     }

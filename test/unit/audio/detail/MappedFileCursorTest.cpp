@@ -53,14 +53,14 @@ namespace ao::audio::detail::test
     CHECK(!cursor.seek(std::numeric_limits<std::int64_t>::max(), SeekOrigin::End));
 
     CHECK(cursor.seek(0, SeekOrigin::End));
-    CHECK(cursor.atEnd());
+    CHECK(cursor.isAtEnd());
 
     auto output = std::array<std::byte, 2>{};
     CHECK(cursor.read(output) == 0);
 
     cursor.close();
     CHECK_FALSE(cursor.isOpen());
-    CHECK(cursor.atEnd());
+    CHECK(cursor.isAtEnd());
     CHECK(cursor.position() == 0);
     CHECK(cursor.size() == 0);
   }

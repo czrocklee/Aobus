@@ -4,9 +4,11 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
@@ -20,7 +22,7 @@
 
 namespace ao::async
 {
-  class IExecutor;
+  class Executor;
 }
 
 namespace ao::audio
@@ -51,7 +53,7 @@ namespace ao::audio
     struct Status final
     {
       Engine::Status engine;
-      std::vector<IBackendProvider::Status> availableBackends;
+      std::vector<BackendProvider::Status> availableBackends;
       flow::Graph flow;
       Quality sourceQuality = Quality::Unknown;
       Quality pipelineQuality = Quality::Unknown;
@@ -67,7 +69,7 @@ namespace ao::audio
       bool operator==(Status const&) const = default;
     };
 
-    explicit Player(async::IExecutor& executor);
+    explicit Player(async::Executor& executor);
     ~Player();
 
     Player(Player const&) = delete;
@@ -75,7 +77,7 @@ namespace ao::audio
     Player(Player&&) = delete;
     Player& operator=(Player&&) = delete;
 
-    void addProvider(std::unique_ptr<IBackendProvider> providerPtr);
+    void addProvider(std::unique_ptr<BackendProvider> providerPtr);
 
     /// @brief Starts playback. Returns `InvalidState` when the backend is not
     /// yet ready (device discovery pending); the request is dropped in that case.
@@ -105,7 +107,7 @@ namespace ao::audio
     void setOnStateChanged(std::function<void()> callback);
 
     /// Called when available output devices change; receives per-provider status snapshots.
-    void setOnOutputDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback);
+    void setOnOutputDevicesChanged(std::function<void(std::vector<BackendProvider::Status> const&)> callback);
 
     /// Called when playback quality or readiness changes.
     void setOnQualityChanged(std::function<void(QualityResult const& quality, bool ready)> callback);

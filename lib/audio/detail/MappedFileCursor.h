@@ -30,7 +30,7 @@ namespace ao::audio::detail
     Result<std::uint64_t> seek(std::int64_t offset, SeekOrigin origin) noexcept;
 
     bool isOpen() const noexcept;
-    bool atEnd() const noexcept;
+    bool isAtEnd() const noexcept;
     std::uint64_t position() const noexcept;
     std::uint64_t size() const noexcept;
 

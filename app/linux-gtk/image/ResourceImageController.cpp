@@ -9,7 +9,7 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <gdkmm/pixbuf.h>
 #include <giomm/memoryinputstream.h>
@@ -59,7 +59,7 @@ namespace ao::gtk
     _widget.clearImage();
   }
 
-  void ResourceImageController::bindToDetailProjection(std::unique_ptr<rt::ITrackDetailProjection> projectionPtr)
+  void ResourceImageController::bindToDetailProjection(std::unique_ptr<rt::TrackDetailProjection> projectionPtr)
   {
     _detailProjectionPtr = std::move(projectionPtr);
     _detailSub = _detailProjectionPtr->subscribe(std::bind_front(&ResourceImageController::onDetailSnapshot, this));

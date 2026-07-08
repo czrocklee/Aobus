@@ -684,7 +684,7 @@ namespace ao::tag::mp4
       auto const mdtaKeys = readMdtaKeys(root.find(kMdtaKeysPath));
 
       clearOwnedStrings();
-      auto builder = library::TrackBuilder::createNew();
+      auto builder = library::TrackBuilder::makeEmpty();
 
       if (ilstNode != nullptr)
       {

@@ -5,7 +5,7 @@
 
 #include "layout/runtime/ComponentInteractionController.h"
 #include "layout/runtime/ComponentTooltipController.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 
 #include <gtkmm/widget.h>
 
@@ -13,11 +13,11 @@
 
 namespace ao::gtk::layout
 {
-  class DecoratedLayoutComponent final : public ILayoutComponent
+  class DecoratedLayoutComponent final : public LayoutComponent
   {
   public:
-    DecoratedLayoutComponent(std::unique_ptr<ILayoutComponent> contentPtr,
-                             std::unique_ptr<ILayoutComponent> tooltipPtr,
+    DecoratedLayoutComponent(std::unique_ptr<LayoutComponent> contentPtr,
+                             std::unique_ptr<LayoutComponent> tooltipPtr,
                              std::unique_ptr<ComponentInteractionController> interactionPtr = nullptr);
     ~DecoratedLayoutComponent() override = default;
 
@@ -29,8 +29,8 @@ namespace ao::gtk::layout
     Gtk::Widget& widget() override;
 
   private:
-    std::unique_ptr<ILayoutComponent> _contentPtr;
-    std::unique_ptr<ILayoutComponent> _tooltipPtr;
+    std::unique_ptr<LayoutComponent> _contentPtr;
+    std::unique_ptr<LayoutComponent> _tooltipPtr;
     ComponentTooltipController _tooltipController;
     std::unique_ptr<ComponentInteractionController> _interactionPtr;
   };

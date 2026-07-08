@@ -5,7 +5,7 @@
 
 #include "ActionRegistry.h"
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 
 #include <giomm/simpleaction.h>
 #include <glibmm/variant.h>
@@ -19,7 +19,7 @@ namespace ao::gtk::layout
 {
   GioActionBridgeSession::GioActionBridgeSession(ActionRegistry const& registry,
                                                  Gio::ActionMap& actionMap,
-                                                 IActionContextProvider& contextProvider,
+                                                 ActionContextProvider& contextProvider,
                                                  std::vector<std::string> exportedActionIds)
     : _registry{registry}
     , _actionMap{actionMap}
@@ -41,7 +41,7 @@ namespace ao::gtk::layout
 
       if (auto simpleActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(gioActionPtr); simpleActionPtr != nullptr)
       {
-        auto ctx = _contextProvider.getActionContext(id);
+        auto ctx = _contextProvider.actionContext(id);
         auto const state = _registry.state(id, ctx);
         simpleActionPtr->set_enabled(state.enabled);
       }
@@ -50,7 +50,7 @@ namespace ao::gtk::layout
 
   std::unique_ptr<GioActionBridgeSession> GioActionBridge::exportActions(ActionRegistry const& registry,
                                                                          Gio::ActionMap& actionMap,
-                                                                         IActionContextProvider& contextProvider)
+                                                                         ActionContextProvider& contextProvider)
   {
     auto exportedActionIds = std::vector<std::string>{};
     auto const& descriptors = registry.descriptors();
@@ -70,14 +70,14 @@ namespace ao::gtk::layout
       auto actionPtr = Gio::SimpleAction::create(desc.id);
 
       // Initialize the state based on the current context
-      auto ctx = contextProvider.getActionContext(desc.id);
+      auto ctx = contextProvider.actionContext(desc.id);
       auto const initialState = registry.state(desc.id, ctx);
       actionPtr->set_enabled(initialState.enabled);
 
       actionPtr->signal_activate().connect(
-        [&registry, &contextProvider, id = desc.id](Glib::VariantBase const& /*param*/)
+        [&registry, &contextProvider, id = desc.id](Glib::VariantBase const& /*parameter*/)
         {
-          auto ctx = contextProvider.getActionContext(id);
+          auto ctx = contextProvider.actionContext(id);
           registry.tryActivate(id, ctx);
         });
 

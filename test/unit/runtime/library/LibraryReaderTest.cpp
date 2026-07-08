@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
@@ -69,14 +69,14 @@ namespace ao::rt::test
     SeededReadModelLibrary seedLibrary(CoreRuntime& runtime)
     {
       auto& library = runtime.musicLibrary();
-      auto txn = library.writeTransaction();
+      auto transaction = library.writeTransaction();
 
-      auto resourceWriter = library.resources().writer(txn);
+      auto resourceWriter = library.resources().writer(transaction);
       auto resourceIdResult = resourceWriter.create(kCoverBytes);
       REQUIRE(resourceIdResult);
       auto const resourceId = *resourceIdResult;
 
-      auto trackBuilder = library::TrackBuilder::createNew();
+      auto trackBuilder = library::TrackBuilder::makeEmpty();
       trackBuilder.metadata()
         .title("A Song")
         .artist("An Artist")
@@ -107,45 +107,45 @@ namespace ao::rt::test
       trackBuilder.tags().add("Favorite").add("Live");
       trackBuilder.coverArt().add(library::PictureType::FrontCover, resourceId);
 
-      auto hotData = trackBuilder.serializeHot(txn, library.dictionary());
+      auto hotData = trackBuilder.serializeHot(transaction, library.dictionary());
       REQUIRE(hotData);
-      auto coldData = trackBuilder.serializeCold(txn, library.dictionary(), library.resources());
+      auto coldData = trackBuilder.serializeCold(transaction, library.dictionary(), library.resources());
       REQUIRE(coldData);
-      auto trackWriter = library.tracks().writer(txn);
+      auto trackWriter = library.tracks().writer(transaction);
       [[maybe_unused]] auto [trackId, trackView] =
         ao::test::requireValue(trackWriter.createHotCold(*hotData, *coldData));
 
-      auto otherTrackBuilder = library::TrackBuilder::createNew();
+      auto otherTrackBuilder = library::TrackBuilder::makeEmpty();
       otherTrackBuilder.metadata().title("Another Song");
       otherTrackBuilder.tags().add("Favorite").add("Jazz");
-      auto otherSerializeResult = otherTrackBuilder.serialize(txn, library.dictionary(), library.resources());
+      auto otherSerializeResult = otherTrackBuilder.serialize(transaction, library.dictionary(), library.resources());
       REQUIRE(otherSerializeResult);
       auto const [otherHot, otherCold] = *otherSerializeResult;
       [[maybe_unused]] auto [otherTrackId, otherTrackView] =
         ao::test::requireValue(trackWriter.createHotCold(otherHot, otherCold));
 
-      auto manifestPayload = library::FileManifestBuilder::createNew()
+      auto manifestPayload = library::FileManifestBuilder::makeEmpty()
                                .trackId(trackId)
                                .fileSize(123456789)
                                .mtime(987654321)
                                .status(library::FileStatus::Missing)
                                .serialize();
-      CHECK(library.manifest().writer(txn).put(kTrackUri, manifestPayload));
+      CHECK(library.manifest().writer(transaction).put(kTrackUri, manifestPayload));
 
-      auto manualListBuilder = library::ListBuilder::createNew();
+      auto manualListBuilder = library::ListBuilder::makeEmpty();
       manualListBuilder.name("Manual List").description("Pinned songs").tracks().add(trackId);
       [[maybe_unused]] auto [manualListId, manualListView] =
-        ao::test::requireValue(library.lists().writer(txn).create(manualListBuilder.serialize()));
+        ao::test::requireValue(library.lists().writer(transaction).create(manualListBuilder.serialize()));
 
-      auto smartListBuilder = library::ListBuilder::createNew();
+      auto smartListBuilder = library::ListBuilder::makeEmpty();
       smartListBuilder.name("Smart List").parentId(manualListId).filter("@artist = \"An Artist\"");
       [[maybe_unused]] auto [smartListId, smartListView] =
-        ao::test::requireValue(library.lists().writer(txn).create(smartListBuilder.serialize()));
+        ao::test::requireValue(library.lists().writer(transaction).create(smartListBuilder.serialize()));
 
-      auto const artistId = library.dictionary().getId("An Artist");
-      auto const albumId = library.dictionary().getId("The Album");
+      auto const artistId = library.dictionary().lookupId("An Artist");
+      auto const albumId = library.dictionary().lookupId("The Album");
 
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
 
       return SeededReadModelLibrary{.trackId = trackId,
                                     .otherTrackId = otherTrackId,
@@ -165,7 +165,7 @@ namespace ao::rt::test
     auto const& reads = runtime.library();
 
     auto scope = reads.reader();
-    REQUIRE(scope.valid());
+    REQUIRE(scope.isValid());
 
     auto const optRow = scope.trackRow(seeded.trackId);
     REQUIRE(optRow);

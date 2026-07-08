@@ -4,7 +4,6 @@
 #include "status/ActivityStatus.h"
 
 #include "layout/LayoutConstants.h"
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -73,7 +72,7 @@ namespace ao::gtk
                                  .emitInitialState = false,
                                }}
   {
-    setupUi();
+    buildUi();
     render();
   }
 
@@ -87,7 +86,7 @@ namespace ao::gtk
     _detailPopover.popdown();
   }
 
-  void ActivityStatus::setupUi()
+  void ActivityStatus::buildUi()
   {
     _box.add_css_class("ao-activity-status");
     _box.set_spacing(layout::kSpacingSmall);
@@ -384,7 +383,7 @@ namespace ao::gtk
 
   void ActivityStatus::onDetailDismissClicked(rt::NotificationId const id)
   {
-    _activityStatusViewModel.hideDetailNotificationFromActivity(id);
+    _activityStatusViewModel.dismissDetailNotificationFromActivity(id);
   }
 
   void ActivityStatus::onDetailActionClicked(rt::NotificationId const id, std::string actionId, Gtk::Widget& anchor)

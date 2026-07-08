@@ -82,19 +82,19 @@ namespace ao::gtk::layout::track_field_grid
     DetailFieldEditor& operator=(DetailFieldEditor&&) = delete;
 
     void setText(Glib::ustring const& text);
-    Glib::ustring getText() const;
+    Glib::ustring text() const;
 
     void setEditable(bool editable);
-    bool getEditable() const;
-    bool getEditing() const;
+    bool isEditable() const;
+    bool isEditing() const;
 
     void startEditing();
     void stopEditing(bool commit);
     void setCompletionProvider(rt::CompletionProvider provider);
 
-    Gtk::Label& displayLabelForTest() { return _displayLabel; }
-    Gtk::Entry& entryForTest() { return _entry; }
-    Gtk::Button& editButtonForTest() { return _editButton; }
+    Gtk::Label& displayLabel() { return _displayLabel; }
+    Gtk::Entry& entry() { return _entry; }
+    Gtk::Button& editButton() { return _editButton; }
 
     sigc::signal<void()>& signalEditStarted();
     sigc::signal<void()>& signalCommitted();

@@ -5,12 +5,13 @@
 #include "ScriptedDecoderSession.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -36,10 +37,10 @@ namespace ao::audio::test
 {
   namespace
   {
-    class BlockingPropertyBackend final : public IBackend
+    class BlockingPropertyBackend final : public Backend
     {
     public:
-      Result<> open(Format const& /*format*/, IRenderTarget* /*target*/) override { return {}; }
+      Result<> open(Format const& /*format*/, RenderTarget* /*target*/) override { return {}; }
       void start() override {}
       void pause() override {}
       void resume() override {}
@@ -112,10 +113,10 @@ namespace ao::audio::test
       bool _releaseCalls = false;
     };
 
-    class RenderingBackend final : public IBackend
+    class RenderingBackend final : public Backend
     {
     public:
-      Result<> open(Format const& format, IRenderTarget* target) override
+      Result<> open(Format const& format, RenderTarget* target) override
       {
         _format = format;
         _target.store(target, std::memory_order_relaxed);
@@ -185,7 +186,7 @@ namespace ao::audio::test
       }
 
     private:
-      std::atomic<IRenderTarget*> _target{nullptr};
+      std::atomic<RenderTarget*> _target{nullptr};
       Format _format{};
       std::jthread _thread;
     };

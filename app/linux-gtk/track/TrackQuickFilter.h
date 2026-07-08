@@ -56,9 +56,9 @@ namespace ao::gtk
     Gtk::Entry const& entry() const noexcept { return _entry; }
 
     void setText(Glib::ustring const& text);
-    Glib::ustring getText() const;
+    Glib::ustring text() const;
     void setPosition(std::int32_t position);
-    std::int32_t getPosition() const;
+    std::int32_t position() const;
     void activate();
 
   private:

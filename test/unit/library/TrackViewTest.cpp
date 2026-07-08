@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/library/TestUtils.h"
+#include "test/unit/TestUtils.h"
+#include "test/unit/library/LibraryBinaryTestSupport.h"
 #include "test/unit/library/TrackViewTestSupport.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -87,7 +88,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackView - returns work and movement IDs from cold data", "[library][unit][track]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata()
       .work("Symphony No. 9 in D minor, Op. 125")
       .movement("II. Molto vivace")
@@ -100,35 +101,35 @@ namespace ao::library::test
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto dictionary = DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
     auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
-    auto coldDataResult = builder.serializeCold(wtxn, dict, resources);
+    auto coldDataResult = builder.serializeCold(wtxn, dictionary, resources);
     REQUIRE(coldDataResult);
     auto const& coldData = *coldDataResult;
     auto const view = makeColdTrackView(coldData);
 
     CHECK(view.classical().workId().raw() > 0);
     CHECK(view.classical().movementId().raw() > 0);
-    CHECK(dict.get(view.classical().workId()) == "Symphony No. 9 in D minor, Op. 125");
-    CHECK(dict.get(view.classical().movementId()) == "II. Molto vivace");
-    CHECK(dict.get(view.classical().conductorId()) == "Carlos Kleiber");
-    CHECK(dict.get(view.classical().ensembleId()) == "Vienna Philharmonic");
-    CHECK(dict.get(view.classical().soloistId()) == "Yo-Yo Ma");
+    CHECK(dictionary.get(view.classical().workId()) == "Symphony No. 9 in D minor, Op. 125");
+    CHECK(dictionary.get(view.classical().movementId()) == "II. Molto vivace");
+    CHECK(dictionary.get(view.classical().conductorId()) == "Carlos Kleiber");
+    CHECK(dictionary.get(view.classical().ensembleId()) == "Vienna Philharmonic");
+    CHECK(dictionary.get(view.classical().soloistId()) == "Yo-Yo Ma");
     CHECK(view.classical().movementNumber() == 2);
     CHECK(view.classical().movementTotal() == 4);
   }
 
   TEST_CASE("TrackView - returns cover art entries from cold data", "[library][unit][track]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.coverArt().add(PictureType::BackCover, ResourceId{42});
 
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto dictionary = DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
     auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
-    auto coldDataResult = builder.serializeCold(wtxn, dict, resources);
+    auto coldDataResult = builder.serializeCold(wtxn, dictionary, resources);
     REQUIRE(coldDataResult);
     auto const& coldData = *coldDataResult;
 

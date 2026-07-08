@@ -4,8 +4,8 @@
 #include "track/TrackColumnController.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -73,9 +73,9 @@ namespace ao::gtk::test
     auto columnView = Gtk::ColumnView{};
     auto controller = TrackColumnController{columnView, layoutStore, rt::kAllTracksListId};
 
-    SECTION("setupColumns creates all supported columns")
+    SECTION("configureColumns creates all supported columns")
     {
-      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 
       auto const columnsPtr = columnView.get_columns();
       CHECK(columnsPtr->get_n_items() > 0);
@@ -83,7 +83,7 @@ namespace ao::gtk::test
 
     SECTION("applyColumnLayout updates visibility")
     {
-      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 
       auto visible = std::vector{rt::TrackField::Title, rt::TrackField::Artist};
       controller.applyColumnLayout(visible);
@@ -104,7 +104,7 @@ namespace ao::gtk::test
 
     SECTION("setup and sync do not persist initial column construction")
     {
-      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 
       auto visible = std::vector{rt::TrackField::Title, rt::TrackField::Artist};
       controller.syncLayout(visible);
@@ -118,11 +118,11 @@ namespace ao::gtk::test
       auto events = std::vector<ListId>{};
       auto sub = layoutStore.signalChanged().connect([&events](ListId listId) { events.push_back(listId); });
 
-      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 
       auto secondColumnView = Gtk::ColumnView{};
       auto secondController = TrackColumnController{secondColumnView, layoutStore, rt::kAllTracksListId};
-      secondController.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+      secondController.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 
       auto firstVisible = std::vector{rt::TrackField::Title, rt::TrackField::Artist};
       auto secondVisible = std::vector{rt::TrackField::Title, rt::TrackField::Album};
@@ -155,11 +155,11 @@ namespace ao::gtk::test
 
     SECTION("title position CSS updates are coalesced through idle")
     {
-      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 
       auto visible = std::vector{rt::TrackField::Artist, rt::TrackField::Title};
       controller.syncLayout(visible);
-      auto const initialCss = controller.titlePositionCssForTest();
+      auto const initialCss = controller.titlePositionCss();
       REQUIRE_FALSE(initialCss.empty());
 
       auto const artistColumnPtr = columnForField(columnView, rt::TrackField::Artist);
@@ -168,17 +168,17 @@ namespace ao::gtk::test
       artistColumnPtr->set_fixed_width(320);
       artistColumnPtr->set_fixed_width(420);
 
-      CHECK(controller.isTitlePositionUpdateQueuedForTest());
+      CHECK(controller.isTitlePositionUpdateQueued());
 
       drainGtkEvents();
 
-      CHECK_FALSE(controller.isTitlePositionUpdateQueuedForTest());
-      CHECK(controller.titlePositionCssForTest() != initialCss);
+      CHECK_FALSE(controller.isTitlePositionUpdateQueued());
+      CHECK(controller.titlePositionCss() != initialCss);
     }
 
     SECTION("allocated column view exposes the viewport as horizontal page size")
     {
-      controller.setupColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 
       auto visible = std::vector{rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Duration};
       controller.syncLayout(visible);

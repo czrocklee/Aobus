@@ -4,8 +4,9 @@
 #pragma once
 
 #include <ao/audio/Backend.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Subscription.h>
 
 #include <memory>
@@ -16,7 +17,7 @@ namespace ao::audio::backend
   /**
    * @brief Provider for PipeWire audio backends.
    */
-  class PipeWireProvider final : public IBackendProvider
+  class PipeWireProvider final : public BackendProvider
   {
   public:
     PipeWireProvider();
@@ -29,8 +30,8 @@ namespace ao::audio::backend
 
     void shutdown() noexcept override;
     Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
-    IBackendProvider::Status status() const override;
-    std::unique_ptr<IBackend> createBackend(Device const& device, ProfileId const& profile) override;
+    BackendProvider::Status status() const override;
+    std::unique_ptr<Backend> createBackend(Device const& device, ProfileId const& profile) override;
     Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
 
   private:

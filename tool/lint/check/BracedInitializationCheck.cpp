@@ -71,15 +71,15 @@ namespace clang::tidy::readability
       }
 
       std::uint32_t sourceArgumentCount = 0;
-      Expr const* firstArg = nullptr;
+      Expr const* firstArgument = nullptr;
 
       for (std::uint32_t i = 0; i < construct->getNumArgs(); ++i)
       {
-        if (Expr const* const arg = construct->getArg(i); arg != nullptr && !isa<CXXDefaultArgExpr>(arg))
+        if (Expr const* const argument = construct->getArg(i); argument != nullptr && !isa<CXXDefaultArgExpr>(argument))
         {
-          if (firstArg == nullptr)
+          if (firstArgument == nullptr)
           {
-            firstArg = arg;
+            firstArgument = argument;
           }
 
           sourceArgumentCount++;
@@ -96,11 +96,11 @@ namespace clang::tidy::readability
         return true;
       }
 
-      if (sourceArgumentCount == 1 && firstArg != nullptr)
+      if (sourceArgumentCount == 1 && firstArgument != nullptr)
       {
-        QualType const argType = firstArg->IgnoreImplicit()->getType().getCanonicalType();
+        QualType const argumentType = firstArgument->IgnoreImplicit()->getType().getCanonicalType();
 
-        if (argType->isIntegerType())
+        if (argumentType->isIntegerType())
         {
           return true;
         }
@@ -135,10 +135,11 @@ namespace clang::tidy::readability
 
       if (construct->getNumArgs() >= 1)
       {
-        if (auto const* arg0 = construct->getArg(0); arg0 != nullptr)
+        if (auto const* firstArgument = construct->getArg(0); firstArgument != nullptr)
         {
-          if (Expr const* const ignoredArg0 = arg0->IgnoreImplicit();
-              ignoredArg0 != nullptr && (isa<StringLiteral>(ignoredArg0) || isa<CXXBindTemporaryExpr>(ignoredArg0)))
+          if (Expr const* const ignoredFirstArgument = firstArgument->IgnoreImplicit();
+              ignoredFirstArgument != nullptr &&
+              (isa<StringLiteral>(ignoredFirstArgument) || isa<CXXBindTemporaryExpr>(ignoredFirstArgument)))
           {
             if (var->getType().getCanonicalType().getAsString().find("string") != std::string::npos)
             {

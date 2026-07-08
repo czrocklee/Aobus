@@ -25,9 +25,9 @@ namespace ao::gtk::layout::editor::test
   TEST_CASE("LayoutEditorTemplate - built-in layout templates expose expected component structure",
             "[gtk][unit][layout][editor]")
   {
-    SECTION("getBuiltInTemplates returns all 8 built-ins")
+    SECTION("builtInTemplates returns all 8 built-ins")
     {
-      auto const templates = getBuiltInTemplates();
+      auto const templates = builtInTemplates();
 
       CHECK(templates.contains("playback.compactControls"));
       CHECK(templates.contains("playback.transportGroup"));
@@ -45,20 +45,20 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("playback.transportGroup has 2 children and linked class")
     {
-      auto const templates = getBuiltInTemplates();
+      auto const templates = builtInTemplates();
       auto const& group = templates.at("playback.transportGroup");
 
       CHECK(group.type == "box");
-      CHECK(group.getProp<std::int64_t>("spacing", -1) == 0);
+      CHECK(group.propertyOr<std::int64_t>("spacing", -1) == 0);
 
-      auto const classes = group.getLayout<std::vector<std::string>>("cssClasses", {});
+      auto const classes = group.layoutOr<std::vector<std::string>>("cssClasses", {});
       CHECK(std::ranges::contains(classes, std::string_view{"linked"}));
       CHECK(group.children.size() == 2);
     }
 
     SECTION("playback.defaultBar contains all expected children")
     {
-      auto const templates = getBuiltInTemplates();
+      auto const templates = builtInTemplates();
       auto const& bar = templates.at("playback.defaultBar");
 
       CHECK(bar.type == "box");
@@ -70,22 +70,22 @@ namespace ao::gtk::layout::editor::test
       CHECK(bar.children[0].children.size() == 2);
       CHECK(bar.children[0].children[0].type == "playback.soulButton");
       CHECK(bar.children[0].children[1].type == "template");
-      CHECK(bar.children[0].children[1].getProp<std::string>("templateId", "") == "playback.transportGroup");
+      CHECK(bar.children[0].children[1].propertyOr<std::string>("templateId", "") == "playback.transportGroup");
       CHECK(bar.children[1].type == "playback.seekSlider");
-      CHECK(bar.children[1].getLayout<bool>("hexpand", false));
+      CHECK(bar.children[1].layoutOr<bool>("hexpand", false));
       CHECK(bar.children[2].type == "box");
       CHECK(bar.children[2].children.size() == 2);
       CHECK(bar.children[2].children[0].type == "playback.timeLabel");
       CHECK(bar.children[2].children[1].type == "playback.volumeControl");
 
       // Grouping regions carry ao-grouping-region CSS class.
-      CHECK(bar.children[0].getLayout<std::string>("cssClasses", "") == "ao-grouping-region");
-      CHECK(bar.children[2].getLayout<std::string>("cssClasses", "") == "ao-grouping-region");
+      CHECK(bar.children[0].layoutOr<std::string>("cssClasses", "") == "ao-grouping-region");
+      CHECK(bar.children[2].layoutOr<std::string>("cssClasses", "") == "ao-grouping-region");
     }
 
     SECTION("status.defaultBar template preserves right-side status order")
     {
-      auto const templates = getBuiltInTemplates();
+      auto const templates = builtInTemplates();
       auto const& bar = templates.at("status.defaultBar");
 
       CHECK(bar.type == "box");
@@ -99,13 +99,13 @@ namespace ao::gtk::layout::editor::test
       CHECK(bar.children[5].type == "status.selectionInfo");
       CHECK(bar.children[6].type == "separator");
       CHECK(bar.children[7].type == "status.trackCount");
-      CHECK(bar.children[4].getProp<std::string>("variant", "") == "classicInline");
-      CHECK(bar.children[4].getProp<std::string>("idleBehavior", "") == "hidden");
+      CHECK(bar.children[4].propertyOr<std::string>("variant", "") == "classicInline");
+      CHECK(bar.children[4].propertyOr<std::string>("idleBehavior", "") == "hidden");
     }
 
     SECTION("modern layout keeps selection counts in header and activity in bottom bar")
     {
-      auto const doc = createBuiltInLayout(LayoutPresetId::Modern);
+      auto const doc = makeBuiltInLayout(LayoutPresetId::Modern);
       REQUIRE(doc.root.children.size() >= 2);
 
       auto const& mainPaned = doc.root.children[0];
@@ -130,13 +130,13 @@ namespace ao::gtk::layout::editor::test
 
       REQUIRE(!bottomEnd.children.empty());
       CHECK(bottomEnd.children[0].type == "status.activityStatus");
-      CHECK(bottomEnd.children[0].getProp<std::string>("variant", "") == "ambient");
-      CHECK(bottomEnd.children[0].getProp<std::string>("idleBehavior", "") == "hidden");
+      CHECK(bottomEnd.children[0].propertyOr<std::string>("variant", "") == "ambient");
+      CHECK(bottomEnd.children[0].propertyOr<std::string>("idleBehavior", "") == "hidden");
     }
 
     SECTION("track.selectionDetailPane keeps field grid scroll at layout level")
     {
-      auto const templates = getBuiltInTemplates();
+      auto const templates = builtInTemplates();
       auto const& pane = templates.at("track.selectionDetailPane");
 
       LayoutNode const* detailContent = nullptr;
@@ -173,7 +173,7 @@ namespace ao::gtk::layout::editor::test
 
       auto doc = LayoutDocument{};
       doc.version = 1;
-      doc.templates = getBuiltInTemplates();
+      doc.templates = builtInTemplates();
       doc.root.type = "template";
       doc.root.props["templateId"] = LayoutValue{std::string{"playback.compactControls"}};
 
@@ -206,7 +206,7 @@ namespace ao::gtk::layout::editor::test
     {
       auto doc = LayoutDocument{};
       doc.version = 2;
-      doc.templates = getBuiltInTemplates();
+      doc.templates = builtInTemplates();
 
       auto tree = ryml::Tree{};
       yaml::write(tree.rootref(), doc);

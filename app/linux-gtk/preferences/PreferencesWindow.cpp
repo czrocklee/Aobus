@@ -123,12 +123,12 @@ namespace ao::gtk
     clearWindowScopedState();
   }
 
-  void PreferencesWindow::setThemeForTest(std::string_view const themeId)
+  void PreferencesWindow::setSelectedThemeId(std::string_view const themeId)
   {
     _themeCombo.set_active_id(std::string{themeId});
   }
 
-  void PreferencesWindow::setLayoutPresetForTest(std::string_view const presetId)
+  void PreferencesWindow::setSelectedLayoutPresetId(std::string_view const presetId)
   {
     _layoutPresetCombo.set_active_id(std::string{presetId});
   }
@@ -310,12 +310,12 @@ namespace ao::gtk
     }
   }
 
-  bool PreferencesWindow::hasPageForTest(std::string_view const name) const
+  bool PreferencesWindow::hasPage(std::string_view const name) const
   {
     return _stack.get_child_by_name(std::string{name}) != nullptr;
   }
 
-  bool PreferencesWindow::hasOutputSelectorForTest() const
+  bool PreferencesWindow::hasOutputSelector() const
   {
     return _outputDeviceButton.get_popover() != nullptr;
   }

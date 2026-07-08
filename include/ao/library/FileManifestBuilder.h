@@ -21,7 +21,7 @@ namespace ao::library
   class FileManifestBuilder final
   {
   public:
-    static FileManifestBuilder createNew();
+    static FileManifestBuilder makeEmpty();
     static FileManifestBuilder fromView(FileManifestView const& view);
 
     FileManifestBuilder& trackId(TrackId val);

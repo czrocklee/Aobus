@@ -16,17 +16,17 @@ namespace ao::uimodel
   {
     constexpr int kCornerHitRadius = 10;
 
-    bool hitCorner(std::int32_t cornerX, std::int32_t cornerY, double mouseX, double mouseY)
+    bool isCornerHit(std::int32_t cornerX, std::int32_t cornerY, double mouseX, double mouseY)
     {
       return std::abs(mouseX - static_cast<double>(cornerX)) <= kCornerHitRadius &&
              std::abs(mouseY - static_cast<double>(cornerY)) <= kCornerHitRadius;
     }
   } // namespace
 
-  bool absoluteCanvasZOrderLess(std::int32_t zIndexA,
-                                std::int32_t insertOrderA,
-                                std::int32_t zIndexB,
-                                std::int32_t insertOrderB)
+  bool ordersAbsoluteCanvasBefore(std::int32_t zIndexA,
+                                  std::int32_t insertOrderA,
+                                  std::int32_t zIndexB,
+                                  std::int32_t insertOrderB)
   {
     if (zIndexA != zIndexB)
     {
@@ -36,9 +36,9 @@ namespace ao::uimodel
     return insertOrderA < insertOrderB;
   }
 
-  bool absoluteCanvasZOrderLess(AbsoluteCanvasItem const& itemA, AbsoluteCanvasItem const& itemB)
+  bool ordersAbsoluteCanvasBefore(AbsoluteCanvasItem const& itemA, AbsoluteCanvasItem const& itemB)
   {
-    return absoluteCanvasZOrderLess(itemA.zIndex, itemA.insertOrder, itemB.zIndex, itemB.insertOrder);
+    return ordersAbsoluteCanvasBefore(itemA.zIndex, itemA.insertOrder, itemB.zIndex, itemB.insertOrder);
   }
 
   std::optional<std::size_t> hitTestAbsoluteCanvas(std::span<AbsoluteCanvasItem const> items,
@@ -57,7 +57,7 @@ namespace ao::uimodel
         continue;
       }
 
-      if (!optHitIndex || absoluteCanvasZOrderLess(items[*optHitIndex], item))
+      if (!optHitIndex || ordersAbsoluteCanvasBefore(items[*optHitIndex], item))
       {
         optHitIndex = index;
       }
@@ -71,22 +71,22 @@ namespace ao::uimodel
                                                               double relX,
                                                               double relY)
   {
-    if (hitCorner(0, 0, relX, relY))
+    if (isCornerHit(0, 0, relX, relY))
     {
       return AbsoluteCanvasResizeCorner::TopLeft;
     }
 
-    if (hitCorner(width, 0, relX, relY))
+    if (isCornerHit(width, 0, relX, relY))
     {
       return AbsoluteCanvasResizeCorner::TopRight;
     }
 
-    if (hitCorner(0, height, relX, relY))
+    if (isCornerHit(0, height, relX, relY))
     {
       return AbsoluteCanvasResizeCorner::BottomLeft;
     }
 
-    if (hitCorner(width, height, relX, relY))
+    if (isCornerHit(width, height, relX, relY))
     {
       return AbsoluteCanvasResizeCorner::BottomRight;
     }

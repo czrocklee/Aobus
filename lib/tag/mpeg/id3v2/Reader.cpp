@@ -286,7 +286,7 @@ namespace ao::tag::mpeg::id3v2
                                    void const* buffer,
                                    std::size_t size)
   {
-    auto builder = library::TrackBuilder::createNew();
+    auto builder = library::TrackBuilder::makeEmpty();
 
     switch (header.majorVersion)
     {

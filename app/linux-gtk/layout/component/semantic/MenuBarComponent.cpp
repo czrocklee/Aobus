@@ -3,7 +3,7 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -21,7 +21,7 @@ namespace ao::gtk::layout
     /**
      * @brief app.menuBar
      */
-    class MenuBarComponent final : public ILayoutComponent
+    class MenuBarComponent final : public LayoutComponent
     {
     public:
       MenuBarComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
@@ -38,7 +38,7 @@ namespace ao::gtk::layout
       Gtk::PopoverMenuBar _menuBar;
     };
 
-    std::unique_ptr<ILayoutComponent> createMenuBar(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createMenuBar(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<MenuBarComponent>(ctx, node);
     }

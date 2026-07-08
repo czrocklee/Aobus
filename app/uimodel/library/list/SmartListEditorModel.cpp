@@ -18,7 +18,7 @@
 
 namespace ao::uimodel
 {
-  std::string SmartListEditorModel::displayExpression(std::string_view expression)
+  std::string SmartListEditorModel::formatExpressionDisplayText(std::string_view expression)
   {
     return expression.empty() ? "(none)" : std::string{expression};
   }
@@ -208,11 +208,11 @@ namespace ao::uimodel
     return std::string{rt::kDefaultTrackPresentationId};
   }
 
-  rt::LibraryWriter::ListDraft SmartListEditorModel::createDraft(ListId parentListId,
-                                                                 ListId editListId,
-                                                                 std::string const& name,
-                                                                 std::string const& description,
-                                                                 std::string const& expression)
+  rt::LibraryWriter::ListDraft SmartListEditorModel::makeDraft(ListId parentListId,
+                                                               ListId editListId,
+                                                               std::string const& name,
+                                                               std::string const& description,
+                                                               std::string const& expression)
   {
     auto draftData = rt::LibraryWriter::ListDraft{};
     draftData.kind = rt::LibraryWriter::ListKind::Smart;

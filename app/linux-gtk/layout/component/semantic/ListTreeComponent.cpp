@@ -3,7 +3,7 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "list/ListNavigationController.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -23,7 +23,7 @@ namespace ao::gtk::layout
     /**
      * @brief library.listTree
      */
-    class ListTreeComponent final : public ILayoutComponent
+    class ListTreeComponent final : public LayoutComponent
     {
     public:
       ListTreeComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
@@ -56,7 +56,7 @@ namespace ao::gtk::layout
       Gtk::Label* _error = nullptr;
     };
 
-    std::unique_ptr<ILayoutComponent> createListTree(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createListTree(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<ListTreeComponent>(ctx, node);
     }

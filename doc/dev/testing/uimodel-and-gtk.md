@@ -196,8 +196,8 @@ When the same new helper appears in two or more test files, promote it into
 `GtkTestSupport.h` instead of copying it. Before adding another widget-tree
 search, CSS, signal, focus, gesture, runtime, or window helper, check
 `GtkTestSupport.h` first. Shared output/backend fakes should follow the shared
-fake precedent in `test/unit/audio/TestUtility.h` rather than being duplicated
-between uimodel and GTK audio tests.
+fake precedent in `test/unit/audio/BackendTestSupport.h` rather than being
+duplicated between uimodel and GTK audio tests.
 
 Keep helpers header-only, narrow, and stateless. Do not grow a test framework.
 

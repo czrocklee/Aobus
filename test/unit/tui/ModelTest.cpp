@@ -5,12 +5,12 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -226,14 +226,14 @@ namespace ao::tui::test
 
   TEST_CASE("Model - active playback transports need clock ticks", "[tui][unit][model]")
   {
-    CHECK_FALSE(transportNeedsClockTick(audio::Transport::Idle));
-    CHECK(transportNeedsClockTick(audio::Transport::Opening));
-    CHECK(transportNeedsClockTick(audio::Transport::Buffering));
-    CHECK(transportNeedsClockTick(audio::Transport::Playing));
-    CHECK_FALSE(transportNeedsClockTick(audio::Transport::Paused));
-    CHECK(transportNeedsClockTick(audio::Transport::Seeking));
-    CHECK_FALSE(transportNeedsClockTick(audio::Transport::Stopping));
-    CHECK_FALSE(transportNeedsClockTick(audio::Transport::Error));
+    CHECK_FALSE(needsTransportClockTick(audio::Transport::Idle));
+    CHECK(needsTransportClockTick(audio::Transport::Opening));
+    CHECK(needsTransportClockTick(audio::Transport::Buffering));
+    CHECK(needsTransportClockTick(audio::Transport::Playing));
+    CHECK_FALSE(needsTransportClockTick(audio::Transport::Paused));
+    CHECK(needsTransportClockTick(audio::Transport::Seeking));
+    CHECK_FALSE(needsTransportClockTick(audio::Transport::Stopping));
+    CHECK_FALSE(needsTransportClockTick(audio::Transport::Error));
   }
 
   TEST_CASE("Model - quality indicator uses Soul brand quality colors", "[tui][unit][model]")

@@ -16,7 +16,7 @@ namespace ao::tag::mpeg::test
 {
   namespace
   {
-    std::array<std::uint8_t, 4> createHeader(VersionID version,
+    std::array<std::uint8_t, 4> createHeader(VersionId version,
                                              LayerDescription layer,
                                              std::uint8_t bitrateIndex,
                                              std::uint8_t samplingIndex,
@@ -44,10 +44,10 @@ namespace ao::tag::mpeg::test
   {
     SECTION("Valid V1 Layer III header")
     {
-      auto const data = createHeader(VersionID::Ver1, LayerDescription::LayerIII, 9, 0); // 128kbps, 44100Hz
+      auto const data = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 0); // 128kbps, 44100Hz
       auto const view = FrameView{data.data(), data.size()};
       CHECK(view.isValid());
-      CHECK(view.layout().versionId() == VersionID::Ver1);
+      CHECK(view.layout().versionId() == VersionId::Ver1);
       CHECK(view.layout().layer() == LayerDescription::LayerIII);
       CHECK(view.bitrate() == 128000);
       CHECK(view.sampleRate() == 44100);
@@ -63,28 +63,28 @@ namespace ao::tag::mpeg::test
 
     SECTION("Reserved version")
     {
-      auto const data = createHeader(VersionID::Reserved, LayerDescription::LayerIII, 9, 0);
+      auto const data = createHeader(VersionId::Reserved, LayerDescription::LayerIII, 9, 0);
       auto const view = FrameView{data.data(), data.size()};
       CHECK_FALSE(view.isValid());
     }
 
     SECTION("Reserved layer")
     {
-      auto const data = createHeader(VersionID::Ver1, LayerDescription::Reserved, 9, 0);
+      auto const data = createHeader(VersionId::Ver1, LayerDescription::Reserved, 9, 0);
       auto const view = FrameView{data.data(), data.size()};
       CHECK_FALSE(view.isValid());
     }
 
     SECTION("Free bitrate")
     {
-      auto const data = createHeader(VersionID::Ver1, LayerDescription::LayerIII, 0, 0);
+      auto const data = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 0, 0);
       auto const view = FrameView{data.data(), data.size()};
       CHECK_FALSE(view.isValid());
     }
 
     SECTION("Reserved sampling rate")
     {
-      auto const data = createHeader(VersionID::Ver1, LayerDescription::LayerIII, 9, 3);
+      auto const data = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 3);
       auto const view = FrameView{data.data(), data.size()};
       CHECK_FALSE(view.isValid());
     }
@@ -94,7 +94,7 @@ namespace ao::tag::mpeg::test
   {
     SECTION("Layer I")
     {
-      auto const data = createHeader(VersionID::Ver1, LayerDescription::LayerI, 9, 0); // 288kbps, 44100Hz
+      auto const data = createHeader(VersionId::Ver1, LayerDescription::LayerI, 9, 0); // 288kbps, 44100Hz
       auto const view = FrameView{data.data(), data.size()};
       CHECK(view.isValid());
       CHECK(view.samplesPerFrame() == 384);
@@ -105,7 +105,7 @@ namespace ao::tag::mpeg::test
 
     SECTION("Layer II")
     {
-      auto const data = createHeader(VersionID::Ver1, LayerDescription::LayerII, 9, 0); // 160kbps, 44100Hz
+      auto const data = createHeader(VersionId::Ver1, LayerDescription::LayerII, 9, 0); // 160kbps, 44100Hz
       auto const view = FrameView{data.data(), data.size()};
       CHECK(view.isValid());
       CHECK(view.samplesPerFrame() == 1152);
@@ -115,7 +115,7 @@ namespace ao::tag::mpeg::test
 
     SECTION("Layer III V2")
     {
-      auto const data = createHeader(VersionID::Ver2, LayerDescription::LayerIII, 9, 0); // 80kbps, 22050Hz
+      auto const data = createHeader(VersionId::Ver2, LayerDescription::LayerIII, 9, 0); // 80kbps, 22050Hz
       auto const view = FrameView{data.data(), data.size()};
       CHECK(view.isValid());
       CHECK(view.samplesPerFrame() == 576);
@@ -125,7 +125,7 @@ namespace ao::tag::mpeg::test
 
     SECTION("Single channel")
     {
-      auto const data = createHeader(VersionID::Ver1, LayerDescription::LayerIII, 9, 0, ChannelMode::SingleChannel);
+      auto const data = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 0, ChannelMode::SingleChannel);
       auto const view = FrameView{data.data(), data.size()};
       CHECK(view.channels() == 1);
     }
@@ -135,7 +135,7 @@ namespace ao::tag::mpeg::test
   {
     // Construct a buffer with a frame header followed by Xing header
     auto buffer = std::vector<std::uint8_t>(200, 0);
-    auto const header = createHeader(VersionID::Ver1, LayerDescription::LayerIII, 9, 0); // Stereo
+    auto const header = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 0); // Stereo
     std::ranges::copy(header, buffer.begin());
 
     // Xing offset for V1 Stereo is 32 + 4 = 36
@@ -161,7 +161,7 @@ namespace ao::tag::mpeg::test
   TEST_CASE("MPEG Frame - keeps Xing fields inside the current frame", "[tag][unit][mpeg][frame]")
   {
     auto const header =
-      createHeader(VersionID::Ver2, LayerDescription::LayerIII, 1, 1, ChannelMode::SingleChannel); // 8kbps, 24000Hz
+      createHeader(VersionId::Ver2, LayerDescription::LayerIII, 1, 1, ChannelMode::SingleChannel); // 8kbps, 24000Hz
     auto const headerView = FrameView{header.data(), header.size()};
     auto const frameLength = headerView.length();
     auto buffer = std::vector<std::uint8_t>(frameLength + sizeof(boost::endian::big_uint32_buf_t), 0);

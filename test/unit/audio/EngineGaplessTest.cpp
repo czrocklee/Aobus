@@ -6,8 +6,8 @@
 #include "test/unit/audio/ScriptedDecoderSession.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -309,7 +309,7 @@ namespace ao::audio::test
     auto* const target = backendRaw->target();
     REQUIRE(target != nullptr);
 
-    backendRaw->fireRouteReady("anchor");
+    backendRaw->emitRouteReady("anchor");
     REQUIRE(routeEntered.waitForCount(1));
 
     // Drive the render side (this thread stands in for the RT thread): consume
@@ -376,7 +376,7 @@ namespace ao::audio::test
     REQUIRE(target->renderPcm(firstOut).bytesWritten == firstOut.size());
     CHECK(target->renderPcm(firstOut).drained);
 
-    backendRaw->fireDrainComplete();
+    backendRaw->emitDrainComplete();
     REQUIRE(endedLatch.waitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
@@ -413,7 +413,7 @@ namespace ao::audio::test
     REQUIRE(target->renderPcm(firstOut).bytesWritten == firstOut.size());
     CHECK(target->renderPcm(firstOut).drained);
 
-    backendRaw->fireDrainComplete();
+    backendRaw->emitDrainComplete();
     REQUIRE(endedLatch.waitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
@@ -450,7 +450,7 @@ namespace ao::audio::test
     REQUIRE(target->renderPcm(firstOut).bytesWritten == firstOut.size());
     CHECK(target->renderPcm(firstOut).drained);
 
-    backendRaw->fireDrainComplete();
+    backendRaw->emitDrainComplete();
     REQUIRE(endedLatch.waitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
@@ -497,7 +497,7 @@ namespace ao::audio::test
     CHECK(std::vector<std::byte>{firstOut.begin(), firstOut.end()} == firstData);
     CHECK(target->renderPcm(firstOut).drained);
 
-    backendRaw->fireDrainComplete();
+    backendRaw->emitDrainComplete();
     REQUIRE(endedLatch.waitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
@@ -535,7 +535,7 @@ namespace ao::audio::test
     REQUIRE(target->renderPcm(firstOut).bytesWritten == firstOut.size());
     CHECK(target->renderPcm(firstOut).drained);
 
-    backendRaw->fireDrainComplete();
+    backendRaw->emitDrainComplete();
     REQUIRE(endedLatch.waitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
@@ -605,7 +605,7 @@ namespace ao::audio::test
     REQUIRE(target->renderPcm(firstOut).bytesWritten == firstOut.size());
     CHECK(target->renderPcm(firstOut).drained);
 
-    backendRaw->fireDrainComplete();
+    backendRaw->emitDrainComplete();
     REQUIRE(endedLatch.waitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);

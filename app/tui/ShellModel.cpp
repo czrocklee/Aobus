@@ -309,7 +309,7 @@ namespace ao::tui
     return kWorkspaceHint;
   }
 
-  bool ShellModel::commandActive() const noexcept
+  bool ShellModel::isCommandActive() const noexcept
   {
     return _commandActive;
   }

@@ -3,7 +3,8 @@
 
 #include "playback/OutputDeviceListItems.h"
 
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 
 #include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
@@ -86,7 +87,7 @@ namespace ao::gtk
     return _badge;
   }
 
-  bool OutputDeviceItem::active() const
+  bool OutputDeviceItem::isActive() const
   {
     return _active;
   }

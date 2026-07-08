@@ -22,9 +22,9 @@ namespace ao::gtk::layout
 
   GtkLayoutPresetId presetIdFromString(std::string_view presetIdStr);
 
-  uimodel::LayoutDocument createDefaultGtkLayout();
+  uimodel::LayoutDocument makeDefaultGtkLayout();
 
-  uimodel::LayoutDocument createBuiltInGtkLayout(GtkLayoutPresetId presetId);
+  uimodel::LayoutDocument makeBuiltInGtkLayout(GtkLayoutPresetId presetId);
 
-  std::map<std::string, uimodel::LayoutNode, std::less<>> getBuiltInGtkTemplates();
+  std::map<std::string, uimodel::LayoutNode, std::less<>> builtInGtkTemplates();
 } // namespace ao::gtk::layout

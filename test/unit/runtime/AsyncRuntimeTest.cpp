@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include <ao/Exception.h>
 #include <ao/async/ImmediateExecutor.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Signal.h>
+#include <ao/rt/Subscription.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <fcntl.h>

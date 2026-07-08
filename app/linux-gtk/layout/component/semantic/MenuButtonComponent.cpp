@@ -3,7 +3,7 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -22,17 +22,17 @@ namespace ao::gtk::layout
     /**
      * @brief app.menuButton
      */
-    class MenuButtonComponent final : public ILayoutComponent
+    class MenuButtonComponent final : public LayoutComponent
     {
     public:
       MenuButtonComponent(LayoutContext& ctx, LayoutNode const& node)
       {
-        if (auto const icon = node.getProp<std::string>("icon", ""); !icon.empty())
+        if (auto const icon = node.propertyOr<std::string>("icon", ""); !icon.empty())
         {
           _button.set_icon_name(icon);
         }
 
-        auto const style = node.getProp<std::string>("style", "flat");
+        auto const style = node.propertyOr<std::string>("style", "flat");
 
         if (style == "flat")
         {
@@ -51,7 +51,7 @@ namespace ao::gtk::layout
       Gtk::MenuButton _button;
     };
 
-    std::unique_ptr<ILayoutComponent> createMenuButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createMenuButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<MenuButtonComponent>(ctx, node);
     }

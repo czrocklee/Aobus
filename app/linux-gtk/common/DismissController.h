@@ -36,7 +36,7 @@ namespace ao::gtk
     void remove();
 
   private:
-    bool pressIsInside(Gtk::Widget const* target) const;
+    bool isPressInside(Gtk::Widget const* target) const;
 
     Glib::RefPtr<Gtk::GestureClick> _clickPtr;
     Gtk::Window* _watchedWindow = nullptr;

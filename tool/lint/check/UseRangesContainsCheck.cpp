@@ -3,7 +3,7 @@
 
 #include "check/UseRangesContainsCheck.h"
 
-#include "check/AstUtil.h"
+#include "check/AstHelpers.h"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Expr.h>
@@ -34,9 +34,9 @@ namespace clang::tidy::readability
     {
       std::uint32_t count = 0;
 
-      for (Expr const* arg : call.arguments())
+      for (Expr const* argument : call.arguments())
       {
-        if (!isa<CXXDefaultArgExpr>(arg))
+        if (!isa<CXXDefaultArgExpr>(argument))
         {
           ++count;
         }
@@ -96,12 +96,12 @@ namespace clang::tidy::readability
 
   void UseRangesContainsCheck::registerMatchers(MatchFinder* finder)
   {
-    auto rangeArg = expr().bind("range");
-    auto valArg = expr().bind("val");
+    auto rangeMatcher = expr().bind("range");
+    auto valueMatcher = expr().bind("val");
 
-    auto algoCall =
-      anyOf(callExpr(unless(cxxOperatorCallExpr()), hasArgument(0, rangeArg), hasArgument(1, valArg)),
-            cxxOperatorCallExpr(hasOverloadedOperatorName("()"), hasArgument(1, rangeArg), hasArgument(2, valArg)));
+    auto algoCall = anyOf(
+      callExpr(unless(cxxOperatorCallExpr()), hasArgument(0, rangeMatcher), hasArgument(1, valueMatcher)),
+      cxxOperatorCallExpr(hasOverloadedOperatorName("()"), hasArgument(1, rangeMatcher), hasArgument(2, valueMatcher)));
     auto boundAlgoCall = expr(algoCall).bind("algo_call");
 
     auto endCall = anyOf(callExpr().bind("end_call"), cxxMemberCallExpr(callee(cxxMethodDecl(hasName("end")))));

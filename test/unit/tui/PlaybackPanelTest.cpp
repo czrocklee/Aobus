@@ -6,8 +6,10 @@
 #include "test/unit/tui/TuiRenderTestSupport.h"
 #include "tui/OutputDevicePanel.h"
 #include "tui/QualityPanel.h"
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>

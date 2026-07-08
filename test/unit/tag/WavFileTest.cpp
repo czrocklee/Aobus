@@ -3,7 +3,7 @@
 
 #include "lib/tag/wav/File.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/wav/TestWav.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
@@ -33,13 +33,13 @@ namespace ao::tag::wav::test
   {
     auto const file = File{audio::test::requireAudioFixture("basic_metadata.wav")};
     auto builder = loadTrack(file);
-    auto const meta = builder.metadata();
+    auto const metadata = builder.metadata();
 
-    CHECK(meta.title() == "Test Title");
-    CHECK(meta.artist() == "Test Artist");
-    CHECK(meta.album() == "Test Album");
-    CHECK(meta.genre() == "Rock");
-    CHECK(meta.year() == 2024);
+    CHECK(metadata.title() == "Test Title");
+    CHECK(metadata.artist() == "Test Artist");
+    CHECK(metadata.album() == "Test Album");
+    CHECK(metadata.genre() == "Rock");
+    CHECK(metadata.year() == 2024);
   }
 
   TEST_CASE("WAV File - reads real PCM audio properties", "[tag][unit][wav][file]")

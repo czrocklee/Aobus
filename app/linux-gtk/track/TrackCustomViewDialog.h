@@ -33,7 +33,7 @@ namespace ao::gtk
     std::optional<TrackCustomPresentationDialogResult> runDialog();
 
   private:
-    void setupUi();
+    void buildUi();
     void populateFromSpec(rt::TrackPresentationSpec const& spec, std::string_view label);
     rt::CustomTrackPresentationPreset collectState();
 

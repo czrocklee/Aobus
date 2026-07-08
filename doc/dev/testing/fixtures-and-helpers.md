@@ -75,4 +75,4 @@ Consider adding or improving a helper when:
 
 Do not add a fixture that hides the action or assertion. The behavior under test should still be visible in the test body.
 
-Before adding another local helper, search for an existing one in nearby test support headers such as `test/unit/TestUtils.h`, `test/unit/RuntimeTestUtils.h`, or `test/unit/linux-gtk/GtkTestSupport.h`. Prefer converging repeated queued executors, runtime setup, LMDB setup, and GTK window/present/drain/unset lifecycles into one shared helper when the behavior is genuinely common.
+Before adding another local helper, search for an existing one in nearby test support headers such as `test/unit/TestUtils.h`, `test/unit/RuntimeTestSupport.h`, or `test/unit/linux-gtk/GtkTestSupport.h`. Prefer converging repeated queued executors, runtime setup, LMDB setup, and GTK window/present/drain/unset lifecycles into one shared helper when the behavior is genuinely common.

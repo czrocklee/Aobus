@@ -4,8 +4,8 @@
 #pragma once
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/library/TestUtils.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/library/LibraryBinaryTestSupport.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -65,7 +65,7 @@ namespace ao::library::test
     std::vector<std::pair<std::string, std::string>> const& customPairs = {},
     std::string_view uri = "")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.property().uri(uri);
     builder.metadata().trackNumber(header.trackNumber);
     builder.metadata().trackTotal(header.trackTotal);
@@ -83,9 +83,9 @@ namespace ao::library::test
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dict = DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto dictionary = DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
     auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
-    auto result = builder.serializeCold(wtxn, dict, resources);
+    auto result = builder.serializeCold(wtxn, dictionary, resources);
     REQUIRE(result);
     return *result;
   }

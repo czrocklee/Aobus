@@ -26,7 +26,8 @@ and then verify them with read-only tidy runs.
 The project lint policy — which warnings to fix, when `NOLINT` is acceptable, the NOLINT cleanup
 playbook, include-cleaner triage, and automatic-fix guidance — lives in `doc/dev/linting.md`. Read
 it before fixing or suppressing any finding. When editing C++ to fix warnings, follow the
-conventions in `doc/dev/coding-style.md` (the `aobus-*` checks enforce them).
+conventions in `doc/dev/coding-style.md` and `doc/dev/naming-conventions.md` (the `aobus-*` checks
+enforce them).
 
 ## Default Workflow
 

@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include "CorePrimitives.h"
+#include "NotificationIds.h"
 #include "NotificationState.h"
+#include "Subscription.h"
 
 #include <chrono>
 #include <functional>

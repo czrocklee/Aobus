@@ -6,9 +6,10 @@
 #include "detail/TimeConversion.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/PcmBlock.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ByteView.h>
@@ -37,7 +38,7 @@ namespace ao::audio
   {
     constexpr std::uint8_t kLowByteMask = 0xFF;
 
-    ::FLAC__StreamMetadata_StreamInfo const& getStreamInfo(::FLAC__StreamMetadata const* metadata)
+    ::FLAC__StreamMetadata_StreamInfo const& streamInfoFor(::FLAC__StreamMetadata const* metadata)
     {
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
       return metadata->data.stream_info;
@@ -415,7 +416,7 @@ namespace ao::audio
   {
     auto* const impl = utility::unsafeDowncast<Impl>(clientData);
 
-    return static_cast<::FLAC__bool>(impl->fileCursor.atEnd());
+    return static_cast<::FLAC__bool>(impl->fileCursor.isAtEnd());
   }
 
   ::FLAC__StreamDecoderWriteStatus FlacDecoderSession::Impl::writeCallback(::FLAC__StreamDecoder const* /*decoder*/,
@@ -495,7 +496,7 @@ namespace ao::audio
     if (auto* const impl = utility::unsafeDowncast<Impl>(clientData);
         metadata->type == ::FLAC__METADATA_TYPE_STREAMINFO)
     {
-      auto const& streamInfo = getStreamInfo(metadata);
+      auto const& streamInfo = streamInfoFor(metadata);
 
       impl->info.sourceFormat.channels = static_cast<std::uint8_t>(streamInfo.channels);
       impl->info.sourceFormat.sampleRate = streamInfo.sample_rate;

@@ -60,7 +60,7 @@ namespace ao::gtk::platform
 
     void start();
 
-    bool active() const noexcept;
+    bool isActive() const noexcept;
 
     static std::string_view playbackStatus(audio::Transport transport) noexcept;
     static std::string_view loopStatus(rt::RepeatMode mode) noexcept;

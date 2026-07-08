@@ -3,7 +3,7 @@
 
 #include "check/UseRangesMinMaxCheck.h"
 
-#include "check/AstUtil.h"
+#include "check/AstHelpers.h"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
@@ -76,35 +76,35 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const* arg0 = aobus::stripImplicitNodes(call->getArg(0));
-    auto const* arg1 = aobus::stripImplicitNodes(call->getArg(1));
+    auto const* firstArgument = aobus::stripImplicitNodes(call->getArg(0));
+    auto const* secondArgument = aobus::stripImplicitNodes(call->getArg(1));
 
-    auto const* arg0BeginCall = dyn_cast_or_null<CXXMemberCallExpr>(arg0);
-    auto const* arg1EndCall = dyn_cast_or_null<CXXMemberCallExpr>(arg1);
+    auto const* firstBeginCall = dyn_cast_or_null<CXXMemberCallExpr>(firstArgument);
+    auto const* secondEndCall = dyn_cast_or_null<CXXMemberCallExpr>(secondArgument);
 
-    if (arg0BeginCall == nullptr || arg1EndCall == nullptr)
+    if (firstBeginCall == nullptr || secondEndCall == nullptr)
     {
       return;
     }
 
-    if (auto const* beginMethod = arg0BeginCall->getMethodDecl();
+    if (auto const* beginMethod = firstBeginCall->getMethodDecl();
         beginMethod == nullptr || beginMethod->getName() != "begin")
     {
       return;
     }
 
-    if (auto const* endMethod = arg1EndCall->getMethodDecl(); endMethod == nullptr || endMethod->getName() != "end")
+    if (auto const* endMethod = secondEndCall->getMethodDecl(); endMethod == nullptr || endMethod->getName() != "end")
     {
       return;
     }
 
-    if (arg0BeginCall->getNumArgs() != 0 || arg1EndCall->getNumArgs() != 0)
+    if (firstBeginCall->getNumArgs() != 0 || secondEndCall->getNumArgs() != 0)
     {
       return;
     }
 
-    if (!aobus::refersToVarDecl(arg0BeginCall->getImplicitObjectArgument(), *container) ||
-        !aobus::refersToVarDecl(arg1EndCall->getImplicitObjectArgument(), *container))
+    if (!aobus::refersToVarDecl(firstBeginCall->getImplicitObjectArgument(), *container) ||
+        !aobus::refersToVarDecl(secondEndCall->getImplicitObjectArgument(), *container))
     {
       return;
     }
@@ -123,14 +123,14 @@ namespace clang::tidy::readability
 
     if (call->getNumArgs() >= kComparatorArgIndex)
     {
-      auto const compStr = aobus::getExprSourceText(*call->getArg(2), sm, langOpts);
+      auto const comparatorText = aobus::getExprSourceText(*call->getArg(2), sm, langOpts);
 
-      if (compStr.empty())
+      if (comparatorText.empty())
       {
         return;
       }
 
-      replacement = std::string{funcName} + "(" + containerStr + ", " + compStr + ")";
+      replacement = std::string{funcName} + "(" + containerStr + ", " + comparatorText + ")";
     }
     else
     {

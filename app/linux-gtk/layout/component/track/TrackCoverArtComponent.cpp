@@ -8,11 +8,11 @@
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailSizing.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -30,7 +30,7 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    class TrackCoverArtComponent final : public ILayoutComponent
+    class TrackCoverArtComponent final : public LayoutComponent
     {
     public:
       class CoverArtSlot final : public Gtk::Widget
@@ -126,7 +126,7 @@ namespace ao::gtk::layout
         _imageWidget.set_overflow(Gtk::Overflow::HIDDEN);
 
         auto targetSize =
-          static_cast<std::int32_t>(node.getProp<std::int64_t>("targetSize", kDefaultCoverArtTargetSize));
+          static_cast<std::int32_t>(node.propertyOr<std::int64_t>("targetSize", kDefaultCoverArtTargetSize));
 
         if (auto const it = node.layout.find("widthRequest"); it != node.layout.end())
         {
@@ -187,7 +187,7 @@ namespace ao::gtk::layout
       sigc::connection _scopeConn;
     };
 
-    std::unique_ptr<ILayoutComponent> createTrackCoverArt(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackCoverArt(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackCoverArtComponent>(ctx, node);
     }

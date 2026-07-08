@@ -4,7 +4,7 @@
 #include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/StatefulComponentState.h"
 #include <ao/rt/Log.h>
@@ -163,7 +163,7 @@ namespace ao::gtk::layout
     /**
      * @brief A resizable and collapsible split container.
      */
-    class CollapsibleSplitComponent final : public ILayoutComponent
+    class CollapsibleSplitComponent final : public LayoutComponent
     {
     public:
       enum class Side : std::uint8_t
@@ -184,9 +184,9 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const orientationStr = node.getProp<std::string>("orientation", "horizontal");
+        auto const orientationStr = node.propertyOr<std::string>("orientation", "horizontal");
         _orientation = (orientationStr == "vertical") ? Gtk::Orientation::VERTICAL : Gtk::Orientation::HORIZONTAL;
-        _collapseSide = (node.getProp<std::string>("collapseSide", "end") == "start") ? Side::Start : Side::End;
+        _collapseSide = (node.propertyOr<std::string>("collapseSide", "end") == "start") ? Side::Start : Side::End;
 
         _container.set_orientation(_orientation);
         _paneSizer.setSplitOrientation(_orientation);
@@ -197,7 +197,7 @@ namespace ao::gtk::layout
         _endChildPtr = ctx.registry.create(ctx, node.children[1]);
 
         auto const& optState = _state.restored();
-        bool initiallyRevealed = node.getProp<bool>("revealed", true);
+        bool initiallyRevealed = node.propertyOr<bool>("revealed", true);
         auto optRestoredSize = std::optional<std::int32_t>{};
 
         if (optState)
@@ -245,7 +245,7 @@ namespace ao::gtk::layout
         _revealer.set_child(_paneSizer);
         _revealer.set_hexpand(_orientation == Gtk::Orientation::VERTICAL);
         _revealer.set_vexpand(_orientation == Gtk::Orientation::HORIZONTAL);
-        _revealer.set_transition_type(getTransitionType());
+        _revealer.set_transition_type(transitionType());
 
         applyInitialProps(node, initiallyRevealed, optRestoredSize);
 
@@ -253,7 +253,7 @@ namespace ao::gtk::layout
         assembleLayout();
 
         // Drag logic
-        setupDragGesture();
+        installDragGesture();
 
         _toggleButton.signal_clicked().connect([this] { toggleRevealed(); });
 
@@ -306,7 +306,7 @@ namespace ao::gtk::layout
                              std::optional<std::int32_t> optRestoredSize)
       {
         // Initial size from "position" (we treat it as the fixed size of the collapsible panel)
-        auto const requestedSize = node.getProp<std::int64_t>("position", -1);
+        auto const requestedSize = node.propertyOr<std::int64_t>("position", -1);
         auto const hasPosition = node.props.contains("position");
         auto const percentIt = node.props.find("initialPositionPercent");
 
@@ -377,7 +377,7 @@ namespace ao::gtk::layout
         }
       }
 
-      void setupDragGesture()
+      void installDragGesture()
       {
         _dragGesturePtr = Gtk::GestureDrag::create();
         _dragGesturePtr->set_button(1);
@@ -387,7 +387,7 @@ namespace ao::gtk::layout
         _dragGesturePtr->signal_drag_begin().connect(
           [this](double startX, double startY)
           {
-            _dragAccepted = dragStartedInGutter(startX, startY);
+            _dragAccepted = isDragStartInGutter(startX, startY);
 
             if (!_dragAccepted)
             {
@@ -462,7 +462,7 @@ namespace ao::gtk::layout
           });
       }
 
-      Gtk::RevealerTransitionType getTransitionType()
+      Gtk::RevealerTransitionType transitionType()
       {
         if (_orientation == Gtk::Orientation::HORIZONTAL)
         {
@@ -580,7 +580,7 @@ namespace ao::gtk::layout
         return Gdk::Cursor::create(_orientation == Gtk::Orientation::HORIZONTAL ? "col-resize" : "row-resize");
       }
 
-      bool dragStartedInGutter(double containerX, double containerY)
+      bool isDragStartInGutter(double containerX, double containerY)
       {
         double gutterX = 0.0;
         double gutterY = 0.0;
@@ -697,11 +697,11 @@ namespace ao::gtk::layout
 
       Gtk::Widget* _collapsibleWidget = nullptr;
       std::unique_ptr<Gtk::Label> _errorPtr;
-      std::unique_ptr<ILayoutComponent> _startChildPtr;
-      std::unique_ptr<ILayoutComponent> _endChildPtr;
+      std::unique_ptr<LayoutComponent> _startChildPtr;
+      std::unique_ptr<LayoutComponent> _endChildPtr;
     };
 
-    std::unique_ptr<ILayoutComponent> createCollapsibleSplit(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createCollapsibleSplit(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<CollapsibleSplitComponent>(ctx, node);
     }

@@ -22,7 +22,7 @@ namespace ao::uimodel
     bool isEditableMetadataRow(rt::TrackFieldDefinition const& def)
     {
       return def.category == rt::TrackFieldCategory::Metadata && def.editable && def.field != rt::TrackField::Tags &&
-             trackFieldCanWritePatch(def.field);
+             canWriteTrackFieldPatch(def.field);
     }
 
     bool isReadonlyPropertyRow(rt::TrackFieldDefinition const& def)

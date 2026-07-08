@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/library/TestUtils.h"
+#include "test/unit/library/LibraryBinaryTestSupport.h"
 #include "test/unit/library/TrackViewTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>

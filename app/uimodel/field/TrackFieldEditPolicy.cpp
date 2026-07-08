@@ -38,7 +38,7 @@ namespace ao::uimodel
     }
   } // namespace
 
-  bool trackFieldCanWritePatch(rt::TrackField field) noexcept
+  bool canWriteTrackFieldPatch(rt::TrackField field) noexcept
   {
     using F = rt::TrackField;
 

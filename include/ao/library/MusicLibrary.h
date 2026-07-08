@@ -11,7 +11,7 @@
 
 namespace ao::library
 {
-  struct MetaHeader;
+  struct MetadataHeader;
   class TrackStore;
   class ListStore;
   class ResourceStore;
@@ -53,8 +53,8 @@ namespace ao::library
     FileManifestStore& manifest();
     FileManifestStore const& manifest() const;
 
-    MetaHeader const& metaHeader() const;
-    void updateMetaHeader(MetaHeader const& header);
+    MetadataHeader const& metadataHeader() const;
+    void updateMetadataHeader(MetadataHeader const& header);
 
     std::filesystem::path const& rootPath() const;
 

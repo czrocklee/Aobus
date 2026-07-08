@@ -23,8 +23,8 @@ namespace ao::cli
 {
   std::vector<TrackId> queryMatchingTrackIds(library::MusicLibrary& library, std::string const& filter)
   {
-    auto const txn = library.readTransaction();
-    auto const reader = library.tracks().reader(txn);
+    auto const transaction = library.readTransaction();
+    auto const reader = library.tracks().reader(transaction);
     auto ids = std::vector<TrackId>{};
 
     if (filter.empty())

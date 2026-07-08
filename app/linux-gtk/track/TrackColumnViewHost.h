@@ -49,8 +49,8 @@ namespace ao::gtk
 
     Glib::RefPtr<Gtk::CssProvider> const& cssProvider() const;
 
-    void setupColumns(FactoryProvider const& factoryProvider);
-    void setupSelectionActivation();
+    void configureColumns(FactoryProvider const& factoryProvider);
+    void configureSelectionActivation();
 
     // Signal accessors — stable across rebuilds
     TrackSelectionController::SelectionChangedSignal& signalSelectionChanged() { return _selectionChangedSignal; }

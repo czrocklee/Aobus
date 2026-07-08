@@ -67,7 +67,7 @@ namespace ao::rt
 
     // kValueCompletionFields carries the per-field storage tier this service scans, while the
     // TrackField definition table's valueCompletion flag is the public predicate every caller uses
-    // (trackFieldSupportsValueCompletion: GTK editors, MetadataValueCompleter, QueryExpressionCompleter).
+    // (supportsTrackFieldValueCompletion: GTK editors, MetadataValueCompleter, QueryExpressionCompleter).
     // The two must name the same set of fields: a field listed here but unflagged would be rebuilt yet
     // never queried, and a flagged field missing here would pass the caller gate but resolve to an empty
     // vocabulary -- both silent. Validate they agree once, instead of letting the lists drift.
@@ -75,7 +75,7 @@ namespace ao::rt
     {
       for ([[maybe_unused]] auto const& spec : kValueCompletionFields)
       {
-        assert(trackFieldSupportsValueCompletion(spec.field) &&
+        assert(supportsTrackFieldValueCompletion(spec.field) &&
                "kValueCompletionFields lists a field the TrackField table does not flag for value completion");
       }
 
@@ -168,8 +168,8 @@ namespace ao::rt
     if (_tagsDirty)
     {
       auto counts = CountMap{};
-      auto const txn = _library.readTransaction();
-      auto const reader = _library.tracks().reader(txn);
+      auto const transaction = _library.readTransaction();
+      auto const reader = _library.tracks().reader(transaction);
       auto const& dictionary = _library.dictionary();
 
       for (auto const& [_, view] : reader.hot())
@@ -194,15 +194,15 @@ namespace ao::rt
     if (_customKeysDirty)
     {
       auto counts = CountMap{};
-      auto const txn = _library.readTransaction();
-      auto const reader = _library.tracks().reader(txn);
+      auto const transaction = _library.readTransaction();
+      auto const reader = _library.tracks().reader(transaction);
       auto const& dictionary = _library.dictionary();
 
       for (auto const& [_, view] : reader.cold())
       {
-        for (auto const& [dictId, _] : view.customMetadata())
+        for (auto const& [dictionaryId, _] : view.customMetadata())
         {
-          addValue(counts, dictionary.getOrDefault(dictId));
+          addValue(counts, dictionary.getOrDefault(dictionaryId));
         }
       }
 
@@ -256,8 +256,8 @@ namespace ao::rt
     }
 
     auto counts = std::array<CountMap, kTrackFieldCount>{};
-    auto const txn = _library.readTransaction();
-    auto const reader = _library.tracks().reader(txn);
+    auto const transaction = _library.readTransaction();
+    auto const reader = _library.tracks().reader(transaction);
     auto const& dictionary = _library.dictionary();
 
     for (auto iter = reader.begin(mode); iter != reader.end(mode); ++iter)

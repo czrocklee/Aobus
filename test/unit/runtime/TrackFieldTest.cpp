@@ -311,31 +311,31 @@ namespace ao::rt::test
 
   TEST_CASE("TrackField - helpers report filter expression support", "[runtime][unit][trackfield]")
   {
-    CHECK(trackFieldSupportsFilterExpression(TrackField::Artist));
-    CHECK(trackFieldSupportsFilterExpression(TrackField::AlbumArtist));
-    CHECK(trackFieldSupportsFilterExpression(TrackField::Duration));
+    CHECK(supportsTrackFieldFilterExpression(TrackField::Artist));
+    CHECK(supportsTrackFieldFilterExpression(TrackField::AlbumArtist));
+    CHECK(supportsTrackFieldFilterExpression(TrackField::Duration));
 
-    CHECK_FALSE(trackFieldSupportsFilterExpression(TrackField::Tags));
-    CHECK_FALSE(trackFieldSupportsFilterExpression(TrackField::TechnicalSummary));
-    CHECK_FALSE(trackFieldSupportsFilterExpression(TrackField::Quality));
+    CHECK_FALSE(supportsTrackFieldFilterExpression(TrackField::Tags));
+    CHECK_FALSE(supportsTrackFieldFilterExpression(TrackField::TechnicalSummary));
+    CHECK_FALSE(supportsTrackFieldFilterExpression(TrackField::Quality));
   }
 
   TEST_CASE("TrackField - helpers report value completion support", "[runtime][unit][trackfield]")
   {
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Artist));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Album));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::AlbumArtist));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Genre));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Composer));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Conductor));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Ensemble));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Work));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Movement));
-    CHECK(trackFieldSupportsValueCompletion(TrackField::Soloist));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Artist));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Album));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::AlbumArtist));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Genre));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Composer));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Conductor));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Ensemble));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Work));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Movement));
+    CHECK(supportsTrackFieldValueCompletion(TrackField::Soloist));
 
-    CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Title));
-    CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Year));
-    CHECK_FALSE(trackFieldSupportsValueCompletion(TrackField::Tags));
+    CHECK_FALSE(supportsTrackFieldValueCompletion(TrackField::Title));
+    CHECK_FALSE(supportsTrackFieldValueCompletion(TrackField::Year));
+    CHECK_FALSE(supportsTrackFieldValueCompletion(TrackField::Tags));
   }
 
   TEST_CASE("TrackField - helpers return empty values for invalid fields", "[runtime][unit][trackfield]")

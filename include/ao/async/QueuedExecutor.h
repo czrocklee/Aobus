@@ -12,7 +12,7 @@
 
 namespace ao::async
 {
-  class QueuedExecutorBase : public IExecutor
+  class QueuedExecutorBase : public Executor
   {
   public:
     ~QueuedExecutorBase() override = default;

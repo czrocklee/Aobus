@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Error.h>
+#include <ao/async/Executor.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -14,7 +15,7 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/utility/ThreadUtils.h>
+#include <ao/utility/ThreadName.h>
 
 #include <boost/asio/this_coro.hpp>
 

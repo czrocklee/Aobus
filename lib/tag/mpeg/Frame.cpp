@@ -115,7 +115,7 @@ namespace ao::tag::mpeg
     }
 
     // versionId cannot be Reserved (0b01)
-    if (header.versionId() == VersionID::Reserved)
+    if (header.versionId() == VersionId::Reserved)
     {
       return false;
     }
@@ -236,7 +236,7 @@ namespace ao::tag::mpeg
 
     if (layer == LayerDescription::LayerIII)
     {
-      return (fl.versionId() == VersionID::Ver1) ? kSamplesLayerIIIVer1 : kSamplesLayerIIIVer2;
+      return (fl.versionId() == VersionId::Ver1) ? kSamplesLayerIIIVer1 : kSamplesLayerIIIVer2;
     }
 
     return 0;
@@ -259,7 +259,7 @@ namespace ao::tag::mpeg
     static constexpr std::size_t kXingOffsetVer2Stereo = 17;
     static constexpr std::size_t kXingOffsetVer2Mono = 9;
 
-    if (fl.versionId() == VersionID::Ver1)
+    if (fl.versionId() == VersionId::Ver1)
     {
       offset = (fl.channelMode() == ChannelMode::SingleChannel) ? kXingOffsetVer1Mono : kXingOffsetVer1Stereo;
     }

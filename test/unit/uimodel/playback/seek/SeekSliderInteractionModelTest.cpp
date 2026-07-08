@@ -74,7 +74,7 @@ namespace ao::uimodel::test
       model.reset();
 
       CHECK(model.duration() == std::chrono::milliseconds{0});
-      CHECK_FALSE(model.enabled());
+      CHECK_FALSE(model.isEnabled());
       CHECK_FALSE(model.isPointerActive());
       CHECK_FALSE(model.hasPendingFinalSeek());
     }

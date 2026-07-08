@@ -83,9 +83,9 @@ namespace ao::gtk
       auto positions = std::vector<std::uint32_t>{};
       positions.reserve(selectedCount);
 
-      for (std::uint32_t idx = 0U; idx < selectedCount; ++idx)
+      for (std::uint32_t index = 0U; index < selectedCount; ++index)
       {
-        positions.push_back(static_cast<std::uint32_t>(bitsetPtr->get_nth(idx)));
+        positions.push_back(static_cast<std::uint32_t>(bitsetPtr->get_nth(index)));
       }
 
       return positions;
@@ -103,7 +103,7 @@ namespace ao::gtk
   {
   }
 
-  void TrackSelectionController::setupActivation()
+  void TrackSelectionController::configureActivation()
   {
     _columnView.set_focusable(true);
     _columnView.set_focus_on_click(true);
@@ -412,9 +412,9 @@ namespace ao::gtk
     auto ids = std::vector<TrackId>{};
     ids.reserve(proj->size());
 
-    for (std::size_t idx = 0; idx < proj->size(); ++idx)
+    for (std::size_t index = 0; index < proj->size(); ++index)
     {
-      ids.push_back(proj->trackIdAt(idx));
+      ids.push_back(proj->trackIdAt(index));
     }
 
     return ids;

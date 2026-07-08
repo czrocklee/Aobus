@@ -27,7 +27,7 @@ namespace ao::uimodel::test
       auto patch = rt::MetadataPatch{};
       auto const value = TrackFieldEditValue{std::in_place_type<std::string>, "Edited"};
 
-      CHECK(trackFieldCanWritePatch(field));
+      CHECK(canWriteTrackFieldPatch(field));
       CHECK(writeTrackFieldPatch(patch, field, value));
       REQUIRE((patch.*target).has_value());
       CHECK(*(patch.*target) == "Edited");
@@ -39,7 +39,7 @@ namespace ao::uimodel::test
       auto patch = rt::MetadataPatch{};
       auto const value = TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(42)};
 
-      CHECK(trackFieldCanWritePatch(field));
+      CHECK(canWriteTrackFieldPatch(field));
       CHECK(writeTrackFieldPatch(patch, field, value));
       REQUIRE((patch.*target).has_value());
       CHECK(*(patch.*target) == 42);
@@ -95,9 +95,9 @@ namespace ao::uimodel::test
     patch.optTitle = "Before";
     auto const value = TrackFieldEditValue{std::in_place_type<std::string>, "Edited"};
 
-    CHECK_FALSE(trackFieldCanWritePatch(rt::TrackField::Tags));
-    CHECK_FALSE(trackFieldCanWritePatch(rt::TrackField::Duration));
-    CHECK_FALSE(trackFieldCanWritePatch(rt::TrackField::Quality));
+    CHECK_FALSE(canWriteTrackFieldPatch(rt::TrackField::Tags));
+    CHECK_FALSE(canWriteTrackFieldPatch(rt::TrackField::Duration));
+    CHECK_FALSE(canWriteTrackFieldPatch(rt::TrackField::Quality));
 
     CHECK_FALSE(writeTrackFieldPatch(patch, rt::TrackField::Tags, value));
     CHECK_FALSE(writeTrackFieldPatch(patch, rt::TrackField::Duration, value));

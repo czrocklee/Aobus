@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackListProjection.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -67,14 +67,16 @@ namespace ao::rt::test
     auto ids = std::vector<TrackId>{};
     ids.reserve(20);
 
-    for (std::int32_t idx = 0; idx < 10; ++idx)
+    for (std::int32_t index = 0; index < 10; ++index)
     {
-      ids.push_back(env.lib.addTrack(library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - idx)), 2020)));
+      ids.push_back(
+        env.lib.addTrack(library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - index)), 2020)));
     }
 
-    for (std::int32_t idx = 0; idx < 10; ++idx)
+    for (std::int32_t index = 0; index < 10; ++index)
     {
-      ids.push_back(env.lib.addTrack(library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - idx)), 2021)));
+      ids.push_back(
+        env.lib.addTrack(library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - index)), 2021)));
     }
 
     env.setupFiltered(ids);
@@ -92,11 +94,11 @@ namespace ao::rt::test
 
     auto const checkOrder = [&](std::size_t start, std::size_t end, std::uint16_t expectedYear)
     {
-      for (std::size_t idx = start; idx < end; ++idx)
+      for (std::size_t index = start; index < end; ++index)
       {
-        auto txn = env.lib.library().readTransaction();
-        auto reader = env.lib.library().tracks().reader(txn);
-        auto const optV = reader.get(proj.trackIdAt(idx), TrackStore::Reader::LoadMode::Hot);
+        auto transaction = env.lib.library().readTransaction();
+        auto reader = env.lib.library().tracks().reader(transaction);
+        auto const optV = reader.get(proj.trackIdAt(index), TrackStore::Reader::LoadMode::Hot);
 
         REQUIRE(optV);
         CHECK(optV->metadata().year() == expectedYear);
@@ -111,12 +113,12 @@ namespace ao::rt::test
     {
       std::size_t const start = is2020 ? std::size_t{0} : std::size_t{10};
 
-      for (std::size_t idx = start; idx < start + 9; ++idx)
+      for (std::size_t index = start; index < start + 9; ++index)
       {
-        auto txn = env.lib.library().readTransaction();
-        auto reader = env.lib.library().tracks().reader(txn);
-        auto const optA = reader.get(proj.trackIdAt(idx), TrackStore::Reader::LoadMode::Hot);
-        auto const optB = reader.get(proj.trackIdAt(idx + 1), TrackStore::Reader::LoadMode::Hot);
+        auto transaction = env.lib.library().readTransaction();
+        auto reader = env.lib.library().tracks().reader(transaction);
+        auto const optA = reader.get(proj.trackIdAt(index), TrackStore::Reader::LoadMode::Hot);
+        auto const optB = reader.get(proj.trackIdAt(index + 1), TrackStore::Reader::LoadMode::Hot);
 
         REQUIRE(optA);
         REQUIRE(optB);
@@ -185,16 +187,16 @@ namespace ao::rt::test
     std::uint16_t previousDisc = 0;
     std::uint16_t previousTrack = 0;
 
-    auto const& dict = env.lib.library().dictionary();
-    auto txn = env.lib.library().readTransaction();
-    auto reader = env.lib.library().tracks().reader(txn);
+    auto const& dictionary = env.lib.library().dictionary();
+    auto transaction = env.lib.library().readTransaction();
+    auto reader = env.lib.library().tracks().reader(transaction);
 
     for (std::size_t i = 0; i < 15; ++i)
     {
       auto const optView = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
 
-      auto const album = std::string{dict.get(optView->metadata().albumId())};
+      auto const album = std::string{dictionary.get(optView->metadata().albumId())};
       auto const disc = optView->metadata().discNumber();
       auto const track = optView->metadata().trackNumber();
 
@@ -299,9 +301,9 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 6);
 
-    auto const& dict = env.lib.library().dictionary();
-    auto txn = env.lib.library().readTransaction();
-    auto reader = env.lib.library().tracks().reader(txn);
+    auto const& dictionary = env.lib.library().dictionary();
+    auto transaction = env.lib.library().readTransaction();
+    auto reader = env.lib.library().tracks().reader(transaction);
 
     auto orderedAlbums = std::vector<std::string>{};
     auto orderedMovements = std::vector<std::uint16_t>{};
@@ -310,7 +312,7 @@ namespace ao::rt::test
     {
       auto const optView = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
-      orderedAlbums.emplace_back(dict.get(optView->metadata().albumId()));
+      orderedAlbums.emplace_back(dictionary.get(optView->metadata().albumId()));
       orderedMovements.push_back(optView->classical().movementNumber());
     }
 
@@ -372,8 +374,8 @@ namespace ao::rt::test
     {
       for (std::size_t i = 0; i < 9; ++i)
       {
-        auto txn = env.lib.library().readTransaction();
-        auto reader = env.lib.library().tracks().reader(txn);
+        auto transaction = env.lib.library().readTransaction();
+        auto reader = env.lib.library().tracks().reader(transaction);
         auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
         auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
         REQUIRE(optA);
@@ -427,8 +429,8 @@ namespace ao::rt::test
 
     for (std::size_t i = 0; i < 14; ++i)
     {
-      auto txn = env.lib.library().readTransaction();
-      auto reader = env.lib.library().tracks().reader(txn);
+      auto transaction = env.lib.library().readTransaction();
+      auto reader = env.lib.library().tracks().reader(transaction);
       auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
       auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optA);
@@ -442,8 +444,8 @@ namespace ao::rt::test
 
     for (std::size_t i = 0; i < 14; ++i)
     {
-      auto txn = env.lib.library().readTransaction();
-      auto reader = env.lib.library().tracks().reader(txn);
+      auto transaction = env.lib.library().readTransaction();
+      auto reader = env.lib.library().tracks().reader(transaction);
       auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
       auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optA);

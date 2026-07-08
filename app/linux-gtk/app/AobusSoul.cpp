@@ -65,7 +65,7 @@ namespace ao::gtk
 
     std::chrono::duration<double> time{0.0};
     bool isStopped = true;
-    bool showFullLogo = false;
+    bool shouldShowFullLogo = false;
 
     float baseStrokeWidth = 9.0F;
     float innerGlyphScale = 1.0F;
@@ -187,14 +187,14 @@ namespace ao::gtk
     return _implPtr->isBreathing;
   }
 
-  bool AobusSoul::isTickActiveForTest() const
+  bool AobusSoul::isTickActive() const
   {
     return _implPtr->tickId != 0;
   }
 
-  bool AobusSoul::showFullLogo() const
+  bool AobusSoul::shouldShowFullLogo() const
   {
-    return _implPtr->showFullLogo;
+    return _implPtr->shouldShowFullLogo;
   }
 
   Gdk::RGBA AobusSoul::aura() const
@@ -291,12 +291,12 @@ namespace ao::gtk
 
   void AobusSoul::setShowFullLogo(bool const show)
   {
-    if (_implPtr->showFullLogo == show)
+    if (_implPtr->shouldShowFullLogo == show)
     {
       return;
     }
 
-    _implPtr->showFullLogo = show;
+    _implPtr->shouldShowFullLogo = show;
     queue_draw();
   }
 
@@ -350,17 +350,17 @@ namespace ao::gtk
     float const maxNormalizedStrokeWidth = maxStrokeWidth / kRefHeight;
     float const soulOuterRadius = kUnitRadius + (maxNormalizedStrokeWidth / 2.0F);
 
-    float const horizontalRadius = _implPtr->showFullLogo ? (kLogoXOffset + soulOuterRadius) : soulOuterRadius;
+    float const horizontalRadius = _implPtr->shouldShowFullLogo ? (kLogoXOffset + soulOuterRadius) : soulOuterRadius;
     float const drawingScale = std::min(width / (horizontalRadius * 2.0F), height / (soulOuterRadius * 2.0F));
 
     float const centerX = width / 2.0F;
     float const centerY = height / 2.0F;
 
-    float const oCenterX = _implPtr->showFullLogo ? (centerX + (kLogoXOffset * drawingScale)) : centerX;
+    float const oCenterX = _implPtr->shouldShowFullLogo ? (centerX + (kLogoXOffset * drawingScale)) : centerX;
     float const aCenterX = centerX - (kLogoXOffset * drawingScale);
 
     // 1. Draw 'a' if requested
-    if (_implPtr->showFullLogo)
+    if (_implPtr->shouldShowFullLogo)
     {
       snapshot->save();
       snapshot->translate({aCenterX, centerY});

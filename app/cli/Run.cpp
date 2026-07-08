@@ -29,7 +29,7 @@ namespace ao::cli
 {
   namespace
   {
-    bool hasHelpAllArg(std::int32_t argc, char const* const* argv)
+    bool hasHelpAllArgument(std::int32_t argc, char const* const* argv)
     {
       for (std::int32_t i = 1; i < argc; ++i)
       {
@@ -71,14 +71,14 @@ namespace ao::cli
 
     try
     {
-      setupTrackCommand(app, context);
-      setupListCommand(app, context);
-      setupInitCommand(app, context);
-      setupScanCommand(app, context);
-      setupTagCommand(app, context);
-      setupLibCommand(app, context);
+      configureTrackCommand(app, context);
+      configureListCommand(app, context);
+      configureInitCommand(app, context);
+      configureScanCommand(app, context);
+      configureTagCommand(app, context);
+      configureLibCommand(app, context);
 
-      if (hasHelpAllArg(argc, argv))
+      if (hasHelpAllArgument(argc, argv))
       {
         // CLI11's built-in help-all still runs after subcommand requirements,
         // and its All mode expands only one level. Print the full tree before
@@ -122,9 +122,9 @@ namespace ao::cli
     auto argv = std::vector<char const*>{};
     argv.reserve(args.size());
 
-    for (auto const& arg : args)
+    for (auto const& argument : args)
     {
-      argv.push_back(arg.c_str());
+      argv.push_back(argument.c_str());
     }
 
     return run(static_cast<std::int32_t>(argv.size()), argv.data(), out, err);

@@ -5,14 +5,15 @@
 #pragma GCC diagnostic ignored "-Wnull-dereference"
 
 #include <ao/audio/Backend.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/backend/AlsaExclusiveBackend.h>
 #include <ao/audio/backend/AlsaProvider.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
 #include <ao/utility/Raii.h>
-#include <ao/utility/ThreadUtils.h>
+#include <ao/utility/ThreadName.h>
 
 #include <poll.h>
 
@@ -63,7 +64,7 @@ namespace ao::audio::backend
 
     Impl()
     {
-      cachedDevices = doAlsaEnumerate();
+      cachedDevices = enumerateAlsaPlaybackDevices();
 
       monitorThread = std::jthread{[this](std::stop_token const& st)
                                    {
@@ -107,7 +108,7 @@ namespace ao::audio::backend
 
           if (devPtr)
           {
-            auto newDevices = doAlsaEnumerate();
+            auto newDevices = enumerateAlsaPlaybackDevices();
             auto subs = std::vector<DeviceSub>{};
             {
               auto const lock = std::scoped_lock{mutex};
@@ -196,7 +197,7 @@ namespace ao::audio::backend
                         }};
   }
 
-  IBackendProvider::Status AlsaProvider::status() const
+  BackendProvider::Status AlsaProvider::status() const
   {
     auto const lock = std::scoped_lock{_implPtr->mutex};
     return {.metadata = {.id = kBackendAlsa,
@@ -209,7 +210,7 @@ namespace ao::audio::backend
             .devices = _implPtr->cachedDevices};
   }
 
-  std::unique_ptr<IBackend> AlsaProvider::createBackend(Device const& device, ProfileId const& /*profile*/)
+  std::unique_ptr<Backend> AlsaProvider::createBackend(Device const& device, ProfileId const& /*profile*/)
   {
     return std::make_unique<AlsaExclusiveBackend>(device, kProfileExclusive, _implPtr->graphRegistry);
   }

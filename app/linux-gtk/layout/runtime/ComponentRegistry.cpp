@@ -7,9 +7,9 @@
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentInteractionController.h"
 #include "layout/runtime/DecoratedLayoutComponent.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -27,7 +27,7 @@ namespace ao::gtk::layout
 {
   namespace
   {
-    class ErrorComponent final : public ILayoutComponent
+    class ErrorComponent final : public LayoutComponent
     {
     public:
       explicit ErrorComponent(std::string const& message)
@@ -53,9 +53,9 @@ namespace ao::gtk::layout
     _catalog.registerComponentDescriptor(std::move(descriptor));
   }
 
-  std::unique_ptr<ILayoutComponent> ComponentRegistry::create(LayoutContext& ctx, uimodel::LayoutNode const& node) const
+  std::unique_ptr<LayoutComponent> ComponentRegistry::create(LayoutContext& ctx, uimodel::LayoutNode const& node) const
   {
-    auto componentPtr = std::unique_ptr<ILayoutComponent>{};
+    auto componentPtr = std::unique_ptr<LayoutComponent>{};
     auto const optCompDesc = descriptor(node.type);
 
     if (auto const it = _factories.find(node.type); it != _factories.end())
@@ -95,7 +95,7 @@ namespace ao::gtk::layout
           return true;
         }
 
-        return !policy.getDefault(slot).empty();
+        return !policy.defaultAction(slot).empty();
       };
 
       hasActions = check(uimodel::kPrimaryActionProp, uimodel::LayoutActionSlot::PrimaryClick) ||
@@ -110,7 +110,7 @@ namespace ao::gtk::layout
       }
     }
 
-    auto tooltipComponentPtr = std::unique_ptr<ILayoutComponent>{};
+    auto tooltipComponentPtr = std::unique_ptr<LayoutComponent>{};
 
     if (node.optTooltip && node.optTooltip->nodePtr)
     {
@@ -134,7 +134,7 @@ namespace ao::gtk::layout
 
       ctx.surface = LayoutSurface::Tooltip;
 
-      auto tooltipComponentPtr = std::unique_ptr<ILayoutComponent>{};
+      auto tooltipComponentPtr = std::unique_ptr<LayoutComponent>{};
 
       // Ignore nested tooltips when already building a tooltip surface.
       if (guard.saved != LayoutSurface::Tooltip)

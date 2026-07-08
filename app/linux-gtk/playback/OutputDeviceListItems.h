@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 
 #include <glibmm/object.h>
 #include <glibmm/objectbase.h>
@@ -49,7 +50,7 @@ namespace ao::gtk
     std::string const& name() const;
     std::string const& description() const;
     std::string const& badge() const;
-    bool active() const;
+    bool isActive() const;
     void setActive(bool active);
 
     // Helper for diffing

@@ -3,9 +3,10 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/IBackendProvider.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Player.h>
 #include <ao/audio/QualityAnalyzer.h>
@@ -15,14 +16,17 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackSessionState.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/Signal.h>
+#include <ao/rt/Subscription.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 
 #include <algorithm>
@@ -51,7 +55,7 @@ namespace ao::rt
       return transport == audio::Transport::Idle || transport == audio::Transport::Error;
     }
 
-    OutputProfileSnapshot toOutputProfileSnapshot(audio::IBackendProvider::ProfileMetadata const& source)
+    OutputProfileSnapshot toOutputProfileSnapshot(audio::BackendProvider::ProfileMetadata const& source)
     {
       return OutputProfileSnapshot{.id = source.id, .name = source.name, .description = source.description};
     }
@@ -66,7 +70,7 @@ namespace ao::rt
                                   .capabilities = source.capabilities};
     }
 
-    OutputBackendSnapshot toOutputBackendSnapshot(audio::IBackendProvider::Status const& source)
+    OutputBackendSnapshot toOutputBackendSnapshot(audio::BackendProvider::Status const& source)
     {
       auto profiles = std::vector<OutputProfileSnapshot>{};
       profiles.reserve(source.metadata.supportedProfiles.size());
@@ -140,7 +144,7 @@ namespace ao::rt
       return !outputDevice.backendId.empty();
     }
 
-    bool sameOutputDevice(OutputDeviceSelection const& lhs, OutputDeviceSelection const& rhs)
+    bool isSameOutputDevice(OutputDeviceSelection const& lhs, OutputDeviceSelection const& rhs)
     {
       return lhs.backendId == rhs.backendId && lhs.deviceId == rhs.deviceId && lhs.profileId == rhs.profileId;
     }
@@ -305,8 +309,8 @@ namespace ao::rt
 
     Result<PlaybackService::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary& library, TrackId trackId)
     {
-      auto const txn = library.readTransaction();
-      auto reader = library.tracks().reader(txn);
+      auto const transaction = library.readTransaction();
+      auto reader = library.tracks().reader(transaction);
       auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
       if (!optView)
@@ -402,7 +406,7 @@ namespace ao::rt
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    async::IExecutor& executor;
+    async::Executor& executor;
     PlaybackState state;
     std::unique_ptr<audio::Player> playerPtr;
     ViewService& views;
@@ -509,7 +513,7 @@ namespace ao::rt
         state.duration = currentRequest.input.duration;
       }
 
-      if (!sameOutputDevice(previousState.output.selectedDevice, state.output.selectedDevice))
+      if (!isSameOutputDevice(previousState.output.selectedDevice, state.output.selectedDevice))
       {
         logOutputDeviceTransition(previousState.output.selectedDevice, state.output.selectedDevice);
       }
@@ -810,7 +814,7 @@ namespace ao::rt
       }
     }
 
-    explicit Impl(async::IExecutor& callbackExecutor,
+    explicit Impl(async::Executor& callbackExecutor,
                   ViewService& viewService,
                   library::MusicLibrary& musicLibrary,
                   NotificationService& notificationService)
@@ -833,7 +837,7 @@ namespace ao::rt
       playerPtr->setOnStateChanged([this] { refreshState(); });
 
       playerPtr->setOnOutputDevicesChanged(
-        [this](std::vector<audio::IBackendProvider::Status> const&)
+        [this](std::vector<audio::BackendProvider::Status> const&)
         {
           refreshState();
 
@@ -889,7 +893,7 @@ namespace ao::rt
     }
   };
 
-  PlaybackService::PlaybackService(async::IExecutor& executor,
+  PlaybackService::PlaybackService(async::Executor& executor,
                                    ViewService& views,
                                    library::MusicLibrary& library,
                                    NotificationService& notifications)
@@ -1364,7 +1368,7 @@ namespace ao::rt
     }
   }
 
-  void PlaybackService::addProvider(std::unique_ptr<audio::IBackendProvider> providerPtr)
+  void PlaybackService::addProvider(std::unique_ptr<audio::BackendProvider> providerPtr)
   {
     _implPtr->ensureOnExecutor();
 

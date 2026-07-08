@@ -37,14 +37,14 @@ namespace ao::query
 
     std::string_view loadDictionaryFieldValue(library::TrackView const& track,
                                               Field field,
-                                              library::DictionaryStore const* dict)
+                                              library::DictionaryStore const* dictionary)
     {
-      if (dict == nullptr)
+      if (dictionary == nullptr)
       {
         return {};
       }
 
-      return dictionaryFieldValue(track, field, *dict);
+      return dictionaryFieldValue(track, field, *dictionary);
     }
 
     template<typename T>
@@ -60,13 +60,13 @@ namespace ao::query
 
     std::string loadFieldText(library::TrackView const& track,
                               FormatInstruction const& instr,
-                              library::DictionaryStore const* dict)
+                              library::DictionaryStore const* dictionary)
     {
       auto const field = instr.field;
 
       if (isDictionaryField(field))
       {
-        return std::string{loadDictionaryFieldValue(track, field, dict)};
+        return std::string{loadDictionaryFieldValue(track, field, dictionary)};
       }
 
       switch (field)
@@ -80,8 +80,8 @@ namespace ao::query
             return {};
           }
 
-          auto const dictId = DictionaryId{static_cast<std::uint32_t>(instr.constValue)};
-          return std::string{track.customMetadata().get(dictId).value_or("")};
+          auto const dictionaryId = DictionaryId{static_cast<std::uint32_t>(instr.constValue)};
+          return std::string{track.customMetadata().get(dictionaryId).value_or("")};
         }
         case Field::Year: return decimalTextOrEmpty(track.metadata().year());
         case Field::TrackNumber: return decimalTextOrEmpty(track.metadata().trackNumber());
@@ -104,10 +104,10 @@ namespace ao::query
     }
   } // namespace
 
-  FormatCompiler::FormatCompiler(library::DictionaryStore* dict)
-    : _dict{dict}
+  FormatCompiler::FormatCompiler(library::DictionaryStore* dictionary)
+    : _dictionary{dictionary}
   {
-    gsl_Expects(dict != nullptr);
+    gsl_Expects(dictionary != nullptr);
   }
 
   std::uint32_t FormatCompiler::addLiteral(std::string_view value)
@@ -171,7 +171,7 @@ namespace ao::query
       detail::throwQueryError("field '{}' cannot be formatted as a scalar string", variable.name);
     }
 
-    if (_dict == nullptr && (isDictionaryField(field) || variable.type == VariableType::Custom))
+    if (_dictionary == nullptr && (isDictionaryField(field) || variable.type == VariableType::Custom))
     {
       detail::throwQueryError("format field '{}' requires a DictionaryStore", variableDisplayName(variable));
     }
@@ -189,8 +189,8 @@ namespace ao::query
 
     if (variable.type == VariableType::Custom)
     {
-      auto const dictId = _dict->getOrIntern(variable.name);
-      constValue = static_cast<std::int64_t>(dictId.raw());
+      auto const dictionaryId = _dictionary->getOrIntern(variable.name);
+      constValue = static_cast<std::int64_t>(dictionaryId.raw());
     }
 
     _plan.instructions.push_back(FormatInstruction{
@@ -222,7 +222,7 @@ namespace ao::query
   try
   {
     _plan = FormatPlan{};
-    _plan.dictionary = _dict;
+    _plan.dictionary = _dictionary;
     _hasHotAccess = false;
     _hasColdAccess = false;
 
@@ -252,9 +252,9 @@ namespace ao::query
     return std::unexpected{ex.error()};
   }
 
-  Result<FormatPlan> compileFormat(Expression const& expr, library::DictionaryStore* dict)
+  Result<FormatPlan> compileFormat(Expression const& expr, library::DictionaryStore* dictionary)
   {
-    auto compiler = dict != nullptr ? FormatCompiler{dict} : FormatCompiler{};
+    auto compiler = dictionary != nullptr ? FormatCompiler{dictionary} : FormatCompiler{};
     return compiler.compile(expr);
   }
 

@@ -3,7 +3,7 @@
 //
 // Phase 0 baseline measurement — synthetic data, no fixed pass/fail thresholds.
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackStore.h>
@@ -13,7 +13,7 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
@@ -390,9 +390,9 @@ namespace ao::rt::test
       auto pool = std::vector<std::string>{};
       pool.reserve(kPoolSize);
 
-      for (std::size_t idx = 0; idx < kPoolSize; ++idx)
+      for (std::size_t index = 0; index < kPoolSize; ++index)
       {
-        pool.push_back(std::format("sort-key-{:04d}", idx));
+        pool.push_back(std::format("sort-key-{:04d}", index));
       }
 
       return pool;
@@ -403,9 +403,9 @@ namespace ao::rt::test
       auto entries = std::vector<SortCacheOrderEntry>{};
       entries.reserve(count);
 
-      for (std::size_t idx = 0; idx < count; ++idx)
+      for (std::size_t index = 0; index < count; ++index)
       {
-        auto const scrambled = (idx * 48271 + 9973) % count;
+        auto const scrambled = (index * 48271 + 9973) % count;
         auto const poolIndex = [poolSize = pool.size()](std::size_t value, std::size_t salt) -> std::size_t
         { return (value * 1103515245 + salt * 12345) % poolSize; };
 
@@ -566,9 +566,9 @@ namespace ao::rt::test
       auto ranks = StringRankMap{};
       ranks.reserve(sortedViews.size());
 
-      for (auto const& [idx, value] : sortedViews | std::views::enumerate)
+      for (auto const& [index, value] : sortedViews | std::views::enumerate)
       {
-        ranks.emplace(value, static_cast<std::uint32_t>(idx + 1));
+        ranks.emplace(value, static_cast<std::uint32_t>(index + 1));
       }
 
       return ranks;
@@ -880,9 +880,9 @@ namespace ao::rt::test
       auto positionIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
       positionIndex.reserve(entries.size());
 
-      for (auto const& [idx, entry] : entries | std::views::enumerate)
+      for (auto const& [index, entry] : entries | std::views::enumerate)
       {
-        positionIndex[entry.trackId] = static_cast<std::size_t>(idx);
+        positionIndex[entry.trackId] = static_cast<std::size_t>(index);
       }
 
       auto const positionEnd = std::chrono::steady_clock::now();
@@ -894,9 +894,9 @@ namespace ao::rt::test
       {
         ++sectionCount;
 
-        for (std::size_t idx = 1; idx < entries.size(); ++idx)
+        for (std::size_t index = 1; index < entries.size(); ++index)
         {
-          if (entries[idx].groupKey != entries[idx - 1].groupKey)
+          if (entries[index].groupKey != entries[index - 1].groupKey)
           {
             ++sectionCount;
           }
@@ -927,7 +927,7 @@ namespace ao::rt::test
       std::int32_t nextReg = 0;
       bool first = true;
 
-      for (std::size_t idx = 0; idx < listSize; ++idx)
+      for (std::size_t index = 0; index < listSize; ++index)
       {
         plan.instructions.push_back(query::Instruction{
           .op = query::OpCode::LoadField,
@@ -941,7 +941,7 @@ namespace ao::rt::test
           .op = query::OpCode::LoadConstant,
           .field = 0,
           .operand = nextReg++,
-          .constValue = static_cast<std::int64_t>(1990 + idx),
+          .constValue = static_cast<std::int64_t>(1990 + index),
           .size = 0,
           .data = nullptr,
         });
@@ -981,9 +981,9 @@ namespace ao::rt::test
       auto plan = query::ExecutionPlan{};
       auto set = query::InSet{};
 
-      for (std::size_t idx = 0; idx < listSize; ++idx)
+      for (std::size_t index = 0; index < listSize; ++index)
       {
-        set.numericValues.insert(static_cast<std::int64_t>(1990 + idx));
+        set.numericValues.insert(static_cast<std::int64_t>(1990 + index));
       }
 
       plan.inSets.push_back(std::move(set));
@@ -1017,18 +1017,18 @@ namespace ao::rt::test
     {
       bench.ids.reserve(trackCount);
 
-      for (std::int32_t idx = 0; idx < trackCount; ++idx)
+      for (std::int32_t index = 0; index < trackCount; ++index)
       {
         auto const spec = library::test::TrackSpec{
-          .title = std::format("Track {:06d}", idx),
-          .artist = std::format("Artist {:04d}", idx % (trackCount / 50 + 1)),
-          .album = std::format("Album {:04d}", idx % (trackCount / 200 + 1)),
-          .genre = std::format("Genre {:02d}", idx % 20),
-          .year = static_cast<std::uint16_t>(1990 + (idx % 35)),
-          .discNumber = static_cast<std::uint16_t>(1 + (idx % 3)),
-          .trackNumber = static_cast<std::uint16_t>(1 + (idx % 20)),
+          .title = std::format("Track {:06d}", index),
+          .artist = std::format("Artist {:04d}", index % (trackCount / 50 + 1)),
+          .album = std::format("Album {:04d}", index % (trackCount / 200 + 1)),
+          .genre = std::format("Genre {:02d}", index % 20),
+          .year = static_cast<std::uint16_t>(1990 + (index % 35)),
+          .discNumber = static_cast<std::uint16_t>(1 + (index % 3)),
+          .trackNumber = static_cast<std::uint16_t>(1 + (index % 20)),
           .duration = std::chrono::minutes{3} + std::chrono::milliseconds{static_cast<std::uint32_t>(
-                                                  (static_cast<std::int64_t>(idx) * 137) %
+                                                  (static_cast<std::int64_t>(index) * 137) %
                                                   std::chrono::milliseconds{std::chrono::minutes{7}}.count())},
         };
         bench.ids.push_back(bench.lib.addTrack(spec));
@@ -1071,7 +1071,7 @@ namespace ao::rt::test
       auto source = CountingSource{bench.ids};
 
       auto const t0 = std::chrono::steady_clock::now();
-      auto proj = TrackListProjection{ViewId{1}, source, lib};
+      auto proj = LiveTrackListProjection{ViewId{1}, source, lib};
       auto const t1 = std::chrono::steady_clock::now();
       proj.setPresentation(TrackPresentationSpec{
         .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}});
@@ -1156,8 +1156,8 @@ namespace ao::rt::test
       auto setPlan = makeSetYearInPlan(listSize);
       auto evaluator = query::PlanEvaluator{};
       auto& lib = bench.lib.library();
-      auto txn = lib.readTransaction();
-      auto reader = lib.tracks().reader(txn);
+      auto transaction = lib.readTransaction();
+      auto reader = lib.tracks().reader(transaction);
 
       auto timing = InThresholdTiming{.listSize = listSize};
 
@@ -1197,7 +1197,7 @@ namespace ao::rt::test
     std::chrono::milliseconds measureProjectionSortFieldDuration(ScaleBench& bench, TrackSortField field)
     {
       auto source = CountingSource{bench.ids};
-      auto proj = TrackListProjection{ViewId{1}, source, bench.lib.library()};
+      auto proj = LiveTrackListProjection{ViewId{1}, source, bench.lib.library()};
 
       auto const start = std::chrono::steady_clock::now();
       proj.setPresentation(TrackPresentationSpec{
@@ -1211,7 +1211,7 @@ namespace ao::rt::test
                                                                     TrackPresentationSpec const& spec)
     {
       auto source = CountingSource{bench.ids};
-      auto proj = TrackListProjection{ViewId{1}, source, bench.lib.library()};
+      auto proj = LiveTrackListProjection{ViewId{1}, source, bench.lib.library()};
 
       auto const start = std::chrono::steady_clock::now();
       proj.setPresentation(spec);

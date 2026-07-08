@@ -78,8 +78,8 @@ namespace ao::uimodel::test
 
     SECTION("detail dismiss ignores sticky and progress notifications")
     {
-      feedState.hideDetailNotificationFromActivity(rt::NotificationId{12}, currentFeed);
-      feedState.hideDetailNotificationFromActivity(rt::NotificationId{14}, currentFeed);
+      feedState.dismissDetailNotificationFromActivity(rt::NotificationId{12}, currentFeed);
+      feedState.dismissDetailNotificationFromActivity(rt::NotificationId{14}, currentFeed);
 
       REQUIRE(feedState.viewState().detail.items.size() == 3);
       CHECK(feedState.viewState().detail.items[0].id == rt::NotificationId{14});

@@ -2,10 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/mp4/TestAtoms.h"
 #include <ao/audio/AlacDecoderSession.h>
-#include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/media/mp4/Demuxer.h>
 

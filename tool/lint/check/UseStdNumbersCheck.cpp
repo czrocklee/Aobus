@@ -136,9 +136,9 @@ namespace clang::tidy::readability
         {
           if (calleeDecl->isExternC())
           {
-            for (auto const* arg : call->arguments())
+            for (auto const* argument : call->arguments())
             {
-              if (mentionsDecl(arg))
+              if (mentionsDecl(argument))
               {
                 found = true;
                 return false; // Stop traversing

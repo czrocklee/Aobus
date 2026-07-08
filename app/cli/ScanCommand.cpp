@@ -92,7 +92,7 @@ namespace ao::cli
       return item.fullPath.generic_string();
     }
 
-    ScanItemDto scanItemDto(rt::ScanItem const& item)
+    ScanItemDto toScanItemDto(rt::ScanItem const& item)
     {
       return ScanItemDto{.type = std::string{scanClassificationName(item.classification)},
                          .uri = itemLabel(item),
@@ -129,7 +129,7 @@ namespace ao::cli
               continue;
             }
 
-            report.optItems->push_back(scanItemDto(item));
+            report.optItems->push_back(toScanItemDto(item));
           }
         }
 
@@ -197,7 +197,7 @@ namespace ao::cli
       }
     }
 
-    std::string_view applyProgressName(rt::ScanApplyProgressStage stage)
+    std::string_view scanApplyProgressLabel(rt::ScanApplyProgressStage stage)
     {
       switch (stage)
       {
@@ -252,7 +252,8 @@ namespace ao::cli
       {
         if (!progress.path.empty())
         {
-          std::println(context.io().err, "{}: {}", applyProgressName(progress.stage), progress.path.generic_string());
+          std::println(
+            context.io().err, "{}: {}", scanApplyProgressLabel(progress.stage), progress.path.generic_string());
         }
       };
     }
@@ -280,7 +281,7 @@ namespace ao::cli
     }
   }
 
-  void setupScanCommand(CLI::App& app, CliContext& context)
+  void configureScanCommand(CLI::App& app, CliContext& context)
   {
     auto* const cmd = app.add_subcommand("scan", "Scan music root and reconcile the library");
     auto* const dryRun = cmd->add_flag("--dry-run", "show planned changes without mutating the library");

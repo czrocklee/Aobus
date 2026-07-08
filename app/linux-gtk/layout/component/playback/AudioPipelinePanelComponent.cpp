@@ -3,7 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/AudioPipelinePanel.h"
 #include <ao/rt/AppRuntime.h>
@@ -24,13 +24,13 @@ namespace ao::gtk::layout
     /**
      * @brief playback.audioPipelinePanel
      */
-    class AudioPipelinePanelComponent final : public ILayoutComponent
+    class AudioPipelinePanelComponent final : public LayoutComponent
     {
     public:
       AudioPipelinePanelComponent(LayoutContext& ctx, LayoutNode const& node)
         : _panel{[](LayoutContext const& ctx2, LayoutNode const& n)
                  {
-                   auto const variantStr = n.getProp<std::string>("variant", "");
+                   auto const variantStr = n.propertyOr<std::string>("variant", "");
 
                    if (variantStr == "inline")
                    {
@@ -61,7 +61,7 @@ namespace ao::gtk::layout
       uimodel::NowPlayingViewModel _viewModel;
     };
 
-    std::unique_ptr<ILayoutComponent> createAudioPipelinePanel(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createAudioPipelinePanel(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<AudioPipelinePanelComponent>(ctx, node);
     }

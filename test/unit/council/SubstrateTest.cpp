@@ -64,7 +64,7 @@ namespace ao::council::test
 
   namespace
   {
-    struct RecordingRunner final : IProcessRunner
+    struct RecordingRunner final : ProcessRunner
     {
       std::vector<ProcessRequest> requests;
       ProcessResult result;

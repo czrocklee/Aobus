@@ -65,7 +65,7 @@ namespace ao::gtk
     uimodel::LayoutActionCatalog const& layoutActionCatalog() const;
 
   private:
-    void setupPlaybackSpaceShortcut();
+    void installPlaybackSpaceShortcut();
 
     rt::AppRuntime& _runtime;
     std::shared_ptr<AppConfig> _configPtr;

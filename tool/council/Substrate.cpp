@@ -101,7 +101,7 @@ namespace ao::council
       }
     }
 
-    bool ignoredCanaryPath(std::filesystem::path const& relative)
+    bool isIgnoredCanaryPath(std::filesystem::path const& relative)
     {
       if (relative.empty())
       {
@@ -296,7 +296,7 @@ namespace ao::council
       return {};
     }
 
-    bool pathIsUnder(std::filesystem::path const& child, std::filesystem::path const& parent)
+    bool isPathUnder(std::filesystem::path const& child, std::filesystem::path const& parent)
     {
       auto normalizedChild = child.lexically_normal();
       auto normalizedParent = parent.lexically_normal();
@@ -315,10 +315,10 @@ namespace ao::council
       return true;
     }
 
-    bool alreadyRuntimeMounted(std::filesystem::path const& path)
+    bool isRuntimeMounted(std::filesystem::path const& path)
     {
       return std::ranges::any_of(
-        kRuntimeReadOnlyPaths, [&](auto const mounted) { return pathIsUnder(path, std::filesystem::path{mounted}); });
+        kRuntimeReadOnlyPaths, [&](auto const mounted) { return isPathUnder(path, std::filesystem::path{mounted}); });
     }
 
     std::filesystem::path resolveAgentExecutable(std::vector<std::string>& argv)
@@ -432,7 +432,7 @@ namespace ao::council
       {
         auto const relative = std::filesystem::relative(iterator->path(), root);
 
-        if (ignoredCanaryPath(relative))
+        if (isIgnoredCanaryPath(relative))
         {
           if (iterator->is_directory())
           {
@@ -477,7 +477,7 @@ namespace ao::council
     }
   }
 
-  SnapshotProvider::SnapshotProvider(IProcessRunner& runner)
+  SnapshotProvider::SnapshotProvider(ProcessRunner& runner)
     : _runner{runner}
   {
   }
@@ -653,7 +653,7 @@ namespace ao::council
     }
   }
 
-  NamespaceRunner::NamespaceRunner(IProcessRunner& runner)
+  NamespaceRunner::NamespaceRunner(ProcessRunner& runner)
     : _runner{runner}
   {
   }
@@ -720,7 +720,7 @@ namespace ao::council
 
     auto const resolvedExecutable = resolveAgentExecutable(request.argv);
 
-    if (!resolvedExecutable.empty() && !alreadyRuntimeMounted(resolvedExecutable))
+    if (!resolvedExecutable.empty() && !isRuntimeMounted(resolvedExecutable))
     {
       appendReadOnlyBindIfExists(argv, directories, resolvedExecutable);
     }

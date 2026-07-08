@@ -9,7 +9,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
-#include <ao/library/Meta.h>
+#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -21,7 +21,7 @@
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Base64.h>
 #include <ao/utility/Uuid.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <algorithm>
 #include <array>
@@ -79,82 +79,82 @@ namespace ao::rt
        .baseStringGetter = [](auto const& base) { return base.title(); }},
       {.field = TrackField::Artist,
        .stringGetter =
-         [](auto const& view, auto& dict)
+         [](auto const& view, auto& dictionary)
        {
          auto const id = view.metadata().artistId();
-         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.artist(); }},
       {.field = TrackField::Album,
        .stringGetter =
-         [](auto const& view, auto& dict)
+         [](auto const& view, auto& dictionary)
        {
          auto const id = view.metadata().albumId();
-         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.album(); }},
       {.field = TrackField::AlbumArtist,
        .stringGetter =
-         [](auto const& view, auto& dict)
+         [](auto const& view, auto& dictionary)
        {
          auto const id = view.metadata().albumArtistId();
-         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.albumArtist(); }},
       {.field = TrackField::Composer,
        .stringGetter =
-         [](auto const& view, auto& dict)
+         [](auto const& view, auto& dictionary)
        {
          auto const id = view.metadata().composerId();
-         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.composer(); }},
       {.field = TrackField::Conductor,
        .stringGetter =
-         [](auto const& view, auto& dict)
+         [](auto const& view, auto& dictionary)
        {
          auto const id = view.classical().conductorId();
-         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.conductor(); }},
       {.field = TrackField::Ensemble,
        .stringGetter =
-         [](auto const& view, auto& dict)
+         [](auto const& view, auto& dictionary)
        {
          auto const id = view.classical().ensembleId();
-         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.ensemble(); }},
       {.field = TrackField::Genre,
        .stringGetter =
-         [](auto const& view, auto& dict)
+         [](auto const& view, auto& dictionary)
        {
          auto const id = view.metadata().genreId();
-         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.genre(); }},
       {.field = TrackField::Work,
        .stringGetter =
-         [](auto const& view, auto& dict)
+         [](auto const& view, auto& dictionary)
        {
          auto const id = view.classical().workId();
-         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.work(); }},
       {.field = TrackField::Movement,
        .stringGetter =
-         [](auto const& view, auto& dict)
+         [](auto const& view, auto& dictionary)
        {
          auto const id = view.classical().movementId();
-         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.movement(); }},
       {.field = TrackField::Soloist,
        .stringGetter =
-         [](auto const& view, auto& dict)
+         [](auto const& view, auto& dictionary)
        {
          auto const id = view.classical().soloistId();
-         return id != kInvalidDictionaryId ? dict.get(id) : std::string_view{};
+         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.soloist(); }},
       {.field = TrackField::Year,
@@ -189,18 +189,19 @@ namespace ao::rt
 
     void emitTrackMetadata(ryml::NodeRef& node,
                            library::TrackView const& view,
-                           library::DictionaryStore& dict,
+                           library::DictionaryStore& dictionary,
                            std::optional<library::TrackBuilder> const& optBaseline)
     {
-      auto const optBaselineMeta = optBaseline ? std::optional{optBaseline->metadata()} : std::nullopt;
-      auto const hasBaseline = optBaselineMeta.has_value();
+      auto const optBaselineMetadata = optBaseline ? std::optional{optBaseline->metadata()} : std::nullopt;
+      auto const hasBaseline = optBaselineMetadata.has_value();
 
       for (auto const& map : kMetadataDispatch)
       {
         if (auto const key = trackFieldId(map.field); map.stringGetter != nullptr)
         {
-          auto const current = map.stringGetter(view, dict);
-          bool const shouldEmit = hasBaseline ? (current != map.baseStringGetter(*optBaselineMeta)) : !current.empty();
+          auto const current = map.stringGetter(view, dictionary);
+          bool const shouldEmit =
+            hasBaseline ? (current != map.baseStringGetter(*optBaselineMetadata)) : !current.empty();
 
           if (shouldEmit)
           {
@@ -210,7 +211,8 @@ namespace ao::rt
         else if (map.numberGetter != nullptr)
         {
           auto const current = map.numberGetter(view);
-          bool const shouldEmit = hasBaseline ? (current != map.baseNumberGetter(*optBaselineMeta)) : (current != 0);
+          bool const shouldEmit =
+            hasBaseline ? (current != map.baseNumberGetter(*optBaselineMetadata)) : (current != 0);
 
           if (shouldEmit)
           {
@@ -225,10 +227,10 @@ namespace ao::rt
         yaml::setKey(customNode, "custom");
         customNode |= ryml::MAP;
 
-        for (auto const& [dictId, value] : custom)
+        for (auto const& [dictionaryId, value] : custom)
         {
           auto child = customNode.append_child();
-          yaml::setKey(child, dict.get(dictId));
+          yaml::setKey(child, dictionary.get(dictionaryId));
           yaml::setValue(child, value);
         }
       }
@@ -308,7 +310,7 @@ namespace ao::rt
       return {};
     }
 
-    bool coverMatchesBaseline(library::CoverArt const& cover,
+    bool matchesCoverBaseline(library::CoverArt const& cover,
                               library::TrackBuilder::CoverArtBuilder::PendingCoverArt const& baseline,
                               library::ResourceStore::Reader const& resReader)
     {
@@ -355,7 +357,7 @@ namespace ao::rt
       {
         auto const cover = covers.at(i);
 
-        if (auto const& baseline = baseCovers[i]; !coverMatchesBaseline(cover, baseline, resReader))
+        if (auto const& baseline = baseCovers[i]; !matchesCoverBaseline(cover, baseline, resReader))
         {
           return true;
         }
@@ -393,14 +395,14 @@ namespace ao::rt
     }
 
     void emitTrackCover(ryml::NodeRef& node,
-                        lmdb::ReadTransaction const& txn,
+                        lmdb::ReadTransaction const& transaction,
                         library::TrackView const& view,
                         std::optional<library::TrackBuilder> const& optBaseline,
                         ExportMode mode,
                         std::unordered_map<ResourceId, std::string>& exportedCovers,
                         library::ResourceStore& resources)
     {
-      auto const resReader = resources.reader(txn);
+      auto const resReader = resources.reader(transaction);
 
       if (!shouldExportCovers(view, optBaseline, mode, resReader))
       {
@@ -423,7 +425,9 @@ namespace ao::rt
       }
     }
 
-    void emitTrackCommon(ryml::NodeRef& node, library::TrackView::TagProxy const& tags, library::DictionaryStore& dict)
+    void emitTrackCommon(ryml::NodeRef& node,
+                         library::TrackView::TagProxy const& tags,
+                         library::DictionaryStore& dictionary)
     {
       if (tags.count() != 0)
       {
@@ -433,7 +437,7 @@ namespace ao::rt
 
         for (auto const tagId : tags)
         {
-          yaml::setValue(tagsNode.append_child(), dict.get(tagId));
+          yaml::setValue(tagsNode.append_child(), dictionary.get(tagId));
         }
       }
     }
@@ -447,17 +451,17 @@ namespace ao::rt
     }
 
     Result<> exportToYaml(std::filesystem::path const& path, ExportMode mode) const;
-    Result<> exportTracks(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const;
+    Result<> exportTracks(ryml::NodeRef& node, lmdb::ReadTransaction const& transaction, ExportMode mode) const;
     Result<> exportTrack(ryml::NodeRef& node,
-                         lmdb::ReadTransaction const& txn,
+                         lmdb::ReadTransaction const& transaction,
                          TrackId id,
                          library::TrackView const& view,
                          ExportMode mode,
                          std::unordered_map<ResourceId, std::string>& exportedCovers,
                          library::ResourceStore& resources,
-                         library::DictionaryStore& dict,
+                         library::DictionaryStore& dictionary,
                          library::FileManifestStore::Reader const& manifestReader) const;
-    Result<> exportLists(ryml::NodeRef& node, lmdb::ReadTransaction const& txn, ExportMode mode) const;
+    Result<> exportLists(ryml::NodeRef& node, lmdb::ReadTransaction const& transaction, ExportMode mode) const;
 
     library::MusicLibrary& ml;
   };
@@ -481,23 +485,23 @@ namespace ao::rt
     root |= ryml::MAP;
 
     root.append_child() << ryml::key("version") << 1;
-    appendString(root, "libraryId", utility::formatUuid(ml.metaHeader().libraryId));
+    appendString(root, "libraryId", utility::formatUuid(ml.metadataHeader().libraryId));
     appendString(root, "export_mode", modeToString(mode));
 
-    auto const txn = ml.readTransaction();
+    auto const transaction = ml.readTransaction();
     auto library = root.append_child();
     yaml::setKey(library, "library");
     library |= ryml::MAP;
 
     if (mode != ExportMode::ListOnly)
     {
-      if (auto result = exportTracks(library, txn, mode); !result)
+      if (auto result = exportTracks(library, transaction, mode); !result)
       {
         return result;
       }
     }
 
-    if (auto result = exportLists(library, txn, mode); !result)
+    if (auto result = exportLists(library, transaction, mode); !result)
     {
       return result;
     }
@@ -521,13 +525,13 @@ namespace ao::rt
   }
 
   Result<> LibraryYamlExporter::Impl::exportTracks(ryml::NodeRef& node,
-                                                   lmdb::ReadTransaction const& txn,
+                                                   lmdb::ReadTransaction const& transaction,
                                                    ExportMode mode) const
   {
-    auto const trackReader = ml.tracks().reader(txn);
-    auto const manifestReader = ml.manifest().reader(txn);
+    auto const trackReader = ml.tracks().reader(transaction);
+    auto const manifestReader = ml.manifest().reader(transaction);
     auto& resources = ml.resources();
-    auto& dict = ml.dictionary();
+    auto& dictionary = ml.dictionary();
     auto exportedCovers = std::unordered_map<ResourceId, std::string>{};
 
     auto tracksNode = node.append_child();
@@ -536,8 +540,8 @@ namespace ao::rt
 
     for (auto const& [trackId, view] : trackReader)
     {
-      if (auto result =
-            exportTrack(tracksNode, txn, trackId, view, mode, exportedCovers, resources, dict, manifestReader);
+      if (auto result = exportTrack(
+            tracksNode, transaction, trackId, view, mode, exportedCovers, resources, dictionary, manifestReader);
           !result)
       {
         return result;
@@ -548,13 +552,13 @@ namespace ao::rt
   }
 
   Result<> LibraryYamlExporter::Impl::exportTrack(ryml::NodeRef& node,
-                                                  lmdb::ReadTransaction const& txn,
+                                                  lmdb::ReadTransaction const& transaction,
                                                   TrackId id,
                                                   library::TrackView const& view,
                                                   ExportMode mode,
                                                   std::unordered_map<ResourceId, std::string>& exportedCovers,
                                                   library::ResourceStore& resources,
-                                                  library::DictionaryStore& dict,
+                                                  library::DictionaryStore& dictionary,
                                                   library::FileManifestStore::Reader const& manifestReader) const
   {
     auto trackNode = node.append_child();
@@ -595,7 +599,7 @@ namespace ao::rt
 
     if (mode != ExportMode::ListOnly)
     {
-      emitTrackMetadata(trackNode, view, dict, optBaseline);
+      emitTrackMetadata(trackNode, view, dictionary, optBaseline);
     }
 
     if (mode == ExportMode::Full)
@@ -606,22 +610,22 @@ namespace ao::rt
       }
     }
 
-    emitTrackCover(trackNode, txn, view, optBaseline, mode, exportedCovers, resources);
+    emitTrackCover(trackNode, transaction, view, optBaseline, mode, exportedCovers, resources);
 
-    emitTrackCommon(trackNode, view.tags(), dict);
+    emitTrackCommon(trackNode, view.tags(), dictionary);
     return {};
   }
 
   Result<> LibraryYamlExporter::Impl::exportLists(ryml::NodeRef& node,
-                                                  lmdb::ReadTransaction const& txn,
+                                                  lmdb::ReadTransaction const& transaction,
                                                   ExportMode mode) const
   {
     auto listsNode = node.append_child();
     yaml::setKey(listsNode, "lists");
     listsNode |= ryml::SEQ;
 
-    auto const listReader = ml.lists().reader(txn);
-    auto const trackReader = ml.tracks().reader(txn);
+    auto const listReader = ml.lists().reader(transaction);
+    auto const trackReader = ml.tracks().reader(transaction);
 
     for (auto const& [listId, listView] : listReader)
     {

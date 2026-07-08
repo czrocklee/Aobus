@@ -6,7 +6,7 @@
 #include "CliContext.h"
 #include "CommandError.h"
 #include "DryRunFlag.h"
-#include "DumpUtils.h"
+#include "DumpOutput.h"
 #include "Output.h"
 #include "QueryHelp.h"
 #include "TrackSelection.h"
@@ -44,10 +44,10 @@ namespace ao::cli
 {
   namespace
   {
-    void show(library::MusicLibrary& ml, std::ostream& os)
+    void printListsPlain(library::MusicLibrary& ml, std::ostream& os)
     {
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.lists().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.lists().reader(transaction);
 
       constexpr int kIdWidth = 5;
 
@@ -167,7 +167,7 @@ namespace ao::cli
 {
   namespace
   {
-    ListRecordDto listRecordDto(ListId id, library::ListView const& view)
+    ListRecordDto toListRecordDto(ListId id, library::ListView const& view)
     {
       auto dto = ListRecordDto{.id = id,
                                .name = std::string{view.name()},
@@ -187,15 +187,15 @@ namespace ao::cli
       return dto;
     }
 
-    void showStructured(library::MusicLibrary& ml, OutputFormat format, std::ostream& os)
+    void emitListCollectionDocument(library::MusicLibrary& ml, OutputFormat format, std::ostream& os)
     {
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.lists().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.lists().reader(transaction);
       auto dto = ListCollectionDto{};
 
       for (auto const& [id, view] : reader)
       {
-        dto.lists.push_back(listRecordDto(id, view));
+        dto.lists.push_back(toListRecordDto(id, view));
       }
 
       emitDocument(os, format, dto);
@@ -241,12 +241,12 @@ namespace ao::cli
       }
     }
 
-    ListTrackRowDto listTrackRowDto(rt::TrackRow const& row)
+    ListTrackRowDto toListTrackRowDto(rt::TrackRow const& row)
     {
       return ListTrackRowDto{.id = row.id, .title = row.title, .artist = row.artist, .album = row.album};
     }
 
-    ListDetailDto listDetailDto(rt::ListNode const& node, std::vector<rt::TrackRow> const& rows)
+    ListDetailDto toListDetailDto(rt::ListNode const& node, std::vector<rt::TrackRow> const& rows)
     {
       auto dto = ListDetailDto{.id = node.id,
                                .name = node.name,
@@ -263,13 +263,13 @@ namespace ao::cli
 
       for (auto const& row : rows)
       {
-        dto.tracks.push_back(listTrackRowDto(row));
+        dto.tracks.push_back(toListTrackRowDto(row));
       }
 
       return dto;
     }
 
-    void showListDetail(CliContext& context, ListId listId)
+    void printListDetail(CliContext& context, ListId listId)
     {
       auto reader = context.library().reader();
       auto optNode = reader.listNode(listId);
@@ -290,13 +290,13 @@ namespace ao::cli
         };
 
         emitDocument(
-          context.io().out, context.options().format, ListDetailDocumentDto{.list = listDetailDto(node, rows)});
+          context.io().out, context.options().format, ListDetailDocumentDto{.list = toListDetailDto(node, rows)});
         return;
       }
 
       if (context.options().format == OutputFormat::Json)
       {
-        emitDocument(context.io().out, context.options().format, listDetailDto(node, rows));
+        emitDocument(context.io().out, context.options().format, toListDetailDto(node, rows));
         return;
       }
 
@@ -659,15 +659,15 @@ namespace ao::cli
         throwCommandError(Error::Code::InvalidInput, "list dump --raw supports only plain output");
       }
 
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.lists().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.lists().reader(transaction);
       auto dto = ListCollectionDto{};
 
       for (auto const& [id, view] : reader)
       {
         if (format != OutputFormat::Plain && !raw)
         {
-          dto.lists.push_back(listRecordDto(id, view));
+          dto.lists.push_back(toListRecordDto(id, view));
         }
         else if (raw)
         {
@@ -700,7 +700,7 @@ namespace ao::cli
     }
   } // namespace
 
-  void setupListCommand(CLI::App& app, CliContext& context)
+  void configureListCommand(CLI::App& app, CliContext& context)
   {
     auto* list = app.add_subcommand("list", "List management commands");
     list->require_subcommand(1);
@@ -712,17 +712,17 @@ namespace ao::cli
       {
         if (showId->count() > 0)
         {
-          showListDetail(context, ListId{showId->as<std::uint32_t>()});
+          printListDetail(context, ListId{showId->as<std::uint32_t>()});
           return;
         }
 
         if (context.options().format == OutputFormat::Plain)
         {
-          show(context.musicLibrary(), context.io().out);
+          printListsPlain(context.musicLibrary(), context.io().out);
         }
         else
         {
-          showStructured(context.musicLibrary(), context.options().format, context.io().out);
+          emitListCollectionDocument(context.musicLibrary(), context.options().format, context.io().out);
         }
       });
 

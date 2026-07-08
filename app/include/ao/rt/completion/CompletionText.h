@@ -14,7 +14,7 @@ namespace ao::rt
     return static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
   }
 
-  inline bool completionStartsWithInsensitive(std::string_view candidate, std::string_view prefix)
+  inline bool startsWithCompletionPrefixInsensitive(std::string_view candidate, std::string_view prefix)
   {
     if (prefix.size() > candidate.size())
     {

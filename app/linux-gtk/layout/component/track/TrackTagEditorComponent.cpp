@@ -4,7 +4,7 @@
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "tag/TagEditController.h"
 #include "tag/TagEditor.h"
@@ -13,7 +13,7 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/source/ListSourceStore.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -30,7 +30,7 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    class TrackTagEditorComponent final : public ILayoutComponent
+    class TrackTagEditorComponent final : public LayoutComponent
     {
     public:
       TrackTagEditorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
@@ -93,7 +93,7 @@ namespace ao::gtk::layout
       sigc::scoped_connection _scopeConn;
     };
 
-    std::unique_ptr<ILayoutComponent> createTrackTagEditor(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackTagEditor(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackTagEditorComponent>(ctx, node);
     }

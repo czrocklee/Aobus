@@ -4,13 +4,13 @@
 #include "TrackSession.h"
 
 #include <ao/Error.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/DecoderFactory.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/DecoderSession.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/FormatNegotiator.h>
-#include <ao/audio/IDecoderSession.h>
-#include <ao/audio/ISource.h>
+#include <ao/audio/PcmSource.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/StreamingSource.h>
 #include <ao/audio/detail/DecoderError.h>
@@ -35,9 +35,9 @@ namespace ao::audio::detail
     // returns null is a deliberate "no decoder", with no IO to diagnose), so its
     // null result becomes NotSupported; the production factory already carries a
     // precise IoError/NotSupported code, which is propagated unchanged.
-    std::unique_ptr<IDecoderSession> makeDecoder(TrackSession::DecoderFactoryFn const& decoderFactory,
-                                                 std::filesystem::path const& path,
-                                                 Format const& outputFormat)
+    std::unique_ptr<DecoderSession> makeDecoder(TrackSession::DecoderFactoryFn const& decoderFactory,
+                                                std::filesystem::path const& path,
+                                                Format const& outputFormat)
     {
       if (decoderFactory)
       {
@@ -105,7 +105,7 @@ namespace ao::audio::detail
 
   void TrackSession::negotiateFormat(std::filesystem::path const& path,
                                      DecodedStreamInfo& info,
-                                     std::unique_ptr<IDecoderSession>& decoder,
+                                     std::unique_ptr<DecoderSession>& decoder,
                                      Format& backendFormat,
                                      Device const& device,
                                      BackendId const& backendId,
@@ -150,9 +150,9 @@ namespace ao::audio::detail
     backendFormat = plan.deviceFormat;
   }
 
-  std::shared_ptr<ISource> TrackSession::createPcmSource(std::unique_ptr<IDecoderSession> decoderPtr,
-                                                         DecodedStreamInfo const& info,
-                                                         OnSourceErrorFn onSourceError)
+  std::shared_ptr<PcmSource> TrackSession::createPcmSource(std::unique_ptr<DecoderSession> decoderPtr,
+                                                           DecodedStreamInfo const& info,
+                                                           OnSourceErrorFn onSourceError)
   {
     auto streamingSourcePtr = std::make_shared<StreamingSource>(
       std::move(decoderPtr), info, std::move(onSourceError), kPrerollDuration, kDecodeHighWatermarkThreshold);

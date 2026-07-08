@@ -3,7 +3,7 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -21,7 +21,7 @@ namespace ao::gtk::layout
     /**
      * @brief A simple text label component.
      */
-    class LabelComponent final : public ILayoutComponent
+    class LabelComponent final : public LayoutComponent
     {
     public:
       LabelComponent(LayoutContext& /*ctx*/, LayoutNode const& node)
@@ -38,7 +38,7 @@ namespace ao::gtk::layout
       Gtk::Label _label;
     };
 
-    std::unique_ptr<ILayoutComponent> createLabel(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createLabel(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<LabelComponent>(ctx, node);
     }

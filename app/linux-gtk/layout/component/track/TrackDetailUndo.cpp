@@ -43,9 +43,9 @@ namespace ao::gtk::layout
     return _optPendingCustomMetadataUndo;
   }
 
-  void TrackDetailUndoController::showCustomMetadataDeleted(std::string key,
-                                                            std::vector<TrackId> trackIds,
-                                                            std::string value)
+  void TrackDetailUndoController::presentCustomMetadataDeletedUndo(std::string key,
+                                                                   std::vector<TrackId> trackIds,
+                                                                   std::string value)
   {
     _optPendingCustomMetadataUndo =
       TrackDetailCustomMetadataUndo{.key = std::move(key), .trackIds = std::move(trackIds), .value = std::move(value)};

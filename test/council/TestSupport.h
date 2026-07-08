@@ -61,7 +61,7 @@ body: |
                        depends);
   }
 
-  inline void runCommand(IProcessRunner& process, std::filesystem::path const& cwd, std::vector<std::string> argv)
+  inline void runCommand(ProcessRunner& process, std::filesystem::path const& cwd, std::vector<std::string> argv)
   {
     auto result = process.run(ProcessRequest{
       .argv = std::move(argv),
@@ -76,7 +76,7 @@ body: |
     REQUIRE(result.exitCode == 0);
   }
 
-  inline void initGitRepo(IProcessRunner& process, std::filesystem::path const& repo, std::filesystem::path const& cwd)
+  inline void initGitRepo(ProcessRunner& process, std::filesystem::path const& repo, std::filesystem::path const& cwd)
   {
     runCommand(process, cwd, {"git", "init", repo.string()});
   }

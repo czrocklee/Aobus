@@ -41,7 +41,7 @@ namespace ao::gtk::layout::editor::test
       ComponentRegistry registry{};
       ActionRegistry actionRegistry{};
       Gtk::Window window{};
-      LayoutDocument doc = createDefaultLayout();
+      LayoutDocument doc = makeDefaultLayout();
     };
 
     Gtk::ComboBoxText* presetCombo(LayoutEditorDialog& dialog)

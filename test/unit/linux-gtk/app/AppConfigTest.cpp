@@ -3,7 +3,7 @@
 
 #include "app/AppConfig.h"
 
-#include "app/UIState.h"
+#include "app/WindowState.h"
 #include "test/unit/TestUtils.h"
 #include <ao/rt/AppPrefsState.h>
 

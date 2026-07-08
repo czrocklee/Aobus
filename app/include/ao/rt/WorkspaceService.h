@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include "CorePrimitives.h"
+#include "Subscription.h"
 #include "TrackPresentation.h"
+#include "ViewIds.h"
 #include "ViewState.h"
 #include "WorkspaceViewState.h"
 #include <ao/CoreIds.h>

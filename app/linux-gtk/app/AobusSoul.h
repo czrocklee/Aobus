@@ -46,8 +46,8 @@ namespace ao::gtk
     void setShowFullLogo(bool show);
 
     bool isBreathing() const;
-    bool isTickActiveForTest() const;
-    bool showFullLogo() const;
+    bool isTickActive() const;
+    bool shouldShowFullLogo() const;
     Gdk::RGBA aura() const;
 
     static Gdk::RGBA mapSoulAura(uimodel::SoulAura aura);

@@ -13,10 +13,11 @@
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -84,7 +85,7 @@ namespace ao::gtk::test
       auto source = rt::test::MutableTrackSource{};
       source.addInitial(addAlbumTrack(runtime.musicLibrary(), "Album"));
 
-      auto projectionPtr = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, source, runtime.musicLibrary());
+      auto projectionPtr = std::make_shared<rt::LiveTrackListProjection>(rt::ViewId{1}, source, runtime.musicLibrary());
       auto presentation = rt::TrackPresentationSpec{.groupBy = rt::TrackGroupKey::Album};
       projectionPtr->setPresentation(presentation);
       modelPtr->bindProjection(projectionPtr);

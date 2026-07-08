@@ -3,7 +3,7 @@
 
 #include "lib/tag/flac/File.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
@@ -113,24 +113,24 @@ namespace ao::tag::flac::test
     auto const file = File{temp.path};
     auto builder = loadTrack(file);
 
-    auto const meta = builder.metadata();
-    CHECK(meta.title() == "Title");
-    CHECK(meta.artist() == "Artist");
-    CHECK(meta.albumArtist() == "AlbumArtist");
-    CHECK(meta.composer() == "Composer");
-    CHECK(meta.conductor() == "Conductor");
-    CHECK(meta.ensemble() == "Ensemble");
-    CHECK(meta.genre() == "Genre");
-    CHECK(meta.trackNumber() == 1);
-    CHECK(meta.trackTotal() == 10);
-    CHECK(meta.discNumber() == 2);
-    CHECK(meta.discTotal() == 5);
-    CHECK(meta.year() == 2024);
-    CHECK(meta.work() == "WorkName");
-    CHECK(meta.movement() == "MovementName");
-    CHECK(meta.soloist() == "Soloist");
-    CHECK(meta.movementNumber() == 2);
-    CHECK(meta.movementTotal() == 4);
+    auto const metadata = builder.metadata();
+    CHECK(metadata.title() == "Title");
+    CHECK(metadata.artist() == "Artist");
+    CHECK(metadata.albumArtist() == "AlbumArtist");
+    CHECK(metadata.composer() == "Composer");
+    CHECK(metadata.conductor() == "Conductor");
+    CHECK(metadata.ensemble() == "Ensemble");
+    CHECK(metadata.genre() == "Genre");
+    CHECK(metadata.trackNumber() == 1);
+    CHECK(metadata.trackTotal() == 10);
+    CHECK(metadata.discNumber() == 2);
+    CHECK(metadata.discTotal() == 5);
+    CHECK(metadata.year() == 2024);
+    CHECK(metadata.work() == "WorkName");
+    CHECK(metadata.movement() == "MovementName");
+    CHECK(metadata.soloist() == "Soloist");
+    CHECK(metadata.movementNumber() == 2);
+    CHECK(metadata.movementTotal() == 4);
     CHECK(builder.customMetadata().pairs().empty());
 
     auto const prop = builder.property();
@@ -145,27 +145,27 @@ namespace ao::tag::flac::test
   {
     auto const file = File{audio::test::requireAudioFixture("basic_metadata.flac")};
     auto builder = loadTrack(file);
-    auto const meta = builder.metadata();
+    auto const metadata = builder.metadata();
 
-    CHECK(meta.title() == "Test Title");
-    CHECK(meta.artist() == "Test Artist");
-    CHECK(meta.album() == "Test Album");
-    CHECK(meta.genre() == "Rock");
-    CHECK(meta.composer() == "Test Composer");
-    CHECK(meta.work() == "Symphony No. 5");
-    CHECK(meta.trackNumber() == 1);
-    CHECK(meta.year() == 2024);
+    CHECK(metadata.title() == "Test Title");
+    CHECK(metadata.artist() == "Test Artist");
+    CHECK(metadata.album() == "Test Album");
+    CHECK(metadata.genre() == "Rock");
+    CHECK(metadata.composer() == "Test Composer");
+    CHECK(metadata.work() == "Symphony No. 5");
+    CHECK(metadata.trackNumber() == 1);
+    CHECK(metadata.year() == 2024);
   }
 
   TEST_CASE("FLAC File - maps classical fallback comments when primary fields are absent", "[tag][unit][flac][file]")
   {
     auto const file = File{audio::test::requireAudioFixture("classical_fallback.flac")};
     auto builder = loadTrack(file);
-    auto const meta = builder.metadata();
+    auto const metadata = builder.metadata();
 
-    CHECK(meta.title() == "Classical Fallback");
-    CHECK(meta.ensemble() == "Fixture Fallback Ensemble");
-    CHECK(meta.soloist() == "Fixture Fallback Soloist");
+    CHECK(metadata.title() == "Classical Fallback");
+    CHECK(metadata.ensemble() == "Fixture Fallback Ensemble");
+    CHECK(metadata.soloist() == "Fixture Fallback Soloist");
   }
 
   TEST_CASE("FLAC File - audio payload range starts after metadata blocks", "[tag][unit][flac][file]")

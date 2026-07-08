@@ -6,8 +6,8 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
-#include <ao/library/Meta.h>
-#include <ao/library/MetaStore.h>
+#include <ao/library/MetadataLayout.h>
+#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
@@ -54,23 +54,23 @@ namespace ao::library
       return bytes;
     }
 
-    MetaHeader makeMetaHeader()
+    MetadataHeader makeMetadataHeader()
     {
       auto const timestamp = currentTimestamp();
-      return MetaHeader{.magic = kLibraryMetaMagic,
-                        .libraryVersion = kLibraryVersion,
-                        .flags = 0,
-                        .createdTime = timestamp,
-                        .libraryId = generateLibraryId()};
+      return MetadataHeader{.magic = kMetadataMagic,
+                            .libraryVersion = kLibraryVersion,
+                            .flags = 0,
+                            .createdTime = timestamp,
+                            .libraryId = generateLibraryId()};
     }
 
-    Result<> validateMetaHeader(MetaHeader const& header)
+    Result<> validateMetadataHeader(MetadataHeader const& header)
     {
-      if (header.magic != kLibraryMetaMagic)
+      if (header.magic != kMetadataMagic)
       {
         return makeError(
           Error::Code::CorruptData,
-          std::format("Invalid library metadata magic 0x{:08x} (expected 0x{:08x})", header.magic, kLibraryMetaMagic));
+          std::format("Invalid library metadata magic 0x{:08x} (expected 0x{:08x})", header.magic, kMetadataMagic));
       }
 
       if (header.libraryVersion != kLibraryVersion)
@@ -89,9 +89,9 @@ namespace ao::library
     std::filesystem::path const musicRoot;
     std::filesystem::path const databasePath;
     lmdb::Environment env;
-    lmdb::WriteTransaction setupTxn;
-    MetaStore metaStore;
-    MetaHeader metaHeader{};
+    lmdb::WriteTransaction initializationTransaction;
+    MetadataStore metadataStore;
+    MetadataHeader metadataHeader{};
     TrackStore tracks;
     ListStore lists;
     ResourceStore resources;
@@ -101,8 +101,8 @@ namespace ao::library
     Impl(std::filesystem::path musicRoot,
          std::filesystem::path databasePath,
          lmdb::Environment env,
-         lmdb::WriteTransaction setupTxn,
-         lmdb::Database metaDb,
+         lmdb::WriteTransaction initializationTransaction,
+         lmdb::Database metadataDb,
          lmdb::Database tracksHotDb,
          lmdb::Database tracksColdDb,
          lmdb::Database listsDb,
@@ -112,12 +112,12 @@ namespace ao::library
       : musicRoot{std::move(musicRoot)}
       , databasePath{std::move(databasePath)}
       , env{std::move(env)}
-      , setupTxn{std::move(setupTxn)}
-      , metaStore{std::move(metaDb)}
+      , initializationTransaction{std::move(initializationTransaction)}
+      , metadataStore{std::move(metadataDb)}
       , tracks{std::move(tracksHotDb), std::move(tracksColdDb)}
       , lists{std::move(listsDb)}
       , resources{std::move(resourcesDb)}
-      , dictionary{std::move(dictionaryDb), this->setupTxn}
+      , dictionary{std::move(dictionaryDb), this->initializationTransaction}
       , manifest{std::move(manifestDb)}
     {
     }
@@ -134,24 +134,25 @@ namespace ao::library
         return std::unexpected{env.error()};
       }
 
-      auto setupTxn = lmdb::WriteTransaction::begin(*env);
+      auto initializationTransaction = lmdb::WriteTransaction::begin(*env);
 
-      if (!setupTxn)
+      if (!initializationTransaction)
       {
-        return std::unexpected{setupTxn.error()};
+        return std::unexpected{initializationTransaction.error()};
       }
 
-      auto metaDb = lmdb::Database::open(*setupTxn, "meta");
-      auto tracksHotDb = lmdb::Database::open(*setupTxn, "tracks_hot");
-      auto tracksColdDb = lmdb::Database::open(*setupTxn, "tracks_cold");
-      auto listsDb = lmdb::Database::open(*setupTxn, "lists");
-      auto resourcesDb = lmdb::Database::open(*setupTxn, "resources");
-      auto dictionaryDb = lmdb::Database::open(*setupTxn, "dictionary");
-      auto manifestDb = lmdb::Database::open(*setupTxn, "file_manifest", lmdb::Database::KeyKind::Blob);
+      auto metadataDb = lmdb::Database::open(*initializationTransaction, "meta");
+      auto tracksHotDb = lmdb::Database::open(*initializationTransaction, "tracks_hot");
+      auto tracksColdDb = lmdb::Database::open(*initializationTransaction, "tracks_cold");
+      auto listsDb = lmdb::Database::open(*initializationTransaction, "lists");
+      auto resourcesDb = lmdb::Database::open(*initializationTransaction, "resources");
+      auto dictionaryDb = lmdb::Database::open(*initializationTransaction, "dictionary");
+      auto manifestDb =
+        lmdb::Database::open(*initializationTransaction, "file_manifest", lmdb::Database::KeyKind::Blob);
 
-      if (!metaDb)
+      if (!metadataDb)
       {
-        return std::unexpected{metaDb.error()};
+        return std::unexpected{metadataDb.error()};
       }
 
       if (!tracksHotDb)
@@ -187,8 +188,8 @@ namespace ao::library
       return std::make_unique<Impl>(std::move(musicRoot),
                                     std::move(databasePath),
                                     std::move(*env),
-                                    std::move(*setupTxn),
-                                    std::move(*metaDb),
+                                    std::move(*initializationTransaction),
+                                    std::move(*metadataDb),
                                     std::move(*tracksHotDb),
                                     std::move(*tracksColdDb),
                                     std::move(*listsDb),
@@ -236,7 +237,7 @@ namespace ao::library
 
       _implPtr = std::move(*impl);
 
-      auto headerResult = _implPtr->metaStore.load(_implPtr->setupTxn);
+      auto headerResult = _implPtr->metadataStore.load(_implPtr->initializationTransaction);
 
       if (!headerResult && headerResult.error().code != Error::Code::NotFound)
       {
@@ -245,21 +246,21 @@ namespace ao::library
 
       if (headerResult)
       {
-        if (auto result = validateMetaHeader(*headerResult); !result)
+        if (auto result = validateMetadataHeader(*headerResult); !result)
         {
           return std::unexpected{result.error()};
         }
 
-        _implPtr->metaHeader = *headerResult;
+        _implPtr->metadataHeader = *headerResult;
       }
       else
       {
-        _implPtr->metaHeader = makeMetaHeader();
-        _implPtr->metaStore.create(_implPtr->setupTxn, _implPtr->metaHeader);
+        _implPtr->metadataHeader = makeMetadataHeader();
+        _implPtr->metadataStore.create(_implPtr->initializationTransaction, _implPtr->metadataHeader);
       }
 
       // Load dictionary entries before first commit
-      if (auto result = _implPtr->setupTxn.commit(); !result)
+      if (auto result = _implPtr->initializationTransaction.commit(); !result)
       {
         return std::unexpected{result.error()};
       }
@@ -282,26 +283,26 @@ namespace ao::library
 
   lmdb::ReadTransaction MusicLibrary::readTransaction() const
   {
-    auto txn = lmdb::ReadTransaction::begin(_implPtr->env);
+    auto transaction = lmdb::ReadTransaction::begin(_implPtr->env);
 
-    if (!txn)
+    if (!transaction)
     {
-      throwException<Exception>("Failed to begin read transaction: {}", txn.error().message);
+      throwException<Exception>("Failed to begin read transaction: {}", transaction.error().message);
     }
 
-    return std::move(*txn);
+    return std::move(*transaction);
   }
 
   lmdb::WriteTransaction MusicLibrary::writeTransaction()
   {
-    auto txn = lmdb::WriteTransaction::begin(_implPtr->env);
+    auto transaction = lmdb::WriteTransaction::begin(_implPtr->env);
 
-    if (!txn)
+    if (!transaction)
     {
-      throwException<Exception>("Failed to begin write transaction: {}", txn.error().message);
+      throwException<Exception>("Failed to begin write transaction: {}", transaction.error().message);
     }
 
-    return std::move(*txn);
+    return std::move(*transaction);
   }
 
   TrackStore& MusicLibrary::tracks()
@@ -354,27 +355,27 @@ namespace ao::library
     return _implPtr->manifest;
   }
 
-  MetaHeader const& MusicLibrary::metaHeader() const
+  MetadataHeader const& MusicLibrary::metadataHeader() const
   {
-    return _implPtr->metaHeader;
+    return _implPtr->metadataHeader;
   }
 
-  void MusicLibrary::updateMetaHeader(MetaHeader const& header)
+  void MusicLibrary::updateMetadataHeader(MetadataHeader const& header)
   {
-    if (auto result = validateMetaHeader(header); !result)
+    if (auto result = validateMetadataHeader(header); !result)
     {
       throwException<Exception>("Invalid library metadata header: {}", result.error().message);
     }
 
-    auto txn = writeTransaction();
-    _implPtr->metaStore.update(txn, header);
+    auto transaction = writeTransaction();
+    _implPtr->metadataStore.update(transaction, header);
 
-    if (auto result = txn.commit(); !result)
+    if (auto result = transaction.commit(); !result)
     {
       throwException<Exception>("Failed to update library metadata header: {}", result.error().message);
     }
 
-    _implPtr->metaHeader = header;
+    _implPtr->metadataHeader = header;
   }
 
   std::filesystem::path const& MusicLibrary::rootPath() const

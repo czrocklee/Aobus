@@ -243,9 +243,9 @@ namespace ao::gtk
     crPtr->save();
     crPtr->begin_new_path();
 
-    for (std::int32_t idx = 0; idx < segmentCount; ++idx)
+    for (std::int32_t index = 0; index < segmentCount; ++index)
     {
-      float const position = (static_cast<float>(idx) * (segmentThickness + segmentGap));
+      float const position = (static_cast<float>(index) * (segmentThickness + segmentGap));
       crPtr->begin_new_sub_path();
 
       if (_orientation == Gtk::Orientation::HORIZONTAL)

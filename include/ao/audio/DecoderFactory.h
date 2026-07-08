@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/audio/DecoderSession.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/IDecoderSession.h>
 
 #include <filesystem>
 #include <memory>
@@ -19,6 +19,6 @@ namespace ao::audio
    * failure to read the container as `IoError`, so callers can distinguish a
    * file we cannot play from a file we cannot open.
    */
-  Result<std::unique_ptr<IDecoderSession>> createDecoderSession(std::filesystem::path const& filePath,
-                                                                Format outputFormat);
+  Result<std::unique_ptr<DecoderSession>> createDecoderSession(std::filesystem::path const& filePath,
+                                                               Format outputFormat);
 } // namespace ao::audio

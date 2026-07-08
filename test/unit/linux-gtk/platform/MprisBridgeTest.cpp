@@ -5,9 +5,9 @@
 
 #include "platform/MprisArtUrlCache.h"
 #include "platform/MprisPlaybackEndpoint.h"
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/CoreIds.h>
@@ -43,11 +43,11 @@ namespace ao::gtk::platform::test
   {
     ResourceId addResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
     {
-      auto txn = library.writeTransaction();
-      auto writer = library.resources().writer(txn);
+      auto transaction = library.writeTransaction();
+      auto writer = library.resources().writer(transaction);
       auto resourceId = writer.create(bytes);
       REQUIRE(resourceId);
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
       return *resourceId;
     }
 
@@ -69,9 +69,9 @@ namespace ao::gtk::platform::test
         return false;
       }
 
-      for (std::size_t idx = 0; idx < actual.size(); ++idx)
+      for (std::size_t index = 0; index < actual.size(); ++index)
       {
-        if (std::byte{static_cast<unsigned char>(actual[idx])} != expected[idx])
+        if (std::byte{static_cast<unsigned char>(actual[index])} != expected[index])
         {
           return false;
         }
@@ -323,7 +323,7 @@ namespace ao::gtk::platform::test
     {
       auto const optCapability = endpoint.playerCapabilityProperty(propertyName);
       REQUIRE(optCapability);
-      CHECK(*optCapability == commands.capable(command));
+      CHECK(*optCapability == commands.isCapable(command));
     };
 
     REQUIRE(queue.playQueue({firstTrack, secondTrack}, firstTrack, ListId{8}));

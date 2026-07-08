@@ -3,9 +3,10 @@
 
 #include "playback/OutputDeviceSelector.h"
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>

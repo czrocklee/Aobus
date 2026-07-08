@@ -71,46 +71,46 @@ namespace ao::rt
       std::uint64_t payloadLength = 0;
     };
 
-    void processItem(std::size_t itemIndex,
-                     lmdb::WriteTransaction& txn,
-                     library::TrackStore::Writer& trackWriter,
-                     library::FileManifestStore::Writer& manifestWriter,
-                     library::DictionaryStore& dict,
-                     std::stop_token stopToken);
+    void applyScanItem(std::size_t itemIndex,
+                       lmdb::WriteTransaction& transaction,
+                       library::TrackStore::Writer& trackWriter,
+                       library::FileManifestStore::Writer& manifestWriter,
+                       library::DictionaryStore& dictionary,
+                       std::stop_token stopToken);
 
-    bool processSkips(ScanItem const& item);
+    bool skipNonActionableItem(ScanItem const& item);
 
     void reportProgress(ScanItem const& item, std::size_t itemIndex, ScanApplyProgressStage stage, double itemFraction);
 
     void reportFailure(std::string_view uri, std::string_view stage, std::string_view message);
 
-    void processMissing(ScanItem const& item,
-                        lmdb::WriteTransaction& txn,
-                        library::FileManifestStore::Writer& manifestWriter);
+    void applyMissingItem(ScanItem const& item,
+                          lmdb::WriteTransaction& transaction,
+                          library::FileManifestStore::Writer& manifestWriter);
 
-    bool processChanged(ScanItem const& item,
-                        lmdb::WriteTransaction& txn,
+    bool tryApplyChangedItem(ScanItem const& item,
+                             lmdb::WriteTransaction& transaction,
+                             library::TrackStore::Writer& trackWriter,
+                             library::FileManifestStore::Writer& manifestWriter,
+                             library::DictionaryStore& dictionary,
+                             library::TrackBuilder& builder,
+                             AudioFingerprint const& fingerprint);
+
+    bool applyMovedItem(ScanItem const& item,
+                        lmdb::WriteTransaction& transaction,
                         library::TrackStore::Writer& trackWriter,
                         library::FileManifestStore::Writer& manifestWriter,
-                        library::DictionaryStore& dict,
+                        library::DictionaryStore& dictionary,
                         library::TrackBuilder& builder,
                         AudioFingerprint const& fingerprint);
 
-    bool processMoved(ScanItem const& item,
-                      lmdb::WriteTransaction& txn,
+    void applyNewItem(ScanItem const& item,
+                      lmdb::WriteTransaction& transaction,
                       library::TrackStore::Writer& trackWriter,
                       library::FileManifestStore::Writer& manifestWriter,
-                      library::DictionaryStore& dict,
+                      library::DictionaryStore& dictionary,
                       library::TrackBuilder& builder,
-                      AudioFingerprint const& fingerprint);
-
-    void processNew(ScanItem const& item,
-                    lmdb::WriteTransaction& txn,
-                    library::TrackStore::Writer& trackWriter,
-                    library::FileManifestStore::Writer& manifestWriter,
-                    library::DictionaryStore& dict,
-                    library::TrackBuilder& builder,
-                    std::optional<AudioFingerprint> const& optFingerprint);
+                      std::optional<AudioFingerprint> const& optFingerprint);
 
     std::optional<std::pair<std::unique_ptr<tag::TagFile>, library::TrackBuilder>> loadTrackBuilder(
       ScanItem const& item);
@@ -128,8 +128,8 @@ namespace ao::rt
 
     std::optional<std::pair<library::TrackBuilder::PreparedHot, library::TrackBuilder::PreparedCold>> prepareTrack(
       library::TrackBuilder const& builder,
-      lmdb::WriteTransaction& txn,
-      library::DictionaryStore& dict,
+      lmdb::WriteTransaction& transaction,
+      library::DictionaryStore& dictionary,
       std::string const& uri);
 
     static library::FileManifestBuilder makeAvailableManifest(ScanItem const& item,

@@ -82,8 +82,8 @@ Design decisions behind the set:
 
 ## Grouping semantics
 
-Grouping is implemented by `TrackListProjection`
-(`app/runtime/projection/TrackListProjection.cpp`). Two group keys are
+Grouping is implemented by `LiveTrackListProjection`
+(`app/runtime/projection/LiveTrackListProjection.cpp`). Two group keys are
 compound even though the spec names a single field:
 
 - `TrackGroupKey::Album` groups by **(album artist, album)** so identically
@@ -98,7 +98,7 @@ groups). Both frontends render the secondary text, which is what makes the
 `redundantFields` only when the group header already presents its value.
 
 If a spec arrives with a `groupBy` but an **empty** `redundantFields`,
-`TrackListProjection::setPresentation()` borrows the redundant fields of the
+`LiveTrackListProjection::setPresentation()` borrows the redundant fields of the
 first builtin preset with the same `groupBy`. Custom specs that want no
 suppression under a grouping must therefore say so by listing visible fields
 explicitly rather than relying on an empty redundant list.

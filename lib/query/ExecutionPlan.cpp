@@ -78,29 +78,29 @@ namespace ao::query
       return field == Field::CoverArtId || field == Field::Tag;
     }
 
-    std::uint32_t tagBloomBit(library::DictionaryStore* dict, std::string_view tagName)
+    std::uint32_t tagBloomBit(library::DictionaryStore* dictionary, std::string_view tagName)
     {
-      if (dict == nullptr)
+      if (dictionary == nullptr)
       {
         return 0;
       }
 
-      auto const tagId = dict->getOrIntern(tagName);
+      auto const tagId = dictionary->getOrIntern(tagName);
       return std::uint32_t{1} << (tagId.raw() & kBloomBitMask);
     }
 
-    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, library::DictionaryStore* dict);
+    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, library::DictionaryStore* dictionary);
 
-    std::uint32_t computeRequiredTagBloomMask(BinaryExpression const& binary, library::DictionaryStore* dict)
+    std::uint32_t computeRequiredTagBloomMask(BinaryExpression const& binary, library::DictionaryStore* dictionary)
     {
-      auto const lhsMask = computeRequiredTagBloomMask(binary.operand, dict);
+      auto const lhsMask = computeRequiredTagBloomMask(binary.operand, dictionary);
 
       if (!binary.optOperation)
       {
         return lhsMask;
       }
 
-      auto const rhsMask = computeRequiredTagBloomMask(binary.optOperation->operand, dict);
+      auto const rhsMask = computeRequiredTagBloomMask(binary.optOperation->operand, dictionary);
 
       switch (binary.optOperation->op)
       {
@@ -113,48 +113,48 @@ namespace ao::query
       }
     }
 
-    std::uint32_t computeRequiredTagBloomMask(UnaryExpression const& unary, library::DictionaryStore* dict)
+    std::uint32_t computeRequiredTagBloomMask(UnaryExpression const& unary, library::DictionaryStore* dictionary)
     {
       if (unary.op == Operator::Not)
       {
         return 0;
       }
 
-      return computeRequiredTagBloomMask(unary.operand, dict);
+      return computeRequiredTagBloomMask(unary.operand, dictionary);
     }
 
-    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, library::DictionaryStore* dict)
+    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, library::DictionaryStore* dictionary)
     {
       return std::visit(utility::makeVisitor(
-                          [dict](VariableExpression const& variable)
+                          [dictionary](VariableExpression const& variable)
                           {
                             if (variable.type != VariableType::Tag)
                             {
                               return std::uint32_t{0};
                             }
 
-                            return tagBloomBit(dict, variable.name);
+                            return tagBloomBit(dictionary, variable.name);
                           },
                           [](ConstantExpression const&) { return std::uint32_t{0}; },
                           [](ListExpression const&) { return std::uint32_t{0}; },
                           [](RangeExpression const&) { return std::uint32_t{0}; },
-                          [dict](std::unique_ptr<BinaryExpression> const& binary)
+                          [dictionary](std::unique_ptr<BinaryExpression> const& binary)
                           {
                             if (!binary)
                             {
                               return std::uint32_t{0};
                             }
 
-                            return computeRequiredTagBloomMask(*binary, dict);
+                            return computeRequiredTagBloomMask(*binary, dictionary);
                           },
-                          [dict](std::unique_ptr<UnaryExpression> const& unary)
+                          [dictionary](std::unique_ptr<UnaryExpression> const& unary)
                           {
                             if (!unary)
                             {
                               return std::uint32_t{0};
                             }
 
-                            return computeRequiredTagBloomMask(*unary, dict);
+                            return computeRequiredTagBloomMask(*unary, dictionary);
                           }),
                         expr);
     }
@@ -459,10 +459,10 @@ namespace ao::query
     }
   } // namespace
 
-  QueryCompiler::QueryCompiler(library::DictionaryStore* dict)
-    : _dict{dict}
+  QueryCompiler::QueryCompiler(library::DictionaryStore* dictionary)
+    : _dictionary{dictionary}
   {
-    gsl_Expects(dict != nullptr);
+    gsl_Expects(dictionary != nullptr);
   }
 
   std::uint32_t QueryCompiler::addStringConstant(std::string_view str)
@@ -581,7 +581,7 @@ namespace ao::query
     // Comparison (Eq/Ne/Lt/Le/Gt/Ge/Like). Compile the left operand first.
     auto const leftReg = compileExpression(binary.operand);
 
-    // Save the left field (and its Custom dictId) before compiling the right operand,
+    // Save the left field (and its Custom dictionaryId) before compiling the right operand,
     // which overwrites _lastField.
     auto const leftField = _lastField;
     auto const leftCustomId = _lastFieldCustomId;
@@ -615,7 +615,7 @@ namespace ao::query
 
     auto const rightReg = compileExpression(binary.optOperation->operand);
 
-    // Carry the left field (and its Custom dictId) directly on the comparison so the
+    // Carry the left field (and its Custom dictionaryId) directly on the comparison so the
     // evaluator resolves the operand's type without scanning back for the LoadField. The
     // comparison consumes the top two results and writes the result into the left register.
     gsl_Expects(rightReg == leftReg + 1);
@@ -687,10 +687,10 @@ namespace ao::query
 
     std::int64_t constValue = 0;
 
-    if ((var->type == VariableType::Custom || var->type == VariableType::Tag) && _dict != nullptr)
+    if ((var->type == VariableType::Custom || var->type == VariableType::Tag) && _dictionary != nullptr)
     {
-      auto const dictId = _dict->getOrIntern(var->name);
-      constValue = static_cast<std::int64_t>(dictId.raw());
+      auto const dictionaryId = _dictionary->getOrIntern(var->name);
+      constValue = static_cast<std::int64_t>(dictionaryId.raw());
     }
 
     _lastFieldCustomId = (var->type == VariableType::Custom) ? constValue : 0;
@@ -716,9 +716,9 @@ namespace ao::query
       _hasHotAccess = true;
 
       // Try to resolve tag name to ID via dictionary for bloom filter
-      if (_dict != nullptr)
+      if (_dictionary != nullptr)
       {
-        auto const tagId = _dict->getOrIntern(var.name);
+        auto const tagId = _dictionary->getOrIntern(var.name);
 
         // Generate implicit tag comparison: track.tags().has(tagId)
         // This handles standalone "#tagname" queries like "#rock"
@@ -780,16 +780,16 @@ namespace ao::query
       _hasHotAccess = true;
     }
 
-    // For custom fields, pre-resolve dictId and store as constant (Option B)
+    // For custom fields, pre-resolve dictionaryId and store as constant (Option B)
     // If resolution fails (key not in dictionary), store 0 - evaluator will return empty string
     std::int64_t constValue = 0;
 
     if (var.type == VariableType::Custom)
     {
-      if (_dict != nullptr)
+      if (_dictionary != nullptr)
       {
-        auto const dictId = _dict->getOrIntern(var.name);
-        constValue = static_cast<std::int64_t>(dictId.raw());
+        auto const dictionaryId = _dictionary->getOrIntern(var.name);
+        constValue = static_cast<std::int64_t>(dictionaryId.raw());
       }
       else
       {
@@ -1119,13 +1119,13 @@ namespace ao::query
       return -1;
     }
 
-    if (_dict == nullptr)
+    if (_dictionary == nullptr)
     {
       return -1;
     }
 
     // Reserve in memory - if already exists, returns existing ID; if not, adds to memory only
-    auto const id = _dict->getOrIntern(str);
+    auto const id = _dictionary->getOrIntern(str);
     return static_cast<std::int64_t>(id.raw());
   }
 
@@ -1183,12 +1183,12 @@ namespace ao::query
                             detail::throwQueryError("unknown audio codec '{}'", value);
                           }
 
-                          if (!isDictionaryField(field) || _dict == nullptr)
+                          if (!isDictionaryField(field) || _dictionary == nullptr)
                           {
                             return InSetValueStatus::NotCompatible;
                           }
 
-                          auto const id = _dict->getOrIntern(value);
+                          auto const id = _dictionary->getOrIntern(value);
                           set.numericValues.insert(static_cast<std::int64_t>(id.raw()));
                           return InSetValueStatus::Appended;
                         }),
@@ -1200,8 +1200,8 @@ namespace ao::query
   try
   {
     _plan = ExecutionPlan{};
-    _plan.dictionary = _dict;
-    _plan.tagBloomMask = computeRequiredTagBloomMask(expr, _dict);
+    _plan.dictionary = _dictionary;
+    _plan.tagBloomMask = computeRequiredTagBloomMask(expr, _dictionary);
     _nextReg = 0;
     _lastFieldCustomId = 0;
     _hasHotAccess = false;
@@ -1247,9 +1247,9 @@ namespace ao::query
     return std::unexpected{ex.error()};
   }
 
-  Result<ExecutionPlan> compileQuery(Expression const& expr, library::DictionaryStore* dict)
+  Result<ExecutionPlan> compileQuery(Expression const& expr, library::DictionaryStore* dictionary)
   {
-    auto compiler = dict != nullptr ? QueryCompiler{dict} : QueryCompiler{};
+    auto compiler = dictionary != nullptr ? QueryCompiler{dictionary} : QueryCompiler{};
     return compiler.compile(expr);
   }
 } // namespace ao::query

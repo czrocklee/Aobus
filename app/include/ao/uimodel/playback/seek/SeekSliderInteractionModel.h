@@ -34,7 +34,7 @@ namespace ao::uimodel
     bool isPointerActive() const noexcept { return _pointerActive; }
     bool hasPendingFinalSeek() const noexcept { return _pendingFinalSeek; }
     std::chrono::milliseconds duration() const noexcept { return _duration; }
-    bool enabled() const noexcept { return _enabled; }
+    bool isEnabled() const noexcept { return _enabled; }
     std::chrono::milliseconds clampElapsed(std::chrono::milliseconds elapsed) const noexcept;
 
   private:

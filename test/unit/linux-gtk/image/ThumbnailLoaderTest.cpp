@@ -99,10 +99,10 @@ namespace ao::gtk::test
       auto callbackOrder = std::vector<int>{};
       auto requests = std::vector<ThumbnailLoader::Request>{};
 
-      for (std::int32_t idx = 0; idx < 4; ++idx)
+      for (std::int32_t index = 0; index < 4; ++index)
       {
         requests.push_back(loader.request(
-          resourceId, kPixelSize, [&, idx](Glib::RefPtr<Gdk::Pixbuf> const&) { callbackOrder.push_back(idx); }));
+          resourceId, kPixelSize, [&, index](Glib::RefPtr<Gdk::Pixbuf> const&) { callbackOrder.push_back(index); }));
       }
 
       REQUIRE(pumpGtkEventsUntil([&] { return callbackOrder.size() == 4; }));

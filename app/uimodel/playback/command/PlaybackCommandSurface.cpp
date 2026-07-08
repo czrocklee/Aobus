@@ -3,9 +3,9 @@
 
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/Subscription.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
@@ -85,7 +85,7 @@ namespace ao::uimodel
   {
     auto const& state = _playback.state();
 
-    if (!enabled(command))
+    if (!isEnabled(command))
     {
       return;
     }
@@ -149,7 +149,7 @@ namespace ao::uimodel
     }
   }
 
-  bool PlaybackCommandSurface::enabled(PlaybackCommand command) const
+  bool PlaybackCommandSurface::isEnabled(PlaybackCommand command) const
   {
     switch (auto const& state = _playback.state(); command)
     {
@@ -166,7 +166,7 @@ namespace ao::uimodel
     return false;
   }
 
-  bool PlaybackCommandSurface::capable(PlaybackCommand command) const
+  bool PlaybackCommandSurface::isCapable(PlaybackCommand command) const
   {
     switch (auto const& state = _playback.state(); command)
     {
@@ -177,7 +177,7 @@ namespace ao::uimodel
       case PlaybackCommand::PlayPause:
       case PlaybackCommand::Stop:
       case PlaybackCommand::ToggleShuffle:
-      case PlaybackCommand::CycleRepeat: return enabled(command);
+      case PlaybackCommand::CycleRepeat: return isEnabled(command);
     }
 
     return false;

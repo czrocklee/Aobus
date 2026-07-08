@@ -7,7 +7,7 @@
 #include "council/YamlEmit.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <ryml.hpp>
 

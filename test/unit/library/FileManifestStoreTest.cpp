@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
@@ -49,7 +50,7 @@ namespace ao::library::test
     auto store = FileManifestStore{db};
 
     auto const signature = utility::xxh3Hash128("stored payload");
-    auto builder = FileManifestBuilder::createNew();
+    auto builder = FileManifestBuilder::makeEmpty();
     builder.trackId(TrackId{42})
       .fileSize(12345)
       .mtime(67890)
@@ -95,7 +96,7 @@ namespace ao::library::test
     auto db = openDatabase(wtxn, "manifests");
     auto store = FileManifestStore{db};
 
-    auto builder = FileManifestBuilder::createNew();
+    auto builder = FileManifestBuilder::makeEmpty();
     builder.trackId(TrackId{42}).fileSize(12345).mtime(67890).status(FileStatus::Available);
 
     auto writer = store.writer(wtxn);

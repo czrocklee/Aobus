@@ -3,7 +3,7 @@
 
 #include "test/unit/library/TrackBuilderTestSupport.h"
 #include "test/unit/library/TrackStoreTestSupport.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
@@ -21,7 +21,7 @@ namespace ao::library::test
     std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold> prepareTrack(TrackBuilder& builder,
                                                                                   TrackSerializationContext& context)
     {
-      auto result = builder.prepare(context.txn(), context.dict(), context.resources());
+      auto result = builder.prepare(context.transaction(), context.dictionary(), context.resources());
       REQUIRE(result);
       return *std::move(result);
     }
@@ -30,15 +30,15 @@ namespace ao::library::test
   TEST_CASE("createPreparedTrackData writes prepared hot and cold track data", "[library][unit][track]")
   {
     auto context = TrackSerializationContext{};
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Created Track").artist("Artist");
     builder.property().uri("/tmp/created.flac");
 
     auto const [preparedHot, preparedCold] = prepareTrack(builder, context);
 
     auto fixture = TrackStoreFixture{};
-    auto txn = beginWriteTransaction(fixture.env);
-    auto writer = fixture.store.writer(txn);
+    auto transaction = beginWriteTransaction(fixture.env);
+    auto writer = fixture.store.writer(transaction);
 
     auto createResult = createPreparedTrackData(writer, preparedHot, preparedCold);
     REQUIRE(createResult);
@@ -52,19 +52,19 @@ namespace ao::library::test
   TEST_CASE("updatePreparedTrackData replaces existing hot and cold track data", "[library][unit][track]")
   {
     auto context = TrackSerializationContext{};
-    auto originalBuilder = TrackBuilder::createNew();
+    auto originalBuilder = TrackBuilder::makeEmpty();
     originalBuilder.metadata().title("Original Track");
     originalBuilder.property().uri("/tmp/original.flac");
     auto const [originalHot, originalCold] = prepareTrack(originalBuilder, context);
 
-    auto updatedBuilder = TrackBuilder::createNew();
+    auto updatedBuilder = TrackBuilder::makeEmpty();
     updatedBuilder.metadata().title("Updated Track");
     updatedBuilder.property().uri("/tmp/updated.flac");
     auto const [updatedHot, updatedCold] = prepareTrack(updatedBuilder, context);
 
     auto fixture = TrackStoreFixture{};
-    auto txn = beginWriteTransaction(fixture.env);
-    auto writer = fixture.store.writer(txn);
+    auto transaction = beginWriteTransaction(fixture.env);
+    auto writer = fixture.store.writer(transaction);
     auto createResult = createPreparedTrackData(writer, originalHot, originalCold);
     REQUIRE(createResult);
 
@@ -81,7 +81,7 @@ namespace ao::library::test
   TEST_CASE("prepared track data is a snapshot unaffected by later builder mutation", "[library][unit][track]")
   {
     auto context = TrackSerializationContext{};
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
 
     {
       // Inputs the builder only borrows as string_views; they go out of
@@ -99,8 +99,8 @@ namespace ao::library::test
       builder.property().uri(longerUri);
 
       auto fixture = TrackStoreFixture{};
-      auto txn = beginWriteTransaction(fixture.env);
-      auto writer = fixture.store.writer(txn);
+      auto transaction = beginWriteTransaction(fixture.env);
+      auto writer = fixture.store.writer(transaction);
 
       auto createResult = createPreparedTrackData(writer, preparedHot, preparedCold);
       REQUIRE(createResult);

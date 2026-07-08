@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
@@ -84,16 +84,16 @@ namespace ao::uimodel::test
 
     SECTION("Stop is enabled only outside idle")
     {
-      CHECK_FALSE(commands.enabled(PlaybackCommand::Stop));
+      CHECK_FALSE(commands.isEnabled(PlaybackCommand::Stop));
 
       REQUIRE(fixture.playbackService.playTrack(trackId, ListId{5}));
 
-      CHECK(commands.enabled(PlaybackCommand::Stop));
+      CHECK(commands.isEnabled(PlaybackCommand::Stop));
 
       commands.execute(PlaybackCommand::Stop);
 
       CHECK(fixture.playbackService.state().transport == audio::Transport::Idle);
-      CHECK_FALSE(commands.enabled(PlaybackCommand::Stop));
+      CHECK_FALSE(commands.isEnabled(PlaybackCommand::Stop));
     }
   }
 
@@ -112,14 +112,14 @@ namespace ao::uimodel::test
     {
       REQUIRE(queue.playQueue({firstTrack, secondTrack}, firstTrack, ListId{9}));
 
-      CHECK(commands.enabled(PlaybackCommand::Next));
-      CHECK_FALSE(commands.enabled(PlaybackCommand::Previous));
+      CHECK(commands.isEnabled(PlaybackCommand::Next));
+      CHECK_FALSE(commands.isEnabled(PlaybackCommand::Previous));
 
       commands.execute(PlaybackCommand::Next);
 
       CHECK(queue.nowPlayingTrackId() == secondTrack);
-      CHECK_FALSE(commands.enabled(PlaybackCommand::Next));
-      CHECK(commands.enabled(PlaybackCommand::Previous));
+      CHECK_FALSE(commands.isEnabled(PlaybackCommand::Next));
+      CHECK(commands.isEnabled(PlaybackCommand::Previous));
 
       commands.execute(PlaybackCommand::Next);
 
@@ -170,9 +170,9 @@ namespace ao::uimodel::test
 
     REQUIRE(fixture.playbackService.playTrack(trackId, ListId{5}));
 
-    CHECK_FALSE(commands.enabled(PlaybackCommand::Play));
-    CHECK(commands.capable(PlaybackCommand::Play));
-    CHECK(commands.capable(PlaybackCommand::Pause));
+    CHECK_FALSE(commands.isEnabled(PlaybackCommand::Play));
+    CHECK(commands.isCapable(PlaybackCommand::Play));
+    CHECK(commands.isCapable(PlaybackCommand::Pause));
   }
 
   TEST_CASE("PlaybackCommandSurface - emits availability when playback becomes ready",
@@ -184,11 +184,11 @@ namespace ao::uimodel::test
     std::int32_t playCount = 0;
     auto sub = commands.onAvailabilityChanged(PlaybackCommand::Play, [&playCount] { ++playCount; });
 
-    CHECK_FALSE(commands.enabled(PlaybackCommand::Play));
+    CHECK_FALSE(commands.isEnabled(PlaybackCommand::Play));
 
     fixture.onDevicesChangedCb(fixture.status.devices);
 
-    CHECK(commands.enabled(PlaybackCommand::Play));
+    CHECK(commands.isEnabled(PlaybackCommand::Play));
     CHECK(playCount > 0);
   }
 

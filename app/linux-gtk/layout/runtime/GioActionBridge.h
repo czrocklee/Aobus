@@ -4,7 +4,7 @@
 #pragma once
 
 #include "ActionRegistry.h"
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
 #include <giomm/actionmap.h>
 #include <glibmm/refptr.h>
@@ -16,23 +16,23 @@
 
 namespace ao::gtk::layout
 {
-  class IActionContextProvider
+  class ActionContextProvider
   {
   public:
-    IActionContextProvider() = default;
-    virtual ~IActionContextProvider() = default;
-    IActionContextProvider(IActionContextProvider const&) = delete;
-    IActionContextProvider& operator=(IActionContextProvider const&) = delete;
-    IActionContextProvider(IActionContextProvider&&) = delete;
-    IActionContextProvider& operator=(IActionContextProvider&&) = delete;
+    ActionContextProvider() = default;
+    virtual ~ActionContextProvider() = default;
+    ActionContextProvider(ActionContextProvider const&) = delete;
+    ActionContextProvider& operator=(ActionContextProvider const&) = delete;
+    ActionContextProvider(ActionContextProvider&&) = delete;
+    ActionContextProvider& operator=(ActionContextProvider&&) = delete;
 
     /**
-     * @brief Gets a valid context for action activation via Gio.
+     * @brief Returns a valid context for action activation via Gio.
      *
      * @param componentId Optional string specifying the component invoking the action.
      * @return ActionActivationContext for the given action.
      */
-    virtual ActionActivationContext getActionContext(std::string_view componentId = "") = 0;
+    virtual ActionActivationContext actionContext(std::string_view componentId = "") = 0;
 
     /**
      * @brief Checks if this context provider can supply a safe anchor widget for a specific action.
@@ -50,7 +50,7 @@ namespace ao::gtk::layout
   public:
     GioActionBridgeSession(ActionRegistry const& registry,
                            Gio::ActionMap& actionMap,
-                           IActionContextProvider& contextProvider,
+                           ActionContextProvider& contextProvider,
                            std::vector<std::string> exportedActionIds);
 
     void refreshStates();
@@ -58,7 +58,7 @@ namespace ao::gtk::layout
   private:
     ActionRegistry const& _registry;
     Gio::ActionMap& _actionMap;
-    IActionContextProvider& _contextProvider;
+    ActionContextProvider& _contextProvider;
     std::vector<std::string> _exportedActionIds;
   };
 
@@ -77,6 +77,6 @@ namespace ao::gtk::layout
      */
     static std::unique_ptr<GioActionBridgeSession> exportActions(ActionRegistry const& registry,
                                                                  Gio::ActionMap& actionMap,
-                                                                 IActionContextProvider& contextProvider);
+                                                                 ActionContextProvider& contextProvider);
   };
 } // namespace ao::gtk::layout

@@ -5,8 +5,9 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/audio/AudioRouteFormatState.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/RouteAnchor.h>
 
 #include <mutex>
 #include <optional>

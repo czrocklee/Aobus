@@ -70,9 +70,9 @@ namespace ao::gtk
   private:
     friend class SmartListDialogTestPeer;
 
-    void setupUi();
-    void setupPreview();
-    void setupPreviewColumns();
+    void buildUi();
+    void buildPreview();
+    void configurePreviewColumns();
     void rebuildPreviewSource();
     void updateSourceLabels();
     void updateDialogState();

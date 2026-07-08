@@ -27,7 +27,7 @@ namespace ao::library::test
 
     SECTION("Title length")
     {
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
       auto const title = std::string(kUint16Max + 1, 't');
       builder.metadata().title(title);
 
@@ -48,7 +48,7 @@ namespace ao::library::test
         tagNames.push_back("tag" + std::to_string(i));
       }
 
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
 
       for (auto const& tagName : tagNames)
       {
@@ -71,7 +71,7 @@ namespace ao::library::test
 
     SECTION("URI length")
     {
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
       auto const uri = std::string(kUint16Overflow, 'u');
       builder.property().uri(uri);
 
@@ -82,7 +82,7 @@ namespace ao::library::test
 
     SECTION("Custom metadata value length")
     {
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
       auto const value = std::string(kUint16Overflow, 'v');
       builder.customMetadata().add("key", value);
 
@@ -95,7 +95,7 @@ namespace ao::library::test
     {
       constexpr std::size_t kOverflowCount = (kUint16Max / sizeof(CoverArtEntry)) + 1;
 
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
 
       for (std::size_t i = 0; i < kOverflowCount; ++i)
       {
@@ -109,7 +109,7 @@ namespace ao::library::test
 
     SECTION("Custom metadata count")
     {
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
 
       for (std::size_t i = 0; i < kUint16Overflow; ++i)
       {
@@ -125,7 +125,7 @@ namespace ao::library::test
     {
       constexpr std::size_t kOverflowCount = (kUint16Max / sizeof(CustomMetadataEntry)) + 1;
 
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
 
       for (std::size_t i = 0; i < kOverflowCount; ++i)
       {
@@ -141,7 +141,7 @@ namespace ao::library::test
     {
       constexpr std::size_t kValueSize = kUint16Max - sizeof(CustomMetadataBlockHeader) - sizeof(CustomMetadataEntry);
 
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
       builder.customMetadata().add("key", std::string(kValueSize, 'v'));
 
       auto const result = context.trySerializeCold(builder);
@@ -155,7 +155,7 @@ namespace ao::library::test
       constexpr std::size_t kValueSize =
         (kUint16Overflow - sizeof(TrackColdHeader) - (kValueCount * sizeof(CustomMetadataEntry))) / kValueCount;
 
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
       auto const value = std::string(kValueSize, 'v');
 
       builder.customMetadata().add("first", value).add("second", value);
@@ -169,7 +169,7 @@ namespace ao::library::test
     {
       constexpr std::size_t kCoverCount = kUint16Max / sizeof(CoverArtEntry);
 
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
       builder.metadata().movementNumber(1);
 
       for (std::size_t i = 0; i < kCoverCount; ++i)

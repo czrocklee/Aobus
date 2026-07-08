@@ -125,7 +125,7 @@ namespace ao::gtk
     _entry.set_text(text);
   }
 
-  Glib::ustring TrackQuickFilter::getText() const
+  Glib::ustring TrackQuickFilter::text() const
   {
     return _entry.get_text();
   }
@@ -135,7 +135,7 @@ namespace ao::gtk
     _entry.set_position(position);
   }
 
-  std::int32_t TrackQuickFilter::getPosition() const
+  std::int32_t TrackQuickFilter::position() const
   {
     return _entry.get_position();
   }

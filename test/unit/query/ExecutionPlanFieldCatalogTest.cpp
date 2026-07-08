@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/query/ExecutionPlanTestUtils.h"
+#include "test/unit/query/ExecutionPlanTestSupport.h"
 #include <ao/query/Field.h>
 #include <ao/query/detail/Bytecode.h>
 

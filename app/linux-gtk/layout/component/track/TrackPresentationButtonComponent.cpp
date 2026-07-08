@@ -3,7 +3,7 @@
 
 #include "TrackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "track/TrackPresentationButton.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -21,7 +21,7 @@ namespace ao::gtk::layout
     /**
      * @brief track.presentationButton component wrapper
      */
-    class TrackPresentationButtonComponent final : public ILayoutComponent
+    class TrackPresentationButtonComponent final : public LayoutComponent
     {
     public:
       TrackPresentationButtonComponent(LayoutContext& ctx, LayoutNode const& node)
@@ -48,7 +48,7 @@ namespace ao::gtk::layout
       TrackPresentationButton _widget;
     };
 
-    std::unique_ptr<ILayoutComponent> createTrackPresentationButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackPresentationButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackPresentationButtonComponent>(ctx, node);
     }

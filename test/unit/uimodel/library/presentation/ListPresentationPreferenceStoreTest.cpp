@@ -3,9 +3,9 @@
 
 #include "test/unit/uimodel/library/presentation/TrackPresentationTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 

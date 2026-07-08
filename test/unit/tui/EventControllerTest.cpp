@@ -3,9 +3,9 @@
 
 #include "tui/EventController.h"
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "tui/LibraryController.h"
 #include "tui/Model.h"
@@ -18,7 +18,8 @@
 #include "tui/TrackTable.h"
 #include "tui/TuiHitRegions.h"
 #include <ao/CoreIds.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
@@ -90,7 +91,7 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Character("/")));
     CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
 
-    CHECK(fixture.shell.commandActive());
+    CHECK(fixture.shell.isCommandActive());
     CHECK(library.selectedTrack() == 0);
   }
 
@@ -124,12 +125,12 @@ namespace ao::tui::test
     REQUIRE(fixture.shell.commandCompletion());
 
     CHECK(controller.handleEvent(ftxui::Event::Tab));
-    CHECK(fixture.shell.commandActive());
+    CHECK(fixture.shell.isCommandActive());
     CHECK(fixture.shell.commandDraft() == "detail");
     CHECK_FALSE(fixture.shell.commandCompletion());
 
     CHECK(controller.handleEvent(ftxui::Event::Return));
-    CHECK_FALSE(fixture.shell.commandActive());
+    CHECK_FALSE(fixture.shell.isCommandActive());
     CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
   }
 
@@ -141,11 +142,11 @@ namespace ao::tui::test
 
     CHECK(controller.handleEvent(ftxui::Event::Character(":")));
     CHECK(controller.handleEvent(ftxui::Event::Character("h")));
-    CHECK(fixture.shell.commandActive());
+    CHECK(fixture.shell.isCommandActive());
     CHECK(fixture.shell.commandDraft() == "h");
 
     CHECK(controller.handleEvent(ftxui::Event::Escape));
-    CHECK_FALSE(fixture.shell.commandActive());
+    CHECK_FALSE(fixture.shell.isCommandActive());
     CHECK(fixture.shell.commandDraft().empty());
   }
 
@@ -355,7 +356,7 @@ namespace ao::tui::test
     auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime.playback()};
 
     enterCommand(controller, "First");
-    CHECK_FALSE(fixture.shell.commandActive());
+    CHECK_FALSE(fixture.shell.isCommandActive());
     CHECK(library.filterDraft() == "First");
     CHECK(library.tracks().size() == 1);
     REQUIRE(library.selectedTrackView().track != nullptr);
@@ -537,16 +538,16 @@ namespace ao::tui::test
 
     auto moveOverButton = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 0, .y = 0};
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", moveOverButton)));
-    CHECK(controller.qualityHoverVisible());
+    CHECK(controller.isQualityHoverVisible());
     CHECK(fixture.shell.overlay() == Overlay::None);
 
     auto moveAway = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 20, .y = 0};
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", moveAway)));
-    CHECK_FALSE(controller.qualityHoverVisible());
+    CHECK_FALSE(controller.isQualityHoverVisible());
 
     CHECK(controller.handleEvent(ftxui::Event::Character("/")));
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", moveOverButton)));
-    CHECK_FALSE(controller.qualityHoverVisible());
+    CHECK_FALSE(controller.isQualityHoverVisible());
   }
 
   TEST_CASE("EventController - hovering clickable buttons updates hover target", "[tui][unit][event]")
@@ -1228,7 +1229,7 @@ namespace ao::tui::test
 
     REQUIRE(library.selectedTrack() == 0);
     CHECK(controller.handleEvent(ftxui::Event::Character("/")));
-    REQUIRE(fixture.shell.commandActive());
+    REQUIRE(fixture.shell.isCommandActive());
 
     auto clickSoul = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 1, .y = 0};
     auto clickOutput = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 6, .y = 0};
@@ -1246,7 +1247,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", pressScrollbar)));
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", clickSection)));
 
-    CHECK(fixture.shell.commandActive());
+    CHECK(fixture.shell.isCommandActive());
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(library.selectedTrack() == 0);
     CHECK(widthOverrides.empty());

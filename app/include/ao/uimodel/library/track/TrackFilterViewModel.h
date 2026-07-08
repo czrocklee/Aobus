@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/rt/CorePrimitives.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/Subscription.h>
+#include <ao/rt/ViewIds.h>
 
 #include <functional>
 #include <optional>
@@ -13,6 +13,7 @@
 
 namespace ao::rt
 {
+  struct FilterStatusChanged;
   class ViewService;
   class WorkspaceService;
 }

@@ -407,11 +407,11 @@ namespace ao::media::mp4
 
     out.resize(count);
 
-    for (auto const& [idx, entry] : std::ranges::views::enumerate(*optEntries))
+    for (auto const& [index, entry] : std::ranges::views::enumerate(*optEntries))
     {
-      auto const uidx = static_cast<std::size_t>(idx);
-      out[uidx].sampleCount = entry.sampleCount.value();
-      out[uidx].sampleDelta = entry.sampleDelta.value();
+      auto const unsignedIndex = static_cast<std::size_t>(index);
+      out[unsignedIndex].sampleCount = entry.sampleCount.value();
+      out[unsignedIndex].sampleDelta = entry.sampleDelta.value();
     }
   }
 
@@ -436,9 +436,9 @@ namespace ao::media::mp4
 
       _samples.resize(count);
 
-      for (auto const& [idx, entry] : std::ranges::views::enumerate(*optEntries))
+      for (auto const& [index, entry] : std::ranges::views::enumerate(*optEntries))
       {
-        _samples[static_cast<std::size_t>(idx)].size = entry.size.value();
+        _samples[static_cast<std::size_t>(index)].size = entry.size.value();
       }
     }
     else
@@ -475,12 +475,12 @@ namespace ao::media::mp4
 
     out.resize(count);
 
-    for (auto const& [idx, entry] : std::ranges::views::enumerate(*optEntries))
+    for (auto const& [index, entry] : std::ranges::views::enumerate(*optEntries))
     {
-      auto const uidx = static_cast<std::size_t>(idx);
-      out[uidx].firstChunk = entry.firstChunk.value();
-      out[uidx].samplesPerChunk = entry.samplesPerChunk.value();
-      out[uidx].sampleDescriptionIndex = entry.sampleDescIndex.value();
+      auto const unsignedIndex = static_cast<std::size_t>(index);
+      out[unsignedIndex].firstChunk = entry.firstChunk.value();
+      out[unsignedIndex].samplesPerChunk = entry.samplesPerChunk.value();
+      out[unsignedIndex].sampleDescriptionIndex = entry.sampleDescIndex.value();
     }
   }
 
@@ -502,9 +502,9 @@ namespace ao::media::mp4
 
     out.resize(count);
 
-    for (auto const& [idx, entry] : std::ranges::views::enumerate(*optEntries))
+    for (auto const& [index, entry] : std::ranges::views::enumerate(*optEntries))
     {
-      out[static_cast<std::size_t>(idx)] = entry.chunkOffset.value();
+      out[static_cast<std::size_t>(index)] = entry.chunkOffset.value();
     }
   }
 
@@ -526,9 +526,9 @@ namespace ao::media::mp4
 
     out.resize(count);
 
-    for (auto const& [idx, entry] : std::ranges::views::enumerate(*optEntries))
+    for (auto const& [index, entry] : std::ranges::views::enumerate(*optEntries))
     {
-      out[static_cast<std::size_t>(idx)] = entry.chunkOffset.value();
+      out[static_cast<std::size_t>(index)] = entry.chunkOffset.value();
     }
   }
 
@@ -735,11 +735,11 @@ namespace ao::media::mp4
         std::min<std::uint64_t>(static_cast<std::uint64_t>(scaledIndex), _samples.size()));
     }
 
-    for (auto const& [idx, sample] : std::ranges::views::enumerate(_samples))
+    for (auto const& [index, sample] : std::ranges::views::enumerate(_samples))
     {
       if (time < sample.startTime + sample.duration)
       {
-        return static_cast<std::uint32_t>(idx);
+        return static_cast<std::uint32_t>(index);
       }
     }
 

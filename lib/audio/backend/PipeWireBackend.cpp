@@ -2,10 +2,11 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/Error.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/backend/PipeWireBackend.h>
 #include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/audio/backend/detail/PipeWireShared.h>
@@ -109,7 +110,7 @@ namespace ao::audio::backend
 
     // Members
     PipeWireEnvironmentGuard envGuard;
-    IRenderTarget* renderTarget = nullptr;
+    RenderTarget* renderTarget = nullptr;
     Format format;
     std::atomic<bool> drainPending = false;
     bool strictFormatRequired = false;
@@ -187,7 +188,7 @@ namespace ao::audio::backend
       return;
     }
 
-    // Honor the IRenderTarget frame-alignment contract: only ever request and
+    // Honor the RenderTarget frame-alignment contract: only ever request and
     // commit whole frames, even when the PipeWire buffer's maxsize is not a
     // whole multiple of the frame stride.
     auto const strideBytes = static_cast<std::size_t>(stride);
@@ -346,7 +347,7 @@ namespace ao::audio::backend
 
   PipeWireBackend::~PipeWireBackend() = default;
 
-  Result<> PipeWireBackend::open(Format const& format, IRenderTarget* target)
+  Result<> PipeWireBackend::open(Format const& format, RenderTarget* target)
   {
     bool const useExclusive = _exclusiveMode && !_targetDeviceId.empty();
 

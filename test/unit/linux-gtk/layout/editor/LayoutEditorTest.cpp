@@ -41,7 +41,7 @@ namespace ao::gtk::layout::editor::test
     auto actionRegistry = ActionRegistry{};
 
     auto window = Gtk::Window{};
-    auto const doc = createDefaultLayout();
+    auto const doc = makeDefaultLayout();
     auto const stubLoader = [](std::string_view) { return uimodel::LayoutDocument{}; };
 
     SECTION("Dialog initializes selectors and tree")

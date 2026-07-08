@@ -4,8 +4,9 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/PcmBlock.h>
 #include <ao/audio/detail/DecoderSessionBase.h>
 
 #include <chrono>

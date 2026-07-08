@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/AudioIdentity.h>
@@ -52,8 +52,8 @@ namespace ao::rt::test
 
     ManifestIdentityState manifestIdentity(library::MusicLibrary& ml, std::string_view uri)
     {
-      auto txn = ml.readTransaction();
-      auto manifestResult = ml.manifest().reader(txn).get(uri);
+      auto transaction = ml.readTransaction();
+      auto manifestResult = ml.manifest().reader(transaction).get(uri);
       REQUIRE(manifestResult);
       return ManifestIdentityState{
         .audioPayloadLength = manifestResult->audioPayloadLength(), .audioSignature = manifestResult->audioSignature()};
@@ -79,15 +79,15 @@ namespace ao::rt::test
 
     void writeManifestIdentity(library::MusicLibrary& ml, std::string_view uri)
     {
-      auto txn = ml.writeTransaction();
-      auto writer = ml.manifest().writer(txn);
+      auto transaction = ml.writeTransaction();
+      auto writer = ml.manifest().writer(transaction);
       auto currentResult = writer.get(uri);
       REQUIRE(currentResult);
 
       auto builder = library::FileManifestBuilder::fromView(*currentResult);
       builder.audioPayloadLength(1).audioSignature(utility::xxh3Hash128("test-identity"));
       REQUIRE(writer.put(uri, builder.serialize()));
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
     }
 
     void appendAndAdvanceMtime(std::filesystem::path const& path)

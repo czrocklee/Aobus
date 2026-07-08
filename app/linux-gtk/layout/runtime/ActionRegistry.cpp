@@ -4,7 +4,10 @@
 #include "layout/runtime/ActionRegistry.h"
 
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionActivation.h>
+#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
+#include <ao/uimodel/layout/action/LayoutActionBinding.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
 #include <algorithm>
 #include <optional>

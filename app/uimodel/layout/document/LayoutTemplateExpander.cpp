@@ -21,7 +21,7 @@ namespace ao::uimodel
     {
       if (node.type == "template")
       {
-        auto const templateId = node.getProp<std::string>("templateId", "");
+        auto const templateId = node.propertyOr<std::string>("templateId", "");
 
         if (templateId.empty())
         {

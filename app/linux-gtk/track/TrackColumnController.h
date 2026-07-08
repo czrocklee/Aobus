@@ -44,7 +44,7 @@ namespace ao::gtk
     TrackColumnController& operator=(TrackColumnController&&) = delete;
 
     // Column setup — calls factoryProvider for each presentable field
-    void setupColumns(FactoryProvider const& factoryProvider);
+    void configureColumns(FactoryProvider const& factoryProvider);
 
     // Layout management
     void applyColumnLayout(std::span<rt::TrackField const> visibleFields);
@@ -62,8 +62,8 @@ namespace ao::gtk
 
     // Exposed for TrackViewPage to connect / manage
     Glib::RefPtr<Gtk::CssProvider> const& cssProvider() const noexcept { return _dynamicCssProviderPtr; }
-    bool isTitlePositionUpdateQueuedForTest() const noexcept;
-    std::string const& titlePositionCssForTest() const noexcept { return _lastTitleCss; }
+    bool isTitlePositionUpdateQueued() const noexcept;
+    std::string const& titlePositionCss() const noexcept { return _lastTitleCss; }
 
   private:
     struct ColumnBinding final

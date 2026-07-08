@@ -55,7 +55,7 @@ namespace ao::tui
                     rt::PlaybackService& playback,
                     EventControllerBindings bindings = {});
 
-    bool qualityHoverVisible() const noexcept { return _qualityHoverVisible; }
+    bool isQualityHoverVisible() const noexcept { return _qualityHoverVisible; }
     HoveredButton hoveredButton() const noexcept { return _hoveredButton; }
     bool handleEvent(ftxui::Event const& event);
 

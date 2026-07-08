@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "DecoderTestUtils.h"
+#include "DecoderTestSupport.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/audio/AlacDecoderSession.h>
-#include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -114,9 +113,9 @@ namespace ao::audio::test
       auto const* source = reinterpret_cast<std::int16_t const*>(sourceBlock->bytes.data());
       auto const* target = reinterpret_cast<std::int32_t const*>(targetBlock->bytes.data());
 
-      for (std::size_t idx = 0; idx < samplesToCheck; ++idx)
+      for (std::size_t index = 0; index < samplesToCheck; ++index)
       {
-        CHECK(target[idx] == static_cast<std::int32_t>(source[idx]) << 16U);
+        CHECK(target[index] == static_cast<std::int32_t>(source[index]) << 16U);
       }
     }
   }

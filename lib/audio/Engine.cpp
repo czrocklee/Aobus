@@ -7,13 +7,14 @@
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IRenderTarget.h>
-#include <ao/audio/ISource.h>
+#include <ao/audio/PcmSource.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/detail/RouteTracker.h>
 
@@ -221,10 +222,10 @@ namespace ao::audio
 
     // Must be declared last so the PipeWire thread loop is stopped
     // before the callbacks and state it accesses are destroyed.
-    std::unique_ptr<IBackend> backendPtr;
+    std::unique_ptr<Backend> backendPtr;
 
     // ── Construction & Destruction ────────────────────────────────
-    Impl(std::unique_ptr<IBackend> backendPtr, Device device, DecoderFactoryFn decoderFactory)
+    Impl(std::unique_ptr<Backend> backendPtr, Device device, DecoderFactoryFn decoderFactory)
       : currentDevice{std::move(device)}, decoderFactory{std::move(decoderFactory)}, backendPtr{std::move(backendPtr)}
     {
       syncBackendIdentity();
@@ -259,7 +260,7 @@ namespace ao::audio
 
     // ── Timeline publication ─────────────────────────────────────
     void publishCurrentNode(std::unique_ptr<TrackNode> nodePtr) { timeline.publishCurrent(std::move(nodePtr)); }
-    std::shared_ptr<ISource> currentSource() const { return timeline.current(); }
+    std::shared_ptr<PcmSource> currentSource() const { return timeline.current(); }
 
     // ── Transition state ──────────────────────────────────────────
     static bool isGaplessCapable(DecodedStreamInfo const& info) noexcept
@@ -598,10 +599,10 @@ namespace ao::audio
       return {};
     }
 
-    struct RenderSession final : public IRenderTarget
+    struct RenderSession final : public RenderTarget
     {
-      RenderSession(Impl& ownerArg, IBackend& backendArg, std::uint64_t generationArg) noexcept
-        : owner{ownerArg}, backend{backendArg}, generation{generationArg}
+      RenderSession(Impl& ownerRef, Backend& backendRef, std::uint64_t generationValue) noexcept
+        : owner{ownerRef}, backend{backendRef}, generation{generationValue}
       {
       }
 
@@ -622,7 +623,7 @@ namespace ao::audio
       void onBackendError(std::string_view message) noexcept override { owner.onBackendError(generation, message); }
 
       Impl& owner;
-      IBackend& backend;
+      Backend& backend;
       std::uint64_t generation = 0;
     };
 
@@ -664,7 +665,7 @@ namespace ao::audio
 
     void resetRenderSession() noexcept { renderSessionPtr.reset(); }
 
-    IRenderTarget* createRenderSession(IBackend& backend)
+    RenderTarget* createRenderSession(Backend& backend)
     {
       auto const generation = nextRenderGeneration++;
       renderSessionPtr = std::make_unique<RenderSession>(*this, backend, generation);
@@ -672,7 +673,7 @@ namespace ao::audio
       return renderSessionPtr.get();
     }
 
-    // ── IRenderTarget session entrypoints ─────────────────────────
+    // ── RenderTarget session entrypoints ─────────────────────────
     RenderPcmResult renderPcm(std::uint64_t generation, std::span<std::byte> output) noexcept
     {
       return detail::renderPcm(
@@ -719,7 +720,7 @@ namespace ao::audio
         RtSignal{.kind = RtSignalKind::Drained, .generation = generation, .drainEpoch = signalDrainEpoch});
     }
 
-    void onRouteReady(std::uint64_t generation, IBackend& backend, std::string_view routeAnchor) noexcept
+    void onRouteReady(std::uint64_t generation, Backend& backend, std::string_view routeAnchor) noexcept
     {
       if (!isActiveRenderSession(generation))
       {
@@ -738,7 +739,7 @@ namespace ao::audio
       }
     }
 
-    void onPropertyChanged(std::uint64_t generation, IBackend& backend, PropertyId id) noexcept
+    void onPropertyChanged(std::uint64_t generation, Backend& backend, PropertyId id) noexcept
     {
       if (isActiveRenderSession(generation))
       {
@@ -1258,7 +1259,7 @@ namespace ao::audio
         static_cast<std::uint32_t>(frameBytes(session.info.outputFormat)), std::memory_order_relaxed);
     }
 
-    void setBackendUnlocked(std::unique_ptr<IBackend> nextBackendPtr, Device const& device);
+    void setBackendUnlocked(std::unique_ptr<Backend> nextBackendPtr, Device const& device);
     void updateDeviceUnlocked(Device const& device);
     Result<> applyInitialOffset(TrackNode& node, std::chrono::milliseconds initialOffset);
     void playUnlocked(PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
@@ -1283,7 +1284,7 @@ namespace ao::audio
 
   Engine::Impl::ControlLock::~ControlLock() = default;
 
-  void Engine::Impl::setBackendUnlocked(std::unique_ptr<IBackend> nextBackendPtr, Device const& device)
+  void Engine::Impl::setBackendUnlocked(std::unique_ptr<Backend> nextBackendPtr, Device const& device)
   {
     struct State
     {
@@ -1780,7 +1781,7 @@ namespace ao::audio
 
   // ── Engine ──────────────────────────────────────────────────────
 
-  Engine::Engine(std::unique_ptr<IBackend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory)
+  Engine::Engine(std::unique_ptr<Backend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory)
     : _implPtr{std::make_unique<Impl>(std::move(backendPtr), device, std::move(decoderFactory))}
   {
     _implPtr->syncBackendStatus();
@@ -1788,7 +1789,7 @@ namespace ao::audio
 
   Engine::~Engine() = default;
 
-  void Engine::setBackend(std::unique_ptr<IBackend> backendPtr, Device const& device)
+  void Engine::setBackend(std::unique_ptr<Backend> backendPtr, Device const& device)
   {
     auto const controlLock = _implPtr->lockControl();
     _implPtr->setBackendUnlocked(std::move(backendPtr), device);

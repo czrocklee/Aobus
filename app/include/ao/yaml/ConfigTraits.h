@@ -5,7 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/rt/Log.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <boost/pfr/core.hpp>
 #include <boost/pfr/core_name.hpp>
@@ -62,9 +62,9 @@ namespace ao::yaml
   inline bool read(ryml::ConstNodeRef node, std::filesystem::path& rhs);
 
   template<typename T>
-  void write(ryml::NodeRef node, std::optional<T> const& rhs);
+  void write(ryml::NodeRef node, std::optional<T> const& optValue);
   template<typename T>
-  bool read(ryml::ConstNodeRef node, std::optional<T>& rhs);
+  bool read(ryml::ConstNodeRef node, std::optional<T>& optValue);
 
   template<EnumType T>
   void write(ryml::NodeRef node, T const& rhs);
@@ -176,11 +176,11 @@ namespace ao::yaml
   }
 
   template<typename T>
-  inline void write(ryml::NodeRef node, std::optional<T> const& rhs)
+  inline void write(ryml::NodeRef node, std::optional<T> const& optValue)
   {
-    if (rhs)
+    if (optValue)
     {
-      write(node, *rhs);
+      write(node, *optValue);
     }
     else
     {
@@ -189,21 +189,21 @@ namespace ao::yaml
   }
 
   template<typename T>
-  inline bool read(ryml::ConstNodeRef node, std::optional<T>& rhs)
+  inline bool read(ryml::ConstNodeRef node, std::optional<T>& optValue)
   {
     if (!node.readable() || (node.has_val() && node.val_is_null()))
     {
-      rhs = std::nullopt;
+      optValue = std::nullopt;
       return true;
     }
 
     if (auto val = T{}; read(node, val))
     {
-      rhs = std::move(val);
+      optValue = std::move(val);
       return true;
     }
 
-    rhs = std::nullopt;
+    optValue = std::nullopt;
     return false;
   }
 

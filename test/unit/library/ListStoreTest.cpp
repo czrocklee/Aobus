@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>

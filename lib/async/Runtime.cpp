@@ -62,12 +62,12 @@ namespace ao::async
     }
   } // namespace
 
-  Runtime::Runtime(IExecutor& callbackExecutor)
+  Runtime::Runtime(Executor& callbackExecutor)
     : Runtime{callbackExecutor, std::max(1U, std::thread::hardware_concurrency())}
   {
   }
 
-  Runtime::Runtime(IExecutor& callbackExecutor, std::size_t workerCount)
+  Runtime::Runtime(Executor& callbackExecutor, std::size_t workerCount)
     : _callbackExecutor{callbackExecutor}, _workerPool{workerCount}
   {
   }
@@ -78,7 +78,7 @@ namespace ao::async
     join();
   }
 
-  IExecutor& Runtime::callbackExecutor() noexcept
+  Executor& Runtime::callbackExecutor() noexcept
   {
     return _callbackExecutor;
   }

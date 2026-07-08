@@ -4,9 +4,9 @@
 #include "../GtkTestSupport.h"
 #include "playback/SeekControl.h"
 #include "playback/TimeLabel.h"
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
@@ -89,37 +89,37 @@ namespace ao::gtk::test
     SECTION("TimeLabel tick follows mapped playing state")
     {
       auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Default};
-      CHECK_FALSE(timeLabel.isTickActiveForTest());
+      CHECK_FALSE(timeLabel.isTickActive());
 
       startPlayback(playback, env.runtime.musicLibrary());
-      CHECK_FALSE(timeLabel.isTickActiveForTest());
+      CHECK_FALSE(timeLabel.isTickActive());
 
       auto windowFixture = GtkWindowFixture{};
       windowFixture.mount(timeLabel.widget());
       windowFixture.present();
-      CHECK(timeLabel.isTickActiveForTest());
+      CHECK(timeLabel.isTickActive());
 
       playback.pause();
       drainGtkEvents();
-      CHECK_FALSE(timeLabel.isTickActiveForTest());
+      CHECK_FALSE(timeLabel.isTickActive());
     }
 
     SECTION("SeekControl tick follows mapped playing state")
     {
       auto seekControl = SeekControl{playback};
-      CHECK_FALSE(seekControl.isTickActiveForTest());
+      CHECK_FALSE(seekControl.isTickActive());
 
       startPlayback(playback, env.runtime.musicLibrary());
-      CHECK_FALSE(seekControl.isTickActiveForTest());
+      CHECK_FALSE(seekControl.isTickActive());
 
       auto windowFixture = GtkWindowFixture{};
       windowFixture.mount(seekControl.widget());
       windowFixture.present();
-      CHECK(seekControl.isTickActiveForTest());
+      CHECK(seekControl.isTickActive());
 
       playback.pause();
       drainGtkEvents();
-      CHECK_FALSE(seekControl.isTickActiveForTest());
+      CHECK_FALSE(seekControl.isTickActive());
     }
   }
 } // namespace ao::gtk::test

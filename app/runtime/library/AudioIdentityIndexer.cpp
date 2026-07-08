@@ -86,8 +86,8 @@ namespace ao::rt
                                                        std::optional<std::string> const& optAfterUri)
     {
       auto rows = std::vector<PendingIdentityRow>{};
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.manifest().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.manifest().reader(transaction);
 
       for (auto const& [uriView, view] : reader)
       {
@@ -124,8 +124,8 @@ namespace ao::rt
     std::int32_t countPendingRows(library::MusicLibrary& ml)
     {
       std::int32_t count = 0;
-      auto const txn = ml.readTransaction();
-      auto const reader = ml.manifest().reader(txn);
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.manifest().reader(transaction);
 
       for (auto const& [uriView, view] : reader)
       {
@@ -139,7 +139,7 @@ namespace ao::rt
       return count;
     }
 
-    bool pendingRowStillMatches(library::FileManifestView const& view, PendingIdentityRow const& row)
+    bool matchesPendingIdentityRow(library::FileManifestView const& view, PendingIdentityRow const& row)
     {
       return view.status() == library::FileStatus::Available &&
              !library::hasAudioIdentity(view.audioPayloadLength(), view.audioSignature()) &&
@@ -332,8 +332,8 @@ namespace ao::rt
         return {};
       }
 
-      auto txn = ml.writeTransaction();
-      auto writer = ml.manifest().writer(txn);
+      auto transaction = ml.writeTransaction();
+      auto writer = ml.manifest().writer(transaction);
       std::int32_t batchCompletedCount = 0;
       std::int32_t batchSkippedCount = 0;
 
@@ -358,7 +358,7 @@ namespace ao::rt
           return std::unexpected{currentResult.error()};
         }
 
-        if (!pendingRowStillMatches(*currentResult, row))
+        if (!matchesPendingIdentityRow(*currentResult, row))
         {
           ++batchSkippedCount;
           continue;
@@ -375,7 +375,7 @@ namespace ao::rt
         ++batchCompletedCount;
       }
 
-      if (auto commitResult = txn.commit(); !commitResult)
+      if (auto commitResult = transaction.commit(); !commitResult)
       {
         return std::unexpected{commitResult.error()};
       }

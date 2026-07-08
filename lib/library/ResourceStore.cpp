@@ -19,9 +19,9 @@ namespace ao::library
 {
   using Writer = ResourceStore::Writer;
 
-  Writer ResourceStore::writer(lmdb::WriteTransaction& txn)
+  Writer ResourceStore::writer(lmdb::WriteTransaction& transaction)
   {
-    return Writer{_database.writer(txn)};
+    return Writer{_database.writer(transaction)};
   }
 
   Result<ResourceId> Writer::create(std::span<std::byte const> data)

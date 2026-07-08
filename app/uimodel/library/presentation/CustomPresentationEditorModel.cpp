@@ -39,9 +39,9 @@ namespace ao::uimodel
   } // namespace
 
   CustomPresentationEditorModel::CustomPresentationEditorModel()
-    : _groupOptions{createGroupOptions()}
-    , _sortFieldOptions{createSortFieldOptions()}
-    , _visibleFieldOptions{createVisibleFieldOptions()}
+    : _groupOptions{makeGroupOptions()}
+    , _sortFieldOptions{makeSortFieldOptions()}
+    , _visibleFieldOptions{makeVisibleFieldOptions()}
   {
   }
 
@@ -237,7 +237,7 @@ namespace ao::uimodel
     return state;
   }
 
-  std::vector<TrackGroupKeyOption> CustomPresentationEditorModel::createGroupOptions()
+  std::vector<TrackGroupKeyOption> CustomPresentationEditorModel::makeGroupOptions()
   {
     auto const keys = std::vector{
       rt::TrackGroupKey::None,
@@ -263,14 +263,14 @@ namespace ao::uimodel
     return options;
   }
 
-  std::vector<TrackSortFieldOption> CustomPresentationEditorModel::createSortFieldOptions()
+  std::vector<TrackSortFieldOption> CustomPresentationEditorModel::makeSortFieldOptions()
   {
     auto options = std::vector<TrackSortFieldOption>{};
     auto const defs = rt::trackFieldDefinitions();
 
-    for (std::size_t idx = 0; idx < rt::kTrackSortFieldCount; ++idx)
+    for (std::size_t index = 0; index < rt::kTrackSortFieldCount; ++index)
     {
-      auto const sortField = static_cast<rt::TrackSortField>(idx);
+      auto const sortField = static_cast<rt::TrackSortField>(index);
 
       for (auto const& def : defs)
       {
@@ -285,7 +285,7 @@ namespace ao::uimodel
     return options;
   }
 
-  std::vector<TrackVisibleFieldOption> CustomPresentationEditorModel::createVisibleFieldOptions()
+  std::vector<TrackVisibleFieldOption> CustomPresentationEditorModel::makeVisibleFieldOptions()
   {
     auto options = std::vector<TrackVisibleFieldOption>{};
 

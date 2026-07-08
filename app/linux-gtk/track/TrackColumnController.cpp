@@ -77,7 +77,7 @@ namespace ao::gtk
 
   TrackColumnController::~TrackColumnController() = default;
 
-  void TrackColumnController::setupColumns(FactoryProvider const& factoryProvider)
+  void TrackColumnController::configureColumns(FactoryProvider const& factoryProvider)
   {
     auto const wasSyncingColumnLayout = _syncingColumnLayout;
     _syncingColumnLayout = true;
@@ -133,7 +133,7 @@ namespace ao::gtk
     if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
     {
       // Reorder columns to match visibleFields order
-      for (auto const& [idx, field] : std::views::enumerate(visibleFields))
+      for (auto const& [index, field] : std::views::enumerate(visibleFields))
       {
         auto* const binding = findColumnBinding(field);
 
@@ -142,7 +142,7 @@ namespace ao::gtk
           continue;
         }
 
-        ensureColumnPosition(columnsPtr, static_cast<std::size_t>(idx), binding->columnPtr);
+        ensureColumnPosition(columnsPtr, static_cast<std::size_t>(index), binding->columnPtr);
       }
     }
 
@@ -356,9 +356,9 @@ namespace ao::gtk
 
     fields.reserve(columnsPtr->get_n_items());
 
-    for (std::uint32_t idx = 0; idx < columnsPtr->get_n_items(); ++idx)
+    for (std::uint32_t index = 0; index < columnsPtr->get_n_items(); ++index)
     {
-      auto const gtkColumnPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(idx));
+      auto const gtkColumnPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(index));
 
       if (!gtkColumnPtr || !gtkColumnPtr->get_visible())
       {
@@ -386,9 +386,9 @@ namespace ao::gtk
 
     widths.reserve(columnsPtr->get_n_items());
 
-    for (std::uint32_t idx = 0; idx < columnsPtr->get_n_items(); ++idx)
+    for (std::uint32_t index = 0; index < columnsPtr->get_n_items(); ++index)
     {
-      auto const gtkColumnPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(idx));
+      auto const gtkColumnPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(index));
 
       if (gtkColumnPtr && gtkColumnPtr->get_visible())
       {
@@ -437,9 +437,9 @@ namespace ao::gtk
     bool found = false;
     auto const titleFieldId = rt::trackFieldId(rt::TrackField::Title);
 
-    for (std::uint32_t idx = 0; idx < columnsPtr->get_n_items(); ++idx)
+    for (std::uint32_t index = 0; index < columnsPtr->get_n_items(); ++index)
     {
-      auto const colPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(idx));
+      auto const colPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(index));
 
       if (!colPtr || !colPtr->get_visible())
       {
@@ -477,7 +477,7 @@ namespace ao::gtk
     }
   }
 
-  bool TrackColumnController::isTitlePositionUpdateQueuedForTest() const noexcept
+  bool TrackColumnController::isTitlePositionUpdateQueued() const noexcept
   {
     return _queuedTitlePositionUpdateConnection.connected();
   }

@@ -4,7 +4,7 @@
 #include "../../GtkTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/rt/TrackField.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -163,9 +163,9 @@ namespace ao::gtk::layout::test
 
     SECTION("Default states: Metadata expanded, Technical collapsed")
     {
-      auto* metaHeader = probe.header(TrackFieldGridSection::Metadata);
+      auto* metadataHeader = probe.header(TrackFieldGridSection::Metadata);
       auto* techHeader = probe.header(TrackFieldGridSection::Technical);
-      REQUIRE(metaHeader != nullptr);
+      REQUIRE(metadataHeader != nullptr);
       REQUIRE(techHeader != nullptr);
 
       auto const titleRow = probe.fieldRow(rt::TrackField::Title);
@@ -219,13 +219,13 @@ namespace ao::gtk::layout::test
 
       CHECK(sampleRateRow.label->get_visible());
 
-      auto* metaHeader = probe.header(TrackFieldGridSection::Metadata);
-      REQUIRE(metaHeader != nullptr);
+      auto* metadataHeader = probe.header(TrackFieldGridSection::Metadata);
+      REQUIRE(metadataHeader != nullptr);
       auto const titleRow = probe.fieldRow(rt::TrackField::Title);
       REQUIRE(titleRow.label != nullptr);
       CHECK(titleRow.label->get_visible());
 
-      emitClicked(*metaHeader);
+      emitClicked(*metadataHeader);
 
       CHECK_FALSE(titleRow.label->get_visible());
     }
@@ -248,22 +248,22 @@ namespace ao::gtk::layout::test
 
     SECTION("Section separators keep the panel width when top-level sections are collapsed")
     {
-      auto* const metaHeader = probe.header(TrackFieldGridSection::Metadata);
+      auto* const metadataHeader = probe.header(TrackFieldGridSection::Metadata);
       auto* const techHeader = probe.header(TrackFieldGridSection::Technical);
-      REQUIRE(metaHeader != nullptr);
+      REQUIRE(metadataHeader != nullptr);
       REQUIRE(techHeader != nullptr);
 
       allocate(320, 1000);
-      auto const expandedMetaWidth = metaHeader->get_width();
+      auto const expandedMetadataWidth = metadataHeader->get_width();
       auto const expandedTechWidth = techHeader->get_width();
-      REQUIRE(expandedMetaWidth > 0);
+      REQUIRE(expandedMetadataWidth > 0);
       REQUIRE(expandedTechWidth > 0);
 
-      emitClicked(*metaHeader);
+      emitClicked(*metadataHeader);
       ao::gtk::test::drainGtkEvents();
       allocate(320, 1000);
 
-      CHECK(metaHeader->get_width() == expandedMetaWidth);
+      CHECK(metadataHeader->get_width() == expandedMetadataWidth);
       CHECK(techHeader->get_width() == expandedTechWidth);
     }
 
@@ -305,10 +305,10 @@ namespace ao::gtk::layout::test
       REQUIRE(customRow.label != nullptr);
       CHECK(customRow.label->get_visible());
 
-      auto* const metaHeader = probe.header(TrackFieldGridSection::Metadata);
-      REQUIRE(metaHeader != nullptr);
+      auto* const metadataHeader = probe.header(TrackFieldGridSection::Metadata);
+      REQUIRE(metadataHeader != nullptr);
 
-      emitClicked(*metaHeader);
+      emitClicked(*metadataHeader);
       ao::gtk::test::drainGtkEvents();
       allocate(316, 320);
       CHECK(measureMinimumHeight(*wrapper, -1) == 0);

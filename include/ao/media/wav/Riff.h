@@ -47,5 +47,5 @@ namespace ao::media::wav
 
   Result<ParsedWave> parseWave(std::span<std::byte const> bytes);
 
-  bool chunkIdEquals(ChunkView const& chunk, std::string_view id) noexcept;
+  bool hasChunkId(ChunkView const& chunk, std::string_view id) noexcept;
 } // namespace ao::media::wav

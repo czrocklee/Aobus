@@ -32,7 +32,7 @@ class TidyClassifyTest(unittest.TestCase):
         self.assertEqual(tidy.classify(helper, explicit=True), "IGNORE")
 
 
-class TidyChecksForTest(unittest.TestCase):
+class TidyChecksTest(unittest.TestCase):
     def test_no_selection_uses_full_mode_checks(self):
         self.assertEqual(tidy.checks_for("STRICT", None), tidy.STRICT_CHECKS)
         self.assertEqual(tidy.checks_for("RELAXED", None), tidy.RELAXED_CHECKS)

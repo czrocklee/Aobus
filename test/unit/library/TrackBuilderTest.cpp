@@ -11,9 +11,9 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("TrackBuilder - createNew returns an empty builder", "[library][unit][track][builder]")
+  TEST_CASE("TrackBuilder - makeEmpty returns an empty builder", "[library][unit][track][builder]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
 
     CHECK(builder.metadata().title().empty());
     CHECK(builder.metadata().artist().empty());
@@ -34,7 +34,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - metadata builder fluent setters update fields", "[library][unit][track][builder]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata()
       .title("Test Title")
       .artist("Test Artist")
@@ -77,7 +77,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - property builder fluent setters update fields", "[library][unit][track][builder]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.property()
       .uri("file:///home/user/music/test.flac")
       .duration(std::chrono::minutes{3} + std::chrono::milliseconds{500})
@@ -98,7 +98,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - custom metadata builder adds removes and clears pairs", "[library][unit][track][builder]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
 
     builder.customMetadata().add("replaygain_track_gain_db", "-6.5");
     builder.customMetadata().add("isrc", "USSM19999999");
@@ -116,7 +116,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - chained API updates builder state", "[library][unit][track][builder]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
 
     builder.metadata().title("Song").artist("Artist").album("Album");
     builder.property().bitDepth(BitDepth{16});

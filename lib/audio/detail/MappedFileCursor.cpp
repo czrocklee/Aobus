@@ -101,7 +101,7 @@ namespace ao::audio::detail
     return _mappedFile.isMapped();
   }
 
-  bool MappedFileCursor::atEnd() const noexcept
+  bool MappedFileCursor::isAtEnd() const noexcept
   {
     return !isOpen() || _position >= size();
   }

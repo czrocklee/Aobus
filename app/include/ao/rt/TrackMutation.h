@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "CorePrimitives.h"
+#include "ViewIds.h"
 #include <ao/CoreIds.h>
 
 #include <cstdint>

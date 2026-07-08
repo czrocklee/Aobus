@@ -6,7 +6,6 @@
 #include "app/ThemeCoordinator.h"
 #include "track/TrackCustomViewDialog.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>

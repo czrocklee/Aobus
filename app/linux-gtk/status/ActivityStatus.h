@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -83,16 +83,15 @@ namespace ao::gtk
     ActivityStatus& operator=(ActivityStatus&&) = delete;
 
     Gtk::Widget& widget() { return _box; }
-
-    Gtk::Label& labelForTest() { return _label; }
-    Gtk::ProgressBar& progressForTest() { return _progressBar; }
-    Gtk::Button& dismissButtonForTest() { return _dismissButton; }
-    Gtk::MenuButton& detailButtonForTest() { return _detailButton; }
-    Gtk::Popover& detailPopoverForTest() { return _detailPopover; }
-    Gtk::Box& detailContentForTest() { return _detailBox; }
+    Gtk::Label& label() { return _label; }
+    Gtk::ProgressBar& progress() { return _progressBar; }
+    Gtk::Button& dismissButton() { return _dismissButton; }
+    Gtk::MenuButton& detailButton() { return _detailButton; }
+    Gtk::Popover& detailPopover() { return _detailPopover; }
+    Gtk::Box& detailContent() { return _detailBox; }
 
   private:
-    void setupUi();
+    void buildUi();
     void render();
     void renderDetail();
     void appendTaskDetail(uimodel::ActivityTaskDetail const& task);

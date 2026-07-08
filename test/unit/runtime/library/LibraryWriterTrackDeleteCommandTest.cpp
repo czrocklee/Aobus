@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -36,19 +36,19 @@ namespace ao::rt::test
 
     auto listIds = std::vector<ListId>{};
     {
-      auto txn = testLib.library().writeTransaction();
-      auto manifest = library::FileManifestBuilder::createNew().trackId(trackId).fileSize(10).mtime(20).serialize();
-      CHECK(testLib.library().manifest().writer(txn).put("/tmp/test.flac", manifest));
+      auto transaction = testLib.library().writeTransaction();
+      auto manifest = library::FileManifestBuilder::makeEmpty().trackId(trackId).fileSize(10).mtime(20).serialize();
+      CHECK(testLib.library().manifest().writer(transaction).put("/tmp/test.flac", manifest));
 
       for (auto const* const name : std::array{"Manual A", "Manual B"})
       {
-        auto listBuilder = library::ListBuilder::createNew();
+        auto listBuilder = library::ListBuilder::makeEmpty();
         listBuilder.name(name).tracks().add(trackId);
         listIds.push_back(
-          ao::test::requireValue(testLib.library().lists().writer(txn).create(listBuilder.serialize())).first);
+          ao::test::requireValue(testLib.library().lists().writer(transaction).create(listBuilder.serialize())).first);
       }
 
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
     }
 
     auto const deleted = writer.deleteTrack(trackId);
@@ -59,13 +59,13 @@ namespace ao::rt::test
     REQUIRE(deletedTracks.size() == 1);
     CHECK(deletedTracks[0] == trackId);
 
-    auto txn = testLib.library().readTransaction();
+    auto transaction = testLib.library().readTransaction();
     auto const optTrackView =
-      testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+      testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     CHECK_FALSE(optTrackView);
-    CHECK_FALSE(testLib.library().manifest().reader(txn).get("/tmp/test.flac"));
+    CHECK_FALSE(testLib.library().manifest().reader(transaction).get("/tmp/test.flac"));
 
-    auto listReader = testLib.library().lists().reader(txn);
+    auto listReader = testLib.library().lists().reader(transaction);
 
     for (auto const listId : listIds)
     {

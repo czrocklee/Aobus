@@ -3,7 +3,7 @@
 
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -29,7 +29,7 @@ namespace ao::gtk::layout
     /**
      * @brief A stack of tabs (Gtk::Stack).
      */
-    class TabsComponent final : public ILayoutComponent
+    class TabsComponent final : public LayoutComponent
     {
     public:
       TabsComponent(LayoutContext& ctx, LayoutNode const& node)
@@ -53,7 +53,7 @@ namespace ao::gtk::layout
           auto childPtr = ctx.registry.create(ctx, childNode);
 
           auto const title =
-            childNode.getLayout<std::string>("title", !childNode.id.empty() ? childNode.id : "[Untitled]");
+            childNode.layoutOr<std::string>("title", !childNode.id.empty() ? childNode.id : "[Untitled]");
           auto const name = !childNode.id.empty() ? childNode.id : childNode.type;
 
           auto const pagePtr = _stack.add(childPtr->widget(), name, title);
@@ -77,10 +77,10 @@ namespace ao::gtk::layout
       Gtk::StackSwitcher _switcher;
       Gtk::Stack _stack;
       std::unique_ptr<Gtk::Label> _errorPtr;
-      std::vector<std::unique_ptr<ILayoutComponent>> _children;
+      std::vector<std::unique_ptr<LayoutComponent>> _children;
     };
 
-    std::unique_ptr<ILayoutComponent> createTabs(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTabs(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TabsComponent>(ctx, node);
     }

@@ -10,7 +10,7 @@
 #include <ao/uimodel/layout/document/LayoutYaml.h>
 #include <ao/utility/Xxh3.h>
 #include <ao/yaml/ConfigTraits.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <array>
 #include <charconv>
@@ -70,25 +70,25 @@ namespace ao::uimodel
       return it == node.props.end() ? nullptr : &it->second;
     }
 
-    std::string propString(LayoutNode const& node, std::string_view key, std::string const& defaultValue)
+    std::string stringPropertyOr(LayoutNode const& node, std::string_view key, std::string const& defaultValue)
     {
       auto const* const value = findProp(node, key);
       return value == nullptr ? defaultValue : value->asString(defaultValue);
     }
 
-    std::int64_t propInt(LayoutNode const& node, std::string_view key, std::int64_t defaultValue)
+    std::int64_t integerPropertyOr(LayoutNode const& node, std::string_view key, std::int64_t defaultValue)
     {
       auto const* const value = findProp(node, key);
       return value == nullptr ? defaultValue : value->asInt(defaultValue);
     }
 
-    double propDouble(LayoutNode const& node, std::string_view key, double defaultValue)
+    double doublePropertyOr(LayoutNode const& node, std::string_view key, double defaultValue)
     {
       auto const* const value = findProp(node, key);
       return value == nullptr ? defaultValue : value->asDouble(defaultValue);
     }
 
-    bool propBool(LayoutNode const& node, std::string_view key, bool defaultValue)
+    bool booleanPropertyOr(LayoutNode const& node, std::string_view key, bool defaultValue)
     {
       auto const* const value = findProp(node, key);
       return value == nullptr ? defaultValue : value->asBool(defaultValue);
@@ -101,23 +101,23 @@ namespace ao::uimodel
 
       if (node.type == kSplitComponentType)
       {
-        appendField(canonical, "orientation", propString(node, "orientation", "vertical"));
-        appendDoubleField(canonical, "initialPositionPercent", propDouble(node, "initialPositionPercent", 0.0));
-        appendIntField(canonical, "position", propInt(node, "position", -1));
-        appendBoolField(canonical, "resizeStart", propBool(node, "resizeStart", true));
-        appendBoolField(canonical, "resizeEnd", propBool(node, "resizeEnd", true));
-        appendBoolField(canonical, "shrinkStart", propBool(node, "shrinkStart", false));
-        appendBoolField(canonical, "shrinkEnd", propBool(node, "shrinkEnd", false));
+        appendField(canonical, "orientation", stringPropertyOr(node, "orientation", "vertical"));
+        appendDoubleField(canonical, "initialPositionPercent", doublePropertyOr(node, "initialPositionPercent", 0.0));
+        appendIntField(canonical, "position", integerPropertyOr(node, "position", -1));
+        appendBoolField(canonical, "resizeStart", booleanPropertyOr(node, "resizeStart", true));
+        appendBoolField(canonical, "resizeEnd", booleanPropertyOr(node, "resizeEnd", true));
+        appendBoolField(canonical, "shrinkStart", booleanPropertyOr(node, "shrinkStart", false));
+        appendBoolField(canonical, "shrinkEnd", booleanPropertyOr(node, "shrinkEnd", false));
         return canonical;
       }
 
       if (node.type == kCollapsibleSplitComponentType)
       {
-        appendField(canonical, "orientation", propString(node, "orientation", "horizontal"));
-        appendField(canonical, "collapseSide", propString(node, "collapseSide", "end"));
-        appendDoubleField(canonical, "initialPositionPercent", propDouble(node, "initialPositionPercent", 0.0));
-        appendIntField(canonical, "position", propInt(node, "position", -1));
-        appendBoolField(canonical, "revealed", propBool(node, "revealed", true));
+        appendField(canonical, "orientation", stringPropertyOr(node, "orientation", "horizontal"));
+        appendField(canonical, "collapseSide", stringPropertyOr(node, "collapseSide", "end"));
+        appendDoubleField(canonical, "initialPositionPercent", doublePropertyOr(node, "initialPositionPercent", 0.0));
+        appendIntField(canonical, "position", integerPropertyOr(node, "position", -1));
+        appendBoolField(canonical, "revealed", booleanPropertyOr(node, "revealed", true));
       }
 
       return canonical;

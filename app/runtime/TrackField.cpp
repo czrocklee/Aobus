@@ -420,12 +420,12 @@ namespace ao::rt
     return {};
   }
 
-  bool trackFieldSupportsFilterExpression(TrackField const field)
+  bool supportsTrackFieldFilterExpression(TrackField const field)
   {
     return !trackFieldFilterExpressionVariable(field).empty();
   }
 
-  bool trackFieldSupportsValueCompletion(TrackField const field)
+  bool supportsTrackFieldValueCompletion(TrackField const field)
   {
     if (auto const* const def = trackFieldDefinition(field); def != nullptr)
     {

@@ -45,7 +45,7 @@ namespace ao::gtk
                                        ThemeCoordinator& themeController)
     : _callbacks{std::move(callbacks)}, _runtime{runtime}, _parent{parent}, _themeController{themeController}
   {
-    setupActions();
+    createActions();
   }
 
   TagEditController::~TagEditController()
@@ -66,7 +66,7 @@ namespace ao::gtk
     _dataProvider = provider;
   }
 
-  void TagEditController::setupActions()
+  void TagEditController::createActions()
   {
     auto const stringType = Glib::VariantType{"s"};
 
@@ -93,7 +93,7 @@ namespace ao::gtk
 
         if (_contextPage)
         {
-          showTagsPopover(*_contextPage, _contextXPosition, _contextYPosition);
+          openTagsPopover(*_contextPage, _contextXPosition, _contextYPosition);
         }
       });
     _contextActionGroupPtr->add_action(editTagsActionPtr);
@@ -107,7 +107,7 @@ namespace ao::gtk
           _contextPopoverPtr->popdown();
         }
 
-        showPropertiesDialog();
+        presentPropertiesDialog();
       });
     _contextActionGroupPtr->add_action(propertiesActionPtr);
   }
@@ -125,7 +125,7 @@ namespace ao::gtk
     }
   }
 
-  void TagEditController::showTrackContextMenu(TrackViewPage& page,
+  void TagEditController::openTrackContextMenu(TrackViewPage& page,
                                                TrackSelectionContext const& selection,
                                                double xPosition,
                                                double yPosition)
@@ -157,7 +157,7 @@ namespace ao::gtk
     _contextPopoverPtr->popup();
   }
 
-  void TagEditController::showTagsPopover(TrackViewPage& page, double xPosition, double yPosition)
+  void TagEditController::openTagsPopover(TrackViewPage& page, double xPosition, double yPosition)
   {
     if (!_optActiveSelection)
     {
@@ -170,10 +170,10 @@ namespace ao::gtk
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
-    page.showTagPopover(*_tagPopoverPtr, xPosition, yPosition);
+    page.openTagPopover(*_tagPopoverPtr, xPosition, yPosition);
   }
 
-  void TagEditController::showPropertiesDialog()
+  void TagEditController::presentPropertiesDialog()
   {
     if (!_optActiveSelection || _dataProvider == nullptr)
     {
@@ -191,7 +191,7 @@ namespace ao::gtk
     dialog->present();
   }
 
-  void TagEditController::showProperties(TrackSelectionContext const& selection)
+  void TagEditController::presentProperties(TrackSelectionContext const& selection)
   {
     if (selection.selectedIds.empty() || _dataProvider == nullptr)
     {
@@ -209,7 +209,7 @@ namespace ao::gtk
     dialog->present();
   }
 
-  void TagEditController::showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo)
+  void TagEditController::openTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo)
   {
     if (selection.selectedIds.empty())
     {

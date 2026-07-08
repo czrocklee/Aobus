@@ -3,13 +3,13 @@
 
 #include "preferences/PreferencesWindow.h"
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
 #include <ao/uimodel/preferences/PreferencesModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -35,7 +35,7 @@ namespace ao::gtk::test
 
     Gtk::ListBox* outputSelectorListBox(PreferencesWindow& window)
     {
-      auto* const selector = window.outputSelectorForTest();
+      auto* const selector = window.outputSelector();
 
       if (selector == nullptr)
       {
@@ -66,11 +66,11 @@ namespace ao::gtk::test
 
     auto window = PreferencesWindow{{}};
 
-    CHECK(window.hasPageForTest("general"));
-    CHECK(window.hasPageForTest("appearance"));
-    CHECK(window.hasPageForTest("playback"));
-    CHECK(window.hasPageForTest("layout"));
-    CHECK(window.hasPageForTest("keyboard"));
+    CHECK(window.hasPage("general"));
+    CHECK(window.hasPage("appearance"));
+    CHECK(window.hasPage("playback"));
+    CHECK(window.hasPage("layout"));
+    CHECK(window.hasPage("keyboard"));
 
     auto catalog = makeCatalog();
     window.refreshKeyboardPage(catalog, uimodel::KeymapModel{uimodel::defaultKeymap()}, {});
@@ -124,10 +124,10 @@ namespace ao::gtk::test
     prefs.lastThemePreset = "classic";
     prefs.lastOutputBackendId = "existing-backend";
     window.refreshPreferences(prefs, nullptr);
-    CHECK(window.selectedThemeForTest() == "classic");
+    CHECK(window.selectedThemeId() == "classic");
     CHECK_FALSE(optPersisted);
 
-    window.setThemeForTest("modern");
+    window.setSelectedThemeId("modern");
 
     REQUIRE(optPersisted);
     CHECK(optPersisted->lastThemePreset == "modern");
@@ -151,10 +151,10 @@ namespace ao::gtk::test
     prefs.lastLayoutPreset = "classic";
     prefs.lastOutputBackendId = "existing-backend";
     window.refreshPreferences(prefs, nullptr);
-    CHECK(window.selectedLayoutPresetForTest() == "classic");
+    CHECK(window.selectedLayoutPresetId() == "classic");
     CHECK_FALSE(optPersisted);
 
-    window.setLayoutPresetForTest("modern");
+    window.setSelectedLayoutPresetId("modern");
 
     REQUIRE(optPersisted);
     CHECK(optPersisted->lastLayoutPreset == "modern");
@@ -183,9 +183,9 @@ namespace ao::gtk::test
     prefs.lastThemePreset = "modern";
     prefs.lastLayoutPreset = "classic";
     window.refreshPreferences(prefs, &fixture.runtime().playback());
-    REQUIRE(window.outputSelectorForTest() != nullptr);
+    REQUIRE(window.outputSelector() != nullptr);
 
-    emitShow(*window.outputSelectorForTest());
+    emitShow(*window.outputSelector());
     drainGtkEvents();
 
     auto* const listBox = outputSelectorListBox(window);
@@ -215,14 +215,14 @@ namespace ao::gtk::test
     auto prefs = rt::AppPrefsState{};
 
     window.refreshPreferences(prefs, &fixture.runtime().playback(), &target);
-    REQUIRE(window.hasOutputSelectorForTest());
-    CHECK(window.outputDeviceLabelForTest() != "Unavailable");
+    REQUIRE(window.hasOutputSelector());
+    CHECK(window.outputDeviceLabelText() != "Unavailable");
 
     ::g_signal_emit_by_name(target.gobj(), "hide");
     drainGtkEvents();
 
-    CHECK_FALSE(window.hasOutputSelectorForTest());
-    CHECK(window.outputDeviceLabelForTest() == "Unavailable");
+    CHECK_FALSE(window.hasOutputSelector());
+    CHECK(window.outputDeviceLabelText() == "Unavailable");
   }
 
   TEST_CASE("PreferencesWindow - unknown persisted ids fall back to visible defaults", "[gtk][unit][preferences]")
@@ -236,7 +236,7 @@ namespace ao::gtk::test
 
     window.refreshPreferences(prefs, nullptr);
 
-    CHECK(window.selectedThemeForTest() == "classic");
-    CHECK(window.selectedLayoutPresetForTest() == "classic");
+    CHECK(window.selectedThemeId() == "classic");
+    CHECK(window.selectedLayoutPresetId() == "classic");
   }
 } // namespace ao::gtk::test

@@ -22,9 +22,9 @@ namespace ao::rt
   {
   }
 
-  void AllTracksSource::reloadFromStore(lmdb::ReadTransaction const& txn)
+  void AllTracksSource::reloadFromStore(lmdb::ReadTransaction const& transaction)
   {
-    auto const reader = _store.reader(txn);
+    auto const reader = _store.reader(transaction);
     auto ids = std::vector<TrackId>{};
     ids.reserve(1000);
 

@@ -98,7 +98,7 @@ namespace ao::gtk
     stopTick();
   }
 
-  bool TimeLabel::isTickActiveForTest() const noexcept
+  bool TimeLabel::isTickActive() const noexcept
   {
     return _tickId != 0;
   }

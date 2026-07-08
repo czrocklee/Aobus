@@ -5,9 +5,11 @@
 
 #include <ao/Error.h>
 #include <ao/audio/AudioRouteFormatState.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/audio/RouteAnchor.h>
 #include <ao/audio/Transport.h>
 
 #include <chrono>
@@ -20,11 +22,11 @@
 
 namespace ao::audio
 {
-  class IBackend;
-  class ISource;
-  class IDecoderSession;
+  class Backend;
+  class PcmSource;
+  class DecoderSession;
   struct PlaybackInput;
-  using DecoderFactoryFn = std::function<std::unique_ptr<IDecoderSession>(std::filesystem::path const&, Format)>;
+  using DecoderFactoryFn = std::function<std::unique_ptr<DecoderSession>(std::filesystem::path const&, Format)>;
 }
 
 namespace ao::audio
@@ -134,7 +136,7 @@ namespace ao::audio
     using OnTrackAdvanced = std::function<void(TrackAdvanced const&)>;
     using OnPlaybackFailure = std::function<void(PlaybackFailure const&)>;
 
-    Engine(std::unique_ptr<IBackend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory = nullptr);
+    Engine(std::unique_ptr<Backend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory = nullptr);
     ~Engine();
 
     Engine(Engine const&) = delete;
@@ -142,7 +144,7 @@ namespace ao::audio
     Engine(Engine&&) = delete;
     Engine& operator=(Engine&&) = delete;
 
-    void setBackend(std::unique_ptr<IBackend> backendPtr, Device const& device);
+    void setBackend(std::unique_ptr<Backend> backendPtr, Device const& device);
     void updateDevice(Device const& device);
 
     void setOnTrackEnded(std::function<void()> callback);

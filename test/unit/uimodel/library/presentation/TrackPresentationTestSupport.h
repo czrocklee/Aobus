@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>

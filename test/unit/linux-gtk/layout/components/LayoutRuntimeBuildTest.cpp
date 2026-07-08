@@ -34,7 +34,7 @@ namespace ao::gtk::layout::test
 
     SECTION("default layout builds a box root")
     {
-      auto const doc = createDefaultLayout();
+      auto const doc = makeDefaultLayout();
       auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
 
       REQUIRE(rootComponentPtr != nullptr);
@@ -100,7 +100,7 @@ namespace ao::gtk::layout::test
 
     SECTION("Playback bar groups carry ao-grouping-region (direct template)")
     {
-      auto const templates = getBuiltInTemplates();
+      auto const templates = builtInTemplates();
       auto const& barTemplate = templates.at("playback.defaultBar");
       auto const barCompPtr = ctx.registry.create(ctx, barTemplate);
 
@@ -121,8 +121,8 @@ namespace ao::gtk::layout::test
     {
       // This exercises the same path as the real app: default layout with
       // template reference node, expanded through LayoutRuntime::build().
-      auto doc = createDefaultLayout();
-      doc.templates = getBuiltInTemplates();
+      auto doc = makeDefaultLayout();
+      doc.templates = builtInTemplates();
       auto const fullLayoutPtr = layoutRuntime.build(ctx, doc);
 
       REQUIRE(fullLayoutPtr != nullptr);
@@ -170,7 +170,7 @@ namespace ao::gtk::layout::test
     {
       GtkStyleRuntime::instance().initialize();
 
-      auto const doc = createBuiltInLayout(LayoutPresetId::Modern);
+      auto const doc = makeBuiltInLayout(LayoutPresetId::Modern);
       auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
       REQUIRE(rootComponentPtr != nullptr);
 

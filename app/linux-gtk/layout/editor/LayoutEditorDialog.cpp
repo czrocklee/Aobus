@@ -9,7 +9,8 @@
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ActionValidator.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionBinding.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionValidator.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -92,7 +93,7 @@ namespace ao::gtk::layout::editor
     addPrimaryAction("Apply", Gtk::ResponseType::APPLY);
     addPrimaryAction("Save", Gtk::ResponseType::OK);
 
-    setupUi();
+    buildUi();
 
     _session[initialPresetId] = SessionEntry{.doc = _document, .dirty = false, .resetPending = false};
 
@@ -160,7 +161,7 @@ namespace ao::gtk::layout::editor
     headerBar().remove(_btnReset);
   }
 
-  void LayoutEditorDialog::setupUi()
+  void LayoutEditorDialog::buildUi()
   {
     _treeStorePtr = Gtk::TreeStore::create(_columns);
     _treeView.set_model(_treeStorePtr);
@@ -297,7 +298,7 @@ namespace ao::gtk::layout::editor
 
     if (_document.root.type == "template")
     {
-      if (auto const templateId = _document.root.getProp<std::string>("templateId", ""); !templateId.empty())
+      if (auto const templateId = _document.root.propertyOr<std::string>("templateId", ""); !templateId.empty())
       {
         displayName += " [" + templateId + "]";
       }
@@ -328,7 +329,7 @@ namespace ao::gtk::layout::editor
 
     if (node->type == "template")
     {
-      if (auto const templateId = node->getProp<std::string>("templateId", ""); !templateId.empty())
+      if (auto const templateId = node->propertyOr<std::string>("templateId", ""); !templateId.empty())
       {
         displayName += " [" + templateId + "]";
       }
@@ -587,7 +588,7 @@ namespace ao::gtk::layout::editor
     }
 
     auto const presetEnum = presetIdFromString(presetId.raw());
-    _document = createBuiltInLayout(presetEnum);
+    _document = makeBuiltInLayout(presetEnum);
 
     if (auto const it = _session.find(_currentPresetId); it != _session.end())
     {
@@ -999,9 +1000,9 @@ namespace ao::gtk::layout::editor
     return createPropertyRow(prop.label, *entry);
   }
 
-  Gtk::Widget* LayoutEditorDialog::dispatchEditor(LayoutNode* node,
-                                                  LayoutPropertyDescriptor const& prop,
-                                                  bool isLayoutProp)
+  Gtk::Widget* LayoutEditorDialog::renderPropertyEditor(LayoutNode* node,
+                                                        LayoutPropertyDescriptor const& prop,
+                                                        bool isLayoutProp)
   {
     auto currentVal = LayoutValue{prop.defaultValue};
     auto const& propertyMap = isLayoutProp ? node->layout : node->props;
@@ -1079,7 +1080,7 @@ namespace ao::gtk::layout::editor
     {
       for (auto const& prop : optDescriptorOption->props)
       {
-        appendToListBox(generalList, dispatchEditor(node, prop, false));
+        appendToListBox(generalList, renderPropertyEditor(node, prop, false));
       }
     }
 
@@ -1152,7 +1153,7 @@ namespace ao::gtk::layout::editor
 
         for (auto const& prop : layoutProps)
         {
-          appendToListBox(layoutList, dispatchEditor(node, prop, true));
+          appendToListBox(layoutList, renderPropertyEditor(node, prop, true));
         }
 
         _propertiesBox.append(*layoutList);

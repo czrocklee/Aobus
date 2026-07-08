@@ -3,7 +3,7 @@
 
 #include "check/LocalInitializationStyleCheck.h"
 
-#include "check/AstUtil.h"
+#include "check/AstHelpers.h"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
@@ -75,7 +75,7 @@ namespace clang::tidy::readability
       return name == "basic_string" || name == "string" || name == "basic_string_view" || name == "string_view";
     }
 
-    bool hasStringLiteralArg(Expr const* init)
+    bool hasStringLiteralArgument(Expr const* init)
     {
       if (init == nullptr)
       {
@@ -86,8 +86,8 @@ namespace clang::tidy::readability
       {
         if (ctor->getNumArgs() > 0)
         {
-          auto const* arg = ctor->getArg(0)->IgnoreImplicit();
-          return isa<StringLiteral>(arg);
+          auto const* argument = ctor->getArg(0)->IgnoreImplicit();
+          return isa<StringLiteral>(argument);
         }
       }
 
@@ -172,16 +172,16 @@ namespace clang::tidy::readability
       return functionalCast;
     }
 
-    Expr const* getSingleFunctionalCastArg(CXXFunctionalCastExpr const* functionalCast)
+    Expr const* getSingleFunctionalCastArgument(CXXFunctionalCastExpr const* functionalCast)
     {
       if (functionalCast == nullptr)
       {
         return nullptr;
       }
 
-      auto const* arg = functionalCast->getSubExprAsWritten();
+      auto const* argument = functionalCast->getSubExprAsWritten();
 
-      if (auto const* initList = dyn_cast_or_null<InitListExpr>(arg); initList != nullptr)
+      if (auto const* initList = dyn_cast_or_null<InitListExpr>(argument); initList != nullptr)
       {
         if (initList->getNumInits() != 1)
         {
@@ -191,7 +191,7 @@ namespace clang::tidy::readability
         return initList->getInit(0);
       }
 
-      return arg;
+      return argument;
     }
 
     bool isAllowedPrimitiveAutoInitializer(Expr const* init)
@@ -388,7 +388,7 @@ namespace clang::tidy::readability
       bool const isContainer = isContainerWithInitializerList(varType);
       bool const isString = isStringOrStringView(varType);
 
-      if (bool const hasLiteral = hasStringLiteralArg(init); isString && hasLiteral)
+      if (bool const hasLiteral = hasStringLiteralArgument(init); isString && hasLiteral)
       {
         auto const suffix = StringRef{varType.getAsString().find("string_view") != StringRef::npos ? "sv" : "s"};
         diag(loc, "prefer standard literals 'auto %0 = \"...\"%1' over explicit string construction")
@@ -448,13 +448,14 @@ namespace clang::tidy::readability
     {
       diagnostic << FixItHint::CreateReplacement(CharSourceRange::getTokenRange(autoLoc.getSourceRange()), replacement);
 
-      auto const* singleArg = getSingleFunctionalCastArg(functionalCast);
+      auto const* singleArgument = getSingleFunctionalCastArgument(functionalCast);
 
-      if (singleArg != nullptr && !aobus::isInMacro(functionalCast->getSourceRange()) &&
-          !aobus::isInMacro(singleArg->getSourceRange()))
+      if (singleArgument != nullptr && !aobus::isInMacro(functionalCast->getSourceRange()) &&
+          !aobus::isInMacro(singleArgument->getSourceRange()))
       {
-        diagnostic << FixItHint::CreateReplacement(CharSourceRange::getTokenRange(functionalCast->getSourceRange()),
-                                                   aobus::getExprSourceText(*singleArg, sm, context.getLangOpts()));
+        diagnostic << FixItHint::CreateReplacement(
+          CharSourceRange::getTokenRange(functionalCast->getSourceRange()),
+          aobus::getExprSourceText(*singleArgument, sm, context.getLangOpts()));
       }
     }
   }

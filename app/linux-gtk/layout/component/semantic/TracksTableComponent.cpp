@@ -3,7 +3,7 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "track/TrackPageHost.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -26,7 +26,7 @@ namespace ao::gtk::layout
     /**
      * @brief tracks.table
      */
-    class TracksTableComponent final : public ILayoutComponent
+    class TracksTableComponent final : public LayoutComponent
     {
     public:
       TracksTableComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
@@ -49,7 +49,7 @@ namespace ao::gtk::layout
       Gtk::Box _container{Gtk::Orientation::VERTICAL};
     };
 
-    std::unique_ptr<ILayoutComponent> createTracksTable(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTracksTable(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TracksTableComponent>(ctx, node);
     }

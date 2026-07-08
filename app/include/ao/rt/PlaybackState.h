@@ -3,9 +3,11 @@
 
 #pragma once
 
-#include "CorePrimitives.h"
+#include "ViewIds.h"
 #include <ao/CoreIds.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Transport.h>
 

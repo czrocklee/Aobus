@@ -3,7 +3,7 @@
 
 #include "playback/AudioQualityCss.h"
 
-#include <ao/audio/Backend.h>
+#include <ao/audio/Quality.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <gtkmm/widget.h>

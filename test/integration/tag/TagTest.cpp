@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackView.h>
@@ -80,19 +82,19 @@ namespace ao::tag::test
 
     auto loaded = loadTrack(path);
     auto& builder = loaded.builder;
-    auto& meta = builder.metadata();
+    auto& metadata = builder.metadata();
 
-    CHECK(meta.title() == "Test Title");
-    CHECK(meta.artist() == "Test Artist");
-    CHECK(meta.album() == "Test Album");
-    CHECK(meta.genre() == "Rock");
-    CHECK(meta.year() == 2024);
+    CHECK(metadata.title() == "Test Title");
+    CHECK(metadata.artist() == "Test Artist");
+    CHECK(metadata.album() == "Test Album");
+    CHECK(metadata.genre() == "Rock");
+    CHECK(metadata.year() == 2024);
 
     if (std::string_view{format} != "wav")
     {
-      CHECK(meta.composer() == "Test Composer");
-      CHECK(meta.work() == "Symphony No. 5");
-      CHECK(meta.trackNumber() == 1);
+      CHECK(metadata.composer() == "Test Composer");
+      CHECK(metadata.work() == "Symphony No. 5");
+      CHECK(metadata.trackNumber() == 1);
     }
   }
 
@@ -106,19 +108,19 @@ namespace ao::tag::test
 
     auto loaded = loadTrack(path);
     auto& builder = loaded.builder;
-    auto& meta = builder.metadata();
+    auto& metadata = builder.metadata();
 
-    CHECK(meta.title() == "HiRes Title");
-    CHECK(meta.artist() == "HiRes Artist");
-    CHECK(meta.album() == "HiRes Album");
-    CHECK(meta.genre() == "Electronic");
-    CHECK(meta.year() == 2025);
+    CHECK(metadata.title() == "HiRes Title");
+    CHECK(metadata.artist() == "HiRes Artist");
+    CHECK(metadata.album() == "HiRes Album");
+    CHECK(metadata.genre() == "Electronic");
+    CHECK(metadata.year() == 2025);
 
     if (std::string_view{format} != "wav")
     {
-      CHECK(meta.composer() == "HiRes Composer");
-      CHECK(meta.work() == "The Four Seasons");
-      CHECK(meta.trackNumber() == 2);
+      CHECK(metadata.composer() == "HiRes Composer");
+      CHECK(metadata.work() == "The Four Seasons");
+      CHECK(metadata.trackNumber() == 2);
     }
   }
 
@@ -129,23 +131,23 @@ namespace ao::tag::test
     auto const path = kTestDataDir / ("classical_metadata." + std::string{format});
 
     auto loaded = loadTrack(path);
-    auto& meta = loaded.builder.metadata();
+    auto& metadata = loaded.builder.metadata();
 
-    CHECK(meta.title() == "Classical Fixture");
-    CHECK(meta.artist() == "Classical Artist");
-    CHECK(meta.album() == "Classical Album");
-    CHECK(meta.genre() == "Classical");
-    CHECK(meta.composer() == "Fixture Composer");
-    CHECK(meta.conductor() == "Fixture Conductor");
-    CHECK(meta.ensemble() == "Fixture Ensemble");
-    CHECK(meta.soloist() == "Fixture Soloist");
-    CHECK(meta.work() == "Fixture Work");
-    CHECK(meta.movement() == "Fixture Movement");
-    CHECK(meta.movementNumber() == 2);
-    CHECK(meta.movementTotal() == 4);
-    CHECK(meta.trackNumber() == 3);
-    CHECK(meta.trackTotal() == 9);
-    CHECK(meta.year() == 2026);
+    CHECK(metadata.title() == "Classical Fixture");
+    CHECK(metadata.artist() == "Classical Artist");
+    CHECK(metadata.album() == "Classical Album");
+    CHECK(metadata.genre() == "Classical");
+    CHECK(metadata.composer() == "Fixture Composer");
+    CHECK(metadata.conductor() == "Fixture Conductor");
+    CHECK(metadata.ensemble() == "Fixture Ensemble");
+    CHECK(metadata.soloist() == "Fixture Soloist");
+    CHECK(metadata.work() == "Fixture Work");
+    CHECK(metadata.movement() == "Fixture Movement");
+    CHECK(metadata.movementNumber() == 2);
+    CHECK(metadata.movementTotal() == 4);
+    CHECK(metadata.trackNumber() == 3);
+    CHECK(metadata.trackTotal() == 9);
+    CHECK(metadata.year() == 2026);
   }
 
   TEST_CASE("TagReader - classical fallback fixture maps orchestra fields", "[tag][integration][metadata][classical]")
@@ -155,14 +157,14 @@ namespace ao::tag::test
     auto const path = kTestDataDir / ("classical_fallback." + std::string{format});
 
     auto loaded = loadTrack(path);
-    auto& meta = loaded.builder.metadata();
+    auto& metadata = loaded.builder.metadata();
 
-    CHECK(meta.title() == "Classical Fallback");
-    CHECK(meta.ensemble() == "Fixture Fallback Ensemble");
+    CHECK(metadata.title() == "Classical Fallback");
+    CHECK(metadata.ensemble() == "Fixture Fallback Ensemble");
 
     if (std::string_view{format} == "flac")
     {
-      CHECK(meta.soloist() == "Fixture Fallback Soloist");
+      CHECK(metadata.soloist() == "Fixture Fallback Soloist");
     }
   }
 
@@ -261,10 +263,10 @@ namespace ao::tag::test
     auto const tempDir = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(tempDir.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto dictionary = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
     auto resources = library::ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
 
-    auto serializeResult = builder.serialize(wtxn, dict, resources);
+    auto serializeResult = builder.serialize(wtxn, dictionary, resources);
     REQUIRE(serializeResult);
     auto const [hotData, coldData] = *serializeResult;
 
@@ -301,7 +303,7 @@ namespace ao::tag::test
 
     auto loaded = loadTrack(path);
     auto& builder = loaded.builder;
-    auto& meta = builder.metadata();
+    auto& metadata = builder.metadata();
     auto& prop = builder.property();
 
     // Empty files should still have audio properties
@@ -310,11 +312,11 @@ namespace ao::tag::test
     CHECK(prop.channels() > 0);
 
     // But metadata should be empty
-    CHECK(meta.title().empty());
-    CHECK(meta.artist().empty());
-    CHECK(meta.album().empty());
-    CHECK(meta.genre().empty());
-    CHECK(meta.trackNumber() == 0);
-    CHECK(meta.year() == 0);
+    CHECK(metadata.title().empty());
+    CHECK(metadata.artist().empty());
+    CHECK(metadata.album().empty());
+    CHECK(metadata.genre().empty());
+    CHECK(metadata.trackNumber() == 0);
+    CHECK(metadata.year() == 0);
   }
 } // namespace ao::tag::test

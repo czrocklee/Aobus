@@ -14,7 +14,7 @@
 
 namespace ao::library
 {
-  FileManifestBuilder FileManifestBuilder::createNew()
+  FileManifestBuilder FileManifestBuilder::makeEmpty()
   {
     return FileManifestBuilder{};
   }

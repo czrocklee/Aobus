@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
@@ -14,10 +13,10 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/source/ListSourceStore.h>
 
@@ -37,7 +36,7 @@ namespace ao::rt::test
   {
     using F = TrackField;
 
-    std::string getString(AggregateValue<TrackFieldRawValue> const& agg)
+    std::string aggregateString(AggregateValue<TrackFieldRawValue> const& agg)
     {
       if (!agg.optValue)
       {
@@ -93,7 +92,7 @@ namespace ao::rt::test
     CHECK(snap.selectionKind == SelectionKind::Single);
     auto const& titleAgg = snap.fields[static_cast<std::size_t>(F::Title)];
     REQUIRE(titleAgg.optValue);
-    CHECK(getString(titleAgg) == "Before");
+    CHECK(aggregateString(titleAgg) == "Before");
 
     // Mutate the track in the library using the service
     {
@@ -105,7 +104,7 @@ namespace ao::rt::test
     // Mutation service already published the signal
 
     snap = projPtr->snapshot();
-    CHECK(getString(snap.fields[static_cast<std::size_t>(F::Title)]) == "After");
+    CHECK(aggregateString(snap.fields[static_cast<std::size_t>(F::Title)]) == "After");
   }
 
   TEST_CASE("TrackDetailProjection - ignores non-intersecting TracksMutated", "[runtime][unit][projection][detail]")
@@ -153,7 +152,7 @@ namespace ao::rt::test
     auto const& artistAgg = snap.fields[static_cast<std::size_t>(F::Artist)];
     CHECK_FALSE(artistAgg.mixed);
     REQUIRE(artistAgg.optValue);
-    CHECK(getString(artistAgg) == "Same");
+    CHECK(aggregateString(artistAgg) == "Same");
 
     // Albums differ
     CHECK(snap.fields[static_cast<std::size_t>(F::Album)].mixed);
@@ -168,7 +167,7 @@ namespace ao::rt::test
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
     CHECK(snap.selectionKind == SelectionKind::Single);
-    CHECK(getString(snap.fields[static_cast<std::size_t>(F::Title)]) == "Song A");
+    CHECK(aggregateString(snap.fields[static_cast<std::size_t>(F::Title)]) == "Song A");
   }
 
   TEST_CASE("TrackDetailProjection - focused view target follows focused view selection",
@@ -190,11 +189,11 @@ namespace ao::rt::test
     env.workspace.navigateTo(GlobalViewKind::AllTracks); // Should trigger onFocusedViewChanged
 
     CHECK(callCount >= 2);
-    CHECK(getString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song A");
+    CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song A");
 
     // Change selection in the focused view
     env.views.setSelection(reply1.viewId, {id2});
-    CHECK(getString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song B");
+    CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song B");
 
     // Change focus away
     env.workspace.closeView(reply1.viewId);
@@ -224,7 +223,7 @@ namespace ao::rt::test
     CHECK(snap.selectionKind == SelectionKind::Single);
     auto const& titleAgg = snap.fields[static_cast<std::size_t>(F::Title)];
     REQUIRE(titleAgg.optValue);
-    CHECK(getString(titleAgg) == "Already Selected");
+    CHECK(aggregateString(titleAgg) == "Already Selected");
   }
 
   TEST_CASE("TrackDetailProjection - missing tracks produce empty field values", "[runtime][unit][projection][detail]")

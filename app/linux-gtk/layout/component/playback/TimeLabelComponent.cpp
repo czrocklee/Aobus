@@ -3,7 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/TimeLabel.h"
 #include <ao/rt/AppRuntime.h>
@@ -23,12 +23,12 @@ namespace ao::gtk::layout
     /**
      * @brief playback.timeLabel
      */
-    class TimeLabelComponent final : public ILayoutComponent
+    class TimeLabelComponent final : public LayoutComponent
     {
     public:
       TimeLabelComponent(LayoutContext& ctx, LayoutNode const& node)
         : _label{ctx.runtime.playback(),
-                 [mode = node.getProp<std::string>("mode", "default")]
+                 [mode = node.propertyOr<std::string>("mode", "default")]
                  {
                    if (mode == "elapsed")
                    {
@@ -51,7 +51,7 @@ namespace ao::gtk::layout
       TimeLabel _label;
     };
 
-    std::unique_ptr<ILayoutComponent> createTimeLabel(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTimeLabel(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TimeLabelComponent>(ctx, node);
     }

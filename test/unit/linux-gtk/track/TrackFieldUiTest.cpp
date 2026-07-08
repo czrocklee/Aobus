@@ -40,7 +40,7 @@ namespace ao::gtk::test
       INFO("Field: " << rtDef.id);
       REQUIRE(def != nullptr);
 
-      auto const canWritePatch = uimodel::trackFieldCanWritePatch(rtDef.field);
+      auto const canWritePatch = uimodel::canWriteTrackFieldPatch(rtDef.field);
       CHECK(canInlineEdit(*def) == canWritePatch);
 
       if (canWritePatch)

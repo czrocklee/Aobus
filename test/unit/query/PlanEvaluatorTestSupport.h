@@ -4,8 +4,8 @@
 #pragma once
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/library/TestUtils.h"
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/library/LibraryBinaryTestSupport.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -110,7 +110,7 @@ namespace ao::query::test
   public:
     TrackFixture() { init(TrackSpec{}, nullptr); }
 
-    explicit TrackFixture(TrackSpec const& spec, DictionaryStore* dict = nullptr) { init(spec, dict); }
+    explicit TrackFixture(TrackSpec const& spec, DictionaryStore* dictionary = nullptr) { init(spec, dictionary); }
 
     TrackFixture(std::string title,
                  std::string artist = "Test Artist",
@@ -159,25 +159,25 @@ namespace ao::query::test
     TrackView view() const { return TrackView{_hotData, _coldData}; }
     TrackView hotOnlyView() const { return TrackView{_hotData, std::span<std::byte const>{}}; }
     TrackView coldOnlyView() const { return TrackView{std::span<std::byte const>{}, _coldData}; }
-    DictionaryStore& dictionary() { return *_optDict; }
+    DictionaryStore& dictionary() { return *_optDictionary; }
 
   private:
-    void init(TrackSpec const& spec, DictionaryStore* dict)
+    void init(TrackSpec const& spec, DictionaryStore* dictionary)
     {
       auto temp = ao::test::TempDir{};
       auto envOpts = Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
       _optEnv.emplace(openEnvironment(temp.path(), envOpts));
       auto wtxn = beginWriteTransaction(*_optEnv);
 
-      if (dict == nullptr)
+      if (dictionary == nullptr)
       {
-        _optDict.emplace(openDatabase(wtxn, "dict"), wtxn);
-        dict = &*_optDict;
+        _optDictionary.emplace(openDatabase(wtxn, "dictionary"), wtxn);
+        dictionary = &*_optDictionary;
       }
 
       _optResources.emplace(openDatabase(wtxn, "resources"));
 
-      TrackBuilder builder = TrackBuilder::createNew();
+      TrackBuilder builder = TrackBuilder::makeEmpty();
       builder.metadata().title(spec.title);
       builder.metadata().artist(spec.artist);
       builder.metadata().album(spec.album);
@@ -220,9 +220,9 @@ namespace ao::query::test
         builder.customMetadata().add(k, v);
       }
 
-      auto hotDataResult = builder.serializeHot(wtxn, *dict);
+      auto hotDataResult = builder.serializeHot(wtxn, *dictionary);
       REQUIRE(hotDataResult);
-      auto coldDataResult = builder.serializeCold(wtxn, *dict, *_optResources);
+      auto coldDataResult = builder.serializeCold(wtxn, *dictionary, *_optResources);
       REQUIRE(coldDataResult);
       _hotData = *hotDataResult;
       _coldData = *coldDataResult;
@@ -256,7 +256,7 @@ namespace ao::query::test
     }
 
     std::optional<Environment> _optEnv;
-    std::optional<DictionaryStore> _optDict;
+    std::optional<DictionaryStore> _optDictionary;
     std::optional<ResourceStore> _optResources;
     std::vector<std::byte> _hotData;
     std::vector<std::byte> _coldData;

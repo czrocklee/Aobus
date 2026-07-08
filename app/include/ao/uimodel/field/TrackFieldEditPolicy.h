@@ -13,6 +13,6 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  bool trackFieldCanWritePatch(rt::TrackField field) noexcept;
+  bool canWriteTrackFieldPatch(rt::TrackField field) noexcept;
   bool writeTrackFieldPatch(rt::MetadataPatch& patch, rt::TrackField field, TrackFieldEditValue const& value);
 } // namespace ao::uimodel

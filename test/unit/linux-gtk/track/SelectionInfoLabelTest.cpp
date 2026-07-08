@@ -5,8 +5,8 @@
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>

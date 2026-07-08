@@ -3,7 +3,7 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -23,22 +23,22 @@ namespace ao::gtk::layout
     /**
      * @brief app.actionButton
      */
-    class ActionButtonComponent final : public ILayoutComponent
+    class ActionButtonComponent final : public LayoutComponent
     {
     public:
       ActionButtonComponent(LayoutContext& /*ctx*/, LayoutNode const& node)
       {
-        if (auto const label = node.getProp<std::string>("label", ""); !label.empty())
+        if (auto const label = node.propertyOr<std::string>("label", ""); !label.empty())
         {
           _button.set_label(label);
         }
 
-        if (auto const icon = node.getProp<std::string>("icon", ""); !icon.empty())
+        if (auto const icon = node.propertyOr<std::string>("icon", ""); !icon.empty())
         {
           _button.set_icon_name(icon);
         }
 
-        auto const style = node.getProp<std::string>("style", "standard");
+        auto const style = node.propertyOr<std::string>("style", "standard");
 
         if (style == "flat")
         {
@@ -57,7 +57,7 @@ namespace ao::gtk::layout
           _button.add_css_class("destructive-action");
         }
 
-        auto const size = node.getProp<std::string>("size", "normal");
+        auto const size = node.propertyOr<std::string>("size", "normal");
 
         if (size == "small")
         {
@@ -75,7 +75,7 @@ namespace ao::gtk::layout
       Gtk::Button _button;
     };
 
-    std::unique_ptr<ILayoutComponent> createActionButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createActionButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<ActionButtonComponent>(ctx, node);
     }

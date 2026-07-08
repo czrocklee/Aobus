@@ -11,7 +11,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -231,10 +231,10 @@ namespace ao::cli::test
       ResourceId addResource(std::span<std::byte const> bytes) const
       {
         auto musicLibrary = library::MusicLibrary{root(), root() / ".aobus/library"};
-        auto txn = musicLibrary.writeTransaction();
-        auto idResult = musicLibrary.resources().writer(txn).create(bytes);
+        auto transaction = musicLibrary.writeTransaction();
+        auto idResult = musicLibrary.resources().writer(transaction).create(bytes);
         REQUIRE(idResult);
-        REQUIRE(txn.commit());
+        REQUIRE(transaction.commit());
         return *idResult;
       }
 
@@ -243,9 +243,9 @@ namespace ao::cli::test
         auto argv = std::vector<std::string>{"aobus", "-C", root().string()};
         argv.reserve(argv.size() + args.size());
 
-        for (auto arg : args)
+        for (auto argument : args)
         {
-          argv.emplace_back(arg);
+          argv.emplace_back(argument);
         }
 
         return runArgs(argv);
@@ -258,8 +258,8 @@ namespace ao::cli::test
     bool manifestHasAudioIdentity(CliFixture const& fixture, std::string_view uri)
     {
       auto musicLibrary = library::MusicLibrary{fixture.root(), fixture.root() / ".aobus/library"};
-      auto txn = musicLibrary.readTransaction();
-      auto manifestResult = musicLibrary.manifest().reader(txn).get(uri);
+      auto transaction = musicLibrary.readTransaction();
+      auto manifestResult = musicLibrary.manifest().reader(transaction).get(uri);
       REQUIRE(manifestResult);
       return library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature());
     }
@@ -384,11 +384,11 @@ namespace ao::cli::test
     CHECK(result.err.empty());
     CHECK(countOccurrences(result.out, "\n") == 2);
 
-    auto const thirdPos = result.out.find("Third");
-    auto const firstPos = result.out.find("First");
-    REQUIRE(thirdPos != std::string::npos);
-    REQUIRE(firstPos != std::string::npos);
-    CHECK(thirdPos < firstPos);
+    auto const thirdOffset = result.out.find("Third");
+    auto const firstOffset = result.out.find("First");
+    REQUIRE(thirdOffset != std::string::npos);
+    REQUIRE(firstOffset != std::string::npos);
+    CHECK(thirdOffset < firstOffset);
     CHECK_FALSE(contains(result.out, "Second"));
   }
 
@@ -847,11 +847,11 @@ namespace ao::cli::test
 
     result = fixture.run({"tag", "list"});
     REQUIRE(result.status == 0);
-    auto const favPos = result.out.find("fav  2");
-    auto const chillPos = result.out.find("chill  1");
-    REQUIRE(favPos != std::string::npos);
-    REQUIRE(chillPos != std::string::npos);
-    CHECK(favPos < chillPos);
+    auto const favOffset = result.out.find("fav  2");
+    auto const chillOffset = result.out.find("chill  1");
+    REQUIRE(favOffset != std::string::npos);
+    REQUIRE(chillOffset != std::string::npos);
+    CHECK(favOffset < chillOffset);
 
     result = fixture.run({"tag", "show", "1", "2"});
     REQUIRE(result.status == 0);

@@ -3,13 +3,15 @@
 
 #pragma once
 
-#include "CorePrimitives.h"
 #include "PlaybackFailure.h"
 #include "PlaybackSessionState.h"
 #include "PlaybackState.h"
+#include "Subscription.h"
+#include "ViewIds.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/PlaybackInput.h>
 
 #include <chrono>
@@ -24,12 +26,12 @@ namespace ao::library
 
 namespace ao::async
 {
-  class IExecutor;
+  class Executor;
 }
 
 namespace ao::audio
 {
-  class IBackendProvider;
+  class BackendProvider;
 }
 
 namespace ao::rt
@@ -88,7 +90,7 @@ namespace ao::rt
       audio::PlaybackInput input{};
     };
 
-    PlaybackService(async::IExecutor& executor,
+    PlaybackService(async::Executor& executor,
                     ViewService& views,
                     library::MusicLibrary& library,
                     NotificationService& notifications);
@@ -143,7 +145,7 @@ namespace ao::rt
 
     // Register an audio backend provider. Called by the composition root
     // (via AppRuntime::addAudioProvider) during bootstrap.
-    void addProvider(std::unique_ptr<audio::IBackendProvider> providerPtr);
+    void addProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
     void pause();
     void resume();
     void stop();

@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/Subscription.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <cstdint>
@@ -26,7 +26,7 @@ namespace ao::tui
     bool selectRow(std::int32_t rowIndex);
 
   private:
-    bool selectableRow(std::int32_t rowIndex) const;
+    bool isSelectableRow(std::int32_t rowIndex) const;
     void normalizeSelection();
 
     uimodel::OutputDeviceViewState _view{};

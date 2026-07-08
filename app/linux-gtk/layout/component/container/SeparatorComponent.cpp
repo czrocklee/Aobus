@@ -3,7 +3,7 @@
 
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -23,14 +23,14 @@ namespace ao::gtk::layout
     /**
      * @brief A visual separator component (Gtk::Separator).
      */
-    class SeparatorComponent final : public ILayoutComponent
+    class SeparatorComponent final : public LayoutComponent
     {
     public:
       SeparatorComponent(LayoutContext& /*ctx*/, LayoutNode const& node)
       {
         auto orientation = Gtk::Orientation::HORIZONTAL;
 
-        if (node.getProp<std::string>("orientation", "") == "vertical")
+        if (node.propertyOr<std::string>("orientation", "") == "vertical")
         {
           orientation = Gtk::Orientation::VERTICAL;
         }
@@ -44,7 +44,7 @@ namespace ao::gtk::layout
       Gtk::Separator _separator;
     };
 
-    std::unique_ptr<ILayoutComponent> createSeparator(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createSeparator(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<SeparatorComponent>(ctx, node);
     }

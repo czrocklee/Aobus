@@ -44,7 +44,7 @@ namespace ao::gtk
       sigc::scoped_connection playingChangedConnection; // now-playing highlight
     };
 
-    bool labelTextIsEllipsized(Gtk::Label const& label)
+    bool isLabelTextEllipsized(Gtk::Label const& label)
     {
       auto const layoutPtr = label.get_layout();
       return layoutPtr != nullptr && layoutPtr->is_ellipsized();
@@ -57,7 +57,7 @@ namespace ao::gtk
         [&label](
           std::int32_t /*x*/, std::int32_t /*y*/, bool /*keyboardTooltip*/, Glib::RefPtr<Gtk::Tooltip> const& tooltip)
         {
-          if (!labelTextIsEllipsized(label))
+          if (!isLabelTextEllipsized(label))
           {
             return false;
           }

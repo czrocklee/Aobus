@@ -28,8 +28,8 @@ namespace ao::library
     {
     }
 
-    Reader reader(lmdb::ReadTransaction const& txn) const;
-    Writer writer(lmdb::WriteTransaction& txn);
+    Reader reader(lmdb::ReadTransaction const& transaction) const;
+    Writer writer(lmdb::WriteTransaction& transaction);
 
   private:
     lmdb::Database _database;
@@ -107,9 +107,9 @@ namespace ao::library
     return Iterator{_reader.begin()};
   }
 
-  inline ResourceStore::Reader ResourceStore::reader(lmdb::ReadTransaction const& txn) const
+  inline ResourceStore::Reader ResourceStore::reader(lmdb::ReadTransaction const& transaction) const
   {
-    return Reader{_database.reader(txn)};
+    return Reader{_database.reader(transaction)};
   }
 
   class ResourceStore::Writer

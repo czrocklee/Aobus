@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -37,9 +37,9 @@ namespace ao::rt::test
     CHECK(mutated[0] == trackId);
 
     // Verify the tag was added by fetching it
-    auto txn = testLib.library().readTransaction();
+    auto transaction = testLib.library().readTransaction();
     auto const optTrackView =
-      testLib.library().tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+      testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optTrackView);
     auto builder = library::TrackBuilder::fromView(*optTrackView, testLib.library().dictionary());
     CHECK(std::ranges::contains(builder.tags().names(), std::string_view{"Favorite"}));

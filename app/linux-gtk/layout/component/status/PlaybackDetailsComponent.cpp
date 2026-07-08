@@ -3,7 +3,7 @@
 
 #include "StatusComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/PlaybackDetailsWidget.h"
 #include <ao/rt/AppRuntime.h>
@@ -19,7 +19,7 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    class PlaybackDetailsComponent final : public ILayoutComponent
+    class PlaybackDetailsComponent final : public LayoutComponent
     {
     public:
       PlaybackDetailsComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
@@ -33,7 +33,7 @@ namespace ao::gtk::layout
       PlaybackDetailsWidget _widget;
     };
 
-    std::unique_ptr<ILayoutComponent> createPlaybackDetails(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createPlaybackDetails(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<PlaybackDetailsComponent>(ctx, node);
     }

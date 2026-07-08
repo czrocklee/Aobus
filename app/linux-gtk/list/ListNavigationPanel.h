@@ -56,10 +56,10 @@ namespace ao::gtk
 
     void rebuildTree(rt::Library const& reads);
     void selectList(ListId listId);
-    bool listHasChildren(ListId listId) const;
+    bool hasListChildren(ListId listId) const;
     ListId selectedListId() const;
 
-    void showContextMenu(Gdk::Rectangle const& rect);
+    void openContextMenu(Gdk::Rectangle const& rect);
 
   private:
     void setupNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);

@@ -37,7 +37,7 @@ namespace ao::rt
         return;
       }
 
-      if (!completionStartsWithInsensitive(entry.value, prefix))
+      if (!startsWithCompletionPrefixInsensitive(entry.value, prefix))
       {
         continue;
       }

@@ -40,7 +40,7 @@ namespace ao::gtk
 
 namespace ao::uimodel
 {
-  class ILayoutComponentStateStore;
+  class LayoutComponentStateStore;
 }
 
 namespace ao::uimodel
@@ -62,7 +62,7 @@ namespace ao::gtk
 
 namespace ao::gtk::layout
 {
-  class ITrackDetailScope;
+  class TrackDetailScope;
   class TrackDetailUndoController;
   class ComponentRegistry;
   class ActionRegistry;
@@ -73,7 +73,7 @@ namespace ao::gtk::layout
     uimodel::TrackPresentationCatalog* presentationCatalog = nullptr;
     uimodel::ListPresentationPreferenceStore* presentationPreferences = nullptr;
     TrackRowCache* trackRowCache = nullptr;
-    ITrackDetailScope* detailScope = nullptr;
+    TrackDetailScope* detailScope = nullptr;
     TrackDetailUndoController* detailUndo = nullptr;
   };
 
@@ -157,7 +157,7 @@ namespace ao::gtk::layout
     Gtk::Window& parentWindow;
     std::string activePresetId{};
     uimodel::LayoutComponentStateDocument componentState{};
-    uimodel::ILayoutComponentStateStore* componentStateStore = nullptr;
+    uimodel::LayoutComponentStateStore* componentStateStore = nullptr;
 
     /**
      * @brief Monotonically incremented when the active component state document is replaced.

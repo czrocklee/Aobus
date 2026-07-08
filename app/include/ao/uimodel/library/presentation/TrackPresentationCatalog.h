@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/Signal.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackPresentation.h>
 
 #include <cstdint>

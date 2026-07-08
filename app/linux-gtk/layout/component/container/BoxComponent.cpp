@@ -3,7 +3,7 @@
 
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -27,21 +27,21 @@ namespace ao::gtk::layout
     /**
      * @brief A box container component.
      */
-    class BoxComponent final : public ILayoutComponent
+    class BoxComponent final : public LayoutComponent
     {
     public:
       BoxComponent(LayoutContext& ctx, LayoutNode const& node)
       {
         auto orientation = Gtk::Orientation::VERTICAL;
 
-        if (node.getProp<std::string>("orientation", "") == "horizontal")
+        if (node.propertyOr<std::string>("orientation", "") == "horizontal")
         {
           orientation = Gtk::Orientation::HORIZONTAL;
         }
 
         _box.set_orientation(orientation);
-        _box.set_spacing(static_cast<std::int32_t>(node.getProp<std::int64_t>("spacing", 0)));
-        _box.set_homogeneous(node.getProp<bool>("homogeneous", false));
+        _box.set_spacing(static_cast<std::int32_t>(node.propertyOr<std::int64_t>("spacing", 0)));
+        _box.set_homogeneous(node.propertyOr<bool>("homogeneous", false));
 
         for (auto const& childNode : node.children)
         {
@@ -55,10 +55,10 @@ namespace ao::gtk::layout
 
     private:
       Gtk::Box _box;
-      std::vector<std::unique_ptr<ILayoutComponent>> _children;
+      std::vector<std::unique_ptr<LayoutComponent>> _children;
     };
 
-    std::unique_ptr<ILayoutComponent> createBox(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createBox(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<BoxComponent>(ctx, node);
     }

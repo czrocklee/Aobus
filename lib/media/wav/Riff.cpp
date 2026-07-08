@@ -69,7 +69,7 @@ namespace ao::media::wav
       std::byte{0x71},
     });
 
-    bool bytesEqual(std::span<std::byte const> bytes, std::string_view text) noexcept
+    bool matchesByteText(std::span<std::byte const> bytes, std::string_view text) noexcept
     {
       if (bytes.size() != text.size())
       {
@@ -223,12 +223,12 @@ namespace ao::media::wav
       return makeError(Error::Code::CorruptData, "WAV file is too small");
     }
 
-    if (!bytesEqual(bytes.first(4), "RIFF"))
+    if (!matchesByteText(bytes.first(4), "RIFF"))
     {
       return makeError(Error::Code::NotSupported, "Unsupported WAV container");
     }
 
-    if (!bytesEqual(bytes.subspan(8, 4), "WAVE"))
+    if (!matchesByteText(bytes.subspan(8, 4), "WAVE"))
     {
       return makeError(Error::Code::CorruptData, "RIFF file is not a WAVE file");
     }
@@ -267,7 +267,7 @@ namespace ao::media::wav
       auto chunk = ChunkView{.id = chunkId, .offset = payloadOffset, .bytes = bytes.subspan(payloadOffset, chunkSize)};
       parsed.chunks.push_back(chunk);
 
-      if (chunkIdEquals(chunk, "fmt "))
+      if (hasChunkId(chunk, "fmt "))
       {
         if (hasFormat)
         {
@@ -284,7 +284,7 @@ namespace ao::media::wav
         parsed.format = *formatResult;
         hasFormat = true;
       }
-      else if (chunkIdEquals(chunk, "data"))
+      else if (hasChunkId(chunk, "data"))
       {
         if (hasData)
         {
@@ -317,7 +317,7 @@ namespace ao::media::wav
     return parsed;
   }
 
-  bool chunkIdEquals(ChunkView const& chunk, std::string_view id) noexcept
+  bool hasChunkId(ChunkView const& chunk, std::string_view id) noexcept
   {
     if (id.size() != chunk.id.size())
     {

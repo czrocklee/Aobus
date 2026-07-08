@@ -2,16 +2,17 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/Error.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/backend/AlsaExclusiveBackend.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
 #include <ao/audio/backend/detail/AlsaPcmError.h>
 #include <ao/audio/backend/detail/AlsaPcmVolume.h>
 #include <ao/audio/backend/detail/AudioBackendShared.h>
-#include <ao/utility/ThreadUtils.h>
+#include <ao/utility/ThreadName.h>
 
 #include <poll.h>
 
@@ -361,11 +362,12 @@ namespace ao::audio::backend
           return 1.0F;
         }
 
-        if (_hasDB)
+        if (_hasDecibelRange)
         {
-          if (long db = 0L; ::snd_mixer_selem_get_playback_dB(_mixerElem, SND_MIXER_SCHN_MONO, &db) == 0)
+          if (long decibels = 0L; ::snd_mixer_selem_get_playback_dB(_mixerElem, SND_MIXER_SCHN_MONO, &decibels) == 0)
           {
-            return std::clamp(static_cast<float>(db - _dbMin) / static_cast<float>(_dbMax - _dbMin), 0.0F, 1.0F);
+            return std::clamp(
+              static_cast<float>(decibels - _decibelMin) / static_cast<float>(_decibelMax - _decibelMin), 0.0F, 1.0F);
           }
         }
 
@@ -397,7 +399,7 @@ namespace ao::audio::backend
       std::string const& mixerElemName() const { return _mixerElemName; }
       detail::AlsaVolumeControlMode volumeMode() const { return _volumeMode.load(); }
       float softwareVolume() const { return _softwareVolume.load(); }
-      bool softwareMuted() const { return _softwareMuted.load(); }
+      bool isSoftwareMuted() const { return _softwareMuted.load(); }
 
     private:
       bool openMixer(::snd_pcm_t* pcm)
@@ -447,17 +449,18 @@ namespace ao::audio::backend
           return false;
         }
 
-        long dbRangeMin = 0L;
-        long dbRangeMax = 0L;
+        long decibelRangeMin = 0L;
+        long decibelRangeMax = 0L;
 
         _mixerElem = candidate.elem;
         _mixerElemName = candidate.name;
         _volMin = optRange->min;
         _volMax = optRange->max;
-        _hasDB = (::snd_mixer_selem_get_playback_dB_range(_mixerElem, &dbRangeMin, &dbRangeMax) == 0 &&
-                  dbRangeMax > dbRangeMin);
-        _dbMin = static_cast<std::ptrdiff_t>(dbRangeMin);
-        _dbMax = static_cast<std::ptrdiff_t>(dbRangeMax);
+        _hasDecibelRange =
+          (::snd_mixer_selem_get_playback_dB_range(_mixerElem, &decibelRangeMin, &decibelRangeMax) == 0 &&
+           decibelRangeMax > decibelRangeMin);
+        _decibelMin = static_cast<std::ptrdiff_t>(decibelRangeMin);
+        _decibelMax = static_cast<std::ptrdiff_t>(decibelRangeMax);
         _volumeMode = detail::AlsaVolumeControlMode::HardwareMixer;
         return true;
       }
@@ -472,11 +475,12 @@ namespace ao::audio::backend
         float const clamped = std::clamp(vol, 0.0F, 1.0F);
         std::int32_t err = 0;
 
-        if (_hasDB)
+        if (_hasDecibelRange)
         {
-          auto const db =
-            toAlsaMixerLevel(_dbMin) + std::lround(static_cast<float>(_dbMax - _dbMin) * static_cast<double>(clamped));
-          err = ::snd_mixer_selem_set_playback_dB_all(_mixerElem, db, 0);
+          auto const decibelLevel =
+            toAlsaMixerLevel(_decibelMin) +
+            std::lround(static_cast<float>(_decibelMax - _decibelMin) * static_cast<double>(clamped));
+          err = ::snd_mixer_selem_set_playback_dB_all(_mixerElem, decibelLevel, 0);
         }
         else
         {
@@ -520,9 +524,9 @@ namespace ao::audio::backend
       std::string _mixerElemName;               // debug/log
       std::ptrdiff_t _volMin = 0;
       std::ptrdiff_t _volMax = 100;
-      bool _hasDB = false;
-      std::ptrdiff_t _dbMin = 0;
-      std::ptrdiff_t _dbMax = 0;
+      bool _hasDecibelRange = false;
+      std::ptrdiff_t _decibelMin = 0;
+      std::ptrdiff_t _decibelMax = 0;
 
       std::atomic<float> _softwareVolume{1.0F};
       std::atomic<bool> _softwareMuted{false};
@@ -547,7 +551,7 @@ namespace ao::audio::backend
 
     std::string deviceName;
     Format format;
-    IRenderTarget* renderTarget = nullptr;
+    RenderTarget* renderTarget = nullptr;
 
     AlsaPcmPtr pcmPtr;
     std::jthread thread;
@@ -561,8 +565,8 @@ namespace ao::audio::backend
 
     detail::AlsaGraphRegistry* graphRegistry = nullptr;
 
-    explicit Impl(std::string name, detail::AlsaGraphRegistry* graphRegistryArg)
-      : deviceName{std::move(name)}, graphRegistry{graphRegistryArg}
+    explicit Impl(std::string name, detail::AlsaGraphRegistry* graphRegistryHandle)
+      : deviceName{std::move(name)}, graphRegistry{graphRegistryHandle}
     {
     }
 
@@ -648,7 +652,7 @@ namespace ao::audio::backend
       auto const renderResult = renderTarget->renderPcm({dst, bytesToRead});
       std::size_t const bytesRead = renderResult.bytesWritten;
 
-      // Per the IRenderTarget contract renderPcm returns whole frames; commit only
+      // Per the RenderTarget contract renderPcm returns whole frames; commit only
       // the whole-frame portion defensively. A partial frame must never be
       // committed (it would desync channel alignment) nor gain-scaled.
       auto const framesRead = static_cast<::snd_pcm_uframes_t>(bytesRead / bytesPerFrame);
@@ -663,7 +667,7 @@ namespace ao::audio::backend
                                         format.bitDepth,
                                         format.validBits,
                                         is3Byte24Bit,
-                                        mixer.softwareMuted() ? 0.0F : mixer.softwareVolume());
+                                        mixer.isSoftwareMuted() ? 0.0F : mixer.softwareVolume());
         }
 
         commitFrames(offset, framesRead, renderResult);
@@ -813,7 +817,7 @@ namespace ao::audio::backend
     else
     {
       vol = mixer.softwareVolume();
-      muted = mixer.softwareMuted();
+      muted = mixer.isSoftwareMuted();
     }
 
     auto optFormat = std::optional<Format>{};
@@ -979,7 +983,7 @@ namespace ao::audio::backend
     close();
   }
 
-  Result<> AlsaExclusiveBackend::open(Format const& format, IRenderTarget* target)
+  Result<> AlsaExclusiveBackend::open(Format const& format, RenderTarget* target)
   {
     _implPtr->format = format;
     _implPtr->renderTarget = target;
@@ -1147,7 +1151,7 @@ namespace ao::audio::backend
         return _implPtr->mixer.readHardwareMuted();
       }
 
-      return _implPtr->mixer.softwareMuted();
+      return _implPtr->mixer.isSoftwareMuted();
     }
 
     return makeError(Error::Code::NotSupported);

@@ -22,7 +22,7 @@ namespace ao::uimodel
   double defaultTrackFieldColumnWeight(rt::TrackField field);
   TrackColumnSizing trackFieldColumnSizing(rt::TrackField field);
 
-  bool trackFieldIsVisibleByDefault(rt::TrackField field);
+  bool isTrackFieldVisibleByDefault(rt::TrackField field);
   std::string_view trackFieldColumnTitle(rt::TrackField field);
 
   std::optional<rt::TrackField> redundantSortFieldColumn(rt::TrackSortField field);

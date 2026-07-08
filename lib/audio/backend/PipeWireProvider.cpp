@@ -2,8 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/audio/Backend.h>
-#include <ao/audio/IBackend.h>
-#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/backend/PipeWireBackend.h>
 #include <ao/audio/backend/PipeWireMonitor.h>
@@ -59,12 +60,12 @@ namespace ao::audio::backend
     return _implPtr->monitor.subscribeDevices(std::move(wrappedCallback));
   }
 
-  std::unique_ptr<IBackend> PipeWireProvider::createBackend(Device const& device, ProfileId const& profile)
+  std::unique_ptr<Backend> PipeWireProvider::createBackend(Device const& device, ProfileId const& profile)
   {
     return std::make_unique<PipeWireBackend>(device, profile);
   }
 
-  IBackendProvider::Status PipeWireProvider::status() const
+  BackendProvider::Status PipeWireProvider::status() const
   {
     return {.metadata =
               {.id = kBackendPipeWire,

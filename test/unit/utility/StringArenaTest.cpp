@@ -72,16 +72,16 @@ namespace ao::utility::test
     auto views = std::vector<std::string_view>{};
     views.reserve(1000);
 
-    for (std::int32_t idx = 0; idx < 1000; ++idx)
+    for (std::int32_t index = 0; index < 1000; ++index)
     {
-      views.push_back(arena.intern(std::format("entry-{:04d}", idx)));
+      views.push_back(arena.intern(std::format("entry-{:04d}", index)));
     }
 
     CHECK(arena.size() == 1000);
 
-    for (std::int32_t idx = 0; idx < 1000; ++idx)
+    for (std::int32_t index = 0; index < 1000; ++index)
     {
-      CHECK(views[static_cast<std::size_t>(idx)] == std::format("entry-{:04d}", idx));
+      CHECK(views[static_cast<std::size_t>(index)] == std::format("entry-{:04d}", index));
     }
   }
 

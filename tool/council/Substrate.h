@@ -33,7 +33,7 @@ namespace ao::council
   class SnapshotProvider final
   {
   public:
-    explicit SnapshotProvider(IProcessRunner& runner);
+    explicit SnapshotProvider(ProcessRunner& runner);
 
     Result<std::filesystem::path> createImmutableBase(std::filesystem::path const& repo,
                                                       std::filesystem::path const& destination);
@@ -42,7 +42,7 @@ namespace ao::council
     void remove(std::filesystem::path const& path) noexcept;
 
   private:
-    IProcessRunner& _runner;
+    ProcessRunner& _runner;
   };
 
   struct SandboxMounts
@@ -53,7 +53,7 @@ namespace ao::council
   class NamespaceRunner final
   {
   public:
-    explicit NamespaceRunner(IProcessRunner& runner);
+    explicit NamespaceRunner(ProcessRunner& runner);
 
     ProcessResult run(std::filesystem::path const& realRepo,
                       std::filesystem::path const& workspace,
@@ -61,7 +61,7 @@ namespace ao::council
                       ProcessRequest request);
 
   private:
-    IProcessRunner& _runner;
+    ProcessRunner& _runner;
   };
 
   class ArtifactStore final

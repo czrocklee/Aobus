@@ -41,8 +41,8 @@ namespace ao::gtk::layout::test
 
       REQUIRE(paned != nullptr);
 
-      int const expectedPos = 200;
-      CHECK(paned->get_position() == expectedPos);
+      int const expectedPosition = 200;
+      CHECK(paned->get_position() == expectedPosition);
       CHECK(paned->get_resize_start_child() == false);
       CHECK(paned->get_shrink_end_child() == true);
     }

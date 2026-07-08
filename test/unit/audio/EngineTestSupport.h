@@ -5,8 +5,9 @@
 
 #include "ScriptedDecoderSession.h"
 #include <ao/AudioCodec.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PlaybackInput.h>

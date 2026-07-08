@@ -67,7 +67,7 @@ namespace ao::gtk
     void setConflictConfirmer(ConflictConfirmer confirmer) { _conflictConfirmer = std::move(confirmer); }
 
     std::vector<std::string> const& editableActionIds() const { return _editableActionIds; }
-    Gtk::Window* captureWindowForTest() const { return _captureWindowPtr.get(); }
+    Gtk::Window* captureWindow() const { return _captureWindowPtr.get(); }
 
   private:
     struct EditableAction final

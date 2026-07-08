@@ -6,8 +6,9 @@
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/AacDecoderSession.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/PcmBlock.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/audio/detail/AacConfigParser.h>
 #include <ao/audio/detail/DecoderError.h>
@@ -272,7 +273,7 @@ namespace ao::audio
   {
     try
     {
-      if (_implPtr->packetSource.atEnd())
+      if (_implPtr->packetSource.isAtEnd())
       {
         return PcmBlock{.bytes = {}, .endOfStream = true};
       }
@@ -376,7 +377,7 @@ namespace ao::audio
           .bitDepth = _implPtr->info.outputFormat.bitDepth,
           .frames = frames,
           .firstFrameIndex = firstFrameIndex,
-          .endOfStream = _implPtr->packetSource.atEnd(),
+          .endOfStream = _implPtr->packetSource.isAtEnd(),
         };
       }
 
@@ -387,7 +388,7 @@ namespace ao::audio
         .bitDepth = _implPtr->info.outputFormat.bitDepth,
         .frames = frames,
         .firstFrameIndex = firstFrameIndex,
-        .endOfStream = _implPtr->packetSource.atEnd(),
+        .endOfStream = _implPtr->packetSource.isAtEnd(),
       };
     }
     catch (detail::DecoderException const& ex)

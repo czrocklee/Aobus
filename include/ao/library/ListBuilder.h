@@ -19,13 +19,13 @@ namespace ao::library
    *
    * Usage:
    *   // Create a manual list
-   *   auto builder = ListBuilder::createNew();
+   *   auto builder = ListBuilder::makeEmpty();
    *   builder.name("My Playlist").description("Great songs");
    *   builder.tracks().add(trackId1).add(trackId2);
    *   auto payload = builder.serialize();
    *
    *   // Create a smart list
-   *   auto builder = ListBuilder::createNew();
+   *   auto builder = ListBuilder::makeEmpty();
    *   builder.name("Smart List").description("Filtered").filter("@genre = rock");
    *   auto payload = builder.serialize();
    */
@@ -33,7 +33,7 @@ namespace ao::library
   {
   public:
     // Factory methods
-    static ListBuilder createNew();
+    static ListBuilder makeEmpty();
     static ListBuilder fromView(ListView const& view);
 
     //=============================================================================

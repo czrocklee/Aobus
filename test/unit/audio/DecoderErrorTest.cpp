@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Error.h>
-#include <ao/audio/IDecoderSession.h>
-#include <ao/audio/ISource.h>
+#include <ao/audio/DecoderSession.h>
+#include <ao/audio/PcmSource.h>
 #include <ao/audio/detail/DecoderError.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -21,13 +21,13 @@ namespace ao::audio::test
   // override that silently drops noexcept fails the build rather than the boundary.
   // Arguments come from declval so the operand measures only the call's exception
   // specification, not (potentially throwing) argument construction.
-  static_assert(noexcept(std::declval<IDecoderSession&>().open(std::declval<std::filesystem::path const&>())));
-  static_assert(noexcept(std::declval<IDecoderSession&>().close()));
-  static_assert(noexcept(std::declval<IDecoderSession&>().seek(std::declval<std::chrono::milliseconds>())));
-  static_assert(noexcept(std::declval<IDecoderSession&>().flush()));
-  static_assert(noexcept(std::declval<IDecoderSession&>().readNextBlock()));
-  static_assert(noexcept(std::declval<IDecoderSession const&>().streamInfo()));
-  static_assert(noexcept(std::declval<ISource&>().seek(std::declval<std::chrono::milliseconds>())));
+  static_assert(noexcept(std::declval<DecoderSession&>().open(std::declval<std::filesystem::path const&>())));
+  static_assert(noexcept(std::declval<DecoderSession&>().close()));
+  static_assert(noexcept(std::declval<DecoderSession&>().seek(std::declval<std::chrono::milliseconds>())));
+  static_assert(noexcept(std::declval<DecoderSession&>().flush()));
+  static_assert(noexcept(std::declval<DecoderSession&>().readNextBlock()));
+  static_assert(noexcept(std::declval<DecoderSession const&>().streamInfo()));
+  static_assert(noexcept(std::declval<PcmSource&>().seek(std::declval<std::chrono::milliseconds>())));
 
   TEST_CASE("throwDecoderError - preserves the original error's source location", "[audio][unit][decoder][error]")
   {

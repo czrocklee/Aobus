@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/TestUtils.h"
-#include "test/unit/query/ExecutionPlanTestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
+#include "test/unit/query/ExecutionPlanTestSupport.h"
 #include <ao/library/DictionaryStore.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
@@ -27,15 +27,15 @@ namespace ao::query::test
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
-    auto dictCompiler = QueryCompiler{&dict};
+    auto dictionary = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
+    auto dictionaryCompiler = QueryCompiler{&dictionary};
 
-    auto const plan = compileOk(dictCompiler, parseOk("%rating?"));
+    auto const plan = compileOk(dictionaryCompiler, parseOk("%rating?"));
 
     REQUIRE(plan.instructions.size() == 1);
     CHECK(plan.instructions[0].op == OpCode::Exists);
     CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::Custom));
-    CHECK(std::cmp_equal(plan.instructions[0].constValue, dict.getId("rating").raw()));
+    CHECK(std::cmp_equal(plan.instructions[0].constValue, dictionary.lookupId("rating").raw()));
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
@@ -44,15 +44,15 @@ namespace ao::query::test
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
-    CHECK(dict.put(wtxn, "Johann Sebastian Bach"));
+    auto dictionary = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
+    CHECK(dictionary.put(wtxn, "Johann Sebastian Bach"));
 
     auto expr = parseOk(R"($artist ~ "Bach")");
-    auto compiler = QueryCompiler{&dict};
+    auto compiler = QueryCompiler{&dictionary};
 
     if (auto const plan = compileOk(compiler, expr); plan.dictionary != nullptr)
     {
-      CHECK(plan.dictionary == &dict);
+      CHECK(plan.dictionary == &dictionary);
       REQUIRE(plan.stringConstants.size() == 1);
       CHECK(plan.stringConstants.front() == "Bach");
       CHECK(plan.instructions.back().op == OpCode::Like);
@@ -65,18 +65,18 @@ namespace ao::query::test
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto dictionary = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
 
     // Tag "FutureTag" does not exist in dictionary yet
     auto expr = parseOk("#FutureTag");
-    auto compiler = QueryCompiler{&dict};
+    auto compiler = QueryCompiler{&dictionary};
 
     // Compile the plan. This should use getOrIntern() to allocate a stable ID
     auto plan = compileOk(compiler, expr);
 
     // The ID should now be in the dictionary because of getOrIntern()
-    CHECK(dict.contains("FutureTag"));
-    auto futureTagId = dict.getId("FutureTag");
+    CHECK(dictionary.contains("FutureTag"));
+    auto futureTagId = dictionary.lookupId("FutureTag");
 
     // Verify that the instruction uses this ID
     bool foundTagEq = false;
@@ -108,17 +108,17 @@ namespace ao::query::test
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
+    auto dictionary = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
 
     // Custom field "FutureKey" does not exist
     auto expr = parseOk("%FutureKey = 'Value'");
-    auto compiler = QueryCompiler{&dict};
+    auto compiler = QueryCompiler{&dictionary};
 
     auto plan = compileOk(compiler, expr);
 
     // ID should have been getOrInternd
-    CHECK(dict.contains("FutureKey"));
-    auto futureKeyId = dict.getId("FutureKey");
+    CHECK(dictionary.contains("FutureKey"));
+    auto futureKeyId = dictionary.lookupId("FutureKey");
 
     // Verify that the instruction uses this ID
     bool foundLoadField = false;
@@ -140,14 +140,14 @@ namespace ao::query::test
     auto temp = ao::test::TempDir{};
     auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dict = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dict"), wtxn};
-    auto bachId = ao::test::requireValue(dict.put(wtxn, "Bach"));
+    auto dictionary = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
+    auto bachId = ao::test::requireValue(dictionary.put(wtxn, "Bach"));
     REQUIRE(wtxn.commit());
 
     SECTION("Dictionary-Backed Equality Resolves To NumericId")
     {
       auto expr = parseOk("$artist = \"Bach\"");
-      auto compiler = QueryCompiler{&dict};
+      auto compiler = QueryCompiler{&dictionary};
       auto plan = compileOk(compiler, expr);
       REQUIRE(plan.instructions.size() >= 2);
       CHECK(plan.instructions[1].op == OpCode::LoadConstant);
@@ -158,7 +158,7 @@ namespace ao::query::test
     SECTION("Dictionary-Backed Like Keeps StringConstant")
     {
       auto expr = parseOk("$artist ~ \"Bach\"");
-      auto compiler = QueryCompiler{&dict};
+      auto compiler = QueryCompiler{&dictionary};
       auto plan = compileOk(compiler, expr);
       REQUIRE(plan.instructions.size() >= 2);
       CHECK(plan.instructions[1].op == OpCode::LoadConstant);

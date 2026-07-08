@@ -205,7 +205,7 @@ namespace ao::gtk::test
     {
       library::test::addTrack(musicLibrary, library::test::TrackSpec{.title = "Test Dictionary String"});
       auto provider = TrackRowCache{runtime.library()};
-      auto const id = DictionaryId{1}; // Assuming ID 1 exists because it's the first string added to the dict
+      auto const id = DictionaryId{1}; // Assuming ID 1 exists because it's the first string added to the dictionary
 
       auto const& name = provider.resolveDictionaryString(id);
       CHECK_FALSE(name.empty());

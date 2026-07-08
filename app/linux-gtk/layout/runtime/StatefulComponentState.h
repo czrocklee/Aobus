@@ -4,8 +4,8 @@
 #pragma once
 
 #include "layout/runtime/LayoutContext.h"
-#include <ao/uimodel/layout/component/ILayoutComponentStateStore.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <cstdint>

@@ -35,26 +35,26 @@ namespace ao::library
    *
    * Usage:
    *   // Pattern A: from existing view, modify hot only
-   *   auto builder = TrackBuilder::fromView(view, dict);
+   *   auto builder = TrackBuilder::fromView(view, dictionary);
    *   builder.tags().add("rock").remove("jazz");
-   *   auto hotData = builder.serializeHot(txn, dict);
+   *   auto hotData = builder.serializeHot(transaction, dictionary);
    *   writer.updateHot(trackId, hotData);
    *
    *   // Pattern B: create new track
-   *   auto builder = TrackBuilder::createNew();
+   *   auto builder = TrackBuilder::makeEmpty();
    *   builder.metadata().title("Song").artist("Artist").album("Album");
    *   builder.property().fileSize(fs).bitDepth(BitDepth{16});
    *   builder.tags().add("rock");
    *   builder.customMetadata().add("key", "value");
-   *   auto [hot, cold] = builder.serialize(txn, dict, resources);
+   *   auto [hot, cold] = builder.serialize(transaction, dictionary, resources);
    *   writer.createHotCold(hot, cold);
    */
   class TrackBuilder final
   {
   public:
     // Factory methods
-    static TrackBuilder createNew();
-    static TrackBuilder fromView(TrackView const& view, DictionaryStore& dict);
+    static TrackBuilder makeEmpty();
+    static TrackBuilder fromView(TrackView const& view, DictionaryStore& dictionary);
 
     //=============================================================================
     // Sub-builders - own the data as string_view
@@ -236,14 +236,14 @@ namespace ao::library
     CustomMetadataBuilder const& customMetadata() const;
 
     // Full serialization - resolves all strings to DictionaryIds
-    Result<std::pair<std::vector<std::byte>, std::vector<std::byte>>> serialize(lmdb::WriteTransaction& txn,
-                                                                                DictionaryStore& dict,
+    Result<std::pair<std::vector<std::byte>, std::vector<std::byte>>> serialize(lmdb::WriteTransaction& transaction,
+                                                                                DictionaryStore& dictionary,
                                                                                 ResourceStore& resources) const;
 
     // Partial serialization for hot-only or cold-only updates
-    Result<std::vector<std::byte>> serializeHot(lmdb::WriteTransaction& txn, DictionaryStore& dict) const;
-    Result<std::vector<std::byte>> serializeCold(lmdb::WriteTransaction& txn,
-                                                 DictionaryStore& dict,
+    Result<std::vector<std::byte>> serializeHot(lmdb::WriteTransaction& transaction, DictionaryStore& dictionary) const;
+    Result<std::vector<std::byte>> serializeCold(lmdb::WriteTransaction& transaction,
+                                                 DictionaryStore& dictionary,
                                                  ResourceStore& resources) const;
 
     //=============================================================================
@@ -267,7 +267,9 @@ namespace ao::library
 
     private:
       PreparedHot() = default;
-      static PreparedHot create(TrackBuilder const* builder, lmdb::WriteTransaction& txn, DictionaryStore& dict);
+      static PreparedHot create(TrackBuilder const* builder,
+                                lmdb::WriteTransaction& transaction,
+                                DictionaryStore& dictionary);
 
       std::string _title;
       std::vector<DictionaryId> _tagIds;
@@ -305,18 +307,21 @@ namespace ao::library
     private:
       PreparedCold() = default;
       static PreparedCold create(TrackBuilder const* builder,
-                                 lmdb::WriteTransaction& txn,
-                                 DictionaryStore& dict,
+                                 lmdb::WriteTransaction& transaction,
+                                 DictionaryStore& dictionary,
                                  ResourceStore& resources);
-      static std::vector<std::pair<DictionaryId, std::string_view>> resolveCustomMetadata(TrackBuilder const* builder,
-                                                                                          lmdb::WriteTransaction& txn,
-                                                                                          DictionaryStore& dict);
+      static std::vector<std::pair<DictionaryId, std::string_view>> resolveCustomMetadata(
+        TrackBuilder const* builder,
+        lmdb::WriteTransaction& transaction,
+        DictionaryStore& dictionary);
 
-      void resolveClassicalIds(TrackBuilder const* builder, lmdb::WriteTransaction& txn, DictionaryStore& dict);
-      void resolveCoverArt(TrackBuilder const* builder, lmdb::WriteTransaction& txn, ResourceStore& resources);
+      void resolveClassicalIds(TrackBuilder const* builder,
+                               lmdb::WriteTransaction& transaction,
+                               DictionaryStore& dictionary);
+      void resolveCoverArt(TrackBuilder const* builder, lmdb::WriteTransaction& transaction, ResourceStore& resources);
       void appendBlock(TrackColdBlockSlot slot, std::vector<std::byte> payload);
       void appendCoverArtBlock();
-      void appendClassicalBlock(MetadataBuilder const& meta);
+      void appendClassicalBlock(MetadataBuilder const& metadata);
       void appendCustomMetadataBlock(std::vector<std::pair<DictionaryId, std::string_view>> const& resolvedPairs);
       void assignLayout(std::string_view uri);
       void snapshot(TrackBuilder const* builder);
@@ -351,14 +356,14 @@ namespace ao::library
     };
 
     // Prepare methods - resolve dictionary IDs and compute sizes
-    Result<std::pair<PreparedHot, PreparedCold>> prepare(lmdb::WriteTransaction& txn,
-                                                         DictionaryStore& dict,
+    Result<std::pair<PreparedHot, PreparedCold>> prepare(lmdb::WriteTransaction& transaction,
+                                                         DictionaryStore& dictionary,
                                                          ResourceStore& resources) const;
 
-    Result<PreparedHot> prepareHot(lmdb::WriteTransaction& txn, DictionaryStore& dict) const;
+    Result<PreparedHot> prepareHot(lmdb::WriteTransaction& transaction, DictionaryStore& dictionary) const;
 
-    Result<PreparedCold> prepareCold(lmdb::WriteTransaction& txn,
-                                     DictionaryStore& dict,
+    Result<PreparedCold> prepareCold(lmdb::WriteTransaction& transaction,
+                                     DictionaryStore& dictionary,
                                      ResourceStore& resources) const;
 
   private:

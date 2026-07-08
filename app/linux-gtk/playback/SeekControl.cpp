@@ -109,7 +109,7 @@ namespace ao::gtk
     stopTick();
   }
 
-  bool SeekControl::isTickActiveForTest() const noexcept
+  bool SeekControl::isTickActive() const noexcept
   {
     return _tickId != 0;
   }

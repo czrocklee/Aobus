@@ -209,7 +209,7 @@ namespace ao::gtk
 
   std::optional<std::string> toGtkAccel(KeyChord const& chord)
   {
-    if (!chord.valid())
+    if (!chord.isValid())
     {
       return std::nullopt;
     }

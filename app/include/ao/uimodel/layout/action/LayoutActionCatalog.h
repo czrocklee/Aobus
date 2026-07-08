@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
 #include <optional>
 #include <string_view>

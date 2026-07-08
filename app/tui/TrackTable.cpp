@@ -56,7 +56,7 @@ namespace ao::tui
       return value.empty() ? std::string{"-"} : std::string{value};
     }
 
-    bool rightAlignField(rt::TrackField const field)
+    bool shouldRightAlignField(rt::TrackField const field)
     {
       using F = rt::TrackField;
 
@@ -172,7 +172,7 @@ namespace ao::tui
       return rt::TrackFieldRawValue{};
     }
 
-    std::string displayTextForField(rt::TrackField const field, rt::TrackRow const& row)
+    std::string formatFieldDisplayText(rt::TrackField const field, rt::TrackRow const& row)
     {
       auto value = uimodel::formatTrackFieldRawValue(field, rawValueForField(field, row));
 
@@ -263,7 +263,7 @@ namespace ao::tui
         columns.push_back(TrackColumn{.field = field,
                                       .label = std::string{uimodel::trackFieldColumnTitle(field)},
                                       .width = width,
-                                      .rightAligned = rightAlignField(field)});
+                                      .rightAligned = shouldRightAlignField(field)});
       }
 
       return columns;
@@ -332,7 +332,7 @@ namespace ao::tui
       {
         auto const& column = columns[index];
         cells.push_back(columnSeparator(index));
-        cells.push_back(fieldCell(displayTextForField(column.field, track.row), column));
+        cells.push_back(fieldCell(formatFieldDisplayText(column.field, track.row), column));
       }
 
       if (!columns.empty())

@@ -5,9 +5,9 @@
 #include <ao/audio/AacDecoderSession.h>
 #include <ao/audio/AlacDecoderSession.h>
 #include <ao/audio/DecoderFactory.h>
+#include <ao/audio/DecoderSession.h>
 #include <ao/audio/FlacDecoderSession.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/IDecoderSession.h>
 #include <ao/audio/Mp3DecoderSession.h>
 #include <ao/audio/WavDecoderSession.h>
 #include <ao/media/mp4/SampleDescription.h>
@@ -22,8 +22,8 @@
 
 namespace ao::audio
 {
-  Result<std::unique_ptr<IDecoderSession>> createDecoderSession(std::filesystem::path const& filePath,
-                                                                Format outputFormat)
+  Result<std::unique_ptr<DecoderSession>> createDecoderSession(std::filesystem::path const& filePath,
+                                                               Format outputFormat)
   {
     auto ext = filePath.extension().string();
     std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });

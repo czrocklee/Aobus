@@ -49,7 +49,7 @@ namespace clang::tidy::readability
         return true;
       }
 
-      bool found() const { return _found; }
+      bool hasFoundMatch() const { return _found; }
 
     private:
       VarDecl const* _varDecl;
@@ -61,7 +61,7 @@ namespace clang::tidy::readability
       auto visitor = UsageVisitor{varDecl};
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
       visitor.TraverseStmt(const_cast<Stmt*>(target));
-      return visitor.found();
+      return visitor.hasFoundMatch();
     }
 
     bool isUsedAfter(VarDecl const* varDecl, CompoundStmt const* block, Stmt const* target)
@@ -80,7 +80,7 @@ namespace clang::tidy::readability
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
         visitor.TraverseStmt(const_cast<Stmt*>(*nextIt));
 
-        if (visitor.found())
+        if (visitor.hasFoundMatch())
         {
           return true;
         }

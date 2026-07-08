@@ -58,14 +58,14 @@ namespace clang::tidy::modernize
 
       if (auto const* const construct = dyn_cast<CXXConstructExpr>(clean); construct != nullptr)
       {
-        for (auto const* const arg : construct->arguments())
+        for (auto const* const argument : construct->arguments())
         {
-          if (arg == nullptr)
+          if (argument == nullptr)
           {
             continue;
           }
 
-          if (auto const* const sub = getInitList(arg); sub != nullptr)
+          if (auto const* const sub = getInitList(argument); sub != nullptr)
           {
             return sub;
           }

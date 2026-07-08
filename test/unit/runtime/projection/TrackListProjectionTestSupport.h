@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
-#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 
@@ -28,9 +28,9 @@ namespace ao::rt::test
     {
     }
 
-    TrackListProjection createProjection(ViewId viewId)
+    LiveTrackListProjection createProjection(ViewId viewId)
     {
-      return TrackListProjection{viewId, *filteredPtr, lib.library()};
+      return LiveTrackListProjection{viewId, *filteredPtr, lib.library()};
     }
 
     void setupFiltered(std::span<TrackId const> ids)

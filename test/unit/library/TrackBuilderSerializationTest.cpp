@@ -47,7 +47,7 @@ namespace ao::library::test
     std::vector<TrackColdBlockSlot> coldBlockSlots(std::span<std::byte const> coldData)
     {
       auto const reader = detail::TrackColdReader{coldData};
-      REQUIRE(reader.valid());
+      REQUIRE(reader.isValid());
 
       auto const& header = reader.header();
       auto result = std::vector<TrackColdBlockSlot>{};
@@ -67,7 +67,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - serializes empty builders", "[library][unit][track-builder][serialization]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     auto const [hotData, coldData] = serializeTestTrack(builder);
 
     CHECK(hotData.size() >= sizeof(TrackHotHeader));
@@ -81,7 +81,7 @@ namespace ao::library::test
 
     SECTION("empty URI")
     {
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
       auto const coldData = context.serializeCold(builder);
       auto const& header = coldHeader(coldData);
 
@@ -89,12 +89,12 @@ namespace ao::library::test
       CHECK(header.blockOffsets == std::array<std::uint16_t, kTrackColdBlockSlotCount>{});
       CHECK(header.uriOffset == sizeof(TrackColdHeader));
       CHECK(header.uriLength == 0);
-      CHECK(detail::TrackColdReader{coldData}.valid());
+      CHECK(detail::TrackColdReader{coldData}.isValid());
     }
 
     SECTION("non-empty URI")
     {
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
       builder.property().uri("abc");
 
       auto const coldData = context.serializeCold(builder);
@@ -111,7 +111,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - serializes strings into hot payloads", "[library][unit][track-builder][serialization]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Hello World").year(2021);
     builder.property().uri("/music/test.flac");
 
@@ -130,7 +130,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - serialize writes hot header fields", "[library][unit][track-builder][serialization]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata().year(1999);
     builder.property().bitDepth(BitDepth{24});
 
@@ -144,7 +144,7 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - serializes strings with special characters",
             "[library][unit][track-builder][serialization]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     auto const* title = "Test: \"Quotes\" & 'Apostrophes'";
     builder.metadata().title(title);
 
@@ -157,7 +157,7 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - serialization is stable across repeated calls",
             "[library][unit][track-builder][serialization]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
     builder.property().uri("/test");
 
@@ -171,7 +171,7 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - serialize writes cold header fields", "[library][unit][track-builder][serialization]")
   {
     auto context = TrackSerializationContext{};
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata()
       .trackNumber(5)
       .trackTotal(10)
@@ -194,16 +194,16 @@ namespace ao::library::test
     CHECK(header->uriOffset == sizeof(TrackColdHeader) + sizeof(TrackClassicalBlock));
 
     auto const view = TrackView{std::span<std::byte const>{}, coldData};
-    CHECK(view.classical().conductorId() == context.dict().getId("Carlos Kleiber"));
-    CHECK(view.classical().ensembleId() == context.dict().getId("Vienna Philharmonic"));
-    CHECK(view.classical().soloistId() == context.dict().getId("Yo-Yo Ma"));
+    CHECK(view.classical().conductorId() == context.dictionary().lookupId("Carlos Kleiber"));
+    CHECK(view.classical().ensembleId() == context.dictionary().lookupId("Vienna Philharmonic"));
+    CHECK(view.classical().soloistId() == context.dictionary().lookupId("Yo-Yo Ma"));
   }
 
   TEST_CASE("TrackBuilder - writes extension blocks in deterministic order",
             "[library][unit][track-builder][serialization]")
   {
     auto context = TrackSerializationContext{};
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
     builder.metadata().work("Work");
     builder.customMetadata().add("key", "value");
@@ -228,7 +228,7 @@ namespace ao::library::test
             "[library][unit][track-builder][serialization]")
   {
     auto context = TrackSerializationContext{};
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.customMetadata().add("odd", "abc");
     builder.property().uri("uri");
 
@@ -253,7 +253,7 @@ namespace ao::library::test
     auto const* entry = utility::layout::view<CustomMetadataEntry>(
       customPayload.subspan(sizeof(CustomMetadataBlockHeader), sizeof(CustomMetadataEntry)));
     REQUIRE(entry != nullptr);
-    CHECK(entry->keyId == context.dict().getId("odd"));
+    CHECK(entry->keyId == context.dictionary().lookupId("odd"));
     CHECK(entry->valueOffset == customHeader->valueOffset);
     CHECK(entry->valueLength == 3);
 
@@ -264,8 +264,8 @@ namespace ao::library::test
     CHECK(std::ranges::all_of(uriPadding, [](std::byte value) { return value == std::byte{0}; }));
 
     auto const view = TrackView{std::span<std::byte const>{}, coldData};
-    REQUIRE(view.customMetadata().get(context.dict().getId("odd")));
-    CHECK(*view.customMetadata().get(context.dict().getId("odd")) == "abc");
+    REQUIRE(view.customMetadata().get(context.dictionary().lookupId("odd")));
+    CHECK(*view.customMetadata().get(context.dictionary().lookupId("odd")) == "abc");
     CHECK(view.property().uri() == "uri");
   }
 
@@ -275,7 +275,7 @@ namespace ao::library::test
     auto expectSingleClassicalBlock = [](auto configure, auto check)
     {
       auto context = TrackSerializationContext{};
-      auto builder = TrackBuilder::createNew();
+      auto builder = TrackBuilder::makeEmpty();
       configure(builder);
 
       auto const coldData = context.serializeCold(builder);
@@ -286,34 +286,34 @@ namespace ao::library::test
       REQUIRE(slots.size() == 1);
       CHECK(slots[0] == TrackColdBlockSlot::Classical);
       CHECK(coldBlockOffset(header, TrackColdBlockSlot::Classical) == sizeof(TrackColdHeader));
-      check(view, context.dict());
+      check(view, context.dictionary());
     };
 
     SECTION("conductor")
     {
       expectSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().conductor("Conductor"); },
-                                 [](TrackView const& view, DictionaryStore& dict)
-                                 { CHECK(view.classical().conductorId() == dict.getId("Conductor")); });
+                                 [](TrackView const& view, DictionaryStore& dictionary)
+                                 { CHECK(view.classical().conductorId() == dictionary.lookupId("Conductor")); });
     }
 
     SECTION("ensemble")
     {
       expectSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().ensemble("Ensemble"); },
-                                 [](TrackView const& view, DictionaryStore& dict)
-                                 { CHECK(view.classical().ensembleId() == dict.getId("Ensemble")); });
+                                 [](TrackView const& view, DictionaryStore& dictionary)
+                                 { CHECK(view.classical().ensembleId() == dictionary.lookupId("Ensemble")); });
     }
 
     SECTION("soloist")
     {
       expectSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().soloist("Soloist"); },
-                                 [](TrackView const& view, DictionaryStore& dict)
-                                 { CHECK(view.classical().soloistId() == dict.getId("Soloist")); });
+                                 [](TrackView const& view, DictionaryStore& dictionary)
+                                 { CHECK(view.classical().soloistId() == dictionary.lookupId("Soloist")); });
     }
   }
 
   TEST_CASE("TrackBuilder - serializeCold writes cold view data", "[library][unit][track-builder][serialization]")
   {
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata().trackNumber(3);
     builder.property().uri("/path/to/file.flac").duration(std::chrono::minutes{4});
     builder.customMetadata().add("key1", "value1").add("key2", "value2");
@@ -330,7 +330,7 @@ namespace ao::library::test
   {
     auto context = TrackSerializationContext{};
 
-    auto original = TrackBuilder::createNew();
+    auto original = TrackBuilder::makeEmpty();
     original.metadata()
       .title("Title")
       .albumArtist("Test Album Artist")
@@ -343,7 +343,7 @@ namespace ao::library::test
     auto const [hotData, coldData] = context.serialize(original);
     auto view = TrackView{hotData, coldData};
 
-    auto reconstructed = TrackBuilder::fromView(view, context.dict());
+    auto reconstructed = TrackBuilder::fromView(view, context.dictionary());
     CHECK(reconstructed.metadata().title() == "Title");
     CHECK(reconstructed.metadata().albumArtist() == "Test Album Artist");
     CHECK(reconstructed.metadata().composer() == "Test Composer");
@@ -362,7 +362,7 @@ namespace ao::library::test
   {
     auto context = TrackSerializationContext{};
 
-    auto builder = TrackBuilder::createNew();
+    auto builder = TrackBuilder::makeEmpty();
     builder.metadata()
       .trackNumber(1)
       .trackTotal(10)
@@ -386,11 +386,11 @@ namespace ao::library::test
     CHECK(view.metadata().discTotal() == 3);
     REQUIRE(view.coverArt().primary());
     CHECK(view.coverArt().primary()->resourceId == ResourceId{42});
-    CHECK(view.metadata().albumId() == context.dict().getId("Album"));
-    CHECK(view.metadata().genreId() == context.dict().getId("Genre"));
-    CHECK(view.metadata().albumArtistId() == context.dict().getId("Album Artist"));
-    CHECK(view.classical().conductorId() == context.dict().getId("Conductor"));
-    CHECK(view.classical().ensembleId() == context.dict().getId("Ensemble"));
-    CHECK(view.classical().soloistId() == context.dict().getId("Soloist"));
+    CHECK(view.metadata().albumId() == context.dictionary().lookupId("Album"));
+    CHECK(view.metadata().genreId() == context.dictionary().lookupId("Genre"));
+    CHECK(view.metadata().albumArtistId() == context.dictionary().lookupId("Album Artist"));
+    CHECK(view.classical().conductorId() == context.dictionary().lookupId("Conductor"));
+    CHECK(view.classical().ensembleId() == context.dictionary().lookupId("Ensemble"));
+    CHECK(view.classical().soloistId() == context.dictionary().lookupId("Soloist"));
   }
 } // namespace ao::library::test

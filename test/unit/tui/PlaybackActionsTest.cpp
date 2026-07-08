@@ -3,8 +3,8 @@
 
 #include "tui/PlaybackActions.h"
 
-#include "test/unit/RuntimeTestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include "tui/Model.h"

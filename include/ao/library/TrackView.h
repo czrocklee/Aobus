@@ -129,8 +129,8 @@ namespace ao::library
     class Iterator;
     Iterator begin() const;
     Iterator end() const;
-    std::optional<std::string_view> get(DictionaryId dictId) const noexcept;
-    bool contains(DictionaryId dictId) const noexcept;
+    std::optional<std::string_view> get(DictionaryId dictionaryId) const noexcept;
+    bool contains(DictionaryId dictionaryId) const noexcept;
 
   private:
     friend class TrackView;

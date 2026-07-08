@@ -13,7 +13,7 @@
 
 namespace ao::tag::mpeg
 {
-  enum class VersionID : std::uint8_t
+  enum class VersionId : std::uint8_t
   {
     Ver25 = 0b00,
     Reserved = 0b01,
@@ -92,7 +92,7 @@ namespace ao::tag::mpeg
 
     std::uint8_t sync1() const { return data[0]; }
     std::uint8_t sync2() const { return (data[1] >> kSyncShift2) & kSyncMask2; }
-    VersionID versionId() const { return static_cast<VersionID>((data[1] >> kVersionShift) & kVersionMask); }
+    VersionId versionId() const { return static_cast<VersionId>((data[1] >> kVersionShift) & kVersionMask); }
     LayerDescription layer() const { return static_cast<LayerDescription>((data[1] >> kLayerShift) & kLayerMask); }
     Protection protectionBit() const { return static_cast<Protection>(data[1] & kProtectionMask); }
     std::uint8_t bitrateIndex() const { return (data[2] >> kBitrateShift) & kBitrateMask; }

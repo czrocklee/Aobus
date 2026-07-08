@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
-#include <ao/audio/Backend.h>
-#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
@@ -42,7 +42,7 @@ namespace ao::rt::test
     [[maybe_unused]] auto& notifications = appPtr->notifications();
 
     appPtr->addAudioProvider(
-      makeReadyAudioProvider(audio::IBackendProvider::Status{.metadata = {.id = audio::BackendId{"dummy"}}}));
+      makeReadyAudioProvider(audio::BackendProvider::Status{.metadata = {.id = audio::BackendId{"dummy"}}}));
 
     // reloadAllTracks
     CHECK_NOTHROW(appPtr->reloadAllTracks());

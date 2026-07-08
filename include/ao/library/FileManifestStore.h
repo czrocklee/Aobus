@@ -30,8 +30,8 @@ namespace ao::library
     {
     }
 
-    Reader reader(lmdb::ReadTransaction const& txn) const;
-    Writer writer(lmdb::WriteTransaction& txn) const;
+    Reader reader(lmdb::ReadTransaction const& transaction) const;
+    Writer writer(lmdb::WriteTransaction& transaction) const;
 
   private:
     lmdb::Database _db;

@@ -8,7 +8,7 @@
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -133,26 +133,26 @@ namespace ao::gtk::layout::test
     coordinator.registerEditor(first);
     coordinator.registerEditor(second);
 
-    auto& firstButton = first.editButtonForTest();
-    auto& secondButton = second.editButtonForTest();
-    auto& firstEntry = first.entryForTest();
-    auto& secondEntry = second.entryForTest();
+    auto& firstButton = first.editButton();
+    auto& secondButton = second.editButton();
+    auto& firstEntry = first.entry();
+    auto& secondEntry = second.entry();
     CHECK(first.has_css_class("ao-detail-field-editable"));
     CHECK(firstButton.has_css_class("ao-detail-field-edit-hint"));
 
     emitClicked(firstButton);
-    REQUIRE(first.getEditing());
+    REQUIRE(first.isEditing());
     firstEntry.set_text("committed first");
 
     emitClicked(secondButton);
-    CHECK_FALSE(first.getEditing());
-    CHECK(first.getText() == "committed first");
-    CHECK(second.getEditing());
+    CHECK_FALSE(first.isEditing());
+    CHECK(first.text() == "committed first");
+    CHECK(second.isEditing());
     CHECK_FALSE(firstEntry.get_child_visible());
     CHECK(secondEntry.get_child_visible());
 
     REQUIRE(emitGesturePressed(window, 1, 1.0, 1.0));
-    CHECK_FALSE(second.getEditing());
+    CHECK_FALSE(second.isEditing());
     CHECK_FALSE(secondEntry.get_child_visible());
   }
 
@@ -206,7 +206,7 @@ namespace ao::gtk::layout::test
     auto* const wrapper = &root;
     REQUIRE(wrapper != nullptr);
 
-    auto getGridStats = [&]
+    auto gridStats = [&]
     {
       std::int32_t maxRow = -1;
       std::int32_t count = 0;
@@ -346,18 +346,18 @@ namespace ao::gtk::layout::test
 
     SECTION("Metadata collapse works without a detail scope")
     {
-      auto* const metaHeader = findHeaderByClass("ao-track-detail-section-meta");
+      auto* const metadataHeader = findHeaderByClass("ao-track-detail-section-meta");
       auto* const propertySlot = findFirstPropertySlot(*grid);
-      REQUIRE(metaHeader != nullptr);
+      REQUIRE(metadataHeader != nullptr);
       REQUIRE(propertySlot != nullptr);
       CHECK(propertySlot->get_visible());
 
-      emitClicked(*metaHeader);
+      emitClicked(*metadataHeader);
       ao::gtk::test::drainGtkEvents();
 
       CHECK_FALSE(propertySlot->get_visible());
 
-      emitClicked(*metaHeader);
+      emitClicked(*metadataHeader);
       ao::gtk::test::drainGtkEvents();
 
       CHECK(propertySlot->get_visible());
@@ -453,7 +453,7 @@ namespace ao::gtk::layout::test
 
                       auto* const editor = dynamic_cast<track_field_grid::DetailFieldEditor*>(&widget);
                       REQUIRE(editor != nullptr);
-                      auto& displayLabel = editor->displayLabelForTest();
+                      auto& displayLabel = editor->displayLabel();
                       CHECK(displayLabel.get_ellipsize() == Pango::EllipsizeMode::END);
                       CHECK((displayLabel.get_width_chars() == 0 || displayLabel.get_width_chars() == 2));
                       CHECK((displayLabel.get_max_width_chars() == 1 || displayLabel.get_max_width_chars() == -1));
@@ -567,7 +567,7 @@ namespace ao::gtk::layout::test
       REQUIRE(customValueBox != nullptr);
       auto* const customValueEditor = findWidget<track_field_grid::DetailFieldEditor>(*customValueBox);
       REQUIRE(customValueEditor != nullptr);
-      auto& customValueLabel = customValueEditor->displayLabelForTest();
+      auto& customValueLabel = customValueEditor->displayLabel();
 
       auto* const customValueSlot = customValueBox->get_parent();
       REQUIRE(customValueSlot != nullptr);
@@ -586,7 +586,7 @@ namespace ao::gtk::layout::test
       REQUIRE(builtInValueEditor != nullptr);
       auto* const builtInValueBox = builtInValueEditor->get_parent();
       REQUIRE(builtInValueBox != nullptr);
-      auto& builtInValueLabel = builtInValueEditor->displayLabelForTest();
+      auto& builtInValueLabel = builtInValueEditor->displayLabel();
       CHECK(scopedRoot.get_width() == 1000);
       CHECK(scopedGrid->get_width() <= 1000);
       CHECK(scopedGrid->get_width() > 0);
@@ -621,8 +621,8 @@ namespace ao::gtk::layout::test
       CHECK(builtInValueEditor->get_width() <= builtInValueEditor->get_parent()->get_width());
       CHECK(builtInValueLabel.get_width() <= builtInValueEditor->get_width());
 
-      auto& editButton = builtInValueEditor->editButtonForTest();
-      auto& entry = builtInValueEditor->entryForTest();
+      auto& editButton = builtInValueEditor->editButton();
+      auto& entry = builtInValueEditor->entry();
       emitClicked(editButton);
       scopedRoot.measure(Gtk::Orientation::VERTICAL, narrowPanelWidth, minHeight, natHeight, minWidth, natWidth);
       scopedRoot.size_allocate(Gtk::Allocation{0, 0, narrowPanelWidth, 2000}, -1);
@@ -642,13 +642,13 @@ namespace ao::gtk::layout::test
     SECTION("Resize keeps a single row per field")
     {
       allocate(200, 2000);
-      auto const [narrowMaxRow, narrowCount] = getGridStats();
+      auto const [narrowMaxRow, narrowCount] = gridStats();
 
       allocate(400, 2000);
-      auto const [mediumMaxRow, mediumCount] = getGridStats();
+      auto const [mediumMaxRow, mediumCount] = gridStats();
 
       allocate(800, 2000);
-      auto const [largeMaxRow, largeCount] = getGridStats();
+      auto const [largeMaxRow, largeCount] = gridStats();
 
       CHECK(narrowMaxRow == mediumMaxRow);
       CHECK(narrowMaxRow == largeMaxRow);

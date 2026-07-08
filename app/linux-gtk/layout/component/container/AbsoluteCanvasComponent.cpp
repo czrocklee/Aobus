@@ -3,7 +3,7 @@
 
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/AbsoluteCanvasModel.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -141,7 +141,7 @@ namespace ao::gtk::layout
         std::ranges::stable_sort(_children,
                                  [](ChildData const& childA, ChildData const& childB)
                                  {
-                                   return uimodel::absoluteCanvasZOrderLess(
+                                   return uimodel::ordersAbsoluteCanvasBefore(
                                      childA.zIndex, childA.insertOrder, childB.zIndex, childB.insertOrder);
                                  });
       }
@@ -534,24 +534,24 @@ namespace ao::gtk::layout
       ChildData* _dragChild = nullptr;
     };
 
-    class AbsoluteCanvasComponent final : public ILayoutComponent
+    class AbsoluteCanvasComponent final : public LayoutComponent
     {
     public:
       AbsoluteCanvasComponent(LayoutContext& ctx, uimodel::LayoutNode const& node)
         : _canvas{ctx.editMode,
                   ctx.onNodeMoved,
-                  node.getProp<bool>("snapToGrid", true),
-                  static_cast<std::int32_t>(node.getProp<std::int64_t>("gridSize", 8))}
+                  node.propertyOr<bool>("snapToGrid", true),
+                  static_cast<std::int32_t>(node.propertyOr<std::int64_t>("gridSize", 8))}
       {
         for (auto const& childNode : node.children)
         {
           auto childPtr = ctx.registry.create(ctx, childNode);
 
-          int const xPosition = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("x", 0));
-          int const yPosition = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("y", 0));
-          int const width = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("width", -1));
-          int const height = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("height", -1));
-          int const zIndex = static_cast<std::int32_t>(childNode.getLayout<std::int64_t>("zIndex", 0));
+          int const xPosition = static_cast<std::int32_t>(childNode.layoutOr<std::int64_t>("x", 0));
+          int const yPosition = static_cast<std::int32_t>(childNode.layoutOr<std::int64_t>("y", 0));
+          int const width = static_cast<std::int32_t>(childNode.layoutOr<std::int64_t>("width", -1));
+          int const height = static_cast<std::int32_t>(childNode.layoutOr<std::int64_t>("height", -1));
+          int const zIndex = static_cast<std::int32_t>(childNode.layoutOr<std::int64_t>("zIndex", 0));
 
           _canvas.addChild(childNode.id, childPtr->widget(), xPosition, yPosition, width, height, zIndex);
           _children.push_back(std::move(childPtr));
@@ -571,10 +571,10 @@ namespace ao::gtk::layout
 
     private:
       AbsoluteCanvasWidget _canvas;
-      std::vector<std::unique_ptr<ILayoutComponent>> _children;
+      std::vector<std::unique_ptr<LayoutComponent>> _children;
     };
 
-    std::unique_ptr<ILayoutComponent> createAbsoluteCanvas(LayoutContext& ctx, uimodel::LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createAbsoluteCanvas(LayoutContext& ctx, uimodel::LayoutNode const& node)
     {
       return std::make_unique<AbsoluteCanvasComponent>(ctx, node);
     }

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/Backend.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackState.h>

@@ -4,8 +4,9 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/audio/DecoderTypes.h>
-#include <ao/audio/IDecoderSession.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/DecoderSession.h>
+#include <ao/audio/PcmBlock.h>
 
 #include <atomic>
 #include <chrono>
@@ -21,7 +22,7 @@
 
 namespace ao::audio::test
 {
-  class [[nodiscard]] ScriptedDecoderSession final : public IDecoderSession
+  class [[nodiscard]] ScriptedDecoderSession final : public DecoderSession
   {
   public:
     struct ReadScriptEntry final
@@ -93,7 +94,7 @@ namespace ao::audio::test
         _script = *_optSeekScript;
       }
 
-      _scriptIdx = 0;
+      _scriptIndex = 0;
       return _seekResult;
     }
 
@@ -101,12 +102,12 @@ namespace ao::audio::test
     {
       _readCount++;
 
-      if (_scriptIdx >= _script.size())
+      if (_scriptIndex >= _script.size())
       {
         return PcmBlock{.bytes = {}, .bitDepth = 16, .frames = 0, .firstFrameIndex = 0, .endOfStream = true};
       }
 
-      auto const& entry = _script[_scriptIdx++];
+      auto const& entry = _script[_scriptIndex++];
 
       if (!entry.result)
       {
@@ -140,7 +141,7 @@ namespace ao::audio::test
     std::vector<ReadScriptEntry> _script;
     std::optional<std::vector<ReadScriptEntry>> _optSeekScript;
     std::function<void(std::chrono::milliseconds)> _seekObserver;
-    std::size_t _scriptIdx = 0;
+    std::size_t _scriptIndex = 0;
     std::size_t _seekCount = 0;
 
     Result<> _openResult = {};

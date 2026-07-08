@@ -3,7 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "playback/TransportButton.h"
 #include <ao/Exception.h>
@@ -34,15 +34,15 @@ namespace ao::gtk::layout
     /**
      * @brief Generic transport button component.
      */
-    class TransportButtonComponent final : public ILayoutComponent
+    class TransportButtonComponent final : public LayoutComponent
     {
     public:
       TransportButtonComponent(LayoutContext& ctx, LayoutNode const& node, TransportButton::Action action)
         : _button{ctx.runtime.playback(),
                   commandSurface(ctx),
                   action,
-                  node.getProp<bool>("showLabel", false),
-                  node.getProp<std::string>("size", "normal")}
+                  node.propertyOr<bool>("showLabel", false),
+                  node.propertyOr<std::string>("size", "normal")}
       {
       }
 
@@ -52,42 +52,42 @@ namespace ao::gtk::layout
       TransportButton _button;
     };
 
-    std::unique_ptr<ILayoutComponent> createPlayPauseButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createPlayPauseButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::PlayPause);
     }
 
-    std::unique_ptr<ILayoutComponent> createStopButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createStopButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Stop);
     }
 
-    std::unique_ptr<ILayoutComponent> createNextButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createNextButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Next);
     }
 
-    std::unique_ptr<ILayoutComponent> createPreviousButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createPreviousButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Previous);
     }
 
-    std::unique_ptr<ILayoutComponent> createShuffleButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createShuffleButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Shuffle);
     }
 
-    std::unique_ptr<ILayoutComponent> createRepeatButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createRepeatButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Repeat);
     }
 
-    std::unique_ptr<ILayoutComponent> createPlayButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createPlayButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Play);
     }
 
-    std::unique_ptr<ILayoutComponent> createPauseButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createPauseButton(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Pause);
     }

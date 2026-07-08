@@ -5,7 +5,7 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h> // NOLINT(misc-include-cleaner)
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -334,30 +334,30 @@ namespace ao::uimodel::test
     node.layout["hexpand"] = LayoutValue{true};
     node.layout["vexpand"] = LayoutValue{true};
 
-    SECTION("getProp returns value when key exists")
+    SECTION("propertyOr returns value when key exists")
     {
-      CHECK(node.getProp<std::string>("label", "") == "hello");
-      CHECK(node.getProp<std::int64_t>("count", 0) == 5);
-      CHECK(node.getProp<bool>("enabled", false) == true);
+      CHECK(node.propertyOr<std::string>("label", "") == "hello");
+      CHECK(node.propertyOr<std::int64_t>("count", 0) == 5);
+      CHECK(node.propertyOr<bool>("enabled", false) == true);
     }
 
-    SECTION("getProp returns default when key missing")
+    SECTION("propertyOr returns default when key missing")
     {
-      CHECK(node.getProp<std::string>("missing", "fallback") == "fallback");
-      CHECK(node.getProp<std::int64_t>("missing", 99) == 99);
-      CHECK(node.getProp<bool>("missing", true) == true);
+      CHECK(node.propertyOr<std::string>("missing", "fallback") == "fallback");
+      CHECK(node.propertyOr<std::int64_t>("missing", 99) == 99);
+      CHECK(node.propertyOr<bool>("missing", true) == true);
     }
 
-    SECTION("getLayout returns value when key exists")
+    SECTION("layoutOr returns value when key exists")
     {
-      CHECK(node.getLayout<bool>("hexpand", false) == true);
-      CHECK(node.getLayout<bool>("vexpand", false) == true);
+      CHECK(node.layoutOr<bool>("hexpand", false) == true);
+      CHECK(node.layoutOr<bool>("vexpand", false) == true);
     }
 
-    SECTION("getLayout returns default when key missing")
+    SECTION("layoutOr returns default when key missing")
     {
-      CHECK(node.getLayout<bool>("vexpand", true) == true);
-      CHECK(node.getLayout<std::int64_t>("spacing", 10) == 10);
+      CHECK(node.layoutOr<bool>("vexpand", true) == true);
+      CHECK(node.layoutOr<std::int64_t>("spacing", 10) == 10);
     }
   }
 

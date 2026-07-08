@@ -10,7 +10,7 @@
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/projection/LiveTrackListProjection.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/listmodel.h>
@@ -81,7 +81,7 @@ namespace ao::gtk::test
     source.addInitial(id2);
 
     auto rowCache = TrackRowCache{runtime.library()};
-    auto const projectionPtr = std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, source, musicLibrary);
+    auto const projectionPtr = std::make_shared<rt::LiveTrackListProjection>(rt::ViewId{1}, source, musicLibrary);
 
     auto const modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);

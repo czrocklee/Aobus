@@ -5,7 +5,7 @@
 
 #include "OutputDeviceListItems.h"
 #include "layout/LayoutConstants.h"
-#include <ao/audio/Backend.h>
+#include <ao/audio/Device.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
@@ -145,7 +145,7 @@ namespace ao::gtk
       checkIcon->set_size_request(kCheckIconWidth, -1);
       checkIcon->add_css_class("ao-output-device-check");
 
-      if (deviceItemPtr->active())
+      if (deviceItemPtr->isActive())
       {
         checkIcon->set_from_icon_name("object-select-symbolic");
         rowBox->add_css_class("ao-output-device-selected-row");

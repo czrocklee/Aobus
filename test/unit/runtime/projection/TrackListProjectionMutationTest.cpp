@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -554,7 +554,7 @@ namespace ao::rt::test
 
     SECTION("Destructor coverage")
     {
-      auto proj2Ptr = std::make_unique<TrackListProjection>(ViewId{2}, env.source, env.lib.library());
+      auto proj2Ptr = std::make_unique<LiveTrackListProjection>(ViewId{2}, env.source, env.lib.library());
       proj2Ptr.reset();
     }
   }

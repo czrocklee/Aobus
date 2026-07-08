@@ -91,5 +91,5 @@ Useful existing samples:
 
 - Runtime service contract style: `test/unit/runtime/NotificationServiceTest.cpp`.
 - UI policy style: `test/unit/uimodel/status/activity/ActivityStatusFeedState*Test.cpp` and `test/unit/uimodel/track/TrackPresentationWorkflowTest.cpp`.
-- Pure helper style: `test/unit/linux-gtk/layout/components/TrackFieldGridTextUtilsTest.cpp`.
+- Pure helper style: `test/unit/linux-gtk/layout/components/TrackFieldGridTextTest.cpp`.
 - Thin GTK adapter style: `test/unit/linux-gtk/track/TrackPresentationButtonTest.cpp`.

@@ -1,54 +1,85 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
-#include "../CorePrimitives.h"
-#include "ProjectionTypes.h"
+#include "../Subscription.h"
+#include "../TrackField.h"
+#include "../TrackFieldValue.h"
+#include "../ViewIds.h"
 #include <ao/CoreIds.h>
 
+#include <array>
+#include <cstdint>
 #include <functional>
-#include <memory>
-#include <span>
+#include <optional>
+#include <string>
+#include <variant>
+#include <vector>
 
 namespace ao::rt
 {
-  class ViewService;
-  class WorkspaceService;
-  class LibraryChanges;
-}
+  enum class SelectionKind : std::uint8_t
+  {
+    None,
+    Single,
+    Multiple,
+  };
 
-namespace ao::library
-{
-  class MusicLibrary;
-}
+  template<typename T>
+  struct AggregateValue final
+  {
+    std::optional<T> optValue{};
+    bool mixed = false;
+  };
 
-namespace ao::rt
-{
-  class TrackDetailProjection final : public ITrackDetailProjection
+  struct CustomMetadataItem final
+  {
+    std::string key{};
+    AggregateValue<std::string> value{};
+    bool presentOnAll = false;
+    bool presentOnAny = false;
+  };
+
+  struct TrackDetailSnapshot final
+  {
+    SelectionKind selectionKind = SelectionKind::None;
+    std::vector<TrackId> trackIds{};
+    std::uint64_t revision = 0;
+
+    ResourceId singleCoverArtId{kInvalidResourceId};
+    std::array<AggregateValue<TrackFieldRawValue>, kTrackFieldCount> fields{};
+    std::vector<CustomMetadataItem> customMetadata{};
+    std::vector<DictionaryId> commonTagIds{};
+  };
+
+  struct FocusedViewTarget final
+  {};
+  struct ExplicitViewTarget final
+  {
+    ViewId viewId{};
+  };
+  struct ExplicitSelectionTarget final
+  {
+    std::vector<TrackId> trackIds{};
+  };
+
+  using DetailTarget = std::variant<FocusedViewTarget, ExplicitViewTarget, ExplicitSelectionTarget>;
+
+  class TrackDetailProjection
   {
   public:
-    TrackDetailProjection(DetailTarget target,
-                          ViewService& views,
-                          library::MusicLibrary& library,
-                          WorkspaceService& workspace,
-                          LibraryChanges const& changes);
-    ~TrackDetailProjection() override;
+    virtual ~TrackDetailProjection() = default;
 
     TrackDetailProjection(TrackDetailProjection const&) = delete;
     TrackDetailProjection& operator=(TrackDetailProjection const&) = delete;
     TrackDetailProjection(TrackDetailProjection&&) = delete;
     TrackDetailProjection& operator=(TrackDetailProjection&&) = delete;
 
-    TrackDetailSnapshot snapshot() const override;
-    Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) override;
+    virtual TrackDetailSnapshot snapshot() const = 0;
+    virtual Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) = 0;
 
-  private:
-    void onSelectionChanged();
-    TrackDetailSnapshot buildSnapshot(std::span<TrackId const> ids) const;
-    void publishSnapshot();
-
-    struct Impl;
-    std::unique_ptr<Impl> _implPtr;
+  protected:
+    TrackDetailProjection() = default;
   };
 } // namespace ao::rt

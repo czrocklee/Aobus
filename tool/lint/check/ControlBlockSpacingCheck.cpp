@@ -105,42 +105,42 @@ namespace clang::tidy::readability
                               SourceManager const& sm,
                               std::uint32_t line)
     {
-      size_t idx = startIndex;
+      size_t index = startIndex;
 
-      while (idx < tokens.size() && sm.getSpellingLineNumber(tokens[idx].getLocation()) == line)
+      while (index < tokens.size() && sm.getSpellingLineNumber(tokens[index].getLocation()) == line)
       {
-        idx++;
+        index++;
       }
 
-      return idx;
+      return index;
     }
 
     size_t skipDoWhileCondition(size_t nextIndex, std::vector<Token> const& tokens, SourceManager const& sm)
     {
-      size_t idx = nextIndex;
+      size_t index = nextIndex;
 
-      if (idx < tokens.size() && tokens[idx].is(tok::raw_identifier) && tokens[idx].getRawIdentifier() == "while")
+      if (index < tokens.size() && tokens[index].is(tok::raw_identifier) && tokens[index].getRawIdentifier() == "while")
       {
-        idx++;
-        std::uint32_t const whileLine = sm.getSpellingLineNumber(tokens[idx - 1].getLocation());
+        index++;
+        std::uint32_t const whileLine = sm.getSpellingLineNumber(tokens[index - 1].getLocation());
 
-        while (idx < tokens.size() && sm.getSpellingLineNumber(tokens[idx].getLocation()) == whileLine)
+        while (index < tokens.size() && sm.getSpellingLineNumber(tokens[index].getLocation()) == whileLine)
         {
-          if (tokens[idx].is(tok::semi))
+          if (tokens[index].is(tok::semi))
           {
             break;
           }
 
-          idx++;
+          index++;
         }
 
-        if (idx < tokens.size() && tokens[idx].is(tok::semi))
+        if (index < tokens.size() && tokens[index].is(tok::semi))
         {
-          idx++;
+          index++;
         }
       }
 
-      return idx;
+      return index;
     }
 
     size_t skipLeadingComments(size_t nextIndex, std::vector<Token> const& tokens, SourceManager const& sm)
@@ -253,19 +253,19 @@ namespace clang::tidy::readability
 
       if (!isBlockStart && !isChainAfterBrace && newlines < newlinesMin)
       {
-        auto db = diag(nextToken.getLocation(), "expected a blank line before '%0'");
-        db << stmtName;
+        auto diagnostic = diag(nextToken.getLocation(), "expected a blank line before '%0'");
+        diagnostic << stmtName;
 
         if (size_t const firstNewline = gap.find('\n'); firstNewline != StringRef::npos)
         {
           FileID const fid = sm.getFileID(previousCodeToken.getLocation());
           SourceLocation const insertLoc =
             sm.getLocForStartOfFile(fid).getLocWithOffset(static_cast<std::int32_t>(previousEnd + firstNewline + 1));
-          db << FixItHint::CreateInsertion(insertLoc, "\n");
+          diagnostic << FixItHint::CreateInsertion(insertLoc, "\n");
         }
         else
         {
-          db << FixItHint::CreateInsertion(nextToken.getLocation(), newlinesMin == 2 ? "\n\n" : "\n");
+          diagnostic << FixItHint::CreateInsertion(nextToken.getLocation(), newlinesMin == 2 ? "\n\n" : "\n");
         }
       }
     }
@@ -324,13 +324,13 @@ namespace clang::tidy::readability
       {
         size_t const firstNl = gap.find('\n');
         size_t const lastNl = gap.rfind('\n');
-        auto db = diag(nextToken.getLocation(), "do not put blank lines at the start of a block");
+        auto diagnostic = diag(nextToken.getLocation(), "do not put blank lines at the start of a block");
 
         if (firstNl != StringRef::npos && lastNl != StringRef::npos && firstNl != lastNl)
         {
           SourceLocation const removeStart = loc.getLocWithOffset(1 + static_cast<std::int32_t>(firstNl) + 1);
           SourceLocation const removeEnd = loc.getLocWithOffset(1 + static_cast<std::int32_t>(lastNl) + 1);
-          db << FixItHint::CreateRemoval(CharSourceRange::getCharRange(removeStart, removeEnd));
+          diagnostic << FixItHint::CreateRemoval(CharSourceRange::getCharRange(removeStart, removeEnd));
         }
       }
     }
@@ -365,7 +365,7 @@ namespace clang::tidy::readability
       {
         size_t const firstNl = gap.find('\n');
         size_t const lastNl = gap.rfind('\n');
-        auto db = diag(loc, "do not put blank lines at the end of a block");
+        auto diagnostic = diag(loc, "do not put blank lines at the end of a block");
 
         if (firstNl != StringRef::npos && lastNl != StringRef::npos && firstNl != lastNl)
         {
@@ -373,7 +373,7 @@ namespace clang::tidy::readability
             static_cast<std::int32_t>(previousToken.getLength()) + static_cast<std::int32_t>(firstNl) + 1);
           SourceLocation const removeEnd = previousToken.getLocation().getLocWithOffset(
             static_cast<std::int32_t>(previousToken.getLength()) + static_cast<std::int32_t>(lastNl) + 1);
-          db << FixItHint::CreateRemoval(CharSourceRange::getCharRange(removeStart, removeEnd));
+          diagnostic << FixItHint::CreateRemoval(CharSourceRange::getCharRange(removeStart, removeEnd));
         }
       }
     }
@@ -460,17 +460,17 @@ namespace clang::tidy::readability
         return;
       }
 
-      auto db = diag(rBraceLoc, "expected a blank line after closing '}' of control block");
+      auto diagnostic = diag(rBraceLoc, "expected a blank line after closing '}' of control block");
 
       if (size_t const firstNewline = gap.find('\n'); firstNewline != StringRef::npos)
       {
         SourceLocation const insertLoc =
           sm.getLocForStartOfFile(fid).getLocWithOffset(static_cast<std::int32_t>(gapStartOffset + firstNewline + 1));
-        db << FixItHint::CreateInsertion(insertLoc, "\n");
+        diagnostic << FixItHint::CreateInsertion(insertLoc, "\n");
       }
       else
       {
-        db << FixItHint::CreateInsertion(tokens[codeIndex].getLocation(), "\n\n");
+        diagnostic << FixItHint::CreateInsertion(tokens[codeIndex].getLocation(), "\n\n");
       }
     }
   }

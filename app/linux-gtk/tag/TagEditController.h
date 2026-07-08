@@ -68,13 +68,13 @@ namespace ao::gtk
     // Add to action group for menu access
     void addActionsTo(Gio::ActionMap& actionMap);
 
-    void showTrackContextMenu(TrackViewPage& page,
+    void openTrackContextMenu(TrackViewPage& page,
                               TrackSelectionContext const& selection,
                               double xPosition,
                               double yPosition);
 
-    void showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo);
-    void showProperties(TrackSelectionContext const& selection);
+    void openTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo);
+    void presentProperties(TrackSelectionContext const& selection);
 
     void submitTagChanges(TrackSelectionContext const& selection,
                           std::span<std::string const> tagsToAdd,
@@ -83,9 +83,9 @@ namespace ao::gtk
   private:
     friend class TagEditControllerTestPeer;
 
-    void setupActions();
-    void showTagsPopover(TrackViewPage& page, double xPosition, double yPosition);
-    void showPropertiesDialog();
+    void createActions();
+    void openTagsPopover(TrackViewPage& page, double xPosition, double yPosition);
+    void presentPropertiesDialog();
 
     void addTagToCurrentSelection(std::string tag);
     void removeTagFromCurrentSelection(std::string tag);

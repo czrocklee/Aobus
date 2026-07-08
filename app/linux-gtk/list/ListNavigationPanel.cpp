@@ -88,9 +88,9 @@ namespace ao::gtk
 
     auto const itemCount = _treeListModelPtr->get_n_items();
 
-    for (guint idx = 0; idx < itemCount; ++idx)
+    for (guint index = 0; index < itemCount; ++index)
     {
-      auto itemPtr = _treeListModelPtr->get_object(idx);
+      auto itemPtr = _treeListModelPtr->get_object(index);
       auto treeListRowPtr = std::dynamic_pointer_cast<Gtk::TreeListRow>(itemPtr);
 
       if (!treeListRowPtr)
@@ -102,13 +102,13 @@ namespace ao::gtk
 
       if (nodePtr && nodePtr->listId() == listId)
       {
-        _listSelectionModelPtr->set_selected(idx);
+        _listSelectionModelPtr->set_selected(index);
         break;
       }
     }
   }
 
-  bool ListNavigationPanel::listHasChildren(ListId listId) const
+  bool ListNavigationPanel::hasListChildren(ListId listId) const
   {
     if (auto it = _nodesById.find(listId); it != _nodesById.end())
     {
@@ -150,7 +150,7 @@ namespace ao::gtk
     return nodePtr->listId();
   }
 
-  void ListNavigationPanel::showContextMenu(Gdk::Rectangle const& rect)
+  void ListNavigationPanel::openContextMenu(Gdk::Rectangle const& rect)
   {
     _listContextMenu.set_pointing_to(rect);
     _listContextMenu.popup();

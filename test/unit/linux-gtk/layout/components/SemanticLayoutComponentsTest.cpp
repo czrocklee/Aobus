@@ -17,12 +17,12 @@
 #include "track/TrackQuickFilter.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/playback/queue/PlaybackQueueModel.h>
@@ -65,8 +65,9 @@ namespace ao::gtk::layout::test
   {
     library::test::TrackSpec trackSpecFor(library::MusicLibrary& musicLibrary, TrackId const trackId)
     {
-      auto const txn = musicLibrary.readTransaction();
-      auto const optView = musicLibrary.tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      auto const transaction = musicLibrary.readTransaction();
+      auto const optView =
+        musicLibrary.tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       return library::test::trackSpecFromView(musicLibrary, *optView);
     }
@@ -300,7 +301,7 @@ namespace ao::gtk::layout::test
       auto& bar = compPtr->widget();
       CHECK_FALSE(bar.get_visible());
 
-      undoController.showCustomMetadataDeleted("Mood", {TrackId{1}}, "Energetic");
+      undoController.presentCustomMetadataDeletedUndo("Mood", {TrackId{1}}, "Energetic");
       drainGtkEvents();
 
       CHECK(bar.get_visible());
@@ -342,11 +343,12 @@ namespace ao::gtk::layout::test
     auto const trackId = library::test::addTrack(musicLibrary, {.title = "Undo Target"});
     auto undoController = TrackDetailUndoController{fixture.runtime().library().writer()};
 
-    undoController.showCustomMetadataDeleted("Mood", {trackId}, "Bright");
+    undoController.presentCustomMetadataDeletedUndo("Mood", {trackId}, "Bright");
     undoController.undo();
 
-    auto const txn = musicLibrary.readTransaction();
-    auto const optView = musicLibrary.tracks().reader(txn).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+    auto const transaction = musicLibrary.readTransaction();
+    auto const optView =
+      musicLibrary.tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
 
     auto const spec = library::test::trackSpecFromView(musicLibrary, *optView);
@@ -367,7 +369,7 @@ namespace ao::gtk::layout::test
                                                   return sigc::connection{};
                                                 }};
 
-    controller.showCustomMetadataDeleted("Mood", {TrackId{1}}, "Bright");
+    controller.presentCustomMetadataDeletedUndo("Mood", {TrackId{1}}, "Bright");
     REQUIRE(controller.pendingCustomMetadataUndo());
     REQUIRE(!timeoutCallback.empty());
 
@@ -540,8 +542,8 @@ namespace ao::gtk::layout::test
     runtime.workspace().navigateTo(rt::kAllTracksListId);
     drainGtkEvents();
 
-    auto txn = library.readTransaction();
-    pageHost.rebuild(cache, txn);
+    auto transaction = library.readTransaction();
+    pageHost.rebuild(cache, transaction);
     drainGtkEvents();
 
     auto registry = ComponentRegistry{};

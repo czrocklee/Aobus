@@ -5,7 +5,11 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionActivation.h>
+#include <ao/uimodel/layout/action/LayoutActionBinding.h>
+#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
+#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>

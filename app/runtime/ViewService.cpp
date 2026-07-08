@@ -5,16 +5,19 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/ScopedTimer.h>
+#include <ao/rt/Signal.h>
 #include <ao/rt/StorageResult.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/LiveTrackDetailProjection.h>
+#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/ListSourceStore.h>
@@ -38,7 +41,7 @@ namespace ao::rt
       TrackListViewState state;
       std::unique_ptr<SmartListSource> adHocSourcePtr;
       TrackSource* activeSource = nullptr;
-      std::shared_ptr<ITrackListProjection> projectionPtr;
+      std::shared_ptr<LiveTrackListProjection> projectionPtr;
     };
 
     void applyPresentation(ViewEntry& entry)
@@ -62,11 +65,7 @@ namespace ao::rt
 
       if (entry.projectionPtr)
       {
-        if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(entry.projectionPtr.get());
-            trackListProj != nullptr)
-        {
-          trackListProj->setPresentation(preset->spec);
-        }
+        entry.projectionPtr->setPresentation(preset->spec);
       }
     }
 
@@ -78,11 +77,7 @@ namespace ao::rt
 
       if (entry.projectionPtr)
       {
-        if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(entry.projectionPtr.get());
-            trackListProj != nullptr)
-        {
-          trackListProj->setPresentation(spec);
-        }
+        entry.projectionPtr->setPresentation(spec);
       }
     }
   } // namespace
@@ -92,11 +87,11 @@ namespace ao::rt
     std::uint64_t nextViewId = 1;
     std::unordered_map<ViewId, ViewEntry> views;
 
-    async::IExecutor& executor;
+    async::Executor& executor;
     library::MusicLibrary& library;
     ListSourceStore& sources;
 
-    Impl(async::IExecutor& exec, library::MusicLibrary& lib, ListSourceStore& sourceStore)
+    Impl(async::Executor& exec, library::MusicLibrary& lib, ListSourceStore& sourceStore)
       : executor{exec}, library{lib}, sources{sourceStore}
     {
     }
@@ -110,7 +105,7 @@ namespace ao::rt
     Signal<ViewService::ListChanged const&> listChangedSignal;
   };
 
-  ViewService::ViewService(async::IExecutor& executor, library::MusicLibrary& library, ListSourceStore& sources)
+  ViewService::ViewService(async::Executor& executor, library::MusicLibrary& library, ListSourceStore& sources)
     : _implPtr{std::make_unique<Impl>(executor, library, sources)}
   {
   }
@@ -178,7 +173,7 @@ namespace ao::rt
       baseSource = adHocSourcePtr.get();
     }
 
-    auto projectionPtr = std::make_shared<TrackListProjection>(id, *baseSource, _implPtr->library);
+    auto projectionPtr = std::make_shared<LiveTrackListProjection>(id, *baseSource, _implPtr->library);
 
     auto& entry = _implPtr->views[id];
     entry.state = state;
@@ -246,7 +241,7 @@ namespace ao::rt
 
       // Need to attach projection to new source
       it->second.projectionPtr =
-        std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
+        std::make_shared<LiveTrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
       applyPresentation(it->second, it->second.state.presentation);
       auto ev = TrackListProjectionChanged{
         .viewId = viewId, .projectionPtr = it->second.projectionPtr, .revision = it->second.state.revision};
@@ -260,7 +255,7 @@ namespace ao::rt
       it->second.adHocSourcePtr.reset();
       it->second.activeSource = baseSource;
       it->second.projectionPtr =
-        std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
+        std::make_shared<LiveTrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
       applyPresentation(it->second, it->second.state.presentation);
       auto ev = TrackListProjectionChanged{
         .viewId = viewId, .projectionPtr = it->second.projectionPtr, .revision = it->second.state.revision};
@@ -363,7 +358,7 @@ namespace ao::rt
     }
 
     it->second.projectionPtr =
-      std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
+      std::make_shared<LiveTrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
     applyPresentation(it->second, it->second.state.presentation);
     _implPtr->projectionChangedSignal.post(
       _implPtr->executor,
@@ -403,8 +398,8 @@ namespace ao::rt
       return std::chrono::milliseconds{0};
     }
 
-    auto const txn = _implPtr->library.readTransaction();
-    auto const reader = _implPtr->library.tracks().reader(txn);
+    auto const transaction = _implPtr->library.readTransaction();
+    auto const reader = _implPtr->library.tracks().reader(transaction);
 
     auto totalDuration = std::chrono::milliseconds{0};
 
@@ -421,15 +416,15 @@ namespace ao::rt
     return totalDuration;
   }
 
-  std::shared_ptr<ITrackListProjection> ViewService::trackListProjection(ViewId viewId)
+  std::shared_ptr<TrackListProjection> ViewService::trackListProjection(ViewId viewId)
   {
     return _implPtr->views.at(viewId).projectionPtr;
   }
 
-  std::unique_ptr<ITrackDetailProjection> ViewService::detailProjection(DetailTarget const& target,
-                                                                        WorkspaceService& workspace,
-                                                                        LibraryChanges const& changes)
+  std::unique_ptr<TrackDetailProjection> ViewService::detailProjection(DetailTarget const& target,
+                                                                       WorkspaceService& workspace,
+                                                                       LibraryChanges const& changes)
   {
-    return std::make_unique<TrackDetailProjection>(target, *this, _implPtr->library, workspace, changes);
+    return std::make_unique<LiveTrackDetailProjection>(target, *this, _implPtr->library, workspace, changes);
   }
 } // namespace ao::rt

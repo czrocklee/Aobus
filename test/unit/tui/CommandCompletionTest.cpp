@@ -3,7 +3,7 @@
 
 #include "tui/CommandCompletion.h"
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "tui/Model.h"
 #include <ao/rt/TrackPresentation.h>

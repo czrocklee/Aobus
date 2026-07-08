@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
@@ -94,9 +95,9 @@ namespace ao::uimodel
 
       for (auto const& device : backend.devices)
       {
-        for (auto const& profileMeta : backend.supportedProfiles)
+        for (auto const& supportedProfile : backend.supportedProfiles)
         {
-          auto const profile = profileMeta.id;
+          auto const profile = supportedProfile.id;
 
           if (!rt::supportsOutputProfile(device, profile))
           {

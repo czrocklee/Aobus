@@ -3,10 +3,11 @@
 
 #include "tui/OutputDeviceController.h"
 
-#include "test/unit/RuntimeTestUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
-#include <ao/audio/Backend.h>
-#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
 #include <ao/rt/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -19,7 +20,7 @@ namespace ao::tui::test
   TEST_CASE("OutputDeviceController - tracks selectable output rows", "[tui][unit][output]")
   {
     auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
-    fixture.status.metadata.supportedProfiles.push_back(audio::IBackendProvider::ProfileMetadata{
+    fixture.status.metadata.supportedProfiles.push_back(audio::BackendProvider::ProfileMetadata{
       .id = audio::kProfileExclusive, .name = "Exclusive", .description = "Exclusive profile"});
     fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -50,7 +51,7 @@ namespace ao::tui::test
   TEST_CASE("OutputDeviceController - selecting a row updates playback output", "[tui][unit][output]")
   {
     auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
-    fixture.status.metadata.supportedProfiles.push_back(audio::IBackendProvider::ProfileMetadata{
+    fixture.status.metadata.supportedProfiles.push_back(audio::BackendProvider::ProfileMetadata{
       .id = audio::kProfileExclusive, .name = "Exclusive", .description = "Exclusive profile"});
     fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);
     fixture.onDevicesChangedCb(fixture.status.devices);

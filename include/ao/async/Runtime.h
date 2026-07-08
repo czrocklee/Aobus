@@ -16,14 +16,14 @@
 
 namespace ao::async
 {
-  class IExecutor;
+  class Executor;
   class LifetimeScope;
 
   class Runtime final
   {
   public:
-    explicit Runtime(IExecutor& callbackExecutor);
-    Runtime(IExecutor& callbackExecutor, std::size_t workerCount);
+    explicit Runtime(Executor& callbackExecutor);
+    Runtime(Executor& callbackExecutor, std::size_t workerCount);
     ~Runtime();
 
     Runtime(Runtime const&) = delete;
@@ -31,7 +31,7 @@ namespace ao::async
     Runtime(Runtime&&) = delete;
     Runtime& operator=(Runtime&&) = delete;
 
-    IExecutor& callbackExecutor() noexcept;
+    Executor& callbackExecutor() noexcept;
 
     void requestStop() noexcept;
     void join();
@@ -53,7 +53,7 @@ namespace ao::async
     void spawnWithLifetime(LifetimeScope* scope, Task<void> task);
 
   private:
-    IExecutor& _callbackExecutor;
+    Executor& _callbackExecutor;
     boost::asio::thread_pool _workerPool;
   };
 } // namespace ao::async

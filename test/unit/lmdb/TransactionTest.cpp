@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
@@ -113,9 +114,9 @@ namespace ao::lmdb::test
     auto db = openDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
     REQUIRE(writer.create(1, createStringData("test data")));
-    CHECK(wtxn.committed() == false);
+    CHECK(wtxn.isCommitted() == false);
     REQUIRE(wtxn.commit());
-    CHECK(wtxn.committed() == true);
+    CHECK(wtxn.isCommitted() == true);
 
     // Start a new transaction - should work now
     auto wtxn2 = beginWriteTransaction(env);

@@ -84,8 +84,8 @@ namespace ao::rt
 
   void ListSourceStore::reloadAllTracks()
   {
-    auto const txn = _library.readTransaction();
-    _allTracks.reloadFromStore(txn);
+    auto const transaction = _library.readTransaction();
+    _allTracks.reloadFromStore(transaction);
   }
 
   void ListSourceStore::refreshList(ListId const listId)
@@ -102,9 +102,9 @@ namespace ao::rt
       return;
     }
 
-    auto const txn = _library.readTransaction();
+    auto const transaction = _library.readTransaction();
     auto const optView =
-      storageValueOrNullopt(_library.lists().reader(txn).get(listId), "Failed to refresh list source");
+      storageValueOrNullopt(_library.lists().reader(transaction).get(listId), "Failed to refresh list source");
 
     if (!optView)
     {
@@ -196,8 +196,9 @@ namespace ao::rt
       return *it->second;
     }
 
-    auto const txn = _library.readTransaction();
-    auto const optView = storageValueOrNullopt(_library.lists().reader(txn).get(listId), "Failed to build list source");
+    auto const transaction = _library.readTransaction();
+    auto const optView =
+      storageValueOrNullopt(_library.lists().reader(transaction).get(listId), "Failed to build list source");
 
     if (!optView)
     {

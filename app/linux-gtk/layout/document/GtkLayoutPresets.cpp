@@ -8,7 +8,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <giomm/resource.h>
 #include <glib.h>
@@ -62,12 +62,12 @@ namespace ao::gtk::layout
     return GtkLayoutPresetId::Classic;
   }
 
-  uimodel::LayoutDocument createDefaultGtkLayout()
+  uimodel::LayoutDocument makeDefaultGtkLayout()
   {
-    return createBuiltInGtkLayout(GtkLayoutPresetId::Classic);
+    return makeBuiltInGtkLayout(GtkLayoutPresetId::Classic);
   }
 
-  uimodel::LayoutDocument createBuiltInGtkLayout(GtkLayoutPresetId presetId)
+  uimodel::LayoutDocument makeBuiltInGtkLayout(GtkLayoutPresetId presetId)
   {
     switch (presetId)
     {
@@ -89,8 +89,8 @@ namespace ao::gtk::layout
     return loadBuiltInLayout("/org/aobus/layout/default_layout.yaml");
   }
 
-  std::map<std::string, uimodel::LayoutNode, std::less<>> getBuiltInGtkTemplates()
+  std::map<std::string, uimodel::LayoutNode, std::less<>> builtInGtkTemplates()
   {
-    return createDefaultGtkLayout().templates;
+    return makeDefaultGtkLayout().templates;
   }
 } // namespace ao::gtk::layout

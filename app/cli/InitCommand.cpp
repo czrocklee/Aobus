@@ -10,7 +10,7 @@
 
 namespace ao::cli
 {
-  void setupInitCommand(CLI::App& app, CliContext& context)
+  void configureInitCommand(CLI::App& app, CliContext& context)
   {
     auto* const cmd = app.add_subcommand("init", "Initialize library and scan the music root");
     auto* const dryRun = addDryRunFlag(*cmd);

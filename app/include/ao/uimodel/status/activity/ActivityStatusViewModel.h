@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/NotificationIds.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <chrono>
@@ -48,7 +48,7 @@ namespace ao::uimodel
     bool expireTransientIfDue();
     void expireTransient();
     void dismissCompact();
-    void hideDetailNotificationFromActivity(rt::NotificationId id);
+    void dismissDetailNotificationFromActivity(rt::NotificationId id);
     void onLibraryTaskProgress(std::string message, double fraction);
     void onLibraryTaskCompleted(std::size_t count);
 

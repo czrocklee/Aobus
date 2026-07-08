@@ -156,96 +156,96 @@ namespace ao::tag::wav
 
     void mergeTextMetadata(library::TrackBuilder& target, library::TrackBuilder const& source)
     {
-      auto const& meta = source.metadata();
+      auto const& metadata = source.metadata();
 
-      if (!meta.title().empty())
+      if (!metadata.title().empty())
       {
-        target.metadata().title(meta.title());
+        target.metadata().title(metadata.title());
       }
 
-      if (!meta.artist().empty())
+      if (!metadata.artist().empty())
       {
-        target.metadata().artist(meta.artist());
+        target.metadata().artist(metadata.artist());
       }
 
-      if (!meta.album().empty())
+      if (!metadata.album().empty())
       {
-        target.metadata().album(meta.album());
+        target.metadata().album(metadata.album());
       }
 
-      if (!meta.albumArtist().empty())
+      if (!metadata.albumArtist().empty())
       {
-        target.metadata().albumArtist(meta.albumArtist());
+        target.metadata().albumArtist(metadata.albumArtist());
       }
 
-      if (!meta.composer().empty())
+      if (!metadata.composer().empty())
       {
-        target.metadata().composer(meta.composer());
+        target.metadata().composer(metadata.composer());
       }
 
-      if (!meta.conductor().empty())
+      if (!metadata.conductor().empty())
       {
-        target.metadata().conductor(meta.conductor());
+        target.metadata().conductor(metadata.conductor());
       }
 
-      if (!meta.ensemble().empty())
+      if (!metadata.ensemble().empty())
       {
-        target.metadata().ensemble(meta.ensemble());
+        target.metadata().ensemble(metadata.ensemble());
       }
 
-      if (!meta.genre().empty())
+      if (!metadata.genre().empty())
       {
-        target.metadata().genre(meta.genre());
+        target.metadata().genre(metadata.genre());
       }
 
-      if (!meta.work().empty())
+      if (!metadata.work().empty())
       {
-        target.metadata().work(meta.work());
+        target.metadata().work(metadata.work());
       }
 
-      if (!meta.movement().empty())
+      if (!metadata.movement().empty())
       {
-        target.metadata().movement(meta.movement());
+        target.metadata().movement(metadata.movement());
       }
 
-      if (!meta.soloist().empty())
+      if (!metadata.soloist().empty())
       {
-        target.metadata().soloist(meta.soloist());
+        target.metadata().soloist(metadata.soloist());
       }
 
-      if (meta.year() != 0)
+      if (metadata.year() != 0)
       {
-        target.metadata().year(meta.year());
+        target.metadata().year(metadata.year());
       }
 
-      if (meta.trackNumber() != 0)
+      if (metadata.trackNumber() != 0)
       {
-        target.metadata().trackNumber(meta.trackNumber());
+        target.metadata().trackNumber(metadata.trackNumber());
       }
 
-      if (meta.trackTotal() != 0)
+      if (metadata.trackTotal() != 0)
       {
-        target.metadata().trackTotal(meta.trackTotal());
+        target.metadata().trackTotal(metadata.trackTotal());
       }
 
-      if (meta.discNumber() != 0)
+      if (metadata.discNumber() != 0)
       {
-        target.metadata().discNumber(meta.discNumber());
+        target.metadata().discNumber(metadata.discNumber());
       }
 
-      if (meta.discTotal() != 0)
+      if (metadata.discTotal() != 0)
       {
-        target.metadata().discTotal(meta.discTotal());
+        target.metadata().discTotal(metadata.discTotal());
       }
 
-      if (meta.movementNumber() != 0)
+      if (metadata.movementNumber() != 0)
       {
-        target.metadata().movementNumber(meta.movementNumber());
+        target.metadata().movementNumber(metadata.movementNumber());
       }
 
-      if (meta.movementTotal() != 0)
+      if (metadata.movementTotal() != 0)
       {
-        target.metadata().movementTotal(meta.movementTotal());
+        target.metadata().movementTotal(metadata.movementTotal());
       }
     }
 
@@ -290,7 +290,7 @@ namespace ao::tag::wav
       }
 
       auto const& parsed = *parsedResult;
-      auto builder = library::TrackBuilder::createNew();
+      auto builder = library::TrackBuilder::makeEmpty();
       auto const totalFrames = parsed.data.size() / parsed.format.blockAlign;
       auto const duration = std::chrono::milliseconds{
         (static_cast<std::uint64_t>(totalFrames) * std::chrono::milliseconds::period::den) / parsed.format.sampleRate};
@@ -308,11 +308,11 @@ namespace ao::tag::wav
 
       for (auto const& chunk : parsed.chunks)
       {
-        if (media::wav::chunkIdEquals(chunk, "LIST"))
+        if (media::wav::hasChunkId(chunk, "LIST"))
         {
           readInfoList(builder, chunk);
         }
-        else if (media::wav::chunkIdEquals(chunk, "id3 ") || media::wav::chunkIdEquals(chunk, "ID3 "))
+        else if (media::wav::hasChunkId(chunk, "id3 ") || media::wav::hasChunkId(chunk, "ID3 "))
         {
           readId3Chunk(builder, *this, chunk);
         }

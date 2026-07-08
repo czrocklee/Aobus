@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <ftxui/screen/box.hpp>

@@ -8,10 +8,10 @@
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <glibmm/refptr.h>
@@ -83,9 +83,9 @@ namespace ao::gtk
     TagEditRequestedSignal& signalTagEditRequested() noexcept { return _viewHostPtr->signalTagEditRequested(); }
 
     CreateSmartListRequestedSignal& signalCreateSmartListRequested() noexcept;
-    rt::ITrackListProjection* projection() const noexcept { return _modelPtr ? _modelPtr->projection() : nullptr; }
+    rt::TrackListProjection* projection() const noexcept { return _modelPtr ? _modelPtr->projection() : nullptr; }
 
-    void showTagPopover(TagPopover& popover, double xPosition, double yPosition);
+    void openTagPopover(TagPopover& popover, double xPosition, double yPosition);
     void setStatusMessage(std::string_view message);
     void clearStatusMessage();
 
@@ -97,9 +97,9 @@ namespace ao::gtk
     void on_map() override;
 
   private:
-    void setupHeaderFactory();
-    void setupStatusBar();
-    void setupColumnViewStyles(Gtk::ColumnView& view);
+    void configureHeaderFactory();
+    void buildStatusBar();
+    void applyColumnViewStyles(Gtk::ColumnView& view);
     void updateSectionHeaders();
 
     void rebuildColumnView(std::span<rt::TrackField const> visibleFields);

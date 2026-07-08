@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../CorePrimitives.h"
+#include "../Subscription.h"
 #include "AllTracksSource.h"
 #include "SmartListEvaluator.h"
 #include "TrackSource.h"

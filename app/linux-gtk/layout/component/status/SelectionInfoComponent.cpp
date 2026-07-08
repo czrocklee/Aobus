@@ -3,7 +3,7 @@
 
 #include "StatusComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "track/SelectionInfoLabel.h"
 #include <ao/rt/AppRuntime.h>
@@ -19,7 +19,7 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    class SelectionInfoComponent final : public ILayoutComponent
+    class SelectionInfoComponent final : public LayoutComponent
     {
     public:
       SelectionInfoComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
@@ -34,7 +34,7 @@ namespace ao::gtk::layout
       SelectionInfoLabel _widget;
     };
 
-    std::unique_ptr<ILayoutComponent> createSelectionInfo(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createSelectionInfo(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<SelectionInfoComponent>(ctx, node);
     }

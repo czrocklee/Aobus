@@ -3,7 +3,7 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "track/TrackPageHost.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -30,7 +30,7 @@ namespace ao::gtk::layout
      *
      * Transitional composite that replicates the current stack + detail handle + revealer.
      */
-    class WorkspaceWithDetailPaneComponent final : public ILayoutComponent
+    class WorkspaceWithDetailPaneComponent final : public LayoutComponent
     {
     public:
       WorkspaceWithDetailPaneComponent(LayoutContext& ctx, LayoutNode const& node)
@@ -88,10 +88,10 @@ namespace ao::gtk::layout
       Gtk::Box _container;
       Gtk::ToggleButton _handle;
       Gtk::Revealer _revealer;
-      std::unique_ptr<ILayoutComponent> _detailPtr;
+      std::unique_ptr<LayoutComponent> _detailPtr;
     };
 
-    std::unique_ptr<ILayoutComponent> createWorkspaceWithDetailPane(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createWorkspaceWithDetailPane(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<WorkspaceWithDetailPaneComponent>(ctx, node);
     }

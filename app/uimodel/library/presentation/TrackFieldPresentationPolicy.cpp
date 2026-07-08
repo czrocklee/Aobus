@@ -124,7 +124,7 @@ namespace ao::uimodel
     }
   }
 
-  bool trackFieldIsVisibleByDefault(rt::TrackField field)
+  bool isTrackFieldVisibleByDefault(rt::TrackField field)
   {
     return std::ranges::contains(rt::defaultTrackPresentationSpec().visibleFields, field);
   }

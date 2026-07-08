@@ -3,19 +3,20 @@
 
 #pragma once
 
-#include "test/unit/RuntimeTestUtils.h"
-#include "test/unit/audio/TestUtility.h"
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/BackendTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/IBackendProvider.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -31,7 +32,7 @@
 
 namespace ao::audio
 {
-  class IRenderTarget;
+  class RenderTarget;
 }
 
 namespace ao::rt::test
@@ -59,9 +60,9 @@ namespace ao::rt::test
   // Canonical single-backend, single-device provider status shared by every
   // harness instance below: "mock_backend" exposes one default "mock_device"
   // and the shared profile.
-  inline audio::IBackendProvider::Status makeMockProviderStatus()
+  inline audio::BackendProvider::Status makeMockProviderStatus()
   {
-    auto status = audio::IBackendProvider::Status{};
+    auto status = audio::BackendProvider::Status{};
     status.metadata.id = audio::BackendId{"mock_backend"};
     status.metadata.name = "Mock Backend";
     status.devices.push_back(audio::Device{.id = audio::DeviceId{"mock_device"},
@@ -69,7 +70,7 @@ namespace ao::rt::test
                                            .description = "A mock audio device",
                                            .isDefault = true,
                                            .backendId = audio::BackendId{"mock_backend"}});
-    status.metadata.supportedProfiles.push_back(audio::IBackendProvider::ProfileMetadata{
+    status.metadata.supportedProfiles.push_back(audio::BackendProvider::ProfileMetadata{
       .id = audio::ProfileId{audio::kProfileShared}, .name = "Shared", .description = "Shared profile"});
     return status;
   }
@@ -77,7 +78,7 @@ namespace ao::rt::test
   using rt::test::QueuedExecutor;
 
   // Shared wiring for the PlaybackService tests: a music library, a view service,
-  // a spy backend, and a mocked IBackendProvider that hands out that backend.
+  // a spy backend, and a mocked BackendProvider that hands out that backend.
   // ExecutorT selects the dispatch model (MockExecutor runs inline; QueuedExecutor
   // defers until drain()). The provider's devices/graph callbacks and the render
   // target are captured into public members so a test can drive them.
@@ -95,7 +96,7 @@ namespace ao::rt::test
 
       fakeit::When(Method(mockProvider, subscribeDevices))
         .AlwaysDo(
-          [this](audio::IBackendProvider::OnDevicesChangedCallback cb)
+          [this](audio::BackendProvider::OnDevicesChangedCallback cb)
           {
             onDevicesChangedCb = cb;
             return audio::Subscription{};
@@ -103,7 +104,7 @@ namespace ao::rt::test
 
       fakeit::When(Method(mockProvider, subscribeGraph))
         .AlwaysDo(
-          [this](std::string_view, audio::IBackendProvider::OnGraphChangedCallback cb)
+          [this](std::string_view, audio::BackendProvider::OnGraphChangedCallback cb)
           {
             onGraphChangedCb = cb;
             return audio::Subscription{};
@@ -139,7 +140,7 @@ namespace ao::rt::test
       fakeit::When(Method(spyBackendPtr->mock(), profileId)).AlwaysReturn(audio::ProfileId{audio::kProfileShared});
       fakeit::When(Method(spyBackendPtr->mock(), open))
         .AlwaysDo(
-          [this](audio::Format const& /*format*/, audio::IRenderTarget* target) -> Result<>
+          [this](audio::Format const& /*format*/, audio::RenderTarget* target) -> Result<>
           {
             renderTarget = target;
             return {};
@@ -167,12 +168,12 @@ namespace ao::rt::test
     NotificationService notificationService;
 
     std::shared_ptr<audio::test::SpyBackend<>> spyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();
-    fakeit::Mock<audio::IBackendProvider> mockProvider;
-    audio::IBackendProvider::Status status = makeMockProviderStatus();
+    fakeit::Mock<audio::BackendProvider> mockProvider;
+    audio::BackendProvider::Status status = makeMockProviderStatus();
 
-    audio::IBackendProvider::OnDevicesChangedCallback onDevicesChangedCb;
-    audio::IBackendProvider::OnGraphChangedCallback onGraphChangedCb;
-    audio::IRenderTarget* renderTarget = nullptr;
+    audio::BackendProvider::OnDevicesChangedCallback onDevicesChangedCb;
+    audio::BackendProvider::OnGraphChangedCallback onGraphChangedCb;
+    audio::RenderTarget* renderTarget = nullptr;
 
     PlaybackService playbackService{executor, viewService, testLib.library(), notificationService};
   };

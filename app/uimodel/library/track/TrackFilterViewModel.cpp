@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/projection/ProjectionTypes.h>
 #include <ao/uimodel/library/track/TrackFilterResolver.h>
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
 

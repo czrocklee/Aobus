@@ -27,7 +27,7 @@ namespace ao::council::test
 {
   namespace
   {
-    struct FakeRunner final : IProcessRunner
+    struct FakeRunner final : ProcessRunner
     {
       std::vector<ProcessRequest> requests;
       std::map<std::string, ProcessResult, std::less<>> agentResults;

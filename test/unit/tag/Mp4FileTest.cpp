@@ -3,7 +3,7 @@
 
 #include "lib/tag/mp4/File.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/mp4/TestAtoms.h"
 #include <ao/AudioCodec.h>
 #include <ao/library/CoverArt.h>
@@ -375,24 +375,24 @@ namespace ao::tag::mp4::test
     auto const file = File{temp.path};
     auto builder = loadTrack(file);
 
-    auto const meta = builder.metadata();
-    CHECK(meta.title() == "Title");
-    CHECK(meta.artist() == "Artist");
-    CHECK(meta.albumArtist() == "AlbumArtist");
-    CHECK(meta.album() == "Album");
-    CHECK(meta.year() == 2024);
-    CHECK(meta.genre() == "Genre");
-    CHECK(meta.composer() == "Composer");
-    CHECK(meta.conductor() == "Conductor");
-    CHECK(meta.ensemble() == "Ensemble");
-    CHECK(meta.work() == "Grouping"); // grp overwrites wrk
-    CHECK(meta.movement() == "MovementName");
-    CHECK(meta.soloist() == "Soloist");
-    CHECK(meta.movementNumber() == 2);
-    CHECK(meta.movementTotal() == 4);
-    CHECK(meta.trackNumber() == 7);
-    CHECK(meta.discNumber() == 2);
-    CHECK(meta.discTotal() == 5);
+    auto const metadata = builder.metadata();
+    CHECK(metadata.title() == "Title");
+    CHECK(metadata.artist() == "Artist");
+    CHECK(metadata.albumArtist() == "AlbumArtist");
+    CHECK(metadata.album() == "Album");
+    CHECK(metadata.year() == 2024);
+    CHECK(metadata.genre() == "Genre");
+    CHECK(metadata.composer() == "Composer");
+    CHECK(metadata.conductor() == "Conductor");
+    CHECK(metadata.ensemble() == "Ensemble");
+    CHECK(metadata.work() == "Grouping"); // grp overwrites wrk
+    CHECK(metadata.movement() == "MovementName");
+    CHECK(metadata.soloist() == "Soloist");
+    CHECK(metadata.movementNumber() == 2);
+    CHECK(metadata.movementTotal() == 4);
+    CHECK(metadata.trackNumber() == 7);
+    CHECK(metadata.discNumber() == 2);
+    CHECK(metadata.discTotal() == 5);
 
     auto const& covers = builder.coverArt().entries();
     REQUIRE(covers.size() == 2);
@@ -405,7 +405,7 @@ namespace ao::tag::mp4::test
     auto const secondData = std::get<std::span<std::byte const>>(covers[1].source);
     CHECK(static_cast<std::uint8_t>(secondData[0]) == 0xEE);
 
-    CHECK(meta.discTotal() == 5);
+    CHECK(metadata.discTotal() == 5);
 
     CHECK(builder.customMetadata().pairs().empty());
 
@@ -420,16 +420,16 @@ namespace ao::tag::mp4::test
   {
     auto const file = File{audio::test::requireAudioFixture("basic_metadata.m4a")};
     auto builder = loadTrack(file);
-    auto const meta = builder.metadata();
+    auto const metadata = builder.metadata();
 
-    CHECK(meta.title() == "Test Title");
-    CHECK(meta.artist() == "Test Artist");
-    CHECK(meta.album() == "Test Album");
-    CHECK(meta.genre() == "Rock");
-    CHECK(meta.composer() == "Test Composer");
-    CHECK(meta.work() == "Symphony No. 5");
-    CHECK(meta.trackNumber() == 1);
-    CHECK(meta.year() == 2024);
+    CHECK(metadata.title() == "Test Title");
+    CHECK(metadata.artist() == "Test Artist");
+    CHECK(metadata.album() == "Test Album");
+    CHECK(metadata.genre() == "Rock");
+    CHECK(metadata.composer() == "Test Composer");
+    CHECK(metadata.work() == "Symphony No. 5");
+    CHECK(metadata.trackNumber() == 1);
+    CHECK(metadata.year() == 2024);
   }
 
   TEST_CASE("MP4 File - maps freeform classical names case-insensitively", "[tag][unit][mp4][file]")

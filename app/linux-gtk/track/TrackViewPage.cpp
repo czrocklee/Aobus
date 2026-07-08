@@ -18,15 +18,15 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/CorePrimitives.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
 #include <ao/uimodel/field/TrackInlineEditWorkflow.h>
@@ -303,7 +303,7 @@ namespace ao::gtk
     , _viewHostPtr{std::make_unique<TrackColumnViewHost>(_modelPtr, _layoutStore, _selectionModelPtr, listId)}
   {
     _layoutStore.setActiveListId(_listId);
-    _viewHostPtr->setupSelectionActivation();
+    _viewHostPtr->configureSelectionActivation();
 
     _themeRefreshConnection = GtkStyleRuntime::instance().signalRefreshed().connect(
       [this]
@@ -313,11 +313,11 @@ namespace ao::gtk
         _viewHostPtr->columnView().queue_draw();
       });
 
-    setupStatusBar();
-    setupHeaderFactory();
+    buildStatusBar();
+    configureHeaderFactory();
 
     // 1. Configure columns and layout first (Off-tree)
-    _viewHostPtr->setupColumns(
+    _viewHostPtr->configureColumns(
       [this](rt::TrackField field)
       { return buildColumnFactory(field, std::bind_front(&TrackViewPage::commitMetadataChange, this), *_modelPtr); });
 
@@ -334,7 +334,7 @@ namespace ao::gtk
     // 2. Configure decorators and styles
     updateSectionHeaders();
 
-    setupColumnViewStyles(_viewHostPtr->columnView());
+    applyColumnViewStyles(_viewHostPtr->columnView());
 
     _contextPopover.set_has_arrow(false);
 
@@ -373,7 +373,7 @@ namespace ao::gtk
       });
   }
 
-  void TrackViewPage::setupHeaderFactory()
+  void TrackViewPage::configureHeaderFactory()
   {
     _sectionHeaderFactoryPtr = Gtk::SignalListItemFactory::create();
 
@@ -432,7 +432,7 @@ namespace ao::gtk
     _viewHostPtr->columnView().set_header_factory(_sectionHeaderFactoryPtr);
   }
 
-  void TrackViewPage::setupStatusBar()
+  void TrackViewPage::buildStatusBar()
   {
     _statusLabel.set_visible(false);
     _statusLabel.set_halign(Gtk::Align::START);
@@ -487,7 +487,7 @@ namespace ao::gtk
     auto& newView = _viewHostPtr->rebuild(_modelPtr, _layoutStore, _selectionModelPtr, factoryProvider, _listId);
 
     // 3. Configure structural properties before attaching model (Safe)
-    setupColumnViewStyles(newView);
+    applyColumnViewStyles(newView);
 
     _viewHostPtr->columnController().setLayoutAndApply(visibleFields);
     _viewHostPtr->columnController().updateTitlePositionVariable();
@@ -519,7 +519,7 @@ namespace ao::gtk
         }
       });
 
-    _viewHostPtr->setupSelectionActivation();
+    _viewHostPtr->configureSelectionActivation();
   }
 
   void TrackViewPage::updateSectionHeaders()
@@ -545,7 +545,7 @@ namespace ao::gtk
     return _createSmartListRequested;
   }
 
-  void TrackViewPage::showTagPopover(TagPopover& popover, double xPosition, double yPosition)
+  void TrackViewPage::openTagPopover(TagPopover& popover, double xPosition, double yPosition)
   {
     auto const rect = Gdk::Rectangle{static_cast<std::int32_t>(xPosition), static_cast<std::int32_t>(yPosition), 1, 1};
 
@@ -602,7 +602,7 @@ namespace ao::gtk
     clearStatusMessage();
   }
 
-  void TrackViewPage::setupColumnViewStyles(Gtk::ColumnView& view)
+  void TrackViewPage::applyColumnViewStyles(Gtk::ColumnView& view)
   {
     view.set_reorderable(true);
     view.get_style_context()->add_provider(_viewHostPtr->cssProvider(), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);

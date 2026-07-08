@@ -2,7 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
-#include <ao/rt/CorePrimitives.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
 
 #include <catch2/catch_test_macros.hpp>

@@ -3,7 +3,7 @@
 
 #include "AppConfig.h"
 
-#include "UIState.h"
+#include "WindowState.h"
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>

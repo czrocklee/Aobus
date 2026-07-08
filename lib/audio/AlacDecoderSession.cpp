@@ -6,8 +6,9 @@
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/AlacDecoderSession.h>
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/PcmBlock.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ByteView.h>
@@ -212,7 +213,7 @@ namespace ao::audio
 
   Result<PcmBlock> AlacDecoderSession::readNextBlock() noexcept
   {
-    if (_implPtr->packetSource.atEnd())
+    if (_implPtr->packetSource.isAtEnd())
     {
       return PcmBlock{.bytes = {}, .endOfStream = true};
     }
@@ -290,7 +291,7 @@ namespace ao::audio
         .bitDepth = targetBps,
         .frames = frameCount,
         .firstFrameIndex = firstFrameIndex,
-        .endOfStream = _implPtr->packetSource.atEnd(),
+        .endOfStream = _implPtr->packetSource.isAtEnd(),
       };
     }
 
@@ -321,7 +322,7 @@ namespace ao::audio
       .bitDepth = targetBps,
       .frames = frameCount,
       .firstFrameIndex = firstFrameIndex,
-      .endOfStream = _implPtr->packetSource.atEnd(),
+      .endOfStream = _implPtr->packetSource.isAtEnd(),
     };
   }
 

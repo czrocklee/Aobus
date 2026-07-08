@@ -51,7 +51,7 @@ namespace clang::tidy::readability
     {
       for (std::uint32_t i = 0; i < ctorExpr->getNumArgs(); ++i)
       {
-        if (auto const* arg = ctorExpr->getArg(i)->IgnoreParenImpCasts(); isLockTagType(arg->getType()))
+        if (auto const* argument = ctorExpr->getArg(i)->IgnoreParenImpCasts(); isLockTagType(argument->getType()))
         {
           return true;
         }
@@ -148,17 +148,17 @@ namespace clang::tidy::readability
         return false;
       }
 
-      bool isUniqueLockParam(CallExpr const* call, std::uint32_t argIndex)
+      bool isUniqueLockParameter(CallExpr const* call, std::uint32_t argumentIndex)
       {
         auto const* func = call->getDirectCallee();
 
-        if (func == nullptr || argIndex >= func->getNumParams())
+        if (func == nullptr || argumentIndex >= func->getNumParams())
         {
           return false;
         }
 
-        auto const* param = func->getParamDecl(argIndex);
-        QualType const type = param->getType().getNonReferenceType().getUnqualifiedType().getCanonicalType();
+        auto const* parameter = func->getParamDecl(argumentIndex);
+        QualType const type = parameter->getType().getNonReferenceType().getUnqualifiedType().getCanonicalType();
 
         if (auto const* record = type->getAsCXXRecordDecl(); record != nullptr)
         {
@@ -175,8 +175,8 @@ namespace clang::tidy::readability
       {
         for (std::uint32_t i = 0; i < call->getNumArgs(); ++i)
         {
-          auto const* arg = call->getArg(i)->IgnoreParenImpCasts();
-          auto const* dre = dyn_cast<DeclRefExpr>(arg);
+          auto const* argument = call->getArg(i)->IgnoreParenImpCasts();
+          auto const* dre = dyn_cast<DeclRefExpr>(argument);
 
           if (dre == nullptr)
           {
@@ -185,7 +185,7 @@ namespace clang::tidy::readability
 
           if (dre->getDecl() == target || dre->getDecl()->getCanonicalDecl() == target->getCanonicalDecl())
           {
-            if (isConditionVariableWait(call) || isUniqueLockParam(call, i))
+            if (isConditionVariableWait(call) || isUniqueLockParameter(call, i))
             {
               found = true;
               return false;

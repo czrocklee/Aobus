@@ -5,7 +5,8 @@
 
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
-#include <ao/audio/IBackend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Property.h>
 
 #include <memory>
@@ -13,7 +14,7 @@
 namespace ao::audio
 {
   struct Format;
-  class IRenderTarget;
+  class RenderTarget;
 }
 
 namespace ao::audio::backend::detail
@@ -26,7 +27,7 @@ namespace ao::audio::backend
   /**
    * @brief Audio backend using ALSA in exclusive (hardware) mode.
    */
-  class AlsaExclusiveBackend final : public IBackend
+  class AlsaExclusiveBackend final : public Backend
   {
   public:
     explicit AlsaExclusiveBackend(Device const& device, ProfileId const& profile);
@@ -40,7 +41,7 @@ namespace ao::audio::backend
     AlsaExclusiveBackend(AlsaExclusiveBackend&&) = delete;
     AlsaExclusiveBackend& operator=(AlsaExclusiveBackend&&) = delete;
 
-    Result<> open(Format const& format, IRenderTarget* target) override;
+    Result<> open(Format const& format, RenderTarget* target) override;
     void start() override;
     void pause() override;
     void resume() override;

@@ -5,7 +5,8 @@
 
 #include "ActionRegistry.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionBinding.h>
+#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -27,7 +28,7 @@ namespace ao::gtk::layout
                                            uimodel::LayoutActionSlot slot,
                                            Gtk::Widget& anchorWidget) const
   {
-    auto const actionId = node.getProp<std::string>(std::string{propName}, std::string{defaultActionId});
+    auto const actionId = node.propertyOr<std::string>(std::string{propName}, std::string{defaultActionId});
 
     // TODO: hasAnchor and hasFocusedView are hardcoded for Phase 1 widget bindings
     auto const bindCtx = uimodel::LayoutActionBindingContext{

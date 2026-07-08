@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/lmdb/TestUtils.h"
+#include "test/unit/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
@@ -34,7 +35,7 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - smart list", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::createNew()
+    auto const payload = ListBuilder::makeEmpty()
                            .name("My Smart List")
                            .description("A smart list")
                            .filter("@artist = 'Test'")
@@ -50,7 +51,7 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - manual list", "[library][unit][list]")
   {
-    auto builder = ListBuilder::createNew().name("My Manual List").description("A manual list");
+    auto builder = ListBuilder::makeEmpty().name("My Manual List").description("A manual list");
     builder.tracks().add(TrackId{100});
     builder.tracks().add(TrackId{200});
     builder.tracks().add(TrackId{300});
@@ -67,7 +68,7 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - manual list empty trackIds", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::createNew().name("Empty List").description("No tracks").serialize();
+    auto const payload = ListBuilder::makeEmpty().name("Empty List").description("No tracks").serialize();
     auto const view = ListView{payload};
 
     CHECK(view.isSmart() == false);
@@ -77,7 +78,7 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - parentId round-trip through View", "[library][unit][list]")
   {
-    auto builder = ListBuilder::createNew()
+    auto builder = ListBuilder::makeEmpty()
                      .name("Nested Smart List")
                      .description("Child list")
                      .filter("$year >= 2021")
@@ -104,7 +105,7 @@ namespace ao::library::test
     auto store = ListStore{openDatabase(wtxn, "lists")};
     REQUIRE(wtxn.commit());
 
-    auto builder = ListBuilder::createNew().name("RoundTrip Test").description("Testing round-trip");
+    auto builder = ListBuilder::makeEmpty().name("RoundTrip Test").description("Testing round-trip");
     builder.tracks().add(TrackId{42});
     builder.tracks().add(TrackId{99});
     auto const payload = builder.serialize();
@@ -134,7 +135,7 @@ namespace ao::library::test
     auto store = ListStore{openDatabase(wtxn, "lists")};
     REQUIRE(wtxn.commit());
 
-    auto const payload = ListBuilder::createNew()
+    auto const payload = ListBuilder::makeEmpty()
                            .name("Smart RoundTrip")
                            .description("Testing smart list round-trip")
                            .filter("@year > 2020")
@@ -157,7 +158,7 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - name and description offsets", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::createNew().name("Offset Test").description("Desc Here").serialize();
+    auto const payload = ListBuilder::makeEmpty().name("Offset Test").description("Desc Here").serialize();
     auto const view = ListView{payload};
 
     CHECK(view.name() == "Offset Test");

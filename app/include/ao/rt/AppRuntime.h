@@ -11,7 +11,7 @@
 
 namespace ao::audio
 {
-  class IBackendProvider;
+  class BackendProvider;
 }
 
 namespace ao::async
@@ -28,7 +28,7 @@ namespace ao::rt
 
   struct AppRuntimeDependencies
   {
-    std::unique_ptr<async::IExecutor> executorPtr{};
+    std::unique_ptr<async::Executor> executorPtr{};
     std::filesystem::path musicRoot{};
     std::filesystem::path databasePath{};
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
@@ -54,7 +54,7 @@ namespace ao::rt
     void reloadAllTracks();
 
     TrackId playSelectionInFocusedView();
-    void addAudioProvider(std::unique_ptr<audio::IBackendProvider> providerPtr);
+    void addAudioProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
 
   private:
     struct Impl;

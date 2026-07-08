@@ -57,12 +57,12 @@ namespace ao::gtk::test
       auto ids = std::vector<TrackId>{};
       ids.reserve(count);
 
-      auto txn = library.writeTransaction();
-      auto writer = library.tracks().writer(txn);
+      auto transaction = library.writeTransaction();
+      auto writer = library.tracks().writer(transaction);
 
       for (std::size_t i = 0; i < count; ++i)
       {
-        auto builder = library::TrackBuilder::createNew();
+        auto builder = library::TrackBuilder::makeEmpty();
         // Spread metadata across many distinct dictionary strings so resolution
         // and the sort/text caches see realistic cardinality rather than one value.
         builder.metadata()
@@ -81,13 +81,13 @@ namespace ao::gtk::test
           .channels(Channels{2})
           .bitDepth(BitDepth{16});
 
-        auto serializeResult = builder.serialize(txn, library.dictionary(), library.resources());
+        auto serializeResult = builder.serialize(transaction, library.dictionary(), library.resources());
         REQUIRE(serializeResult);
         auto const [hot, cold] = *serializeResult;
         ids.push_back(ao::test::requireValue(writer.createHotCold(hot, cold)).first);
       }
 
-      REQUIRE(txn.commit());
+      REQUIRE(transaction.commit());
       return ids;
     }
   } // namespace
@@ -107,7 +107,7 @@ namespace ao::gtk::test
     auto cache = TrackRowCache{fixture.runtime().library()};
 
     // Cold scroll: walk every row once, top to bottom. Each row is materialized
-    // lazily (the first trackRow() opens a read txn, resolves dictionary strings,
+    // lazily (the first trackRow() opens a read transaction, resolves dictionary strings,
     // populates) and every computed column is formatted for the first time. This
     // is the cost of scrolling through a library that has never been viewed.
     std::size_t coldSink = 0;

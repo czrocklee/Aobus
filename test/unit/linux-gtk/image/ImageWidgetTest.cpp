@@ -10,7 +10,7 @@
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/projection/ProjectionTypes.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <catch2/catch_test_macros.hpp>
 

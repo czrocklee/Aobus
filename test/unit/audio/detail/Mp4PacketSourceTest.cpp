@@ -38,7 +38,7 @@ namespace ao::audio::detail::test
 
     REQUIRE(source.open(temp.path, "alac"));
     CHECK(source.isOpen());
-    CHECK_FALSE(source.atEnd());
+    CHECK_FALSE(source.isAtEnd());
     CHECK(source.sampleIndex() == 0);
     CHECK(source.packet().size() == 4);
     CHECK(source.magicCookie().size() == 11);
@@ -47,13 +47,13 @@ namespace ao::audio::detail::test
     CHECK(source.firstFrameIndex(44100, 4096) == 0);
 
     source.advance();
-    CHECK(source.atEnd());
+    CHECK(source.isAtEnd());
     CHECK(source.packet().empty());
     CHECK(source.sampleInfo().size == 0);
 
     source.close();
     CHECK_FALSE(source.isOpen());
-    CHECK(source.atEnd());
+    CHECK(source.isAtEnd());
     CHECK(!source.seek(std::chrono::milliseconds{10}));
   }
 
@@ -66,7 +66,7 @@ namespace ao::audio::detail::test
 
       CHECK(!source.open(temp.path, "mp4a"));
       CHECK_FALSE(source.isOpen());
-      CHECK(source.atEnd());
+      CHECK(source.isAtEnd());
     }
 
     SECTION("Zero media timescale uses the codec fallback")
@@ -81,7 +81,7 @@ namespace ao::audio::detail::test
       CHECK(source.duration(44100) == std::chrono::seconds{2});
       CHECK(!source.seek(std::chrono::seconds{1}));
       CHECK(source.seek(std::chrono::seconds{1}, 44100));
-      CHECK(source.atEnd());
+      CHECK(source.isAtEnd());
     }
   }
 } // namespace ao::audio::detail::test

@@ -8,7 +8,7 @@
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
 #include <ao/utility/AtomicFile.h>
-#include <ao/yaml/Utils.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <exception>
 #include <filesystem>

@@ -133,7 +133,7 @@ namespace ao::cli
       std::println(os);
     }
 
-    void showTags(CliContext& context, std::vector<std::uint32_t> const& rawIds)
+    void printSelectedTags(CliContext& context, std::vector<std::uint32_t> const& rawIds)
     {
       auto reader = context.library().reader();
       auto const trackIds = requireTrackIds(reader, rawIds);
@@ -242,7 +242,7 @@ namespace ao::cli
     }
   } // namespace
 
-  void setupTagCommand(CLI::App& app, CliContext& context)
+  void configureTagCommand(CLI::App& app, CliContext& context)
   {
     auto* tag = app.add_subcommand("tag", "Tag management commands");
     tag->require_subcommand(1);
@@ -280,6 +280,6 @@ namespace ao::cli
     auto* show = tag->add_subcommand("show", "Show tags shared by selected tracks");
     auto showIdsPtr = std::make_shared<std::vector<std::uint32_t>>();
     show->add_option("id", *showIdsPtr, "track id")->required();
-    show->callback([&context, showIdsPtr] { showTags(context, *showIdsPtr); });
+    show->callback([&context, showIdsPtr] { printSelectedTags(context, *showIdsPtr); });
   }
 } // namespace ao::cli

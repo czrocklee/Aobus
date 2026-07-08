@@ -23,7 +23,7 @@ namespace ao::council
     std::filesystem::path immutableBase;
     std::filesystem::path runRoot;
     Registry const& registry;
-    IProcessRunner& processRunner;
+    ProcessRunner& processRunner;
     async::Runtime& asyncRuntime;
   };
 
@@ -50,7 +50,7 @@ namespace ao::council
   class Runner final
   {
   public:
-    explicit Runner(IProcessRunner& processRunner);
+    explicit Runner(ProcessRunner& processRunner);
 
     Result<RunSummary> run(Registry const& registry,
                            std::vector<PhaseIntent> const& intents,
@@ -58,6 +58,6 @@ namespace ao::council
                            std::filesystem::path const& out);
 
   private:
-    IProcessRunner& _processRunner;
+    ProcessRunner& _processRunner;
   };
 } // namespace ao::council

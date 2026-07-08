@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include <ao/uimodel/layout/action/LayoutActionActivation.h>
+#include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/action/LayoutActionTypes.h>
+#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
 #include <functional>
 #include <optional>
@@ -21,6 +23,11 @@ namespace Gtk
 {
   class Window;
   class Widget;
+}
+
+namespace ao::uimodel
+{
+  struct LayoutActionBindingContext;
 }
 
 namespace ao::gtk::layout

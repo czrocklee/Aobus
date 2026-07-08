@@ -11,7 +11,7 @@
 
 namespace ao::gtk::layout
 {
-  class ILayoutComponent;
+  class LayoutComponent;
 
   class ComponentTooltipController final
   {
@@ -24,7 +24,7 @@ namespace ao::gtk::layout
     ComponentTooltipController(ComponentTooltipController&&) = delete;
     ComponentTooltipController& operator=(ComponentTooltipController&&) = delete;
 
-    void attach(Gtk::Widget& target, ILayoutComponent& tooltipComponent);
+    void attach(Gtk::Widget& target, LayoutComponent& tooltipComponent);
 
   private:
     void detach();
@@ -32,7 +32,7 @@ namespace ao::gtk::layout
     void onLeave();
 
     Gtk::Widget* _target = nullptr;
-    ILayoutComponent* _tooltipComponent = nullptr;
+    LayoutComponent* _tooltipComponent = nullptr;
 
     Gtk::Popover _popover;
     Glib::RefPtr<Gtk::EventControllerMotion> _motionControllerPtr;

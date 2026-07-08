@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../CorePrimitives.h"
+#include "../Subscription.h"
 #include "../TrackField.h"
 #include <ao/CoreIds.h>
 

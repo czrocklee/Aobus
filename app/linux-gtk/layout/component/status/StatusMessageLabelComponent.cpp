@@ -3,7 +3,7 @@
 
 #include "StatusComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -23,7 +23,7 @@ namespace ao::gtk::layout
     /**
      * @brief status.messageLabel
      */
-    class StatusMessageLabelComponent final : public ILayoutComponent
+    class StatusMessageLabelComponent final : public LayoutComponent
     {
     public:
       StatusMessageLabelComponent(LayoutContext& /*ctx*/, LayoutNode const& /*node*/)
@@ -39,7 +39,7 @@ namespace ao::gtk::layout
       Gtk::Label _label;
     };
 
-    std::unique_ptr<ILayoutComponent> createStatusMessageLabel(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createStatusMessageLabel(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<StatusMessageLabelComponent>(ctx, node);
     }

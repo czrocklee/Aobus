@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestUtils.h"
-#include "test/unit/audio/AudioFixtureUtils.h"
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackStore.h>
@@ -63,13 +63,13 @@ namespace ao::rt::test
     CHECK(result->failureCount == 0);
     CHECK_FALSE(result->cancelled);
 
-    auto txn = testLib.library().readTransaction();
-    auto trackReader = testLib.library().tracks().reader(txn);
+    auto transaction = testLib.library().readTransaction();
+    auto trackReader = testLib.library().tracks().reader(transaction);
     auto optTrack = trackReader.get(result->processedIds[0]);
     REQUIRE(optTrack);
     CHECK(optTrack->metadata().title() == "Test Title");
 
-    auto manifestResult = testLib.library().manifest().reader(txn).get("song.flac");
+    auto manifestResult = testLib.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK(manifestResult->trackId() == result->processedIds[0]);
     CHECK(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
@@ -91,8 +91,8 @@ namespace ao::rt::test
     REQUIRE(result->processedIds.size() == 1);
     CHECK(result->failureCount == 0);
 
-    auto txn = testLib.library().readTransaction();
-    auto manifestResult = testLib.library().manifest().reader(txn).get("song.flac");
+    auto transaction = testLib.library().readTransaction();
+    auto manifestResult = testLib.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK_FALSE(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
   }
@@ -115,9 +115,9 @@ namespace ao::rt::test
     CHECK(result->processedIds.empty());
     CHECK(result->failureCount == 0);
 
-    auto txn = testLib.library().readTransaction();
-    auto trackReader = testLib.library().tracks().reader(txn);
-    auto manifestReader = testLib.library().manifest().reader(txn);
+    auto transaction = testLib.library().readTransaction();
+    auto trackReader = testLib.library().tracks().reader(transaction);
+    auto manifestReader = testLib.library().manifest().reader(transaction);
     CHECK(trackReader.begin() == trackReader.end());
     CHECK(manifestReader.begin() == manifestReader.end());
   }
