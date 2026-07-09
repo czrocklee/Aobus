@@ -41,7 +41,7 @@ namespace ao::yaml::test
       bool ok = false;
       std::optional<std::string> optOmitted;
       std::optional<std::string> optPresent;
-      std::vector<std::string> emptyVector;
+      std::vector<std::string> emptyNames;
       std::vector<NestedDto> nested;
       std::map<std::string, std::string> labels;
       TrackId trackId{};
@@ -109,7 +109,7 @@ namespace ao::yaml::test
       .ok = true,
       .optOmitted = std::nullopt,
       .optPresent = "value",
-      .emptyVector = {},
+      .emptyNames = {},
       .nested = {NestedDto{.name = "child", .count = 7}},
       .labels = {{"alpha", "one"}, {"empty", ""}},
       .trackId = TrackId{42},
@@ -128,8 +128,8 @@ namespace ao::yaml::test
     CHECK(scalarView(findChild(root, "view")) == "123");
     CHECK(findChild(root, "omitted").readable() == false);
     CHECK(scalarView(findChild(root, "present")) == "value");
-    CHECK(findChild(root, "emptyVector").is_seq());
-    CHECK(findChild(root, "emptyVector").num_children() == 0);
+    CHECK(findChild(root, "emptyNames").is_seq());
+    CHECK(findChild(root, "emptyNames").num_children() == 0);
     CHECK(scalarView(findChild(findChild(root, "nested")[0], "name")) == "child");
     CHECK(scalarView(findChild(findChild(root, "labels"), "alpha")) == "one");
     CHECK(scalarView(findChild(root, "trackId")) == "42");
@@ -143,7 +143,7 @@ namespace ao::yaml::test
     CHECK(jsonText.find("\"view\": \"123\"") != std::string::npos);
     CHECK(jsonText.find("\"number\": 123") != std::string::npos);
     CHECK(jsonText.find("\"emptyText\": \"\"") != std::string::npos);
-    CHECK(jsonText.find("\"emptyVector\": []") != std::string::npos);
+    CHECK(jsonText.find("\"emptyNames\": []") != std::string::npos);
     CHECK(jsonText.find("\"labels\": {") != std::string::npos);
     CHECK(jsonText.find("\"omitted\"") == std::string::npos);
     CHECK(jsonText.find("\"new\": 5") != std::string::npos);

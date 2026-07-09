@@ -28,8 +28,8 @@ namespace ao::rt::test
     coldList.setExpression("@duration >= 3m"); // Cold property
 
     auto t1 = libraryFixture.addTrack(makeSmartListSpec("Track", 2022, std::chrono::seconds{200}));
-    auto const batchArray = std::array{t1};
-    source.batchInsert(batchArray);
+    auto const batchTrackIds = std::array{t1};
+    source.batchInsert(batchTrackIds);
 
     hotList.reload();
     coldList.reload();
@@ -51,8 +51,8 @@ namespace ao::rt::test
 
     auto t1 = libraryFixture.addTrack(makeSmartListSpec("Track", 2022, std::chrono::seconds{200}));
     auto t2 = libraryFixture.addTrack(makeSmartListSpec("Bad", 2022, std::chrono::seconds{1}));
-    auto const batchArray = std::array{t1, t2};
-    source.batchInsert(batchArray);
+    auto const batchTrackIds = std::array{t1, t2};
+    source.batchInsert(batchTrackIds);
 
     list.reload();
     CHECK(list.size() == 1);

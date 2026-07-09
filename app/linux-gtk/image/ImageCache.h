@@ -78,6 +78,6 @@ namespace ao::gtk
 
     std::size_t _maxSize;
     std::list<CacheEntry> _entries;
-    boost::unordered_flat_map<ImageCacheKey, std::list<CacheEntry>::iterator, ImageCacheKeyHash> _cacheMap;
+    boost::unordered_flat_map<ImageCacheKey, std::list<CacheEntry>::iterator, ImageCacheKeyHash> _entryByKey;
   };
 } // namespace ao::gtk

@@ -195,13 +195,13 @@ namespace clang::tidy::readability
       return endsWithApprovedNoun(name, kApprovedNouns);
     }
 
-    StringRef durationNounsList()
+    StringRef durationNounSummaryText()
     {
       return "duration, interval, timeout, delay, period, time, offset, threshold, elapsed, length, latency, "
              "remaining, budget, span, age, delta, position";
     }
 
-    StringRef timePointNounsList()
+    StringRef timePointNounSummaryText()
     {
       return "time, timestamp, instant, deadline, point, epoch, mark, start, end, expiry, origin, now";
     }
@@ -268,27 +268,27 @@ namespace clang::tidy::readability
         return;
       }
 
-      auto const approvedList = isTimePoint ? timePointNounsList() : durationNounsList();
+      auto const approvedNounsText = isTimePoint ? timePointNounSummaryText() : durationNounSummaryText();
 
       if (isFunction)
       {
         diag(decl->getLocation(), "%0-returning function '%1' must end with an approved noun (%2)")
-          << category << name << approvedList;
+          << category << name << approvedNounsText;
       }
       else if (isa<ParmVarDecl>(decl))
       {
         diag(decl->getLocation(), "%0 parameter '%1' must end with an approved noun (%2)")
-          << category << name << approvedList;
+          << category << name << approvedNounsText;
       }
       else if (isa<FieldDecl>(decl))
       {
         diag(decl->getLocation(), "%0 field '%1' must end with an approved noun (%2)")
-          << category << name << approvedList;
+          << category << name << approvedNounsText;
       }
       else
       {
         diag(decl->getLocation(), "%0 variable '%1' must end with an approved noun (%2)")
-          << category << name << approvedList;
+          << category << name << approvedNounsText;
       }
     };
 

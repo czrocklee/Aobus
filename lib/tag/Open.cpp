@@ -28,7 +28,7 @@ namespace ao::tag
     // The one and only mapping from file extension to tag reader. Both open()
     // and isSupported() derive from this, so the supported-format set can never
     // drift between "what we scan" and "what we can actually parse".
-    constexpr auto kCreatorMap = std::to_array<std::pair<std::string_view, Creator>>({
+    constexpr auto kCreatorsByExtension = std::to_array<std::pair<std::string_view, Creator>>({
       {".mp3",
        [](std::filesystem::path const& filePath) -> std::unique_ptr<TagFile>
        { return std::make_unique<mpeg::File>(filePath); }},
@@ -52,8 +52,8 @@ namespace ao::tag
 
     Creator const* findCreator(std::string_view ext)
     {
-      auto const* const it = std::ranges::find(kCreatorMap, ext, &std::pair<std::string_view, Creator>::first);
-      return it != kCreatorMap.end() ? &it->second : nullptr;
+      auto const* const it = std::ranges::find(kCreatorsByExtension, ext, &std::pair<std::string_view, Creator>::first);
+      return it != kCreatorsByExtension.end() ? &it->second : nullptr;
     }
   } // namespace
 

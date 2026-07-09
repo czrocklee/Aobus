@@ -679,7 +679,7 @@ namespace ao::cli
       return dto;
     }
 
-    void printRelinkList(rt::ScanPlan const& plan, OutputFormat format, std::ostream& os)
+    void printRelinkCandidates(rt::ScanPlan const& plan, OutputFormat format, std::ostream& os)
     {
       auto const dto = toRelinkListDto(plan);
 
@@ -862,7 +862,7 @@ namespace ao::cli
 
       if (!optOldUri && !optNewUri)
       {
-        printRelinkList(plan, format, os);
+        printRelinkCandidates(plan, format, os);
         return;
       }
 

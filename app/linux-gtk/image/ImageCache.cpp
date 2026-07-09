@@ -46,9 +46,9 @@ namespace ao::gtk
 
   Glib::RefPtr<Gdk::Pixbuf> ImageCache::get(ImageCacheKey key)
   {
-    auto const it = _cacheMap.find(key);
+    auto const it = _entryByKey.find(key);
 
-    if (it == _cacheMap.end())
+    if (it == _entryByKey.end())
     {
       return {};
     }
@@ -65,7 +65,7 @@ namespace ao::gtk
       return;
     }
 
-    if (auto const it = _cacheMap.find(key); it != _cacheMap.end())
+    if (auto const it = _entryByKey.find(key); it != _entryByKey.end())
     {
       // Update existing entry and move to front
       it->second->pixbufPtr = pixbufPtr;
@@ -75,20 +75,20 @@ namespace ao::gtk
 
     // Add new entry to front
     _entries.push_front({.key = key, .pixbufPtr = pixbufPtr});
-    _cacheMap[key] = _entries.begin();
+    _entryByKey[key] = _entries.begin();
 
     // Evict least recently used if over capacity
     if (_entries.size() > _maxSize)
     {
       auto const last = CacheEntry{_entries.back()};
-      _cacheMap.erase(last.key);
+      _entryByKey.erase(last.key);
       _entries.pop_back();
     }
   }
 
   void ImageCache::clear()
   {
-    _cacheMap.clear();
+    _entryByKey.clear();
     _entries.clear();
   }
 } // namespace ao::gtk

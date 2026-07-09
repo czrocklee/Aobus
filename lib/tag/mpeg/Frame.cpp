@@ -27,10 +27,10 @@ namespace ao::tag::mpeg
     constexpr std::uint32_t kSamplingRate12000 = 12000;
     constexpr std::uint32_t kSamplingRate8000 = 8000;
 
-    using SamplingRateArray = std::array<std::uint32_t, 4>;
-    using VersionSamplingRateArray = std::array<SamplingRateArray, 4>;
+    using SamplingRateChoices = std::array<std::uint32_t, 4>;
+    using VersionSamplingRates = std::array<SamplingRateChoices, 4>;
 
-    constexpr VersionSamplingRateArray kVersionSamplingRateTable = {{
+    constexpr VersionSamplingRates kVersionSamplingRateTable = {{
       {kSamplingRate11025, kSamplingRate12000, kSamplingRate8000, 0},  // V2.5 (00)
       {0, 0, 0, 0},                                                    // Reserved (01)
       {kSamplingRate22050, kSamplingRate24000, kSamplingRate16000, 0}, // V2 (10)
@@ -39,20 +39,20 @@ namespace ao::tag::mpeg
 
     // Number of possible bitrate index values in MPEG audio
     constexpr std::size_t kBitrateCount = 16;
-    using BitrateArray = std::array<std::uint16_t, kBitrateCount>;
+    using BitrateChoices = std::array<std::uint16_t, kBitrateCount>;
 
-    constexpr BitrateArray kBitrateTableV1L1 =
+    constexpr BitrateChoices kBitrateTableV1L1 =
       {0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0};
-    constexpr BitrateArray kBitrateTableV1L2 = {0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0};
-    constexpr BitrateArray kBitrateTableV1L3 = {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0};
-    constexpr BitrateArray kBitrateTableV2L1 = {0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256, 0};
-    constexpr BitrateArray kBitrateTableV2L23 = {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0};
-    constexpr BitrateArray kBitrateTableReserved = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr BitrateChoices kBitrateTableV1L2 = {0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0};
+    constexpr BitrateChoices kBitrateTableV1L3 = {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0};
+    constexpr BitrateChoices kBitrateTableV2L1 = {0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256, 0};
+    constexpr BitrateChoices kBitrateTableV2L23 = {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0};
+    constexpr BitrateChoices kBitrateTableReserved = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-    using LayerBitrateArray = std::array<BitrateArray, 4>;
-    using VersionLayerBitrateArray = std::array<LayerBitrateArray, 4>;
+    using LayerBitrates = std::array<BitrateChoices, 4>;
+    using VersionLayerBitrates = std::array<LayerBitrates, 4>;
 
-    constexpr VersionLayerBitrateArray kVersionLayerBitrateTable = {{
+    constexpr VersionLayerBitrates kVersionLayerBitrateTable = {{
       {kBitrateTableReserved, kBitrateTableV2L23, kBitrateTableV2L23, kBitrateTableV2L1},           // V2.5
       {kBitrateTableReserved, kBitrateTableReserved, kBitrateTableReserved, kBitrateTableReserved}, // Reserved
       {kBitrateTableReserved, kBitrateTableV2L23, kBitrateTableV2L23, kBitrateTableV2L1},           // V2

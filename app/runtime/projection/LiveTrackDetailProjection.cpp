@@ -99,7 +99,7 @@ namespace ao::rt
 
     void aggregateCustom(library::TrackView const& view,
                          library::DictionaryStore const& dictionary,
-                         std::map<std::string, CustomAggregationState>& customMap)
+                         std::map<std::string, CustomAggregationState>& customAggregates)
     {
       for (auto const& [dictionaryId, value] : view.customMetadata())
       {
@@ -110,7 +110,7 @@ namespace ao::rt
           continue;
         }
 
-        auto& state = customMap[key];
+        auto& state = customAggregates[key];
         state.presentCount++;
 
         if (!state.optFirstValue)
@@ -292,7 +292,7 @@ namespace ao::rt
     auto const& dictionary = _implPtr->library.dictionary();
 
     auto fieldValues = std::array<std::vector<TrackFieldRawValue>, kTrackFieldCount>{};
-    auto customMap = std::map<std::string, CustomAggregationState>{};
+    auto customAggregates = std::map<std::string, CustomAggregationState>{};
     std::size_t loadedCount = 0;
 
     for (auto const trackId : ids)
@@ -307,7 +307,7 @@ namespace ao::rt
 
       loadedCount++;
       aggregateFields(*optView, dictionary, &manifestReader, fieldValues);
-      aggregateCustom(*optView, dictionary, customMap);
+      aggregateCustom(*optView, dictionary, customAggregates);
 
       if (ids.size() == 1)
       {
@@ -336,7 +336,7 @@ namespace ao::rt
       ++fieldIter;
     }
 
-    for (auto const& [key, state] : customMap)
+    for (auto const& [key, state] : customAggregates)
     {
       auto item = CustomMetadataItem{
         .key = key,

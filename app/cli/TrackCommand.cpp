@@ -468,8 +468,8 @@ namespace ao::cli
       return names;
     }
 
-    std::map<std::string, std::string> customMap(library::TrackView const& view,
-                                                 library::DictionaryStore const& dictionary)
+    std::map<std::string, std::string> customMetadataByName(library::TrackView const& view,
+                                                            library::DictionaryStore const& dictionary)
     {
       auto result = std::map<std::string, std::string>{};
 
@@ -565,7 +565,7 @@ namespace ao::cli
         dto.optDuration = positiveDurationMillis(view.property().duration());
         dto.optSampleRate = nonZeroSampleRate(view.property().sampleRate());
         dto.optUri = nonEmptyString(view.property().uri());
-        dto.optCustom = customMap(view, dictionary);
+        dto.optCustom = customMetadataByName(view, dictionary);
       }
 
       return dto;

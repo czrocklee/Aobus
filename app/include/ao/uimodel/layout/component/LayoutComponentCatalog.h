@@ -120,6 +120,6 @@ namespace ao::uimodel
   private:
     std::vector<LayoutComponentDescriptor> _descriptors = {};
     boost::unordered_flat_map<std::string, std::size_t, utility::TransparentStringHash, utility::TransparentStringEqual>
-      _descriptorIndexMap = {};
+      _descriptorIndexByType = {};
   };
 } // namespace ao::uimodel

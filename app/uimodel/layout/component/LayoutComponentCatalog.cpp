@@ -69,12 +69,12 @@ namespace ao::uimodel
 
   bool LayoutComponentCatalog::registerComponentDescriptor(LayoutComponentDescriptor descriptor)
   {
-    if (_descriptorIndexMap.contains(descriptor.type))
+    if (_descriptorIndexByType.contains(descriptor.type))
     {
       return false;
     }
 
-    _descriptorIndexMap[descriptor.type] = _descriptors.size();
+    _descriptorIndexByType[descriptor.type] = _descriptors.size();
     _descriptors.push_back(std::move(descriptor));
     return true;
   }
@@ -86,7 +86,7 @@ namespace ao::uimodel
 
   std::optional<LayoutComponentDescriptor> LayoutComponentCatalog::descriptor(std::string_view type) const
   {
-    if (auto const it = _descriptorIndexMap.find(type); it != _descriptorIndexMap.end())
+    if (auto const it = _descriptorIndexByType.find(type); it != _descriptorIndexByType.end())
     {
       return _descriptors[it->second];
     }

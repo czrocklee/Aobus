@@ -50,7 +50,7 @@ namespace ao::rt
       {.field = TrackField::Soloist, .coldStore = true},
     });
 
-    using CountMap = boost::unordered_flat_map<std::string_view, std::uint32_t, std::hash<std::string_view>>;
+    using ValueFrequencies = boost::unordered_flat_map<std::string_view, std::uint32_t, std::hash<std::string_view>>;
 
     constexpr ValueCompletionFieldSpec const* valueCompletionSpecForField(TrackField field)
     {
@@ -91,7 +91,7 @@ namespace ao::rt
       return static_cast<std::size_t>(field);
     }
 
-    void addValue(CountMap& counts, std::string_view value)
+    void addValue(ValueFrequencies& counts, std::string_view value)
     {
       if (!value.empty())
       {
@@ -99,7 +99,7 @@ namespace ao::rt
       }
     }
 
-    std::vector<VocabularyEntry> sortedVocabulary(CountMap const& counts)
+    std::vector<VocabularyEntry> sortedVocabulary(ValueFrequencies const& counts)
     {
       auto entries = std::vector<VocabularyEntry>{};
       entries.reserve(counts.size());
@@ -167,7 +167,7 @@ namespace ao::rt
 
     if (_tagsDirty)
     {
-      auto counts = CountMap{};
+      auto counts = ValueFrequencies{};
       auto const transaction = _library.readTransaction();
       auto const reader = _library.tracks().reader(transaction);
       auto const& dictionary = _library.dictionary();
@@ -193,7 +193,7 @@ namespace ao::rt
 
     if (_customKeysDirty)
     {
-      auto counts = CountMap{};
+      auto counts = ValueFrequencies{};
       auto const transaction = _library.readTransaction();
       auto const reader = _library.tracks().reader(transaction);
       auto const& dictionary = _library.dictionary();
@@ -255,7 +255,7 @@ namespace ao::rt
       return;
     }
 
-    auto counts = std::array<CountMap, kTrackFieldCount>{};
+    auto counts = std::array<ValueFrequencies, kTrackFieldCount>{};
     auto const transaction = _library.readTransaction();
     auto const reader = _library.tracks().reader(transaction);
     auto const& dictionary = _library.dictionary();

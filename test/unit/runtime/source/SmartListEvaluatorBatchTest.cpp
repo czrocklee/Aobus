@@ -33,8 +33,8 @@ namespace ao::rt::test
     auto t2 = libraryFixture.addTrack(makeSmartListSpec("New1", 2021));
     auto t3 = libraryFixture.addTrack(makeSmartListSpec("New2", 2022));
 
-    auto const batchArray = std::array{t1, t2, t3};
-    source.batchInsert(batchArray);
+    auto const batchTrackIds = std::array{t1, t2, t3};
+    source.batchInsert(batchTrackIds);
 
     REQUIRE(spy.events.size() == 1);
     CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchInserted);
@@ -45,8 +45,8 @@ namespace ao::rt::test
     CHECK(list.size() == 2);
 
     spy.clear();
-    auto const removeArray = std::array{t2};
-    source.batchRemove(removeArray);
+    auto const removeTrackIds = std::array{t2};
+    source.batchRemove(removeTrackIds);
 
     REQUIRE(spy.events.size() == 1);
     CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchRemoved);
@@ -71,12 +71,12 @@ namespace ao::rt::test
     auto t2 = libraryFixture.addTrack(makeSmartListSpec("New1", 2021));
     auto t3 = libraryFixture.addTrack(makeSmartListSpec("New2", 2022));
 
-    auto const batchArray = std::array{t1, t2, t3};
-    source.batchInsert(batchArray);
+    auto const batchTrackIds = std::array{t1, t2, t3};
+    source.batchInsert(batchTrackIds);
     CHECK(list.size() == 2);
 
-    auto const removeArray = std::array{t1};
-    source.batchRemove(removeArray);
+    auto const removeTrackIds = std::array{t1};
+    source.batchRemove(removeTrackIds);
     CHECK(list.size() == 2); // t2 and t3
 
     // Trigger batch update that causes transitions
@@ -88,8 +88,8 @@ namespace ao::rt::test
     libraryFixture.updateTrack(t1, [](library::test::TrackSpec& spec) { spec.year = 2025; });       // Insert
     libraryFixture.updateTrack(t3, [](library::test::TrackSpec& spec) { spec.title = "Updated"; }); // Update
 
-    auto const updateArray = std::array{t1, t2, t3};
-    source.batchUpdate(updateArray);
+    auto const updateTrackIds = std::array{t1, t2, t3};
+    source.batchUpdate(updateTrackIds);
 
     CHECK(list.size() == 2); // t1 and t3
   }

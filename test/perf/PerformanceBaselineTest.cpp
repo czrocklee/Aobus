@@ -548,9 +548,9 @@ namespace ao::rt::test
       return checksum;
     }
 
-    using StringRankMap = boost::unordered_flat_map<std::string_view, std::uint32_t>;
+    using StringRanks = boost::unordered_flat_map<std::string_view, std::uint32_t>;
 
-    StringRankMap makeStringRankMap(std::vector<std::string> const& pool)
+    StringRanks makeStringRanks(std::vector<std::string> const& pool)
     {
       auto sortedViews = std::vector<std::string_view>{};
       sortedViews.reserve(pool.size());
@@ -563,7 +563,7 @@ namespace ao::rt::test
       std::ranges::sort(sortedViews);
       sortedViews.erase(std::ranges::unique(sortedViews).begin(), sortedViews.end());
 
-      auto ranks = StringRankMap{};
+      auto ranks = StringRanks{};
       ranks.reserve(sortedViews.size());
 
       for (auto const& [index, value] : sortedViews | std::views::enumerate)
@@ -574,7 +574,7 @@ namespace ao::rt::test
       return ranks;
     }
 
-    std::uint32_t rankOf(StringRankMap const& ranks, std::string_view value)
+    std::uint32_t rankOf(StringRanks const& ranks, std::string_view value)
     {
       if (auto const it = ranks.find(value); it != ranks.end())
       {
@@ -585,7 +585,7 @@ namespace ao::rt::test
     }
 
     std::vector<RankedSortCacheOrderEntry> makeRankedSortCacheEntries(std::vector<SortCacheOrderEntry> const& entries,
-                                                                      StringRankMap const& ranks)
+                                                                      StringRanks const& ranks)
     {
       auto rankedEntries = std::vector<RankedSortCacheOrderEntry>{};
       rankedEntries.reserve(entries.size());
@@ -791,7 +791,7 @@ namespace ao::rt::test
       auto const totalStart = std::chrono::steady_clock::now();
 
       auto const rankStart = std::chrono::steady_clock::now();
-      auto const ranks = makeStringRankMap(pool);
+      auto const ranks = makeStringRanks(pool);
       auto const rankEnd = std::chrono::steady_clock::now();
 
       auto const buildStart = std::chrono::steady_clock::now();

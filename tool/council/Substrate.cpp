@@ -269,13 +269,13 @@ namespace ao::council
         return {};
       }
 
-      auto pathList = std::string_view{pathValue};
+      auto remainingPathText = std::string_view{pathValue};
 
-      while (!pathList.empty())
+      while (!remainingPathText.empty())
       {
-        auto const separator = pathList.find(':');
+        auto const separator = remainingPathText.find(':');
 
-        if (auto const directory = pathList.substr(0, separator); !directory.empty())
+        if (auto const directory = remainingPathText.substr(0, separator); !directory.empty())
         {
           auto candidate = canonicalExecutable(std::filesystem::path{directory} / executable);
 
@@ -290,7 +290,7 @@ namespace ao::council
           break;
         }
 
-        pathList.remove_prefix(separator + 1);
+        remainingPathText.remove_prefix(separator + 1);
       }
 
       return {};

@@ -194,7 +194,7 @@ namespace ao::audio
     }
 
     // Rebuild global cache from all providers
-    auto allDevicesList = std::vector<Device>{};
+    auto allProviderDevices = std::vector<Device>{};
     auto snapshots = std::vector<BackendProvider::Status>{};
 
     for (auto const& recordPtr : providers)
@@ -204,13 +204,13 @@ namespace ao::audio
       // consistency
       status.devices = recordPtr->devices;
       snapshots.push_back(std::move(status));
-      allDevicesList.insert(allDevicesList.end(), recordPtr->devices.begin(), recordPtr->devices.end());
+      allProviderDevices.insert(allProviderDevices.end(), recordPtr->devices.begin(), recordPtr->devices.end());
     }
 
     {
       auto const lock = std::scoped_lock{backendsMutex};
       cachedBackends = std::move(snapshots);
-      allDevices = std::move(allDevicesList);
+      allDevices = std::move(allProviderDevices);
     }
 
     // Keep the engine's current device capabilities up-to-date

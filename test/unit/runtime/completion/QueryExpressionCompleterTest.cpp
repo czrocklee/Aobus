@@ -158,11 +158,11 @@ namespace ao::rt::test
     CHECK(optArtist->items.front().displayText == "Artist");
     CHECK(insertTexts(optArtist->items) == std::vector<std::string>{R"("Artist")"});
 
-    auto optList = completer.complete("$artist in [Ar", 14);
-    REQUIRE(optList);
-    CHECK(optList->replaceBegin == 12);
-    CHECK(optList->replaceEnd == 14);
-    CHECK(insertTexts(optList->items) == std::vector<std::string>{R"("Artist")"});
+    auto optListCompletion = completer.complete("$artist in [Ar", 14);
+    REQUIRE(optListCompletion);
+    CHECK(optListCompletion->replaceBegin == 12);
+    CHECK(optListCompletion->replaceEnd == 14);
+    CHECK(insertTexts(optListCompletion->items) == std::vector<std::string>{R"("Artist")"});
 
     auto optConductor = completer.complete("$conductor = Con", 16);
     REQUIRE(optConductor);

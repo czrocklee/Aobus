@@ -23,9 +23,9 @@ namespace ao::uimodel
 {
   namespace
   {
-    using StringSet =
+    using ReservedLayoutNodeIds =
       boost::unordered_flat_set<std::string, utility::TransparentStringHash, utility::TransparentStringEqual>;
-    using StringMap = boost::
+    using LayoutNodeTypesById = boost::
       unordered_flat_map<std::string, std::string, utility::TransparentStringHash, utility::TransparentStringEqual>;
 
     void visitNodeRecursive(LayoutNode const& node, LayoutNodeVisitor const& visitor)
@@ -43,14 +43,14 @@ namespace ao::uimodel
       }
     }
 
-    void collectIds(LayoutDocument const& doc, StringSet& ids)
+    void collectIds(LayoutDocument const& doc, ReservedLayoutNodeIds& reservedIds)
     {
       visitLayoutDocumentNodes(doc,
-                               [&ids](LayoutNode const& node)
+                               [&reservedIds](LayoutNode const& node)
                                {
                                  if (!node.id.empty())
                                  {
-                                   ids.insert(node.id);
+                                   reservedIds.insert(node.id);
                                  }
                                });
     }
@@ -103,40 +103,40 @@ namespace ao::uimodel
       return result;
     }
 
-    std::string makeUniqueFromReserved(StringSet& reserved, std::string const& stem)
+    std::string makeUniqueFromReserved(ReservedLayoutNodeIds& reservedIds, std::string const& stem)
     {
-      if (!reserved.contains(stem))
+      if (!reservedIds.contains(stem))
       {
-        reserved.insert(stem);
+        reservedIds.insert(stem);
         return stem;
       }
 
       for (std::int32_t index = 2; true; ++index)
       {
-        if (auto candidate = stem + "-" + std::to_string(index); !reserved.contains(candidate))
+        if (auto candidate = stem + "-" + std::to_string(index); !reservedIds.contains(candidate))
         {
-          reserved.insert(candidate);
+          reservedIds.insert(candidate);
           return candidate;
         }
       }
     }
 
-    void regenerateRecursive(LayoutNode& node, StringSet& reserved)
+    void regenerateRecursive(LayoutNode& node, ReservedLayoutNodeIds& reservedIds)
     {
       if (!node.id.empty() || isStatefulLayoutComponentType(node.type))
       {
         auto const stem = idStem(node.type, node.id.empty() ? "copy" : node.id);
-        node.id = makeUniqueFromReserved(reserved, stem);
+        node.id = makeUniqueFromReserved(reservedIds, stem);
       }
 
       for (auto& child : node.children)
       {
-        regenerateRecursive(child, reserved);
+        regenerateRecursive(child, reservedIds);
       }
 
       if (node.optTooltip && node.optTooltip->nodePtr)
       {
-        regenerateRecursive(*node.optTooltip->nodePtr, reserved);
+        regenerateRecursive(*node.optTooltip->nodePtr, reservedIds);
       }
     }
   } // namespace
@@ -166,11 +166,11 @@ namespace ao::uimodel
   std::vector<LayoutNodeIdDiagnostic> validateStatefulLayoutNodeIds(LayoutDocument const& doc)
   {
     auto diagnostics = std::vector<LayoutNodeIdDiagnostic>{};
-    auto seenIds = StringMap{};
+    auto seenNodeTypesById = LayoutNodeTypesById{};
 
     visitExpandedLayoutNodes(
       doc,
-      [&diagnostics, &seenIds](LayoutNode const& node)
+      [&diagnostics, &seenNodeTypesById](LayoutNode const& node)
       {
         if (!isStatefulLayoutComponentType(node.type))
         {
@@ -187,7 +187,7 @@ namespace ao::uimodel
           return;
         }
 
-        if (auto const [it, inserted] = seenIds.emplace(node.id, node.type); !inserted)
+        if (auto const [it, inserted] = seenNodeTypesById.emplace(node.id, node.type); !inserted)
         {
           diagnostics.push_back(LayoutNodeIdDiagnostic{
             .severity = LayoutNodeIdDiagnosticSeverity::Error,
@@ -209,15 +209,15 @@ namespace ao::uimodel
 
   std::string makeUniqueLayoutNodeId(LayoutDocument const& doc, std::string_view componentType, std::string_view role)
   {
-    auto reserved = StringSet{};
-    collectIds(doc, reserved);
-    return makeUniqueFromReserved(reserved, idStem(componentType, role));
+    auto reservedIds = ReservedLayoutNodeIds{};
+    collectIds(doc, reservedIds);
+    return makeUniqueFromReserved(reservedIds, idStem(componentType, role));
   }
 
   void regenerateLayoutNodeIds(LayoutNode& subtree, LayoutDocument const& ownerDoc)
   {
-    auto reserved = StringSet{};
-    collectIds(ownerDoc, reserved);
-    regenerateRecursive(subtree, reserved);
+    auto reservedIds = ReservedLayoutNodeIds{};
+    collectIds(ownerDoc, reservedIds);
+    regenerateRecursive(subtree, reservedIds);
   }
 } // namespace ao::uimodel

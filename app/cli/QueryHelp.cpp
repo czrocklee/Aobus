@@ -60,7 +60,7 @@ namespace ao::cli
       }
     }
 
-    std::string systemFieldList()
+    std::string systemFieldSummaryText()
     {
       auto text = std::string{};
       appendSummaries(text, query::VariableType::Metadata);
@@ -73,7 +73,7 @@ namespace ao::cli
   {
     auto hint = std::string{"\nhint: expressions look like: $genre = \"Rock\" | not $genre? | $year in 1990..1999 | "
                             "$title ~ \"love\" and $artist = \"Miles Davis\"\n      fields: "};
-    hint += systemFieldList();
+    hint += systemFieldSummaryText();
     hint += "; #tag for tags; %customKey for custom metadata";
     return hint;
   }
@@ -81,7 +81,7 @@ namespace ao::cli
   std::string formatExpressionUsageHint()
   {
     auto hint = std::string{"\nhint: format expressions look like: $artist + \" - \" + $title\n      fields: "};
-    hint += systemFieldList();
+    hint += systemFieldSummaryText();
     hint += "; %customKey for custom metadata";
     return hint;
   }
@@ -99,7 +99,7 @@ namespace ao::cli
                               "    aobus -O json track show --filter 'not $genre?'\n"
                               "    aobus track show --format '$artist + \" - \" + $title'\n"
                               "  Fields: "};
-    footer += systemFieldList();
+    footer += systemFieldSummaryText();
     return footer;
   }
 

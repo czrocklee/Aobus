@@ -365,6 +365,17 @@ role suffixes such as `ViewModel`, `Service`, `Component`, `Dialog`, `Widget`,
 - Return one value with a singular noun: `trackId()`, `xPosition()`. Return a
   collection with a plural noun: `trackIds()`, `xPositions()`. Counts use a
   singular target: `trackCount()`, not `tracksCount()`.
+- Name ordinary collection values and collection-returning accessors with
+  plural domain nouns: `trackIds`, `tracks`, `xPositions`, `devices`.
+- Do not add storage-shape suffixes such as `List`, `Vector`, `Array`, `Map`,
+  or `Set` merely to repeat the container type. Prefer `devices` over
+  `deviceList` or `deviceVector`.
+- Reserve `*List` for domain list entities, user-visible lists, query/list
+  syntax, or framework/UI list concepts: `ListView`, `ListStore`, `SmartList`,
+  `ListExpression`, `Gtk::ListBox`, `Gio::ListModel`.
+- `*Map` and `*Set` are allowed when lookup or membership semantics are part of
+  the local contract, not just an implementation detail: `nodeFormatMap`,
+  `sinkCapabilitiesMap`, `reachableSet`.
 - Use singular targets for single-item operations and plural targets for batch
   operations: `removeTrack(id)` versus `removeTracks(ids)`.
 

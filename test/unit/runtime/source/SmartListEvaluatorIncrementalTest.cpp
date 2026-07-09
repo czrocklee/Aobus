@@ -241,8 +241,8 @@ namespace ao::rt::test
     list.reload();
 
     auto t1 = libraryFixture.addTrack(makeSmartListSpec("Track", 2020));
-    auto const batchArray = std::array{t1};
-    source.batchInsert(batchArray);
+    auto const batchTrackIds = std::array{t1};
+    source.batchInsert(batchTrackIds);
 
     // Mutate via base library, then notify list directly
     libraryFixture.updateTrack(t1, [](library::test::TrackSpec& spec) { spec.year = 2022; });
