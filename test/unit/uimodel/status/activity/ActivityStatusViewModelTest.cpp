@@ -79,7 +79,7 @@ namespace ao::uimodel::test
 
     SECTION("library task runtime events reuse activity projection")
     {
-      viewModel.onLibraryTaskProgress("Updating: status-progress.flac", 0.625);
+      viewModel.handleLibraryTaskProgress("Updating: status-progress.flac", 0.625);
 
       CHECK(latest.compact.kind == ActivityStatusKind::Processing);
       CHECK(latest.compact.text == "Updating library");
@@ -88,7 +88,7 @@ namespace ao::uimodel::test
       REQUIRE(latest.detail.optLibraryTask);
       CHECK(latest.detail.optLibraryTask->message == "Updating: status-progress.flac");
 
-      viewModel.onLibraryTaskCompleted(4);
+      viewModel.handleLibraryTaskCompleted(4);
 
       CHECK(latest.compact.kind == ActivityStatusKind::Success);
       CHECK(latest.compact.text == "Scan complete: 4 tracks added");
@@ -115,10 +115,10 @@ namespace ao::uimodel::test
       ActivityStatusViewModelOptions{.libraryChanges = &changes},
     };
 
-    auto testLib = rt::test::TestMusicLibrary{};
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto executor = rt::test::MockExecutor{};
     auto runtime = async::Runtime{executor};
-    auto taskService = rt::LibraryTaskService{runtime, testLib.library(), changes};
+    auto taskService = rt::LibraryTaskService{runtime, libraryFixture.library(), changes};
     auto applyTask = [](rt::LibraryTaskService* service) -> async::Task<Result<rt::ScanApplyResult>>
     {
       auto plan = rt::ScanPlan{};

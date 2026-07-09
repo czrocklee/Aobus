@@ -17,9 +17,9 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - initialized projection exposes source rows and view metadata",
             "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
-    auto const id1 = env.lib.addTrack(library::test::makeTrackSpec("Track A", 2020));
-    auto const id2 = env.lib.addTrack(library::test::makeTrackSpec("Track B", 2021));
+    auto env = TrackListProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track A", 2020));
+    auto const id2 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track B", 2021));
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -56,8 +56,8 @@ namespace ao::rt::test
 
   TEST_CASE("TrackListProjection - subscribe immediately publishes reset", "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
-    auto const id1 = env.lib.addTrack(library::test::makeTrackSpec("Track", 2020));
+    auto env = TrackListProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track", 2020));
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -75,8 +75,8 @@ namespace ao::rt::test
 
   TEST_CASE("TrackListProjection - subscribe replays reset to each subscriber", "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
-    auto const id1 = env.lib.addTrack(library::test::makeTrackSpec("Track", 2020));
+    auto env = TrackListProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track", 2020));
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -89,8 +89,8 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - subscription reset does not emit additional callbacks",
             "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
-    auto const id1 = env.lib.addTrack(library::test::makeTrackSpec("Track", 2020));
+    auto env = TrackListProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track", 2020));
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -104,7 +104,7 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - empty source exposes no rows and invalid lookup fallback",
             "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
+    auto env = TrackListProjectionFixture{};
     env.setupFiltered({});
 
     auto proj = env.createProjection(ViewId{1});

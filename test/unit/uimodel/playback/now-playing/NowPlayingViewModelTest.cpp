@@ -45,13 +45,13 @@ namespace ao::uimodel::test
 
   TEST_CASE("NowPlayingViewModel - view state generation", "[uimodel][unit][playback]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
+    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
+    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
+    auto playback = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
     addReadyAudioProvider(playback);
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
@@ -166,13 +166,13 @@ namespace ao::uimodel::test
   TEST_CASE("NowPlayingViewModel - reports connecting stream info when audio engine is not ready",
             "[uimodel][unit][playback]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
+    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
+    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
+    auto playback = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
     auto const viewModel = NowPlayingViewModel{playback, [&log](auto const& view) { log.render(view); }};
@@ -183,13 +183,13 @@ namespace ao::uimodel::test
 
   TEST_CASE("NowPlayingViewModel - refreshes from playback events until destroyed", "[uimodel][unit][playback]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
+    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
+    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
+    auto playback = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
     addReadyAudioProvider(playback);
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
@@ -198,7 +198,8 @@ namespace ao::uimodel::test
     REQUIRE(!log.empty());
     log.clear();
 
-    auto const trackId = testLib.addTrack({.title = "Event Song", .artist = "Event Artist", .album = "Event Album"});
+    auto const trackId =
+      libraryFixture.addTrack({.title = "Event Song", .artist = "Event Artist", .album = "Event Album"});
     REQUIRE(playback.play(playbackRequest(trackId, "Event Song", "Event Artist"), ListId{1}));
 
     REQUIRE(!log.empty());

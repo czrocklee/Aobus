@@ -26,7 +26,7 @@ namespace ao::uimodel::test
                                      std::nullopt,
                                      rt::NotificationActivityPresentation::Hidden)});
 
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{11});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{11});
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Idle);
       CHECK(feedState.viewState().detail.items.empty());
@@ -41,7 +41,7 @@ namespace ao::uimodel::test
                                      std::nullopt,
                                      rt::NotificationActivityPresentation::DetailOnly)});
 
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{19});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{19});
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Idle);
       REQUIRE(feedState.viewState().detail.items.size() == 1);
@@ -51,7 +51,7 @@ namespace ao::uimodel::test
 
     SECTION("non-compact presentations do not interrupt library progress")
     {
-      feedState.onLibraryTaskProgress("Scanning: album.flac", 0.4);
+      feedState.handleLibraryTaskProgress("Scanning: album.flac", 0.4);
 
       auto currentFeed = feed({entry(rt::NotificationId{25},
                                      rt::NotificationSeverity::Info,
@@ -59,14 +59,14 @@ namespace ao::uimodel::test
                                      false,
                                      std::nullopt,
                                      rt::NotificationActivityPresentation::DetailOnly)});
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{25});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{25});
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Processing);
       CHECK(feedState.viewState().compact.text == "Scanning library");
       REQUIRE(feedState.viewState().detail.items.size() == 1);
       CHECK(feedState.viewState().detail.items[0].message == "Index diagnostic");
 
-      feedState.onLibraryTaskCompleted(3, currentFeed);
+      feedState.handleLibraryTaskCompleted(3, currentFeed);
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Success);
       CHECK(feedState.viewState().compact.text == "Scan complete: 3 tracks added");
@@ -74,7 +74,7 @@ namespace ao::uimodel::test
 
     SECTION("hidden presentation does not interrupt library progress")
     {
-      feedState.onLibraryTaskProgress("Updating: album.flac", 0.7);
+      feedState.handleLibraryTaskProgress("Updating: album.flac", 0.7);
 
       auto currentFeed = feed({entry(rt::NotificationId{26},
                                      rt::NotificationSeverity::Info,
@@ -82,7 +82,7 @@ namespace ao::uimodel::test
                                      false,
                                      std::nullopt,
                                      rt::NotificationActivityPresentation::Hidden)});
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{26});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{26});
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Processing);
       CHECK(feedState.viewState().compact.text == "Updating library");
@@ -92,7 +92,7 @@ namespace ao::uimodel::test
     SECTION("non-compact presentations do not replace transient compact state")
     {
       auto info = entry(rt::NotificationId{27}, rt::NotificationSeverity::Info, "Saved playlist");
-      feedState.onNotificationPosted(feed({info}), rt::NotificationId{27});
+      feedState.handleNotificationPosted(feed({info}), rt::NotificationId{27});
       REQUIRE(feedState.viewState().compact.kind == ActivityStatusKind::Info);
 
       auto detailOnly = entry(rt::NotificationId{28},
@@ -101,7 +101,7 @@ namespace ao::uimodel::test
                               false,
                               std::nullopt,
                               rt::NotificationActivityPresentation::DetailOnly);
-      feedState.onNotificationPosted(feed({info, detailOnly}), rt::NotificationId{28});
+      feedState.handleNotificationPosted(feed({info, detailOnly}), rt::NotificationId{28});
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Info);
       CHECK(feedState.viewState().compact.text == "Saved playlist");
@@ -113,7 +113,7 @@ namespace ao::uimodel::test
     {
       auto currentFeed = feed({entry(rt::NotificationId{20}, rt::NotificationSeverity::Warning, "Default warning")});
 
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{20});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{20});
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Warning);
       CHECK(feedState.viewState().compact.text == "Default warning");
@@ -124,7 +124,7 @@ namespace ao::uimodel::test
     {
       auto currentFeed = feed({entry(rt::NotificationId{21}, rt::NotificationSeverity::Info, "Saved playlist")});
 
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{21});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{21});
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Info);
       CHECK(feedState.viewState().compact.text == "Saved playlist");
@@ -137,7 +137,7 @@ namespace ao::uimodel::test
     {
       auto currentFeed = feed({entry(rt::NotificationId{29}, rt::NotificationSeverity::Info, "Background note", true)});
 
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{29});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{29});
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Info);
       CHECK(feedState.viewState().compact.text == "Background note");

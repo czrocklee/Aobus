@@ -677,7 +677,7 @@ namespace ao::tui::test
                                       fixture.runtime.playback(),
                                       EventControllerBindings{.activityStatusViewModel = &activityStatusViewModel}};
 
-    activityStatusViewModel.onLibraryTaskProgress("Updating: status-progress.flac", 0.625);
+    activityStatusViewModel.handleLibraryTaskProgress("Updating: status-progress.flac", 0.625);
     REQUIRE(activityStatusViewModel.viewState().compact.kind == uimodel::ActivityStatusKind::Processing);
     REQUIRE_FALSE(activityStatusViewModel.viewState().compact.dismissible);
 

@@ -206,12 +206,12 @@ namespace ao::gtk::platform
       auto const ownerId = Gio::DBus::own_name(
         Gio::DBus::BusType::SESSION,
         kBusName,
-        [this](Glib::RefPtr<Gio::DBus::Connection> const& connection, Glib::ustring const& name)
-        { onBusAcquired(connection, name); },
-        [this](Glib::RefPtr<Gio::DBus::Connection> const& connection, Glib::ustring const& name)
-        { onNameAcquired(connection, name); },
-        [this](Glib::RefPtr<Gio::DBus::Connection> const& connection, Glib::ustring const& name)
-        { onNameLost(connection, name); },
+        [this](Glib::RefPtr<Gio::DBus::Connection> const& busConnectionPtr, Glib::ustring const& name)
+        { handleBusAcquired(busConnectionPtr, name); },
+        [this](Glib::RefPtr<Gio::DBus::Connection> const& busConnectionPtr, Glib::ustring const& name)
+        { handleNameAcquired(busConnectionPtr, name); },
+        [this](Glib::RefPtr<Gio::DBus::Connection> const& busConnectionPtr, Glib::ustring const& name)
+        { handleNameLost(busConnectionPtr, name); },
         Gio::DBus::BusNameOwnerFlags::NONE);
 
       if (ownerId == 0)
@@ -458,7 +458,7 @@ namespace ao::gtk::platform
       return {};
     }
 
-    void registerObjects(Glib::RefPtr<Gio::DBus::Connection> const& connection)
+    void registerObjects(Glib::RefPtr<Gio::DBus::Connection> const& busConnectionPtr)
     {
       auto const rootInfoPtr = nodeInfoPtr->lookup_interface(kRootInterface);
       auto const playerInfoPtr = nodeInfoPtr->lookup_interface(kPlayerInterface);
@@ -471,7 +471,7 @@ namespace ao::gtk::platform
 
       try
       {
-        auto const rootRegistrationId = connection->register_object(
+        auto const rootRegistrationId = busConnectionPtr->register_object(
           kObjectPath,
           rootInfoPtr,
           [this](Glib::RefPtr<Gio::DBus::Connection> const& connectionPtr,
@@ -480,9 +480,10 @@ namespace ao::gtk::platform
                  Glib::ustring const& interfaceName,
                  Glib::ustring const& methodName,
                  Glib::VariantContainerBase const& parameters,
-                 Glib::RefPtr<Gio::DBus::MethodInvocation> const& invocation)
+                 Glib::RefPtr<Gio::DBus::MethodInvocation> const& invocationPtr)
           {
-            handleRootMethodCall(connectionPtr, sender, objectPath, interfaceName, methodName, parameters, invocation);
+            handleRootMethodCall(
+              connectionPtr, sender, objectPath, interfaceName, methodName, parameters, invocationPtr);
           },
           [this](Glib::VariantBase& property,
                  Glib::RefPtr<Gio::DBus::Connection> const& connectionPtr,
@@ -492,8 +493,9 @@ namespace ao::gtk::platform
                  Glib::ustring const& propertyName)
           { handleRootGetProperty(property, connectionPtr, sender, objectPath, interfaceName, propertyName); });
 
-        rootObjectRegistration = utility::ScopedRegistration{
-          [connection, rootRegistrationId] { std::ignore = connection->unregister_object(rootRegistrationId); }};
+        rootObjectRegistration =
+          utility::ScopedRegistration{[busConnectionPtr, rootRegistrationId]
+                                      { std::ignore = busConnectionPtr->unregister_object(rootRegistrationId); }};
       }
       catch (Glib::Error const& e)
       {
@@ -503,7 +505,7 @@ namespace ao::gtk::platform
 
       try
       {
-        auto const playerRegistrationId = connection->register_object(
+        auto const playerRegistrationId = busConnectionPtr->register_object(
           kObjectPath,
           playerInfoPtr,
           [this](Glib::RefPtr<Gio::DBus::Connection> const& connectionPtr,
@@ -512,10 +514,10 @@ namespace ao::gtk::platform
                  Glib::ustring const& interfaceName,
                  Glib::ustring const& methodName,
                  Glib::VariantContainerBase const& parameters,
-                 Glib::RefPtr<Gio::DBus::MethodInvocation> const& invocation)
+                 Glib::RefPtr<Gio::DBus::MethodInvocation> const& invocationPtr)
           {
             handlePlayerMethodCall(
-              connectionPtr, sender, objectPath, interfaceName, methodName, parameters, invocation);
+              connectionPtr, sender, objectPath, interfaceName, methodName, parameters, invocationPtr);
           },
           [this](Glib::VariantBase& property,
                  Glib::RefPtr<Gio::DBus::Connection> const& connectionPtr,
@@ -532,8 +534,9 @@ namespace ao::gtk::platform
                  Glib::VariantBase const& value)
           { return handlePlayerSetProperty(connectionPtr, sender, objectPath, interfaceName, propertyName, value); });
 
-        playerObjectRegistration = utility::ScopedRegistration{
-          [connection, playerRegistrationId] { std::ignore = connection->unregister_object(playerRegistrationId); }};
+        playerObjectRegistration =
+          utility::ScopedRegistration{[busConnectionPtr, playerRegistrationId]
+                                      { std::ignore = busConnectionPtr->unregister_object(playerRegistrationId); }};
       }
       catch (Glib::Error const& e)
       {
@@ -552,15 +555,15 @@ namespace ao::gtk::platform
       nameAcquired = false;
     }
 
-    void onBusAcquired(Glib::RefPtr<Gio::DBus::Connection> const& connection, Glib::ustring const& /*name*/)
+    void handleBusAcquired(Glib::RefPtr<Gio::DBus::Connection> const& busConnectionPtr, Glib::ustring const& /*name*/)
     {
-      if (!connection)
+      if (!busConnectionPtr)
       {
         APP_LOG_WARN("MPRIS disabled: failed to connect to the session bus");
         return;
       }
 
-      connectionPtr = connection;
+      connectionPtr = busConnectionPtr;
 
       if (!nodeInfoPtr)
       {
@@ -575,10 +578,10 @@ namespace ao::gtk::platform
         }
       }
 
-      registerObjects(connection);
+      registerObjects(busConnectionPtr);
     }
 
-    void onNameAcquired(Glib::RefPtr<Gio::DBus::Connection> const& /*connection*/, Glib::ustring const& name)
+    void handleNameAcquired(Glib::RefPtr<Gio::DBus::Connection> const& /*connection*/, Glib::ustring const& name)
     {
       if (!rootObjectRegistration || !playerObjectRegistration)
       {
@@ -592,28 +595,28 @@ namespace ao::gtk::platform
       APP_LOG_INFO("MPRIS name acquired: {}", name.raw());
     }
 
-    void onNameLost(Glib::RefPtr<Gio::DBus::Connection> const& /*connection*/, Glib::ustring const& name)
+    void handleNameLost(Glib::RefPtr<Gio::DBus::Connection> const& /*connection*/, Glib::ustring const& name)
     {
       subscriptions.clear();
       releaseBusState();
       APP_LOG_WARN("MPRIS disabled: failed to acquire D-Bus name {}", name.raw());
     }
 
-    void handleRootMethodCall(Glib::RefPtr<Gio::DBus::Connection> const& /*connection*/,
+    void handleRootMethodCall(Glib::RefPtr<Gio::DBus::Connection> const& /*connectionPtr*/,
                               Glib::ustring const& /*sender*/,
                               Glib::ustring const& /*objectPath*/,
                               Glib::ustring const& /*interfaceName*/,
                               Glib::ustring const& methodName,
                               Glib::VariantContainerBase const& /*parameters*/,
-                              Glib::RefPtr<Gio::DBus::MethodInvocation> const& invocation) const
+                              Glib::RefPtr<Gio::DBus::MethodInvocation> const& invocationPtr) const
     {
       if (dispatchRootMethod(methodName.raw()))
       {
-        invocation->return_value({});
+        invocationPtr->return_value({});
         return;
       }
 
-      invocation->return_dbus_error(kMprisError, "Unsupported MPRIS root method");
+      invocationPtr->return_dbus_error(kMprisError, "Unsupported MPRIS root method");
     }
 
     void handleRootGetProperty(Glib::VariantBase& property,
@@ -626,13 +629,13 @@ namespace ao::gtk::platform
       property = rootProperty(propertyName.raw());
     }
 
-    void handlePlayerMethodCall(Glib::RefPtr<Gio::DBus::Connection> const& /*connection*/,
+    void handlePlayerMethodCall(Glib::RefPtr<Gio::DBus::Connection> const& /*connectionPtr*/,
                                 Glib::ustring const& /*sender*/,
                                 Glib::ustring const& /*objectPath*/,
                                 Glib::ustring const& /*interfaceName*/,
                                 Glib::ustring const& methodName,
                                 Glib::VariantContainerBase const& parameters,
-                                Glib::RefPtr<Gio::DBus::MethodInvocation> const& invocation)
+                                Glib::RefPtr<Gio::DBus::MethodInvocation> const& invocationPtr)
     {
       if (methodName == "Seek")
       {
@@ -641,11 +644,11 @@ namespace ao::gtk::platform
 
         if (auto const offsetUs = offsetUsVariant.get(); dispatchSeek(offsetUs))
         {
-          invocation->return_value({});
+          invocationPtr->return_value({});
           return;
         }
 
-        invocation->return_dbus_error(kMprisError, "No active track to seek");
+        invocationPtr->return_dbus_error(kMprisError, "No active track to seek");
         return;
       }
 
@@ -660,21 +663,21 @@ namespace ao::gtk::platform
         if (auto const positionUs = positionUsVariant.get();
             dispatchSetPosition(requestedTrackObjectPath.raw(), positionUs))
         {
-          invocation->return_value({});
+          invocationPtr->return_value({});
           return;
         }
 
-        invocation->return_dbus_error(kMprisError, "No active track to seek");
+        invocationPtr->return_dbus_error(kMprisError, "No active track to seek");
         return;
       }
 
       if (dispatchPlayerMethod(methodName.raw()))
       {
-        invocation->return_value({});
+        invocationPtr->return_value({});
         return;
       }
 
-      invocation->return_dbus_error(kMprisError, "Unsupported MPRIS player method");
+      invocationPtr->return_dbus_error(kMprisError, "Unsupported MPRIS player method");
     }
 
     void handlePlayerGetProperty(Glib::VariantBase& property,

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "CapturingBackend.h"
 #include "EngineTestSupport.h"
+#include "FakeCapturingBackend.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -29,7 +29,7 @@ namespace ao::audio::test
 {
   namespace
   {
-    class BlockingStopBackend final : public Backend
+    class FakeBlockingStopBackend final : public Backend
     {
     public:
       Result<> open(Format const& format, RenderTarget* target) override
@@ -119,7 +119,7 @@ namespace ao::audio::test
 
         if (target != nullptr)
         {
-          target->onRouteReady(routeAnchor);
+          target->handleRouteReady(routeAnchor);
         }
       }
 
@@ -137,7 +137,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - backend error callback transitions to error", "[audio][unit][engine][callback]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
@@ -147,7 +147,7 @@ namespace ao::audio::test
     auto stateChanged = CallbackLatch{};
     engine.setOnStateChanged([&] { stateChanged.notify(); });
 
-    target->onBackendError("Hardware failure");
+    target->handleBackendError("Hardware failure");
 
     CHECK(stateChanged.waitForCount(1));
     auto const snap = engine.status();
@@ -159,7 +159,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - route ready callback updates route snapshot", "[audio][unit][engine][callback]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
@@ -172,7 +172,7 @@ namespace ao::audio::test
 
     engine.setOnStateChanged([&callbackThreadPromise] { callbackThreadPromise.set_value(std::this_thread::get_id()); });
 
-    target->onRouteReady("anchor-123");
+    target->handleRouteReady("anchor-123");
 
     REQUIRE(callbackThread.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
     CHECK(callbackThread.get() != callerThread);
@@ -185,7 +185,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - playback status callbacks update engine internals", "[audio][unit][engine][callback]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
 
     // The latch must outlive the engine: the event thread keeps invoking
@@ -199,11 +199,11 @@ namespace ao::audio::test
     auto* const target = backendRaw->target();
     engine.setOnStateChanged([&] { stateChanged.notify(); });
 
-    target->onUnderrun();
-    target->onPositionAdvanced(100);
-    target->onFormatChanged(Format{.sampleRate = 48000, .channels = 2, .bitDepth = 24, .isInterleaved = true});
-    target->onFormatChanged(Format{.sampleRate = 48000, .channels = 2, .bitDepth = 24, .isInterleaved = true});
-    target->onPropertyChanged(PropertyId::Volume);
+    target->handleUnderrun();
+    target->handlePositionAdvanced(100);
+    target->handleFormatChanged(Format{.sampleRate = 48000, .channels = 2, .bitDepth = 24, .isInterleaved = true});
+    target->handleFormatChanged(Format{.sampleRate = 48000, .channels = 2, .bitDepth = 24, .isInterleaved = true});
+    backendRaw->emitPropertyChanged(PropertyId::Volume);
 
     CHECK(stateChanged.waitForCount(1));
     CHECK(engine.status().routeState.engineOutputFormat.sampleRate == 48000);
@@ -212,7 +212,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - stop drops retired render session target", "[audio][unit][engine][callback]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
@@ -234,7 +234,7 @@ namespace ao::audio::test
             "[audio][unit][engine][callback]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
@@ -262,7 +262,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - queued render event from retired session is ignored", "[audio][unit][engine][callback]")
   {
     auto const device = makeEngineTestDevice();
-    auto blockingBackendPtr = std::make_unique<BlockingStopBackend>();
+    auto blockingBackendPtr = std::make_unique<FakeBlockingStopBackend>();
     auto* const blockingBackendRaw = blockingBackendPtr.get();
     auto blockingEngine = Engine{std::move(blockingBackendPtr), device, makeScriptedEngineDecoderFactory()};
 

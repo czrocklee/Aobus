@@ -29,10 +29,10 @@ namespace ao::gtk::layout::test
 
   namespace
   {
-    class DummyContextProvider final : public ActionContextProvider
+    class FakeActionContextProvider final : public ActionContextProvider
     {
     public:
-      DummyContextProvider(rt::AppRuntime& runtime, Gtk::Window& window, Gtk::Widget& widget)
+      FakeActionContextProvider(rt::AppRuntime& runtime, Gtk::Window& window, Gtk::Widget& widget)
         : _runtime{runtime}, _window{window}, _widget{widget}
       {
       }
@@ -65,7 +65,7 @@ namespace ao::gtk::layout::test
 
     auto window = Gtk::Window{};
     auto widget = Gtk::Box{};
-    auto contextProvider = DummyContextProvider{runtime, window, widget};
+    auto contextProvider = FakeActionContextProvider{runtime, window, widget};
 
     auto registry = ActionRegistry{};
     auto actionMapPtr = Gio::SimpleActionGroup::create();

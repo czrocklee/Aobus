@@ -37,7 +37,7 @@ namespace ao::gtk
     struct Callbacks final
     {
       std::function<void(ListId)> onListSelected;
-      std::function<rt::TrackSource*(ListId)> getListMembership;
+      std::function<rt::TrackSource*(ListId)> resolveListMembership;
       std::function<void(ListId, std::string)> onListPresentationSaved;
       std::function<std::optional<std::string>(ListId)> listPresentationCallback;
     };
@@ -65,8 +65,8 @@ namespace ao::gtk
 
   private:
     void createActions();
-    void onContextMenuRequested(ListId listId, Gdk::Rectangle const& rect);
-    void onSelectionChanged(ListId listId);
+    void handleContextMenuRequested(ListId listId, Gdk::Rectangle const& rect);
+    void handleSelectionChanged(ListId listId);
 
     void openNewListDialog(ListId parentListId, std::string initialExpression = {});
     void openNewSmartListDialog();
@@ -74,10 +74,8 @@ namespace ao::gtk
 
     ListId createList(rt::LibraryWriter::ListDraft const& draft);
     bool updateList(rt::LibraryWriter::ListDraft const& draft);
-    void onDeleteList();
-    void onEditList();
-
-    friend class ListNavigationControllerTestPeer;
+    void handleDeleteListActivated();
+    void handleEditListActivated();
 
     Gtk::Window& _parent;
     Callbacks _callbacks;

@@ -157,15 +157,15 @@ namespace ao::gtk
     }
   }
 
-  void ImageWidget::setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
+  void ImageWidget::setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
   {
-    if (!pixbuf)
+    if (!pixbufPtr)
     {
       clearImage();
       return;
     }
 
-    _sourcePixbufPtr = pixbuf;
+    _sourcePixbufPtr = pixbufPtr;
     invalidateRenderedImage();
     queueRefresh();
   }

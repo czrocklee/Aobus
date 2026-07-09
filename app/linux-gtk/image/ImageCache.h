@@ -60,9 +60,9 @@ namespace ao::gtk
     /**
      * @brief Add a Pixbuf to the cache.
      * @param key The resource and usage/size bucket.
-     * @param pixbuf The Pixbuf to cache.
+     * @param pixbufPtr The Pixbuf to cache.
      */
-    void put(ImageCacheKey key, Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
+    void put(ImageCacheKey key, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr);
 
     /**
      * @brief Clear all cached entries.

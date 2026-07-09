@@ -52,11 +52,11 @@ namespace ao::gtk::portal
     dialogPtr->set_title("Open Music Library");
 
     dialogPtr->select_folder(_parent,
-                             [this, dialogPtr](Glib::RefPtr<Gio::AsyncResult>& result)
+                             [this, dialogPtr](Glib::RefPtr<Gio::AsyncResult>& resultPtr)
                              {
                                try
                                {
-                                 if (auto const folderPtr = dialogPtr->select_folder_finish(result); folderPtr)
+                                 if (auto const folderPtr = dialogPtr->select_folder_finish(resultPtr); folderPtr)
                                  {
                                    auto const path = std::filesystem::path{folderPtr->get_path()};
 
@@ -119,14 +119,14 @@ namespace ao::gtk::portal
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
 
     dialog->signal_response().connect([this, modeCombo, dialog, tokenPtr](std::int32_t responseId)
-                                      { onExportModeConfirmed(responseId, modeCombo, dialog); });
+                                      { handleExportModeConfirmed(responseId, modeCombo, dialog); });
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
   }
 
-  void ImportExportCoordinator::onExportModeConfirmed(std::int32_t responseId,
-                                                      Gtk::DropDown* modeCombo,
-                                                      AppDialog* dialog)
+  void ImportExportCoordinator::handleExportModeConfirmed(std::int32_t responseId,
+                                                          Gtk::DropDown* modeCombo,
+                                                          AppDialog* dialog)
   {
     if (responseId != Gtk::ResponseType::OK)
     {
@@ -151,17 +151,17 @@ namespace ao::gtk::portal
     fileDialogPtr->set_filters(filtersPtr);
 
     fileDialogPtr->save(_parent,
-                        [this, mode, fileDialogPtr](Glib::RefPtr<Gio::AsyncResult>& result)
-                        { onExportFileSelected(result, mode, fileDialogPtr); });
+                        [this, mode, fileDialogPtr](Glib::RefPtr<Gio::AsyncResult>& resultPtr)
+                        { handleExportFileSelected(resultPtr, mode, fileDialogPtr); });
   }
 
-  void ImportExportCoordinator::onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
-                                                     rt::ExportMode mode,
-                                                     Glib::RefPtr<Gtk::FileDialog> const& fileDialog)
+  void ImportExportCoordinator::handleExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& resultPtr,
+                                                         rt::ExportMode mode,
+                                                         Glib::RefPtr<Gtk::FileDialog> const& fileDialogPtr)
   {
     try
     {
-      if (auto const filePtr = fileDialog->save_finish(result); filePtr)
+      if (auto const filePtr = fileDialogPtr->save_finish(resultPtr); filePtr)
       {
         exportLibraryTo(filePtr->get_path(), mode);
       }
@@ -191,8 +191,8 @@ namespace ao::gtk::portal
     fileDialogPtr->set_filters(filtersPtr);
 
     fileDialogPtr->open(_parent,
-                        [this, fileDialogPtr](Glib::RefPtr<Gio::AsyncResult>& result)
-                        { onLibraryImportSelected(result, fileDialogPtr); });
+                        [this, fileDialogPtr](Glib::RefPtr<Gio::AsyncResult>& resultPtr)
+                        { handleLibraryImportSelected(resultPtr, fileDialogPtr); });
   }
 
   void ImportExportCoordinator::importLibraryFrom(std::filesystem::path path)
@@ -200,12 +200,12 @@ namespace ao::gtk::portal
     _workflow.importFrom(std::move(path));
   }
 
-  void ImportExportCoordinator::onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result,
-                                                        Glib::RefPtr<Gtk::FileDialog> const& dialog)
+  void ImportExportCoordinator::handleLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& resultPtr,
+                                                            Glib::RefPtr<Gtk::FileDialog> const& dialogPtr)
   {
     try
     {
-      if (auto const filePtr = dialog->open_finish(result); filePtr)
+      if (auto const filePtr = dialogPtr->open_finish(resultPtr); filePtr)
       {
         importLibraryFrom(filePtr->get_path());
       }

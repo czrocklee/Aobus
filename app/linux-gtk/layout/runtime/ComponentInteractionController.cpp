@@ -53,7 +53,7 @@ namespace ao::gtk::layout
                                                           uimodel::LayoutComponentActionPolicy const& policy,
                                                           ActionBinder const& binder)
   {
-    if (!policy.allows(uimodel::LayoutActionSlot::PrimaryClick))
+    if (!policy.isSlotAllowed(uimodel::LayoutActionSlot::PrimaryClick))
     {
       return;
     }
@@ -93,7 +93,7 @@ namespace ao::gtk::layout
                                                             uimodel::LayoutComponentActionPolicy const& policy,
                                                             ActionBinder const& binder)
   {
-    if (!policy.allows(uimodel::LayoutActionSlot::SecondaryClick))
+    if (!policy.isSlotAllowed(uimodel::LayoutActionSlot::SecondaryClick))
     {
       return;
     }
@@ -133,7 +133,7 @@ namespace ao::gtk::layout
                                                               uimodel::LayoutComponentActionPolicy const& policy,
                                                               ActionBinder const& binder)
   {
-    if (!policy.allows(uimodel::LayoutActionSlot::PrimaryLongPress))
+    if (!policy.isSlotAllowed(uimodel::LayoutActionSlot::PrimaryLongPress))
     {
       return;
     }
@@ -170,7 +170,7 @@ namespace ao::gtk::layout
                                                                 uimodel::LayoutComponentActionPolicy const& policy,
                                                                 ActionBinder const& binder)
   {
-    if (!policy.allows(uimodel::LayoutActionSlot::SecondaryLongPress))
+    if (!policy.isSlotAllowed(uimodel::LayoutActionSlot::SecondaryLongPress))
     {
       return;
     }

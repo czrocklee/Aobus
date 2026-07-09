@@ -20,7 +20,7 @@ namespace ao::rt::test
 {
   namespace
   {
-    std::filesystem::path copyFixtureAudio(TestMusicLibrary const& testLib, std::string const& name)
+    std::filesystem::path copyFixtureAudio(MusicLibraryFixture const& libraryFixture, std::string const& name)
     {
       auto const source = std::filesystem::current_path() / "test/integration/tag/test_data/empty.flac";
 
@@ -29,15 +29,15 @@ namespace ao::rt::test
         return {};
       }
 
-      auto const destination = testLib.root() / name;
+      auto const destination = libraryFixture.root() / name;
       std::filesystem::create_directories(destination.parent_path());
       std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing);
       return destination;
     }
 
-    std::filesystem::path createTextFile(TestMusicLibrary const& testLib, std::string const& name)
+    std::filesystem::path createTextFile(MusicLibraryFixture const& libraryFixture, std::string const& name)
     {
-      auto const destination = testLib.root() / name;
+      auto const destination = libraryFixture.root() / name;
       auto out = std::ofstream{destination};
       out << "not audio";
       return destination;
@@ -47,16 +47,16 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - createTrackFromFile imports a valid file and publishes a mutation",
             "[runtime][unit][library][track-create]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
     auto inserted = std::vector<TrackId>{};
     auto collectionSub = changes.onTrackCollectionChanged([&](auto const& ev) { inserted = ev.inserted; });
 
-    auto const absValidFile = copyFixtureAudio(testLib, "music/song.flac");
+    auto const absValidFile = copyFixtureAudio(libraryFixture, "music/song.flac");
 
     if (!std::filesystem::exists(absValidFile))
     {
@@ -71,14 +71,14 @@ namespace ao::rt::test
     REQUIRE(inserted.size() == 1);
     CHECK(inserted[0] == trackIdResult->trackId);
 
-    auto transaction = testLib.library().readTransaction();
-    auto const optTrackView = testLib.library()
+    auto transaction = libraryFixture.library().readTransaction();
+    auto const optTrackView = libraryFixture.library()
                                 .tracks()
                                 .reader(transaction)
                                 .get(trackIdResult->trackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optTrackView);
     CHECK(optTrackView->property().uri() == "music/song.flac");
-    CHECK(testLib.library().manifest().reader(transaction).get("music/song.flac"));
+    CHECK(libraryFixture.library().manifest().reader(transaction).get("music/song.flac"));
 
     auto const duplicateResult = writer.createTrackFromFile(absValidFile);
     REQUIRE(!duplicateResult);
@@ -88,11 +88,11 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryWriter - createTrackFromFile accepts root-relative paths", "[runtime][unit][library][track-create]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
-    auto const absValidFile = copyFixtureAudio(testLib, "relative.flac");
+    auto const absValidFile = copyFixtureAudio(libraryFixture, "relative.flac");
 
     if (!std::filesystem::exists(absValidFile))
     {
@@ -103,8 +103,8 @@ namespace ao::rt::test
     auto const trackIdResult = writer.createTrackFromFile("relative.flac");
     REQUIRE(trackIdResult);
 
-    auto transaction = testLib.library().readTransaction();
-    auto const optTrackView = testLib.library()
+    auto transaction = libraryFixture.library().readTransaction();
+    auto const optTrackView = libraryFixture.library()
                                 .tracks()
                                 .reader(transaction)
                                 .get(trackIdResult->trackId, library::TrackStore::Reader::LoadMode::Both);
@@ -115,14 +115,14 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - createTrackFromFile rejects unsupported files with Result errors",
             "[runtime][unit][library][track-create]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
 
-    auto const unsupportedFile = createTextFile(testLib, "unsupported.txt");
+    auto const unsupportedFile = createTextFile(libraryFixture, "unsupported.txt");
 
     auto const trackIdResult = writer.createTrackFromFile(unsupportedFile);
     REQUIRE(!trackIdResult);
@@ -133,9 +133,9 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - createTrackFromFile rejects invalid path boundaries",
             "[runtime][unit][library][track-create]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     SECTION("missing file")
     {

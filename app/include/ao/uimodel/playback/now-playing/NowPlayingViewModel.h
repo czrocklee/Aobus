@@ -46,7 +46,7 @@ namespace ao::uimodel
 
   NowPlayingActionCommand::Type resolveNowPlayingPlayPauseCommand(audio::Transport transport) noexcept;
 
-  struct AudioPipelineView final
+  struct AudioPipelineViewState final
   {
     rt::QualityState quality{};
     std::string deviceName{};
@@ -57,7 +57,7 @@ namespace ao::uimodel
   struct NowPlayingViewState final
   {
     std::string streamInfo;
-    AudioPipelineView audioPipeline{};
+    AudioPipelineViewState audioPipeline{};
     AudioQualityCategory qualityCategory = AudioQualityCategory::Unknown;
     bool isActive = false;
 

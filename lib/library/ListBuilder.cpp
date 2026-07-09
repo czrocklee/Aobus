@@ -91,9 +91,9 @@ namespace ao::library
     return *this;
   }
 
-  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::isSmart(bool isSmart)
+  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::smart(bool smart)
   {
-    _isSmart = isSmart;
+    _isSmart = smart;
     return *this;
   }
 
@@ -127,7 +127,7 @@ namespace ao::library
 
     // Build header
     auto header = ListHeader{};
-    header.trackIdsCount = static_cast<std::uint32_t>(trackIds.size());
+    header.trackIdCount = static_cast<std::uint32_t>(trackIds.size());
     header.nameOffset = static_cast<std::uint16_t>(trackIdsSize);
     header.nameLength = static_cast<std::uint16_t>(nameLength);
     header.descOffset = static_cast<std::uint16_t>(descOffset);

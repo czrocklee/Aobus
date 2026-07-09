@@ -62,9 +62,9 @@ namespace ao::gtk
     void openContextMenu(Gdk::Rectangle const& rect);
 
   private:
-    void setupNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
-    void bindNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
-    void onListSelectionChanged(std::uint32_t position, std::uint32_t nItems) const;
+    void setupNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItemPtr);
+    void bindNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItemPtr);
+    void handleListSelectionChanged(std::uint32_t position, std::uint32_t nItems) const;
 
     Callbacks _callbacks;
 

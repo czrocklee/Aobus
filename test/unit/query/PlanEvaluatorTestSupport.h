@@ -108,9 +108,9 @@ namespace ao::query::test
   class TrackFixture final
   {
   public:
-    TrackFixture() { init(TrackSpec{}, nullptr); }
+    TrackFixture() { setup(TrackSpec{}, nullptr); }
 
-    explicit TrackFixture(TrackSpec const& spec, DictionaryStore* dictionary = nullptr) { init(spec, dictionary); }
+    explicit TrackFixture(TrackSpec const& spec, DictionaryStore* dictionary = nullptr) { setup(spec, dictionary); }
 
     TrackFixture(std::string title,
                  std::string artist = "Test Artist",
@@ -153,7 +153,7 @@ namespace ao::query::test
 
       spec.composer = std::move(composer);
       spec.work = std::move(work);
-      init(spec, nullptr);
+      setup(spec, nullptr);
     }
 
     TrackView view() const { return TrackView{_hotData, _coldData}; }
@@ -162,7 +162,7 @@ namespace ao::query::test
     DictionaryStore& dictionary() { return *_optDictionary; }
 
   private:
-    void init(TrackSpec const& spec, DictionaryStore* dictionary)
+    void setup(TrackSpec const& spec, DictionaryStore* dictionary)
     {
       auto temp = ao::test::TempDir{};
       auto envOpts = Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};

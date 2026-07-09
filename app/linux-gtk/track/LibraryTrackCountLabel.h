@@ -30,11 +30,11 @@ namespace ao::gtk
     LibraryTrackCountLabel& operator=(LibraryTrackCountLabel&&) = delete;
 
     // TrackSourceObserver interface
-    void onReset() override;
-    void onInserted(TrackId id, std::size_t index) override;
-    void onUpdated(TrackId id, std::size_t index) override;
-    void onRemoved(TrackId id, std::size_t index) override;
-    void onSourceDestroyed() override;
+    void handleReset() override;
+    void handleInserted(TrackId id, std::size_t index) override;
+    void handleUpdated(TrackId id, std::size_t index) override;
+    void handleRemoved(TrackId id, std::size_t index) override;
+    void handleSourceDestroyed() override;
 
     Gtk::Widget& widget() { return _label; }
 

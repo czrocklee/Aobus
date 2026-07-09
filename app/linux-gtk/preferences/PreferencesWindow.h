@@ -6,7 +6,7 @@
 #include "preferences/ShortcutEditorWidget.h"
 #include <ao/rt/AppPrefsState.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/preferences/PreferencesModel.h>
+#include <ao/uimodel/preferences/PreferencesEditorModel.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/comboboxtext.h>
@@ -44,8 +44,8 @@ namespace ao::gtk
       std::function<void()> onEditLayout{};
       std::function<void()> onResetRuntimeLayoutState{};
       std::function<void()> onSaveCurrentPanelSizesAsLayoutDefaults{};
-      uimodel::PreferencesModel::PersistCallback onPersistPreferences{};
-      uimodel::PreferencesModel::ThemeApplyCallback onApplyTheme{};
+      uimodel::PreferencesEditorModel::PersistCallback onPersistPreferences{};
+      uimodel::PreferencesEditorModel::ThemeApplyCallback onApplyTheme{};
     };
 
     explicit PreferencesWindow(Callbacks callbacks);
@@ -81,13 +81,13 @@ namespace ao::gtk
     void dismiss();
     void clearWindowScopedState();
     void clearKeyboardPage();
-    void onLayoutPresetChanged();
-    void onThemeChanged();
+    void handleLayoutPresetChanged();
+    void handleThemeChanged();
     void refreshOutputSummary(rt::PlaybackService& playback);
     void rebuildOutputSelector(rt::PlaybackService* playback, Gtk::Window* targetWindow);
 
     Callbacks _callbacks;
-    std::unique_ptr<uimodel::PreferencesModel> _modelPtr;
+    std::unique_ptr<uimodel::PreferencesEditorModel> _modelPtr;
     sigc::scoped_connection _targetHideConn; // NOLINT(misc-include-cleaner)
     sigc::connection _themeComboConn;
     sigc::connection _layoutPresetComboConn;

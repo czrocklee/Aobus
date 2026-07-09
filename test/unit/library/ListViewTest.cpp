@@ -81,7 +81,7 @@ namespace ao::library::test
 
   TEST_CASE("ListView - poisons invalid serialized data", "[library][unit][list]")
   {
-    auto expectPoisoned = [](ListView const& view)
+    auto checkPoisoned = [](ListView const& view)
     {
       CHECK_FALSE(view.isValid());
       CHECK(view.name().empty());
@@ -92,18 +92,18 @@ namespace ao::library::test
     };
 
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte*>(nullptr), 100};
-    expectPoisoned(ListView{nullSpan});
+    checkPoisoned(ListView{nullSpan});
 
     auto const smallData = std::vector<std::byte>(10);
-    expectPoisoned(ListView{smallData});
+    checkPoisoned(ListView{smallData});
 
     SECTION("track-id array overruns the record")
     {
       auto data = std::vector<std::byte>(kListHeaderSize, std::byte{0});
       auto header = ListHeader{};
-      header.trackIdsCount = 4;
+      header.trackIdCount = 4;
       std::memcpy(data.data(), &header, sizeof(ListHeader));
-      expectPoisoned(ListView{data});
+      checkPoisoned(ListView{data});
     }
 
     SECTION("string extent overruns the record")
@@ -113,7 +113,7 @@ namespace ao::library::test
       header.nameOffset = 0;
       header.nameLength = 16;
       std::memcpy(data.data(), &header, sizeof(ListHeader));
-      expectPoisoned(ListView{data});
+      checkPoisoned(ListView{data});
     }
   }
 

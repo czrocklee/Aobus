@@ -81,8 +81,6 @@ namespace ao::gtk
                           std::span<std::string const> tagsToRemove);
 
   private:
-    friend class TagEditControllerTestPeer;
-
     void createActions();
     void openTagsPopover(TrackViewPage& page, double xPosition, double yPosition);
     void presentPropertiesDialog();

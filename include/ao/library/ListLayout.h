@@ -27,7 +27,7 @@ namespace ao::library
    * Layout:
    *   ┌─────────────────────────────────────┐  ← header begin
    *   │        ListHeader (20B)             │
-   *   │  trackIdsCount (4B)                │
+   *   │  trackIdCount (4B)                 │
    *   │  nameOffset, nameLength (4B)        │
    *   │  descOffset, descLength (4B)        │
    *   │  filterOffset, filterLength (4B)    │
@@ -47,7 +47,7 @@ namespace ao::library
   struct ListHeader final
   {
     // 4-byte section
-    std::uint32_t trackIdsCount = 0; // Number of track IDs (trackIds always start at sizeof(header))
+    std::uint32_t trackIdCount = 0; // Number of track IDs (trackIds always start at sizeof(header))
 
     // 2-byte section
     std::uint16_t nameOffset = 0;   // Byte offset from the track-id region start to the name string

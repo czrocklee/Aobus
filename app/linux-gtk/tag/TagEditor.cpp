@@ -261,10 +261,10 @@ namespace ao::gtk
       _entry.set_width_chars(kEntryWidthChars);
       _entry.set_max_width_chars(kEntryMaxWidthChars);
       _entry.set_visible(false);
-      _entry.signal_activate().connect(sigc::mem_fun(*this, &AddTagTrigger::onActivate));
+      _entry.signal_activate().connect(sigc::mem_fun(*this, &AddTagTrigger::handleActivate));
       _entry.signal_changed().connect([this] { _filterChanged.emit(); });
       auto focusControllerPtr = Gtk::EventControllerFocus::create();
-      focusControllerPtr->signal_leave().connect(sigc::mem_fun(*this, &AddTagTrigger::onFocusLeave));
+      focusControllerPtr->signal_leave().connect(sigc::mem_fun(*this, &AddTagTrigger::handleFocusLeave));
       _entry.add_controller(focusControllerPtr);
 
       auto keyControllerPtr = Gtk::EventControllerKey::create();
@@ -325,7 +325,7 @@ namespace ao::gtk
       _filterChanged.emit();
     }
 
-    void onActivate()
+    void handleActivate()
     {
       auto const text = _entry.get_text().raw();
 
@@ -341,7 +341,7 @@ namespace ao::gtk
 
     // Clicking away dismisses the inline entry without committing — same as Escape — so the add
     // box never feels stuck open. Enter is the only path that commits a tag.
-    void onFocusLeave()
+    void handleFocusLeave()
     {
       if (_entry.get_visible())
       {
@@ -434,7 +434,7 @@ namespace ao::gtk
 
     _addTrigger = Gtk::make_managed<AddTagTrigger>();
     _addTrigger->set_parent(*this);
-    _addTrigger->signalSubmit().connect(sigc::mem_fun(*this, &TagEditor::onAddSubmitted));
+    _addTrigger->signalSubmit().connect(sigc::mem_fun(*this, &TagEditor::handleAddSubmitted));
     _addTrigger->signalFilterChanged().connect([this] { applyFilter(); });
   }
 
@@ -494,14 +494,14 @@ namespace ao::gtk
     auto const addCurrentChip = [this](std::string const& tag)
     {
       auto* const chip = Gtk::make_managed<TagChip>(tag);
-      chip->signal_remove().connect([this, tag] { onTagRemoveClicked(tag); });
+      chip->signal_remove().connect([this, tag] { handleTagRemoveClicked(tag); });
       insertBeforeTrigger(*chip);
     };
 
     auto const addAvailableChip = [this](std::string const& tag)
     {
       auto* const chip = Gtk::make_managed<AvailableTagChip>(tag);
-      chip->signal_clicked().connect([this, tag] { onAvailableTagClicked(tag); });
+      chip->signal_clicked().connect([this, tag] { handleAvailableTagClicked(tag); });
       insertBeforeTrigger(*chip);
     };
 
@@ -540,7 +540,7 @@ namespace ao::gtk
     applyFilter();
   }
 
-  void TagEditor::onTagRemoveClicked(std::string const& tag)
+  void TagEditor::handleTagRemoveClicked(std::string const& tag)
   {
     if (!std::ranges::contains(_pendingRemoves, tag))
     {
@@ -554,7 +554,7 @@ namespace ao::gtk
     _tagsChanged.emit(_pendingAdds, _pendingRemoves);
   }
 
-  void TagEditor::onAvailableTagClicked(std::string const& tag)
+  void TagEditor::handleAvailableTagClicked(std::string const& tag)
   {
     if (!std::ranges::contains(_pendingAdds, tag))
     {
@@ -568,7 +568,7 @@ namespace ao::gtk
     _tagsChanged.emit(_pendingAdds, _pendingRemoves);
   }
 
-  void TagEditor::onAddSubmitted(std::string const& tag)
+  void TagEditor::handleAddSubmitted(std::string const& tag)
   {
     if (tag.empty())
     {

@@ -17,14 +17,14 @@ namespace ao::uimodel::test
 {
   struct TrackPresentationFixture final
   {
-    rt::test::TestMusicLibrary testLib{};
+    rt::test::MusicLibraryFixture libraryFixture{};
     rt::test::MockExecutor executor{};
     rt::LibraryChanges changes{};
-    rt::TrackSourceCache trackSourceCache{testLib.library(), changes};
-    rt::ViewService viewService{executor, testLib.library(), trackSourceCache};
+    rt::TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
+    rt::ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
     rt::NotificationService notifications;
-    rt::PlaybackService playbackService{executor, viewService, testLib.library(), notifications};
-    rt::WorkspaceService workspace{viewService, playbackService, changes, testLib.library()};
+    rt::PlaybackService playbackService{executor, viewService, libraryFixture.library(), notifications};
+    rt::WorkspaceService workspace{viewService, playbackService, changes, libraryFixture.library()};
     TrackPresentationCatalog catalog{workspace};
     ListPresentationPreferenceStore preferences{catalog};
   };

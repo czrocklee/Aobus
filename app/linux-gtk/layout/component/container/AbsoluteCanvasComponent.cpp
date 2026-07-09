@@ -49,15 +49,16 @@ namespace ao::gtk::layout
           _dragPtr = Gtk::GestureDrag::create();
           _dragPtr->set_button(GDK_BUTTON_PRIMARY);
           _dragPtr->signal_drag_begin().connect([this](double xPosition, double yPosition)
-                                                { onDragBegin(xPosition, yPosition); });
+                                                { handleDragBegin(xPosition, yPosition); });
           _dragPtr->signal_drag_update().connect([this](double offsetX, double offsetY)
-                                                 { onDragUpdate(offsetX, offsetY); });
-          _dragPtr->signal_drag_end().connect([this](double offsetX, double offsetY) { onDragEnd(offsetX, offsetY); });
+                                                 { handleDragUpdate(offsetX, offsetY); });
+          _dragPtr->signal_drag_end().connect([this](double offsetX, double offsetY)
+                                              { handleDragEnd(offsetX, offsetY); });
           add_controller(_dragPtr);
 
           auto const keyPtr = Gtk::EventControllerKey::create();
           keyPtr->signal_key_pressed().connect(
-            [this](guint keyval, guint, Gdk::ModifierType) -> bool { return onKeyPressed(keyval); }, false);
+            [this](guint keyval, guint, Gdk::ModifierType) -> bool { return handleKeyPressed(keyval); }, false);
           add_controller(keyPtr);
         }
       }
@@ -212,9 +213,9 @@ namespace ao::gtk::layout
         }
       }
 
-      void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override
+      void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshotPtr) override
       {
-        Gtk::Widget::snapshot_vfunc(snapshot);
+        Gtk::Widget::snapshot_vfunc(snapshotPtr);
 
         if (!_editMode || _selectedId.empty())
         {
@@ -246,7 +247,7 @@ namespace ao::gtk::layout
                                                 static_cast<float>(child.y),
                                                 static_cast<float>(width),
                                                 static_cast<float>(height)};
-          auto const crPtr = snapshot->append_cairo(rect);
+          auto const crPtr = snapshotPtr->append_cairo(rect);
 
           // Adwaita blue: #3584e4
           static constexpr double kSelectionR = 0.21;
@@ -290,7 +291,7 @@ namespace ao::gtk::layout
       }
 
     private:
-      bool onKeyPressed(guint keyval)
+      bool handleKeyPressed(guint keyval)
       {
         if (_selectedId.empty())
         {
@@ -347,7 +348,7 @@ namespace ao::gtk::layout
         return false;
       }
 
-      void onDragBegin(double xPosition, double yPosition)
+      void handleDragBegin(double xPosition, double yPosition)
       {
         _dragChild = nullptr;
         _resizeCorner = uimodel::AbsoluteCanvasResizeCorner::None;
@@ -400,7 +401,7 @@ namespace ao::gtk::layout
           uimodel::detectAbsoluteCanvasResizeCorner(rect.width, rect.height, xPosition - child.x, yPosition - child.y);
       }
 
-      void onDragUpdate(double offsetX, double offsetY)
+      void handleDragUpdate(double offsetX, double offsetY)
       {
         if (_dragChild == nullptr)
         {
@@ -460,7 +461,7 @@ namespace ao::gtk::layout
         queue_draw();
       }
 
-      void onDragEnd(double offsetX, double offsetY)
+      void handleDragEnd(double offsetX, double offsetY)
       {
         if (_dragChild == nullptr)
         {

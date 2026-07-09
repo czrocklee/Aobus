@@ -24,24 +24,24 @@ namespace ao::rt::test
 {
   using namespace ao::library;
 
-  struct TrackSourceSpy final : TrackSourceObserver
+  struct SpyTrackSourceRemovals final : TrackSourceObserver
   {
     std::vector<std::pair<TrackId, std::size_t>> removed{};
 
-    void onReset() override {}
-    void onInserted(TrackId /*id*/, std::size_t /*index*/) override {}
-    void onUpdated(TrackId /*id*/, std::size_t /*index*/) override {}
-    void onRemoved(TrackId id, std::size_t index) override { removed.emplace_back(id, index); }
+    void handleReset() override {}
+    void handleInserted(TrackId /*id*/, std::size_t /*index*/) override {}
+    void handleUpdated(TrackId /*id*/, std::size_t /*index*/) override {}
+    void handleRemoved(TrackId id, std::size_t index) override { removed.emplace_back(id, index); }
   };
 
   TEST_CASE("TrackSourceCache - source lookup and list refresh maintain source state",
             "[runtime][unit][source][track-source-cache]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
-    auto cache = TrackSourceCache{testLib.library(), changes};
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
 
     SECTION("sourceFor kInvalidListId returns allTracks")
     {
@@ -53,11 +53,12 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = testLib.library().writeTransaction();
+        auto transaction = libraryFixture.library().writeTransaction();
         auto builder = ListBuilder::makeEmpty();
         builder.name("ManualList");
         listId =
-          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+            .first;
         REQUIRE(transaction.commit());
       }
 
@@ -73,12 +74,13 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = testLib.library().writeTransaction();
+        auto transaction = libraryFixture.library().writeTransaction();
         auto builder = ListBuilder::makeEmpty();
         builder.name("SmartList");
         builder.filter("title == \"foo\"");
         listId =
-          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+            .first;
         REQUIRE(transaction.commit());
       }
 
@@ -94,8 +96,8 @@ namespace ao::rt::test
 
     SECTION("reloadAllTracks updates allTracks source")
     {
-      testLib.addTrack("Track 1");
-      testLib.addTrack("Track 2");
+      libraryFixture.addTrack("Track 1");
+      libraryFixture.addTrack("Track 2");
 
       cache.reloadAllTracks();
       CHECK(cache.allTracks().size() == 2);
@@ -103,10 +105,10 @@ namespace ao::rt::test
 
     SECTION("track delete notifications remove allTracks membership")
     {
-      auto const trackId = testLib.addTrack("Track 1");
+      auto const trackId = libraryFixture.addTrack("Track 1");
       cache.reloadAllTracks();
       REQUIRE(cache.allTracks().size() == 1);
-      auto spy = TrackSourceSpy{};
+      auto spy = SpyTrackSourceRemovals{};
       cache.allTracks().attach(&spy);
 
       CHECK(writer.deleteTrack(trackId).has_value());
@@ -125,26 +127,27 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = testLib.library().writeTransaction();
+        auto transaction = libraryFixture.library().writeTransaction();
         auto builder = ListBuilder::makeEmpty();
         builder.name("Manual");
         listId =
-          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+            .first;
         REQUIRE(transaction.commit());
       }
 
       auto& source = cache.sourceFor(listId);
       CHECK(source.size() == 0);
 
-      auto t1 = testLib.addTrack("A");
+      auto t1 = libraryFixture.addTrack("A");
       cache.reloadAllTracks(); // ensure parent source has it
 
       {
-        auto transaction = testLib.library().writeTransaction();
-        auto optView = testLib.library().lists().reader(transaction).get(listId);
+        auto transaction = libraryFixture.library().writeTransaction();
+        auto optView = libraryFixture.library().lists().reader(transaction).get(listId);
         auto builder = ListBuilder::fromView(*optView);
         builder.tracks().add(t1);
-        CHECK(testLib.library().lists().writer(transaction).update(listId, builder.serialize()));
+        CHECK(libraryFixture.library().lists().writer(transaction).update(listId, builder.serialize()));
         REQUIRE(transaction.commit());
       }
 
@@ -157,20 +160,21 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = testLib.library().writeTransaction();
+        auto transaction = libraryFixture.library().writeTransaction();
         auto builder = ListBuilder::makeEmpty();
         builder.name("Smart");
         builder.filter("$year >= 2020");
         listId =
-          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+            .first;
         REQUIRE(transaction.commit());
       }
 
       auto& source = cache.sourceFor(listId);
       CHECK(source.size() == 0);
 
-      testLib.addTrack("B");
-      testLib.addTrack("A");
+      libraryFixture.addTrack("B");
+      libraryFixture.addTrack("A");
 
       cache.reloadAllTracks();
 
@@ -188,19 +192,20 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = testLib.library().writeTransaction();
+        auto transaction = libraryFixture.library().writeTransaction();
         auto builder = ListBuilder::makeEmpty();
         builder.name("DeleteMe");
         listId =
-          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+            .first;
         REQUIRE(transaction.commit());
       }
 
       cache.sourceFor(listId);
 
       {
-        auto transaction = testLib.library().writeTransaction();
-        testLib.library().lists().writer(transaction).remove(listId);
+        auto transaction = libraryFixture.library().writeTransaction();
+        libraryFixture.library().lists().writer(transaction).remove(listId);
         REQUIRE(transaction.commit());
       }
 
@@ -219,8 +224,8 @@ namespace ao::rt::test
       auto grandchildId = ListId{0};
 
       {
-        auto transaction = testLib.library().writeTransaction();
-        auto writer = testLib.library().lists().writer(transaction);
+        auto transaction = libraryFixture.library().writeTransaction();
+        auto writer = libraryFixture.library().lists().writer(transaction);
 
         auto parentBuilder = ListBuilder::makeEmpty();
         parentBuilder.name("Parent");
@@ -245,10 +250,10 @@ namespace ao::rt::test
       cache.sourceFor(grandchildId);
 
       {
-        auto transaction = testLib.library().writeTransaction();
-        testLib.library().lists().writer(transaction).remove(grandchildId);
-        testLib.library().lists().writer(transaction).remove(childId);
-        testLib.library().lists().writer(transaction).remove(parentId);
+        auto transaction = libraryFixture.library().writeTransaction();
+        libraryFixture.library().lists().writer(transaction).remove(grandchildId);
+        libraryFixture.library().lists().writer(transaction).remove(childId);
+        libraryFixture.library().lists().writer(transaction).remove(parentId);
         REQUIRE(transaction.commit());
       }
 
@@ -264,11 +269,12 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = testLib.library().writeTransaction();
+        auto transaction = libraryFixture.library().writeTransaction();
         auto builder = ListBuilder::makeEmpty();
         builder.name("ToErase");
         listId =
-          ao::test::requireValue(testLib.library().lists().writer(transaction).create(builder.serialize())).first;
+          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+            .first;
         REQUIRE(transaction.commit());
       }
 

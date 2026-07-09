@@ -100,7 +100,7 @@ namespace ao::gtk
 
     auto factoryPtr = Gtk::SignalListItemFactory::create();
     factoryPtr->signal_setup().connect(
-      [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+      [](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
       {
         auto* const row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
         row->add_css_class("ao-query-completion-row");
@@ -118,13 +118,13 @@ namespace ao::gtk
         detail->add_css_class("ao-query-completion-row-detail");
         row->append(*detail);
 
-        listItem->set_child(*row);
+        listItemPtr->set_child(*row);
       });
 
     factoryPtr->signal_bind().connect(
-      [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+      [](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
       {
-        auto* const row = dynamic_cast<Gtk::Box*>(listItem->get_child());
+        auto* const row = dynamic_cast<Gtk::Box*>(listItemPtr->get_child());
 
         if (row == nullptr)
         {
@@ -133,7 +133,7 @@ namespace ao::gtk
 
         auto* const title = dynamic_cast<Gtk::Label*>(row->get_first_child());
         auto* const detail = title == nullptr ? nullptr : dynamic_cast<Gtk::Label*>(title->get_next_sibling());
-        auto const itemPtr = std::dynamic_pointer_cast<CompletionListItem>(listItem->get_item());
+        auto const itemPtr = std::dynamic_pointer_cast<CompletionListItem>(listItemPtr->get_item());
 
         if (title == nullptr || detail == nullptr || !itemPtr)
         {

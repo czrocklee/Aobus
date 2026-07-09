@@ -29,24 +29,24 @@ namespace ao::rt
     TrackSourceObserver(TrackSourceObserver&&) = delete;
     TrackSourceObserver& operator=(TrackSourceObserver&&) = delete;
 
-    virtual void onReset() = 0;
+    virtual void handleReset() = 0;
 
     // Single-item notifications for fine-grained UI updates
-    virtual void onInserted(TrackId id, std::size_t index) = 0;
-    virtual void onUpdated(TrackId id, std::size_t index) = 0;
-    virtual void onRemoved(TrackId id, std::size_t index) = 0;
+    virtual void handleInserted(TrackId id, std::size_t index) = 0;
+    virtual void handleUpdated(TrackId id, std::size_t index) = 0;
+    virtual void handleRemoved(TrackId id, std::size_t index) = 0;
 
     // Multi-item notifications for performance during bulk operations.
     // Default implementation can fallback to individual notifications if needed.
-    virtual void onBulkInserted(std::span<TrackId const> /*ids*/) {}
-    virtual void onBulkUpdated(std::span<TrackId const> /*ids*/) {}
-    virtual void onBulkRemoved(std::span<TrackId const> /*ids*/) {}
+    virtual void handleBulkInserted(std::span<TrackId const> /*ids*/) {}
+    virtual void handleBulkUpdated(std::span<TrackId const> /*ids*/) {}
+    virtual void handleBulkRemoved(std::span<TrackId const> /*ids*/) {}
 
     /**
      * Called when the source list is being destroyed.
      * Observers MUST NOT call any methods on source after this call returns.
      */
-    virtual void onSourceDestroyed() {}
+    virtual void handleSourceDestroyed() {}
 
   protected:
     TrackSourceObserver() = default;

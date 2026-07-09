@@ -3,7 +3,7 @@
 
 #include "app/MainWindow.h"
 
-#include "app/AppConfig.h"
+#include "app/AppConfigStore.h"
 #include "app/WindowState.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
@@ -27,10 +27,10 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
-    auto configPtr = std::make_shared<AppConfig>(configPath);
-    configPtr->saveWindow(WindowState{.width = 640, .height = 480, .maximized = false});
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    configStorePtr->saveWindow(WindowState{.width = 640, .height = 480, .maximized = false});
 
-    auto window = MainWindow{fixture.runtime(), configPtr, nullptr};
+    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr};
 
     CHECK(window.get_title() == "Aobus");
 
@@ -61,18 +61,18 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
-    auto configPtr = std::make_shared<AppConfig>(configPath);
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
-    auto window = MainWindow{fixture.runtime(), configPtr, nullptr};
+    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr};
 
     auto before = rt::AppSessionState{};
-    configPtr->loadAppSession(before);
+    configStorePtr->loadAppSession(before);
     REQUIRE(before.lastLibraryPath.empty());
 
     window.on_hide();
 
     auto after = rt::AppSessionState{};
-    configPtr->loadAppSession(after);
+    configStorePtr->loadAppSession(after);
     CHECK(after.lastLibraryPath == fixture.runtime().musicLibrary().rootPath().string());
   }
 
@@ -82,18 +82,18 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
-    auto configPtr = std::make_shared<AppConfig>(configPath);
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
-    auto window = MainWindow{fixture.runtime(), configPtr, nullptr};
+    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr};
 
     auto before = rt::AppSessionState{};
-    configPtr->loadAppSession(before);
+    configStorePtr->loadAppSession(before);
     REQUIRE(before.lastLibraryPath.empty());
 
     window.saveSession();
 
     auto after = rt::AppSessionState{};
-    configPtr->loadAppSession(after);
+    configStorePtr->loadAppSession(after);
     CHECK(after.lastLibraryPath == fixture.runtime().musicLibrary().rootPath().string());
   }
 
@@ -104,16 +104,16 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
-    auto configPtr = std::make_shared<AppConfig>(configPath);
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
     auto prefs = rt::AppPrefsState{};
     prefs.lastOutputBackendId = "test_backend";
     prefs.lastOutputDeviceId = "test_device";
     prefs.lastOutputProfileId = audio::kProfileShared.raw();
-    configPtr->saveAppPrefs(prefs);
+    configStorePtr->saveAppPrefs(prefs);
 
     rt::test::addReadyAudioProvider(fixture.runtime().playback());
 
-    auto window = MainWindow{fixture.runtime(), configPtr, nullptr};
+    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr};
     drainGtkEvents();
 
     auto const& output = fixture.runtime().playback().state().output.selectedDevice;

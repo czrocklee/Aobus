@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/audio/backend/PipeWireMonitor.h>
-#include <ao/audio/backend/detail/PipeWireShared.h>
+#include <ao/audio/backend/detail/PipeWireRuntime.h>
 #include <ao/utility/ByteView.h>
 
 extern "C"
@@ -20,7 +20,7 @@ extern "C"
 #include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/Subscription.h>
-#include <ao/audio/backend/detail/PipeWireMonitorHelpers.h>
+#include <ao/audio/backend/detail/PipeWireMonitorParsing.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <algorithm>
@@ -51,7 +51,7 @@ namespace ao::audio::backend
     Sink,
   };
 
-  // --- Internal Helpers (Monitor only) ---
+  // --- Internal monitor operations ---
 
   namespace
   {
@@ -238,7 +238,7 @@ namespace ao::audio::backend
                                   std::unordered_set<std::uint32_t> const& reachableSet) const;
     void populateGraph(flow::Graph& graph, std::uint32_t streamId) const;
 
-    static void onCoreDone(void* data, std::uint32_t /*id*/, std::int32_t seq)
+    static void handleCoreDone(void* data, std::uint32_t /*id*/, std::int32_t seq)
     {
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
 
@@ -253,12 +253,12 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    static void onRegistryGlobal(void* data,
-                                 std::uint32_t id,
-                                 std::uint32_t /*permissions*/,
-                                 char const* type,
-                                 std::uint32_t version,
-                                 ::spa_dict const* props)
+    static void handleRegistryGlobal(void* data,
+                                     std::uint32_t id,
+                                     std::uint32_t /*permissions*/,
+                                     char const* type,
+                                     std::uint32_t version,
+                                     ::spa_dict const* props)
     {
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
       auto const isNode = (std::strcmp(type, PW_TYPE_INTERFACE_Node) == 0);
@@ -320,7 +320,7 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    static void onRegistryGlobalRemove(void* data, std::uint32_t id)
+    static void handleRegistryGlobalRemove(void* data, std::uint32_t id)
     {
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
       bool needsRefresh = false;
@@ -368,7 +368,7 @@ namespace ao::audio::backend
       }
     }
 
-    static void onNodeInfo(void* data, ::pw_node_info const* info)
+    static void handleNodeInfo(void* data, ::pw_node_info const* info)
     {
       if (info == nullptr)
       {
@@ -397,12 +397,12 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    static void onNodeParam(void* data,
-                            std::int32_t /*seq*/,
-                            std::uint32_t id,
-                            std::uint32_t /*index*/,
-                            std::uint32_t /*next*/,
-                            ::spa_pod const* param)
+    static void handleNodeParam(void* data,
+                                std::int32_t /*seq*/,
+                                std::uint32_t id,
+                                std::uint32_t /*index*/,
+                                std::uint32_t /*next*/,
+                                ::spa_pod const* param)
     {
       auto* const binding = static_cast<PipeWireMonitor::Impl::NodeBinding*>(data);
       auto* const impl = binding->impl;
@@ -428,7 +428,7 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    static void onRefreshEvent(void* data, std::uint64_t /*expiry*/)
+    static void handleRefreshEvent(void* data, std::uint64_t /*expiry*/)
     {
       static_cast<PipeWireMonitor::Impl*>(data)->refresh();
     }
@@ -437,7 +437,7 @@ namespace ao::audio::backend
     {
       auto ev = ::pw_core_events{};
       ev.version = PW_VERSION_CORE_EVENTS;
-      ev.done = onCoreDone;
+      ev.done = handleCoreDone;
       return ev;
     }();
 
@@ -445,8 +445,8 @@ namespace ao::audio::backend
     {
       auto ev = ::pw_registry_events{};
       ev.version = PW_VERSION_REGISTRY_EVENTS;
-      ev.global = onRegistryGlobal;
-      ev.global_remove = onRegistryGlobalRemove;
+      ev.global = handleRegistryGlobal;
+      ev.global_remove = handleRegistryGlobalRemove;
       return ev;
     }();
 
@@ -454,8 +454,8 @@ namespace ao::audio::backend
     {
       auto ev = ::pw_node_events{};
       ev.version = PW_VERSION_NODE_EVENTS;
-      ev.info = onNodeInfo;
-      ev.param = onNodeParam;
+      ev.info = handleNodeInfo;
+      ev.param = handleNodeParam;
       return ev;
     }();
 
@@ -463,8 +463,8 @@ namespace ao::audio::backend
     {
       auto ev = ::pw_node_events{};
       ev.version = PW_VERSION_NODE_EVENTS;
-      ev.info = onNodeInfo;
-      ev.param = onNodeParam;
+      ev.info = handleNodeInfo;
+      ev.param = handleNodeParam;
       return ev;
     }();
   };
@@ -489,7 +489,7 @@ namespace ao::audio::backend
 
     _implPtr->refreshEventPtr.get_deleter().loop = _implPtr->threadLoopPtr.get();
     auto* const event = ::pw_loop_add_event(
-      ::pw_thread_loop_get_loop(_implPtr->threadLoopPtr.get()), &Impl::onRefreshEvent, _implPtr.get());
+      ::pw_thread_loop_get_loop(_implPtr->threadLoopPtr.get()), &Impl::handleRefreshEvent, _implPtr.get());
 
     if (event == nullptr)
     {
@@ -672,7 +672,7 @@ namespace ao::audio::backend
 
       for (auto const& sub : graphSubscriptions)
       {
-        if (auto const optParsedId = detail::parseUintProperty(sub.routeAnchor.c_str()); optParsedId)
+        if (auto const optParsedId = detail::parsePipeWireUint32(sub.routeAnchor.c_str()); optParsedId)
         {
           subscribedStreamIds.insert(*optParsedId);
         }
@@ -692,7 +692,7 @@ namespace ao::audio::backend
 
       for (auto const& sub : graphSubscriptions)
       {
-        auto const optParsedId = detail::parseUintProperty(sub.routeAnchor.c_str());
+        auto const optParsedId = detail::parsePipeWireUint32(sub.routeAnchor.c_str());
 
         if (optParsedId && *optParsedId != PW_ID_ANY && sub.callback)
         {

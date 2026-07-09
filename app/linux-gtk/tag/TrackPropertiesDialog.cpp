@@ -94,7 +94,7 @@ namespace ao::gtk
     addCancelAction("Close", Gtk::ResponseType::CLOSE);
     _saveButton = addPrimaryAction("Save", Gtk::ResponseType::OK);
     _saveButton->set_sensitive(false);
-    _saveButton->signal_clicked().connect([this] { onSave(); });
+    _saveButton->signal_clicked().connect([this] { handleSaveClicked(); });
 
     _notebook.add_css_class("ao-properties-notebook");
     _notebook.set_vexpand(true);
@@ -282,7 +282,7 @@ namespace ao::gtk
     updateSaveEnabled();
   }
 
-  void TrackPropertiesDialog::onSave()
+  void TrackPropertiesDialog::handleSaveClicked()
   {
     if (_trackIds.empty())
     {

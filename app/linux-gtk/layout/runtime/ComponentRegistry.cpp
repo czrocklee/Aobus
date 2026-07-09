@@ -85,7 +85,7 @@ namespace ao::gtk::layout
 
       auto const check = [&](std::string_view propName, uimodel::LayoutActionSlot slot)
       {
-        if (!policy.allows(slot))
+        if (!policy.isSlotAllowed(slot))
         {
           return false;
         }

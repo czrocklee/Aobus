@@ -47,7 +47,7 @@ namespace ao::uimodel
       return val != 0 && (mask & val) == val;
     }
 
-    constexpr bool empty() const { return mask == 0; }
+    constexpr bool isEmpty() const { return mask == 0; }
 
     constexpr KeyModifiers operator|(KeyModifiers other) const
     {

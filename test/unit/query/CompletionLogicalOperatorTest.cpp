@@ -127,7 +127,7 @@ namespace ao::query::test
 
   TEST_CASE("Completion - backward scanner tracks complete predicate boundaries", "[query][unit][completion]")
   {
-    auto const assertCompletePredicateBoundary = [](std::string_view expression)
+    auto const checkCompletePredicateBoundary = [](std::string_view expression)
     {
       REQUIRE(parse(expression).has_value());
 
@@ -164,7 +164,7 @@ namespace ao::query::test
     {
       DYNAMIC_SECTION("Expression: " << expression)
       {
-        assertCompletePredicateBoundary(expression);
+        checkCompletePredicateBoundary(expression);
       }
     }
   }

@@ -21,9 +21,9 @@
 
 namespace ao::gtk
 {
-  ListTreeModelBuilder::Result ListTreeModelBuilder::build(rt::Library const& reads)
+  ListTreeModelBuilder::BuildResult ListTreeModelBuilder::build(rt::Library const& reads)
   {
-    auto result = Result{};
+    auto result = BuildResult{};
     result.storePtr = Gio::ListStore<ListTreeItem>::create();
 
     auto scope = reads.reader();
@@ -66,9 +66,9 @@ namespace ao::gtk
 
     result.treeModelPtr = Gtk::TreeListModel::create(
       result.storePtr,
-      [](Glib::RefPtr<Glib::ObjectBase> const& item) -> Glib::RefPtr<Gio::ListModel>
+      [](Glib::RefPtr<Glib::ObjectBase> const& itemPtr) -> Glib::RefPtr<Gio::ListModel>
       {
-        auto nodePtr = std::dynamic_pointer_cast<ListTreeItem>(item);
+        auto nodePtr = std::dynamic_pointer_cast<ListTreeItem>(itemPtr);
 
         if (!nodePtr || !nodePtr->hasChildren())
         {

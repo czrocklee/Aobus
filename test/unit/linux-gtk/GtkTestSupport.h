@@ -610,9 +610,9 @@ namespace ao::gtk::test
   }
 
   /**
-   * ManualTrackDetailMock - Manual mock for TrackDetailProjection.
+   * MockManualTrackDetail - Manual mock for TrackDetailProjection.
    */
-  class ManualTrackDetailMock final : public rt::TrackDetailProjection
+  class MockManualTrackDetail final : public rt::TrackDetailProjection
   {
   public:
     rt::TrackDetailSnapshot snapshot() const override { return _snap; }

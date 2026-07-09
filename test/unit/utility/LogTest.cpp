@@ -18,21 +18,21 @@ namespace ao::rt::test
     auto const tempDir = std::filesystem::temp_directory_path() / "ao_log_test";
     std::filesystem::remove_all(tempDir);
 
-    // Log is a process-global singleton and Log::init() is a no-op while already
+    // Log is a process-global singleton and Log::initialize() is a no-op while already
     // initialized. Other test cases init logging without shutting it down, so we
     // must clear any leaked state to guarantee init() actually targets tempDir.
     Log::shutdown();
 
     SECTION("Initialize with specific directory and log level")
     {
-      Log::init(LogLevel::Debug, tempDir);
+      Log::initialize(LogLevel::Debug, tempDir);
 
-      auto const& appLogger = Log::appLogger();
-      auto const& audioLogger = Log::audioLogger();
+      auto const& appLoggerPtr = Log::appLogger();
+      auto const& audioLoggerPtr = Log::audioLogger();
 
       CHECK(Log::isInitialized());
-      CHECK(appLogger != nullptr);
-      CHECK(audioLogger != nullptr);
+      CHECK(appLoggerPtr != nullptr);
+      CHECK(audioLoggerPtr != nullptr);
 
       // Write a test log
       APP_LOG_DEBUG("Test app debug log");
@@ -68,7 +68,7 @@ namespace ao::rt::test
         std::filesystem::remove_all(defaultDir);
       }
 
-      Log::init(LogLevel::Warn, "");
+      Log::initialize(LogLevel::Warn, "");
 
       CHECK(Log::isInitialized());
       CHECK(std::filesystem::exists(defaultDir));

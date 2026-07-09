@@ -15,18 +15,18 @@ namespace ao::rt::test
   TEST_CASE("SmartListEvaluator - empty expression matches all tracks and maintains ID order",
             "[runtime][unit][smart-list][expression]")
   {
-    auto testLibrary = TestMusicLibrary{};
-    auto first = testLibrary.addTrack(makeSmartListSpec("first", 2020));
-    auto second = testLibrary.addTrack(makeSmartListSpec("second", 2021));
+    auto libraryFixture = MusicLibraryFixture{};
+    auto first = libraryFixture.addTrack(makeSmartListSpec("first", 2020));
+    auto second = libraryFixture.addTrack(makeSmartListSpec("second", 2021));
 
     auto source = MutableTrackSource{};
     // Source is [second, first]
     source.addInitial(second);
     source.addInitial(first);
 
-    auto engine = SmartListEvaluator{testLibrary.library()};
-    auto filtered = SmartListSource{source, testLibrary.library(), engine};
-    auto spy = TrackSourceObserverSpy{};
+    auto engine = SmartListEvaluator{libraryFixture.library()};
+    auto filtered = SmartListSource{source, libraryFixture.library(), engine};
+    auto spy = SpyTrackSourceObserver{};
     filtered.attach(&spy);
 
     filtered.reload();
@@ -37,7 +37,7 @@ namespace ao::rt::test
     CHECK(filtered.trackIdAt(0) == first);
     CHECK(filtered.trackIdAt(1) == second);
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::Reset);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Reset);
 
     filtered.detach(&spy);
   }
@@ -45,15 +45,15 @@ namespace ao::rt::test
   TEST_CASE("SmartListEvaluator - invalid expression remains empty while sibling list receives inserts",
             "[runtime][unit][smart-list][expression]")
   {
-    auto testLibrary = TestMusicLibrary{};
-    auto first = testLibrary.addTrack(makeSmartListSpec("first", 2022));
+    auto libraryFixture = MusicLibraryFixture{};
+    auto first = libraryFixture.addTrack(makeSmartListSpec("first", 2022));
 
     auto source = MutableTrackSource{};
     source.addInitial(first);
 
-    auto engine = SmartListEvaluator{testLibrary.library()};
-    auto validList = SmartListSource{source, testLibrary.library(), engine};
-    auto invalidList = SmartListSource{source, testLibrary.library(), engine};
+    auto engine = SmartListEvaluator{libraryFixture.library()};
+    auto validList = SmartListSource{source, libraryFixture.library(), engine};
+    auto invalidList = SmartListSource{source, libraryFixture.library(), engine};
     validList.setExpression("$year >= 2021");
     validList.reload();
     invalidList.setExpression("   ");
@@ -67,16 +67,16 @@ namespace ao::rt::test
     CHECK_FALSE(invalidList.error()->message.empty());
     CHECK(invalidList.size() == 0);
 
-    auto validSpy = TrackSourceObserverSpy{};
-    auto invalidSpy = TrackSourceObserverSpy{};
+    auto validSpy = SpyTrackSourceObserver{};
+    auto invalidSpy = SpyTrackSourceObserver{};
     validList.attach(&validSpy);
     invalidList.attach(&invalidSpy);
 
-    auto second = testLibrary.addTrack(makeSmartListSpec("second", 2023));
+    auto second = libraryFixture.addTrack(makeSmartListSpec("second", 2023));
     source.insert(second, 1);
 
     REQUIRE(validSpy.events.size() == 1);
-    CHECK(validSpy.events[0].kind == TrackSourceObserverSpy::EventKind::Inserted);
+    CHECK(validSpy.events[0].kind == SpyTrackSourceObserver::EventKind::Inserted);
     CHECK(validSpy.events[0].id == second);
     CHECK(invalidSpy.events.empty());
     REQUIRE(validList.size() == 2);
@@ -90,15 +90,15 @@ namespace ao::rt::test
   TEST_CASE("SmartListEvaluator - setting a valid expression clears invalid expression error",
             "[runtime][unit][smart-list][expression]")
   {
-    auto testLibrary = TestMusicLibrary{};
-    auto first = testLibrary.addTrack(makeSmartListSpec("first", 2022));
+    auto libraryFixture = MusicLibraryFixture{};
+    auto first = libraryFixture.addTrack(makeSmartListSpec("first", 2022));
 
     auto source = MutableTrackSource{};
     source.addInitial(first);
 
-    auto engine = SmartListEvaluator{testLibrary.library()};
-    auto validList = SmartListSource{source, testLibrary.library(), engine};
-    auto invalidList = SmartListSource{source, testLibrary.library(), engine};
+    auto engine = SmartListEvaluator{libraryFixture.library()};
+    auto validList = SmartListSource{source, libraryFixture.library(), engine};
+    auto invalidList = SmartListSource{source, libraryFixture.library(), engine};
     validList.setExpression("$year >= 2021");
     validList.reload();
     invalidList.setExpression("   ");

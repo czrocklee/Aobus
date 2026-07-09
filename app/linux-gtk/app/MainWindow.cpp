@@ -3,7 +3,7 @@
 
 #include "app/MainWindow.h"
 
-#include "app/AppConfig.h"
+#include "app/AppConfigStore.h"
 #include "app/AppDialog.h"
 #include "app/KeymapApplicator.h"
 #include "app/MainWindowCoordinator.h"
@@ -42,15 +42,15 @@
 namespace ao::gtk
 {
   MainWindow::MainWindow(rt::AppRuntime& runtime,
-                         std::shared_ptr<AppConfig> configPtr,
+                         std::shared_ptr<AppConfigStore> configStorePtr,
                          std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                          std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
     : _runtime{runtime}
-    , _configPtr{std::move(configPtr)}
-    , _mainWindowCoordinatorPtr{std::make_unique<MainWindowCoordinator>(*this, _runtime, _configPtr)}
+    , _configStorePtr{std::move(configStorePtr)}
+    , _mainWindowCoordinatorPtr{std::make_unique<MainWindowCoordinator>(*this, _runtime, _configStorePtr)}
     , _shellLayout{_runtime,
                    *this,
-                   _configPtr,
+                   _configStorePtr,
                    std::move(shellLayoutStorePtr),
                    std::move(componentStateStorePtr),
                    *_mainWindowCoordinatorPtr->themeController()}
@@ -184,17 +184,17 @@ namespace ao::gtk
     _shellLayout.bindServices(_mainWindowCoordinatorPtr->uiServices());
     _shellLayout.refreshExportedActions();
 
-    _shellLayout.loadLayout(*_configPtr);
+    _shellLayout.loadLayout(*_configStorePtr);
   }
 
   void MainWindow::rebuildLayout()
   {
-    _shellLayout.loadLayout(*_configPtr);
+    _shellLayout.loadLayout(*_configStorePtr);
   }
 
   void MainWindow::openLayoutEditor()
   {
-    _shellLayout.openEditor(*_configPtr);
+    _shellLayout.openEditor(*_configStorePtr);
   }
 
   void MainWindow::resetRuntimeLayoutState()
@@ -209,7 +209,7 @@ namespace ao::gtk
 
   void MainWindow::applyKeymap(uimodel::KeymapModel const& keymap)
   {
-    _configPtr->saveKeymap(keymap);
+    _configStorePtr->saveKeymap(keymap);
 
     if (auto const appPtr = get_application(); appPtr)
     {

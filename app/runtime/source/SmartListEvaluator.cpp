@@ -32,7 +32,7 @@ namespace ao::rt
   {
   }
 
-  void SourceObserver::onReset()
+  void SourceObserver::handleReset()
   {
     if (!_valid)
     {
@@ -45,7 +45,7 @@ namespace ao::rt
     }
   }
 
-  void SourceObserver::onInserted(TrackId const id, std::size_t const index)
+  void SourceObserver::handleInserted(TrackId const id, std::size_t const index)
   {
     if (!_valid)
     {
@@ -58,7 +58,7 @@ namespace ao::rt
     }
   }
 
-  void SourceObserver::onUpdated(TrackId const id, std::size_t const index)
+  void SourceObserver::handleUpdated(TrackId const id, std::size_t const index)
   {
     if (!_valid)
     {
@@ -71,7 +71,7 @@ namespace ao::rt
     }
   }
 
-  void SourceObserver::onRemoved(TrackId const id, std::size_t /*index*/)
+  void SourceObserver::handleRemoved(TrackId const id, std::size_t /*index*/)
   {
     if (!_valid)
     {
@@ -84,7 +84,7 @@ namespace ao::rt
     }
   }
 
-  void SourceObserver::onBulkInserted(std::span<TrackId const> const ids)
+  void SourceObserver::handleBulkInserted(std::span<TrackId const> const ids)
   {
     if (!_valid)
     {
@@ -97,7 +97,7 @@ namespace ao::rt
     }
   }
 
-  void SourceObserver::onBulkUpdated(std::span<TrackId const> const ids)
+  void SourceObserver::handleBulkUpdated(std::span<TrackId const> const ids)
   {
     if (!_valid)
     {
@@ -110,7 +110,7 @@ namespace ao::rt
     }
   }
 
-  void SourceObserver::onBulkRemoved(std::span<TrackId const> const ids)
+  void SourceObserver::handleBulkRemoved(std::span<TrackId const> const ids)
   {
     if (!_valid)
     {
@@ -123,7 +123,7 @@ namespace ao::rt
     }
   }
 
-  void SourceObserver::onSourceDestroyed()
+  void SourceObserver::handleSourceDestroyed()
   {
     if (!_valid)
     {
@@ -147,20 +147,20 @@ namespace ao::rt
   {
     _alive = false;
 
-    for (auto& [source, bucket] : _buckets)
+    for (auto& [source, bucketPtr] : _buckets)
     {
-      for (auto* list : bucket->lists)
+      for (auto* list : bucketPtr->lists)
       {
         list->_evaluator = nullptr;
       }
 
-      if (bucket->observerPtr)
+      if (bucketPtr->observerPtr)
       {
-        utility::unsafeDowncast<SourceObserver>(bucket->observerPtr.get())->invalidate();
+        utility::unsafeDowncast<SourceObserver>(bucketPtr->observerPtr.get())->invalidate();
 
-        if (bucket->sourceAlive)
+        if (bucketPtr->sourceAlive)
         {
-          source->detach(bucket->observerPtr.get());
+          source->detach(bucketPtr->observerPtr.get());
         }
       }
     }
@@ -168,17 +168,17 @@ namespace ao::rt
 
   void SmartListEvaluator::registerList(TrackSource& source, SmartListSource& list)
   {
-    auto& bucket = _buckets[&source];
+    auto& bucketPtr = _buckets[&source];
 
-    if (!bucket)
+    if (!bucketPtr)
     {
-      bucket = std::make_unique<SourceBucket>();
-      bucket->source = &source;
-      bucket->observerPtr = std::make_unique<SourceObserver>(*this, source);
-      source.attach(bucket->observerPtr.get());
+      bucketPtr = std::make_unique<SourceBucket>();
+      bucketPtr->source = &source;
+      bucketPtr->observerPtr = std::make_unique<SourceObserver>(*this, source);
+      source.attach(bucketPtr->observerPtr.get());
     }
 
-    bucket->lists.push_back(&list);
+    bucketPtr->lists.push_back(&list);
   }
 
   void SmartListEvaluator::unregisterList(TrackSource& source, SmartListSource& list)

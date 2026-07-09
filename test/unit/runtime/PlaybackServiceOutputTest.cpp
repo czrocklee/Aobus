@@ -76,7 +76,7 @@ namespace ao::rt::test
     CHECK(qualityFixture.playbackService.play(desc, ListId{1}));
     REQUIRE(qualityFixture.renderTarget != nullptr);
 
-    qualityFixture.renderTarget->onRouteReady("mock_anchor");
+    qualityFixture.renderTarget->handleRouteReady("mock_anchor");
     REQUIRE(qualityFixture.executor.drainUntil([&] { return !routedQualityEvents.empty(); }));
 
     REQUIRE(routedQualityEvents.size() == 1);

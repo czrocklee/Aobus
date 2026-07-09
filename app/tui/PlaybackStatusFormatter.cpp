@@ -35,7 +35,7 @@ namespace ao::tui
     return "Unknown";
   }
 
-  bool needsTransportClockTick(audio::Transport const transport)
+  bool shouldTickTransportClock(audio::Transport const transport)
   {
     switch (transport)
     {

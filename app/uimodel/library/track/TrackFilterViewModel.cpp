@@ -19,11 +19,11 @@ namespace ao::uimodel
                                              std::function<void(TrackFilterViewState const&)> onRender)
     : _viewService{viewService}, _workspaceService{workspaceService}, _onRender{std::move(onRender)}
   {
-    _focusSub = _workspaceService.onFocusedViewChanged([this](rt::ViewId viewId) { onFocusedViewChanged(viewId); });
+    _focusSub = _workspaceService.onFocusedViewChanged([this](rt::ViewId viewId) { handleFocusedViewChanged(viewId); });
     _filterStatusSub =
-      _viewService.onFilterStatusChanged([this](auto const& status) { onFilterStatusChanged(status); });
+      _viewService.onFilterStatusChanged([this](auto const& status) { handleFilterStatusChanged(status); });
 
-    onFocusedViewChanged(_workspaceService.layoutState().activeViewId);
+    handleFocusedViewChanged(_workspaceService.layoutState().activeViewId);
   }
 
   void TrackFilterViewModel::updateFilter(std::string const& rawText)
@@ -52,7 +52,7 @@ namespace ao::uimodel
     refresh();
   }
 
-  void TrackFilterViewModel::onFocusedViewChanged(rt::ViewId viewId)
+  void TrackFilterViewModel::handleFocusedViewChanged(rt::ViewId viewId)
   {
     _viewId = viewId;
 
@@ -77,7 +77,7 @@ namespace ao::uimodel
     refresh();
   }
 
-  void TrackFilterViewModel::onFilterStatusChanged(rt::FilterStatusChanged const& status)
+  void TrackFilterViewModel::handleFilterStatusChanged(rt::FilterStatusChanged const& status)
   {
     if (status.viewId != _viewId)
     {

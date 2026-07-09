@@ -46,22 +46,22 @@ namespace ao::rt::test
       Subscription listsSub;
     };
 
-    bool trackExists(TestMusicLibrary& testLib, TrackId trackId)
+    bool trackExists(MusicLibraryFixture& libraryFixture, TrackId trackId)
     {
-      auto transaction = testLib.library().readTransaction();
-      return testLib.library()
+      auto transaction = libraryFixture.library().readTransaction();
+      return libraryFixture.library()
         .tracks()
         .reader(transaction)
         .get(trackId, library::TrackStore::Reader::LoadMode::Both)
         .has_value();
     }
 
-    std::size_t trackCount(TestMusicLibrary& testLib)
+    std::size_t trackCount(MusicLibraryFixture& libraryFixture)
     {
       std::size_t count = 0;
-      auto transaction = testLib.library().readTransaction();
+      auto transaction = libraryFixture.library().readTransaction();
 
-      for ([[maybe_unused]] auto const& item : testLib.library().tracks().reader(transaction))
+      for ([[maybe_unused]] auto const& item : libraryFixture.library().tracks().reader(transaction))
       {
         ++count;
       }
@@ -69,37 +69,37 @@ namespace ao::rt::test
       return count;
     }
 
-    std::string trackTitle(TestMusicLibrary& testLib, TrackId trackId)
+    std::string trackTitle(MusicLibraryFixture& libraryFixture, TrackId trackId)
     {
-      auto transaction = testLib.library().readTransaction();
+      auto transaction = libraryFixture.library().readTransaction();
       auto const optView =
-        testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+        libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optView);
       return std::string{optView->metadata().title()};
     }
 
-    bool trackHasTag(TestMusicLibrary& testLib, TrackId trackId, std::string_view tag)
+    bool trackHasTag(MusicLibraryFixture& libraryFixture, TrackId trackId, std::string_view tag)
     {
-      auto transaction = testLib.library().readTransaction();
+      auto transaction = libraryFixture.library().readTransaction();
       auto const optView =
-        testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+        libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optView);
-      auto builder = library::TrackBuilder::fromView(*optView, testLib.library().dictionary());
+      auto builder = library::TrackBuilder::fromView(*optView, libraryFixture.library().dictionary());
       return std::ranges::contains(builder.tags().names(), tag);
     }
 
-    bool listExists(TestMusicLibrary& testLib, ListId listId)
+    bool listExists(MusicLibraryFixture& libraryFixture, ListId listId)
     {
-      auto transaction = testLib.library().readTransaction();
-      return testLib.library().lists().reader(transaction).get(listId).has_value();
+      auto transaction = libraryFixture.library().readTransaction();
+      return libraryFixture.library().lists().reader(transaction).get(listId).has_value();
     }
 
-    std::size_t listCount(TestMusicLibrary& testLib)
+    std::size_t listCount(MusicLibraryFixture& libraryFixture)
     {
       std::size_t count = 0;
-      auto transaction = testLib.library().readTransaction();
+      auto transaction = libraryFixture.library().readTransaction();
 
-      for ([[maybe_unused]] auto const& item : testLib.library().lists().reader(transaction))
+      for ([[maybe_unused]] auto const& item : libraryFixture.library().lists().reader(transaction))
       {
         ++count;
       }
@@ -107,25 +107,27 @@ namespace ao::rt::test
       return count;
     }
 
-    std::string listName(TestMusicLibrary& testLib, ListId listId)
+    std::string listName(MusicLibraryFixture& libraryFixture, ListId listId)
     {
-      auto transaction = testLib.library().readTransaction();
-      auto const optView = testLib.library().lists().reader(transaction).get(listId);
+      auto transaction = libraryFixture.library().readTransaction();
+      auto const optView = libraryFixture.library().lists().reader(transaction).get(listId);
       REQUIRE(optView);
       return std::string{optView->name()};
     }
 
-    bool listContainsTrack(TestMusicLibrary& testLib, ListId listId, TrackId trackId)
+    bool listContainsTrack(MusicLibraryFixture& libraryFixture, ListId listId, TrackId trackId)
     {
-      auto transaction = testLib.library().readTransaction();
-      auto const optView = testLib.library().lists().reader(transaction).get(listId);
+      auto transaction = libraryFixture.library().readTransaction();
+      auto const optView = libraryFixture.library().lists().reader(transaction).get(listId);
       REQUIRE(optView);
       return std::ranges::contains(optView->tracks(), trackId);
     }
 
-    ListId createManualList(TestMusicLibrary& testLib, std::string_view name, std::vector<TrackId> trackIds = {})
+    ListId createManualList(MusicLibraryFixture& libraryFixture,
+                            std::string_view name,
+                            std::vector<TrackId> trackIds = {})
     {
-      auto transaction = testLib.library().writeTransaction();
+      auto transaction = libraryFixture.library().writeTransaction();
       auto builder = library::ListBuilder::makeEmpty().name(name);
 
       for (auto const trackId : trackIds)
@@ -133,13 +135,13 @@ namespace ao::rt::test
         builder.tracks().add(trackId);
       }
 
-      auto const createResult = testLib.library().lists().writer(transaction).create(builder.serialize());
+      auto const createResult = libraryFixture.library().lists().writer(transaction).create(builder.serialize());
       REQUIRE(createResult);
       REQUIRE(transaction.commit());
       return createResult->first;
     }
 
-    std::filesystem::path copyFixtureAudio(TestMusicLibrary const& testLib, std::string const& name)
+    std::filesystem::path copyFixtureAudio(MusicLibraryFixture const& libraryFixture, std::string const& name)
     {
       auto const source = std::filesystem::current_path() / "test/integration/tag/test_data/empty.flac";
 
@@ -148,7 +150,7 @@ namespace ao::rt::test
         return {};
       }
 
-      auto const destination = testLib.root() / name;
+      auto const destination = libraryFixture.root() / name;
       std::filesystem::create_directories(destination.parent_path());
       std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing);
       return destination;
@@ -157,10 +159,10 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryWriter - dry-run previews metadata updates without committing", "[runtime][unit][library][dry-run]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto const trackId = testLib.addTrack("Before");
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Before");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
     auto recorder = ChangeRecorder{changes};
     auto const patch = MetadataPatch{.optTitle = "After"};
 
@@ -171,22 +173,22 @@ namespace ao::rt::test
     REQUIRE(dryRun->changes[0].fields.size() == 1);
     CHECK(dryRun->changes[0].fields[0] ==
           TrackFieldChange{.field = "title", .oldValue = "Before", .newValue = "After"});
-    CHECK(trackTitle(testLib, trackId) == "Before");
+    CHECK(trackTitle(libraryFixture, trackId) == "Before");
     CHECK(recorder.tracksMutated == 0);
 
     auto const commit = writer.updateMetadata(std::array{trackId}, patch);
     REQUIRE(commit);
     CHECK(*commit == *dryRun);
-    CHECK(trackTitle(testLib, trackId) == "After");
+    CHECK(trackTitle(libraryFixture, trackId) == "After");
     CHECK(recorder.tracksMutated == 1);
   }
 
   TEST_CASE("LibraryWriter - dry-run previews tag edits without committing", "[runtime][unit][library][dry-run]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto const trackId = testLib.addTrack("Track");
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Track");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
     auto recorder = ChangeRecorder{changes};
     auto const tags = std::array{std::string{"Favorite"}};
 
@@ -195,43 +197,43 @@ namespace ao::rt::test
     REQUIRE(dryRun);
     REQUIRE(dryRun->changes.size() == 1);
     CHECK(dryRun->changes[0].addedTags == std::vector<std::string>{"Favorite"});
-    CHECK_FALSE(trackHasTag(testLib, trackId, "Favorite"));
+    CHECK_FALSE(trackHasTag(libraryFixture, trackId, "Favorite"));
     CHECK(recorder.tracksMutated == 0);
 
     auto const commit = writer.editTags(std::array{trackId}, tags, {});
     REQUIRE(commit);
     CHECK(*commit == *dryRun);
-    CHECK(trackHasTag(testLib, trackId, "Favorite"));
+    CHECK(trackHasTag(libraryFixture, trackId, "Favorite"));
     CHECK(recorder.tracksMutated == 1);
   }
 
   TEST_CASE("LibraryWriter - dry-run previews list creation without committing", "[runtime][unit][library][dry-run]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
     auto recorder = ChangeRecorder{changes};
     auto draft = LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Draft"};
 
     auto const dryRun = writer.previewCreateList(draft);
 
     REQUIRE(dryRun);
-    CHECK(listCount(testLib) == 0);
+    CHECK(listCount(libraryFixture) == 0);
     CHECK(recorder.listsMutated == 0);
 
     auto const commit = writer.createList(draft);
     REQUIRE(commit);
-    CHECK(listExists(testLib, *commit));
+    CHECK(listExists(libraryFixture, *commit));
     CHECK(recorder.listsMutated == 1);
   }
 
   TEST_CASE("LibraryWriter - dry-run previews list updates without committing", "[runtime][unit][library][dry-run]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto const trackId = testLib.addTrack("Track");
-    auto const listId = createManualList(testLib, "Before");
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Track");
+    auto const listId = createManualList(libraryFixture, "Before");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
     auto recorder = ChangeRecorder{changes};
     auto draft = LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual, .listId = listId, .name = "After", .trackIds = {trackId}};
@@ -242,25 +244,25 @@ namespace ao::rt::test
     CHECK(dryRun->changed);
     CHECK(dryRun->fieldChanges[0] == ListFieldChange{.field = "name", .oldValue = "Before", .newValue = "After"});
     CHECK(dryRun->addedTrackIds == std::vector<TrackId>{trackId});
-    CHECK(listName(testLib, listId) == "Before");
-    CHECK_FALSE(listContainsTrack(testLib, listId, trackId));
+    CHECK(listName(libraryFixture, listId) == "Before");
+    CHECK_FALSE(listContainsTrack(libraryFixture, listId, trackId));
     CHECK(recorder.listsMutated == 0);
 
     auto const commit = writer.updateList(draft);
     REQUIRE(commit);
     CHECK(*commit == *dryRun);
-    CHECK(listName(testLib, listId) == "After");
-    CHECK(listContainsTrack(testLib, listId, trackId));
+    CHECK(listName(libraryFixture, listId) == "After");
+    CHECK(listContainsTrack(libraryFixture, listId, trackId));
     CHECK(recorder.listsMutated == 1);
   }
 
   TEST_CASE("LibraryWriter - dry-run previews list deletion without committing", "[runtime][unit][library][dry-run]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto const trackId = testLib.addTrack("Track");
-    auto const listId = createManualList(testLib, "Delete Me", {trackId});
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Track");
+    auto const listId = createManualList(libraryFixture, "Delete Me", {trackId});
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
     auto recorder = ChangeRecorder{changes};
 
     auto const dryRun = writer.previewDeleteList(listId);
@@ -269,23 +271,23 @@ namespace ao::rt::test
     CHECK(dryRun->name == "Delete Me");
     CHECK(dryRun->kind == "manual");
     CHECK(dryRun->trackCount == 1);
-    CHECK(listExists(testLib, listId));
+    CHECK(listExists(libraryFixture, listId));
     CHECK(recorder.listsMutated == 0);
 
     auto const commit = writer.deleteList(listId);
     REQUIRE(commit);
     CHECK(*commit == *dryRun);
-    CHECK_FALSE(listExists(testLib, listId));
+    CHECK_FALSE(listExists(libraryFixture, listId));
     CHECK(recorder.listsMutated == 1);
   }
 
   TEST_CASE("LibraryWriter - dry-run previews track deletion without committing", "[runtime][unit][library][dry-run]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto const trackId = testLib.addTrack("Delete Track");
-    auto const listId = createManualList(testLib, "Manual", {trackId});
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Delete Track");
+    auto const listId = createManualList(libraryFixture, "Manual", {trackId});
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
     auto recorder = ChangeRecorder{changes};
 
     auto const dryRun = writer.previewDeleteTrack(trackId);
@@ -294,8 +296,8 @@ namespace ao::rt::test
     CHECK(dryRun->trackId == trackId);
     CHECK(dryRun->title == "Delete Track");
     CHECK(dryRun->removedFromListIds == std::vector<ListId>{listId});
-    CHECK(trackExists(testLib, trackId));
-    CHECK(listContainsTrack(testLib, listId, trackId));
+    CHECK(trackExists(libraryFixture, trackId));
+    CHECK(listContainsTrack(libraryFixture, listId, trackId));
     CHECK(recorder.tracksMutated == 0);
     CHECK(recorder.collectionChanged == 0);
     CHECK(recorder.listsMutated == 0);
@@ -303,8 +305,8 @@ namespace ao::rt::test
     auto const commit = writer.deleteTrack(trackId);
     REQUIRE(commit);
     CHECK(*commit == *dryRun);
-    CHECK_FALSE(trackExists(testLib, trackId));
-    CHECK_FALSE(listContainsTrack(testLib, listId, trackId));
+    CHECK_FALSE(trackExists(libraryFixture, trackId));
+    CHECK_FALSE(listContainsTrack(libraryFixture, listId, trackId));
     CHECK(recorder.tracksMutated == 1);
     CHECK(recorder.collectionChanged == 1);
     CHECK(recorder.listsMutated == 1);
@@ -312,11 +314,11 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryWriter - dry-run previews track creation without committing", "[runtime][unit][library][dry-run]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
     auto recorder = ChangeRecorder{changes};
-    auto const absValidFile = copyFixtureAudio(testLib, "music/song.flac");
+    auto const absValidFile = copyFixtureAudio(libraryFixture, "music/song.flac");
 
     if (!std::filesystem::exists(absValidFile))
     {
@@ -328,8 +330,9 @@ namespace ao::rt::test
 
     REQUIRE(dryRun);
     CHECK(dryRun->uri == "music/song.flac");
-    CHECK(trackCount(testLib) == 0);
-    CHECK_FALSE(testLib.library().manifest().reader(testLib.library().readTransaction()).get("music/song.flac"));
+    CHECK(trackCount(libraryFixture) == 0);
+    CHECK_FALSE(
+      libraryFixture.library().manifest().reader(libraryFixture.library().readTransaction()).get("music/song.flac"));
     CHECK(recorder.tracksMutated == 0);
     CHECK(recorder.collectionChanged == 0);
 
@@ -338,8 +341,9 @@ namespace ao::rt::test
     CHECK(commit->uri == dryRun->uri);
     CHECK(commit->title == dryRun->title);
     CHECK(commit->artist == dryRun->artist);
-    CHECK(trackExists(testLib, commit->trackId));
-    CHECK(testLib.library().manifest().reader(testLib.library().readTransaction()).get("music/song.flac"));
+    CHECK(trackExists(libraryFixture, commit->trackId));
+    CHECK(
+      libraryFixture.library().manifest().reader(libraryFixture.library().readTransaction()).get("music/song.flac"));
     CHECK(recorder.tracksMutated == 1);
     CHECK(recorder.collectionChanged == 1);
   }

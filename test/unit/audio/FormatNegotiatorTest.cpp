@@ -29,9 +29,9 @@ namespace ao::audio::test
     {
       auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
 
-      CHECK(plan.requiresResample == false);
-      CHECK(plan.requiresBitDepthConversion == false);
-      CHECK(plan.requiresChannelRemap == false);
+      CHECK(plan.isResampleRequired == false);
+      CHECK(plan.isBitDepthConversionRequired == false);
+      CHECK(plan.isChannelRemapRequired == false);
       CHECK(plan.deviceFormat.sampleRate == sourceFormat.sampleRate);
       CHECK(plan.deviceFormat.channels == sourceFormat.channels);
       CHECK(plan.deviceFormat.bitDepth == sourceFormat.bitDepth);
@@ -43,7 +43,7 @@ namespace ao::audio::test
       caps.sampleRates = {48000, 96000}; // 44100 is not supported
       auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
 
-      CHECK(plan.requiresResample == true);
+      CHECK(plan.isResampleRequired == true);
       // (48000 % 44100) = 3900
       // (96000 % 44100) = 7800
       // 48000 is chosen as "closest" via modulo
@@ -57,7 +57,7 @@ namespace ao::audio::test
       caps.sampleFormats = {};   // Force fallback logic
       auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
 
-      CHECK(plan.requiresBitDepthConversion == true);
+      CHECK(plan.isBitDepthConversionRequired == true);
       CHECK(plan.deviceFormat.bitDepth == 32); // Max element
       CHECK(plan.reason.find("bit depth conversion required") != std::string::npos);
     }
@@ -67,7 +67,7 @@ namespace ao::audio::test
       caps.channelCounts = {6, 8}; // 2 is not supported
       auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
 
-      CHECK(plan.requiresChannelRemap == true);
+      CHECK(plan.isChannelRemapRequired == true);
       CHECK(plan.deviceFormat.channels == 6); // First element
       CHECK(plan.reason.find("channel remapping required") != std::string::npos);
     }
@@ -156,7 +156,7 @@ namespace ao::audio::test
       caps.bitDepths = {16};
 
       auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
-      CHECK_FALSE(plan.requiresBitDepthConversion);
+      CHECK_FALSE(plan.isBitDepthConversionRequired);
       CHECK(plan.decoderOutputFormat.bitDepth == 32);
       CHECK(plan.decoderOutputFormat.validBits == 24);
       CHECK(plan.deviceFormat.bitDepth == 32);
@@ -175,7 +175,7 @@ namespace ao::audio::test
       CHECK(plan.decoderOutputFormat.validBits == 16);
       CHECK(plan.deviceFormat.bitDepth == 32);
       CHECK(plan.deviceFormat.validBits == 16);
-      CHECK(plan.requiresBitDepthConversion == true);
+      CHECK(plan.isBitDepthConversionRequired == true);
     }
 
     SECTION("8-bit integer source decodes into the negotiated storage width with 8 valid bits")
@@ -208,7 +208,7 @@ namespace ao::audio::test
       CHECK(plan.deviceFormat.bitDepth == 32);
       CHECK(plan.deviceFormat.validBits == 32);
       CHECK(plan.deviceFormat.isFloat);
-      CHECK_FALSE(plan.requiresBitDepthConversion);
+      CHECK_FALSE(plan.isBitDepthConversionRequired);
     }
 
     SECTION("32-bit float source uses integer decoder output when float is unsupported")
@@ -220,7 +220,7 @@ namespace ao::audio::test
       caps.bitDepths = {16};
 
       auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
-      CHECK(plan.requiresBitDepthConversion);
+      CHECK(plan.isBitDepthConversionRequired);
       CHECK_FALSE(plan.decoderOutputFormat.isFloat);
       CHECK(plan.decoderOutputFormat.bitDepth == 16);
       CHECK(plan.decoderOutputFormat.validBits == 16);
@@ -236,9 +236,9 @@ namespace ao::audio::test
       caps.channelCounts = {6};
 
       auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
-      CHECK(plan.requiresResample == true);
-      CHECK(plan.requiresBitDepthConversion == true);
-      CHECK(plan.requiresChannelRemap == true);
+      CHECK(plan.isResampleRequired == true);
+      CHECK(plan.isBitDepthConversionRequired == true);
+      CHECK(plan.isChannelRemapRequired == true);
 
       CHECK_THAT(plan.reason, Catch::Matchers::ContainsSubstring("sample rate resampling required"));
       CHECK_THAT(plan.reason, Catch::Matchers::ContainsSubstring("bit depth conversion required"));
@@ -254,8 +254,8 @@ namespace ao::audio::test
       caps.sampleFormats = {{.bitDepth = 32, .validBits = 24, .isFloat = false}}; // but 24/24 is NOT in sampleFormats
 
       auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
-      CHECK(plan.requiresResample == true);
-      CHECK(plan.requiresBitDepthConversion == true);
+      CHECK(plan.isResampleRequired == true);
+      CHECK(plan.isBitDepthConversionRequired == true);
       CHECK_THAT(plan.reason,
                  Catch::Matchers::ContainsSubstring("sample rate resampling required; bit depth conversion required"));
     }

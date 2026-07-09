@@ -148,14 +148,14 @@ namespace ao::rt
     {
       foundNew = false;
 
-      for (auto const& [childId, childSource] : _sources)
+      for (auto const& [childId, childSourcePtr] : _sources)
       {
         if (std::ranges::contains(toErase, childId))
         {
           continue;
         }
 
-        auto* const parent = parentSourceOf(*childSource);
+        auto* const parent = parentSourceOf(*childSourcePtr);
 
         for (auto const id : toErase)
         {

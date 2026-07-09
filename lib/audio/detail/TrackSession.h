@@ -52,7 +52,7 @@ namespace ao::audio::detail
   private:
     static void negotiateFormat(std::filesystem::path const& path,
                                 DecodedStreamInfo& info,
-                                std::unique_ptr<DecoderSession>& decoder,
+                                std::unique_ptr<DecoderSession>& decoderPtr,
                                 Format& backendFormat,
                                 Device const& device,
                                 BackendId const& backendId,

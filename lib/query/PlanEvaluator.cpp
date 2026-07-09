@@ -46,7 +46,7 @@ namespace ao::query
       return plan->stringConstants[index];
     }
 
-    std::string_view loadDictionaryFieldValue(library::TrackView const& track, Field field, ExecutionPlan const* plan)
+    std::string_view readDictionaryFieldValue(library::TrackView const& track, Field field, ExecutionPlan const* plan)
     {
       gsl_Expects(plan != nullptr);
       gsl_Expects(plan->dictionary != nullptr);
@@ -59,7 +59,7 @@ namespace ao::query
       return dictionaryFieldValue(track, field, *plan->dictionary);
     }
 
-    std::string_view loadStringFieldValue(library::TrackView const& track, Field field, std::int64_t customDictionaryId)
+    std::string_view readStringFieldValue(library::TrackView const& track, Field field, std::int64_t customDictionaryId)
     {
       switch (field)
       {
@@ -79,8 +79,7 @@ namespace ao::query
       }
     }
 
-    // Free function to load field value
-    std::int64_t loadFieldValue(library::TrackView const& track, Field field)
+    std::int64_t readFieldValue(library::TrackView const& track, Field field)
     {
       switch (field)
       {
@@ -144,7 +143,7 @@ namespace ao::query
 
       if (auto const stringIndex = reg(registers, instr.operand); isStringField(field))
       {
-        auto const fieldStr = loadStringFieldValue(track, field, instr.constValue);
+        auto const fieldStr = readStringFieldValue(track, field, instr.constValue);
         auto const constantStr = stringConstant(plan, stringIndex);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
@@ -152,7 +151,7 @@ namespace ao::query
       {
         // Dictionary fields hold interned IDs whose order is arbitrary, so an
         // ordered comparison resolves the ID back to text and compares that.
-        auto const fieldStr = loadDictionaryFieldValue(track, field, plan);
+        auto const fieldStr = readDictionaryFieldValue(track, field, plan);
         auto const constantStr = stringConstant(plan, stringIndex);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
@@ -181,7 +180,7 @@ namespace ao::query
       {
         if (auto stringIndex = reg(registers, instr.operand); isStringField(field))
         {
-          auto const fieldStr = loadStringFieldValue(track, field, instr.constValue);
+          auto const fieldStr = readStringFieldValue(track, field, instr.constValue);
           auto const constantStr = stringConstant(plan, stringIndex);
           reg(registers, instr.operand - 1) = (fieldStr == constantStr) ? 1 : 0;
         }
@@ -208,11 +207,11 @@ namespace ao::query
 
       if (isStringField(field))
       {
-        fieldStr = loadStringFieldValue(track, field, instr.constValue);
+        fieldStr = readStringFieldValue(track, field, instr.constValue);
       }
       else if (isDictionaryField(field))
       {
-        fieldStr = loadDictionaryFieldValue(track, field, plan);
+        fieldStr = readDictionaryFieldValue(track, field, plan);
       }
 
       auto const constantStr = stringConstant(plan, rhs);
@@ -237,7 +236,7 @@ namespace ao::query
         case Field::WorkId:
         case Field::MovementId:
         case Field::SoloistId:
-          return loadFieldValue(track, field) != static_cast<std::int64_t>(kInvalidDictionaryId.raw());
+          return readFieldValue(track, field) != static_cast<std::int64_t>(kInvalidDictionaryId.raw());
 
         case Field::CoverArtId:
           return track.coverArt().primary().value_or(library::CoverArt{}).resourceId != kInvalidResourceId;
@@ -253,7 +252,7 @@ namespace ao::query
         case Field::Bitrate:
         case Field::SampleRate:
         case Field::Channels:
-        case Field::BitDepth: return loadFieldValue(track, field) > 0;
+        case Field::BitDepth: return readFieldValue(track, field) > 0;
 
         case Field::Codec: return track.property().codec() != AudioCodec::Unknown;
 
@@ -265,7 +264,7 @@ namespace ao::query
                  track.customMetadata().contains(DictionaryId{static_cast<std::uint32_t>(instr.constValue)});
 
         case Field::TagBloom:
-        case Field::TagCount: return loadFieldValue(track, field) > 0;
+        case Field::TagCount: return readFieldValue(track, field) > 0;
 
         default: return false;
       }
@@ -307,11 +306,11 @@ namespace ao::query
 
         if (isStringField(field) || field == Field::Custom)
         {
-          fieldValue = loadStringFieldValue(track, field, instr.size);
+          fieldValue = readStringFieldValue(track, field, instr.size);
         }
         else if (isDictionaryField(field) && plan->dictionary != nullptr)
         {
-          fieldValue = loadDictionaryFieldValue(track, field, plan);
+          fieldValue = readDictionaryFieldValue(track, field, plan);
         }
 
         reg(registers, instr.operand) = containsString(set, fieldValue) ? 1 : 0;
@@ -367,7 +366,7 @@ namespace ao::query
       switch (instr.op)
       {
         case OpCode::LoadField:
-          reg(_registers, instr.operand) = loadFieldValue(track, static_cast<Field>(instr.field));
+          reg(_registers, instr.operand) = readFieldValue(track, static_cast<Field>(instr.field));
           break;
 
         case OpCode::LoadConstant: reg(_registers, instr.operand) = instr.constValue; break;

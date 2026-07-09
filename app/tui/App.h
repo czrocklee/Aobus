@@ -11,7 +11,7 @@
 
 namespace ao::tui
 {
-  struct Options final
+  struct AppOptions final
   {
     std::filesystem::path libraryRoot{"."};
     std::filesystem::path databasePath{};
@@ -20,5 +20,5 @@ namespace ao::tui
     rt::LogLevel logLevel = rt::LogLevel::Info;
   };
 
-  std::int32_t run(Options const& options);
+  std::int32_t run(AppOptions const& options);
 } // namespace ao::tui

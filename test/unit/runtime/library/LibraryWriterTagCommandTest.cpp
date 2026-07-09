@@ -19,11 +19,11 @@ namespace ao::rt::test
 {
   TEST_CASE("LibraryWriter - editTags adds a new tag and publishes a mutation", "[runtime][unit][library][tag]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto const trackId = testLib.addTrack("Test Track");
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
@@ -37,21 +37,21 @@ namespace ao::rt::test
     CHECK(mutated[0] == trackId);
 
     // Verify the tag was added by fetching it
-    auto transaction = testLib.library().readTransaction();
+    auto transaction = libraryFixture.library().readTransaction();
     auto const optTrackView =
-      testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+      libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optTrackView);
-    auto builder = library::TrackBuilder::fromView(*optTrackView, testLib.library().dictionary());
+    auto builder = library::TrackBuilder::fromView(*optTrackView, libraryFixture.library().dictionary());
     CHECK(std::ranges::contains(builder.tags().names(), std::string_view{"Favorite"}));
   }
 
   TEST_CASE("LibraryWriter - editTags ignores an existing tag", "[runtime][unit][library][tag]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto const trackId = testLib.addTrack("Test Track");
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
@@ -69,11 +69,11 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryWriter - editTags ignores tag additions for missing tracks", "[runtime][unit][library][tag]")
   {
-    auto testLib = TestMusicLibrary{};
-    [[maybe_unused]] auto const trackId = testLib.addTrack("Test Track");
+    auto libraryFixture = MusicLibraryFixture{};
+    [[maybe_unused]] auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
@@ -88,11 +88,11 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - editTags removes an existing tag and publishes a mutation",
             "[runtime][unit][library][tag]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto const trackId = testLib.addTrack("Test Track");
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
@@ -111,11 +111,11 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryWriter - editTags ignores missing tags", "[runtime][unit][library][tag]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto const trackId = testLib.addTrack("Test Track");
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
@@ -129,11 +129,11 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryWriter - editTags ignores tag removals for missing tracks", "[runtime][unit][library][tag]")
   {
-    auto testLib = TestMusicLibrary{};
-    [[maybe_unused]] auto const trackId = testLib.addTrack("Test Track");
+    auto libraryFixture = MusicLibraryFixture{};
+    [[maybe_unused]] auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });

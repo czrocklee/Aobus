@@ -22,11 +22,11 @@ namespace ao::rt::test
 {
   namespace
   {
-    void addCompletionTrack(TestMusicLibrary& testLib,
+    void addCompletionTrack(MusicLibraryFixture& libraryFixture,
                             std::span<std::string const> tags,
                             std::span<std::pair<std::string, std::string> const> custom)
     {
-      library::test::addTrack(testLib.library(),
+      library::test::addTrack(libraryFixture.library(),
                               library::test::TrackSpec{.title = "Completion Track",
                                                        .artist = "Artist",
                                                        .album = "Album",
@@ -39,12 +39,12 @@ namespace ao::rt::test
                                                        .duration = std::chrono::seconds{120}});
     }
 
-    QueryExpressionCompleter makeCompleter(TestMusicLibrary& testLib,
+    QueryExpressionCompleter makeCompleter(MusicLibraryFixture& libraryFixture,
                                            std::unique_ptr<LibraryChanges>& changesPtr,
                                            std::unique_ptr<CompletionService>& servicePtr)
     {
       changesPtr = std::make_unique<LibraryChanges>();
-      servicePtr = std::make_unique<CompletionService>(testLib.library(), *changesPtr);
+      servicePtr = std::make_unique<CompletionService>(libraryFixture.library(), *changesPtr);
       return QueryExpressionCompleter{*servicePtr};
     }
 
@@ -64,10 +64,10 @@ namespace ao::rt::test
   TEST_CASE("QueryExpressionCompleter - completes field aliases from query prefixes",
             "[runtime][unit][completion-query][field]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
+    auto completer = makeCompleter(libraryFixture, changesPtr, servicePtr);
 
     auto optAlbum = completer.complete("$al", 3);
     REQUIRE(optAlbum);
@@ -88,10 +88,10 @@ namespace ao::rt::test
   TEST_CASE("QueryExpressionCompleter - completes operators allowed after fields",
             "[runtime][unit][completion-query][operator]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
+    auto completer = makeCompleter(libraryFixture, changesPtr, servicePtr);
 
     auto optArtist = completer.complete("$artist ", 8);
     REQUIRE(optArtist);
@@ -109,10 +109,10 @@ namespace ao::rt::test
   TEST_CASE("QueryExpressionCompleter - completes logical operators after values",
             "[runtime][unit][completion-query][operator]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
+    auto completer = makeCompleter(libraryFixture, changesPtr, servicePtr);
 
     auto optAfterValue = completer.complete(R"($artist = "Miles" )", 18);
     REQUIRE(optAfterValue);
@@ -142,14 +142,14 @@ namespace ao::rt::test
   TEST_CASE("QueryExpressionCompleter - completes metadata values for value positions",
             "[runtime][unit][completion-query][value]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto tags = std::vector<std::string>{};
     auto custom = std::vector<std::pair<std::string, std::string>>{};
-    addCompletionTrack(testLib, tags, custom);
+    addCompletionTrack(libraryFixture, tags, custom);
 
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
+    auto completer = makeCompleter(libraryFixture, changesPtr, servicePtr);
 
     auto optArtist = completer.complete("$artist = Ar", 12);
     REQUIRE(optArtist);
@@ -176,14 +176,14 @@ namespace ao::rt::test
   TEST_CASE("QueryExpressionCompleter - completes tag and custom-key variables",
             "[runtime][unit][completion-query][variable]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto tags = std::vector<std::string>{"90s Rock", "Rock"};
     auto custom = std::vector<std::pair<std::string, std::string>>{{"Replay Gain", "-6"}, {"Mood", "Bright"}};
-    addCompletionTrack(testLib, tags, custom);
+    addCompletionTrack(libraryFixture, tags, custom);
 
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
+    auto completer = makeCompleter(libraryFixture, changesPtr, servicePtr);
 
     auto optTag = completer.complete("#90", 3);
     REQUIRE(optTag);
@@ -203,10 +203,10 @@ namespace ao::rt::test
   TEST_CASE("QueryExpressionCompleter - respects limits and token boundaries",
             "[runtime][unit][completion-query][boundary]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
     auto servicePtr = std::unique_ptr<CompletionService>{};
-    auto completer = makeCompleter(testLib, changesPtr, servicePtr);
+    auto completer = makeCompleter(libraryFixture, changesPtr, servicePtr);
 
     auto optLimited = completer.complete("$", 1, 2);
     REQUIRE(optLimited);

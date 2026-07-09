@@ -28,7 +28,7 @@ namespace ao::query::detail
         return false;
       }
 
-      switch (operatorInfo(binary.optOperation->op).cls)
+      switch (operatorDescriptor(binary.optOperation->op).cls)
       {
         case OperatorClass::Logical:
           return isPredicateExpression(binary.operand) && isPredicateExpression(binary.optOperation->operand);
@@ -74,13 +74,14 @@ namespace ao::query::detail
   bool isPredicateExpression(Expression const& expr)
   {
     return std::visit(
-      utility::makeVisitor(
-        [](VariableExpression const& var) { return var.type == VariableType::Tag; },
-        [](ConstantExpression const& constant) { return isBooleanConstant(constant); },
-        [](ListExpression const&) { return false; },
-        [](RangeExpression const&) { return false; },
-        [](std::unique_ptr<BinaryExpression> const& binary) { return binary != nullptr && isPredicateBinary(*binary); },
-        [](std::unique_ptr<UnaryExpression> const& unary) { return unary != nullptr && isPredicateUnary(*unary); }),
+      utility::makeVisitor([](VariableExpression const& var) { return var.type == VariableType::Tag; },
+                           [](ConstantExpression const& constant) { return isBooleanConstant(constant); },
+                           [](ListExpression const&) { return false; },
+                           [](RangeExpression const&) { return false; },
+                           [](std::unique_ptr<BinaryExpression> const& binaryPtr)
+                           { return binaryPtr != nullptr && isPredicateBinary(*binaryPtr); },
+                           [](std::unique_ptr<UnaryExpression> const& unaryPtr)
+                           { return unaryPtr != nullptr && isPredicateUnary(*unaryPtr); }),
       expr);
   }
 } // namespace ao::query::detail

@@ -28,16 +28,16 @@ namespace ao::gtk::layout
 
   private:
     void detach();
-    void onEnter();
-    void onLeave();
+    void handlePointerEntered();
+    void handlePointerLeft();
 
     Gtk::Widget* _target = nullptr;
     LayoutComponent* _tooltipComponent = nullptr;
 
     Gtk::Popover _popover;
     Glib::RefPtr<Gtk::EventControllerMotion> _motionControllerPtr;
-    sigc::connection _motionEnterConn;
-    sigc::connection _motionLeaveConn;
+    sigc::connection _motionPointerEnteredConn;
+    sigc::connection _motionPointerLeftConn;
     sigc::connection _hoverTimeout;
   };
 } // namespace ao::gtk::layout

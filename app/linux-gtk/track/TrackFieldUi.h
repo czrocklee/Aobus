@@ -23,7 +23,7 @@ namespace ao::gtk
   using TrackRowTextReader = std::string (*)(TrackRowObject const&, TrackRowCache const&);
   using TrackInlineEditParser = Result<TrackFieldEditValue> (*)(std::string_view);
   using TrackRowEditReader = TrackFieldEditValue (*)(TrackRowObject const&, rt::TrackField);
-  using TrackRowEditApplier = bool (*)(TrackRowObject&, TrackFieldEditValue const&, rt::TrackField);
+  using TrackRowEditWriter = bool (*)(TrackRowObject&, TrackFieldEditValue const&, rt::TrackField);
 
   struct TrackFieldUiDefinition final
   {
@@ -32,7 +32,7 @@ namespace ao::gtk
     TrackRowTextReader readRowText = nullptr;
     TrackInlineEditParser parseInlineEdit = nullptr;
     TrackRowEditReader readRowEditValue = nullptr;
-    TrackRowEditApplier applyRowEditValue = nullptr;
+    TrackRowEditWriter applyRowEditValue = nullptr;
   };
 
   bool canInlineEdit(TrackFieldUiDefinition const& def);

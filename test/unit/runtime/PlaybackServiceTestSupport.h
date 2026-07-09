@@ -160,11 +160,11 @@ namespace ao::rt::test
     // Declaration order matters: the executor must outlive the view/playback
     // services that hold references to it, and playbackService (destroyed first)
     // tears down its Player while the provider mock is still alive.
-    TestMusicLibrary testLib;
+    MusicLibraryFixture libraryFixture;
     ExecutorT executor;
     LibraryChanges changes;
-    TrackSourceCache trackSourceCache{testLib.library(), changes};
-    ViewService viewService{executor, testLib.library(), trackSourceCache};
+    TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
+    ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
     NotificationService notificationService;
 
     std::shared_ptr<audio::test::SpyBackend<>> spyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();
@@ -175,6 +175,6 @@ namespace ao::rt::test
     audio::BackendProvider::OnGraphChangedCallback onGraphChangedCb;
     audio::RenderTarget* renderTarget = nullptr;
 
-    PlaybackService playbackService{executor, viewService, testLib.library(), notificationService};
+    PlaybackService playbackService{executor, viewService, libraryFixture.library(), notificationService};
   };
 } // namespace ao::rt::test

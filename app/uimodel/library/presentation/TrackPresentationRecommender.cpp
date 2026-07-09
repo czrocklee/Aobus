@@ -31,12 +31,12 @@ namespace ao::uimodel
 
         if (std::holds_alternative<std::unique_ptr<query::BinaryExpression>>(expr))
         {
-          auto const& bin = std::get<std::unique_ptr<query::BinaryExpression>>(expr);
-          visit(bin->operand);
+          auto const& binaryPtr = std::get<std::unique_ptr<query::BinaryExpression>>(expr);
+          visit(binaryPtr->operand);
 
-          if (bin->optOperation)
+          if (binaryPtr->optOperation)
           {
-            visit(bin->optOperation->operand);
+            visit(binaryPtr->optOperation->operand);
           }
 
           return;
@@ -44,8 +44,8 @@ namespace ao::uimodel
 
         if (std::holds_alternative<std::unique_ptr<query::UnaryExpression>>(expr))
         {
-          auto const& un = std::get<std::unique_ptr<query::UnaryExpression>>(expr);
-          visit(un->operand);
+          auto const& unaryPtr = std::get<std::unique_ptr<query::UnaryExpression>>(expr);
+          visit(unaryPtr->operand);
         }
       }
 

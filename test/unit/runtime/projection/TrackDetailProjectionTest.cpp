@@ -46,9 +46,9 @@ namespace ao::rt::test
       return std::get<std::string>(*agg.optValue);
     }
 
-    struct Env final
+    struct TrackDetailProjectionFixture final
     {
-      TestMusicLibrary lib;
+      MusicLibraryFixture libraryFixture;
       MockExecutor executor;
       async::Runtime runtime;
       LibraryChanges changes;
@@ -60,16 +60,16 @@ namespace ao::rt::test
       PlaybackService playback;
       WorkspaceService workspace;
 
-      Env()
-        : lib{}
+      TrackDetailProjectionFixture()
+        : libraryFixture{}
         , runtime{executor}
         , changes{}
-        , writer{lib.library(), changes}
-        , sources{lib.library(), changes}
-        , views{executor, lib.library(), sources}
-        , config{lib.library().rootPath() / "config.json"}
-        , playback{executor, views, lib.library(), notifications}
-        , workspace{views, playback, changes, lib.library()}
+        , writer{libraryFixture.library(), changes}
+        , sources{libraryFixture.library(), changes}
+        , views{executor, libraryFixture.library(), sources}
+        , config{libraryFixture.library().rootPath() / "config.json"}
+        , playback{executor, views, libraryFixture.library(), notifications}
+        , workspace{views, playback, changes, libraryFixture.library()}
       {
       }
     };
@@ -78,10 +78,10 @@ namespace ao::rt::test
   TEST_CASE("TrackDetailProjection - refreshes selected fields after intersecting TracksMutated",
             "[runtime][unit][projection][detail]")
   {
-    auto env = Env{};
+    auto env = TrackDetailProjectionFixture{};
 
     auto const id1 =
-      env.lib.addTrack(library::test::TrackSpec{.title = "Before", .artist = "ArtistA", .album = "AlbumX"});
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Before", .artist = "ArtistA", .album = "AlbumX"});
 
     auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1});
@@ -109,10 +109,10 @@ namespace ao::rt::test
 
   TEST_CASE("TrackDetailProjection - ignores non-intersecting TracksMutated", "[runtime][unit][projection][detail]")
   {
-    auto env = Env{};
+    auto env = TrackDetailProjectionFixture{};
 
-    auto const id1 = env.lib.addTrack("Selected");
-    auto const id2 = env.lib.addTrack("Other");
+    auto const id1 = env.libraryFixture.addTrack("Selected");
+    auto const id2 = env.libraryFixture.addTrack("Other");
 
     auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1});
@@ -132,10 +132,12 @@ namespace ao::rt::test
   TEST_CASE("TrackDetailProjection - aggregates common and mixed metadata for multi-select",
             "[runtime][unit][projection][detail]")
   {
-    auto env = Env{};
+    auto env = TrackDetailProjectionFixture{};
 
-    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Song A", .artist = "Same", .album = "AlbumX"});
-    auto const id2 = env.lib.addTrack(library::test::TrackSpec{.title = "Song B", .artist = "Same", .album = "AlbumY"});
+    auto const id1 =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Song A", .artist = "Same", .album = "AlbumX"});
+    auto const id2 =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Song B", .artist = "Same", .album = "AlbumY"});
 
     auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.views.setSelection(reply.viewId, {id1, id2});
@@ -161,8 +163,8 @@ namespace ao::rt::test
   TEST_CASE("TrackDetailProjection - explicit selection target snapshots provided track ids",
             "[runtime][unit][projection][detail]")
   {
-    auto env = Env{};
-    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Song A"});
+    auto env = TrackDetailProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Song A"});
     auto const projPtr =
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
@@ -173,9 +175,9 @@ namespace ao::rt::test
   TEST_CASE("TrackDetailProjection - focused view target follows focused view selection",
             "[runtime][unit][track-detail][workspace]")
   {
-    auto env = Env{};
-    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Song A"});
-    auto const id2 = env.lib.addTrack(library::test::TrackSpec{.title = "Song B"});
+    auto env = TrackDetailProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Song A"});
+    auto const id2 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Song B"});
 
     auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.changes);
 
@@ -210,8 +212,8 @@ namespace ao::rt::test
   TEST_CASE("TrackDetailProjection - focused view target initializes from active selection",
             "[runtime][unit][track-detail][workspace]")
   {
-    auto env = Env{};
-    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Already Selected"});
+    auto env = TrackDetailProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Already Selected"});
 
     auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
     env.workspace.setFocusedView(reply.viewId);
@@ -228,7 +230,7 @@ namespace ao::rt::test
 
   TEST_CASE("TrackDetailProjection - missing tracks produce empty field values", "[runtime][unit][projection][detail]")
   {
-    auto env = Env{};
+    auto env = TrackDetailProjectionFixture{};
     auto const projPtr =
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{TrackId{9999}}}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
@@ -238,8 +240,8 @@ namespace ao::rt::test
 
   TEST_CASE("TrackDetailProjection - tag aggregation exposes common tag ids", "[runtime][unit][track-detail][tag]")
   {
-    auto env = Env{};
-    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "Song A"});
+    auto env = TrackDetailProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Song A"});
 
     // Add tag
     auto const targetIds = std::vector{id1};
@@ -256,10 +258,10 @@ namespace ao::rt::test
   TEST_CASE("TrackDetailProjection - custom metadata aggregation marks partial shared and mixed values",
             "[runtime][unit][projection][detail]")
   {
-    auto env = Env{};
+    auto env = TrackDetailProjectionFixture{};
 
-    auto const id1 = env.lib.addTrack("Song 1");
-    auto const id2 = env.lib.addTrack("Song 2");
+    auto const id1 = env.libraryFixture.addTrack("Song 1");
+    auto const id2 = env.libraryFixture.addTrack("Song 2");
 
     // Add custom metadata to id1
     {

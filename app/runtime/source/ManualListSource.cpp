@@ -57,7 +57,7 @@ namespace ao::rt
     TrackSource::notifyReset();
   }
 
-  void ManualListSource::onReset()
+  void ManualListSource::handleReset()
   {
     if (_source == nullptr)
     {
@@ -79,11 +79,11 @@ namespace ao::rt
     TrackSource::notifyReset();
   }
 
-  void ManualListSource::onInserted(TrackId /*id*/, std::size_t /*index*/)
+  void ManualListSource::handleInserted(TrackId /*id*/, std::size_t /*index*/)
   {
   }
 
-  void ManualListSource::onUpdated(TrackId const id, std::size_t /*index*/)
+  void ManualListSource::handleUpdated(TrackId const id, std::size_t /*index*/)
   {
     if (auto const optMyIndex = indexOf(id); optMyIndex)
     {
@@ -91,7 +91,7 @@ namespace ao::rt
     }
   }
 
-  void ManualListSource::onRemoved(TrackId const id, std::size_t /*index*/)
+  void ManualListSource::handleRemoved(TrackId const id, std::size_t /*index*/)
   {
     if (auto const it = std::ranges::find(_trackIds, id); it != _trackIds.end())
     {
@@ -101,11 +101,11 @@ namespace ao::rt
     }
   }
 
-  void ManualListSource::onBulkInserted(std::span<TrackId const> /*ids*/)
+  void ManualListSource::handleBulkInserted(std::span<TrackId const> /*ids*/)
   {
   }
 
-  void ManualListSource::onBulkUpdated(std::span<TrackId const> const ids)
+  void ManualListSource::handleBulkUpdated(std::span<TrackId const> const ids)
   {
     auto matched = std::vector<TrackId>{};
     matched.reserve(ids.size());
@@ -124,7 +124,7 @@ namespace ao::rt
     }
   }
 
-  void ManualListSource::onBulkRemoved(std::span<TrackId const> const ids)
+  void ManualListSource::handleBulkRemoved(std::span<TrackId const> const ids)
   {
     auto removed = std::vector<TrackId>{};
     removed.reserve(ids.size());

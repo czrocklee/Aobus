@@ -154,12 +154,12 @@ namespace ao::query::test
 
     for (auto const& c : cases)
     {
-      auto binPtr = std::make_unique<BinaryExpression>();
-      binPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
-      binPtr->optOperation = BinaryExpression::Operation{
+      auto binaryPtr = std::make_unique<BinaryExpression>();
+      binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+      binaryPtr->optOperation = BinaryExpression::Operation{
         .op = c.op, .operand = VariableExpression{.type = VariableType::Metadata, .name = "b"}};
 
-      CHECK(serialize(Expression{std::move(binPtr)}).find(c.expected) != std::string::npos);
+      CHECK(serialize(Expression{std::move(binaryPtr)}).find(c.expected) != std::string::npos);
     }
   }
 
@@ -184,31 +184,31 @@ namespace ao::query::test
 
   TEST_CASE("Serializer - omits parentheses around root binary expressions", "[query][unit][serializer]")
   {
-    auto binPtr = std::make_unique<BinaryExpression>();
-    binPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
-    binPtr->optOperation = BinaryExpression::Operation{.op = Operator::Equal, .operand = std::int64_t{1}};
-    CHECK(serialize(Expression{std::move(binPtr)}) == "$a = 1");
+    auto binaryPtr = std::make_unique<BinaryExpression>();
+    binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    binaryPtr->optOperation = BinaryExpression::Operation{.op = Operator::Equal, .operand = std::int64_t{1}};
+    CHECK(serialize(Expression{std::move(binaryPtr)}) == "$a = 1");
   }
 
   TEST_CASE("Serializer - serializes in lists", "[query][unit][serializer]")
   {
-    auto binPtr = std::make_unique<BinaryExpression>();
-    binPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "artist"};
-    binPtr->optOperation = BinaryExpression::Operation{
+    auto binaryPtr = std::make_unique<BinaryExpression>();
+    binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "artist"};
+    binaryPtr->optOperation = BinaryExpression::Operation{
       .op = Operator::In, .operand = ListExpression{.values = {std::string{"Bach"}, std::string{"Mozart"}}}};
 
-    CHECK(serialize(Expression{std::move(binPtr)}) == R"($artist in ["Bach", "Mozart"])");
+    CHECK(serialize(Expression{std::move(binaryPtr)}) == R"($artist in ["Bach", "Mozart"])");
   }
 
   TEST_CASE("Serializer - serializes in ranges", "[query][unit][serializer]")
   {
-    auto binPtr = std::make_unique<BinaryExpression>();
-    binPtr->operand = VariableExpression{.type = VariableType::Property, .name = "duration"};
-    binPtr->optOperation = BinaryExpression::Operation{
+    auto binaryPtr = std::make_unique<BinaryExpression>();
+    binaryPtr->operand = VariableExpression{.type = VariableType::Property, .name = "duration"};
+    binaryPtr->optOperation = BinaryExpression::Operation{
       .op = Operator::In,
       .operand = RangeExpression{.lower = UnitConstantExpression{"2m30s"}, .upper = UnitConstantExpression{"5m"}}};
 
-    CHECK(serialize(Expression{std::move(binPtr)}) == "@duration in 2m30s..5m");
+    CHECK(serialize(Expression{std::move(binaryPtr)}) == "@duration in 2m30s..5m");
   }
 
   TEST_CASE("Serializer - preserves canonical shape across parse serialize parse", "[query][unit][serializer]")
@@ -253,18 +253,18 @@ namespace ao::query::test
 
     SECTION("Null Binary Left Operand")
     {
-      auto binPtr = std::make_unique<BinaryExpression>();
-      // binPtr->operand is default-constructed ($)
-      binPtr->optOperation = BinaryExpression::Operation{.op = Operator::And, .operand = ConstantExpression{true}};
-      CHECK(serialize(Expression{std::move(binPtr)}) == "$ and true");
+      auto binaryPtr = std::make_unique<BinaryExpression>();
+      // binaryPtr->operand is default-constructed ($)
+      binaryPtr->optOperation = BinaryExpression::Operation{.op = Operator::And, .operand = ConstantExpression{true}};
+      CHECK(serialize(Expression{std::move(binaryPtr)}) == "$ and true");
     }
 
     SECTION("Null Binary Right Operation")
     {
-      auto binPtr = std::make_unique<BinaryExpression>();
-      binPtr->operand = ConstantExpression{true};
-      // binPtr->optOperation is nullopt
-      CHECK(serialize(Expression{std::move(binPtr)}) == "true");
+      auto binaryPtr = std::make_unique<BinaryExpression>();
+      binaryPtr->operand = ConstantExpression{true};
+      // binaryPtr->optOperation is nullopt
+      CHECK(serialize(Expression{std::move(binaryPtr)}) == "true");
     }
   }
 } // namespace ao::query::test

@@ -68,10 +68,10 @@ namespace ao::gtk
     }
 
     _tickId = _label.add_tick_callback(
-      [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
+      [this](Glib::RefPtr<Gdk::FrameClock> const& clockPtr) -> bool
       {
         auto const displayElapsed =
-          _interpolator.interpolateElapsed(uimodel::FrameClock::fromMicros(clock->get_frame_time()));
+          _interpolator.interpolateElapsed(uimodel::FrameClock::fromMicros(clockPtr->get_frame_time()));
         updateLabel(displayElapsed, _interpolator.lastDuration());
 
         return true;

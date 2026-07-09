@@ -45,11 +45,9 @@ namespace ao::gtk
                        int& natural,
                        int& minimumBaseline,
                        int& naturalBaseline) const override;
-    void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override;
+    void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshotPtr) override;
 
   private:
-    friend class VolumeBarTestPeer;
-
     void updateTooltip();
     void handleAbsoluteClick(double xPosition, double yPosition);
     void handleDragUpdate(double xPosition, double yPosition);

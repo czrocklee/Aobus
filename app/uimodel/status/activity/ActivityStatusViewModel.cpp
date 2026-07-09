@@ -55,13 +55,13 @@ namespace ao::uimodel
       postedSub = notifications.onPosted(
         [this](rt::NotificationId const id)
         {
-          feedState.onNotificationPosted(notifications.feed(), id);
+          feedState.handleNotificationPosted(notifications.feed(), id);
           publish();
         });
       changedSub = notifications.onChanged(
         [this]
         {
-          feedState.onFeedChanged(notifications.feed());
+          feedState.handleFeedChanged(notifications.feed());
           publish();
         });
 
@@ -69,9 +69,9 @@ namespace ao::uimodel
       {
         libraryProgressSub = options.libraryChanges->onLibraryTaskProgress(
           [this](rt::LibraryChanges::LibraryTaskProgressUpdated const& event)
-          { onLibraryTaskProgress(event.message, event.fraction); });
+          { handleLibraryTaskProgress(event.message, event.fraction); });
         libraryCompletedSub = options.libraryChanges->onLibraryTaskCompleted([this](std::size_t const count)
-                                                                             { onLibraryTaskCompleted(count); });
+                                                                             { handleLibraryTaskCompleted(count); });
       }
 
       syncAutoDismissDeadline();
@@ -110,7 +110,7 @@ namespace ao::uimodel
     void expireTransient()
     {
       optAutoDismissDeadline.reset();
-      feedState.onTransientExpired(notifications.feed());
+      feedState.handleTransientExpired(notifications.feed());
       publish();
     }
 
@@ -126,15 +126,15 @@ namespace ao::uimodel
       publish();
     }
 
-    void onLibraryTaskProgress(std::string message, double const fraction)
+    void handleLibraryTaskProgress(std::string message, double const fraction)
     {
-      feedState.onLibraryTaskProgress(std::move(message), fraction);
+      feedState.handleLibraryTaskProgress(std::move(message), fraction);
       publish();
     }
 
-    void onLibraryTaskCompleted(std::size_t const count)
+    void handleLibraryTaskCompleted(std::size_t const count)
     {
-      feedState.onLibraryTaskCompleted(count, notifications.feed());
+      feedState.handleLibraryTaskCompleted(count, notifications.feed());
       publish();
     }
   };
@@ -184,13 +184,13 @@ namespace ao::uimodel
     _implPtr->dismissDetailNotificationFromActivity(id);
   }
 
-  void ActivityStatusViewModel::onLibraryTaskProgress(std::string message, double const fraction)
+  void ActivityStatusViewModel::handleLibraryTaskProgress(std::string message, double const fraction)
   {
-    _implPtr->onLibraryTaskProgress(std::move(message), fraction);
+    _implPtr->handleLibraryTaskProgress(std::move(message), fraction);
   }
 
-  void ActivityStatusViewModel::onLibraryTaskCompleted(std::size_t const count)
+  void ActivityStatusViewModel::handleLibraryTaskCompleted(std::size_t const count)
   {
-    _implPtr->onLibraryTaskCompleted(count);
+    _implPtr->handleLibraryTaskCompleted(count);
   }
 } // namespace ao::uimodel

@@ -74,7 +74,7 @@ namespace ao::gtk
     void loadData();
     void loadFirstTrack(rt::LibraryReader const& scope, TrackId trackId);
     void loadSubsequentTrack(rt::LibraryReader const& scope, TrackId trackId);
-    void onSave();
+    void handleSaveClicked();
     void updateSaveEnabled();
     void updateEditorValue(rt::TrackField field, Gtk::Widget* widget);
 

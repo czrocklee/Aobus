@@ -18,7 +18,7 @@ namespace ao::rt::test
 {
   TEST_CASE("ViewService - listViews starts empty", "[runtime][unit][view][lifecycle]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     CHECK(service.listViews().empty());
@@ -26,7 +26,7 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - createView assigns ids and lifecycle state", "[runtime][unit][view][lifecycle]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     SECTION("creating a track list view returns ViewId")
@@ -63,7 +63,7 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - destroyView removes state and publishes destruction", "[runtime][unit][view][lifecycle]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     auto const result = service.createView({}, true);
@@ -112,7 +112,7 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - trackListState returns created view snapshot", "[runtime][unit][view][lifecycle]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     auto const result = service.createView({.filterExpression = "$year > 2000"}, true);
@@ -139,7 +139,7 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - trackListProjection returns the owned projection", "[runtime][unit][view][lifecycle]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     auto const result = service.createView({}, true);
@@ -151,7 +151,7 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - projection subscription replays initial reset", "[runtime][unit][view][lifecycle]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     auto const result = service.createView({}, true);

@@ -91,6 +91,8 @@ If the task is explicitly about coverage percentage or missing lines, use `cover
 - The same fixture setup is copied into many cases.
 - The expected value is computed by duplicating the production algorithm.
 - The test relies on incidental widget hierarchy or display text when a stable accessor would be better.
+- The test violates the testability seam order in
+  `fixtures-and-helpers.md`.
 - Commented-out assertions or stale TODO comments remain in the test.
 - A new case is appended to a giant test file even though it has a clear separate contract area.
 
@@ -106,5 +108,6 @@ Before finishing, confirm:
 - Async/GTK behavior is deterministic.
 - Fixtures reduce noise without hiding the behavior under test.
 - GTK tests do not duplicate policy better tested in `uimodel`.
+- Testability seams follow `fixtures-and-helpers.md`.
 - New files are listed in `test/CMakeLists.txt`.
 - Focused validation has been run when practical, or skipped with an honest reason.

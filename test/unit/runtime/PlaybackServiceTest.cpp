@@ -52,7 +52,7 @@ namespace ao::rt::test
     spec.album = "Queue Album";
     spec.uri = audio::test::requireAudioFixture("basic_metadata.flac").string();
     spec.duration = std::chrono::minutes{3};
-    auto const trackId = fixture.testLib.addTrack(spec);
+    auto const trackId = fixture.libraryFixture.addTrack(spec);
 
     CHECK(fixture.playbackService.playTrack(trackId, ListId{7}));
     CHECK(fixture.playbackService.state().nowPlaying == NowPlayingInfo{.trackId = trackId,
@@ -72,8 +72,8 @@ namespace ao::rt::test
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
 
-    auto const currentTrack = fixture.testLib.addTrack({.title = "Current Track", .uri = fixturePath});
-    auto const nextTrack = fixture.testLib.addTrack({.title = "Prepared Track", .uri = fixturePath});
+    auto const currentTrack = fixture.libraryFixture.addTrack({.title = "Current Track", .uri = fixturePath});
+    auto const nextTrack = fixture.libraryFixture.addTrack({.title = "Prepared Track", .uri = fixturePath});
 
     REQUIRE(fixture.playbackService.playTrack(currentTrack, ListId{7}));
     REQUIRE(fixture.playbackService.prepareNext(nextTrack, ListId{7}));
@@ -92,7 +92,7 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.testLib.addTrack({.title = "Terminal Track", .uri = fixturePath});
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Terminal Track", .uri = fixturePath});
 
     std::size_t idleCount = 0;
     auto idleSub = fixture.playbackService.onIdle([&] { ++idleCount; });
@@ -109,7 +109,7 @@ namespace ao::rt::test
     }
 
     REQUIRE(isDrained);
-    fixture.renderTarget->onDrainComplete();
+    fixture.renderTarget->handleDrainComplete();
 
     for (std::int32_t i = 0; i < 100000 && idleCount == 0; ++i)
     {
@@ -129,8 +129,8 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const currentTrack = fixture.testLib.addTrack({.title = "Current Track", .uri = fixturePath});
-    auto const nextTrack = fixture.testLib.addTrack({.title = "Prepared Track", .uri = fixturePath});
+    auto const currentTrack = fixture.libraryFixture.addTrack({.title = "Current Track", .uri = fixturePath});
+    auto const nextTrack = fixture.libraryFixture.addTrack({.title = "Prepared Track", .uri = fixturePath});
 
     auto nowPlaying = std::vector<PlaybackService::NowPlayingChanged>{};
     std::size_t idleCount = 0;
@@ -178,8 +178,8 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const currentTrack = fixture.testLib.addTrack({.title = "Current Track", .uri = fixturePath});
-    auto const nextTrack = fixture.testLib.addTrack({.title = "Prepared Track", .uri = fixturePath});
+    auto const currentTrack = fixture.libraryFixture.addTrack({.title = "Current Track", .uri = fixturePath});
+    auto const nextTrack = fixture.libraryFixture.addTrack({.title = "Prepared Track", .uri = fixturePath});
 
     auto nowPlaying = std::vector<PlaybackService::NowPlayingChanged>{};
     auto nowPlayingSub = fixture.playbackService.onNowPlayingChanged([&](PlaybackService::NowPlayingChanged const& ev)
@@ -216,7 +216,7 @@ namespace ao::rt::test
     fixture.onDevicesChangedCb(fixture.status.devices);
     fixture.executor.drain();
 
-    auto const trackId = fixture.testLib.addTrack({.title = "Broken Track", .uri = "broken.txt"});
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
 
     auto failures = std::vector<PlaybackFailure>{};
     auto sub =
@@ -242,7 +242,7 @@ namespace ao::rt::test
     fixture.onDevicesChangedCb(fixture.status.devices);
     fixture.executor.drain();
 
-    auto const trackId = fixture.testLib.addTrack({.title = "Broken Track", .uri = "broken.txt"});
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
 
     REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
     REQUIRE(fixture.executor.drainUntil([&] { return !fixture.notificationService.feed().entries.empty(); }));
@@ -283,8 +283,8 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const brokenTrack = fixture.testLib.addTrack({.title = "Stale Broken Track", .uri = "broken.txt"});
-    auto const replacementTrack = fixture.testLib.addTrack({.title = "Replacement Track", .uri = flacPath});
+    auto const brokenTrack = fixture.libraryFixture.addTrack({.title = "Stale Broken Track", .uri = "broken.txt"});
+    auto const replacementTrack = fixture.libraryFixture.addTrack({.title = "Replacement Track", .uri = flacPath});
 
     auto failures = std::vector<PlaybackFailure>{};
     auto sub =
@@ -306,8 +306,8 @@ namespace ao::rt::test
     auto fixture = PlaybackFixture<MockExecutor>{};
 
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const track1 = fixture.testLib.addTrack({.title = "Track 1", .uri = flacPath});
-    auto const track2 = fixture.testLib.addTrack({.title = "Track 2", .uri = flacPath});
+    auto const track1 = fixture.libraryFixture.addTrack({.title = "Track 1", .uri = flacPath});
+    auto const track2 = fixture.libraryFixture.addTrack({.title = "Track 2", .uri = flacPath});
 
     CHECK_FALSE(fixture.playbackService.playTrack(track1, ListId{7}));
     CHECK_FALSE(fixture.playbackService.playTrack(track2, ListId{7}));
@@ -326,7 +326,7 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.testLib.addTrack({.title = "Playing Track", .uri = fixturePath});
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Playing Track", .uri = fixturePath});
 
     auto failures = std::vector<PlaybackFailure>{};
     auto sub =
@@ -335,7 +335,7 @@ namespace ao::rt::test
     REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
     REQUIRE(fixture.renderTarget != nullptr);
 
-    fixture.renderTarget->onBackendError("device lost");
+    fixture.renderTarget->handleBackendError("device lost");
     REQUIRE(fixture.executor.drainUntil([&] { return !failures.empty(); }));
 
     REQUIRE(failures.size() == 1);

@@ -34,10 +34,10 @@ namespace ao::rt
   class Log final
   {
   public:
-    // Logging threads must be stopped before shutdown; init/shutdown do not synchronize with log calls.
-    static void init(LogLevel level = LogLevel::Info,
-                     std::filesystem::path logDir = {},
-                     LogConsoleMode consoleMode = LogConsoleMode::Enabled);
+    // Logging threads must be stopped before shutdown; initialize/shutdown do not synchronize with log calls.
+    static void initialize(LogLevel level = LogLevel::Info,
+                           std::filesystem::path logDir = {},
+                           LogConsoleMode consoleMode = LogConsoleMode::Enabled);
     static void shutdown();
 
     static bool isInitialized();
@@ -65,10 +65,10 @@ namespace ao::rt
 #define AO_LOG_CALL(loggerExpr, level, loc, ...)                                                                       \
   do /* NOLINT(cppcoreguidelines-avoid-do-while) */                                                                    \
   {                                                                                                                    \
-    auto const& logger = (loggerExpr);                                                                                 \
-    if (logger != nullptr && logger->should_log(level))                                                                \
+    auto const& loggerPtr = (loggerExpr);                                                                              \
+    if (loggerPtr != nullptr && loggerPtr->should_log(level))                                                          \
     {                                                                                                                  \
-      logger->log(ao::rt::toSpdlog(loc), level, __VA_ARGS__);                                                          \
+      loggerPtr->log(ao::rt::toSpdlog(loc), level, __VA_ARGS__);                                                       \
     }                                                                                                                  \
   }                                                                                                                    \
   while (false)

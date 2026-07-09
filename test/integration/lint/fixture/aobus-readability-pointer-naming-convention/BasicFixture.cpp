@@ -87,12 +87,37 @@ void testFunctionInvalidParam(std::shared_ptr<MyClass> invalidParam)
 }
 
 // POSITIVE
+void testFunctionInvalidUniqueRefParam(std::unique_ptr<MyClass>& invalidUniqueRefParam)
+{
+}
+
+// POSITIVE
+void testFunctionInvalidSharedConstRefParam(std::shared_ptr<MyClass> const& invalidSharedConstRefParam)
+{
+}
+
+// NEGATIVE
+void testFunctionValidManagedRefParam(std::unique_ptr<MyClass>& validManagedRefParamPtr)
+{
+}
+
+// POSITIVE
 void testFunctionRawPtrParam(MyClass* pPtr)
+{
+}
+
+// POSITIVE
+void testFunctionRawPtrRefParam(MyClass*& rawRefPtr)
 {
 }
 
 // NEGATIVE
 void testFunctionRawParam(MyClass* p)
+{
+}
+
+// NEGATIVE
+void testFunctionRawRefParam(MyClass*& rawRef)
 {
 }
 
@@ -137,6 +162,12 @@ void testFunctionEmptyParam(std::shared_ptr<MyClass>)
 {
   // NEGATIVE
   auto myLambda = [](std::shared_ptr<MyClass>) {};
+
+  // POSITIVE
+  auto myNamedLambda = [](std::shared_ptr<MyClass> const& namedParam) {};
+
+  // NEGATIVE
+  auto myNamedValidLambda = [](std::shared_ptr<MyClass> const& namedParamPtr) {};
 
   // NEGATIVE
   auto myAutoLambda = [](auto, auto, auto) {};

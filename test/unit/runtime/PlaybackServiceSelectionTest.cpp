@@ -75,7 +75,7 @@ namespace ao::rt::test
     fixture.onDevicesChangedCb(emptyStatus.devices);
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.testLib.addTrack({.title = "A Track", .uri = fixturePath});
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "A Track", .uri = fixturePath});
     auto const result = fixture.viewService.createView({.listId = kInvalidListId}, true);
     fixture.viewService.setSelection(result.viewId, {trackId});
 
@@ -90,9 +90,17 @@ namespace ao::rt::test
 
     if (fixture.renderTarget != nullptr)
     {
-      fixture.renderTarget->onRouteReady("mock_anchor");
-      fixture.renderTarget->onDrainComplete();
-      fixture.renderTarget->onPropertyChanged(audio::PropertyId::Volume);
+      fixture.renderTarget->handleRouteReady("mock_anchor");
+      fixture.renderTarget->handleDrainComplete();
+      fixture.renderTarget->handlePropertyChanged(audio::PropertySnapshot{
+        .id = audio::PropertyId::Volume,
+        .optValue = audio::PropertyValue{1.0F},
+        .info = audio::PropertyInfo{.canRead = true,
+                                    .canWrite = true,
+                                    .isAvailable = true,
+                                    .emitsChangeNotifications = false,
+                                    .isHardwareAssisted = true},
+      });
     }
   }
 

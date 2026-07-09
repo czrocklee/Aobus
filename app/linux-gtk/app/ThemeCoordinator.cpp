@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 #include "app/ThemeCoordinator.h"
 
-#include "app/AppConfig.h"
+#include "app/AppConfigStore.h"
 #include "app/ThemePreset.h"
 #include <ao/rt/AppPrefsState.h>
 
@@ -27,7 +27,7 @@ namespace ao::gtk
 
   namespace
   {
-    void onRegisteredWindowFinalized(void* const data, GObject* /*whereTheObjectWas*/)
+    void handleRegisteredWindowFinalized(void* const data, GObject* /*whereTheObjectWas*/)
     {
       auto* const registration = static_cast<ThemeWindowRegistration*>(data);
 
@@ -47,7 +47,7 @@ namespace ao::gtk
     {
       if (registration.weakRefActive && registration.window != nullptr)
       {
-        ::g_object_weak_unref(gObjectFor(*registration.window), onRegisteredWindowFinalized, &registration);
+        ::g_object_weak_unref(gObjectFor(*registration.window), handleRegisteredWindowFinalized, &registration);
       }
 
       registration.weakRefActive = false;
@@ -98,19 +98,19 @@ namespace ao::gtk
     }
   }
 
-  void ThemeCoordinator::load(AppConfig const& config)
+  void ThemeCoordinator::load(AppConfigStore const& configStore)
   {
     auto prefs = rt::AppPrefsState{};
-    config.loadAppPrefs(prefs);
+    configStore.loadAppPrefs(prefs);
     _activePreset = rt::themePresetFromString(prefs.lastThemePreset);
   }
 
-  void ThemeCoordinator::save(AppConfig& config) const
+  void ThemeCoordinator::save(AppConfigStore& configStore) const
   {
     auto prefs = rt::AppPrefsState{};
-    config.loadAppPrefs(prefs);
+    configStore.loadAppPrefs(prefs);
     prefs.lastThemePreset = std::string{rt::themePresetToString(_activePreset)};
-    config.saveAppPrefs(prefs);
+    configStore.saveAppPrefs(prefs);
   }
 
   void ThemeCoordinator::setTheme(rt::ThemePresetId preset)
@@ -152,7 +152,7 @@ namespace ao::gtk
     auto registrationPtr = std::make_shared<ThemeWindowRegistration>();
     registrationPtr->coordinator = this;
     registrationPtr->window = &window;
-    ::g_object_weak_ref(gObjectFor(window), onRegisteredWindowFinalized, registrationPtr.get());
+    ::g_object_weak_ref(gObjectFor(window), handleRegisteredWindowFinalized, registrationPtr.get());
     registrationPtr->weakRefActive = true;
 
     _registeredWindows.push_back(registrationPtr);

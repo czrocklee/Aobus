@@ -62,10 +62,10 @@ namespace ao::gtk
   void ResourceImageController::bindToDetailProjection(std::unique_ptr<rt::TrackDetailProjection> projectionPtr)
   {
     _detailProjectionPtr = std::move(projectionPtr);
-    _detailSub = _detailProjectionPtr->subscribe(std::bind_front(&ResourceImageController::onDetailSnapshot, this));
+    _detailSub = _detailProjectionPtr->subscribe(std::bind_front(&ResourceImageController::handleDetailSnapshot, this));
   }
 
-  void ResourceImageController::onDetailSnapshot(rt::TrackDetailSnapshot const& snap)
+  void ResourceImageController::handleDetailSnapshot(rt::TrackDetailSnapshot const& snap)
   {
     if (snap.selectionKind == rt::SelectionKind::None || snap.trackIds.empty())
     {

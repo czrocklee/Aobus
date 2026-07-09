@@ -62,7 +62,7 @@ namespace ao::audio::test
      * relative to their source bit-depth.
      */
     template<typename TSource, typename TTarget>
-    void verifyBitPerfectShift(std::span<TSource const> source, std::span<TTarget const> target, std::uint8_t shift)
+    void checkBitPerfectShift(std::span<TSource const> source, std::span<TTarget const> target, std::uint8_t shift)
     {
       REQUIRE(source.size() == target.size());
 
@@ -162,7 +162,7 @@ namespace ao::audio::test
       }
 
       // 3. Verify shift (16 -> 32 should be 16-bit shift)
-      verifyBitPerfectShift<std::int16_t, std::int32_t>(samples16, samples32, 16);
+      checkBitPerfectShift<std::int16_t, std::int32_t>(samples16, samples32, 16);
     }
 
     SECTION("ALAC: 24-bit to 32-bit padding alignment")
@@ -192,7 +192,7 @@ namespace ao::audio::test
       }
 
       // 3. Verify shift (24 -> 32 should be 8-bit shift)
-      verifyBitPerfectShift<std::int32_t, std::int32_t>(samples24, samples32, 8);
+      checkBitPerfectShift<std::int32_t, std::int32_t>(samples24, samples32, 8);
     }
   }
 

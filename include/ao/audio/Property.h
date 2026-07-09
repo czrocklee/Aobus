@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <variant>
 
 namespace ao::audio
@@ -23,7 +24,7 @@ namespace ao::audio
   using PropertyValue = std::variant<float, bool>;
 
   /**
-   * @brief Metadata describing the capabilities and status of a property.
+   * @brief Runtime status of a backend property.
    */
   struct PropertyInfo final
   {
@@ -37,6 +38,20 @@ namespace ao::audio
     bool isHardwareAssisted = false;
 
     constexpr bool operator==(PropertyInfo const&) const noexcept = default;
+  };
+
+  /**
+   * @brief Backend-published snapshot for a runtime property change.
+   *
+   * The changed property's value is optional so a backend can still publish a
+   * capability refresh when the concrete value is unavailable. info describes
+   * the property identified by id.
+   */
+  struct PropertySnapshot final
+  {
+    PropertyId id{};
+    std::optional<PropertyValue> optValue;
+    PropertyInfo info;
   };
 
   /**

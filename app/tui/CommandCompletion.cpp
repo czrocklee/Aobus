@@ -27,7 +27,7 @@ namespace ao::tui
       return std::min(commandPrefix.size(), draft.size());
     }
 
-    bool looksLikeExpression(std::string_view const value)
+    bool isExpressionLike(std::string_view const value)
     {
       auto const first = value.find_first_not_of(" \t");
 
@@ -251,7 +251,7 @@ namespace ao::tui
           return buildResult(replaceBegin, draft.size(), std::move(items));
         }
 
-        if (looksLikeExpression(argumentPrefix))
+        if (isExpressionLike(argumentPrefix))
         {
           if (auto optResult = completeExpression(context, argumentPrefix, replaceBegin, limit); optResult)
           {
@@ -274,7 +274,7 @@ namespace ao::tui
       }
     }
 
-    if (looksLikeExpression(draft))
+    if (isExpressionLike(draft))
     {
       if (auto optResult = completeExpression(context, draft, 0, limit); optResult)
       {

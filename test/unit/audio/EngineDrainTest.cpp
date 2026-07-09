@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "CapturingBackend.h"
 #include "EngineTestSupport.h"
+#include "FakeCapturingBackend.h"
 #include "ScriptedDecoderSession.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
@@ -33,7 +33,7 @@ namespace ao::audio::test
 {
   namespace
   {
-    // A backend whose stop() synchronously delivers onDrainComplete to the
+    // A backend whose stop() synchronously delivers handleDrainComplete to the
     // render target, modeling a drain callback that is already in flight when a
     // control command stops the stream.
     class DrainOnStopBackend final : public Backend
@@ -57,7 +57,7 @@ namespace ao::audio::test
 
         if (_target != nullptr)
         {
-          _target->onDrainComplete();
+          _target->handleDrainComplete();
         }
       }
 
@@ -97,7 +97,7 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
 
     auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
@@ -126,7 +126,7 @@ namespace ao::audio::test
     std::ignore = target->renderPcm(buffer).bytesWritten; // Read all 20 bytes
     CHECK(target->renderPcm(buffer).drained);
 
-    SECTION("onDrainComplete resets to idle and fires track ended")
+    SECTION("handleDrainComplete resets to idle and fires track ended")
     {
       auto trackEndedLatch = CallbackLatch{};
       engine.setOnTrackEnded([&] { trackEndedLatch.notify(); });
@@ -136,7 +136,7 @@ namespace ao::audio::test
       CHECK(engine.status().transport == Transport::Idle);
     }
 
-    SECTION("onDrainComplete without pending drain is ignored")
+    SECTION("handleDrainComplete without pending drain is ignored")
     {
       engine.stop(); // resets everything
       trackEnded.store(false, std::memory_order_release);
@@ -144,7 +144,7 @@ namespace ao::audio::test
       CHECK_FALSE(trackEnded.load(std::memory_order_acquire));
     }
 
-    SECTION("onBackendError stops playback")
+    SECTION("handleBackendError stops playback")
     {
       auto stateChanged = CallbackLatch{};
       engine.setOnStateChanged([&] { stateChanged.notify(); });
@@ -159,7 +159,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - play ignores stale pending drain from retired session", "[audio][unit][engine-drain][window]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
@@ -225,7 +225,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - seek ignores stale pending drain and keeps session playing", "[audio][unit][engine-seek][drain]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const initialData = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
@@ -326,7 +326,7 @@ namespace ao::audio::test
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
     CHECK(target->renderPcm(out).drained);
 
-    // Seek while the drain is in flight: the backend delivers onDrainComplete
+    // Seek while the drain is in flight: the backend delivers handleDrainComplete
     // inside the stop() this seek issues, so a Drained signal for the current
     // generation lands in the ring mid-command. The post-seek script is empty,
     // so the seek lands at end of stream and takes the quiesce path.

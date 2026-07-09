@@ -54,29 +54,29 @@ namespace ao::query::test
 
     struct Canonicalizer final
     {
-      void operator()(std::unique_ptr<BinaryExpression> const& binary)
+      void operator()(std::unique_ptr<BinaryExpression> const& binaryPtr)
       {
-        if (!binary)
+        if (!binaryPtr)
         {
           return;
         }
 
-        oss << "[b{" << toString(binary->optOperation->op) << "}";
-        std::visit(*this, binary->operand);
+        oss << "[b{" << toString(binaryPtr->optOperation->op) << "}";
+        std::visit(*this, binaryPtr->operand);
         oss << ",";
-        std::visit(*this, binary->optOperation->operand);
+        std::visit(*this, binaryPtr->optOperation->operand);
         oss << "]";
       }
 
-      void operator()(std::unique_ptr<UnaryExpression> const& unary)
+      void operator()(std::unique_ptr<UnaryExpression> const& unaryPtr)
       {
-        if (!unary)
+        if (!unaryPtr)
         {
           return;
         }
 
-        oss << "[u{" << toString(unary->op) << "}";
-        std::visit(*this, unary->operand);
+        oss << "[u{" << toString(unaryPtr->op) << "}";
+        std::visit(*this, unaryPtr->operand);
         oss << "]";
       }
 

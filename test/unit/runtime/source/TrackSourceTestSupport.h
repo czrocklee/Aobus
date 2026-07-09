@@ -55,7 +55,7 @@ namespace ao::rt::test
       notifyReset();
     }
 
-    void onReset() { notifyReset(); }
+    void emitReset() { notifyReset(); }
 
     void batchInsert(std::span<TrackId const> ids)
     {
@@ -97,7 +97,7 @@ namespace ao::rt::test
     std::vector<TrackId> _ids;
   };
 
-  struct TrackSourceObserverSpy final : public TrackSourceObserver
+  struct SpyTrackSourceObserver final : public TrackSourceObserver
   {
     enum class EventKind : std::uint8_t
     {
@@ -118,34 +118,34 @@ namespace ao::rt::test
       std::vector<TrackId> batchIds{};
     };
 
-    void onReset() override { events.push_back({.kind = EventKind::Reset}); }
+    void handleReset() override { events.push_back({.kind = EventKind::Reset}); }
 
-    void onInserted(TrackId id, std::size_t index) override
+    void handleInserted(TrackId id, std::size_t index) override
     {
       events.push_back({.kind = EventKind::Inserted, .id = id, .index = index});
     }
 
-    void onUpdated(TrackId id, std::size_t index) override
+    void handleUpdated(TrackId id, std::size_t index) override
     {
       events.push_back({.kind = EventKind::Updated, .id = id, .index = index});
     }
 
-    void onRemoved(TrackId id, std::size_t index) override
+    void handleRemoved(TrackId id, std::size_t index) override
     {
       events.push_back({.kind = EventKind::Removed, .id = id, .index = index});
     }
 
-    void onBulkInserted(std::span<TrackId const> ids) override
+    void handleBulkInserted(std::span<TrackId const> ids) override
     {
       events.push_back({.kind = EventKind::BatchInserted, .batchIds = {ids.begin(), ids.end()}});
     }
 
-    void onBulkUpdated(std::span<TrackId const> ids) override
+    void handleBulkUpdated(std::span<TrackId const> ids) override
     {
       events.push_back({.kind = EventKind::BatchUpdated, .batchIds = {ids.begin(), ids.end()}});
     }
 
-    void onBulkRemoved(std::span<TrackId const> ids) override
+    void handleBulkRemoved(std::span<TrackId const> ids) override
     {
       events.push_back({.kind = EventKind::BatchRemoved, .batchIds = {ids.begin(), ids.end()}});
     }

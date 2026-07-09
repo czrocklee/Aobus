@@ -28,26 +28,26 @@ namespace ao::gtk
     }
   }
 
-  void LibraryTrackCountLabel::onReset()
+  void LibraryTrackCountLabel::handleReset()
   {
     updateCount();
   }
 
-  void LibraryTrackCountLabel::onInserted(TrackId /*id*/, std::size_t /*index*/)
+  void LibraryTrackCountLabel::handleInserted(TrackId /*id*/, std::size_t /*index*/)
   {
     updateCount();
   }
 
-  void LibraryTrackCountLabel::onUpdated(TrackId /*id*/, std::size_t /*index*/)
+  void LibraryTrackCountLabel::handleUpdated(TrackId /*id*/, std::size_t /*index*/)
   {
   }
 
-  void LibraryTrackCountLabel::onRemoved(TrackId /*id*/, std::size_t /*index*/)
+  void LibraryTrackCountLabel::handleRemoved(TrackId /*id*/, std::size_t /*index*/)
   {
     updateCount();
   }
 
-  void LibraryTrackCountLabel::onSourceDestroyed()
+  void LibraryTrackCountLabel::handleSourceDestroyed()
   {
     _source = nullptr;
   }

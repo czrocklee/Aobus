@@ -15,12 +15,17 @@ namespace clang::tidy::readability
 {
   void PointerNamingConventionCheck::registerMatchers(MatchFinder* finder)
   {
-    auto const managedPointerType = hasType(qualType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(
-      cxxRecordDecl(hasAnyName("::std::shared_ptr", "::std::unique_ptr", "::std::weak_ptr", "::Glib::RefPtr")))))));
+    auto const managedPointerRecord = recordType(hasDeclaration(
+      cxxRecordDecl(hasAnyName("::std::shared_ptr", "::std::unique_ptr", "::std::weak_ptr", "::Glib::RefPtr"))));
+    auto const managedPointerObjectType = qualType(hasUnqualifiedDesugaredType(managedPointerRecord));
+    auto const managedPointerType =
+      hasType(qualType(anyOf(hasUnqualifiedDesugaredType(managedPointerRecord), references(managedPointerObjectType))));
 
     finder->addMatcher(declaratorDecl(managedPointerType).bind("managed"), this);
 
-    auto const rawPointerType = hasType(qualType(hasUnqualifiedDesugaredType(pointerType())));
+    auto const rawPointerObjectType = qualType(hasUnqualifiedDesugaredType(pointerType()));
+    auto const rawPointerType =
+      hasType(qualType(anyOf(hasUnqualifiedDesugaredType(pointerType()), references(rawPointerObjectType))));
     finder->addMatcher(declaratorDecl(rawPointerType).bind("raw"), this);
   }
 

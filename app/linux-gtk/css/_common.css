@@ -492,7 +492,7 @@ button.ao-quick-filter-action:disabled {
   margin-top: 6px;
 }
 
-/* OutputDeviceSelector */
+/* OutputDevicePopover */
 .ao-output-device-row {
   padding: 6px 16px;
   transition: background 150ms ease;
@@ -791,7 +791,7 @@ columnview row.ao-missing-row label {
   font-style: italic;
 }
 
-/* SeekControl */
+/* SeekControlWidget */
 .ao-seekbar {
   padding: 0;
 }

@@ -272,7 +272,7 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - writes classical block for standalone new classical fields",
             "[library][unit][track-builder][serialization]")
   {
-    auto expectSingleClassicalBlock = [](auto configure, auto check)
+    auto checkSingleClassicalBlock = [](auto configure, auto check)
     {
       auto context = TrackSerializationContext{};
       auto builder = TrackBuilder::makeEmpty();
@@ -291,23 +291,23 @@ namespace ao::library::test
 
     SECTION("conductor")
     {
-      expectSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().conductor("Conductor"); },
-                                 [](TrackView const& view, DictionaryStore& dictionary)
-                                 { CHECK(view.classical().conductorId() == dictionary.lookupId("Conductor")); });
+      checkSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().conductor("Conductor"); },
+                                [](TrackView const& view, DictionaryStore& dictionary)
+                                { CHECK(view.classical().conductorId() == dictionary.lookupId("Conductor")); });
     }
 
     SECTION("ensemble")
     {
-      expectSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().ensemble("Ensemble"); },
-                                 [](TrackView const& view, DictionaryStore& dictionary)
-                                 { CHECK(view.classical().ensembleId() == dictionary.lookupId("Ensemble")); });
+      checkSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().ensemble("Ensemble"); },
+                                [](TrackView const& view, DictionaryStore& dictionary)
+                                { CHECK(view.classical().ensembleId() == dictionary.lookupId("Ensemble")); });
     }
 
     SECTION("soloist")
     {
-      expectSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().soloist("Soloist"); },
-                                 [](TrackView const& view, DictionaryStore& dictionary)
-                                 { CHECK(view.classical().soloistId() == dictionary.lookupId("Soloist")); });
+      checkSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().soloist("Soloist"); },
+                                [](TrackView const& view, DictionaryStore& dictionary)
+                                { CHECK(view.classical().soloistId() == dictionary.lookupId("Soloist")); });
     }
   }
 

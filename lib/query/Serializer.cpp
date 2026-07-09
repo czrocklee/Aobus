@@ -91,42 +91,42 @@ namespace ao::query
     {
       Serializer() = default;
 
-      void operator()(std::unique_ptr<BinaryExpression> const& binary)
+      void operator()(std::unique_ptr<BinaryExpression> const& binaryPtr)
       {
-        if (!binary)
+        if (!binaryPtr)
         {
           return;
         }
 
-        auto guard = ParenthesisGuard{oss, (counter++ > 0) && binary->optOperation};
-        std::visit(*this, binary->operand);
+        auto guard = ParenthesisGuard{oss, (counter++ > 0) && binaryPtr->optOperation};
+        std::visit(*this, binaryPtr->operand);
 
-        if (binary->optOperation)
+        if (binaryPtr->optOperation)
         {
-          serializeBinary(binary->optOperation->op, binary->optOperation->operand);
+          serializeBinary(binaryPtr->optOperation->op, binaryPtr->optOperation->operand);
         }
       }
 
-      void operator()(std::unique_ptr<UnaryExpression> const& unary)
+      void operator()(std::unique_ptr<UnaryExpression> const& unaryPtr)
       {
-        if (!unary)
+        if (!unaryPtr)
         {
           return;
         }
 
-        if (unary->op == Operator::Exists)
+        if (unaryPtr->op == Operator::Exists)
         {
-          auto const needsParens = std::get_if<VariableExpression>(&unary->operand) == nullptr;
+          auto const needsParens = std::get_if<VariableExpression>(&unaryPtr->operand) == nullptr;
           {
             auto guard = ParenthesisGuard{oss, needsParens};
-            std::visit(*this, unary->operand);
+            std::visit(*this, unaryPtr->operand);
           }
           std::print(oss, "?");
           return;
         }
 
         std::print(oss, "not ");
-        std::visit(*this, unary->operand);
+        std::visit(*this, unaryPtr->operand);
       }
 
       void operator()(VariableExpression const& variable)
@@ -175,7 +175,7 @@ namespace ao::query
       {
         // serializeBinary only ever receives binary (infix) operators, so the
         // canonical token from the table reproduces the original spacing exactly.
-        std::print(oss, " {} ", detail::operatorInfo(op).spelling);
+        std::print(oss, " {} ", detail::operatorDescriptor(op).spelling);
         std::visit(*this, rhs);
       }
 

@@ -38,17 +38,17 @@ namespace ao::rt::test
 
   TEST_CASE("CompletionService - builds tag and custom-key vocabularies", "[runtime][unit][completion][vocabulary]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     library::test::addTrack(
-      testLib.library(),
+      libraryFixture.library(),
       library::test::TrackSpec{
         .title = "One", .tags = {"Rock", "Favorite"}, .customMetadata = {{"Mood", "Bright"}, {"ReplayGain", "-6"}}});
     library::test::addTrack(
-      testLib.library(),
+      libraryFixture.library(),
       library::test::TrackSpec{.title = "Two", .tags = {"Rock", "Live"}, .customMetadata = {{"Mood", "Dark"}}});
 
     auto changes = LibraryChanges{};
-    auto service = CompletionService{testLib.library(), changes};
+    auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
                                      {"Rock", 2},
@@ -64,8 +64,8 @@ namespace ao::rt::test
   TEST_CASE("CompletionService - builds metadata value vocabularies for supported fields",
             "[runtime][unit][completion-vocabulary][value]")
   {
-    auto testLib = TestMusicLibrary{};
-    library::test::addTrack(testLib.library(),
+    auto libraryFixture = MusicLibraryFixture{};
+    library::test::addTrack(libraryFixture.library(),
                             library::test::TrackSpec{.title = "One",
                                                      .artist = "Bach",
                                                      .album = "Goldberg",
@@ -77,7 +77,7 @@ namespace ao::rt::test
                                                      .work = "Variations",
                                                      .movement = "Aria",
                                                      .soloist = "Glenn Gould"});
-    library::test::addTrack(testLib.library(),
+    library::test::addTrack(libraryFixture.library(),
                             library::test::TrackSpec{.title = "Two",
                                                      .artist = "Bach",
                                                      .album = "Cello Suites",
@@ -89,7 +89,7 @@ namespace ao::rt::test
                                                      .work = "Suites",
                                                      .movement = "Prelude",
                                                      .soloist = "Yo-Yo Ma"});
-    library::test::addTrack(testLib.library(),
+    library::test::addTrack(libraryFixture.library(),
                             library::test::TrackSpec{.title = "Three",
                                                      .artist = "Glass",
                                                      .album = "Glassworks",
@@ -103,7 +103,7 @@ namespace ao::rt::test
                                                      .soloist = "Philip Glass"});
 
     auto changes = LibraryChanges{};
-    auto service = CompletionService{testLib.library(), changes};
+    auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                             {"Bach", 2},
@@ -152,17 +152,17 @@ namespace ao::rt::test
   TEST_CASE("CompletionService - invalidates tag snapshots on track mutation",
             "[runtime][unit][completion-vocabulary][cache]")
   {
-    auto testLib = TestMusicLibrary{};
-    library::test::addTrack(testLib.library(), library::test::TrackSpec{.title = "One", .tags = {"Rock"}});
+    auto libraryFixture = MusicLibraryFixture{};
+    library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = "One", .tags = {"Rock"}});
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
-    auto service = CompletionService{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"Rock", 1}});
 
     auto const trackId =
-      library::test::addTrack(testLib.library(), library::test::TrackSpec{.title = "Two", .tags = {"Jazz"}});
+      library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = "Two", .tags = {"Jazz"}});
     // addTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.
     auto const updateResult = writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two Updated"});
@@ -178,15 +178,15 @@ namespace ao::rt::test
   TEST_CASE("CompletionService - invalidates metadata value vocabularies on track mutation",
             "[runtime][unit][completion-vocabulary][cache]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     library::test::addTrack(
-      testLib.library(),
+      libraryFixture.library(),
       library::test::TrackSpec{
         .title = "One", .artist = "Bach", .album = "Goldberg", .conductor = "Carlos Kleiber", .work = "Variations"});
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
-    auto service = CompletionService{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                             {"Bach", 1},
@@ -202,7 +202,7 @@ namespace ao::rt::test
                                                              });
 
     auto const trackId = library::test::addTrack(
-      testLib.library(),
+      libraryFixture.library(),
       library::test::TrackSpec{
         .title = "Two", .artist = "Glass", .album = "Glassworks", .conductor = "Michael Riesman", .work = "Etudes"});
     // addTrack writes directly; drive a writer mutation so the change
@@ -232,15 +232,15 @@ namespace ao::rt::test
   TEST_CASE("CompletionService - lazily rebuilds dirty value vocabularies",
             "[runtime][unit][completion-vocabulary][cache]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     library::test::addTrack(
-      testLib.library(),
+      libraryFixture.library(),
       library::test::TrackSpec{
         .title = "One", .artist = "Bach", .album = "Goldberg", .genre = "Classical", .work = "Variations"});
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
-    auto service = CompletionService{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                             {"Bach", 1},
@@ -256,7 +256,7 @@ namespace ao::rt::test
                                                         });
 
     auto const trackId = library::test::addTrack(
-      testLib.library(),
+      libraryFixture.library(),
       library::test::TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"});
     // addTrack writes directly; drive a writer mutation so the change
     // notification fires and invalidates the completion cache.

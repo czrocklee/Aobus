@@ -344,7 +344,7 @@ namespace ao::rt
                                std::optional<TrackId> const& optExistingTrackId,
                                ExportMode payloadMode,
                                std::optional<library::TrackBuilder>& optBuilder,
-                               std::unique_ptr<tag::TagFile>& keepAliveTagFile,
+                               std::unique_ptr<tag::TagFile>& keepAliveTagFilePtr,
                                library::TrackStore::Writer& trackWriter);
 
     Result<> importLists(std::vector<ValidatedList> const& lists,
@@ -381,7 +381,7 @@ namespace ao::rt
     Result<> loadFileBaseline(std::string_view uriStr,
                               ExportMode payloadMode,
                               std::optional<library::TrackBuilder>& optBuilder,
-                              std::unique_ptr<tag::TagFile>& keepAliveTagFile) const;
+                              std::unique_ptr<tag::TagFile>& keepAliveTagFilePtr) const;
 
     library::MusicLibrary& ml;
   };
@@ -1161,7 +1161,7 @@ namespace ao::rt
                                                         std::optional<TrackId> const& optExistingTrackId,
                                                         ExportMode payloadMode,
                                                         std::optional<library::TrackBuilder>& optBuilder,
-                                                        std::unique_ptr<tag::TagFile>& keepAliveTagFile,
+                                                        std::unique_ptr<tag::TagFile>& keepAliveTagFilePtr,
                                                         library::TrackStore::Writer& trackWriter)
   {
     if (optExistingTrackId)
@@ -1174,7 +1174,7 @@ namespace ao::rt
 
     if (payloadMode == ExportMode::Delta || payloadMode == ExportMode::Metadata)
     {
-      if (auto result = loadFileBaseline(uriStr, payloadMode, optBuilder, keepAliveTagFile); !result)
+      if (auto result = loadFileBaseline(uriStr, payloadMode, optBuilder, keepAliveTagFilePtr); !result)
       {
         return std::unexpected{result.error()};
       }
@@ -1186,7 +1186,7 @@ namespace ao::rt
   Result<> LibraryYamlImporter::Impl::loadFileBaseline(std::string_view uriStr,
                                                        ExportMode payloadMode,
                                                        std::optional<library::TrackBuilder>& optBuilder,
-                                                       std::unique_ptr<tag::TagFile>& keepAliveTagFile) const
+                                                       std::unique_ptr<tag::TagFile>& keepAliveTagFilePtr) const
   {
     auto fileEc = std::error_code{};
     auto const fullPath = ml.rootPath() / uriStr;
@@ -1210,8 +1210,8 @@ namespace ao::rt
       return {};
     }
 
-    keepAliveTagFile = std::move(*tagFileResult);
-    auto fileBuilderResult = keepAliveTagFile->loadTrack();
+    keepAliveTagFilePtr = std::move(*tagFileResult);
+    auto fileBuilderResult = keepAliveTagFilePtr->loadTrack();
 
     if (!fileBuilderResult)
     {

@@ -155,17 +155,17 @@ namespace ao::gtk
     queueTitlePositionVariableUpdate();
   }
 
-  void TrackColumnController::ensureColumnPosition(Glib::RefPtr<Gio::ListModel> const& columns,
+  void TrackColumnController::ensureColumnPosition(Glib::RefPtr<Gio::ListModel> const& columnsPtr,
                                                    std::size_t index,
-                                                   Glib::RefPtr<Gtk::ColumnViewColumn> const& column)
+                                                   Glib::RefPtr<Gtk::ColumnViewColumn> const& columnPtr)
   {
     bool needsMove = true;
 
-    if (columns->get_n_items() > index)
+    if (columnsPtr->get_n_items() > index)
     {
-      if (auto currentObjPtr = columns->get_object(static_cast<::guint>(index)); currentObjPtr)
+      if (auto currentObjPtr = columnsPtr->get_object(static_cast<::guint>(index)); currentObjPtr)
       {
-        if (currentObjPtr == column)
+        if (currentObjPtr == columnPtr)
         {
           needsMove = false;
         }
@@ -174,16 +174,16 @@ namespace ao::gtk
 
     if (needsMove)
     {
-      for (::guint loopIndex = 0; loopIndex < columns->get_n_items(); ++loopIndex)
+      for (::guint loopIndex = 0; loopIndex < columnsPtr->get_n_items(); ++loopIndex)
       {
-        if (columns->get_object(loopIndex) == column)
+        if (columnsPtr->get_object(loopIndex) == columnPtr)
         {
-          _columnView.remove_column(column);
+          _columnView.remove_column(columnPtr);
           break;
         }
       }
 
-      _columnView.insert_column(static_cast<::guint>(index), column);
+      _columnView.insert_column(static_cast<::guint>(index), columnPtr);
     }
   }
 

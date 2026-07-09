@@ -15,9 +15,9 @@ namespace ao::audio
     Format sourceFormat = {};
     Format deviceFormat = {};
     Format decoderOutputFormat = {};
-    bool requiresResample = false;
-    bool requiresBitDepthConversion = false;
-    bool requiresChannelRemap = false;
+    bool isResampleRequired = false;
+    bool isBitDepthConversionRequired = false;
+    bool isChannelRemapRequired = false;
     std::string reason = {};
   };
 

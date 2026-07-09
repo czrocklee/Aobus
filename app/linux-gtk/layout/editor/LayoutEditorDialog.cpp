@@ -140,7 +140,7 @@ namespace ao::gtk::layout::editor
     _comboPresets.set_active_id(initialPresetId);
     _comboThemePresets.set_active_id(initialThemeId);
 
-    _comboPresets.signal_changed().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onPresetChanged));
+    _comboPresets.signal_changed().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handlePresetChanged));
 
     _comboThemePresets.signal_changed().connect(
       [this]
@@ -169,7 +169,8 @@ namespace ao::gtk::layout::editor
     _treeView.append_column("Node", _columns.displayName);
     _treeView.append_column("Type", _columns.type);
 
-    _treeView.get_selection()->signal_changed().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onSelectionChanged));
+    _treeView.get_selection()->signal_changed().connect(
+      sigc::mem_fun(*this, &LayoutEditorDialog::handleSelectionChanged));
 
     _treeScroll.set_child(_treeView);
     _treeScroll.set_policy(Gtk::PolicyType::AUTOMATIC, Gtk::PolicyType::AUTOMATIC);
@@ -244,17 +245,17 @@ namespace ao::gtk::layout::editor
 
     _btnRemove.set_icon_name("user-trash-symbolic");
     _btnRemove.set_tooltip_text("Remove Node");
-    _btnRemove.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onRemoveNode));
+    _btnRemove.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleRemoveNodeClicked));
 
     _btnUp.set_icon_name("go-up-symbolic");
     _btnUp.set_tooltip_text("Move Up");
-    _btnUp.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onMoveUp));
+    _btnUp.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleMoveUpClicked));
 
     _btnDown.set_icon_name("go-down-symbolic");
     _btnDown.set_tooltip_text("Move Down");
-    _btnDown.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onMoveDown));
+    _btnDown.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleMoveDownClicked));
 
-    _btnReset.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::onResetDefault));
+    _btnReset.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleResetDefaultClicked));
 
     _treeBox.append(_toolbar);
     _treeBox.append(_treeScroll);
@@ -500,7 +501,7 @@ namespace ao::gtk::layout::editor
     return node;
   }
 
-  void LayoutEditorDialog::onRemoveNode()
+  void LayoutEditorDialog::handleRemoveNodeClicked()
   {
     auto* const targetNode = selectedNonRootNode();
 
@@ -526,7 +527,7 @@ namespace ao::gtk::layout::editor
     }
   }
 
-  void LayoutEditorDialog::onMoveUp()
+  void LayoutEditorDialog::handleMoveUpClicked()
   {
     auto* const targetNode = selectedNonRootNode();
 
@@ -552,7 +553,7 @@ namespace ao::gtk::layout::editor
     }
   }
 
-  void LayoutEditorDialog::onMoveDown()
+  void LayoutEditorDialog::handleMoveDownClicked()
   {
     auto* const targetNode = selectedNonRootNode();
 
@@ -578,7 +579,7 @@ namespace ao::gtk::layout::editor
     }
   }
 
-  void LayoutEditorDialog::onResetDefault()
+  void LayoutEditorDialog::handleResetDefaultClicked()
   {
     auto const presetId = _comboPresets.get_active_id();
 
@@ -601,7 +602,7 @@ namespace ao::gtk::layout::editor
     notifyPreview();
   }
 
-  void LayoutEditorDialog::onPresetChanged()
+  void LayoutEditorDialog::handlePresetChanged()
   {
     auto const id = _comboPresets.get_active_id();
 
@@ -703,7 +704,7 @@ namespace ao::gtk::layout::editor
       Gtk::ResponseType::OK);
   }
 
-  void LayoutEditorDialog::onSelectionChanged()
+  void LayoutEditorDialog::handleSelectionChanged()
   {
     if (auto const row = _treeView.get_selection()->get_selected(); row)
     {

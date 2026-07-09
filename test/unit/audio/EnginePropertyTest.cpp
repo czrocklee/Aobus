@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "BackendTestSupport.h"
-#include "CapturingBackend.h"
 #include "EngineTestSupport.h"
+#include "FakeCapturingBackend.h"
 #include "ScriptedDecoderSession.h"
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
@@ -75,7 +75,7 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* backendRaw = backendPtr.get();
 
     auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
@@ -138,7 +138,7 @@ namespace ao::audio::test
       CHECK(result.error().code == Error::Code::NotSupported);
     }
 
-    SECTION("onPropertyChanged callback updates engine volume status")
+    SECTION("handlePropertyChanged callback updates engine volume status")
     {
       backendRaw->setMockPropertyInfo(PropertyId::Volume,
                                       PropertyInfo{
@@ -164,30 +164,74 @@ namespace ao::audio::test
       CHECK(engine.status().volumeIsHardwareAssisted == true);
     }
 
-    SECTION("onPropertyChanged handles backend read errors gracefully")
+    SECTION("handlePropertyChanged handles backend read errors gracefully")
     {
+      engine.play(makePlaybackItem(desc));
+      CHECK(engine.setVolume(0.42F));
+      CHECK(engine.setMuted(true));
+
+      auto stateChanged = CallbackLatch{};
+      engine.setOnStateChanged([&] { stateChanged.notify(); });
+
       backendRaw->setPropertyError(Error::Code::Generic);
       backendRaw->emitPropertyChanged(PropertyId::Volume);
       backendRaw->emitPropertyChanged(PropertyId::Muted);
 
+      CHECK(stateChanged.waitForCount(2));
       CHECK(engine.status().volumeAvailable);
-      CHECK(engine.status().volume == Catch::Approx{1.0F});
-      CHECK(engine.status().muted == false);
+      CHECK(engine.status().volume == Catch::Approx{0.42F});
+      CHECK(engine.status().muted == true);
     }
 
-    SECTION("onPropertyChanged callback updates engine mute status")
+    SECTION("handlePropertyChanged callback updates engine mute status")
     {
+      engine.play(makePlaybackItem(desc));
+      auto volumeStateChanged = CallbackLatch{};
+      engine.setOnStateChanged([&] { volumeStateChanged.notify(); });
+      backendRaw->setMockPropertyInfo(PropertyId::Volume,
+                                      PropertyInfo{
+                                        .canRead = true,
+                                        .canWrite = true,
+                                        .isAvailable = true,
+                                        .emitsChangeNotifications = false,
+                                        .isHardwareAssisted = true,
+                                      });
+      backendRaw->emitPropertyChanged(PropertyId::Volume);
+      CHECK(volumeStateChanged.waitForCount(1));
+      CHECK(engine.status().volumeIsHardwareAssisted == true);
+
+      backendRaw->setMockPropertyInfo(PropertyId::Muted,
+                                      PropertyInfo{
+                                        .canRead = true,
+                                        .canWrite = true,
+                                        .isAvailable = false,
+                                        .emitsChangeNotifications = false,
+                                        .isHardwareAssisted = false,
+                                      });
+      CHECK(backendRaw->setProperty(PropertyId::Muted, PropertyValue{true}));
+
+      auto stateChanged = CallbackLatch{};
+      engine.setOnStateChanged([&] { stateChanged.notify(); });
+
       backendRaw->emitPropertyChanged(PropertyId::Muted);
 
+      CHECK(stateChanged.waitForCount(1));
       CHECK(engine.status().volumeAvailable);
-      CHECK(engine.status().muted == false);
-      CHECK(engine.isMuted() == false);
+      CHECK(engine.status().volumeIsHardwareAssisted == true);
+      CHECK(engine.status().muted == true);
+      CHECK(engine.isMuted() == true);
     }
 
-    SECTION("onPropertyChanged callback for unknown property is ignored")
+    SECTION("handlePropertyChanged callback for unknown property is ignored")
     {
+      engine.play(makePlaybackItem(desc));
+      auto stateChanged = CallbackLatch{};
+      engine.setOnStateChanged([&] { stateChanged.notify(); });
+
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
       backendRaw->emitPropertyChanged(kUnknownId);
+
+      CHECK_FALSE(stateChanged.waitForCount(1, std::chrono::milliseconds{100}));
     }
 
     SECTION("Backend callbacks update engine state correctly")

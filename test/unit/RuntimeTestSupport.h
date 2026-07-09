@@ -162,10 +162,10 @@ namespace ao::rt::test
     playback.addProvider(makeReadyAudioProvider(std::move(status)));
   }
 
-  class TestMusicLibrary final
+  class MusicLibraryFixture final
   {
   public:
-    TestMusicLibrary()
+    MusicLibraryFixture()
       : _tempDir{}, _library{_tempDir.path(), _tempDir.path()}
     {
     }
@@ -198,7 +198,7 @@ namespace ao::rt::test
     static auto create(T initial) { return AsyncTestState{std::make_shared<std::atomic<T>>(initial)}; }
 
     void set(T value) { *_dataPtr = value; }
-    T get() const { return _dataPtr->load(); }
+    T load() const { return _dataPtr->load(); }
 
     bool waitUntil(T expected, std::chrono::milliseconds timeout = std::chrono::milliseconds{500})
     {
@@ -206,7 +206,7 @@ namespace ao::rt::test
 
       while (std::chrono::steady_clock::now() - start < timeout)
       {
-        if (get() == expected)
+        if (load() == expected)
         {
           return true;
         }
@@ -214,7 +214,7 @@ namespace ao::rt::test
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
       }
 
-      return get() == expected;
+      return load() == expected;
     }
 
     std::atomic<T>* operator->() { return _dataPtr.get(); }
@@ -322,7 +322,7 @@ namespace ao::rt::test
       return queuedCount() != 0;
     }
 
-    void expectQueued(std::chrono::milliseconds timeout = std::chrono::milliseconds{500}) const
+    void checkQueued(std::chrono::milliseconds timeout = std::chrono::milliseconds{500}) const
     {
       INFO("Timed out waiting for queued executor task");
       REQUIRE(waitUntilQueued(timeout));

@@ -1009,7 +1009,7 @@ namespace ao::rt::test
 
     struct ScaleBench final
     {
-      TestMusicLibrary lib;
+      MusicLibraryFixture libraryFixture;
       std::vector<TrackId> ids;
     };
 
@@ -1031,14 +1031,14 @@ namespace ao::rt::test
                                                   (static_cast<std::int64_t>(index) * 137) %
                                                   std::chrono::milliseconds{std::chrono::minutes{7}}.count())},
         };
-        bench.ids.push_back(bench.lib.addTrack(spec));
+        bench.ids.push_back(bench.libraryFixture.addTrack(spec));
       }
     }
 
-    class CountingSource final : public TrackSource
+    class BenchmarkTrackSource final : public TrackSource
     {
     public:
-      explicit CountingSource(std::vector<TrackId> ids)
+      explicit BenchmarkTrackSource(std::vector<TrackId> ids)
         : _ids{std::move(ids)}
       {
       }
@@ -1065,10 +1065,10 @@ namespace ao::rt::test
     Timings measureScale(ScaleBench& bench, std::int32_t trackCount)
     {
       auto t = Timings{};
-      auto& lib = bench.lib.library();
+      auto& lib = bench.libraryFixture.library();
 
       // 1. Projection construction + setPresentation
-      auto source = CountingSource{bench.ids};
+      auto source = BenchmarkTrackSource{bench.ids};
 
       auto const t0 = std::chrono::steady_clock::now();
       auto proj = LiveTrackListProjection{ViewId{1}, source, lib};
@@ -1155,7 +1155,7 @@ namespace ao::rt::test
       auto expandedPlan = makeExpandedYearInPlan(listSize);
       auto setPlan = makeSetYearInPlan(listSize);
       auto evaluator = query::PlanEvaluator{};
-      auto& lib = bench.lib.library();
+      auto& lib = bench.libraryFixture.library();
       auto transaction = lib.readTransaction();
       auto reader = lib.tracks().reader(transaction);
 
@@ -1196,8 +1196,8 @@ namespace ao::rt::test
 
     std::chrono::milliseconds measureProjectionSortFieldDuration(ScaleBench& bench, TrackSortField field)
     {
-      auto source = CountingSource{bench.ids};
-      auto proj = LiveTrackListProjection{ViewId{1}, source, bench.lib.library()};
+      auto source = BenchmarkTrackSource{bench.ids};
+      auto proj = LiveTrackListProjection{ViewId{1}, source, bench.libraryFixture.library()};
 
       auto const start = std::chrono::steady_clock::now();
       proj.setPresentation(TrackPresentationSpec{
@@ -1210,8 +1210,8 @@ namespace ao::rt::test
     std::chrono::milliseconds measureProjectionPresentationDuration(ScaleBench& bench,
                                                                     TrackPresentationSpec const& spec)
     {
-      auto source = CountingSource{bench.ids};
-      auto proj = LiveTrackListProjection{ViewId{1}, source, bench.lib.library()};
+      auto source = BenchmarkTrackSource{bench.ids};
+      auto proj = LiveTrackListProjection{ViewId{1}, source, bench.libraryFixture.library()};
 
       auto const start = std::chrono::steady_clock::now();
       proj.setPresentation(spec);
@@ -1223,7 +1223,7 @@ namespace ao::rt::test
 
   TEST_CASE("PerformanceBaseline - phase 0 10k baseline", "[perf][unit][baseline]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr int kN = 10000;
     APP_LOG_INFO("=== Phase 0 Baseline: {} tracks ===", kN);
 
@@ -1256,7 +1256,7 @@ namespace ao::rt::test
 
   TEST_CASE("PerformanceBaseline - phase 0 query IN threshold sweep", "[perf][unit][baseline][query]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr int kN = 10000;
     constexpr auto kListSizes = std::array<std::size_t, 8>{1, 2, 3, 4, 6, 8, 12, 16};
     APP_LOG_INFO("=== Phase 0 Query IN threshold sweep: {} tracks ===", kN);
@@ -1289,7 +1289,7 @@ namespace ao::rt::test
   TEST_CASE("PerformanceBaseline - phase 0 OrderEntry direct entry sort cache pressure",
             "[perf][unit][baseline][projection]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry direct entry sort cache pressure ===");
@@ -1319,7 +1319,7 @@ namespace ao::rt::test
 
   TEST_CASE("PerformanceBaseline - phase 0 OrderEntry comparator dispatch cost", "[perf][unit][baseline][projection]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry comparator dispatch cost ===");
@@ -1349,7 +1349,7 @@ namespace ao::rt::test
 
   TEST_CASE("PerformanceBaseline - phase 0 OrderEntry ranked integer key sort", "[perf][unit][baseline][projection]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry ranked integer key sort ===");
@@ -1383,7 +1383,7 @@ namespace ao::rt::test
 
   TEST_CASE("PerformanceBaseline - phase 0 OrderEntry compact active key sort", "[perf][unit][baseline][projection]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry compact active key sort ===");
@@ -1415,7 +1415,7 @@ namespace ao::rt::test
 
   TEST_CASE("PerformanceBaseline - phase 0 OrderEntry index sort cache pressure", "[perf][unit][baseline][projection]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry index sort cache pressure ===");
@@ -1451,7 +1451,7 @@ namespace ao::rt::test
   TEST_CASE("PerformanceBaseline - phase 0 OrderEntry index materialize cache pressure",
             "[perf][unit][baseline][projection]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 OrderEntry index materialize cache pressure ===");
@@ -1486,7 +1486,7 @@ namespace ao::rt::test
 
   TEST_CASE("PerformanceBaseline - phase 0 projection rebuild stage timing", "[perf][unit][baseline][projection]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
 
     APP_LOG_INFO("=== Phase 0 Projection rebuild stage timing ===");
@@ -1521,7 +1521,7 @@ namespace ao::rt::test
 
   TEST_CASE("PerformanceBaseline - phase 0 projection sort field timing", "[perf][unit][baseline][projection]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr int kN = 1000000;
 
     APP_LOG_INFO("=== Phase 0 Projection sort field timing: {} tracks ===", kN);
@@ -1555,7 +1555,7 @@ namespace ao::rt::test
 
   TEST_CASE("PerformanceBaseline - phase 0 projection preset timing", "[perf][unit][baseline][projection]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr int kN = 1000000;
 
     APP_LOG_INFO("=== Phase 0 Projection preset timing: {} tracks ===", kN);
@@ -1578,7 +1578,7 @@ namespace ao::rt::test
 
   TEST_CASE("PerformanceBaseline - phase 0 100k baseline", "[perf][unit][baseline]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr int kN = 100000;
     APP_LOG_INFO("=== Phase 0 Baseline: {} tracks ===", kN);
 
@@ -1611,7 +1611,7 @@ namespace ao::rt::test
 
   TEST_CASE("PerformanceBaseline - phase 0 1M baseline", "[perf][unit][baseline]")
   {
-    Log::init(LogLevel::Info);
+    Log::initialize(LogLevel::Info);
     constexpr int kN = 1000000;
     APP_LOG_INFO("=== Phase 0 Baseline: {} tracks ===", kN);
 

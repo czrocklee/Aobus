@@ -267,9 +267,9 @@ namespace ao::library
 
     private:
       PreparedHot() = default;
-      static PreparedHot create(TrackBuilder const* builder,
-                                lmdb::WriteTransaction& transaction,
-                                DictionaryStore& dictionary);
+      static PreparedHot make(TrackBuilder const* builder,
+                              lmdb::WriteTransaction& transaction,
+                              DictionaryStore& dictionary);
 
       std::string _title;
       std::vector<DictionaryId> _tagIds;
@@ -292,7 +292,7 @@ namespace ao::library
 
     /**
      * PreparedCold - prepared cold data for zero-copy write.
-     * Created by create() (handles embedded cover art, resolves custom keys).
+     * Produced by make() (handles embedded cover art, resolves custom keys).
      *
      * Like PreparedHot, a prepared value is an immutable snapshot that owns
      * every byte writeTo emits - including the URI - with all header fields
@@ -306,10 +306,10 @@ namespace ao::library
 
     private:
       PreparedCold() = default;
-      static PreparedCold create(TrackBuilder const* builder,
-                                 lmdb::WriteTransaction& transaction,
-                                 DictionaryStore& dictionary,
-                                 ResourceStore& resources);
+      static PreparedCold make(TrackBuilder const* builder,
+                               lmdb::WriteTransaction& transaction,
+                               DictionaryStore& dictionary,
+                               ResourceStore& resources);
       static std::vector<std::pair<DictionaryId, std::string_view>> resolveCustomMetadata(
         TrackBuilder const* builder,
         lmdb::WriteTransaction& transaction,

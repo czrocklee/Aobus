@@ -5,7 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "playback/OutputDeviceSelector.h"
+#include "playback/OutputDevicePopover.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -46,7 +46,7 @@ namespace ao::gtk::layout
         _button.signal_clicked().connect(
           [this]
           {
-            auto* const popover = Gtk::make_managed<OutputDeviceSelector>(_playback, Gtk::PositionType::TOP);
+            auto* const popover = Gtk::make_managed<OutputDevicePopover>(_playback, Gtk::PositionType::TOP);
             popover->set_parent(_button);
             popover->signal_closed().connect([popover] { popover->unparent(); });
             popover->popup();

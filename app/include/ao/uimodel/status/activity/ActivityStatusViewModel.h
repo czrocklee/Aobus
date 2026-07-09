@@ -49,8 +49,8 @@ namespace ao::uimodel
     void expireTransient();
     void dismissCompact();
     void dismissDetailNotificationFromActivity(rt::NotificationId id);
-    void onLibraryTaskProgress(std::string message, double fraction);
-    void onLibraryTaskCompleted(std::size_t count);
+    void handleLibraryTaskProgress(std::string message, double fraction);
+    void handleLibraryTaskCompleted(std::size_t count);
 
   private:
     struct Impl;

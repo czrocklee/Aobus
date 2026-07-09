@@ -14,23 +14,23 @@
 
 namespace ao::rt::test
 {
-  struct ViewServiceTestEnv final
+  struct ViewServiceFixture final
   {
-    TestMusicLibrary library;
+    MusicLibraryFixture libraryFixture;
     MockExecutor executor;
     async::Runtime runtime;
     LibraryChanges changes;
     LibraryWriter writer;
     std::unique_ptr<TrackSourceCache> cachePtr;
 
-    ViewServiceTestEnv()
+    ViewServiceFixture()
       : runtime{executor}
       , changes{}
-      , writer{library.library(), changes}
-      , cachePtr{std::make_unique<TrackSourceCache>(library.library(), changes)}
+      , writer{libraryFixture.library(), changes}
+      , cachePtr{std::make_unique<TrackSourceCache>(libraryFixture.library(), changes)}
     {
     }
 
-    ViewService makeService() { return ViewService{executor, library.library(), *cachePtr}; }
+    ViewService makeService() { return ViewService{executor, libraryFixture.library(), *cachePtr}; }
   };
 } // namespace ao::rt::test

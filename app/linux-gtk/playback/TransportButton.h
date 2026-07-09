@@ -38,8 +38,6 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _button; }
 
   private:
-    friend class TransportButtonTestPeer;
-
     void applyState(uimodel::TransportViewState const& view);
 
     Gtk::Button _button;

@@ -29,7 +29,7 @@
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
-#include <ao/uimodel/field/TrackInlineEditWorkflow.h>
+#include <ao/uimodel/field/TrackInlineEdit.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <gdkmm/rectangle.h>
@@ -378,9 +378,9 @@ namespace ao::gtk
     _sectionHeaderFactoryPtr = Gtk::SignalListItemFactory::create();
 
     _sectionHeaderFactoryPtr->signal_setup_obj().connect(
-      [this](Glib::RefPtr<Glib::Object> const& object)
+      [this](Glib::RefPtr<Glib::Object> const& objectPtr)
       {
-        auto const headerPtr = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
+        auto const headerPtr = std::dynamic_pointer_cast<Gtk::ListHeader>(objectPtr);
 
         if (!headerPtr)
         {
@@ -392,9 +392,9 @@ namespace ao::gtk
       });
 
     _sectionHeaderFactoryPtr->signal_bind_obj().connect(
-      [this](Glib::RefPtr<Glib::Object> const& object)
+      [this](Glib::RefPtr<Glib::Object> const& objectPtr)
       {
-        auto const headerPtr = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
+        auto const headerPtr = std::dynamic_pointer_cast<Gtk::ListHeader>(objectPtr);
         auto* const widget = headerPtr ? dynamic_cast<TrackSectionHeaderWidget*>(headerPtr->get_child()) : nullptr;
 
         if (headerPtr == nullptr || widget == nullptr)
@@ -558,7 +558,7 @@ namespace ao::gtk
     popover.popup();
   }
 
-  void TrackViewPage::commitMetadataChange(Glib::RefPtr<TrackRowObject> const& row,
+  void TrackViewPage::commitMetadataChange(Glib::RefPtr<TrackRowObject> const& rowPtr,
                                            rt::TrackField field,
                                            std::string newValue)
   {
@@ -569,21 +569,21 @@ namespace ao::gtk
       return;
     }
 
-    auto const result = uimodel::TrackInlineEditWorkflow::apply(
+    auto const result = uimodel::applyTrackInlineEdit(
       uimodel::TrackInlineEditRequest{
-        .field = field, .oldText = row->fieldText(field).raw(), .newText = std::move(newValue)},
+        .field = field, .oldText = rowPtr->fieldText(field).raw(), .newText = std::move(newValue)},
       uimodel::TrackInlineEditHooks{
         .parse = [uiDef](std::string_view text) -> Result<uimodel::TrackFieldEditValue>
         { return uiDef->parseInlineEdit(text); },
-        .readCurrentValue = [row, field, uiDef] -> uimodel::TrackFieldEditValue
-        { return uiDef->readRowEditValue(*row, field); },
-        .applyValue = [row, field, uiDef](uimodel::TrackFieldEditValue const& value)
-        { uiDef->applyRowEditValue(*row, value, field); },
+        .readCurrentValue = [rowPtr, field, uiDef] -> uimodel::TrackFieldEditValue
+        { return uiDef->readRowEditValue(*rowPtr, field); },
+        .applyValue = [rowPtr, field, uiDef](uimodel::TrackFieldEditValue const& value)
+        { uiDef->applyRowEditValue(*rowPtr, value, field); },
         .writePatch = [field](rt::MetadataPatch& patch, uimodel::TrackFieldEditValue const& value)
         { uimodel::writeTrackFieldPatch(patch, field, value); },
-        .commitPatch = [this, row](rt::MetadataPatch const& patch) -> Result<rt::UpdateTrackMetadataReply>
+        .commitPatch = [this, rowPtr](rt::MetadataPatch const& patch) -> Result<rt::UpdateTrackMetadataReply>
         {
-          auto const trackIds = std::array{row->trackId()};
+          auto const trackIds = std::array{rowPtr->trackId()};
           return _runtime.library().writer().updateMetadata(trackIds, patch);
         },
       });

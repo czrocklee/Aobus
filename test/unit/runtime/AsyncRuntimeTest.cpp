@@ -87,7 +87,7 @@ namespace ao::rt::test
     auto const result = future.get();
 
     CHECK(result != std::this_thread::get_id());
-    CHECK(counter.get() == 2);
+    CHECK(counter.load() == 2);
 
     runtime.requestStop();
     runtime.join();

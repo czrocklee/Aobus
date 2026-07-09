@@ -209,6 +209,9 @@ Do not choose them by convenience or by field count.
   for any grouped widgets.
 - `*Widget` is a concrete GTK widget or composite widget. It should expose a
   widget contract, not application orchestration.
+- Domain nouns such as `Control` may appear in a GTK type's stem when they are
+  the natural UI concept, but the type still ends with a concrete UI role:
+  `SeekControlWidget`, not `SeekControl`.
 - `*Dialog`, `*Window`, `*Popover`, and `*Page` use their ordinary UI meanings:
   transient dialog, top-level window, transient popover, and navigable page.
 - `*Controller` is imperative UI or framework glue that routes events,
@@ -270,6 +273,8 @@ Do not choose them by convenience or by field count.
 - `Fake*` is a working controlled implementation with state or simplified real
   behavior.
 - `Mock*` is for interaction expectations.
+- `Spy*` records calls, events, or state for later assertions without
+  predeclaring expectations.
 - `Stub*` provides fixed or minimal responses.
 - `*Helpers` is allowed only for internal/detail/tooling free-function
   collections tied to a clear owner or domain. Do not use it as a domain or
@@ -306,7 +311,7 @@ Mechanical class/file naming checks live in `./ao name-audit` and run from
 without semantic inference: banned catch-all file names, layer placement for
 role suffixes such as `ViewModel`, `Service`, `Component`, `Dialog`, `Widget`,
 `Panel`, `Controller`, `Coordinator`, `Host`, and `Bridge`, and keeping
-`Fake*`, `Mock*`, and `Stub*` types in tests.
+`Fake*`, `Mock*`, `Spy*`, and `Stub*` types in tests.
 
 ## Pointer Names
 
@@ -348,6 +353,12 @@ role suffixes such as `ViewModel`, `Service`, `Component`, `Dialog`, `Widget`,
   `isValid()`, `isEditable()`, `isEmpty()`, and `isEditing()` over
   `enabled()`, `valid()`, `editable()`, `empty()`, and `editing()`, except when
   matching an external boundary or standard-library-compatible API.
+- Matching and capability predicates may use precise semantic verbs:
+  `matches*` and `accepts*` are allowed for per-item matching, filtering, or
+  visitor predicates, and `supports*` is allowed for capability support. Avoid
+  widening that exception to ordinary state checks: prefer `is*Required`,
+  `shouldBlock*`, `canAccept*`, or `is*Allowed` over `requires*`, `blocks*`,
+  `accepts*`, or `allows*` for non-matching boolean queries.
 - Boolean-returning actions keep action verbs when the return value reports
   success, change, consumption, or completion: `applyPatch()`,
   `writeTrackFieldPatch()`, `bind()`, `goBack()`.
@@ -365,7 +376,7 @@ Use the narrowest verb that describes the observable contract.
 | --- | --- |
 | `make*` / `create*` / `build*` | `make*` constructs pure in-memory values or objects. `create*` creates persistent, registered, externally visible, or owned resources. `build*` assembles derived plans, trees, projections, or aggregates from existing inputs. Do not decide by return type. |
 | `new*` | Do not add project-owned `new*` functions or methods. Use `make*` or `create*`. |
-| `load*` / `read*` / `parse*` | `load*` materializes from durable sources. `read*` consumes bytes, records, fields, streams, or current state. `parse*` converts syntax, text, or binary representation into structured data. |
+| `load*` / `read*` / `parse*` | `load*` materializes domain objects or application state from durable sources. `read*` consumes bytes, records, fields, streams, or current state. Low-level helpers such as `readFile()` or `readFileBytes()` may return raw file contents; `load*` is for materialized domain values such as registries, layouts, tracks, or sessions. `parse*` converts syntax, text, or binary representation into structured data. |
 | `resolve*` / `find*` / `lookup*` | `resolve*` binds an id, name, or reference using context. `find*` searches locally and may not find a match. `lookup*` queries a table, catalog, schema, dictionary, or registry. |
 | `write*` / `serialize*` / `emit*` / `dump*` | `write*` writes into a target object, file, storage, node, patch, or buffer. `serialize*` converts to storage or wire representation. `emit*` produces structured output, signal payload, or event text. `dump*` is diagnostic or user-requested raw/plain output. |
 | `export*` / `import*` | Use for full transfer workflows across a boundary. |
@@ -380,10 +391,14 @@ Use the narrowest verb that describes the observable contract.
 | `print*` / `log*` / `report*` / `trace*` | `print*` writes directly to CLI/stdout/stderr or a stream. `log*` writes to the logging system. `report*` creates or submits aggregated diagnostics or results. `trace*` is low-level instrumentation. |
 | `format*` / `describe*` / `label*` / `*Text` / `toString()` | `format*` creates presentation strings with formatting policy. `describe*` creates longer human or diagnostic text. `label*` creates short UI label text. `*Text` names existing text properties or payloads. Avoid `*String` names that only repeat the return type. Reserve `toString()` for generic enum or value conversion, not domain presentation formatting. |
 | `diagnose*` / `explain*` | `diagnose*` analyzes problems and produces diagnostics or a report. `explain*` creates human-facing reasons; plain error text should usually use `format*` or `describe*`. |
-| `process*` / `run*` / `execute*` | Avoid `process*` unless the function is truly a batch, stream, or work-item pipeline. Use `run*` for commands, tasks, tests, workflows, and loops. Use `execute*` for commands, instructions, actions, or executor contexts. Do not add `do*` or `perform*`. |
+| `process*` / `run*` / `execute*` | Avoid `process*` unless the function is truly a batch, stream, event-queue item, or work-item pipeline. Use `run*` for commands, tasks, tests, workflows, and loops. Use `execute*` for commands, instructions, actions, or executor contexts. Do not add `do*` or `perform*`. |
 | `prepare*` / `configure*` / `finalize*` / `complete*` / `finish*` | `prepare*` establishes prerequisites for a later action. `configure*` sets options, policy, callbacks, or dependencies. `finalize*` ends a builder, serialization, transaction, or other phased flow and produces final state. `complete*` marks or advances work to success. Avoid new `finish*`; use `complete*`, `finalize*`, `close*`, or `commit*` when one is more precise. |
 
 - Empty fluent builder factories use `makeEmpty()`, not `createNew()`.
+- Fluent builder mutators use domain property names even when the operation has
+  setter semantics: `name("Favorites")`, `duration(value)`, `smart(true)`.
+  Reserve predicate forms such as `isSmart()` for boolean getters. Use `set*`
+  for direct setters on ordinary mutable objects outside fluent builders.
 
 ### State, Lifecycle, And Time
 
@@ -420,9 +435,23 @@ Use the narrowest verb that describes the observable contract.
 
 ### Events, Callbacks, And Subscriptions
 
-- `on*` names a callback entry point or framework signal handler. `handle*`
-  dispatches or orchestrates an event, command, or request into behavior.
-  `notify*` notifies subscribers or services. `emit*` produces a signal,
+- `on*` names a subscription API or callback slot from the caller's point of
+  view: `playback.onStarted(handler)` means "run this handler when playback has
+  started". Do not use `on*` for project-owned methods that process an incoming
+  event.
+- `handle*` names an event, framework signal, callback, command, or request
+  processing entry point inside the receiving object:
+  `handleSaveClicked()`, `handleTrackChanged()`,
+  `handleRevealTrackRequested()`.
+- `process*Event` may name consumption of a queued event work item when that
+  distinction matters. The producer should still use `emit*`, `notify*`,
+  `post*`, or `enqueue*` according to what it actually does.
+- Pure C or framework callback thunks that only cast opaque user data and
+  forward to a project method should usually be non-capturing lambdas at the
+  registration site. Named callback entry points with real logic use `handle*`.
+  A stored callable slot may still be named `on*` when it represents "call this
+  when the fact happens".
+- `notify*` notifies subscribers or services. `emit*` produces a signal,
   output, or event payload. Replace project-owned `fire*` with `emit*`.
 - Use `dispatch*` only for real distribution to multiple handlers, a queue, or
   an executor.
@@ -439,7 +468,13 @@ Use the narrowest verb that describes the observable contract.
   Do not add project-owned `will*` or `did*`.
 - Event/fact names use factual suffixes after the fact: `*Changed`, `*Added`,
   `*Removed`, `*Requested`, `*Completed`, and `*Failed`. Prefer
-  `emitTrackChanged()`, `onTrackChanged()`, and `handleTrackChanged()` shapes.
+  `emitTrackChanged()` to produce an event, `onTrackChanged(handler)` to
+  register a handler, and `handleTrackChanged()` to process the event inside a
+  receiver.
+- Widget and framework signal handlers should include the concrete signal fact
+  when it is not already clear: `handleSaveClicked()`,
+  `handleDeleteListActivated()`, `handleEditorSaveRequested()`,
+  `handlePointerEntered()`, and `handleSelectionChanged()`.
 
 ### Collections, Matching, And Traversal
 
@@ -547,13 +582,8 @@ Use the narrowest verb that describes the observable contract.
 - Test arrangement may use `setup*`; cleanup may use `teardown*` when RAII is
   not enough. Test type names such as `*Fixture`, `*TestSupport`, `Fake*`,
   `Mock*`, and `Stub*` are defined in Class And File Role Names.
-- Do not add `*ForTest()` functions or methods. Existing `*ForTest()` APIs are
-  design debt to remove through normal APIs, constructor injection, small
-  interfaces, fixtures, or test support. GTK component child widgets and
-  observable UI state should use normal public accessors when that
-  observability is part of the component contract; do not hide routine widget
-  access behind a test peer. If a case cannot be removed cleanly, stop and
-  review the design instead of documenting a permanent exception.
+- Do not encode test-only access in names such as `*ForTest()`. Testability
+  seam rules live in `doc/dev/testing/fixtures-and-helpers.md`.
 
 ## Semantic Vocabulary
 

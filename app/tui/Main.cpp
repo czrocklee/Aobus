@@ -19,9 +19,9 @@
 
 namespace
 {
-  ao::tui::Options parseOptions(std::span<char*> args)
+  ao::tui::AppOptions parseOptions(std::span<char*> args)
   {
-    auto options = ao::tui::Options{};
+    auto options = ao::tui::AppOptions{};
     auto app = CLI::App{"Aobus terminal player"};
 
     app.add_option("-l,--library", options.libraryRoot, "Music library root")->capture_default_str();

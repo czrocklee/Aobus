@@ -39,12 +39,12 @@ namespace ao::audio
 
     void requireBitDepthConversion(RenderPlan& plan)
     {
-      if (plan.requiresBitDepthConversion)
+      if (plan.isBitDepthConversionRequired)
       {
         return;
       }
 
-      plan.requiresBitDepthConversion = true;
+      plan.isBitDepthConversionRequired = true;
 
       if (!plan.reason.empty())
       {
@@ -232,7 +232,7 @@ namespace ao::audio
 
     negotiate(plan.deviceFormat.sampleRate,
               caps.sampleRates,
-              plan.requiresResample,
+              plan.isResampleRequired,
               plan.reason,
               "sample rate resampling required",
               [&]
@@ -248,7 +248,7 @@ namespace ao::audio
     {
       negotiate(plan.deviceFormat.bitDepth,
                 caps.bitDepths,
-                plan.requiresBitDepthConversion,
+                plan.isBitDepthConversionRequired,
                 plan.reason,
                 "bit depth conversion required",
                 [&] { return *std::ranges::max_element(caps.bitDepths); });
@@ -256,7 +256,7 @@ namespace ao::audio
 
     negotiate(plan.deviceFormat.channels,
               caps.channelCounts,
-              plan.requiresChannelRemap,
+              plan.isChannelRemapRequired,
               plan.reason,
               "channel remapping required",
               [&] { return caps.channelCounts.front(); });
@@ -288,7 +288,7 @@ namespace ao::audio
     }
 
     // Ensure deviceFormat matches decoderOutputFormat if no other conversion is needed
-    if (!plan.requiresBitDepthConversion)
+    if (!plan.isBitDepthConversionRequired)
     {
       plan.deviceFormat.bitDepth = plan.decoderOutputFormat.bitDepth;
       plan.deviceFormat.validBits = plan.decoderOutputFormat.validBits;

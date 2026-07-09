@@ -5,7 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "playback/VolumeControl.h"
+#include "playback/VolumeControlWidget.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -41,7 +41,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _control.widget(); }
 
     private:
-      VolumeControl _control;
+      VolumeControlWidget _control;
     };
 
     std::unique_ptr<LayoutComponent> createVolumeControl(LayoutContext& ctx, LayoutNode const& node)

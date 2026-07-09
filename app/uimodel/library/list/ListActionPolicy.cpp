@@ -7,7 +7,7 @@
 
 namespace ao::uimodel
 {
-  ListActionViewState ListActionPolicy::describeActions(ListId selectedListId, bool selectedListHasChildren)
+  ListActionViewState describeListActions(ListId selectedListId, bool selectedListHasChildren)
   {
     auto state = ListActionViewState{};
 
@@ -22,7 +22,7 @@ namespace ao::uimodel
     return state;
   }
 
-  ListId ListActionPolicy::parentForNewSmartList(ListId selectedListId)
+  ListId parentForNewSmartList(ListId selectedListId)
   {
     if (selectedListId != kInvalidListId && selectedListId != rt::kAllTracksListId)
     {

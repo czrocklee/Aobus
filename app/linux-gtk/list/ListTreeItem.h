@@ -32,7 +32,7 @@ namespace ao::gtk
 
     ListTreeItem* parent() const { return _parent; }
 
-    static Glib::RefPtr<ListTreeItem> create(Glib::RefPtr<ListRowObject> const& row);
+    static Glib::RefPtr<ListTreeItem> create(Glib::RefPtr<ListRowObject> const& rowPtr);
 
   protected:
     explicit ListTreeItem();

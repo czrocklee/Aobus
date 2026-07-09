@@ -44,7 +44,7 @@ namespace ao::uimodel::test
 
     SECTION("synthetic library progress is retained as task detail")
     {
-      feedState.onLibraryTaskProgress("Scanning: album.flac", 0.5);
+      feedState.handleLibraryTaskProgress("Scanning: album.flac", 0.5);
 
       auto const& detail = feedState.viewState().detail;
       REQUIRE(detail.optLibraryTask);
@@ -130,10 +130,10 @@ namespace ao::uimodel::test
 
     SECTION("action render policy filters hidden actions and keeps disabled reasons")
     {
-      auto const actions = std::vector<ActivityActionView>{
+      auto const actions = std::vector<ActivityActionDescriptor>{
         {.id = "library.retry", .label = "Retry"}, {.id = "library.ignore", .label = "Ignore"}};
 
-      auto const resolved = resolveActivityActionViews(
+      auto const resolved = resolveActivityActionStates(
         actions,
         [](std::string_view actionId, std::string_view label)
         {
@@ -156,11 +156,11 @@ namespace ao::uimodel::test
 
     SECTION("action render policy skips empty labels and caps visible actions")
     {
-      auto const actions = std::vector<ActivityActionView>{{.id = "library.retry", .label = ""},
-                                                           {.id = "library.ignore", .label = "Ignore"},
-                                                           {.id = "library.details", .label = "Details"}};
+      auto const actions = std::vector<ActivityActionDescriptor>{{.id = "library.retry", .label = ""},
+                                                                 {.id = "library.ignore", .label = "Ignore"},
+                                                                 {.id = "library.details", .label = "Details"}};
 
-      auto const resolved = resolveActivityActionViews(
+      auto const resolved = resolveActivityActionStates(
         actions,
         [](std::string_view actionId, std::string_view label)
         {

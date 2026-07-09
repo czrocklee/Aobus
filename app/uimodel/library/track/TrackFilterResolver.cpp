@@ -21,7 +21,7 @@ namespace ao::uimodel
 {
   namespace
   {
-    bool looksLikeExpression(std::string_view value)
+    bool isExpressionLike(std::string_view value)
     {
       return std::ranges::any_of(value,
                                  [](char ch)
@@ -138,7 +138,7 @@ namespace ao::uimodel
       return ResolvedTrackFilter{};
     }
 
-    if (looksLikeExpression(trimmed))
+    if (isExpressionLike(trimmed))
     {
       return ResolvedTrackFilter{.mode = TrackFilterMode::Expression, .expression = trimmed};
     }

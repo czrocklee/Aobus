@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "CapturingBackend.h"
 #include "EngineTestSupport.h"
+#include "FakeCapturingBackend.h"
 #include <ao/audio/Engine.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Transport.h>
@@ -17,7 +17,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - resume on already playing engine does nothing", "[audio][unit][engine][transport]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "test.flac"}));
@@ -29,7 +29,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - pause on idle engine does nothing", "[audio][unit][engine][transport]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
     engine.stop();

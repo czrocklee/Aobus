@@ -14,7 +14,7 @@
 
 namespace ao::gtk
 {
-  class AppConfig;
+  class AppConfigStore;
   class ThemeCoordinator;
   struct ThemeWindowRegistration;
 
@@ -68,8 +68,8 @@ namespace ao::gtk
     ThemeCoordinator(ThemeCoordinator&&) = delete;
     ThemeCoordinator& operator=(ThemeCoordinator&&) = delete;
 
-    void load(AppConfig const& config);
-    void save(AppConfig& config) const;
+    void load(AppConfigStore const& configStore);
+    void save(AppConfigStore& configStore) const;
 
     void setTheme(rt::ThemePresetId preset);
     rt::ThemePresetId activeTheme() const noexcept;

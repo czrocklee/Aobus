@@ -20,7 +20,7 @@ namespace ao::gtk
    * Callback for committing inline metadata edits from the UI.
    */
   using MetadataCommitFn =
-    std::function<void(Glib::RefPtr<TrackRowObject> const& row, rt::TrackField field, std::string newValue)>;
+    std::function<void(Glib::RefPtr<TrackRowObject> const& rowPtr, rt::TrackField field, std::string newValue)>;
 
   /**
    * Builds a SignalListItemFactory for the given track field.

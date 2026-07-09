@@ -362,7 +362,7 @@ namespace ao::query::test
            .aliases = std::span{kNoAliases}},
     };
 
-    auto const assertSpecs = [&](std::span<detail::QueryVariableCompletionSpec const> actual, auto const& expected)
+    auto const checkSpecs = [&](std::span<detail::QueryVariableCompletionSpec const> actual, auto const& expected)
     {
       REQUIRE(actual.size() == expected.size());
 
@@ -381,8 +381,8 @@ namespace ao::query::test
       }
     };
 
-    assertSpecs(detail::queryVariableCompletionSpecs(VariableType::Metadata), expectedMetadata);
-    assertSpecs(detail::queryVariableCompletionSpecs(VariableType::Property), expectedProperties);
+    checkSpecs(detail::queryVariableCompletionSpecs(VariableType::Metadata), expectedMetadata);
+    checkSpecs(detail::queryVariableCompletionSpecs(VariableType::Property), expectedProperties);
   }
 
   TEST_CASE("Completion - exposes public query variable summaries", "[query][unit][completion]")

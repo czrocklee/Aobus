@@ -18,13 +18,13 @@ namespace ao::uimodel
   {
   public:
     void initialize(rt::NotificationFeedState const& feed);
-    void onFeedChanged(rt::NotificationFeedState const& feed);
-    void onNotificationPosted(rt::NotificationFeedState const& feed, rt::NotificationId id);
-    void onLibraryTaskProgress(std::string message, double fraction);
-    void onLibraryTaskCompleted(std::size_t count, rt::NotificationFeedState const& feed);
+    void handleFeedChanged(rt::NotificationFeedState const& feed);
+    void handleNotificationPosted(rt::NotificationFeedState const& feed, rt::NotificationId id);
+    void handleLibraryTaskProgress(std::string message, double fraction);
+    void handleLibraryTaskCompleted(std::size_t count, rt::NotificationFeedState const& feed);
     void dismissCompact(rt::NotificationFeedState const& feed);
     void dismissDetailNotificationFromActivity(rt::NotificationId id, rt::NotificationFeedState const& feed);
-    void onTransientExpired(rt::NotificationFeedState const& feed);
+    void handleTransientExpired(rt::NotificationFeedState const& feed);
 
     std::vector<rt::NotificationId> locallyHideableNotificationIds(rt::NotificationFeedState const& feed) const;
     ActivityStatusViewState const& viewState() const noexcept;

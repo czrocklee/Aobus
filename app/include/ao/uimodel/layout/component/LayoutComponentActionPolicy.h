@@ -19,7 +19,7 @@ namespace ao::uimodel
     LayoutActionSlotMask slotMask = 0;
     std::map<LayoutActionSlot, std::string> defaultActionIds = {};
 
-    constexpr bool allows(LayoutActionSlot const slot) const { return (slotMask & slotBit(slot)) != 0; }
+    constexpr bool isSlotAllowed(LayoutActionSlot const slot) const { return (slotMask & slotBit(slot)) != 0; }
 
     std::string_view defaultAction(LayoutActionSlot const slot) const
     {

@@ -26,13 +26,13 @@ namespace ao::uimodel::test
 
   TEST_CASE("PlaybackTimeViewModel - view state generation", "[uimodel][unit][playback]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
+    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
+    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
+    auto playback = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
     addReadyAudioProvider(playback);
 
     auto log = ao::test::RenderLog<PlaybackTimeViewState>{};
@@ -47,7 +47,7 @@ namespace ao::uimodel::test
 
     SECTION("onSeekUpdate triggers refresh with Preview and Final modes")
     {
-      auto const trackId = testLib.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
+      auto const trackId = libraryFixture.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       auto desc = PlaybackService::PlaybackRequest{
         .item = NowPlayingInfo{.trackId = trackId, .title = "Seek Test", .artist = "Artist"},

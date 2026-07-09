@@ -34,7 +34,7 @@ add_library(aobus-gtk-lib STATIC
     app/ThemePreset.cpp
     app/WindowActionRegistry.cpp
     app/MainWindowCoordinator.cpp
-    app/AppConfig.cpp
+    app/AppConfigStore.cpp
     app/ShellLayoutStore.cpp
     app/GtkLayoutConfig.cpp
     platform/AudioBackendBootstrap.cpp
@@ -81,9 +81,9 @@ add_library(aobus-gtk-lib STATIC
     playback/PlaybackDetailsWidget.cpp
     playback/TransportButton.cpp
     playback/TimeLabel.cpp
-    playback/OutputDeviceSelector.cpp
-    playback/VolumeControl.cpp
-    playback/SeekControl.cpp
+    playback/OutputDevicePopover.cpp
+    playback/VolumeControlWidget.cpp
+    playback/SeekControlWidget.cpp
     playback/VolumeBar.cpp
 
     image/ImageCache.cpp
@@ -165,7 +165,7 @@ add_library(aobus-gtk-lib STATIC
     layout/component/status/SelectionInfoComponent.cpp
     layout/component/status/StatusMessageLabelComponent.cpp
     layout/component/status/StatusRegistry.cpp
-    status/ActivityStatus.cpp
+    status/ActivityStatusWidget.cpp
     layout/editor/LayoutEditorDialog.cpp
 )
 

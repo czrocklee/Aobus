@@ -87,7 +87,7 @@ namespace ao::uimodel::test
       CHECK(*optDesc->optMaxChildren == 2);
       CHECK((optDesc->surfaces & static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Main)) != 0);
       CHECK((optDesc->surfaces & static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Tooltip)) != 0);
-      CHECK(optDesc->actionPolicy.allows(LayoutActionSlot::PrimaryClick));
+      CHECK(optDesc->actionPolicy.isSlotAllowed(LayoutActionSlot::PrimaryClick));
       CHECK(optDesc->actionPolicy.defaultAction(LayoutActionSlot::PrimaryClick) == "valid.action");
 
       auto const& all = catalog.descriptors();

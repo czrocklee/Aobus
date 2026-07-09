@@ -14,7 +14,7 @@ namespace ao::uimodel::test
       auto const optChord = KeyChord::parse("P");
       REQUIRE(optChord);
       CHECK(optChord->key == "P");
-      CHECK(optChord->modifiers.empty());
+      CHECK(optChord->modifiers.isEmpty());
     }
 
     SECTION("single letter normalized to uppercase")
@@ -51,7 +51,7 @@ namespace ao::uimodel::test
       auto const optChord = KeyChord::parse("Media:Play");
       REQUIRE(optChord);
       CHECK(optChord->key == "Media:Play");
-      CHECK(optChord->modifiers.empty());
+      CHECK(optChord->modifiers.isEmpty());
     }
 
     SECTION("surrounding whitespace tolerated")
@@ -103,7 +103,7 @@ namespace ao::uimodel::test
     {
       auto const optChord = KeyChord::parse("+");
       REQUIRE(optChord);
-      CHECK(optChord->modifiers.empty());
+      CHECK(optChord->modifiers.isEmpty());
       CHECK(optChord->key == "+");
     }
 

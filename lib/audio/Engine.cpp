@@ -53,7 +53,7 @@ namespace ao::audio
 
   struct Engine::Impl final
   {
-    struct RenderSession;
+    struct EngineRenderTarget;
     using RenderTimeline = detail::RenderTimeline;
     using TrackNode = RenderTimeline::Node;
     struct BackendErrorEvent;
@@ -116,9 +116,7 @@ namespace ao::audio
     struct PropertyChangedEvent final
     {
       std::uint64_t generation = 0;
-      PropertyId id{};
-      std::optional<PropertyValue> optValue;
-      PropertyInfo volumeInfo;
+      PropertySnapshot snapshot;
     };
 
     // Notifications already materialized by a control thread that settled a
@@ -139,6 +137,179 @@ namespace ao::audio
                                        DeferredNotifications>;
     using Notification = std::function<void()>;
     using Notifications = std::vector<Notification>;
+
+    struct PendingRouteNotifications final
+    {
+      std::function<void()> stateChanged;
+      OnRouteChanged routeChanged;
+      RouteStatus routeSnapshot;
+    };
+
+    class EngineEventQueue final
+    {
+    public:
+      using RtSignalProcessor = std::function<std::optional<Notifications>()>;
+      using PlaybackEventProcessor = std::function<Notifications(PlaybackEvent&)>;
+
+      EngineEventQueue() = default;
+
+      ~EngineEventQueue()
+      {
+        assert(!_eventThread.joinable() && "EngineEventQueue owner must stop the queue before destruction");
+        assert(_playbackEvents.empty() && "EngineEventQueue owner must clear playback events before destruction");
+        assert(_rtSignalRing.read_available() == 0 &&
+               "EngineEventQueue owner must drain RT signals before destruction");
+      }
+
+      EngineEventQueue(EngineEventQueue const&) = delete;
+      EngineEventQueue& operator=(EngineEventQueue const&) = delete;
+      EngineEventQueue(EngineEventQueue&&) = delete;
+      EngineEventQueue& operator=(EngineEventQueue&&) = delete;
+
+      void start(RtSignalProcessor processNextRtSignal, PlaybackEventProcessor processPlaybackEvent)
+      {
+        _eventThread =
+          std::jthread{[this,
+                        processNextRtSignal = std::move(processNextRtSignal),
+                        processPlaybackEvent = std::move(processPlaybackEvent)](std::stop_token stopToken) mutable
+                       { run(stopToken, processNextRtSignal, processPlaybackEvent); }};
+      }
+
+      void enqueuePlaybackEvent(PlaybackEvent event)
+      {
+        if (_eventThread.get_stop_token().stop_requested())
+        {
+          return;
+        }
+
+        {
+          auto const lock = std::scoped_lock{_playbackEventMutex};
+
+          if (_eventThread.get_stop_token().stop_requested())
+          {
+            return;
+          }
+
+          _playbackEvents.push_back(std::move(event));
+        }
+
+        _eventSignal.release();
+      }
+
+      bool enqueueRtSignal(RtSignal signal) noexcept
+      {
+        if (!_rtSignalRing.push(signal))
+        {
+          assert(false && "RT signal ring overflow: event thread is not draining");
+          return false;
+        }
+
+        _eventSignal.release();
+        return true;
+      }
+
+      // Consumer-side only. Runtime consumers serialize pop+processing outside
+      // this class because control commands also settle this ring.
+      bool tryPopRtSignal(RtSignal& signal) { return _rtSignalRing.pop(signal); }
+
+      template<typename RtSignalConsumer>
+      void drainRtSignals(RtSignalConsumer consume)
+      {
+        auto signal = RtSignal{};
+
+        while (tryPopRtSignal(signal))
+        {
+          consume(signal);
+        }
+      }
+
+      template<typename RtSignalConsumer>
+      void stop(RtSignalConsumer discardSignal) noexcept
+      {
+        if (_eventThread.joinable())
+        {
+          _eventThread.request_stop();
+          _eventSignal.release();
+          _eventThread.join();
+        }
+
+        {
+          auto const lock = std::scoped_lock{_playbackEventMutex};
+          _playbackEvents.clear();
+        }
+
+        drainRtSignals(discardSignal);
+      }
+
+    private:
+      static constexpr std::size_t kRtSignalCapacity = 64;
+
+      mutable std::mutex _playbackEventMutex;
+      std::deque<PlaybackEvent> _playbackEvents;
+      boost::lockfree::spsc_queue<RtSignal, boost::lockfree::capacity<kRtSignalCapacity>> _rtSignalRing;
+      std::counting_semaphore<> _eventSignal{0};
+      std::jthread _eventThread;
+
+      static void runNotifications(Notifications& notifications)
+      {
+        for (auto& notification : notifications)
+        {
+          if (notification)
+          {
+            notification();
+          }
+        }
+      }
+
+      void run(std::stop_token stopToken,
+               RtSignalProcessor& processNextRtSignal,
+               PlaybackEventProcessor& processPlaybackEvent)
+      {
+        while (true)
+        {
+          _eventSignal.acquire();
+
+          if (stopToken.stop_requested())
+          {
+            return;
+          }
+
+          // Drain the wait-free render-thread ring first so a gapless advance
+          // is published before any queued non-RT events. The owner pops and
+          // processes the signal in one externally serialized critical section.
+          while (true)
+          {
+            auto optNotifications = processNextRtSignal();
+
+            if (!optNotifications)
+            {
+              break;
+            }
+
+            runNotifications(*optNotifications);
+          }
+
+          while (true)
+          {
+            auto optEvent = std::optional<PlaybackEvent>{};
+            {
+              auto const lock = std::scoped_lock{_playbackEventMutex};
+
+              if (_playbackEvents.empty())
+              {
+                break;
+              }
+
+              optEvent = std::move(_playbackEvents.front());
+              _playbackEvents.pop_front();
+            }
+
+            auto notifications = processPlaybackEvent(*optEvent);
+            runNotifications(notifications);
+          }
+        }
+      }
+    };
 
     Device currentDevice;
     RenderTimeline timeline;
@@ -177,7 +348,7 @@ namespace ao::audio
     std::atomic<std::uint64_t> accumulatedFrames{0};
     std::atomic<std::uint32_t> engineSampleRate{0};
     std::atomic<std::uint32_t> engineFrameBytes{0};
-    std::atomic<std::uint64_t> activeRenderGeneration{0};
+    std::atomic<std::uint64_t> activeRenderTargetGeneration{0};
 
     // Guards the current-track format snapshot the control thread reads when it
     // decides, at arm time, whether the next track can be gaplessly spliced. The
@@ -195,7 +366,7 @@ namespace ao::audio
     std::atomic<bool> spliceHandoffInProgress{false};
 
     mutable std::mutex stateMutex;
-    std::uint64_t nextRenderGeneration = 1;
+    std::uint64_t nextRenderTargetGeneration = 1;
     std::uint64_t nextSourceGeneration = 1;
     std::optional<PlaybackItem> optCurrentItem;
     Status status;
@@ -206,19 +377,9 @@ namespace ao::audio
     OnRouteChanged onRouteChanged;
     detail::RouteTracker routeTracker;
     DecoderFactoryFn decoderFactory;
-    std::unique_ptr<RenderSession> renderSessionPtr;
+    std::unique_ptr<EngineRenderTarget> renderTargetPtr;
 
-    // The event thread is woken by a counting semaphore rather than a condition
-    // variable so the render thread can signal it without a mutex (a mutex-free
-    // release avoids the lost-wakeup a lock-free ring would otherwise have with a
-    // condition variable). Every producer releases once per item; the consumer
-    // drains both the wait-free rtSignalRing and the mutex-guarded eventQueue.
-    static constexpr std::size_t kRtSignalCapacity = 64;
-    mutable std::mutex eventMutex;
-    std::deque<PlaybackEvent> eventQueue;
-    boost::lockfree::spsc_queue<RtSignal, boost::lockfree::capacity<kRtSignalCapacity>> rtSignalRing;
-    std::counting_semaphore<> eventSignal{0};
-    std::jthread eventThread;
+    EngineEventQueue eventQueue;
 
     // Must be declared last so the PipeWire thread loop is stopped
     // before the callbacks and state it accesses are destroyed.
@@ -229,27 +390,44 @@ namespace ao::audio
       : currentDevice{std::move(device)}, decoderFactory{std::move(decoderFactory)}, backendPtr{std::move(backendPtr)}
     {
       syncBackendIdentity();
-      eventThread = std::jthread{[this](std::stop_token stopToken) { runEventLoop(stopToken); }};
+      eventQueue.start(
+        [this] -> std::optional<Notifications>
+        {
+          auto const lock = std::scoped_lock{controlMutex};
+          auto signal = RtSignal{};
+
+          if (!eventQueue.tryPopRtSignal(signal))
+          {
+            return std::nullopt;
+          }
+
+          return processRtSignal(signal);
+        },
+        [this](PlaybackEvent& event)
+        {
+          auto const lock = std::scoped_lock{controlMutex};
+          return processPlaybackEvent(event);
+        });
     }
 
     ~Impl()
     {
       retireSessions();
-      stopEventLoop();
+      eventQueue.stop([this](RtSignal const& signal) { discardSpliceSignalNode(signal.splicedNode); });
 
       if (backendPtr)
       {
         backendPtr->stop();
         backendPtr->close();
-        resetRenderSession();
+        resetRenderTarget();
       }
 
       timeline.clear();
 
       // The render thread is now stopped. Drain the signal ring once more to free
-      // any splice signal it posted after stopEventLoop's drain but before the
-      // backend stopped, then free any armed-but-never-spliced lookahead node.
-      drainRtSignalRing();
+      // any splice signal it posted after the event queue stopped but before
+      // the backend stopped, then free any armed-but-never-spliced lookahead node.
+      eventQueue.drainRtSignals([this](RtSignal const& signal) { discardSpliceSignalNode(signal.splicedNode); });
       clearPreparedNext();
     }
 
@@ -411,43 +589,14 @@ namespace ao::audio
     // Non-RT event producers (backend / route / format / property / source
     // errors). Allowed to allocate and lock; must never be called from the RT
     // render thread.
-    void enqueuePlaybackEvent(PlaybackEvent event)
-    {
-      if (eventThread.get_stop_token().stop_requested())
-      {
-        return;
-      }
-
-      {
-        auto const lock = std::scoped_lock{eventMutex};
-
-        if (eventThread.get_stop_token().stop_requested())
-        {
-          return;
-        }
-
-        eventQueue.push_back(std::move(event));
-      }
-
-      eventSignal.release();
-    }
+    void enqueuePlaybackEvent(PlaybackEvent event) { eventQueue.enqueuePlaybackEvent(std::move(event)); }
 
     // Wait-free producer for the render thread. Pushes a trivially copyable
     // signal onto the lock-free ring and releases the semaphore; no lock, no
     // allocation, no unbounded work. Returns false only if the ring is full,
     // which cannot happen in practice (the event thread drains on every wake and
     // the render thread posts at most one signal per track).
-    bool enqueueRtSignal(RtSignal signal) noexcept
-    {
-      if (!rtSignalRing.push(signal))
-      {
-        assert(false && "RT signal ring overflow: event thread is not draining");
-        return false;
-      }
-
-      eventSignal.release();
-      return true;
-    }
+    bool enqueueRtSignal(RtSignal signal) noexcept { return eventQueue.enqueueRtSignal(signal); }
 
     // Control-command entry point: acquires controlMutex and settles every
     // pending splice signal still in the ring before the command body runs.
@@ -456,7 +605,7 @@ namespace ao::audio
     // snapshot still describe the retired track; settling first closes that
     // window, so a command like seek can never act on the wrong source. Pending
     // drain completions are forwarded to the normal event queue instead: a
-    // control command may retire or reposition the render session, and the drain
+    // control command may retire or reposition the render target, and the drain
     // must be checked after that command has applied.
     ControlLock lockControl() { return ControlLock{*this}; }
 
@@ -468,168 +617,138 @@ namespace ao::audio
     // would deadlock on a reentrant Engine call.
     void settlePendingRtSignals()
     {
-      auto signal = RtSignal{};
-
-      while (rtSignalRing.pop(signal))
-      {
-        if (signal.kind == RtSignalKind::Drained)
+      eventQueue.drainRtSignals(
+        [this](RtSignal const& signal)
         {
-          assert(signal.splicedNode == nullptr);
-          enqueuePlaybackEvent(DrainCompleteEvent{.generation = signal.generation, .drainEpoch = signal.drainEpoch});
-          continue;
-        }
-
-        if (auto notifications = applyRtSignal(signal); !notifications.empty())
-        {
-          enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
-        }
-      }
-    }
-
-    void stopEventLoop() noexcept
-    {
-      if (eventThread.joinable())
-      {
-        eventThread.request_stop();
-        eventSignal.release();
-        eventThread.join();
-      }
-
-      {
-        auto const lock = std::scoped_lock{eventMutex};
-        eventQueue.clear();
-      }
-
-      drainRtSignalRing();
-    }
-
-    // Free any sessions still owned by unprocessed splice signals. Consumer side
-    // only (event thread, or the destructor after the event thread has joined).
-    void drainRtSignalRing() noexcept
-    {
-      auto signal = RtSignal{};
-
-      while (rtSignalRing.pop(signal))
-      {
-        discardSpliceSignalNode(signal.splicedNode);
-      }
-    }
-
-    static void runNotifications(Notifications& notifications)
-    {
-      for (auto& notification : notifications)
-      {
-        if (notification)
-        {
-          notification();
-        }
-      }
-    }
-
-    void runEventLoop(std::stop_token stopToken)
-    {
-      while (true)
-      {
-        eventSignal.acquire();
-
-        if (stopToken.stop_requested())
-        {
-          return;
-        }
-
-        // Drain the wait-free render-thread ring first so a gapless advance is
-        // published before any queued non-RT events. The pop itself happens
-        // under controlMutex: control threads also consume this ring at command
-        // entry (lockControl), settling splice signals and forwarding drain
-        // signals, so a control command can never observe a
-        // spliced-but-unapplied state.
-        while (true)
-        {
-          auto notifications = Notifications{};
+          if (signal.kind == RtSignalKind::Drained)
           {
-            auto const lock = std::scoped_lock{controlMutex};
-            auto signal = RtSignal{};
-
-            if (!rtSignalRing.pop(signal))
-            {
-              break;
-            }
-
-            notifications = applyRtSignal(signal);
-          }
-          runNotifications(notifications);
-        }
-
-        while (true)
-        {
-          auto optEvent = std::optional<PlaybackEvent>{};
-          {
-            auto const lock = std::scoped_lock{eventMutex};
-
-            if (eventQueue.empty())
-            {
-              break;
-            }
-
-            optEvent = std::move(eventQueue.front());
-            eventQueue.pop_front();
+            assert(signal.splicedNode == nullptr);
+            enqueuePlaybackEvent(DrainCompleteEvent{.generation = signal.generation, .drainEpoch = signal.drainEpoch});
+            return;
           }
 
-          auto notifications = Notifications{};
+          if (auto notifications = processRtSignal(signal); !notifications.empty())
           {
-            auto const lock = std::scoped_lock{controlMutex};
-            notifications = applyPlaybackEvent(*optEvent);
+            enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
           }
-          runNotifications(notifications);
-        }
-      }
+        });
     }
 
     // Dispatch a render-thread signal. Spliced signals carry a non-owning
     // TrackNode pointer; timeline ownership is already stable. Runs on the
     // event thread under controlMutex.
-    Notifications applyRtSignal(RtSignal const& signal)
+    Notifications processRtSignal(RtSignal const& signal)
     {
       switch (signal.kind)
       {
-        case RtSignalKind::Spliced: return handleSpliceAdvanced(takeSplicedNode(signal.splicedNode), signal.generation);
-        case RtSignalKind::Drained: return handleDrainComplete(signal.generation, signal.drainEpoch);
+        case RtSignalKind::Spliced:
+          return processSpliceAdvancedSignal(takeSplicedNode(signal.splicedNode), signal.generation);
+        case RtSignalKind::Drained: return processDrainCompleteSignal(signal.generation, signal.drainEpoch);
       }
 
       return {};
     }
 
-    struct RenderSession final : public RenderTarget
+    struct EngineRenderTarget final : public RenderTarget
     {
-      RenderSession(Impl& ownerRef, Backend& backendRef, std::uint64_t generationValue) noexcept
-        : owner{ownerRef}, backend{backendRef}, generation{generationValue}
+      EngineRenderTarget(Impl& ownerRef, BackendId backendIdValue, std::uint64_t generationValue)
+        : owner{ownerRef}, backendId{std::move(backendIdValue)}, generation{generationValue}
       {
       }
 
       RenderPcmResult renderPcm(std::span<std::byte> output) noexcept override
       {
-        return owner.renderPcm(generation, output);
+        return detail::renderPcm(
+          owner.timeline,
+          owner.engineFrameBytes,
+          owner.playbackDrainPending,
+          generation,
+          output,
+          [this](std::uint64_t signalGeneration) noexcept { return owner.isActiveRenderTarget(signalGeneration); },
+          [this](std::uint64_t signalGeneration) noexcept { return owner.trySplicePreparedNext(signalGeneration); });
       }
 
-      void onUnderrun() noexcept override { owner.onUnderrun(generation); }
-      void onPositionAdvanced(std::uint32_t frames) noexcept override { owner.onPositionAdvanced(generation, frames); }
-      void onDrainComplete() noexcept override { owner.onDrainComplete(generation); }
-      void onRouteReady(std::string_view routeAnchor) noexcept override
+      void handleUnderrun() noexcept override
       {
-        owner.onRouteReady(generation, backend, routeAnchor);
+        if (owner.isActiveRenderTarget(generation))
+        {
+          ++owner.underrunCount;
+        }
       }
-      void onFormatChanged(Format const& format) noexcept override { owner.onFormatChanged(generation, format); }
-      void onPropertyChanged(PropertyId id) noexcept override { owner.onPropertyChanged(generation, backend, id); }
-      void onBackendError(std::string_view message) noexcept override { owner.onBackendError(generation, message); }
+
+      void handlePositionAdvanced(std::uint32_t frames) noexcept override
+      {
+        if (owner.isActiveRenderTarget(generation))
+        {
+          owner.accumulatedFrames.fetch_add(frames, std::memory_order_relaxed);
+        }
+      }
+
+      void handleDrainComplete() noexcept override
+      {
+        if (!owner.isActiveRenderTarget(generation))
+        {
+          return;
+        }
+
+        auto const signalDrainEpoch = owner.drainEpoch.load(std::memory_order_acquire);
+
+        if (!owner.playbackDrainPending.exchange(false, std::memory_order_acq_rel))
+        {
+          return;
+        }
+
+        std::ignore = owner.enqueueRtSignal(
+          RtSignal{.kind = RtSignalKind::Drained, .generation = generation, .drainEpoch = signalDrainEpoch});
+      }
+
+      void handleRouteReady(std::string_view routeAnchor) noexcept override
+      {
+        if (!owner.isActiveRenderTarget(generation))
+        {
+          return;
+        }
+
+        owner.enqueuePlaybackEvent(
+          RouteReadyEvent{.generation = generation, .backendId = backendId, .routeAnchor = std::string{routeAnchor}});
+      }
+
+      void handleFormatChanged(Format const& format) noexcept override
+      {
+        if (owner.isActiveRenderTarget(generation))
+        {
+          owner.enqueuePlaybackEvent(FormatChangedEvent{.generation = generation, .format = format});
+        }
+      }
+
+      void handlePropertyChanged(PropertySnapshot snapshot) noexcept override
+      {
+        if (!owner.isActiveRenderTarget(generation))
+        {
+          return;
+        }
+
+        owner.enqueuePlaybackEvent(PropertyChangedEvent{.generation = generation, .snapshot = std::move(snapshot)});
+      }
+
+      void handleBackendError(std::string_view message) noexcept override
+      {
+        if (!owner.isActiveRenderTarget(generation))
+        {
+          return;
+        }
+
+        owner.enqueuePlaybackEvent(BackendErrorEvent{.generation = generation, .message = std::string{message}});
+      }
 
       Impl& owner;
-      Backend& backend;
+      BackendId backendId;
       std::uint64_t generation = 0;
     };
 
-    bool isActiveRenderSession(std::uint64_t generation) const noexcept
+    bool isActiveRenderTarget(std::uint64_t generation) const noexcept
     {
-      return activeRenderGeneration.load(std::memory_order_acquire) == generation;
+      return activeRenderTargetGeneration.load(std::memory_order_acquire) == generation;
     }
 
     // Wait-free gapless splice, executed on the RT render thread at a drain
@@ -642,7 +761,7 @@ namespace ao::audio
         timeline,
         spliceHandoffInProgress,
         generation,
-        [this](std::uint64_t signalGeneration) noexcept { return isActiveRenderSession(signalGeneration); },
+        [this](std::uint64_t signalGeneration) noexcept { return isActiveRenderTarget(signalGeneration); },
         accumulatedFrames,
         engineSampleRate,
         engineFrameBytes,
@@ -655,119 +774,25 @@ namespace ao::audio
         });
     }
 
-    void retireRenderSession() noexcept { activeRenderGeneration.store(0, std::memory_order_release); }
+    void retireRenderTarget() noexcept { activeRenderTargetGeneration.store(0, std::memory_order_release); }
 
     void retireSessions() noexcept
     {
-      activeRenderGeneration.store(0, std::memory_order_release);
+      activeRenderTargetGeneration.store(0, std::memory_order_release);
       timeline.retireCursor();
     }
 
-    void resetRenderSession() noexcept { renderSessionPtr.reset(); }
+    void resetRenderTarget() noexcept { renderTargetPtr.reset(); }
 
-    RenderTarget* createRenderSession(Backend& backend)
+    RenderTarget* createRenderTarget(Backend& backend)
     {
-      auto const generation = nextRenderGeneration++;
-      renderSessionPtr = std::make_unique<RenderSession>(*this, backend, generation);
-      activeRenderGeneration.store(generation, std::memory_order_release);
-      return renderSessionPtr.get();
+      auto const generation = nextRenderTargetGeneration++;
+      renderTargetPtr = std::make_unique<EngineRenderTarget>(*this, backend.backendId(), generation);
+      activeRenderTargetGeneration.store(generation, std::memory_order_release);
+      return renderTargetPtr.get();
     }
 
-    // ── RenderTarget session entrypoints ─────────────────────────
-    RenderPcmResult renderPcm(std::uint64_t generation, std::span<std::byte> output) noexcept
-    {
-      return detail::renderPcm(
-        timeline,
-        engineFrameBytes,
-        playbackDrainPending,
-        generation,
-        output,
-        [this](std::uint64_t signalGeneration) noexcept { return isActiveRenderSession(signalGeneration); },
-        [this](std::uint64_t signalGeneration) noexcept { return trySplicePreparedNext(signalGeneration); });
-    }
-
-    void onUnderrun(std::uint64_t generation) noexcept
-    {
-      if (isActiveRenderSession(generation))
-      {
-        ++underrunCount;
-      }
-    }
-
-    void onPositionAdvanced(std::uint64_t generation, std::uint32_t frames) noexcept
-    {
-      if (isActiveRenderSession(generation))
-      {
-        accumulatedFrames.fetch_add(frames, std::memory_order_relaxed);
-      }
-    }
-
-    void onDrainComplete(std::uint64_t generation) noexcept
-    {
-      if (!isActiveRenderSession(generation))
-      {
-        return;
-      }
-
-      auto const signalDrainEpoch = drainEpoch.load(std::memory_order_acquire);
-
-      if (!playbackDrainPending.exchange(false, std::memory_order_acq_rel))
-      {
-        return;
-      }
-
-      std::ignore = enqueueRtSignal(
-        RtSignal{.kind = RtSignalKind::Drained, .generation = generation, .drainEpoch = signalDrainEpoch});
-    }
-
-    void onRouteReady(std::uint64_t generation, Backend& backend, std::string_view routeAnchor) noexcept
-    {
-      if (!isActiveRenderSession(generation))
-      {
-        return;
-      }
-
-      enqueuePlaybackEvent(RouteReadyEvent{
-        .generation = generation, .backendId = backend.backendId(), .routeAnchor = std::string{routeAnchor}});
-    }
-
-    void onFormatChanged(std::uint64_t generation, Format const& format) noexcept
-    {
-      if (isActiveRenderSession(generation))
-      {
-        enqueuePlaybackEvent(FormatChangedEvent{.generation = generation, .format = format});
-      }
-    }
-
-    void onPropertyChanged(std::uint64_t generation, Backend& backend, PropertyId id) noexcept
-    {
-      if (isActiveRenderSession(generation))
-      {
-        auto optValue = std::optional<PropertyValue>{};
-
-        if (auto value = backend.property(id); value)
-        {
-          optValue = *value;
-        }
-
-        enqueuePlaybackEvent(PropertyChangedEvent{.generation = generation,
-                                                  .id = id,
-                                                  .optValue = std::move(optValue),
-                                                  .volumeInfo = backend.queryProperty(PropertyId::Volume)});
-      }
-    }
-
-    void onBackendError(std::uint64_t generation, std::string_view message) noexcept
-    {
-      if (!isActiveRenderSession(generation))
-      {
-        return;
-      }
-
-      enqueuePlaybackEvent(BackendErrorEvent{.generation = generation, .message = std::string{message}});
-    }
-
-    // ── Handlers ───────────────────────────────────────────────────
+    // ── Playback State Helpers ─────────────────────────────────────
     void resetPlaybackStatePreservingOutput()
     {
       auto const backendId = status.backendId;
@@ -796,183 +821,91 @@ namespace ao::audio
       routeTracker.clear();
     }
 
+    void closeBackendPlayback()
+    {
+      backendPtr->stop();
+      backendPtr->close();
+      resetRenderTarget();
+      timeline.clear();
+    }
+
+    PendingRouteNotifications capturePendingRouteNotifications()
+    {
+      return PendingRouteNotifications{
+        .stateChanged = onStateChanged,
+        .routeChanged = onRouteChanged,
+        .routeSnapshot = RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()}};
+    }
+
+    // ── Playback State Transitions ──────────────────────────────────
+    Notifications completeDrain(std::uint64_t generation, std::uint64_t signalDrainEpoch)
+    {
+      auto onTrackEndedCallback = std::function<void()>{};
+      auto onRouteChangedCallback = OnRouteChanged{};
+      auto stateChanged = std::function<void()>{};
+
+      {
+        auto const lock = std::scoped_lock{stateMutex};
+
+        if (!isActiveRenderTarget(generation) || drainEpoch.load(std::memory_order_acquire) != signalDrainEpoch)
+        {
+          return {};
+        }
+
+        retireRenderTarget();
+        onRouteChangedCallback = onRouteChanged;
+        resetPlaybackStatePreservingOutput();
+        onTrackEndedCallback = onTrackEnded;
+        stateChanged = onStateChanged;
+      }
+
+      resetTransitionState();
+      closeBackendPlayback();
+
+      auto notifications = Notifications{};
+      appendStateChangedNotification(notifications, std::move(stateChanged));
+
+      if (onRouteChangedCallback)
+      {
+        notifications.emplace_back([callback = std::move(onRouteChangedCallback)] { callback({}); });
+      }
+
+      if (onTrackEndedCallback)
+      {
+        notifications.emplace_back([callback = std::move(onTrackEndedCallback)] { callback(); });
+      }
+
+      return notifications;
+    }
+
+    // ── Playback Event Dispatch ────────────────────────────────────
     // Non-const: DeferredNotifications hands its payload out by move.
-    Notifications applyPlaybackEvent(PlaybackEvent& event)
+    Notifications processPlaybackEvent(PlaybackEvent& event)
     {
-      return std::visit([this](auto& typedEvent) { return applyPlaybackEvent(typedEvent); }, event);
+      return std::visit([this](auto& typedEvent) { return processPlaybackEvent(typedEvent); }, event);
     }
 
-    Notifications applyPlaybackEvent(BackendErrorEvent const& event)
-    {
-      return handleBackendError(event.generation, event.message);
-    }
+    Notifications processPlaybackEvent(BackendErrorEvent const& event) { return processBackendErrorEvent(event); }
 
-    Notifications applyPlaybackEvent(SourceErrorEvent const& event)
-    {
-      return handleSourceError(event.sourceGeneration, event.error);
-    }
+    Notifications processPlaybackEvent(SourceErrorEvent const& event) { return processSourceErrorEvent(event); }
 
-    Notifications applyPlaybackEvent(DrainCompleteEvent const& event)
-    {
-      return handleDrainComplete(event.generation, event.drainEpoch);
-    }
+    Notifications processPlaybackEvent(DrainCompleteEvent const& event) { return processDrainCompleteEvent(event); }
 
-    Notifications applyPlaybackEvent(RouteReadyEvent const& event)
-    {
-      return handleRouteReady(event.generation, event.backendId, event.routeAnchor);
-    }
+    Notifications processPlaybackEvent(RouteReadyEvent const& event) { return processRouteReadyEvent(event); }
 
-    Notifications applyPlaybackEvent(FormatChangedEvent const& event)
-    {
-      return handleFormatChanged(event.generation, event.format);
-    }
+    Notifications processPlaybackEvent(FormatChangedEvent const& event) { return processFormatChangedEvent(event); }
 
-    Notifications applyPlaybackEvent(PropertyChangedEvent const& event) { return handlePropertyChanged(event); }
+    Notifications processPlaybackEvent(PropertyChangedEvent const& event) { return processPropertyChangedEvent(event); }
 
-    Notifications applyPlaybackEvent(DeferredNotifications& event) { return std::move(event.notifications); }
+    Notifications processPlaybackEvent(DeferredNotifications& event) { return std::move(event.notifications); }
 
+    // ── Notification Builders ──────────────────────────────────────
     static void appendStateChangedNotification(Notifications& notifications, std::function<void()> callback)
     {
       if (callback)
       {
         notifications.emplace_back([callback = std::move(callback)] { callback(); });
       }
-    }
-
-    Notifications handleBackendError(std::uint64_t generation, std::string_view message)
-    {
-      auto stateChanged = std::function<void()>{};
-      auto failureCallback = OnPlaybackFailure{};
-      auto optFailedItem = std::optional<PlaybackItem>{};
-      bool shouldQuiesce = false;
-      {
-        auto const lock = std::scoped_lock{stateMutex};
-
-        if (!isActiveRenderSession(generation))
-        {
-          return {};
-        }
-
-        optFailedItem = optCurrentItem;
-        retireRenderSession();
-        resetPlaybackStatePreservingOutput();
-        status.transport = Transport::Error;
-        status.statusText = std::string{message};
-        failureCallback = onPlaybackFailure;
-        stateChanged = onStateChanged;
-        shouldQuiesce = true;
-      }
-
-      resetTransitionState();
-
-      if (shouldQuiesce)
-      {
-        backendPtr->stop();
-        backendPtr->close();
-        resetRenderSession();
-        timeline.clear();
-      }
-
-      auto notifications = Notifications{};
-
-      if (optFailedItem)
-      {
-        appendPlaybackFailureNotification(
-          notifications,
-          std::move(failureCallback),
-          PlaybackFailure{
-            .kind = PlaybackFailureKind::DeviceLost,
-            .itemId = optFailedItem->id,
-            .input = optFailedItem->input,
-            .generation = generation,
-            .error = Error{.code = Error::Code::IoError, .message = std::string{message}},
-            .recoverable = false,
-          });
-      }
-
-      appendStateChangedNotification(notifications, std::move(stateChanged));
-      return notifications;
-    }
-
-    Notifications handleSourceError(std::uint64_t sourceGeneration, Error const& error)
-    {
-      if (clearPreparedNextForGeneration(sourceGeneration))
-      {
-        return {};
-      }
-
-      auto const message = error.message.empty() ? std::string{"PCM source failed"} : error.message;
-      auto endedCallback = std::function<void()>{};
-      auto failureCallback = OnPlaybackFailure{};
-      auto optFailedItem = std::optional<PlaybackItem>{};
-      auto stateChanged = std::function<void()>{};
-
-      bool shouldQuiesce = false;
-      {
-        auto const lock = std::scoped_lock{stateMutex};
-
-        if (sourceGeneration != timeline.activeSourceGeneration())
-        {
-          return {};
-        }
-
-        if (status.transport == Transport::Idle)
-        {
-          return {};
-        }
-
-        optFailedItem = optCurrentItem;
-        retireRenderSession();
-        resetPlaybackStatePreservingOutput();
-        status.transport = Transport::Error;
-        status.statusText = message;
-        endedCallback = onTrackEnded;
-        failureCallback = onPlaybackFailure;
-        stateChanged = onStateChanged;
-        shouldQuiesce = true;
-      }
-
-      resetTransitionState();
-
-      if (shouldQuiesce)
-      {
-        backendPtr->stop();
-        backendPtr->close();
-        resetRenderSession();
-        timeline.clear();
-      }
-
-      auto notifications = Notifications{};
-
-      if (optFailedItem)
-      {
-        auto failureError = error;
-
-        if (failureError.message.empty())
-        {
-          failureError.message = message;
-        }
-
-        appendPlaybackFailureNotification(notifications,
-                                          std::move(failureCallback),
-                                          PlaybackFailure{
-                                            .kind = PlaybackFailureKind::Decode,
-                                            .itemId = optFailedItem->id,
-                                            .input = optFailedItem->input,
-                                            .generation = sourceGeneration,
-                                            .error = std::move(failureError),
-                                            .recoverable = true,
-                                          });
-      }
-
-      appendStateChangedNotification(notifications, std::move(stateChanged));
-
-      if (endedCallback)
-      {
-        notifications.emplace_back([callback = std::move(endedCallback)] { callback(); });
-      }
-
-      return notifications;
     }
 
     static void appendRouteNotification(Notifications& notifications, OnRouteChanged callback, RouteStatus snapshot)
@@ -982,6 +915,12 @@ namespace ao::audio
         notifications.emplace_back([callback = std::move(callback), snapshot = std::move(snapshot)]
                                    { callback(snapshot); });
       }
+    }
+
+    static void appendPendingRouteNotifications(Notifications& notifications, PendingRouteNotifications pending)
+    {
+      appendStateChangedNotification(notifications, std::move(pending.stateChanged));
+      appendRouteNotification(notifications, std::move(pending.routeChanged), std::move(pending.routeSnapshot));
     }
 
     static void appendTrackAdvancedNotification(Notifications& notifications,
@@ -1005,14 +944,15 @@ namespace ao::audio
       }
     }
 
+    // ── Render Signal Reducers ─────────────────────────────────────
     // Complete a gapless splice on the event thread. The render thread already
     // made `session`'s source active; here we install the owning shared_ptr,
     // retire the previous source (destroying it — and joining its decode thread —
     // off the RT thread), refresh the current-track format the next arm gates
-    // against, and surface the advance to observers. If the render session was
+    // against, and surface the advance to observers. If the render target was
     // retired between the splice and now, the session is simply dropped (its
     // source is destroyed here, still off the RT thread).
-    Notifications handleSpliceAdvanced(TrackNode* session, std::uint64_t generation)
+    Notifications processSpliceAdvancedSignal(TrackNode* session, std::uint64_t generation)
     {
       if (session == nullptr)
       {
@@ -1028,7 +968,7 @@ namespace ao::audio
       {
         auto const lock = std::scoped_lock{stateMutex};
 
-        if (!isActiveRenderSession(generation))
+        if (!isActiveRenderTarget(generation))
         {
           return {};
         }
@@ -1069,150 +1009,219 @@ namespace ao::audio
       return notifications;
     }
 
-    Notifications handleRouteReady(std::uint64_t generation, BackendId const& backendId, std::string_view routeAnchor)
+    Notifications processDrainCompleteSignal(std::uint64_t generation, std::uint64_t signalDrainEpoch)
     {
-      auto notifications = Notifications{};
+      return completeDrain(generation, signalDrainEpoch);
+    }
+
+    // ── Playback Event Reducers ────────────────────────────────────
+    Notifications processBackendErrorEvent(BackendErrorEvent const& event)
+    {
       auto stateChanged = std::function<void()>{};
-      auto callback = OnRouteChanged{};
-      auto snapshot = RouteStatus{};
+      auto failureCallback = OnPlaybackFailure{};
+      auto optFailedItem = std::optional<PlaybackItem>{};
       {
         auto const lock = std::scoped_lock{stateMutex};
 
-        if (!isActiveRenderSession(generation))
+        if (!isActiveRenderTarget(event.generation))
         {
           return {};
         }
 
-        routeTracker.setAnchor(backendId, std::string{routeAnchor});
+        optFailedItem = optCurrentItem;
+        retireRenderTarget();
+        resetPlaybackStatePreservingOutput();
+        status.transport = Transport::Error;
+        status.statusText = event.message;
+        failureCallback = onPlaybackFailure;
         stateChanged = onStateChanged;
-        callback = onRouteChanged;
-        snapshot = RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
+      }
+
+      resetTransitionState();
+      closeBackendPlayback();
+
+      auto notifications = Notifications{};
+
+      if (optFailedItem)
+      {
+        appendPlaybackFailureNotification(notifications,
+                                          std::move(failureCallback),
+                                          PlaybackFailure{
+                                            .kind = PlaybackFailureKind::DeviceLost,
+                                            .itemId = optFailedItem->id,
+                                            .input = optFailedItem->input,
+                                            .generation = event.generation,
+                                            .error = Error{.code = Error::Code::IoError, .message = event.message},
+                                            .recoverable = false,
+                                          });
       }
 
       appendStateChangedNotification(notifications, std::move(stateChanged));
-      appendRouteNotification(notifications, std::move(callback), std::move(snapshot));
       return notifications;
     }
 
-    Notifications handleFormatChanged(std::uint64_t generation, Format const& format)
+    Notifications processSourceErrorEvent(SourceErrorEvent const& event)
     {
-      auto notifications = Notifications{};
+      if (clearPreparedNextForGeneration(event.sourceGeneration))
+      {
+        return {};
+      }
+
+      auto const message = event.error.message.empty() ? std::string{"PCM source failed"} : event.error.message;
+      auto endedCallback = std::function<void()>{};
+      auto failureCallback = OnPlaybackFailure{};
+      auto optFailedItem = std::optional<PlaybackItem>{};
       auto stateChanged = std::function<void()>{};
-      auto callback = OnRouteChanged{};
-      auto snapshot = RouteStatus{};
+
       {
         auto const lock = std::scoped_lock{stateMutex};
 
-        if (!isActiveRenderSession(generation))
+        if (event.sourceGeneration != timeline.activeSourceGeneration())
         {
           return {};
         }
 
-        routeTracker.setEngineFormat(format);
-        status.routeState.engineOutputFormat = format;
+        if (status.transport == Transport::Idle)
+        {
+          return {};
+        }
+
+        optFailedItem = optCurrentItem;
+        retireRenderTarget();
+        resetPlaybackStatePreservingOutput();
+        status.transport = Transport::Error;
+        status.statusText = message;
+        endedCallback = onTrackEnded;
+        failureCallback = onPlaybackFailure;
         stateChanged = onStateChanged;
-        callback = onRouteChanged;
-        snapshot = RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
+      }
+
+      resetTransitionState();
+      closeBackendPlayback();
+
+      auto notifications = Notifications{};
+
+      if (optFailedItem)
+      {
+        auto failureError = event.error;
+
+        if (failureError.message.empty())
+        {
+          failureError.message = message;
+        }
+
+        appendPlaybackFailureNotification(notifications,
+                                          std::move(failureCallback),
+                                          PlaybackFailure{
+                                            .kind = PlaybackFailureKind::Decode,
+                                            .itemId = optFailedItem->id,
+                                            .input = optFailedItem->input,
+                                            .generation = event.sourceGeneration,
+                                            .error = std::move(failureError),
+                                            .recoverable = true,
+                                          });
       }
 
       appendStateChangedNotification(notifications, std::move(stateChanged));
-      appendRouteNotification(notifications, std::move(callback), std::move(snapshot));
+
+      if (endedCallback)
+      {
+        notifications.emplace_back([callback = std::move(endedCallback)] { callback(); });
+      }
+
       return notifications;
     }
 
-    Notifications handlePropertyChanged(PropertyChangedEvent const& event)
+    Notifications processDrainCompleteEvent(DrainCompleteEvent const& event)
+    {
+      return completeDrain(event.generation, event.drainEpoch);
+    }
+
+    Notifications processRouteReadyEvent(RouteReadyEvent const& event)
     {
       auto notifications = Notifications{};
-      auto stateChanged = std::function<void()>{};
-      auto callback = OnRouteChanged{};
-      auto snapshot = RouteStatus{};
+      auto pendingNotifications = PendingRouteNotifications{};
       {
         auto const lock = std::scoped_lock{stateMutex};
 
-        if (!isActiveRenderSession(event.generation))
+        if (!isActiveRenderTarget(event.generation))
         {
           return {};
         }
 
-        if (event.id == PropertyId::Volume)
+        routeTracker.setAnchor(event.backendId, event.routeAnchor);
+        pendingNotifications = capturePendingRouteNotifications();
+      }
+
+      appendPendingRouteNotifications(notifications, std::move(pendingNotifications));
+      return notifications;
+    }
+
+    Notifications processFormatChangedEvent(FormatChangedEvent const& event)
+    {
+      auto notifications = Notifications{};
+      auto pendingNotifications = PendingRouteNotifications{};
+      {
+        auto const lock = std::scoped_lock{stateMutex};
+
+        if (!isActiveRenderTarget(event.generation))
         {
-          if (event.optValue)
+          return {};
+        }
+
+        routeTracker.setEngineFormat(event.format);
+        status.routeState.engineOutputFormat = event.format;
+        pendingNotifications = capturePendingRouteNotifications();
+      }
+
+      appendPendingRouteNotifications(notifications, std::move(pendingNotifications));
+      return notifications;
+    }
+
+    Notifications processPropertyChangedEvent(PropertyChangedEvent const& event)
+    {
+      auto notifications = Notifications{};
+      auto pendingNotifications = PendingRouteNotifications{};
+      {
+        auto const lock = std::scoped_lock{stateMutex};
+
+        if (!isActiveRenderTarget(event.generation))
+        {
+          return {};
+        }
+
+        if (event.snapshot.id == PropertyId::Volume)
+        {
+          if (event.snapshot.optValue)
           {
-            if (auto const* vol = std::get_if<float>(&*event.optValue); vol != nullptr)
+            if (auto const* vol = std::get_if<float>(&*event.snapshot.optValue); vol != nullptr)
             {
               status.volume = *vol;
             }
           }
+
+          status.volumeAvailable = event.snapshot.info.isAvailable;
+          status.volumeIsHardwareAssisted = event.snapshot.info.isHardwareAssisted;
         }
-        else if (event.id == PropertyId::Muted)
+        else if (event.snapshot.id == PropertyId::Muted)
         {
-          if (event.optValue)
+          if (event.snapshot.optValue)
           {
-            if (auto const* mute = std::get_if<bool>(&*event.optValue); mute != nullptr)
+            if (auto const* mute = std::get_if<bool>(&*event.snapshot.optValue); mute != nullptr)
             {
               status.muted = *mute;
             }
           }
         }
-
-        status.volumeAvailable = event.volumeInfo.isAvailable;
-        status.volumeIsHardwareAssisted = event.volumeInfo.isHardwareAssisted;
-        stateChanged = onStateChanged;
-        callback = onRouteChanged;
-        snapshot = RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
-      }
-
-      appendStateChangedNotification(notifications, std::move(stateChanged));
-      appendRouteNotification(notifications, std::move(callback), std::move(snapshot));
-      return notifications;
-    }
-
-    Notifications handleDrainComplete(std::uint64_t generation, std::uint64_t signalDrainEpoch)
-    {
-      auto onTrackEndedCallback = std::function<void()>{};
-      auto onRouteChangedCallback = OnRouteChanged{};
-      auto stateChanged = std::function<void()>{};
-      bool shouldQuiesce = false;
-
-      {
-        auto const lock = std::scoped_lock{stateMutex};
-
-        if (!isActiveRenderSession(generation) || drainEpoch.load(std::memory_order_acquire) != signalDrainEpoch)
+        else
         {
           return {};
         }
 
-        retireRenderSession();
-        onRouteChangedCallback = onRouteChanged;
-        resetPlaybackStatePreservingOutput();
-        onTrackEndedCallback = onTrackEnded;
-        stateChanged = onStateChanged;
-        shouldQuiesce = true;
+        pendingNotifications = capturePendingRouteNotifications();
       }
 
-      resetTransitionState();
-
-      if (shouldQuiesce)
-      {
-        backendPtr->stop();
-        backendPtr->close();
-        resetRenderSession();
-        timeline.clear();
-      }
-
-      auto notifications = Notifications{};
-      appendStateChangedNotification(notifications, std::move(stateChanged));
-
-      if (onRouteChangedCallback)
-      {
-        notifications.emplace_back([callback = std::move(onRouteChangedCallback)] { callback({}); });
-      }
-
-      if (onTrackEndedCallback)
-      {
-        notifications.emplace_back([callback = std::move(onTrackEndedCallback)] { callback(); });
-      }
-
+      appendPendingRouteNotifications(notifications, std::move(pendingNotifications));
       return notifications;
     }
 
@@ -1274,7 +1283,7 @@ namespace ao::audio
 
     // Marks the route-activation attempt failed with a terminal Error state
     // and a non-recoverable RouteActivation failure notification. Caller must
-    // hold stateMutex and own any side cleanup (render session teardown,
+    // hold stateMutex and own any side cleanup (render target teardown,
     // transition reset) before invoking.
     void markRouteActivationFailureUnlocked(Notifications& notifications,
                                             PlaybackItem const& item,
@@ -1385,13 +1394,13 @@ namespace ao::audio
 
     {
       auto const lock = std::scoped_lock{stateMutex};
-      retireRenderSession();
+      retireRenderTarget();
       timeline.retireCursor();
     }
 
     backendPtr->stop();
     backendPtr->close();
-    resetRenderSession();
+    resetRenderTarget();
     timeline.clear();
 
     auto const sourceGeneration = nextSourceGeneration++;
@@ -1468,13 +1477,13 @@ namespace ao::audio
     }
 
     publishCurrentNode(std::move(openedNodePtr));
-    auto* renderTarget = createRenderSession(*backendPtr);
+    auto* renderTarget = createRenderTarget(*backendPtr);
 
     if (auto const openResult = backendPtr->open(currentNode->backendFormat, renderTarget); !openResult)
     {
-      retireRenderSession();
+      retireRenderTarget();
       backendPtr->close();
-      resetRenderSession();
+      resetRenderTarget();
       auto notifications = Notifications{};
       {
         auto const lock = std::scoped_lock{stateMutex};
@@ -1502,10 +1511,10 @@ namespace ao::audio
     if (auto const drained = !currentNode->sourcePtr || currentNode->sourcePtr->isDrained();
         drained && bufferedDuration == std::chrono::milliseconds{0})
     {
-      retireRenderSession();
+      retireRenderTarget();
       backendPtr->stop();
       backendPtr->close();
-      resetRenderSession();
+      resetRenderTarget();
       timeline.clear();
       resetTransitionState();
       auto const lock = std::scoped_lock{stateMutex};
@@ -1643,7 +1652,7 @@ namespace ao::audio
         drained &&
         (sourcePtr ? sourcePtr->bufferedDuration() : std::chrono::milliseconds{0}) == std::chrono::milliseconds{0})
     {
-      retireRenderSession();
+      retireRenderTarget();
       resetEngine();
       lock.unlock();
       timeline.clear();
@@ -1662,13 +1671,13 @@ namespace ao::audio
 
     {
       auto const lock = std::scoped_lock{stateMutex};
-      retireRenderSession();
+      retireRenderTarget();
       timeline.retireCursor();
     }
 
     backendPtr->stop();
     backendPtr->close();
-    resetRenderSession();
+    resetRenderTarget();
 
     {
       auto const lock = std::scoped_lock{stateMutex};
@@ -1719,12 +1728,12 @@ namespace ao::audio
     if (auto const drained = sourcePtr->isDrained(); drained && bufferedDuration == std::chrono::milliseconds{0})
     {
       // Retire before stopping: a drain callback still in flight from this
-      // (about to be closed) session must not be applied later and resurrect
+      // (about to be closed) target must not be applied later and resurrect
       // or re-quiesce engine state the reset below already settled.
-      retireRenderSession();
+      retireRenderTarget();
       backendPtr->stop();
       backendPtr->close();
-      resetRenderSession();
+      resetRenderTarget();
       timeline.clear();
       resetTransitionState();
       auto const lock = std::scoped_lock{stateMutex};

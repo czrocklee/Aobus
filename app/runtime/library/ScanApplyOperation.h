@@ -119,7 +119,7 @@ namespace ao::rt
 
     bool shouldFingerprintDuringApply(ScanItem const& item) const noexcept;
 
-    bool requiresFingerprintForApply(ScanItem const& item) const noexcept;
+    bool isFingerprintRequiredForApply(ScanItem const& item) const noexcept;
 
     std::optional<AudioFingerprint> fingerprintAudioPayload(ScanItem const& item,
                                                             tag::TagFile const& tagFile,

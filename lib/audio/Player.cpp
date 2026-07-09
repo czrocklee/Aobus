@@ -66,7 +66,7 @@ namespace ao::audio
     {
       std::atomic<bool> shuttingDown{false};
 
-      bool acceptsCallbacks() const noexcept { return !shuttingDown.load(std::memory_order_acquire); }
+      bool canAcceptCallbacks() const noexcept { return !shuttingDown.load(std::memory_order_acquire); }
       void shutdown() noexcept { shuttingDown.store(true, std::memory_order_release); }
     };
 
@@ -94,14 +94,14 @@ namespace ao::audio
       //   4. Destroy providers last.
       graphSubscription.reset();
 
-      for (auto& record : providers)
+      for (auto& recordPtr : providers)
       {
-        record->subscription.reset();
+        recordPtr->subscription.reset();
       }
 
-      for (auto& record : providers)
+      for (auto& recordPtr : providers)
       {
-        record->providerPtr->shutdown();
+        recordPtr->providerPtr->shutdown();
       }
 
       // Defensive: prevent dangling use if Engine teardown somehow triggers handleRouteChanged.
@@ -145,7 +145,7 @@ namespace ao::audio
       executor.dispatch(
         [gatePtr = std::move(gatePtr), task = std::move(task)] mutable
         {
-          if (!gatePtr->acceptsCallbacks())
+          if (!gatePtr->canAcceptCallbacks())
           {
             return;
           }
@@ -164,7 +164,7 @@ namespace ao::audio
       executor.dispatch(
         [this, slot, gatePtr = gatePtr, args = std::make_tuple(std::move(args)...)] mutable
         {
-          if (!gatePtr->acceptsCallbacks())
+          if (!gatePtr->canAcceptCallbacks())
           {
             return;
           }
@@ -186,7 +186,7 @@ namespace ao::audio
   {
     // Update individual provider cache
     auto const it =
-      std::ranges::find_if(providers, [&](auto const& record) { return record->providerPtr.get() == provider; });
+      std::ranges::find_if(providers, [&](auto const& recordPtr) { return recordPtr->providerPtr.get() == provider; });
 
     if (it != providers.end())
     {
@@ -197,14 +197,14 @@ namespace ao::audio
     auto allDevicesList = std::vector<Device>{};
     auto snapshots = std::vector<BackendProvider::Status>{};
 
-    for (auto const& record : providers)
+    for (auto const& recordPtr : providers)
     {
-      auto status = record->providerPtr->status();
+      auto status = recordPtr->providerPtr->status();
       // The provider status might have its own internal device list, but we use the one from the subscription for
       // consistency
-      status.devices = record->devices;
+      status.devices = recordPtr->devices;
       snapshots.push_back(std::move(status));
-      allDevicesList.insert(allDevicesList.end(), record->devices.begin(), record->devices.end());
+      allDevicesList.insert(allDevicesList.end(), recordPtr->devices.begin(), recordPtr->devices.end());
     }
 
     {
@@ -447,10 +447,10 @@ namespace ao::audio
     recordPtr->providerPtr = std::move(providerPtr);
 
     auto* const provider = recordPtr->providerPtr.get();
-    auto* const record = recordPtr.get();
+    auto* const recordRaw = recordPtr.get();
     _implPtr->providers.push_back(std::move(recordPtr));
 
-    record->subscription = provider->subscribeDevices(
+    recordRaw->subscription = provider->subscribeDevices(
       [this, provider, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor](std::vector<Device> const& devices)
       {
         Impl::dispatchInternal(executor,
@@ -510,8 +510,9 @@ namespace ao::audio
       return {};
     }
 
-    auto const recordIt = std::ranges::find_if(
-      _implPtr->providers, [&](auto const& record) { return record->providerPtr->status().descriptor.id == backend; });
+    auto const recordIt = std::ranges::find_if(_implPtr->providers,
+                                               [&](auto const& recordPtr)
+                                               { return recordPtr->providerPtr->status().descriptor.id == backend; });
 
     if (recordIt == _implPtr->providers.end())
     {

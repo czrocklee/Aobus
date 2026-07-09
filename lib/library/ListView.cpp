@@ -24,7 +24,7 @@ namespace ao::library
     }
 
     auto const size = data.size();
-    auto const trackIdBytes = static_cast<std::size_t>(header->trackIdsCount) * sizeof(TrackId);
+    auto const trackIdBytes = static_cast<std::size_t>(header->trackIdCount) * sizeof(TrackId);
 
     auto fieldFits = [size](std::uint16_t offset, std::uint16_t length) noexcept
     { return kListHeaderSize + static_cast<std::size_t>(offset) + static_cast<std::size_t>(length) <= size; };
@@ -75,7 +75,7 @@ namespace ao::library
       return TrackProxy{};
     }
 
-    auto const trackIdBytes = static_cast<std::size_t>(_header->trackIdsCount) * sizeof(TrackId);
+    auto const trackIdBytes = static_cast<std::size_t>(_header->trackIdCount) * sizeof(TrackId);
     return TrackProxy{utility::layout::viewArray<TrackId>(_payload.subspan(kListHeaderSize, trackIdBytes))};
   }
 } // namespace ao::library

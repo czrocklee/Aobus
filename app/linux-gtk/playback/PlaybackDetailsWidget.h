@@ -37,8 +37,6 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _container; }
 
   private:
-    friend class PlaybackDetailsWidgetTestPeer;
-
     void applyState(uimodel::NowPlayingViewState const& view);
 
     Gtk::Box _container{Gtk::Orientation::HORIZONTAL};

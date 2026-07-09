@@ -49,8 +49,8 @@ namespace ao::gtk
   private:
     void render(uimodel::TrackPresentationPickerState const& state);
     void populatePresentationOptions(uimodel::TrackPresentationPickerState const& state);
-    void onPresentationSelected(std::string_view presentationId);
-    void onCreateCustomViewClicked();
+    void handlePresentationSelected(std::string_view presentationId);
+    void handleCreateCustomViewClicked();
     void applyCommand(uimodel::TrackPresentationApplyCommand const& command);
 
     rt::AppRuntime& _runtime;

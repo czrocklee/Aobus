@@ -56,16 +56,16 @@ namespace ao::rt
     Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) override;
 
   private:
-    void onReset() override;
-    void onInserted(TrackId id, std::size_t index) override;
-    void onUpdated(TrackId id, std::size_t index) override;
-    void onRemoved(TrackId id, std::size_t index) override;
+    void handleReset() override;
+    void handleInserted(TrackId id, std::size_t index) override;
+    void handleUpdated(TrackId id, std::size_t index) override;
+    void handleRemoved(TrackId id, std::size_t index) override;
 
-    void onBulkInserted(std::span<TrackId const> ids) override;
-    void onBulkUpdated(std::span<TrackId const> ids) override;
-    void onBulkRemoved(std::span<TrackId const> ids) override;
+    void handleBulkInserted(std::span<TrackId const> ids) override;
+    void handleBulkUpdated(std::span<TrackId const> ids) override;
+    void handleBulkRemoved(std::span<TrackId const> ids) override;
 
-    void onSourceDestroyed() override;
+    void handleSourceDestroyed() override;
 
     void publishDelta(TrackListProjectionDeltaBatch const& batch);
 

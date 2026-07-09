@@ -103,7 +103,7 @@ namespace ao::gtk::layout
         }
 
         // Subscribe to projection
-        _sub = _projectionPtr->subscribe([this](auto const& snap) { onSnapshot(snap); });
+        _sub = _projectionPtr->subscribe([this](auto const& snap) { handleSnapshot(snap); });
       }
 
       TrackDetailScopeComponent(TrackDetailScopeComponent const&) = delete;
@@ -127,7 +127,7 @@ namespace ao::gtk::layout
       }
 
     private:
-      void onSnapshot(rt::TrackDetailSnapshot const& snap)
+      void handleSnapshot(rt::TrackDetailSnapshot const& snap)
       {
         bool const selectionChanged = _currentSnap.trackIds != snap.trackIds;
         _currentSnap = snap;

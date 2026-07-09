@@ -56,25 +56,25 @@ namespace ao::audio
     virtual RenderPcmResult renderPcm(std::span<std::byte> output) noexcept = 0;
 
     /// Called by the backend when an underrun occurs.
-    virtual void onUnderrun() noexcept = 0;
+    virtual void handleUnderrun() noexcept = 0;
 
     /// Called by the backend to report playback progress.
-    virtual void onPositionAdvanced(std::uint32_t frames) noexcept = 0;
+    virtual void handlePositionAdvanced(std::uint32_t frames) noexcept = 0;
 
     /// Called by the backend when a drain operation has completed.
-    virtual void onDrainComplete() noexcept = 0;
+    virtual void handleDrainComplete() noexcept = 0;
 
     /// Called by the backend when the stream's runtime node ID or route anchor is stable.
-    virtual void onRouteReady(std::string_view routeAnchor) noexcept = 0;
+    virtual void handleRouteReady(std::string_view routeAnchor) noexcept = 0;
 
     /// Called by the backend when its input stream format is negotiated or changes.
-    virtual void onFormatChanged(Format const& format) noexcept = 0;
+    virtual void handleFormatChanged(Format const& format) noexcept = 0;
 
     /// Called by the backend when a runtime property changes externally.
-    virtual void onPropertyChanged(PropertyId id) noexcept = 0;
+    virtual void handlePropertyChanged(PropertySnapshot snapshot) noexcept = 0;
 
     /// Called by the backend when a terminal error occurs (e.g. device lost).
-    virtual void onBackendError(std::string_view message) noexcept = 0;
+    virtual void handleBackendError(std::string_view message) noexcept = 0;
 
   protected:
     RenderTarget() = default;

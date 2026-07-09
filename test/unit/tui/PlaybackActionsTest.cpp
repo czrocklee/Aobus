@@ -39,8 +39,8 @@ namespace ao::tui::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto first = library::test::TrackSpec{.title = "First", .artist = "One", .uri = fixturePath};
     auto second = library::test::TrackSpec{.title = "Second", .artist = "Two", .uri = fixturePath};
-    auto const firstId = fixture.testLib.addTrack(first);
-    auto const secondId = fixture.testLib.addTrack(second);
+    auto const firstId = fixture.libraryFixture.addTrack(first);
+    auto const secondId = fixture.libraryFixture.addTrack(second);
     auto const tracks = std::vector{trackEntry(firstId), trackEntry(secondId)};
 
     CHECK(playSelected(fixture.playbackService, tracks, -4, ListId{7}));
@@ -74,7 +74,7 @@ namespace ao::tui::test
       .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
     };
 
-    auto const trackId = fixture.testLib.addTrack(spec);
+    auto const trackId = fixture.libraryFixture.addTrack(spec);
     auto const tracks = std::vector{trackEntry(trackId)};
 
     CHECK(togglePlayback(fixture.playbackService, tracks, 0, ListId{9}));

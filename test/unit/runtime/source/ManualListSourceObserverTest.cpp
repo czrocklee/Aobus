@@ -22,10 +22,10 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
     auto mls = ManualListSource{lv.view()};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
-    mls.onReset();
+    mls.handleReset();
 
     CHECK(spy.events.empty());
     CHECK(mls.size() == 3);
@@ -47,13 +47,13 @@ namespace ao::rt::test
 
     mls.trackIds().emplace_back(99);
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     source.reset({{TrackId{1}, TrackId{3}}});
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::Reset);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Reset);
     REQUIRE(mls.size() == 2);
     CHECK(mls.trackIdAt(0) == TrackId{1});
     CHECK(mls.trackIdAt(1) == TrackId{3});
@@ -71,13 +71,13 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     source.reset();
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::Reset);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Reset);
     CHECK(mls.size() == 0);
     CHECK(mls.trackIds().empty());
 
@@ -95,13 +95,13 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     source.reset({{TrackId{1}, TrackId{2}, TrackId{3}}});
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::Reset);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Reset);
     REQUIRE(mls.size() == 3);
     CHECK(mls.trackIdAt(0) == TrackId{1});
     CHECK(mls.trackIdAt(1) == TrackId{2});
@@ -117,10 +117,10 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
     auto mls = ManualListSource{lv.view()};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
-    mls.onInserted(TrackId{99}, 0);
+    mls.handleInserted(TrackId{99}, 0);
 
     CHECK(spy.events.empty());
     CHECK(mls.size() == 2);
@@ -135,11 +135,11 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}}};
     auto mls = ManualListSource{lv.view()};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     auto const batch = std::array{TrackId{10}, TrackId{20}};
-    mls.onBulkInserted(std::span{batch});
+    mls.handleBulkInserted(std::span{batch});
 
     CHECK(spy.events.empty());
     CHECK(mls.size() == 1);
@@ -161,13 +161,13 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{3}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     source.update(TrackId{3});
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::Updated);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
     CHECK(spy.events[0].id == TrackId{3});
     CHECK(spy.events[0].index == 1);
 
@@ -175,7 +175,7 @@ namespace ao::rt::test
     source.update(TrackId{1});
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::Updated);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
     CHECK(spy.events[0].id == TrackId{1});
     CHECK(spy.events[0].index == 0);
 
@@ -191,7 +191,7 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     source.update(TrackId{99});
@@ -214,14 +214,14 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     auto const batch = std::array{TrackId{1}, TrackId{2}, TrackId{4}, TrackId{5}};
     source.batchUpdate(batch);
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::BatchUpdated);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchUpdated);
     CHECK(spy.events[0].batchIds.size() == 2);
     CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{1}));
     CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
@@ -238,7 +238,7 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     auto const batch = std::array{TrackId{99}, TrackId{100}};
@@ -257,7 +257,7 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     source.batchUpdate({});
@@ -278,14 +278,14 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     auto const batch = std::array{TrackId{1}, TrackId{2}, TrackId{3}};
     source.batchUpdate(batch);
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::BatchUpdated);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchUpdated);
     CHECK(spy.events[0].batchIds.size() == 3);
     CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{1}));
     CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
@@ -308,13 +308,13 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{10}, TrackId{20}, TrackId{30}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     source.remove(TrackId{20});
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::Removed);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Removed);
     CHECK(spy.events[0].id == TrackId{20});
     CHECK(spy.events[0].index == 1);
     REQUIRE(mls.size() == 2);
@@ -334,13 +334,13 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     source.remove(TrackId{1});
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::Removed);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Removed);
     CHECK(spy.events[0].id == TrackId{1});
     CHECK(spy.events[0].index == 0);
     REQUIRE(mls.size() == 1);
@@ -358,7 +358,7 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     source.remove(TrackId{99});
@@ -383,14 +383,14 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     auto const batch = std::array{TrackId{2}, TrackId{5}, TrackId{4}};
     source.batchRemove(batch);
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::BatchRemoved);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchRemoved);
     CHECK(spy.events[0].batchIds.size() == 2);
     CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
     CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{4}));
@@ -410,7 +410,7 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     auto const batch = std::array{TrackId{99}, TrackId{100}};
@@ -430,7 +430,7 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     source.batchRemove({});
@@ -451,14 +451,14 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     auto const batch = std::array{TrackId{1}, TrackId{2}, TrackId{3}};
     source.batchRemove(batch);
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::BatchRemoved);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchRemoved);
     CHECK(spy.events[0].batchIds.size() == 3);
     CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{1}));
     CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
@@ -481,7 +481,7 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     // Remove middle element first.
@@ -531,14 +531,14 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     auto const batch = std::array{TrackId{1}, TrackId{2}};
     source.batchRemove(batch);
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::BatchRemoved);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchRemoved);
     CHECK(spy.events[0].batchIds.size() == 2);
     REQUIRE(mls.size() == 2);
 
@@ -546,7 +546,7 @@ namespace ao::rt::test
     source.remove(TrackId{3});
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::Removed);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Removed);
     CHECK(spy.events[0].id == TrackId{3});
     CHECK(spy.events[0].index == 0);
     REQUIRE(mls.size() == 1);
@@ -566,20 +566,20 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy = TrackSourceObserverSpy{};
+    auto spy = SpyTrackSourceObserver{};
     mls.attach(&spy);
 
     auto const batch = std::array{TrackId{1}, TrackId{2}};
     source.batchUpdate(batch);
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::BatchUpdated);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchUpdated);
 
     spy.clear();
     source.update(TrackId{1});
 
     REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == TrackSourceObserverSpy::EventKind::Updated);
+    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
     CHECK(spy.events[0].id == TrackId{1});
 
     mls.detach(&spy);
@@ -620,19 +620,19 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy1 = TrackSourceObserverSpy{};
-    auto spy2 = TrackSourceObserverSpy{};
+    auto spy1 = SpyTrackSourceObserver{};
+    auto spy2 = SpyTrackSourceObserver{};
     mls.attach(&spy1);
     mls.attach(&spy2);
 
     source.update(TrackId{1});
 
     REQUIRE(spy1.events.size() == 1);
-    CHECK(spy1.events[0].kind == TrackSourceObserverSpy::EventKind::Updated);
+    CHECK(spy1.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
     CHECK(spy1.events[0].id == TrackId{1});
 
     REQUIRE(spy2.events.size() == 1);
-    CHECK(spy2.events[0].kind == TrackSourceObserverSpy::EventKind::Updated);
+    CHECK(spy2.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
     CHECK(spy2.events[0].id == TrackId{1});
 
     mls.detach(&spy1);
@@ -647,8 +647,8 @@ namespace ao::rt::test
     auto lv = ListViewOwner{{TrackId{1}}};
     auto mls = ManualListSource{lv.view(), &source};
 
-    auto spy1 = TrackSourceObserverSpy{};
-    auto spy2 = TrackSourceObserverSpy{};
+    auto spy1 = SpyTrackSourceObserver{};
+    auto spy2 = SpyTrackSourceObserver{};
     mls.attach(&spy1);
     mls.attach(&spy2);
     mls.detach(&spy2);
@@ -678,7 +678,7 @@ namespace ao::rt::test
     auto lv2 = ListViewOwner{{TrackId{2}}};
     auto outer = ManualListSource{lv2.view(), &inner};
 
-    auto outerSpy = TrackSourceObserverSpy{};
+    auto outerSpy = SpyTrackSourceObserver{};
     outer.attach(&outerSpy);
 
     source.remove(TrackId{2});
@@ -688,7 +688,7 @@ namespace ao::rt::test
     REQUIRE(outer.size() == 0);
 
     REQUIRE(outerSpy.events.size() == 1);
-    CHECK(outerSpy.events[0].kind == TrackSourceObserverSpy::EventKind::Removed);
+    CHECK(outerSpy.events[0].kind == SpyTrackSourceObserver::EventKind::Removed);
     CHECK(outerSpy.events[0].id == TrackId{2});
     CHECK(outerSpy.events[0].index == 0);
 
@@ -708,7 +708,7 @@ namespace ao::rt::test
     auto lv2 = ListViewOwner{{TrackId{1}, TrackId{3}}};
     auto outer = ManualListSource{lv2.view(), &inner};
 
-    auto outerSpy = TrackSourceObserverSpy{};
+    auto outerSpy = SpyTrackSourceObserver{};
     outer.attach(&outerSpy);
 
     source.reset({{TrackId{3}}});
@@ -719,7 +719,7 @@ namespace ao::rt::test
     CHECK(outer.trackIdAt(0) == TrackId{3});
 
     REQUIRE(!outerSpy.events.empty());
-    CHECK(outerSpy.events.back().kind == TrackSourceObserverSpy::EventKind::Reset);
+    CHECK(outerSpy.events.back().kind == SpyTrackSourceObserver::EventKind::Reset);
 
     outer.detach(&outerSpy);
   }

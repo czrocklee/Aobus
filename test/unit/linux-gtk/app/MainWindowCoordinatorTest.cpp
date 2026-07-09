@@ -4,7 +4,7 @@
 #include "app/MainWindowCoordinator.h"
 
 #include "../GtkTestSupport.h"
-#include "app/AppConfig.h"
+#include "app/AppConfigStore.h"
 #include "app/MainWindow.h"
 #include "app/ThemeCoordinator.h"
 #include "portal/ImportExportCoordinator.h"
@@ -78,31 +78,31 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
-    auto configPtr = std::make_shared<AppConfig>(configPath);
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
     auto initialPrefs = rt::AppPrefsState{};
     initialPrefs.lastThemePreset = "modern";
     initialPrefs.lastOutputBackendId = "preference-backend";
     initialPrefs.lastOutputDeviceId = "preference-device";
     initialPrefs.lastOutputProfileId = "preference-profile";
-    configPtr->saveAppPrefs(initialPrefs);
+    configStorePtr->saveAppPrefs(initialPrefs);
 
-    auto window = MainWindow{runtime, configPtr, nullptr};
-    auto coordinator = MainWindowCoordinator{window, runtime, configPtr};
+    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
     coordinator.loadSession();
 
     coordinator.themeController()->setTheme(rt::ThemePresetId::Classic);
     coordinator.saveSession();
 
     auto loadedPrefs = rt::AppPrefsState{};
-    configPtr->loadAppPrefs(loadedPrefs);
+    configStorePtr->loadAppPrefs(loadedPrefs);
     CHECK(loadedPrefs.lastThemePreset == "modern");
     CHECK(loadedPrefs.lastOutputBackendId == "preference-backend");
     CHECK(loadedPrefs.lastOutputDeviceId == "preference-device");
     CHECK(loadedPrefs.lastOutputProfileId == "preference-profile");
 
     auto loadedSession = rt::AppSessionState{};
-    configPtr->loadAppSession(loadedSession);
+    configStorePtr->loadAppSession(loadedSession);
     CHECK(loadedSession.lastLibraryPath == runtime.musicLibrary().rootPath().string());
   }
 
@@ -112,10 +112,10 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
-    auto configPtr = std::make_shared<AppConfig>(configPath);
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
-    auto window = MainWindow{runtime, configPtr, nullptr};
-    auto coordinator = MainWindowCoordinator{window, runtime, configPtr};
+    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
     auto const trackId = addTrackWithTitle(runtime, "Before Import");
     auto const rowBeforePtr = coordinator.trackRowCache()->trackRow(trackId);
@@ -141,21 +141,21 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(runtime.playback());
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
-    auto configPtr = std::make_shared<AppConfig>(configPath);
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
     auto prefs = rt::AppPrefsState{};
     prefs.lastOutputBackendId = "incomplete-preference-backend";
     prefs.lastOutputProfileId = {};
-    configPtr->saveAppPrefs(prefs);
+    configStorePtr->saveAppPrefs(prefs);
 
     auto session = rt::AppSessionState{};
     session.lastOutputBackendId = "test_backend";
     session.lastOutputDeviceId = "test_device";
     session.lastOutputProfileId = audio::kProfileShared.raw();
-    configPtr->saveAppSession(session);
+    configStorePtr->saveAppSession(session);
 
-    auto window = MainWindow{runtime, configPtr, nullptr};
-    auto coordinator = MainWindowCoordinator{window, runtime, configPtr};
+    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
     coordinator.loadSession();
 
     auto const& selected = runtime.playback().state().output.selectedDevice;
@@ -182,9 +182,9 @@ namespace ao::gtk::test
     REQUIRE(runtime.configStore().flush());
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
-    auto configPtr = std::make_shared<AppConfig>(configPath);
-    auto window = MainWindow{runtime, configPtr, nullptr};
-    auto coordinator = MainWindowCoordinator{window, runtime, configPtr};
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
     coordinator.initializeSession();
 
@@ -221,9 +221,9 @@ namespace ao::gtk::test
     REQUIRE(runtime.configStore().flush());
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
-    auto configPtr = std::make_shared<AppConfig>(configPath);
-    auto window = MainWindow{runtime, configPtr, nullptr};
-    auto coordinator = MainWindowCoordinator{window, runtime, configPtr};
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
     coordinator.initializeSession();
 

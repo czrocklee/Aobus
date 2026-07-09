@@ -27,13 +27,13 @@ namespace ao::uimodel::test
 
   TEST_CASE("OutputDeviceViewModel - state generation", "[uimodel][unit][playback][output]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
+    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
+    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
+    auto playback = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
 
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
     auto viewModel = OutputDeviceViewModel{playback, [&log](auto const& view) { log.render(view); }};
@@ -57,13 +57,13 @@ namespace ao::uimodel::test
 
   TEST_CASE("OutputDeviceViewModel - refresh with fake provider", "[uimodel][unit][playback][output]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
+    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
+    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
+    auto playback = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
 
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
     auto viewModel = OutputDeviceViewModel{playback, [&log](auto const& view) { log.render(view); }};

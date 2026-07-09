@@ -22,7 +22,7 @@ extern "C"
 #include <libudev.h>
 }
 
-#include <ao/audio/backend/detail/AlsaProviderHelpers.h>
+#include <ao/audio/backend/detail/AlsaDeviceDiscovery.h>
 
 #pragma GCC diagnostic pop
 

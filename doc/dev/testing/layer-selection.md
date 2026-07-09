@@ -69,7 +69,7 @@ Good GTK tests usually:
 - Build the widget with a fixture.
 - Drive a user-facing event such as click, activate, focus, gesture, or runtime signal.
 - Assert a small number of stable widget outcomes.
-- Use explicit `...ForTest()` accessors or stable semantic CSS classes when possible.
+- Use normal public accessors or stable semantic CSS classes when possible.
 - Reserve geometry/measurement assertions for real regressions and document why they exist.
 
 Appropriate contracts:

@@ -125,10 +125,10 @@ namespace ao::uimodel
         }
       }
 
-      view.audioPipeline = AudioPipelineView{.quality = state.quality,
-                                             .deviceName = std::move(deviceName),
-                                             .deviceIconName = std::move(deviceIconName),
-                                             .plainTextFallback = plainTextFallback};
+      view.audioPipeline = AudioPipelineViewState{.quality = state.quality,
+                                                  .deviceName = std::move(deviceName),
+                                                  .deviceIconName = std::move(deviceIconName),
+                                                  .plainTextFallback = plainTextFallback};
 
       view.isActive = (state.quality.overall != audio::Quality::Unknown);
       view.qualityCategory = presentation.category;

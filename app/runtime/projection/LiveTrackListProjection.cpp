@@ -204,7 +204,7 @@ namespace ao::rt
       }
     }
 
-    bool needsColdDataForSortField(TrackSortField field)
+    bool isColdDataRequiredForSortField(TrackSortField field)
     {
       switch (field)
       {
@@ -220,7 +220,7 @@ namespace ao::rt
       }
     }
 
-    bool needsColdDataForGroupBy(TrackGroupKey groupBy)
+    bool isColdDataRequiredForGroupBy(TrackGroupKey groupBy)
     {
       return groupBy == TrackGroupKey::Work || groupBy == TrackGroupKey::Album || groupBy == TrackGroupKey::Conductor ||
              groupBy == TrackGroupKey::Ensemble;
@@ -230,11 +230,11 @@ namespace ao::rt
                                                           TrackGroupKey groupBy)
     {
       bool needsHot = groupBy != TrackGroupKey::None;
-      bool needsCold = needsColdDataForGroupBy(groupBy);
+      bool needsCold = isColdDataRequiredForGroupBy(groupBy);
 
       for (auto const& term : sortBy)
       {
-        if (needsColdDataForSortField(term.field))
+        if (isColdDataRequiredForSortField(term.field))
         {
           needsCold = true;
         }
@@ -1804,7 +1804,7 @@ namespace ao::rt
     return Subscription{[this, index] { _implPtr->subscribers[index] = {}; }};
   }
 
-  void LiveTrackListProjection::onReset()
+  void LiveTrackListProjection::handleReset()
   {
     _implPtr->rebuildOrderIndex();
     _implPtr->publishDelta(TrackListProjectionDeltaBatch{
@@ -1813,32 +1813,32 @@ namespace ao::rt
     });
   }
 
-  void LiveTrackListProjection::onInserted(TrackId id, std::size_t /*sourceIndex*/)
+  void LiveTrackListProjection::handleInserted(TrackId id, std::size_t /*sourceIndex*/)
   {
     _implPtr->insertEntry(id);
   }
 
-  void LiveTrackListProjection::onUpdated(TrackId id, std::size_t /*sourceIndex*/)
+  void LiveTrackListProjection::handleUpdated(TrackId id, std::size_t /*sourceIndex*/)
   {
     _implPtr->updateEntry(id);
   }
 
-  void LiveTrackListProjection::onRemoved(TrackId id, std::size_t /*sourceIndex*/)
+  void LiveTrackListProjection::handleRemoved(TrackId id, std::size_t /*sourceIndex*/)
   {
     _implPtr->removeEntry(id);
   }
 
-  void LiveTrackListProjection::onBulkInserted(std::span<TrackId const> ids)
+  void LiveTrackListProjection::handleBulkInserted(std::span<TrackId const> ids)
   {
     _implPtr->insertEntries(ids);
   }
 
-  void LiveTrackListProjection::onBulkUpdated(std::span<TrackId const> ids)
+  void LiveTrackListProjection::handleBulkUpdated(std::span<TrackId const> ids)
   {
     _implPtr->updateEntries(ids);
   }
 
-  void LiveTrackListProjection::onBulkRemoved(std::span<TrackId const> ids)
+  void LiveTrackListProjection::handleBulkRemoved(std::span<TrackId const> ids)
   {
     _implPtr->removeEntries(ids);
   }
@@ -1848,7 +1848,7 @@ namespace ao::rt
     _implPtr->publishDelta(batch);
   }
 
-  void LiveTrackListProjection::onSourceDestroyed()
+  void LiveTrackListProjection::handleSourceDestroyed()
   {
     _implPtr->sourceDestroyed = true;
   }

@@ -35,7 +35,7 @@ namespace ao::query
       return field == Field::Tag || field == Field::TagBloom || field == Field::TagCount || field == Field::CoverArtId;
     }
 
-    std::string_view loadDictionaryFieldValue(library::TrackView const& track,
+    std::string_view readDictionaryFieldValue(library::TrackView const& track,
                                               Field field,
                                               library::DictionaryStore const* dictionary)
     {
@@ -58,7 +58,7 @@ namespace ao::query
       return std::format("{}", value);
     }
 
-    std::string loadFieldText(library::TrackView const& track,
+    std::string readFieldText(library::TrackView const& track,
                               FormatInstruction const& instr,
                               library::DictionaryStore const* dictionary)
     {
@@ -66,7 +66,7 @@ namespace ao::query
 
       if (isDictionaryField(field))
       {
-        return std::string{loadDictionaryFieldValue(track, field, dictionary)};
+        return std::string{readDictionaryFieldValue(track, field, dictionary)};
       }
 
       switch (field)
@@ -124,10 +124,10 @@ namespace ao::query
   void FormatCompiler::compileExpression(Expression const& expr)
   {
     std::visit(utility::makeVisitor(
-                 [this](std::unique_ptr<BinaryExpression> const& binary)
+                 [this](std::unique_ptr<BinaryExpression> const& binaryPtr)
                  {
-                   gsl_Expects(binary != nullptr);
-                   compileBinary(*binary);
+                   gsl_Expects(binaryPtr != nullptr);
+                   compileBinary(*binaryPtr);
                  },
                  [](std::unique_ptr<UnaryExpression> const&)
                  { detail::throwQueryError("format expressions do not support unary operators"); },
@@ -278,7 +278,7 @@ namespace ao::query
           }
 
           break;
-        case FormatOpCode::AppendField: output += loadFieldText(track, instr, plan.dictionary); break;
+        case FormatOpCode::AppendField: output += readFieldText(track, instr, plan.dictionary); break;
       }
     }
 

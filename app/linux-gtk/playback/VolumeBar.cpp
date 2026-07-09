@@ -192,13 +192,13 @@ namespace ao::gtk
     natural = std::max(natural, minimum);
   }
 
-  void VolumeBar::snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot)
+  void VolumeBar::snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshotPtr)
   {
     auto const width = get_width();
     auto const height = get_height();
 
     auto const crPtr =
-      snapshot->append_cairo(Gdk::Graphene::Rect{0, 0, static_cast<float>(width), static_cast<float>(height)});
+      snapshotPtr->append_cairo(Gdk::Graphene::Rect{0, 0, static_cast<float>(width), static_cast<float>(height)});
 
     auto const contextPtr = get_style_context();
     auto const color = contextPtr->get_color();

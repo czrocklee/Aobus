@@ -5,7 +5,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
-#include <ao/uimodel/layout/document/LayoutTemplateExpander.h>
+#include <ao/uimodel/layout/document/LayoutTemplateExpansion.h>
 #include <ao/utility/TransparentStringHash.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -121,7 +121,7 @@ namespace ao::uimodel
       }
     }
 
-    void freshenRecursive(LayoutNode& node, StringSet& reserved)
+    void regenerateRecursive(LayoutNode& node, StringSet& reserved)
     {
       if (!node.id.empty() || isStatefulLayoutComponentType(node.type))
       {
@@ -131,12 +131,12 @@ namespace ao::uimodel
 
       for (auto& child : node.children)
       {
-        freshenRecursive(child, reserved);
+        regenerateRecursive(child, reserved);
       }
 
       if (node.optTooltip && node.optTooltip->nodePtr)
       {
-        freshenRecursive(*node.optTooltip->nodePtr, reserved);
+        regenerateRecursive(*node.optTooltip->nodePtr, reserved);
       }
     }
   } // namespace
@@ -159,7 +159,7 @@ namespace ao::uimodel
 
   void visitExpandedLayoutNodes(LayoutDocument const& doc, LayoutNodeVisitor const& visitor)
   {
-    auto const expandedRoot = LayoutTemplateExpander::expand(doc);
+    auto const expandedRoot = expandLayoutTemplates(doc);
     visitNodeRecursive(expandedRoot, visitor);
   }
 
@@ -214,10 +214,10 @@ namespace ao::uimodel
     return makeUniqueFromReserved(reserved, idStem(componentType, role));
   }
 
-  void freshenLayoutNodeIds(LayoutNode& subtree, LayoutDocument const& ownerDoc)
+  void regenerateLayoutNodeIds(LayoutNode& subtree, LayoutDocument const& ownerDoc)
   {
     auto reserved = StringSet{};
     collectIds(ownerDoc, reserved);
-    freshenRecursive(subtree, reserved);
+    regenerateRecursive(subtree, reserved);
   }
 } // namespace ao::uimodel

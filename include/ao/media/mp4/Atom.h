@@ -123,9 +123,9 @@ namespace ao::media::mp4
     {
       ensureParsed();
 
-      for (auto const& child : _children)
+      for (auto const& childPtr : _children)
       {
-        if (!std::invoke(visitor, *child))
+        if (!std::invoke(visitor, *childPtr))
         {
           break;
         }
@@ -151,7 +151,8 @@ namespace ao::media::mp4
     std::uint32_t length() const override
     {
       ensureParsed();
-      return std::ranges::fold_left(_children, 0U, [](auto size, auto const& ptr) { return size + ptr->length(); });
+      return std::ranges::fold_left(
+        _children, 0U, [](auto size, auto const& atomPtr) { return size + atomPtr->length(); });
     }
 
     std::string_view type() const override { return "root"; }
@@ -164,9 +165,9 @@ namespace ao::media::mp4
     {
       ensureParsed();
 
-      for (auto const& child : _children)
+      for (auto const& childPtr : _children)
       {
-        if (!std::invoke(visitor, *child))
+        if (!std::invoke(visitor, *childPtr))
         {
           break;
         }

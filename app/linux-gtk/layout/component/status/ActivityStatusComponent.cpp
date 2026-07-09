@@ -6,7 +6,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "status/ActivityStatus.h"
+#include "status/ActivityStatusWidget.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -26,40 +26,41 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    ActivityStatusVariant parseVariant(std::string const& value)
+    ActivityStatusWidgetVariant parseVariant(std::string const& value)
     {
       if (value == "classicInline")
       {
-        return ActivityStatusVariant::ClassicInline;
+        return ActivityStatusWidgetVariant::ClassicInline;
       }
 
-      return ActivityStatusVariant::Ambient;
+      return ActivityStatusWidgetVariant::Ambient;
     }
 
-    ActivityStatusIdleBehavior parseIdleBehavior(std::string const& value, ActivityStatusVariant const variant)
+    ActivityStatusWidgetIdleBehavior parseIdleBehavior(std::string const& value,
+                                                       ActivityStatusWidgetVariant const variant)
     {
       if (value == "reserve")
       {
-        return ActivityStatusIdleBehavior::Reserve;
+        return ActivityStatusWidgetIdleBehavior::Reserve;
       }
 
       if (value == "hidden")
       {
-        return ActivityStatusIdleBehavior::Hidden;
+        return ActivityStatusWidgetIdleBehavior::Hidden;
       }
 
-      return variant == ActivityStatusVariant::ClassicInline ? ActivityStatusIdleBehavior::Reserve
-                                                             : ActivityStatusIdleBehavior::Hidden;
+      return variant == ActivityStatusWidgetVariant::ClassicInline ? ActivityStatusWidgetIdleBehavior::Reserve
+                                                                   : ActivityStatusWidgetIdleBehavior::Hidden;
     }
 
     constexpr std::int32_t kMaxTextCharsMin = 8;
     constexpr std::int32_t kMaxTextCharsMax = 120;
 
-    ActivityStatusOptions optionsFromNode(LayoutNode const& node)
+    ActivityStatusWidgetOptions optionsFromNode(LayoutNode const& node)
     {
       auto const variant = parseVariant(node.propertyOr<std::string>("variant", "ambient"));
       auto const rawMaxTextChars = node.propertyOr<std::int64_t>("maxTextChars", kDefaultMaxTextChars);
-      return ActivityStatusOptions{
+      return ActivityStatusWidgetOptions{
         .variant = variant,
         .idleBehavior = parseIdleBehavior(node.propertyOr<std::string>("idleBehavior", ""), variant),
         .maxTextChars = static_cast<std::int32_t>(
@@ -80,7 +81,7 @@ namespace ao::gtk::layout
         , _parentWindow{ctx.parentWindow}
         , _actionRegistry{ctx.actionRegistry}
         , _componentId{componentIdFromNode(node)}
-        , _widget{ActivityStatusDependencies{
+        , _widget{ActivityStatusWidgetDependencies{
             .notifications = ctx.runtime.notifications(),
             .libraryChanges = &ctx.runtime.library().changes(),
             .options = optionsFromNode(node),
@@ -91,7 +92,7 @@ namespace ao::gtk::layout
 
               if (!optDesc)
               {
-                return ActivityStatusActionRenderState{};
+                return ActivityStatusWidgetActionRenderState{};
               }
 
               auto activationContext = ActionActivationContext{.runtime = _runtime,
@@ -101,10 +102,10 @@ namespace ao::gtk::layout
               auto const actionState = _actionRegistry.state(actionId, activationContext);
               auto label = actionLabel.empty() ? optDesc->label : std::string{actionLabel};
 
-              return ActivityStatusActionRenderState{.visible = !label.empty(),
-                                                     .enabled = actionState.enabled,
-                                                     .label = std::move(label),
-                                                     .disabledReason = actionState.disabledReason};
+              return ActivityStatusWidgetActionRenderState{.visible = !label.empty(),
+                                                           .enabled = actionState.enabled,
+                                                           .label = std::move(label),
+                                                           .disabledReason = actionState.disabledReason};
             },
             .onNotificationAction =
               [this](auto, auto actionId, Gtk::Widget& anchor)
@@ -125,7 +126,7 @@ namespace ao::gtk::layout
       Gtk::Window& _parentWindow;
       ActionRegistry const& _actionRegistry;
       std::string _componentId;
-      ActivityStatus _widget;
+      ActivityStatusWidget _widget;
     };
 
     std::unique_ptr<LayoutComponent> createActivityStatus(LayoutContext& ctx, LayoutNode const& node)

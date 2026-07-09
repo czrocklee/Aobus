@@ -22,15 +22,13 @@
 
 namespace ao::gtk
 {
-  class AudioPipelinePanelTestPeer
+  class AudioPipelinePanelInspector
   {
   public:
-    explicit AudioPipelinePanelTestPeer(AudioPipelinePanel& widget)
+    explicit AudioPipelinePanelInspector(AudioPipelinePanel& widget)
       : _widget{widget}
     {
     }
-
-    Gtk::Widget* firstChild() const { return _widget.get_first_child(); }
 
     std::int32_t childCount() const
     {
@@ -107,21 +105,21 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = AudioPipelinePanel{};
-    auto peer = AudioPipelinePanelTestPeer{widget};
+    auto inspector = AudioPipelinePanelInspector{widget};
 
-    auto view = uimodel::AudioPipelineView{};
+    auto view = uimodel::AudioPipelineViewState{};
     widget.apply(view);
 
-    CHECK(peer.childCount() == 0);
+    CHECK(inspector.childCount() == 0);
   }
 
   TEST_CASE("AudioPipelinePanel - renders pipeline nodes with header and conclusion", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = AudioPipelinePanel{};
-    auto peer = AudioPipelinePanelTestPeer{widget};
+    auto inspector = AudioPipelinePanelInspector{widget};
 
-    auto view = uimodel::AudioPipelineView{};
+    auto view = uimodel::AudioPipelineViewState{};
     view.quality = rt::QualityState{
       .sourceQuality = audio::Quality::BitwisePerfect,
       .pipelineQuality = audio::Quality::BitwisePerfect,
@@ -139,30 +137,30 @@ namespace ao::gtk::test
 
     widget.apply(view);
 
-    auto const labels = peer.labelTexts();
+    auto const labels = inspector.labelTexts();
     CHECK(hasLabel(labels, "Audio Pipeline"));
     CHECK(hasLabel(labels, "[Source]"));
     CHECK(hasLabel(labels, "Source"));
     CHECK(hasLabel(labels, "(44.1 kHz · 16-bit · Stereo)"));
     CHECK(hasLabel(labels, "Bit-perfect playback"));
-    CHECK(peer.hasDescendantCssClass("ao-quality-medal"));
+    CHECK(inspector.hasDescendantCssClass("ao-quality-medal"));
   }
 
   TEST_CASE("AudioPipelinePanel - replaces variant CSS classes", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = AudioPipelinePanel{AudioPipelinePanelVariant::Inline};
-    auto peer = AudioPipelinePanelTestPeer{widget};
+    auto inspector = AudioPipelinePanelInspector{widget};
 
-    CHECK(peer.hasCssClass("ao-quality-panel"));
-    CHECK(peer.hasCssClass("ao-quality-panel-inline"));
+    CHECK(inspector.hasCssClass("ao-quality-panel"));
+    CHECK(inspector.hasCssClass("ao-quality-panel-inline"));
 
     widget.setVariant(AudioPipelinePanelVariant::Tooltip);
-    CHECK_FALSE(peer.hasCssClass("ao-quality-panel-inline"));
-    CHECK(peer.hasCssClass("ao-quality-panel-tooltip"));
+    CHECK_FALSE(inspector.hasCssClass("ao-quality-panel-inline"));
+    CHECK(inspector.hasCssClass("ao-quality-panel-tooltip"));
 
     widget.setVariant(AudioPipelinePanelVariant::Compact);
-    CHECK_FALSE(peer.hasCssClass("ao-quality-panel-tooltip"));
-    CHECK(peer.hasCssClass("ao-quality-panel-compact"));
+    CHECK_FALSE(inspector.hasCssClass("ao-quality-panel-tooltip"));
+    CHECK(inspector.hasCssClass("ao-quality-panel-compact"));
   }
 } // namespace ao::gtk::test

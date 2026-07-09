@@ -21,13 +21,13 @@ namespace ao::uimodel::test
 
   TEST_CASE("VolumeViewModel - view state generation", "[uimodel][unit][playback]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
+    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
+    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, viewService, testLib.library(), notificationService};
+    auto playback = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
 
     auto log = ao::test::RenderLog<VolumeViewState>{};
     auto viewModel = VolumeViewModel{playback, [&log](auto const& view) { log.render(view); }};

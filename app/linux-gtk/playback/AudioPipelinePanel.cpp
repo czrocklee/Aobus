@@ -50,7 +50,7 @@ namespace ao::gtk
     }
   }
 
-  void AudioPipelinePanel::apply(uimodel::AudioPipelineView const& view)
+  void AudioPipelinePanel::apply(uimodel::AudioPipelineViewState const& view)
   {
     // Remove all existing children
     while (auto* child = get_first_child())

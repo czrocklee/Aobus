@@ -29,6 +29,22 @@ Over repeated low-level setup in every test.
 
 Fixture defaults should be non-trivial enough to prove data flow. Avoid using only empty strings, `0`, or `false` unless the test is about empty/default behavior.
 
+## Testability seams
+
+Tests should observe public behavior, not bypass production privacy. Do not add
+test-only private-access backdoors to production types.
+
+When a behavior is hard to observe, use this order:
+
+1. Move pure policy into a lower-layer model or helper that can be tested
+   directly.
+2. Add a normal public observation point when the state is part of the
+   component or service contract.
+3. Use constructor injection, callbacks, clocks, executors, or a small
+   interface to drive the behavior through production code.
+4. Add focused shared test support around public APIs when the setup is common.
+5. Stop and review the design if none of these options fits.
+
 ## Catch2 style reminders
 
 - Include `<catch2/catch_test_macros.hpp>` for basic assertions.

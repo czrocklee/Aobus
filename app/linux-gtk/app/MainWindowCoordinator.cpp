@@ -3,7 +3,7 @@
 
 #include "app/MainWindowCoordinator.h"
 
-#include "app/AppConfig.h"
+#include "app/AppConfigStore.h"
 #include "app/GtkLayoutConfig.h"
 #include "app/GtkUiServices.h"
 #include "app/MainWindow.h"
@@ -90,7 +90,7 @@ namespace ao::gtk
                                      auto const spec = presentationForList(listId, runtime);
                                      runtime.workspace().navigateTo(listId, {.optPresentation = spec});
                                    },
-                                   .getListMembership = [&runtime](ListId listId)
+                                   .resolveListMembership = [&runtime](ListId listId)
                                    { return &runtime.sources().sourceFor(listId); },
                                    .onListPresentationSaved = [this](ListId listId, std::string const& presentationId)
                                    { trackPresentationPreferences.setPresentationIdForList(listId, presentationId); },
@@ -311,8 +311,8 @@ namespace ao::gtk
 
   MainWindowCoordinator::MainWindowCoordinator(MainWindow& window,
                                                rt::AppRuntime& runtime,
-                                               std::shared_ptr<AppConfig> configPtr)
-    : _window{window}, _runtime{runtime}, _configPtr{std::move(configPtr)}
+                                               std::shared_ptr<AppConfigStore> configStorePtr)
+    : _window{window}, _runtime{runtime}, _configStorePtr{std::move(configStorePtr)}
   {
     _implPtr = std::make_unique<Impl>(this, window, runtime);
 
@@ -404,13 +404,13 @@ namespace ao::gtk
     }
 
     windowState.maximized = _window.is_maximized();
-    _configPtr->saveWindow(windowState);
+    _configStorePtr->saveWindow(windowState);
 
     saveColumnLayout();
 
     // Session state: per-window shutdown must not overwrite explicit application preferences.
     auto session = rt::AppSessionState{};
-    _configPtr->loadAppSession(session);
+    _configStorePtr->loadAppSession(session);
 
     session.lastLibraryPath = _runtime.musicLibrary().rootPath().string();
     auto const& pb = _runtime.playback().state();
@@ -418,7 +418,7 @@ namespace ao::gtk
     session.lastOutputDeviceId = pb.output.selectedDevice.deviceId.raw();
     session.lastOutputProfileId = pb.output.selectedDevice.profileId.raw();
 
-    _configPtr->saveAppSession(session);
+    _configStorePtr->saveAppSession(session);
 
     _implPtr->savePlaybackSession(_runtime);
     _runtime.workspace().saveSession(_runtime.configStore());
@@ -428,7 +428,7 @@ namespace ao::gtk
   {
     // Window state
     auto windowState = WindowState{};
-    _configPtr->loadWindow(windowState);
+    _configStorePtr->loadWindow(windowState);
     _window.set_default_size(windowState.width, windowState.height);
 
     if (windowState.maximized)
@@ -445,9 +445,9 @@ namespace ao::gtk
 
     // App prefs (playback restoration)
     auto prefs = rt::AppPrefsState{};
-    _configPtr->loadAppPrefs(prefs);
+    _configStorePtr->loadAppPrefs(prefs);
     auto session = rt::AppSessionState{};
-    _configPtr->loadAppSession(session);
+    _configStorePtr->loadAppSession(session);
 
     bool const hasPreferredOutput = !prefs.lastOutputBackendId.empty() && !prefs.lastOutputProfileId.empty();
     auto const& outputBackendId = hasPreferredOutput ? prefs.lastOutputBackendId : session.lastOutputBackendId;
@@ -460,7 +460,7 @@ namespace ao::gtk
         audio::BackendId{outputBackendId}, audio::DeviceId{outputDeviceId}, audio::ProfileId{outputProfileId});
     }
 
-    _implPtr->themeController.load(*_configPtr);
+    _implPtr->themeController.load(*_configStorePtr);
     _optThemeToken = _implPtr->themeController.registerToplevel(_window);
   }
 

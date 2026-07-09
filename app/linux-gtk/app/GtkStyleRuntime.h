@@ -25,7 +25,7 @@ namespace ao::gtk
     sigc::signal<void()>& signalRefreshed();
 
     void addProviderForDisplayOf(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> providerPtr, guint priority);
-    void removeProviderForDisplayOf(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> const& provider);
+    void removeProviderForDisplayOf(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> const& providerPtr);
 
     Glib::RefPtr<Gtk::CssProvider> const& appProvider() const;
 

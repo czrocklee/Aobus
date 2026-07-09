@@ -30,7 +30,7 @@ namespace ao::gtk
     AudioPipelinePanel& operator=(AudioPipelinePanel&&) = delete;
 
     void setVariant(AudioPipelinePanelVariant variant);
-    void apply(uimodel::AudioPipelineView const& view);
+    void apply(uimodel::AudioPipelineViewState const& view);
 
   private:
     AudioPipelinePanelVariant _variant;

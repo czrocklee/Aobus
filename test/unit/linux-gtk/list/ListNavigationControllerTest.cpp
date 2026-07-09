@@ -66,7 +66,7 @@ namespace ao::gtk::test
     auto savedPresentationId = std::string{};
     auto callbacks =
       ListNavigationController::Callbacks{.onListSelected = [&](ListId id) { selectedId = id; },
-                                          .getListMembership = [&](ListId) -> rt::TrackSource* { return nullptr; },
+                                          .resolveListMembership = [&](ListId) -> rt::TrackSource* { return nullptr; },
                                           .onListPresentationSaved =
                                             [&](ListId id, std::string presentationId)
                                           {

@@ -153,7 +153,7 @@ namespace ao::uimodel
 
       for (auto const& action : entry.content.actions)
       {
-        item.actions.push_back(ActivityActionView{.id = action.id, .label = action.label});
+        item.actions.push_back(ActivityActionDescriptor{.id = action.id, .label = action.label});
       }
 
       return item;
@@ -180,12 +180,12 @@ namespace ao::uimodel
     return !detail.items.empty() || detail.optLibraryTask;
   }
 
-  std::vector<ActivityResolvedActionView> resolveActivityActionViews(
-    std::vector<ActivityActionView> const& actions,
+  std::vector<ActivityResolvedActionState> resolveActivityActionStates(
+    std::vector<ActivityActionDescriptor> const& actions,
     ActivityActionAvailabilityResolver const& resolveAction,
     std::size_t const maxVisibleActions)
   {
-    auto result = std::vector<ActivityResolvedActionView>{};
+    auto result = std::vector<ActivityResolvedActionState>{};
 
     if (!resolveAction || maxVisibleActions == 0)
     {
@@ -208,10 +208,10 @@ namespace ao::uimodel
         continue;
       }
 
-      result.push_back(ActivityResolvedActionView{.id = action.id,
-                                                  .enabled = state.enabled,
-                                                  .label = std::move(state.label),
-                                                  .disabledReason = std::move(state.disabledReason)});
+      result.push_back(ActivityResolvedActionState{.id = action.id,
+                                                   .enabled = state.enabled,
+                                                   .label = std::move(state.label),
+                                                   .disabledReason = std::move(state.disabledReason)});
     }
 
     return result;
@@ -223,7 +223,7 @@ namespace ao::uimodel
     projectPersistentCompact(feed);
   }
 
-  void ActivityStatusFeedState::onFeedChanged(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::handleFeedChanged(rt::NotificationFeedState const& feed)
   {
     projectDetail(feed);
 
@@ -261,7 +261,8 @@ namespace ao::uimodel
     }
   }
 
-  void ActivityStatusFeedState::onNotificationPosted(rt::NotificationFeedState const& feed, rt::NotificationId const id)
+  void ActivityStatusFeedState::handleNotificationPosted(rt::NotificationFeedState const& feed,
+                                                         rt::NotificationId const id)
   {
     projectDetail(feed);
 
@@ -292,7 +293,7 @@ namespace ao::uimodel
     }
   }
 
-  void ActivityStatusFeedState::onLibraryTaskProgress(std::string message, double const fraction)
+  void ActivityStatusFeedState::handleLibraryTaskProgress(std::string message, double const fraction)
   {
     _taskActive = true;
     _optLibraryProgress = LibraryProgressState{.message = std::move(message), .fraction = fraction};
@@ -306,7 +307,8 @@ namespace ao::uimodel
     _state.detail.hasActiveProgress = true;
   }
 
-  void ActivityStatusFeedState::onLibraryTaskCompleted(std::size_t const count, rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::handleLibraryTaskCompleted(std::size_t const count,
+                                                           rt::NotificationFeedState const& feed)
   {
     _taskActive = false;
     _optLibraryProgress.reset();
@@ -352,7 +354,7 @@ namespace ao::uimodel
     }
   }
 
-  void ActivityStatusFeedState::onTransientExpired(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedState::handleTransientExpired(rt::NotificationFeedState const& feed)
   {
     projectDetail(feed);
     projectPersistentCompact(feed);

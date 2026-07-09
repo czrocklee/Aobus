@@ -30,11 +30,11 @@ namespace ao::rt::test
   TEST_CASE("LibraryTaskService - importLibraryAsync returns failure for invalid path",
             "[runtime][unit][library][task]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, testLib.library(), changes};
+    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
 
     auto future = runtime.spawn(service.importLibraryAsync("/nonexistent_path_123.yaml"));
     auto const result = future.get();
@@ -49,11 +49,11 @@ namespace ao::rt::test
   TEST_CASE("LibraryTaskService - exportLibraryAsync returns failure for invalid path",
             "[runtime][unit][library][task]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, testLib.library(), changes};
+    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
 
     auto future = runtime.spawn(service.exportLibraryAsync("/root/nonexistent_path_123.yaml", ExportMode::Full));
     auto const result = future.get();
@@ -64,11 +64,11 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryTaskService - buildScanPlanAsync succeeds", "[runtime][unit][library-task][scan]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, testLib.library(), changes};
+    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
 
     auto future = runtime.spawn(service.buildScanPlanAsync());
     auto const result = future.get();
@@ -78,11 +78,11 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryTaskService - applyScanPlanAsync succeeds with empty plan", "[runtime][unit][library-task][scan]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, testLib.library(), changes};
+    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
 
     auto plan = ScanPlan{};
     auto future = runtime.spawn(service.applyScanPlanAsync(std::move(plan)));
@@ -95,16 +95,16 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryTaskService - applyScanPlanAsync can defer new audio identity", "[runtime][unit][library][task]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
-    std::filesystem::copy_file(sourceFile, testLib.root() / "song.flac");
+    std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
 
     auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, testLib.library(), changes};
+    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
 
-    auto scanService = LibraryScan{testLib.library()};
+    auto scanService = LibraryScan{libraryFixture.library()};
     auto plan = scanService.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
@@ -114,24 +114,24 @@ namespace ao::rt::test
 
     REQUIRE(result);
     REQUIRE(result->processedIds.size() == 1);
-    auto transaction = testLib.library().readTransaction();
-    auto manifestResult = testLib.library().manifest().reader(transaction).get("song.flac");
+    auto transaction = libraryFixture.library().readTransaction();
+    auto manifestResult = libraryFixture.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK_FALSE(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
   }
 
   TEST_CASE("LibraryTaskService - backfillAudioIdentityAsync fills pending rows", "[runtime][unit][library][task]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
-    std::filesystem::copy_file(sourceFile, testLib.root() / "song.flac");
+    std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
 
     auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, testLib.library(), changes};
+    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
 
-    auto scanService = LibraryScan{testLib.library()};
+    auto scanService = LibraryScan{libraryFixture.library()};
     auto plan = scanService.buildPlan().value();
     auto applyFuture = runtime.spawn(service.applyScanPlanAsync(
       std::move(plan), ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}));
@@ -146,8 +146,8 @@ namespace ao::rt::test
     CHECK(backfillResult->failureCount == 0);
     CHECK_FALSE(backfillResult->cancelled);
 
-    auto transaction = testLib.library().readTransaction();
-    auto manifestResult = testLib.library().manifest().reader(transaction).get("song.flac");
+    auto transaction = libraryFixture.library().readTransaction();
+    auto manifestResult = libraryFixture.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
   }
@@ -155,11 +155,11 @@ namespace ao::rt::test
   TEST_CASE("LibraryTaskService - applyScanPlanAsync reports progress while applying plan",
             "[runtime][unit][library-task][scan]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, testLib.library(), changes};
+    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
 
     auto progressEvents = std::vector<LibraryChanges::LibraryTaskProgressUpdated>{};
     auto sub = changes.onLibraryTaskProgress([&](auto const& ev) { progressEvents.push_back(ev); });
@@ -205,16 +205,16 @@ namespace ao::rt::test
   TEST_CASE("LibraryTaskService - applyScanPlanAsync forwards cancellation to scan executor",
             "[runtime][unit][library-task][scan]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
-    std::filesystem::copy_file(sourceFile, testLib.root() / "song.flac");
+    std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
 
     auto executor = MockExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, testLib.library(), changes};
+    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
 
-    auto scanService = LibraryScan{testLib.library()};
+    auto scanService = LibraryScan{libraryFixture.library()};
     auto plan = scanService.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
@@ -224,7 +224,7 @@ namespace ao::rt::test
     auto sub = changes.onLibraryTaskProgress(
       [&](LibraryChanges::LibraryTaskProgressUpdated const& event)
       {
-        if (event.message == "Fingerprinting: song.flac" && !sawFingerprinting.get())
+        if (event.message == "Fingerprinting: song.flac" && !sawFingerprinting.load())
         {
           sawFingerprinting.set(true);
           signal.emit(async::CancellationType::all);
@@ -259,11 +259,11 @@ namespace ao::rt::test
                   });
 
     REQUIRE(sawCancellation.waitUntil(true));
-    CHECK(sawFingerprinting.get());
+    CHECK(sawFingerprinting.load());
 
-    auto transaction = testLib.library().readTransaction();
-    auto trackReader = testLib.library().tracks().reader(transaction);
-    auto manifestReader = testLib.library().manifest().reader(transaction);
+    auto transaction = libraryFixture.library().readTransaction();
+    auto trackReader = libraryFixture.library().tracks().reader(transaction);
+    auto manifestReader = libraryFixture.library().manifest().reader(transaction);
     CHECK(trackReader.begin() == trackReader.end());
     CHECK(manifestReader.begin() == manifestReader.end());
 

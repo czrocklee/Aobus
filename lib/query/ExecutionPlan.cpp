@@ -138,23 +138,23 @@ namespace ao::query
                           [](ConstantExpression const&) { return std::uint32_t{0}; },
                           [](ListExpression const&) { return std::uint32_t{0}; },
                           [](RangeExpression const&) { return std::uint32_t{0}; },
-                          [dictionary](std::unique_ptr<BinaryExpression> const& binary)
+                          [dictionary](std::unique_ptr<BinaryExpression> const& binaryPtr)
                           {
-                            if (!binary)
+                            if (!binaryPtr)
                             {
                               return std::uint32_t{0};
                             }
 
-                            return computeRequiredTagBloomMask(*binary, dictionary);
+                            return computeRequiredTagBloomMask(*binaryPtr, dictionary);
                           },
-                          [dictionary](std::unique_ptr<UnaryExpression> const& unary)
+                          [dictionary](std::unique_ptr<UnaryExpression> const& unaryPtr)
                           {
-                            if (!unary)
+                            if (!unaryPtr)
                             {
                               return std::uint32_t{0};
                             }
 
-                            return computeRequiredTagBloomMask(*unary, dictionary);
+                            return computeRequiredTagBloomMask(*unaryPtr, dictionary);
                           }),
                         expr);
     }
@@ -199,23 +199,23 @@ namespace ao::query
                              [](ConstantExpression const&) -> VariableExpression const* { return nullptr; },
                              [](ListExpression const&) -> VariableExpression const* { return nullptr; },
                              [](RangeExpression const&) -> VariableExpression const* { return nullptr; },
-                             [](std::unique_ptr<BinaryExpression> const& binary) -> VariableExpression const*
+                             [](std::unique_ptr<BinaryExpression> const& binaryPtr) -> VariableExpression const*
                              {
-                               if (!binary)
+                               if (!binaryPtr)
                                {
                                  return nullptr;
                                }
 
-                               return bareNonTagVariableInPredicatePosition(*binary);
+                               return bareNonTagVariableInPredicatePosition(*binaryPtr);
                              },
-                             [](std::unique_ptr<UnaryExpression> const& unary) -> VariableExpression const*
+                             [](std::unique_ptr<UnaryExpression> const& unaryPtr) -> VariableExpression const*
                              {
-                               if (!unary)
+                               if (!unaryPtr)
                                {
                                  return nullptr;
                                }
 
-                               return bareNonTagVariableInPredicatePosition(*unary);
+                               return bareNonTagVariableInPredicatePosition(*unaryPtr);
                              }),
         expr);
     }
@@ -507,15 +507,15 @@ namespace ao::query
   {
     return std::visit(
       utility::makeVisitor(
-        [this](std::unique_ptr<BinaryExpression> const& binary) -> std::uint32_t
+        [this](std::unique_ptr<BinaryExpression> const& binaryPtr) -> std::uint32_t
         {
-          gsl_Expects(binary != nullptr);
-          return compileBinary(*binary);
+          gsl_Expects(binaryPtr != nullptr);
+          return compileBinary(*binaryPtr);
         },
-        [this](std::unique_ptr<UnaryExpression> const& unary) -> std::uint32_t
+        [this](std::unique_ptr<UnaryExpression> const& unaryPtr) -> std::uint32_t
         {
-          gsl_Expects(unary != nullptr);
-          return compileUnary(*unary);
+          gsl_Expects(unaryPtr != nullptr);
+          return compileUnary(*unaryPtr);
         },
         [this](VariableExpression const& var) -> std::uint32_t { return compileVariable(var); },
         [this](ConstantExpression const& constant) -> std::uint32_t { return compileConstant(constant); },

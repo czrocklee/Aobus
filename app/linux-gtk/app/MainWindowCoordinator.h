@@ -29,7 +29,7 @@ namespace ao::uimodel
 namespace ao::gtk
 {
   class MainWindow;
-  class AppConfig;
+  class AppConfigStore;
   class GtkLayoutConfig;
   class TrackRowCache;
   class ImageCache;
@@ -46,7 +46,7 @@ namespace ao::gtk
   class MainWindowCoordinator final
   {
   public:
-    MainWindowCoordinator(MainWindow& window, rt::AppRuntime& runtime, std::shared_ptr<AppConfig> configPtr);
+    MainWindowCoordinator(MainWindow& window, rt::AppRuntime& runtime, std::shared_ptr<AppConfigStore> configStorePtr);
     ~MainWindowCoordinator();
 
     // Not copyable or movable
@@ -83,7 +83,7 @@ namespace ao::gtk
 
     MainWindow& _window;
     rt::AppRuntime& _runtime;
-    std::shared_ptr<AppConfig> _configPtr;
+    std::shared_ptr<AppConfigStore> _configStorePtr;
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
 

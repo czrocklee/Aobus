@@ -15,7 +15,7 @@ namespace ao::rt::test
 {
   TEST_CASE("ViewService - createView with groupBy applies effective sort", "[runtime][unit][view][presentation]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     auto const result = service.createView({.groupBy = TrackGroupKey::Artist}, true);
@@ -40,7 +40,7 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - createView with Album groupBy applies album sort", "[runtime][unit][view][presentation]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     auto const result = service.createView({.groupBy = TrackGroupKey::Album}, true);
@@ -63,7 +63,7 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - setPresentation updates state and projection", "[runtime][unit][view][presentation]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     auto const result = service.createView({}, true);
@@ -80,7 +80,7 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - setPresentation no-ops on same value", "[runtime][unit][view][presentation]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     auto const* preset = builtinTrackPresentationPreset("years");
@@ -99,7 +99,7 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - setPresentation publishes PresentationChanged", "[runtime][unit][view][presentation]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     auto const result = service.createView({}, true);
@@ -117,7 +117,7 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - setPresentation no-op does not publish event", "[runtime][unit][view][presentation]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
     auto const result = service.createView({}, true);
@@ -141,7 +141,7 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - setPresentation with preset string", "[runtime][unit][view][presentation]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
     auto const result = service.createView({}, true);
 

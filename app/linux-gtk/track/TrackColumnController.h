@@ -88,9 +88,9 @@ namespace ao::gtk
     std::vector<std::int32_t> visibleColumnWidths() const;
     std::vector<rt::TrackField> visibleFieldsInStoredOrder(std::span<rt::TrackField const> visibleFields) const;
 
-    void ensureColumnPosition(Glib::RefPtr<Gio::ListModel> const& columns,
+    void ensureColumnPosition(Glib::RefPtr<Gio::ListModel> const& columnsPtr,
                               std::size_t index,
-                              Glib::RefPtr<Gtk::ColumnViewColumn> const& column);
+                              Glib::RefPtr<Gtk::ColumnViewColumn> const& columnPtr);
 
     ColumnBinding* findColumnBinding(rt::TrackField field);
     ColumnBinding const* findColumnBinding(rt::TrackField field) const;

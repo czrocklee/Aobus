@@ -464,7 +464,7 @@ namespace ao::uimodel::test
       CHECK(makeUniqueLayoutNodeId(doc, "split", "new") == "split-new-3");
     }
 
-    SECTION("freshening a copied stateful subtree replaces ids recursively")
+    SECTION("regenerating a copied stateful subtree replaces ids recursively")
     {
       auto owner = LayoutDocument{};
       owner.root.type = "box";
@@ -473,7 +473,7 @@ namespace ao::uimodel::test
       auto copy = LayoutNode{.id = "split-original", .type = "split"};
       copy.children = {LayoutNode{.id = "child", .type = "spacer"}, LayoutNode{.type = "collapsibleSplit"}};
 
-      freshenLayoutNodeIds(copy, owner);
+      regenerateLayoutNodeIds(copy, owner);
 
       CHECK(copy.id != "split-original");
       CHECK(copy.id == "split-split-original");

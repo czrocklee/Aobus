@@ -67,9 +67,9 @@ namespace ao::gtk::layout::track_field_grid
     _submitButton.add_css_class("ao-detail-custom-metadata-popover-submit");
     _submitButton.set_tooltip_text("Add Custom Metadata");
 
-    _submitButton.signal_clicked().connect([this] { onAddRequested(); });
+    _submitButton.signal_clicked().connect([this] { handleAddRequested(); });
     _keyEntry.signal_activate().connect([this] { _valueEntry.grab_focus(); });
-    _valueEntry.signal_activate().connect([this] { onAddRequested(); });
+    _valueEntry.signal_activate().connect([this] { handleAddRequested(); });
 
     _keyEntry.property_text().signal_changed().connect([this] { _keyEntry.remove_css_class("error"); });
     _valueEntry.property_text().signal_changed().connect([this] { _valueEntry.remove_css_class("error"); });
@@ -133,7 +133,7 @@ namespace ao::gtk::layout::track_field_grid
     _keyEntry.grab_focus();
   }
 
-  void AddCustomMetadataButton::onAddRequested()
+  void AddCustomMetadataButton::handleAddRequested()
   {
     auto const keyText = _keyEntry.get_text();
     auto const valueText = _valueEntry.get_text();

@@ -99,7 +99,7 @@ namespace ao::gtk
     , _modelPtr{std::move(modelPtr)}
     , _selectionModelPtr{std::move(selectionModelPtr)}
     , _selectionChangedConnection{_selectionModelPtr->signal_selection_changed().connect(
-        sigc::mem_fun(*this, &TrackSelectionController::onSelectionChanged))}
+        sigc::mem_fun(*this, &TrackSelectionController::handleSelectionChanged))}
   {
   }
 
@@ -123,7 +123,7 @@ namespace ao::gtk
           return;
         }
 
-        onActivateCurrentSelection();
+        handleActivateCurrentSelection();
       });
 
     auto const keyControllerPtr = Gtk::EventControllerKey::create();
@@ -132,7 +132,7 @@ namespace ao::gtk
       {
         if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter)
         {
-          onActivateCurrentSelection();
+          handleActivateCurrentSelection();
           return true;
         }
 
@@ -232,7 +232,7 @@ namespace ao::gtk
     _columnView.add_controller(secondaryClickControllerPtr);
   }
 
-  void TrackSelectionController::onActivateCurrentSelection()
+  void TrackSelectionController::handleActivateCurrentSelection()
   {
     if (_suppressNextTrackActivation)
     {
@@ -246,7 +246,7 @@ namespace ao::gtk
     }
   }
 
-  void TrackSelectionController::onSelectionChanged(std::uint32_t /*position*/, std::uint32_t /*nItems*/)
+  void TrackSelectionController::handleSelectionChanged(std::uint32_t /*position*/, std::uint32_t /*nItems*/)
   {
     _selectionChanged.emit();
   }

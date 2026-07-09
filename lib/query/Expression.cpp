@@ -14,34 +14,34 @@ namespace ao::query
   {
     struct Normalizer final
     {
-      void operator()(std::unique_ptr<BinaryExpression> const& binary)
+      void operator()(std::unique_ptr<BinaryExpression> const& binaryPtr)
       {
-        if (!binary)
+        if (!binaryPtr)
         {
           return;
         }
 
-        normalize(binary->operand);
+        normalize(binaryPtr->operand);
 
-        if (!binary->optOperation)
+        if (!binaryPtr->optOperation)
         {
-          auto extracted = Expression{std::move(binary->operand)};
+          auto extracted = Expression{std::move(binaryPtr->operand)};
           root = std::move(extracted);
           return;
         }
 
-        normalize(binary->optOperation->operand);
-        shiftAdd(*binary);
+        normalize(binaryPtr->optOperation->operand);
+        shiftAdd(*binaryPtr);
       }
 
-      void operator()(std::unique_ptr<UnaryExpression> const& unary)
+      void operator()(std::unique_ptr<UnaryExpression> const& unaryPtr)
       {
-        if (!unary)
+        if (!unaryPtr)
         {
           return;
         }
 
-        normalize(unary->operand);
+        normalize(unaryPtr->operand);
       }
 
       void operator()(VariableExpression& /*variable*/) {}

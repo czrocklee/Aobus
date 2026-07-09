@@ -100,7 +100,7 @@ namespace ao::gtk::layout::editor
     void buildUi();
     void populateTree();
     void appendNodeToTree(Gtk::TreeModel::Row parentRow, uimodel::LayoutNode* node);
-    void onSelectionChanged();
+    void handleSelectionChanged();
     void updatePropertiesPanel(uimodel::LayoutNode* node);
     void applyPropertyChange(uimodel::LayoutNode* node,
                              std::string_view propName,
@@ -137,11 +137,11 @@ namespace ao::gtk::layout::editor
     void addComponent(std::string type);
     void wrapNode(std::string containerType);
 
-    void onRemoveNode();
-    void onMoveUp();
-    void onMoveDown();
-    void onResetDefault();
-    void onPresetChanged();
+    void handleRemoveNodeClicked();
+    void handleMoveUpClicked();
+    void handleMoveDownClicked();
+    void handleResetDefaultClicked();
+    void handlePresetChanged();
 
     bool validateAllDirtyDocuments();
     void presentErrorDialog(std::string const& title, std::string const& message);

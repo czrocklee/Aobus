@@ -45,7 +45,7 @@ namespace ao::library::test
     REQUIRE(wtxn.commit());
 
     // Create a list
-    auto header = ListHeader{.trackIdsCount = 5, .nameOffset = 0};
+    auto header = ListHeader{.trackIdCount = 5, .nameOffset = 0};
 
     auto data = std::vector<std::byte>(sizeof(ListHeader));
     std::memcpy(data.data(), &header, sizeof(ListHeader));
@@ -72,9 +72,9 @@ namespace ao::library::test
     REQUIRE(wtxn.commit());
 
     // Create a list
-    auto header = ListHeader{.trackIdsCount = 10, .nameOffset = 0};
+    auto header = ListHeader{.trackIdCount = 10, .nameOffset = 0};
 
-    auto const trackIdsSize = static_cast<std::size_t>(header.trackIdsCount) * sizeof(TrackId);
+    auto const trackIdsSize = static_cast<std::size_t>(header.trackIdCount) * sizeof(TrackId);
     auto data = std::vector<std::byte>(sizeof(ListHeader) + trackIdsSize);
     std::memcpy(data.data(), &header, sizeof(ListHeader));
 

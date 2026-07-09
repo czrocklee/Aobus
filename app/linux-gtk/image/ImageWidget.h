@@ -31,7 +31,7 @@ namespace ao::gtk
     void setForceSquareTarget(bool forceSquare);
     double displayScale() const;
 
-    void setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
+    void setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr);
     void clearImage();
 
   protected:

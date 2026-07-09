@@ -97,9 +97,10 @@ namespace ao::gtk
     Gtk::StyleContext::add_provider_for_display(widget.get_display(), providerPtr, priority);
   }
 
-  void GtkStyleRuntime::removeProviderForDisplayOf(Gtk::Widget& widget, Glib::RefPtr<Gtk::CssProvider> const& provider)
+  void GtkStyleRuntime::removeProviderForDisplayOf(Gtk::Widget& widget,
+                                                   Glib::RefPtr<Gtk::CssProvider> const& providerPtr)
   {
-    Gtk::StyleContext::remove_provider_for_display(widget.get_display(), provider);
+    Gtk::StyleContext::remove_provider_for_display(widget.get_display(), providerPtr);
   }
 
   Glib::RefPtr<Gtk::CssProvider> const& GtkStyleRuntime::appProvider() const
@@ -299,7 +300,7 @@ namespace ao::gtk
 
     _gtkConfigMonitorPtr = configFilePtr->monitor_directory();
     _gtkConfigMonitorPtr->signal_changed().connect(
-      [this](Glib::RefPtr<Gio::File> const& file,
+      [this](Glib::RefPtr<Gio::File> const& filePtr,
              Glib::RefPtr<Gio::File> const& /*otherFile*/,
              Gio::FileMonitor::Event event)
       {
@@ -308,7 +309,7 @@ namespace ao::gtk
         if (event == Event::CHANGED || event == Event::CREATED || event == Event::DELETED ||
             event == Event::CHANGES_DONE_HINT)
         {
-          if (auto const name = file->get_basename(); name == "settings.ini" || name == "gtk.css")
+          if (auto const name = filePtr->get_basename(); name == "settings.ini" || name == "gtk.css")
           {
             APP_LOG_DEBUG("GtkStyleRuntime: gtk-4.0 change detected ({}), scheduling reload...", name);
             reload();
@@ -327,7 +328,7 @@ namespace ao::gtk
 
     _aobusConfigMonitorPtr = aobusFilePtr->monitor_directory();
     _aobusConfigMonitorPtr->signal_changed().connect(
-      [this](Glib::RefPtr<Gio::File> const& file,
+      [this](Glib::RefPtr<Gio::File> const& filePtr,
              Glib::RefPtr<Gio::File> const& /*otherFile*/,
              Gio::FileMonitor::Event event)
       {
@@ -335,7 +336,7 @@ namespace ao::gtk
 
         if (event == Event::CHANGED || event == Event::CREATED || event == Event::CHANGES_DONE_HINT)
         {
-          if (file->get_basename() == "user.css")
+          if (filePtr->get_basename() == "user.css")
           {
             APP_LOG_DEBUG("GtkStyleRuntime: user.css change detected, reloading...");
             reloadUserCss();

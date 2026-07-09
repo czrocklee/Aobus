@@ -262,13 +262,13 @@ namespace ao::rt::test
 
   TEST_CASE("PlaybackService control - rejected play does not emit success", "[runtime][unit][playback][control]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
+    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
+    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
-    auto playbackService = PlaybackService{executor, viewService, testLib.library(), notificationService};
+    auto playbackService = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
 
     bool preparingFired = false;
     auto subPreparing = playbackService.onPreparing([&] { preparingFired = true; });
@@ -307,7 +307,7 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.testLib.addTrack({.title = "Restored Track", .uri = fixturePath});
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Restored Track", .uri = fixturePath});
     auto const session = PlaybackSessionState{
       .sourceListId = ListId{10},
       .trackId = trackId,
@@ -381,8 +381,8 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId =
-      fixture.testLib.addTrack({.title = "Restored Track", .uri = fixturePath, .duration = std::chrono::seconds{3}});
+    auto const trackId = fixture.libraryFixture.addTrack(
+      {.title = "Restored Track", .uri = fixturePath, .duration = std::chrono::seconds{3}});
     auto const session = PlaybackSessionState{
       .sourceListId = ListId{10},
       .trackId = trackId,
@@ -421,7 +421,7 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.testLib.addTrack({.title = "Restored Track", .uri = fixturePath});
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Restored Track", .uri = fixturePath});
     auto const tempDir = ao::test::TempDir{};
     auto sessionStore = ConfigStore{std::filesystem::path{tempDir.path()} / "workspace.yaml"};
     auto const storedSession = PlaybackSessionState{

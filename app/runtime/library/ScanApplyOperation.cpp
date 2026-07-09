@@ -144,7 +144,7 @@ namespace ao::rt
       optFingerprint = fingerprintAudioPayload(item, *tagFilePtr, itemIndex, stopToken);
     }
 
-    if (!optFingerprint && requiresFingerprintForApply(item))
+    if (!optFingerprint && isFingerprintRequiredForApply(item))
     {
       return;
     }
@@ -288,7 +288,7 @@ namespace ao::rt
     return false;
   }
 
-  bool ScanApplyOperation::requiresFingerprintForApply(ScanItem const& item) const noexcept
+  bool ScanApplyOperation::isFingerprintRequiredForApply(ScanItem const& item) const noexcept
   {
     switch (item.classification)
     {

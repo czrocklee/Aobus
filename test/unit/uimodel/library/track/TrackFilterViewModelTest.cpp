@@ -28,14 +28,14 @@ namespace ao::uimodel::test
   {
     struct TrackFilterFixture final
     {
-      TestMusicLibrary testLib;
+      MusicLibraryFixture libraryFixture;
       MockExecutor executor;
       LibraryChanges changes;
-      TrackSourceCache trackSourceCache{testLib.library(), changes};
-      ViewService viewService{executor, testLib.library(), trackSourceCache};
+      TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
+      ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
       NotificationService notifications;
-      PlaybackService playback{executor, viewService, testLib.library(), notifications};
-      WorkspaceService workspaceService{viewService, playback, changes, testLib.library()};
+      PlaybackService playback{executor, viewService, libraryFixture.library(), notifications};
+      WorkspaceService workspaceService{viewService, playback, changes, libraryFixture.library()};
       ao::test::RenderLog<TrackFilterViewState> renderLog;
       TrackFilterViewModel viewModel{viewService,
                                      workspaceService,

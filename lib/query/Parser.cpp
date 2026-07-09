@@ -95,11 +95,11 @@ namespace
 
                                         for (auto& item : list | std::views::reverse | std::views::drop(1))
                                         {
-                                          auto binPtr = std::make_unique<BinaryExpression>();
-                                          binPtr->operand = std::move(item);
-                                          binPtr->optOperation = BinaryExpression::Operation{
+                                          auto binaryPtr = std::make_unique<BinaryExpression>();
+                                          binaryPtr->operand = std::move(item);
+                                          binaryPtr->optOperation = BinaryExpression::Operation{
                                             .op = Operator::Add, .operand = std::move(result)};
-                                          result = Expression{std::move(binPtr)};
+                                          result = Expression{std::move(binaryPtr)};
                                         }
 
                                         return result;
@@ -157,25 +157,25 @@ namespace
     static constexpr auto value = lexy::callback<Expression>([](Expression lhs) { return lhs; },
                                                              [](Operator op, Expression expr)
                                                              {
-                                                               auto unPtr = std::make_unique<UnaryExpression>();
-                                                               unPtr->op = op;
-                                                               unPtr->operand = std::move(expr);
-                                                               return Expression{std::move(unPtr)};
+                                                               auto unaryPtr = std::make_unique<UnaryExpression>();
+                                                               unaryPtr->op = op;
+                                                               unaryPtr->operand = std::move(expr);
+                                                               return Expression{std::move(unaryPtr)};
                                                              },
                                                              [](Expression expr, Operator op)
                                                              {
-                                                               auto unPtr = std::make_unique<UnaryExpression>();
-                                                               unPtr->op = op;
-                                                               unPtr->operand = std::move(expr);
-                                                               return Expression{std::move(unPtr)};
+                                                               auto unaryPtr = std::make_unique<UnaryExpression>();
+                                                               unaryPtr->op = op;
+                                                               unaryPtr->operand = std::move(expr);
+                                                               return Expression{std::move(unaryPtr)};
                                                              },
                                                              [](Expression lhs, Operator op, Expression rhs)
                                                              {
-                                                               auto binPtr = std::make_unique<BinaryExpression>();
-                                                               binPtr->operand = std::move(lhs);
-                                                               binPtr->optOperation = BinaryExpression::Operation{
+                                                               auto binaryPtr = std::make_unique<BinaryExpression>();
+                                                               binaryPtr->operand = std::move(lhs);
+                                                               binaryPtr->optOperation = BinaryExpression::Operation{
                                                                  .op = op, .operand = std::move(rhs)};
-                                                               return Expression{std::move(binPtr)};
+                                                               return Expression{std::move(binaryPtr)};
                                                              });
   };
 

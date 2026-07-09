@@ -203,7 +203,7 @@ namespace ao::query
       return previous != nullptr && isIdentifierLikeToken(previous->kind);
     }
 
-    bool blocksCompletionAtCursor(std::span<detail::CompletionToken const> tokens, std::size_t cursor)
+    bool shouldBlockCompletionAtCursor(std::span<detail::CompletionToken const> tokens, std::size_t cursor)
     {
       auto const* token = tokenContaining(tokens, cursor);
 
@@ -583,7 +583,7 @@ namespace ao::query
     auto const tokens = detail::tokenizeCompletionQuery(text);
     auto const prefixTokens = detail::tokenizeCompletionQuery(text.substr(0, cursor));
 
-    if (blocksCompletionAtCursor(tokens, cursor) || hasBlockingPartialTailAtCursor(text, prefixTokens, cursor))
+    if (shouldBlockCompletionAtCursor(tokens, cursor) || hasBlockingPartialTailAtCursor(text, prefixTokens, cursor))
     {
       return std::nullopt;
     }

@@ -3,7 +3,7 @@
 
 #include "app/ShellLayoutController.h"
 
-#include "app/AppConfig.h"
+#include "app/AppConfigStore.h"
 #include "app/GtkUiServices.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
@@ -105,7 +105,7 @@ namespace ao::gtk::test
     window.set_application(appPtr);
 
     auto const tempDir = fixture.tempDir().path();
-    auto const configPtr = std::make_shared<AppConfig>(tempDir / "config.yaml");
+    auto const configStorePtr = std::make_shared<AppConfigStore>(tempDir / "config.yaml");
     auto const storePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
     auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state");
     auto themeController = ThemeCoordinator{};
@@ -113,7 +113,7 @@ namespace ao::gtk::test
     auto commandSurface = uimodel::PlaybackCommandSurface{
       runtime.playback(), &queueSession, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
     auto controller =
-      ShellLayoutController{runtime, window, configPtr, storePtr, componentStateStorePtr, themeController};
+      ShellLayoutController{runtime, window, configStorePtr, storePtr, componentStateStorePtr, themeController};
     controller.bindServices(
       GtkUiServices{.playbackQueueSession = &queueSession, .playbackCommandSurface = &commandSurface});
 
@@ -125,7 +125,7 @@ namespace ao::gtk::test
 
     SECTION("loadLayout load works")
     {
-      controller.loadLayout(*configPtr);
+      controller.loadLayout(*configStorePtr);
       drainGtkEvents();
       CHECK(controller.context().componentStateStore ==
             static_cast<uimodel::LayoutComponentStateStore*>(componentStateStorePtr.get()));
@@ -136,14 +136,14 @@ namespace ao::gtk::test
       auto prefs = rt::AppPrefsState{};
       prefs.lastLayoutPreset = "classic";
       prefs.lastThemePreset = "classic";
-      configPtr->saveAppPrefs(prefs);
-      themeController.load(*configPtr);
+      configStorePtr->saveAppPrefs(prefs);
+      themeController.load(*configStorePtr);
 
-      controller.loadLayout(*configPtr);
+      controller.loadLayout(*configStorePtr);
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 
-      controller.openEditor(*configPtr);
+      controller.openEditor(*configStorePtr);
       drainGtkEvents();
 
       auto* const dialog = controller.editorDialog();
@@ -160,7 +160,7 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       auto savedPrefs = rt::AppPrefsState{};
-      configPtr->loadAppPrefs(savedPrefs);
+      configStorePtr->loadAppPrefs(savedPrefs);
       CHECK(savedPrefs.lastThemePreset == "classic");
       CHECK(themeController.activeTheme() == rt::ThemePresetId::Classic);
     }
@@ -170,14 +170,14 @@ namespace ao::gtk::test
       auto prefs = rt::AppPrefsState{};
       prefs.lastLayoutPreset = "classic";
       prefs.lastThemePreset = "classic";
-      configPtr->saveAppPrefs(prefs);
-      themeController.load(*configPtr);
+      configStorePtr->saveAppPrefs(prefs);
+      themeController.load(*configStorePtr);
 
-      controller.loadLayout(*configPtr);
+      controller.loadLayout(*configStorePtr);
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 
-      controller.openEditor(*configPtr);
+      controller.openEditor(*configStorePtr);
       drainGtkEvents();
 
       auto* const dialog = controller.editorDialog();
@@ -193,7 +193,7 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       auto savedPrefs = rt::AppPrefsState{};
-      configPtr->loadAppPrefs(savedPrefs);
+      configStorePtr->loadAppPrefs(savedPrefs);
       CHECK(savedPrefs.lastLayoutPreset == "classic");
       CHECK(savedPrefs.lastThemePreset == "classic");
       CHECK(themeController.activeTheme() == rt::ThemePresetId::Classic);
@@ -269,7 +269,7 @@ namespace ao::gtk::test
       };
       componentStateStorePtr->save("classic", stateDoc);
 
-      controller.loadLayout(*configPtr);
+      controller.loadLayout(*configStorePtr);
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
       REQUIRE(controller.context().componentState.components.contains("main-paned"));
@@ -298,7 +298,7 @@ namespace ao::gtk::test
       };
       componentStateStorePtr->save("classic", stateDoc);
 
-      controller.loadLayout(*configPtr);
+      controller.loadLayout(*configStorePtr);
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 
@@ -344,7 +344,7 @@ namespace ao::gtk::test
       };
       componentStateStorePtr->save("classic", stateDoc);
 
-      controller.loadLayout(*configPtr);
+      controller.loadLayout(*configStorePtr);
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 

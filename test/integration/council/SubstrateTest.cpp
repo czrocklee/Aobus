@@ -24,7 +24,7 @@ namespace ao::council::test
     std::filesystem::create_directories(repo);
     writeFile(temp, "repo/source.txt", "fresh\n");
     auto process = BoostProcessRunner{};
-    initGitRepo(process, repo, tempPath(temp));
+    setupGitRepo(process, repo, tempPath(temp));
 
     auto const destination = tempPath(temp) / "out" / ".base";
     writeFile(temp, "out/.base/stale.txt", "left over by a crashed run\n");
@@ -45,7 +45,7 @@ namespace ao::council::test
     std::filesystem::create_directories(repo);
     writeFile(temp, "repo/source.txt", "original\n");
     auto process = BoostProcessRunner{};
-    initGitRepo(process, repo, tempPath(temp));
+    setupGitRepo(process, repo, tempPath(temp));
     runCommand(process, repo, {"git", "-C", repo.string(), "config", "user.name", "Aobus Test"});
     runCommand(process, repo, {"git", "-C", repo.string(), "config", "user.email", "test@localhost"});
     runCommand(process, repo, {"git", "-C", repo.string(), "add", "source.txt"});
@@ -81,7 +81,7 @@ namespace ao::council::test
     std::filesystem::create_directories(repo);
     writeFile(temp, "repo/source.txt", "original\n");
     auto process = BoostProcessRunner{};
-    initGitRepo(process, repo, tempPath(temp));
+    setupGitRepo(process, repo, tempPath(temp));
 
     // Simulate a parent git operation interrupted mid-flight: the index lock rides into the snapshot copy
     // and would otherwise make the base's own `git add`/`commit` fail with "index.lock exists".

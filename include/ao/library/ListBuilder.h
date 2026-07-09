@@ -47,7 +47,7 @@ namespace ao::library
       TracksBuilder& add(TrackId id);
       TracksBuilder& remove(TrackId id);
       TracksBuilder& clear();
-      TracksBuilder& isSmart(bool isSmart);
+      TracksBuilder& smart(bool smart);
 
       std::vector<TrackId> const& ids() const { return _trackIds; }
       bool isSmart() const { return _isSmart; }

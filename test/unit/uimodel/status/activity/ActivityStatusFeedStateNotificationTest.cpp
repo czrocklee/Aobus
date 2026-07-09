@@ -41,7 +41,7 @@ namespace ao::uimodel::test
                                      false,
                                      std::chrono::milliseconds{1500})});
 
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{5});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{5});
 
       auto const& compact = feedState.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Info);
@@ -52,7 +52,7 @@ namespace ao::uimodel::test
     SECTION("compact dismiss does not remove detail feed")
     {
       auto currentFeed = feed({entry(rt::NotificationId{6}, rt::NotificationSeverity::Error, "Scan failed", true)});
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{6});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{6});
 
       feedState.dismissCompact(currentFeed);
 
@@ -64,12 +64,12 @@ namespace ao::uimodel::test
     SECTION("new persistent notification reappears after previous compact dismiss")
     {
       auto firstFeed = feed({entry(rt::NotificationId{7}, rt::NotificationSeverity::Error, "Old failure", true)});
-      feedState.onNotificationPosted(firstFeed, rt::NotificationId{7});
+      feedState.handleNotificationPosted(firstFeed, rt::NotificationId{7});
       feedState.dismissCompact(firstFeed);
 
       auto nextFeed = feed({entry(rt::NotificationId{7}, rt::NotificationSeverity::Error, "Old failure", true),
                             entry(rt::NotificationId{8}, rt::NotificationSeverity::Error, "New failure", true)});
-      feedState.onNotificationPosted(nextFeed, rt::NotificationId{8});
+      feedState.handleNotificationPosted(nextFeed, rt::NotificationId{8});
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Error);
       CHECK(feedState.viewState().compact.text == "New failure");
@@ -80,12 +80,12 @@ namespace ao::uimodel::test
     SECTION("dismissed higher severity does not suppress new lower severity persistent notification")
     {
       auto errorFeed = feed({entry(rt::NotificationId{16}, rt::NotificationSeverity::Error, "Old failure", true)});
-      feedState.onNotificationPosted(errorFeed, rt::NotificationId{16});
+      feedState.handleNotificationPosted(errorFeed, rt::NotificationId{16});
       feedState.dismissCompact(errorFeed);
 
       auto warningFeed = feed({entry(rt::NotificationId{16}, rt::NotificationSeverity::Error, "Old failure", true),
                                entry(rt::NotificationId{17}, rt::NotificationSeverity::Warning, "New warning", true)});
-      feedState.onNotificationPosted(warningFeed, rt::NotificationId{17});
+      feedState.handleNotificationPosted(warningFeed, rt::NotificationId{17});
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Warning);
       CHECK(feedState.viewState().compact.text == "New warning");
@@ -95,10 +95,10 @@ namespace ao::uimodel::test
     SECTION("notification-derived transient disappears when its source leaves the feed")
     {
       auto currentFeed = feed({entry(rt::NotificationId{18}, rt::NotificationSeverity::Info, "Saved playlist")});
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{18});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{18});
       REQUIRE(feedState.viewState().compact.kind == ActivityStatusKind::Info);
 
-      feedState.onFeedChanged(feed({}));
+      feedState.handleFeedChanged(feed({}));
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Idle);
     }
@@ -106,11 +106,11 @@ namespace ao::uimodel::test
     SECTION("transient expiration returns to persistent warning when present")
     {
       auto currentFeed = feed({entry(rt::NotificationId{9}, rt::NotificationSeverity::Warning, "Partial import")});
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{9});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{9});
       feedState.dismissCompact(currentFeed);
 
       auto replacementFeed = feed({entry(rt::NotificationId{10}, rt::NotificationSeverity::Warning, "New warning")});
-      feedState.onTransientExpired(replacementFeed);
+      feedState.handleTransientExpired(replacementFeed);
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Warning);
       CHECK(feedState.viewState().compact.text == "New warning");

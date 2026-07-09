@@ -23,8 +23,8 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - 10k scale operations preserve indices and deltas",
             "[runtime][unit][projection][scale]")
   {
-    auto env = TestMusicLibrary{};
-    auto& lib = env.library();
+    auto libraryFixture = MusicLibraryFixture{};
+    auto& lib = libraryFixture.library();
 
     int const kTrackCount = 10000;
     auto ids = std::vector<TrackId>{};
@@ -32,9 +32,10 @@ namespace ao::rt::test
 
     for (std::int32_t index = 0; index < kTrackCount; ++index)
     {
-      ids.push_back(env.addTrack(library::test::TrackSpec{.title = std::format("Track {:05d}", index),
-                                                          .artist = std::format("Artist {:03d}", index % 100),
-                                                          .album = std::format("Album {:03d}", index % 500)}));
+      ids.push_back(
+        libraryFixture.addTrack(library::test::TrackSpec{.title = std::format("Track {:05d}", index),
+                                                         .artist = std::format("Artist {:03d}", index % 100),
+                                                         .album = std::format("Album {:03d}", index % 500)}));
     }
 
     auto source = MutableTrackSource{};
@@ -53,7 +54,8 @@ namespace ao::rt::test
 
       for (std::int32_t index = 0; index < 100; ++index)
       {
-        newIds.push_back(env.addTrack(library::test::TrackSpec{.title = std::format("New Track {:05d}", index)}));
+        newIds.push_back(
+          libraryFixture.addTrack(library::test::TrackSpec{.title = std::format("New Track {:05d}", index)}));
       }
 
       source.batchInsert(newIds);

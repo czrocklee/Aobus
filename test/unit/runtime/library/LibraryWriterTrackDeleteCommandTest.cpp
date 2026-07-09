@@ -21,11 +21,11 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - deleteTrack removes an existing track and publishes a mutation",
             "[runtime][unit][library][track-delete]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto const trackId = testLib.addTrack("Test Track");
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
@@ -36,16 +36,17 @@ namespace ao::rt::test
 
     auto listIds = std::vector<ListId>{};
     {
-      auto transaction = testLib.library().writeTransaction();
+      auto transaction = libraryFixture.library().writeTransaction();
       auto manifest = library::FileManifestBuilder::makeEmpty().trackId(trackId).fileSize(10).mtime(20).serialize();
-      CHECK(testLib.library().manifest().writer(transaction).put("/tmp/test.flac", manifest));
+      CHECK(libraryFixture.library().manifest().writer(transaction).put("/tmp/test.flac", manifest));
 
       for (auto const* const name : std::array{"Manual A", "Manual B"})
       {
         auto listBuilder = library::ListBuilder::makeEmpty();
         listBuilder.name(name).tracks().add(trackId);
         listIds.push_back(
-          ao::test::requireValue(testLib.library().lists().writer(transaction).create(listBuilder.serialize())).first);
+          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(listBuilder.serialize()))
+            .first);
       }
 
       REQUIRE(transaction.commit());
@@ -59,13 +60,13 @@ namespace ao::rt::test
     REQUIRE(deletedTracks.size() == 1);
     CHECK(deletedTracks[0] == trackId);
 
-    auto transaction = testLib.library().readTransaction();
+    auto transaction = libraryFixture.library().readTransaction();
     auto const optTrackView =
-      testLib.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+      libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     CHECK_FALSE(optTrackView);
-    CHECK_FALSE(testLib.library().manifest().reader(transaction).get("/tmp/test.flac"));
+    CHECK_FALSE(libraryFixture.library().manifest().reader(transaction).get("/tmp/test.flac"));
 
-    auto listReader = testLib.library().lists().reader(transaction);
+    auto listReader = libraryFixture.library().lists().reader(transaction);
 
     for (auto const listId : listIds)
     {
@@ -79,11 +80,11 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryWriter - deleteTrack rejects missing tracks", "[runtime][unit][library][track-delete]")
   {
-    auto testLib = TestMusicLibrary{};
-    [[maybe_unused]] auto const trackId = testLib.addTrack("Test Track");
+    auto libraryFixture = MusicLibraryFixture{};
+    [[maybe_unused]] auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{testLib.library(), changes};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });

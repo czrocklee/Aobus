@@ -53,10 +53,10 @@ namespace ao::audio::test
       };
     }
 
-    class TestBackend final : public NullBackend
+    class FakeBackend final : public NullBackend
     {
     public:
-      TestBackend(BackendId b, ProfileId p)
+      FakeBackend(BackendId b, ProfileId p)
         : _backendId{std::move(b)}, _profileId{std::move(p)}
       {
       }
@@ -114,7 +114,7 @@ namespace ao::audio::test
         });
 
     When(Method(mockProvider, createBackend))
-      .AlwaysDo([&](Device const& b, ProfileId const& p) { return std::make_unique<TestBackend>(b.backendId, p); });
+      .AlwaysDo([&](Device const& b, ProfileId const& p) { return std::make_unique<FakeBackend>(b.backendId, p); });
     auto onGraphChanged = BackendProvider::OnGraphChangedCallback{};
 
     When(Method(mockProvider, subscribeGraph))
@@ -274,7 +274,7 @@ namespace ao::audio::test
         });
 
     When(Method(mockProvider, createBackend))
-      .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
+      .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<FakeBackend>(dev.backendId, p); });
     When(Method(mockProvider, status))
       .AlwaysReturn(BackendProvider::Status{.descriptor = {.id = kBackendPipeWire,
                                                            .name = "PipeWire",
@@ -359,7 +359,7 @@ namespace ao::audio::test
         });
 
     When(Method(mockProvider, createBackend))
-      .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
+      .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<FakeBackend>(dev.backendId, p); });
     When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
     When(Method(mockProvider, subscribeGraph))
       .AlwaysDo([](std::string_view, BackendProvider::OnGraphChangedCallback const&) { return Subscription{}; });
@@ -411,7 +411,7 @@ namespace ao::audio::test
         });
 
     When(Method(mockProvider, createBackend))
-      .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
+      .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<FakeBackend>(dev.backendId, p); });
     When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
     When(Method(mockProvider, subscribeGraph))
       .AlwaysDo([](std::string_view, BackendProvider::OnGraphChangedCallback const&) { return Subscription{}; });
@@ -447,7 +447,7 @@ namespace ao::audio::test
         });
 
     When(Method(mockProvider, createBackend))
-      .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<TestBackend>(dev.backendId, p); });
+      .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<FakeBackend>(dev.backendId, p); });
     When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
 
     auto onGraphChanged = BackendProvider::OnGraphChangedCallback{};

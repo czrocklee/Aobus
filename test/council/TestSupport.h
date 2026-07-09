@@ -76,7 +76,7 @@ body: |
     REQUIRE(result.exitCode == 0);
   }
 
-  inline void initGitRepo(ProcessRunner& process, std::filesystem::path const& repo, std::filesystem::path const& cwd)
+  inline void setupGitRepo(ProcessRunner& process, std::filesystem::path const& repo, std::filesystem::path const& cwd)
   {
     runCommand(process, cwd, {"git", "init", repo.string()});
   }

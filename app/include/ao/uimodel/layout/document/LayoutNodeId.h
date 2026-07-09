@@ -38,5 +38,5 @@ namespace ao::uimodel
   bool hasLayoutNodeIdErrors(std::vector<LayoutNodeIdDiagnostic> const& diagnostics);
 
   std::string makeUniqueLayoutNodeId(LayoutDocument const& doc, std::string_view componentType, std::string_view role);
-  void freshenLayoutNodeIds(LayoutNode& subtree, LayoutDocument const& ownerDoc);
+  void regenerateLayoutNodeIds(LayoutNode& subtree, LayoutDocument const& ownerDoc);
 } // namespace ao::uimodel

@@ -25,7 +25,7 @@
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/field/TrackInlineEditWorkflow.h>
+#include <ao/uimodel/field/TrackInlineEdit.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadataWorkflow.h>
@@ -150,10 +150,10 @@ namespace ao::gtk::layout
           }
         }
 
-        _showAllFieldsButton.signal_clicked().connect([this] { onToggleShowEmptyMetadata(); });
+        _showAllFieldsButton.signal_clicked().connect([this] { handleToggleShowEmptyMetadata(); });
 
-        _metadataHeader.button.signal_clicked().connect([this] { onToggleMetadata(); });
-        _technicalHeader.button.signal_clicked().connect([this] { onToggleTechnical(); });
+        _metadataHeader.button.signal_clicked().connect([this] { handleToggleMetadata(); });
+        _technicalHeader.button.signal_clicked().connect([this] { handleToggleTechnical(); });
 
         _metadataHeader.addCssClass("ao-track-detail-section-meta");
         _technicalHeader.addCssClass("ao-track-detail-section-tech");
@@ -215,8 +215,8 @@ namespace ao::gtk::layout
 
         if (_scope != nullptr)
         {
-          _scopeConn = _scope->signalSnapshotChanged().connect([this](auto const& snap) { onSnapshot(snap); });
-          onSnapshot(_scope->snapshot());
+          _scopeConn = _scope->signalSnapshotChanged().connect([this](auto const& snap) { handleSnapshot(snap); });
+          handleSnapshot(_scope->snapshot());
         }
       }
 
@@ -368,7 +368,7 @@ namespace ao::gtk::layout
         updateHeaderLabels(snap);
       }
 
-      void onToggleShowEmptyMetadata()
+      void handleToggleShowEmptyMetadata()
       {
         _showEmptyMetadata = !_showEmptyMetadata;
         _showAllFieldsButton.set_label(_showEmptyMetadata ? "Hide empty fields" : "Show empty fields");
@@ -383,7 +383,7 @@ namespace ao::gtk::layout
         }
       }
 
-      void onToggleMetadata()
+      void handleToggleMetadata()
       {
         _metadataExpanded = !_metadataExpanded;
         _metadataHeader.setExpanded(_metadataExpanded);
@@ -399,7 +399,7 @@ namespace ao::gtk::layout
         }
       }
 
-      void onToggleTechnical()
+      void handleToggleTechnical()
       {
         _technicalExpanded = !_technicalExpanded;
         _technicalHeader.setExpanded(_technicalExpanded);
@@ -435,7 +435,7 @@ namespace ao::gtk::layout
         toggleClass(_technicalHeader, _technicalExpanded);
       }
 
-      void onSnapshot(rt::TrackDetailSnapshot const& snap)
+      void handleSnapshot(rt::TrackDetailSnapshot const& snap)
       {
         for (auto& row : _metadataRows)
         {
@@ -484,7 +484,7 @@ namespace ao::gtk::layout
           }
 
           row.valueEditor.add_css_class("ao-property-editable");
-          row.valueEditor.signalCommitted().connect([this, field = row.field] { onBuiltInEdited(field); });
+          row.valueEditor.signalCommitted().connect([this, field = row.field] { handleBuiltInEdited(field); });
           row.valueEditor.signalCanceled().connect(
             [this, field = row.field]
             {
@@ -537,7 +537,7 @@ namespace ao::gtk::layout
             }
 
             editor.add_css_class("ao-property-editable");
-            editor.signalCommitted().connect([this, field] { onCompositeEdited(field); });
+            editor.signalCommitted().connect([this, field] { handleCompositeEdited(field); });
             editor.signalCanceled().connect(
               [this, field]
               {
@@ -606,7 +606,7 @@ namespace ao::gtk::layout
           validUtf8Text(uimodel::formatTrackFieldDisplayText(field, snap, mixedText, showTechnicalUnknown));
         auto const newText = std::string{newValue};
         bool firstApply = true;
-        auto const result = uimodel::TrackInlineEditWorkflow::apply(
+        auto const result = uimodel::applyTrackInlineEdit(
           uimodel::TrackInlineEditRequest{.field = field, .oldText = oldText, .newText = newText},
           uimodel::TrackInlineEditHooks{
             .parse = [uiDef](std::string_view text) { return uiDef->parseInlineEdit(text); },
@@ -639,7 +639,7 @@ namespace ao::gtk::layout
         return false;
       }
 
-      void onBuiltInEdited(rt::TrackField field)
+      void handleBuiltInEdited(rt::TrackField field)
       {
         auto* row = findBuiltInRow(field);
 
@@ -668,7 +668,7 @@ namespace ao::gtk::layout
         }
       }
 
-      void onCompositeEdited(rt::TrackField field)
+      void handleCompositeEdited(rt::TrackField field)
       {
         auto* row = findCompositeBuiltInRow(field);
 
@@ -756,7 +756,7 @@ namespace ao::gtk::layout
         row.editor.add_css_class("ao-property-value");
         row.editor.add_css_class("ao-property-editable");
         _editCoordinator.registerEditor(row.editor);
-        row.editor.signalCommitted().connect([this, key = row.key] { onCustomEdited(key); });
+        row.editor.signalCommitted().connect([this, key = row.key] { handleCustomEdited(key); });
         row.editor.signalCanceled().connect(
           [this, key = row.key]
           {
@@ -776,7 +776,7 @@ namespace ao::gtk::layout
         row.deleteButton.add_css_class("ao-icon-button");
         row.deleteButton.add_css_class("ao-detail-field-delete");
         row.deleteButton.set_tooltip_text("Delete Custom Metadata");
-        row.deleteButton.signal_clicked().connect([this, key = row.key] { onCustomDeleted(key); });
+        row.deleteButton.signal_clicked().connect([this, key = row.key] { handleCustomDeleted(key); });
 
         row.partialIcon.set_from_icon_name("dialog-warning-symbolic");
         row.partialIcon.set_opacity(kLabelOpacity);
@@ -804,7 +804,7 @@ namespace ao::gtk::layout
         row.partialIcon.set_visible(!item.presentOnAll);
       }
 
-      void onCustomEdited(std::string key)
+      void handleCustomEdited(std::string key)
       {
         auto* row = findCustomRow(key);
 
@@ -836,7 +836,7 @@ namespace ao::gtk::layout
         }
       }
 
-      void onCustomDeleted(std::string key)
+      void handleCustomDeleted(std::string key)
       {
         if (_scope == nullptr)
         {
@@ -860,7 +860,7 @@ namespace ao::gtk::layout
         }
       }
 
-      void onCustomAdded(std::string key, std::string value)
+      void handleCustomAdded(std::string key, std::string value)
       {
         if (_scope == nullptr)
         {
@@ -1046,7 +1046,7 @@ namespace ao::gtk::layout
       void buildAddMetadataUi()
       {
         _addMetadataButton.signalAddRequested().connect([this](std::string key, std::string value)
-                                                        { onCustomAdded(std::move(key), std::move(value)); });
+                                                        { handleCustomAdded(std::move(key), std::move(value)); });
       }
 
       BuiltInRow* findBuiltInRow(rt::TrackField field)

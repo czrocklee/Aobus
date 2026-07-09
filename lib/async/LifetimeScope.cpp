@@ -29,9 +29,9 @@ namespace ao::async
     auto lock = std::scoped_lock{_statePtr->mutex};
     _statePtr->isAlive = false;
 
-    for (auto const& sig : _statePtr->signals)
+    for (auto const& signalPtr : _statePtr->signals)
     {
-      sig->emit(CancellationType::all);
+      signalPtr->emit(CancellationType::all);
     }
   }
 
@@ -43,7 +43,7 @@ namespace ao::async
   namespace
   {
     void handleCoroutineCompletion(std::shared_ptr<LifetimeScopeState> statePtr,
-                                   std::shared_ptr<CancellationSignal> sigPtr,
+                                   std::shared_ptr<CancellationSignal> signalPtr,
                                    std::exception_ptr exPtr)
     {
       {
@@ -51,7 +51,7 @@ namespace ao::async
 
         if (statePtr->isAlive)
         {
-          std::erase(statePtr->signals, sigPtr);
+          std::erase(statePtr->signals, signalPtr);
         }
       }
 
@@ -82,7 +82,7 @@ namespace ao::async
 
   void Runtime::spawnWithLifetime(LifetimeScope* scope, Task<void> task)
   {
-    auto sigPtr = std::make_shared<CancellationSignal>();
+    auto signalPtr = std::make_shared<CancellationSignal>();
     auto statePtr = scope->state();
 
     {
@@ -93,11 +93,11 @@ namespace ao::async
         return;
       }
 
-      statePtr->signals.push_back(sigPtr);
+      statePtr->signals.push_back(signalPtr);
     }
 
     spawn(std::move(task),
-          sigPtr->slot(),
-          [statePtr, sigPtr](auto exPtr) { handleCoroutineCompletion(statePtr, sigPtr, exPtr); });
+          signalPtr->slot(),
+          [statePtr, signalPtr](auto exPtr) { handleCoroutineCompletion(statePtr, signalPtr, exPtr); });
   }
 } // namespace ao::async

@@ -121,16 +121,16 @@ namespace ao::library::test
     }
 
     /** The deep verifier must reject the record. */
-    void expectVerifierRejects(std::vector<std::byte> const& data)
+    void checkVerifierRejects(std::vector<std::byte> const& data)
     {
       auto const reader = detail::TrackColdReader{data};
       CHECK_FALSE(reader.isValid());
     }
 
     /** The read gate must poison the whole cold side, record-granular. */
-    void expectColdGateRejects(std::vector<std::byte> const& data)
+    void checkColdGateRejects(std::vector<std::byte> const& data)
     {
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
 
       auto const view = TrackView{std::span<std::byte const>{}, data};
       CHECK_FALSE(view.isColdValid());
@@ -142,9 +142,9 @@ namespace ao::library::test
     }
 
     /** The deep verifier rejects, but the read gate tolerates the record. */
-    TrackView expectColdGateTolerates(std::vector<std::byte> const& data)
+    TrackView checkColdGateTolerates(std::vector<std::byte> const& data)
     {
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
 
       auto view = TrackView{std::span<std::byte const>{}, data};
       CHECK(view.isColdValid());
@@ -270,7 +270,7 @@ namespace ao::library::test
     SECTION("too short for header")
     {
       auto const data = std::vector<std::byte>(sizeof(TrackColdHeader) - 1, std::byte{0});
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("URI range overruns the record")
@@ -282,14 +282,14 @@ namespace ao::library::test
                  .uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader)),
                  .uriLength = 8,
                });
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("URI offset points inside the header")
     {
       auto data = std::vector<std::byte>(sizeof(TrackColdHeader), std::byte{0});
       writePod(data, 0, TrackColdHeader{.uriOffset = 8, .uriLength = 0});
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("slot offset is not aligned")
@@ -297,7 +297,7 @@ namespace ao::library::test
       auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
       header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Classical)] = 30;
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("slot offset is before the header")
@@ -306,7 +306,7 @@ namespace ao::library::test
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
       header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Classical)] =
         static_cast<std::uint16_t>(sizeof(TrackColdHeader) - 4);
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("present slot offsets are not strictly increasing")
@@ -316,7 +316,7 @@ namespace ao::library::test
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
       header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Classical)] =
         header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt)];
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("slot offset points at the URI")
@@ -324,13 +324,13 @@ namespace ao::library::test
       auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
       header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Classical)] = header->uriOffset;
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("classical slice is too small for the block")
     {
       auto const data = makeColdRecord({RawColdBlock{.payload = std::vector<std::byte>(4, std::byte{0})}});
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("classical slice shrinks below the block size through a shifted offset")
@@ -339,14 +339,14 @@ namespace ao::library::test
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
       header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Classical)] =
         static_cast<std::uint16_t>(sizeof(TrackColdHeader) + 4);
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("custom payload is too short for its block header")
     {
       auto const data = makeColdRecord(
         {RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::vector<std::byte>(1, std::byte{0})}});
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("custom entry table overruns the payload")
@@ -361,7 +361,7 @@ namespace ao::library::test
 
       auto const data =
         makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::move(payload)}});
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("a later invalid block poisons earlier valid blocks")
@@ -369,7 +369,7 @@ namespace ao::library::test
       auto const data = makeColdRecord(
         {RawColdBlock{.payload = makeClassicalPayload()},
          RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::vector<std::byte>(1, std::byte{0})}});
-      expectColdGateRejects(data);
+      checkColdGateRejects(data);
     }
 
     SECTION("malformed cold structure poisons fixed cold fields too")
@@ -395,7 +395,7 @@ namespace ao::library::test
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
       header->reserved8 = 1;
 
-      auto const view = expectColdGateTolerates(data);
+      auto const view = checkColdGateTolerates(data);
       CHECK(view.classical().workId() == DictionaryId{1});
     }
 
@@ -405,7 +405,7 @@ namespace ao::library::test
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
       header->blockOffsets[kTrackColdKnownBlockSlotCount] = header->uriOffset;
 
-      auto const view = expectColdGateTolerates(data);
+      auto const view = checkColdGateTolerates(data);
       CHECK(view.classical().workId() == DictionaryId{1});
     }
 
@@ -421,7 +421,7 @@ namespace ao::library::test
       data[sizeof(TrackColdHeader)] = std::byte{0x75};
       data[sizeof(TrackColdHeader) + 1] = std::byte{1};
 
-      auto const view = expectColdGateTolerates(data);
+      auto const view = checkColdGateTolerates(data);
       CHECK(view.property().uri() == "u");
     }
 
@@ -430,7 +430,7 @@ namespace ao::library::test
       auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
       data.resize(data.size() + 4, std::byte{0});
 
-      auto const view = expectColdGateTolerates(data);
+      auto const view = checkColdGateTolerates(data);
       CHECK(view.classical().workId() == DictionaryId{1});
     }
 
@@ -444,7 +444,7 @@ namespace ao::library::test
                  .uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader)),
                  .uriLength = static_cast<std::uint16_t>(kOversizedRecordSize - sizeof(TrackColdHeader)),
                });
-      expectColdGateTolerates(data);
+      checkColdGateTolerates(data);
     }
 
     SECTION("cover slice that is not a whole number of entries reads as empty cover art")
@@ -452,7 +452,7 @@ namespace ao::library::test
       auto const data = makeColdRecord(
         {RawColdBlock{.slot = TrackColdBlockSlot::CoverArt, .payload = std::vector<std::byte>(1, std::byte{0})}});
 
-      auto const view = expectColdGateTolerates(data);
+      auto const view = checkColdGateTolerates(data);
       CHECK(view.coverArt().count() == 0);
       CHECK_FALSE(view.coverArt().primary());
     }
@@ -468,7 +468,7 @@ namespace ao::library::test
       entry->type = static_cast<std::uint8_t>(PictureType::PublisherLogo) + 1;
       entry->reserved[0] = 1;
 
-      auto const view = expectColdGateTolerates(data);
+      auto const view = checkColdGateTolerates(data);
       CHECK(view.coverArt().count() == 1);
       CHECK(view.coverArt().at(0).resourceId == ResourceId{42});
     }
@@ -478,7 +478,7 @@ namespace ao::library::test
       auto const data = makeColdRecord(
         {RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = makeUnsortedCustomPayload()}});
 
-      auto const view = expectColdGateTolerates(data);
+      auto const view = checkColdGateTolerates(data);
       CHECK(view.customMetadata().count() == 2);
       CHECK(view.customMetadata().contains(DictionaryId{1}));
       CHECK(view.customMetadata().contains(DictionaryId{2}));
@@ -512,7 +512,7 @@ namespace ao::library::test
       auto const data =
         makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::move(payload)}});
 
-      auto const view = expectColdGateTolerates(data);
+      auto const view = checkColdGateTolerates(data);
       CHECK(view.customMetadata().count() == kEntryCount);
 
       std::size_t iterated = 0;
@@ -549,7 +549,7 @@ namespace ao::library::test
       auto const data =
         makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::move(payload)}});
 
-      auto const view = expectColdGateTolerates(data);
+      auto const view = checkColdGateTolerates(data);
       auto const optValue = view.customMetadata().get(DictionaryId{1});
       REQUIRE(optValue);
       CHECK(optValue->empty());
@@ -564,14 +564,14 @@ namespace ao::library::test
                                   RawColdBlock{.payload = makeClassicalPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
       header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt)] = 0;
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
 
     SECTION("cover payload is not an entry array")
     {
       auto const data = makeColdRecord(
         {RawColdBlock{.slot = TrackColdBlockSlot::CoverArt, .payload = std::vector<std::byte>(1, std::byte{0})}});
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
 
     SECTION("cover entry has invalid picture type")
@@ -583,7 +583,7 @@ namespace ao::library::test
         std::span{data}.subspan(header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt)]));
       REQUIRE(entry != nullptr);
       entry->type = static_cast<std::uint8_t>(PictureType::PublisherLogo) + 1;
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
 
     SECTION("cover entry has invalid resource id")
@@ -595,7 +595,7 @@ namespace ao::library::test
         std::span{data}.subspan(header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt)]));
       REQUIRE(entry != nullptr);
       entry->id = kInvalidResourceId;
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
 
     SECTION("cover entry reserved bytes are nonzero")
@@ -607,7 +607,7 @@ namespace ao::library::test
         std::span{data}.subspan(header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt)]));
       REQUIRE(entry != nullptr);
       entry->reserved[0] = 1;
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
 
     SECTION("custom header value offset disagrees with computed table end")
@@ -626,7 +626,7 @@ namespace ao::library::test
 
       auto const data =
         makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::move(payload)}});
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
 
     SECTION("custom entry value starts before value area")
@@ -648,7 +648,7 @@ namespace ao::library::test
 
       auto const data =
         makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::move(payload)}});
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
 
     SECTION("custom entry value offset is outside payload")
@@ -667,7 +667,7 @@ namespace ao::library::test
 
       auto const data =
         makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::move(payload)}});
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
 
     SECTION("custom entry has invalid key id")
@@ -686,14 +686,14 @@ namespace ao::library::test
 
       auto const data =
         makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::move(payload)}});
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
 
     SECTION("custom entries are not sorted")
     {
       auto const data = makeColdRecord(
         {RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = makeUnsortedCustomPayload()}});
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
 
     SECTION("custom logical payload length disagrees with aligned slot span")
@@ -707,7 +707,7 @@ namespace ao::library::test
 
       auto const data =
         makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::move(payload)}});
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
 
     SECTION("custom aligned padding is nonzero")
@@ -728,7 +728,7 @@ namespace ao::library::test
       auto data =
         makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::move(payload)}});
       data[sizeof(TrackColdHeader) + valueOffset + 1] = std::byte{1};
-      expectVerifierRejects(data);
+      checkVerifierRejects(data);
     }
   }
 } // namespace ao::library::test

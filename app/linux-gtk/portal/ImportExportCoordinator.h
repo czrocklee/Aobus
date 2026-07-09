@@ -71,12 +71,13 @@ namespace ao::gtk::portal
     void exportLibraryTo(std::filesystem::path path, rt::ExportMode mode);
 
   private:
-    void onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
+    void handleLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& resultPtr,
+                                     Glib::RefPtr<Gtk::FileDialog> const& dialogPtr);
 
-    void onExportModeConfirmed(std::int32_t responseId, Gtk::DropDown* modeCombo, AppDialog* dialog);
-    void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
-                              rt::ExportMode mode,
-                              Glib::RefPtr<Gtk::FileDialog> const& fileDialog);
+    void handleExportModeConfirmed(std::int32_t responseId, Gtk::DropDown* modeCombo, AppDialog* dialog);
+    void handleExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& resultPtr,
+                                  rt::ExportMode mode,
+                                  Glib::RefPtr<Gtk::FileDialog> const& fileDialogPtr);
 
     Gtk::Window& _parent;
     ImportExportCallbacks _callbacks;

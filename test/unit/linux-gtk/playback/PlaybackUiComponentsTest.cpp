@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "../GtkTestSupport.h"
-#include "playback/SeekControl.h"
+#include "playback/SeekControlWidget.h"
 #include "playback/TimeLabel.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
@@ -28,12 +28,12 @@ namespace ao::gtk::test
 {
   namespace
   {
-    struct TestEnvironment final
+    struct PlaybackUiComponentsFixture final
     {
       ao::test::TempDir tempDir{};
       rt::AppRuntime runtime;
 
-      TestEnvironment()
+      PlaybackUiComponentsFixture()
         : runtime{makeRuntime(tempDir)}
       {
       }
@@ -58,14 +58,14 @@ namespace ao::gtk::test
   TEST_CASE("PlaybackUiComponents - render initial GTK bindings", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto env = TestEnvironment{};
+    auto env = PlaybackUiComponentsFixture{};
     auto& playback = env.runtime.playback();
     rt::test::addReadyAudioProvider(playback);
     drainGtkEvents();
 
-    SECTION("SeekControl renders a disabled seek scale before playback starts")
+    SECTION("SeekControlWidget renders a disabled seek scale before playback starts")
     {
-      auto seekControl = SeekControl{playback};
+      auto seekControl = SeekControlWidget{playback};
 
       auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
       REQUIRE(scale != nullptr);
@@ -104,9 +104,9 @@ namespace ao::gtk::test
       CHECK_FALSE(timeLabel.isTickActive());
     }
 
-    SECTION("SeekControl tick follows mapped playing state")
+    SECTION("SeekControlWidget tick follows mapped playing state")
     {
-      auto seekControl = SeekControl{playback};
+      auto seekControl = SeekControlWidget{playback};
       CHECK_FALSE(seekControl.isTickActive());
 
       startPlayback(playback, env.runtime.musicLibrary());

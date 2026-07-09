@@ -496,14 +496,14 @@ namespace ao::tui
   } // namespace
 
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-  std::int32_t run(Options const& options)
+  std::int32_t run(AppOptions const& options)
   {
     auto const coverArtMode = parseCoverArtMode(options.coverArtMode);
     auto const kittyCoverArt = shouldUseKittyCoverArt(coverArtMode);
     auto const blockCoverArt = shouldUseBlockCoverArt(coverArtMode);
 
     std::filesystem::create_directories(options.configPath.parent_path());
-    rt::Log::init(options.logLevel, options.libraryRoot / ".aobus" / "logs", rt::LogConsoleMode::Disabled);
+    rt::Log::initialize(options.logLevel, options.libraryRoot / ".aobus" / "logs", rt::LogConsoleMode::Disabled);
 
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
     screen.TrackMouse(true);
@@ -529,7 +529,7 @@ namespace ao::tui
 
     auto& playback = runtime.playback();
     auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
-    auto clockTickActive = std::atomic_bool{needsTransportClockTick(playback.state().transport)};
+    auto clockTickActive = std::atomic_bool{shouldTickTransportClock(playback.state().transport)};
     auto activityAutoDismissActive = std::atomic_bool{false};
     auto playbackClock = uimodel::PlaybackPositionInterpolator{};
     auto optPreviewElapsed = std::optional<std::chrono::milliseconds>{};
@@ -537,7 +537,7 @@ namespace ao::tui
       uimodel::PlaybackTimeViewModel{playback,
                                      [&](uimodel::PlaybackTimeViewState const& view)
                                      {
-                                       clockTickActive.store(needsTransportClockTick(playback.state().transport));
+                                       clockTickActive.store(shouldTickTransportClock(playback.state().transport));
 
                                        if (view.duration == std::chrono::milliseconds{0})
                                        {

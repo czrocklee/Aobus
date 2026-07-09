@@ -46,7 +46,7 @@ namespace ao::gtk::test
       return spec;
     }
 
-    struct ModelSpy final
+    struct SpyTrackListModelEvents final
     {
       struct Event
       {
@@ -59,7 +59,7 @@ namespace ao::gtk::test
       std::vector<Event> events;
       Glib::RefPtr<TrackListModel> modelPtr;
 
-      void onItemsChanged(::guint position, ::guint removed, ::guint added)
+      void handleItemsChanged(::guint position, ::guint removed, ::guint added)
       {
         events.push_back({position, removed, added, modelPtr->get_n_items()});
       }
@@ -86,9 +86,9 @@ namespace ao::gtk::test
     auto const modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
 
-    auto spy = ModelSpy{};
+    auto spy = SpyTrackListModelEvents{};
     spy.modelPtr = modelPtr;
-    modelPtr->signal_items_changed().connect(sigc::mem_fun(spy, &ModelSpy::onItemsChanged));
+    modelPtr->signal_items_changed().connect(sigc::mem_fun(spy, &SpyTrackListModelEvents::handleItemsChanged));
 
     SECTION("Basic properties and size")
     {
@@ -223,7 +223,7 @@ namespace ao::gtk::test
 
     SECTION("Delta batch notifications - Reset")
     {
-      source.onReset();
+      source.emitReset();
 
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].position == 0);

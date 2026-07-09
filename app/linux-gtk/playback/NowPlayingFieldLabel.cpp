@@ -59,12 +59,12 @@ namespace ao::gtk
       auto const gesturePtr = Gtk::GestureClick::create();
       gesturePtr->set_button(1);
       gesturePtr->set_propagation_phase(Gtk::PropagationPhase::BUBBLE);
-      gesturePtr->signal_pressed().connect([this](std::int32_t, double, double) { onLabelClicked(); });
+      gesturePtr->signal_pressed().connect([this](std::int32_t, double, double) { handleLabelClicked(); });
       _label.add_controller(gesturePtr);
     }
   }
 
-  void NowPlayingFieldLabel::onLabelClicked()
+  void NowPlayingFieldLabel::handleLabelClicked()
   {
     APP_LOG_DEBUG("[PID {}] NowPlayingFieldLabel: Clicked, field: {}, action: {}",
                   getpid(),

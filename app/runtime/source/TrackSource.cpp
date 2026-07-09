@@ -13,7 +13,7 @@ namespace ao::rt
   {
     for (auto* obs : _observers)
     {
-      obs->onSourceDestroyed();
+      obs->handleSourceDestroyed();
     }
   }
 
@@ -39,7 +39,7 @@ namespace ao::rt
   {
     for (auto* const obs : _observers)
     {
-      obs->onBulkInserted(ids);
+      obs->handleBulkInserted(ids);
     }
   }
 
@@ -47,7 +47,7 @@ namespace ao::rt
   {
     for (auto* const obs : _observers)
     {
-      obs->onBulkUpdated(ids);
+      obs->handleBulkUpdated(ids);
     }
   }
 
@@ -55,7 +55,7 @@ namespace ao::rt
   {
     for (auto* const obs : _observers)
     {
-      obs->onBulkRemoved(ids);
+      obs->handleBulkRemoved(ids);
     }
   }
 
@@ -63,7 +63,7 @@ namespace ao::rt
   {
     for (auto* const obs : _observers)
     {
-      obs->onReset();
+      obs->handleReset();
     }
   }
 
@@ -71,7 +71,7 @@ namespace ao::rt
   {
     for (auto* const obs : _observers)
     {
-      obs->onInserted(id, index);
+      obs->handleInserted(id, index);
     }
   }
 
@@ -79,7 +79,7 @@ namespace ao::rt
   {
     for (auto* const obs : _observers)
     {
-      obs->onUpdated(id, index);
+      obs->handleUpdated(id, index);
     }
   }
 
@@ -87,7 +87,7 @@ namespace ao::rt
   {
     for (auto* const obs : _observers)
     {
-      obs->onRemoved(id, index);
+      obs->handleRemoved(id, index);
     }
   }
 } // namespace ao::rt

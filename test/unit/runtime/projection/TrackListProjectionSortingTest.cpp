@@ -25,14 +25,14 @@ namespace ao::rt::test
 
   TEST_CASE("TrackListProjection - title sort ignores leading articles", "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
-    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "The Best"});
-    auto const id2 = env.lib.addTrack(library::test::TrackSpec{.title = "A Better"});
-    auto const id3 = env.lib.addTrack(library::test::TrackSpec{.title = "An Apple"});
-    auto const id4 = env.lib.addTrack(library::test::TrackSpec{.title = "Zeppelin"});
-    auto const id5 = env.lib.addTrack(library::test::TrackSpec{.title = "the other"});
-    auto const id6 = env.lib.addTrack(library::test::TrackSpec{.title = "a different"});
-    auto const id7 = env.lib.addTrack(library::test::TrackSpec{.title = "ANOTHER"});
+    auto env = TrackListProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "The Best"});
+    auto const id2 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A Better"});
+    auto const id3 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "An Apple"});
+    auto const id4 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Zeppelin"});
+    auto const id5 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "the other"});
+    auto const id6 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "a different"});
+    auto const id7 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "ANOTHER"});
 
     env.setupFiltered({{id1, id2, id3, id4, id5, id6, id7}});
 
@@ -63,20 +63,20 @@ namespace ao::rt::test
 
   TEST_CASE("TrackListProjection - sort 20 tracks by year then title", "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
+    auto env = TrackListProjectionFixture{};
     auto ids = std::vector<TrackId>{};
     ids.reserve(20);
 
     for (std::int32_t index = 0; index < 10; ++index)
     {
-      ids.push_back(
-        env.lib.addTrack(library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - index)), 2020)));
+      ids.push_back(env.libraryFixture.addTrack(
+        library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - index)), 2020)));
     }
 
     for (std::int32_t index = 0; index < 10; ++index)
     {
-      ids.push_back(
-        env.lib.addTrack(library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - index)), 2021)));
+      ids.push_back(env.libraryFixture.addTrack(
+        library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - index)), 2021)));
     }
 
     env.setupFiltered(ids);
@@ -96,8 +96,8 @@ namespace ao::rt::test
     {
       for (std::size_t index = start; index < end; ++index)
       {
-        auto transaction = env.lib.library().readTransaction();
-        auto reader = env.lib.library().tracks().reader(transaction);
+        auto transaction = env.libraryFixture.library().readTransaction();
+        auto reader = env.libraryFixture.library().tracks().reader(transaction);
         auto const optV = reader.get(proj.trackIdAt(index), TrackStore::Reader::LoadMode::Hot);
 
         REQUIRE(optV);
@@ -115,8 +115,8 @@ namespace ao::rt::test
 
       for (std::size_t index = start; index < start + 9; ++index)
       {
-        auto transaction = env.lib.library().readTransaction();
-        auto reader = env.lib.library().tracks().reader(transaction);
+        auto transaction = env.libraryFixture.library().readTransaction();
+        auto reader = env.libraryFixture.library().tracks().reader(transaction);
         auto const optA = reader.get(proj.trackIdAt(index), TrackStore::Reader::LoadMode::Hot);
         auto const optB = reader.get(proj.trackIdAt(index + 1), TrackStore::Reader::LoadMode::Hot);
 
@@ -129,7 +129,7 @@ namespace ao::rt::test
 
   TEST_CASE("TrackListProjection - sort 15 tracks by album disc track", "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
+    auto env = TrackListProjectionFixture{};
     auto ids = std::vector<TrackId>{};
     ids.reserve(20);
     struct Row final
@@ -164,7 +164,7 @@ namespace ao::rt::test
       spec.album = r.album;
       spec.discNumber = r.disc;
       spec.trackNumber = r.track;
-      ids.push_back(env.lib.addTrack(spec));
+      ids.push_back(env.libraryFixture.addTrack(spec));
     }
 
     env.setupFiltered(ids);
@@ -187,9 +187,9 @@ namespace ao::rt::test
     std::uint16_t previousDisc = 0;
     std::uint16_t previousTrack = 0;
 
-    auto const& dictionary = env.lib.library().dictionary();
-    auto transaction = env.lib.library().readTransaction();
-    auto reader = env.lib.library().tracks().reader(transaction);
+    auto const& dictionary = env.libraryFixture.library().dictionary();
+    auto transaction = env.libraryFixture.library().readTransaction();
+    auto reader = env.libraryFixture.library().tracks().reader(transaction);
 
     for (std::size_t i = 0; i < 15; ++i)
     {
@@ -215,15 +215,15 @@ namespace ao::rt::test
 
   TEST_CASE("TrackListProjection - sorts by classical role metadata", "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
+    auto env = TrackListProjectionFixture{};
 
-    auto const id1 = env.lib.addTrack(library::test::TrackSpec{.title = "A",
-                                                               .conductor = "Leonard Bernstein",
-                                                               .ensemble = "New York Philharmonic",
-                                                               .soloist = "Martha Argerich"});
-    auto const id2 = env.lib.addTrack(library::test::TrackSpec{
+    auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A",
+                                                                          .conductor = "Leonard Bernstein",
+                                                                          .ensemble = "New York Philharmonic",
+                                                                          .soloist = "Martha Argerich"});
+    auto const id2 = env.libraryFixture.addTrack(library::test::TrackSpec{
       .title = "B", .conductor = "Carlos Kleiber", .ensemble = "Vienna Philharmonic", .soloist = "Yo-Yo Ma"});
-    auto const id3 = env.lib.addTrack(library::test::TrackSpec{
+    auto const id3 = env.libraryFixture.addTrack(library::test::TrackSpec{
       .title = "C", .conductor = "Carlos Kleiber", .ensemble = "Staatskapelle Dresden", .soloist = "Glenn Gould"});
 
     env.setupFiltered({{id1, id2, id3}});
@@ -250,7 +250,7 @@ namespace ao::rt::test
     // performances into a single section. The classical sort order places Album before
     // Movement, so each performance's movements must stay contiguous and movement-ordered
     // rather than interleaving (Karajan-I, Kleiber-I, Karajan-II, ...).
-    auto env = TestEnv{};
+    auto env = TrackListProjectionFixture{};
 
     struct Row final
     {
@@ -282,7 +282,7 @@ namespace ao::rt::test
       spec.movementNumber = r.movementNumber;
       spec.movementTotal = 3;
       spec.trackNumber = r.trackNumber;
-      ids.push_back(env.lib.addTrack(spec));
+      ids.push_back(env.libraryFixture.addTrack(spec));
     }
 
     env.setupFiltered(ids);
@@ -301,9 +301,9 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 6);
 
-    auto const& dictionary = env.lib.library().dictionary();
-    auto transaction = env.lib.library().readTransaction();
-    auto reader = env.lib.library().tracks().reader(transaction);
+    auto const& dictionary = env.libraryFixture.library().dictionary();
+    auto transaction = env.libraryFixture.library().readTransaction();
+    auto reader = env.libraryFixture.library().tracks().reader(transaction);
 
     auto orderedAlbums = std::vector<std::string>{};
     auto orderedMovements = std::vector<std::uint16_t>{};
@@ -325,13 +325,13 @@ namespace ao::rt::test
 
   TEST_CASE("TrackListProjection - sort 10 identical tracks preserves stability", "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
+    auto env = TrackListProjectionFixture{};
     auto ids = std::vector<TrackId>{};
     ids.reserve(10);
 
     for (std::int32_t i = 0; i < 10; ++i)
     {
-      ids.push_back(env.lib.addTrack(library::test::makeTrackSpec("Same", 2020)));
+      ids.push_back(env.libraryFixture.addTrack(library::test::makeTrackSpec("Same", 2020)));
     }
 
     env.setupFiltered(ids);
@@ -352,14 +352,14 @@ namespace ao::rt::test
 
   TEST_CASE("TrackListProjection - sort reversal 10 tracks avoids IO", "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
+    auto env = TrackListProjectionFixture{};
     auto ids = std::vector<TrackId>{};
     ids.reserve(10);
 
     for (std::int32_t y = 2019; y >= 2010; --y)
     {
       ids.push_back(
-        env.lib.addTrack(library::test::makeTrackSpec(std::format("{}", y), static_cast<std::uint16_t>(y))));
+        env.libraryFixture.addTrack(library::test::makeTrackSpec(std::format("{}", y), static_cast<std::uint16_t>(y))));
     }
 
     env.setupFiltered(ids);
@@ -374,8 +374,8 @@ namespace ao::rt::test
     {
       for (std::size_t i = 0; i < 9; ++i)
       {
-        auto transaction = env.lib.library().readTransaction();
-        auto reader = env.lib.library().tracks().reader(transaction);
+        auto transaction = env.libraryFixture.library().readTransaction();
+        auto reader = env.libraryFixture.library().tracks().reader(transaction);
         auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
         auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
         REQUIRE(optA);
@@ -407,15 +407,15 @@ namespace ao::rt::test
 
   TEST_CASE("TrackListProjection - switch year to title sort on 15 tracks", "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
+    auto env = TrackListProjectionFixture{};
     auto ids = std::vector<TrackId>{};
     ids.reserve(15);
 
     for (std::int32_t i = 0; i < 15; ++i)
     {
       auto title = std::string(1, static_cast<char>('A' + ((i * 7) % 15)));
-      ids.push_back(
-        env.lib.addTrack(library::test::makeTrackSpec(title, static_cast<std::uint16_t>(2000 + ((i * 3) % 20)))));
+      ids.push_back(env.libraryFixture.addTrack(
+        library::test::makeTrackSpec(title, static_cast<std::uint16_t>(2000 + ((i * 3) % 20)))));
     }
 
     env.setupFiltered(ids);
@@ -429,8 +429,8 @@ namespace ao::rt::test
 
     for (std::size_t i = 0; i < 14; ++i)
     {
-      auto transaction = env.lib.library().readTransaction();
-      auto reader = env.lib.library().tracks().reader(transaction);
+      auto transaction = env.libraryFixture.library().readTransaction();
+      auto reader = env.libraryFixture.library().tracks().reader(transaction);
       auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
       auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optA);
@@ -444,8 +444,8 @@ namespace ao::rt::test
 
     for (std::size_t i = 0; i < 14; ++i)
     {
-      auto transaction = env.lib.library().readTransaction();
-      auto reader = env.lib.library().tracks().reader(transaction);
+      auto transaction = env.libraryFixture.library().readTransaction();
+      auto reader = env.libraryFixture.library().tracks().reader(transaction);
       auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
       auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optA);
@@ -456,10 +456,10 @@ namespace ao::rt::test
 
   TEST_CASE("TrackListProjection - sort by duration", "[runtime][unit][projection]")
   {
-    auto env = TestEnv{};
+    auto env = TrackListProjectionFixture{};
 
-    auto id1 = env.lib.addTrack(library::test::TrackSpec{.title = "A", .duration = std::chrono::seconds{5}});
-    auto id2 = env.lib.addTrack(library::test::TrackSpec{.title = "B", .duration = std::chrono::seconds{3}});
+    auto id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .duration = std::chrono::seconds{5}});
+    auto id2 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .duration = std::chrono::seconds{3}});
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});

@@ -8,8 +8,9 @@
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/backend/PipeWireBackend.h>
-#include <ao/audio/backend/detail/AudioBackendShared.h>
-#include <ao/audio/backend/detail/PipeWireShared.h>
+#include <ao/audio/backend/detail/AudioBackendVolumeMath.h>
+#include <ao/audio/backend/detail/PipeWireFormatParsing.h>
+#include <ao/audio/backend/detail/PipeWireRuntime.h>
 #include <ao/utility/Raii.h>
 
 extern "C"
@@ -88,25 +89,7 @@ namespace ao::audio::backend
     void handleStreamStateChanged(::pw_stream_state oldState, ::pw_stream_state newState, char const* errorMessage);
     void handleStreamDrained();
 
-    // Static C callback thunks for PipeWire
-    static void onStreamProcess(void* data);
-    static void onStreamParamChanged(void* data, std::uint32_t id, ::spa_pod const* param);
-    static void onStreamStateChanged(void* data,
-                                     ::pw_stream_state oldState,
-                                     ::pw_stream_state newState,
-                                     char const* errorMessage);
-    static void onStreamDrained(void* data);
-
-    static inline ::pw_stream_events const streamEvents = []
-    {
-      auto ev = ::pw_stream_events{};
-      ev.version = PW_VERSION_STREAM_EVENTS;
-      ev.state_changed = onStreamStateChanged;
-      ev.param_changed = onStreamParamChanged;
-      ev.process = onStreamProcess;
-      ev.drained = onStreamDrained;
-      return ev;
-    }();
+    static ::pw_stream_events const streamEvents;
 
     // Members
     PipeWireEnvironmentGuard envGuard;
@@ -125,37 +108,64 @@ namespace ao::audio::backend
 
     std::atomic<float> volume{1.0F};
     std::atomic<bool> muted{false};
-    std::atomic<bool> volumeAvailable{true};
+    std::atomic<bool> outputControlAvailable{true};
 
     void applyCachedControls() const;
+    PropertyInfo volumePropertyInfo() const noexcept
+    {
+      return {.canRead = true,
+              .canWrite = true,
+              .isAvailable = outputControlAvailable.load(std::memory_order_relaxed),
+              .emitsChangeNotifications = true,
+              .isHardwareAssisted = false};
+    }
+
+    PropertyInfo mutedPropertyInfo() const noexcept
+    {
+      return {.canRead = true,
+              .canWrite = true,
+              .isAvailable = outputControlAvailable.load(std::memory_order_relaxed),
+              .emitsChangeNotifications = true,
+              .isHardwareAssisted = false};
+    }
+
+    PropertyInfo propertyInfo(PropertyId id) const noexcept
+    {
+      if (id == PropertyId::Volume)
+      {
+        return volumePropertyInfo();
+      }
+
+      if (id == PropertyId::Muted)
+      {
+        return mutedPropertyInfo();
+      }
+
+      return {};
+    }
+
+    PropertySnapshot propertySnapshot(PropertyId id, PropertyValue const& value) const
+    {
+      return {.id = id, .optValue = value, .info = propertyInfo(id)};
+    }
 
   private:
     void handleFormatParam(::spa_pod const* param);
     void handlePropsParam(::spa_pod const* param);
   };
 
-  void PipeWireBackend::Impl::onStreamProcess(void* data)
+  ::pw_stream_events const PipeWireBackend::Impl::streamEvents = []
   {
-    static_cast<Impl*>(data)->handleStreamProcess();
-  }
-
-  void PipeWireBackend::Impl::onStreamParamChanged(void* data, std::uint32_t id, ::spa_pod const* param)
-  {
-    static_cast<Impl*>(data)->handleStreamParamChanged(id, param);
-  }
-
-  void PipeWireBackend::Impl::onStreamStateChanged(void* data,
-                                                   ::pw_stream_state oldState,
-                                                   ::pw_stream_state newState,
-                                                   char const* errorMessage)
-  {
-    static_cast<Impl*>(data)->handleStreamStateChanged(oldState, newState, errorMessage);
-  }
-
-  void PipeWireBackend::Impl::onStreamDrained(void* data)
-  {
-    static_cast<Impl*>(data)->handleStreamDrained();
-  }
+    auto ev = ::pw_stream_events{};
+    ev.version = PW_VERSION_STREAM_EVENTS;
+    ev.state_changed = [](void* data, ::pw_stream_state oldState, ::pw_stream_state newState, char const* errorMessage)
+    { static_cast<Impl*>(data)->handleStreamStateChanged(oldState, newState, errorMessage); };
+    ev.param_changed = [](void* data, std::uint32_t id, ::spa_pod const* param)
+    { static_cast<Impl*>(data)->handleStreamParamChanged(id, param); };
+    ev.process = [](void* data) { static_cast<Impl*>(data)->handleStreamProcess(); };
+    ev.drained = [](void* data) { static_cast<Impl*>(data)->handleStreamDrained(); };
+    return ev;
+  }();
 
   void PipeWireBackend::Impl::handleStreamProcess() const
   {
@@ -208,7 +218,7 @@ namespace ao::audio::backend
       buffer->buffer->datas[0].chunk->size = static_cast<std::uint32_t>(committedBytes);
       buffer->buffer->datas[0].chunk->stride = static_cast<std::int32_t>(stride);
       ::pw_stream_queue_buffer(streamPtr.get(), buffer);
-      renderTarget->onPositionAdvanced(result.positionFrames);
+      renderTarget->handlePositionAdvanced(result.positionFrames);
       return true;
     };
 
@@ -251,7 +261,7 @@ namespace ao::audio::backend
     if (auto optNegotiated = parseRawStreamFormat(param); optNegotiated)
     {
       format = *optNegotiated;
-      renderTarget->onFormatChanged(format);
+      renderTarget->handleFormatChanged(format);
     }
   }
 
@@ -264,7 +274,7 @@ namespace ao::audio::backend
       {
         if (std::abs(volFloat - volume.exchange(volFloat)) > detail::kVolumeEpsilon)
         {
-          renderTarget->onPropertyChanged(PropertyId::Volume);
+          renderTarget->handlePropertyChanged(propertySnapshot(PropertyId::Volume, PropertyValue{volFloat}));
         }
       }
     }
@@ -275,7 +285,7 @@ namespace ao::audio::backend
       {
         if (muteBool != muted.exchange(muteBool))
         {
-          renderTarget->onPropertyChanged(PropertyId::Muted);
+          renderTarget->handlePropertyChanged(propertySnapshot(PropertyId::Muted, PropertyValue{muteBool}));
         }
       }
     }
@@ -287,7 +297,7 @@ namespace ao::audio::backend
   {
     if (newState == PW_STREAM_STATE_ERROR)
     {
-      renderTarget->onBackendError(errorMessage != nullptr ? errorMessage : "Unknown PipeWire error");
+      renderTarget->handleBackendError(errorMessage != nullptr ? errorMessage : "Unknown PipeWire error");
     }
     else if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
     {
@@ -296,7 +306,7 @@ namespace ao::audio::backend
         if (auto id = ::pw_stream_get_node_id(streamPtr.get()); id != PW_ID_ANY)
         {
           routeAnchorReported = true;
-          renderTarget->onRouteReady(std::format("{}", id));
+          renderTarget->handleRouteReady(std::format("{}", id));
         }
       }
     }
@@ -305,7 +315,7 @@ namespace ao::audio::backend
   void PipeWireBackend::Impl::handleStreamDrained()
   {
     drainPending = false;
-    renderTarget->onDrainComplete();
+    renderTarget->handleDrainComplete();
   }
 
   void PipeWireBackend::Impl::applyCachedControls() const
@@ -451,7 +461,7 @@ namespace ao::audio::backend
     }
 
     _implPtr->applyCachedControls();
-    _implPtr->volumeAvailable.store(!useExclusive, std::memory_order_relaxed); // Default to available in shared mode
+    _implPtr->outputControlAvailable.store(!useExclusive, std::memory_order_relaxed);
 
     return {};
   }
@@ -591,11 +601,12 @@ namespace ao::audio::backend
   {
     if (id == PropertyId::Volume || id == PropertyId::Muted)
     {
-      return {.canRead = true,
-              .canWrite = true,
-              .isAvailable = _implPtr && _implPtr->volumeAvailable.load(std::memory_order_relaxed),
-              .emitsChangeNotifications = true,
-              .isHardwareAssisted = false};
+      if (_implPtr != nullptr)
+      {
+        return _implPtr->propertyInfo(id);
+      }
+
+      return {.canRead = true, .canWrite = true, .emitsChangeNotifications = true};
     }
 
     return {};

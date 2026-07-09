@@ -40,7 +40,7 @@ namespace ao::gtk::test
       // List B (Smart, child of A)
       auto builderB = library::ListBuilder::makeEmpty();
       builderB.name("Smart Child B").parentId(idA).filter("genre:rock");
-      builderB.tracks().isSmart(true);
+      builderB.tracks().smart(true);
       auto [id2, _] = ao::test::requireValue(writer.create(builderB.serialize()));
       idB = id2;
 

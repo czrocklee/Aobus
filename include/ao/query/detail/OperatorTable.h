@@ -29,14 +29,14 @@ namespace ao::query::detail
     Unary,      // not/exists: arity-1, predicate decided structurally by the caller
   };
 
-  struct OperatorInfo
+  struct OperatorDescriptor
   {
     std::string_view spelling; // canonical source token, no surrounding spaces
     OperatorClass cls;
   };
 
   // Indexed by the integer value of Operator; the order MUST match the enum.
-  inline constexpr auto kOperatorTable = std::to_array<OperatorInfo>({
+  inline constexpr auto kOperatorTable = std::to_array<OperatorDescriptor>({
     {.spelling = "and", .cls = OperatorClass::Logical},
     {.spelling = "or", .cls = OperatorClass::Logical},
     {.spelling = "not", .cls = OperatorClass::Unary},
@@ -55,7 +55,7 @@ namespace ao::query::detail
   static_assert(kOperatorTable.size() == static_cast<std::size_t>(Operator::Exists) + 1,
                 "kOperatorTable must have exactly one entry per Operator enumerator");
 
-  constexpr OperatorInfo const& operatorInfo(Operator op)
+  constexpr OperatorDescriptor const& operatorDescriptor(Operator op)
   {
     auto const index = static_cast<std::size_t>(op);
     gsl_Expects(index < kOperatorTable.size());

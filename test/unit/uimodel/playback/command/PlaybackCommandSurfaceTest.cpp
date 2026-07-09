@@ -28,7 +28,7 @@ namespace ao::uimodel::test
     auto fixture = PlaybackFixture<MockExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.testLib.addTrack({.title = "Command Track", .uri = fixturePath});
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Command Track", .uri = fixturePath});
 
     std::int32_t playSelectionCount = 0;
     auto commands =
@@ -103,8 +103,8 @@ namespace ao::uimodel::test
     auto fixture = PlaybackFixture<MockExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const firstTrack = fixture.testLib.addTrack({.title = "Queue First", .uri = fixturePath});
-    auto const secondTrack = fixture.testLib.addTrack({.title = "Queue Second", .uri = fixturePath});
+    auto const firstTrack = fixture.libraryFixture.addTrack({.title = "Queue First", .uri = fixturePath});
+    auto const secondTrack = fixture.libraryFixture.addTrack({.title = "Queue Second", .uri = fixturePath});
     auto queue = PlaybackQueueSession{fixture.playbackService, fixture.notificationService};
     auto commands = PlaybackCommandSurface{fixture.playbackService, &queue, [] {}};
 
@@ -165,7 +165,7 @@ namespace ao::uimodel::test
     auto fixture = PlaybackFixture<MockExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.testLib.addTrack({.title = "Capability Track", .uri = fixturePath});
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Capability Track", .uri = fixturePath});
     auto commands = PlaybackCommandSurface{fixture.playbackService, nullptr, [] {}};
 
     REQUIRE(fixture.playbackService.playTrack(trackId, ListId{5}));
@@ -198,8 +198,8 @@ namespace ao::uimodel::test
     auto fixture = PlaybackFixture<MockExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const firstTrack = fixture.testLib.addTrack({.title = "Event First", .uri = fixturePath});
-    auto const secondTrack = fixture.testLib.addTrack({.title = "Event Second", .uri = fixturePath});
+    auto const firstTrack = fixture.libraryFixture.addTrack({.title = "Event First", .uri = fixturePath});
+    auto const secondTrack = fixture.libraryFixture.addTrack({.title = "Event Second", .uri = fixturePath});
     auto commands = PlaybackCommandSurface{fixture.playbackService, nullptr, [] {}};
 
     std::int32_t count = 0;

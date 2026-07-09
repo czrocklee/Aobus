@@ -27,7 +27,7 @@ namespace ao::uimodel
     Error,
   };
 
-  struct ActivityActionView final
+  struct ActivityActionDescriptor final
   {
     std::string id{};
     std::string label{};
@@ -41,7 +41,7 @@ namespace ao::uimodel
     std::string disabledReason{};
   };
 
-  struct ActivityResolvedActionView final
+  struct ActivityResolvedActionState final
   {
     std::string id{};
     bool enabled = false;
@@ -77,7 +77,7 @@ namespace ao::uimodel
     std::optional<rt::NotificationProgressMode> optProgressMode{};
     double progressFraction = 0.0;
     std::string progressLabel{};
-    std::vector<ActivityActionView> actions{};
+    std::vector<ActivityActionDescriptor> actions{};
   };
 
   struct ActivityTaskDetail final
@@ -103,8 +103,8 @@ namespace ao::uimodel
 
   std::string_view activityStatusKindCssClass(ActivityStatusKind kind);
   bool hasDetailContent(ActivityDetailState const& detail) noexcept;
-  std::vector<ActivityResolvedActionView> resolveActivityActionViews(
-    std::vector<ActivityActionView> const& actions,
+  std::vector<ActivityResolvedActionState> resolveActivityActionStates(
+    std::vector<ActivityActionDescriptor> const& actions,
     ActivityActionAvailabilityResolver const& resolveAction,
     std::size_t maxVisibleActions);
 } // namespace ao::uimodel

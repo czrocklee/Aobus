@@ -22,19 +22,19 @@ namespace ao::rt::test
 {
   namespace
   {
-    void copyBasicAudioFixture(TestMusicLibrary& testLib, std::string_view uri = "song.flac")
+    void copyBasicAudioFixture(MusicLibraryFixture& libraryFixture, std::string_view uri = "song.flac")
     {
       auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
-      std::filesystem::copy_file(sourceFile, testLib.root() / std::filesystem::path{uri});
+      std::filesystem::copy_file(sourceFile, libraryFixture.root() / std::filesystem::path{uri});
     }
   } // namespace
 
   TEST_CASE("LibraryScan - buildPlan reports new audio files", "[runtime][unit][library][scan]")
   {
-    auto testLib = TestMusicLibrary{};
-    copyBasicAudioFixture(testLib);
+    auto libraryFixture = MusicLibraryFixture{};
+    copyBasicAudioFixture(libraryFixture);
 
-    auto service = LibraryScan{testLib.library()};
+    auto service = LibraryScan{libraryFixture.library()};
     auto progressPaths = std::vector<std::filesystem::path>{};
     auto result =
       service.buildPlan([&progressPaths](std::filesystem::path const& path) { progressPaths.push_back(path); });
@@ -49,10 +49,10 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryScan - applyPlan imports new tracks", "[runtime][unit][library][scan]")
   {
-    auto testLib = TestMusicLibrary{};
-    copyBasicAudioFixture(testLib);
+    auto libraryFixture = MusicLibraryFixture{};
+    copyBasicAudioFixture(libraryFixture);
 
-    auto service = LibraryScan{testLib.library()};
+    auto service = LibraryScan{libraryFixture.library()};
     auto plan = service.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
@@ -63,13 +63,13 @@ namespace ao::rt::test
     CHECK(result->failureCount == 0);
     CHECK_FALSE(result->cancelled);
 
-    auto transaction = testLib.library().readTransaction();
-    auto trackReader = testLib.library().tracks().reader(transaction);
+    auto transaction = libraryFixture.library().readTransaction();
+    auto trackReader = libraryFixture.library().tracks().reader(transaction);
     auto optTrack = trackReader.get(result->processedIds[0]);
     REQUIRE(optTrack);
     CHECK(optTrack->metadata().title() == "Test Title");
 
-    auto manifestResult = testLib.library().manifest().reader(transaction).get("song.flac");
+    auto manifestResult = libraryFixture.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK(manifestResult->trackId() == result->processedIds[0]);
     CHECK(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
@@ -77,10 +77,10 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryScan - applyPlan can defer new audio identity", "[runtime][unit][library][scan]")
   {
-    auto testLib = TestMusicLibrary{};
-    copyBasicAudioFixture(testLib);
+    auto libraryFixture = MusicLibraryFixture{};
+    copyBasicAudioFixture(libraryFixture);
 
-    auto service = LibraryScan{testLib.library()};
+    auto service = LibraryScan{libraryFixture.library()};
     auto plan = service.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
@@ -91,18 +91,18 @@ namespace ao::rt::test
     REQUIRE(result->processedIds.size() == 1);
     CHECK(result->failureCount == 0);
 
-    auto transaction = testLib.library().readTransaction();
-    auto manifestResult = testLib.library().manifest().reader(transaction).get("song.flac");
+    auto transaction = libraryFixture.library().readTransaction();
+    auto manifestResult = libraryFixture.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK_FALSE(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
   }
 
   TEST_CASE("LibraryScan - applyPlan honors cancellation", "[runtime][unit][library][scan]")
   {
-    auto testLib = TestMusicLibrary{};
-    copyBasicAudioFixture(testLib);
+    auto libraryFixture = MusicLibraryFixture{};
+    copyBasicAudioFixture(libraryFixture);
 
-    auto service = LibraryScan{testLib.library()};
+    auto service = LibraryScan{libraryFixture.library()};
     auto plan = service.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
@@ -115,9 +115,9 @@ namespace ao::rt::test
     CHECK(result->processedIds.empty());
     CHECK(result->failureCount == 0);
 
-    auto transaction = testLib.library().readTransaction();
-    auto trackReader = testLib.library().tracks().reader(transaction);
-    auto manifestReader = testLib.library().manifest().reader(transaction);
+    auto transaction = libraryFixture.library().readTransaction();
+    auto trackReader = libraryFixture.library().tracks().reader(transaction);
+    auto manifestReader = libraryFixture.library().manifest().reader(transaction);
     CHECK(trackReader.begin() == trackReader.end());
     CHECK(manifestReader.begin() == manifestReader.end());
   }

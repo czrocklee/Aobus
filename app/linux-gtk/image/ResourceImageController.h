@@ -39,7 +39,7 @@ namespace ao::gtk
     void bindToDetailProjection(std::unique_ptr<rt::TrackDetailProjection> projectionPtr);
 
   private:
-    void onDetailSnapshot(rt::TrackDetailSnapshot const& snap);
+    void handleDetailSnapshot(rt::TrackDetailSnapshot const& snap);
     void loadFullSize(ResourceId resourceId);
     void loadThumbnail(ResourceId resourceId, std::uint64_t generation);
     std::int32_t thumbnailPhysicalSize() const;

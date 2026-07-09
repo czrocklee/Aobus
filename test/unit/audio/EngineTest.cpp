@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "BackendTestSupport.h"
-#include "CapturingBackend.h"
 #include "EngineTestSupport.h"
+#include "FakeCapturingBackend.h"
 #include "ScriptedDecoderSession.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/Error.h>
@@ -178,7 +178,7 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const device =
       Device{.id = DeviceId{"alsa-exclusive"},
@@ -264,7 +264,7 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
 
     auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
@@ -310,7 +310,7 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
 
     auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true}; // 2 bytes = 1ms
     auto const factory = [fmt](auto const&, auto const&)
@@ -344,7 +344,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - play with initial offset seeks before publishing elapsed", "[audio][unit][engine][seek]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto orderedEvents = std::vector<std::string>{};
     backendRaw->setEventObserver([&orderedEvents](std::string_view name) { orderedEvents.emplace_back(name); });

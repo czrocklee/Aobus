@@ -32,9 +32,10 @@ if(LINUX)
         backend/PipeWireBackend.cpp
         backend/PipeWireMonitor.cpp
         backend/PipeWireProvider.cpp
-        backend/detail/PipeWireShared.cpp
-        backend/detail/PipeWireMonitorHelpers.cpp
-        backend/detail/AlsaProviderHelpers.cpp
+        backend/detail/PipeWireFormatParsing.cpp
+        backend/detail/PipeWireRuntime.cpp
+        backend/detail/PipeWireMonitorParsing.cpp
+        backend/detail/AlsaDeviceDiscovery.cpp
         backend/detail/AlsaGraphRegistry.cpp
         backend/detail/AlsaPcmVolume.cpp
     )

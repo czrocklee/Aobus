@@ -44,22 +44,22 @@ namespace ao::uimodel
                                   .optDefaultActionId = std::move(optDefaultId)});
     };
 
-    if (descriptorPolicy.allows(LayoutActionSlot::PrimaryClick))
+    if (descriptorPolicy.isSlotAllowed(LayoutActionSlot::PrimaryClick))
     {
       inject(kPrimaryActionProp, "Primary Action", LayoutActionSlot::PrimaryClick);
     }
 
-    if (descriptorPolicy.allows(LayoutActionSlot::PrimaryLongPress))
+    if (descriptorPolicy.isSlotAllowed(LayoutActionSlot::PrimaryLongPress))
     {
       inject(kPrimaryLongPressActionProp, "Primary Long Press", LayoutActionSlot::PrimaryLongPress);
     }
 
-    if (descriptorPolicy.allows(LayoutActionSlot::SecondaryClick))
+    if (descriptorPolicy.isSlotAllowed(LayoutActionSlot::SecondaryClick))
     {
       inject(kSecondaryActionProp, "Secondary Action", LayoutActionSlot::SecondaryClick);
     }
 
-    if (descriptorPolicy.allows(LayoutActionSlot::SecondaryLongPress))
+    if (descriptorPolicy.isSlotAllowed(LayoutActionSlot::SecondaryLongPress))
     {
       inject(kSecondaryLongPressActionProp, "Secondary Long Press", LayoutActionSlot::SecondaryLongPress);
     }

@@ -20,7 +20,7 @@ namespace ao::query::test
   // suggestions). Log-only baseline - no fixed threshold (machine dependent).
   TEST_CASE("Completion - records latency baseline", "[query][unit][completion][baseline]")
   {
-    rt::Log::init(rt::LogLevel::Info);
+    rt::Log::initialize(rt::LogLevel::Info);
 
     auto const inputs = std::array<std::string_view, 4>{
       R"($artist = "Miles Davis" )",   // completed predicate -> logical-operator suggestion path

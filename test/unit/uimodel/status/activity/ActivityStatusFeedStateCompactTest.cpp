@@ -26,7 +26,7 @@ namespace ao::uimodel::test
 
     SECTION("library progress owns the compact readout")
     {
-      feedState.onLibraryTaskProgress("Scanning: long-file-name.flac", 0.625);
+      feedState.handleLibraryTaskProgress("Scanning: long-file-name.flac", 0.625);
 
       auto const& compact = feedState.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Processing);
@@ -37,8 +37,8 @@ namespace ao::uimodel::test
 
     SECTION("library completion is a transient success")
     {
-      feedState.onLibraryTaskProgress("Updating: track.flac", 0.8);
-      feedState.onLibraryTaskCompleted(17, feed({}));
+      feedState.handleLibraryTaskProgress("Updating: track.flac", 0.8);
+      feedState.handleLibraryTaskCompleted(17, feed({}));
 
       auto const& compact = feedState.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Success);
@@ -48,14 +48,14 @@ namespace ao::uimodel::test
 
     SECTION("notification during task is deferred and errors beat completion")
     {
-      feedState.onLibraryTaskProgress("Scanning: album.flac", 0.4);
+      feedState.handleLibraryTaskProgress("Scanning: album.flac", 0.4);
 
       auto const error = entry(rt::NotificationId{4}, rt::NotificationSeverity::Error, "Import failed", true);
       auto const currentFeed = feed({error});
-      feedState.onNotificationPosted(currentFeed, rt::NotificationId{4});
+      feedState.handleNotificationPosted(currentFeed, rt::NotificationId{4});
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Processing);
 
-      feedState.onLibraryTaskCompleted(9, currentFeed);
+      feedState.handleLibraryTaskCompleted(9, currentFeed);
 
       auto const& compact = feedState.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Error);
@@ -66,12 +66,12 @@ namespace ao::uimodel::test
 
     SECTION("deferred persistent notification is ignored when removed before task completion")
     {
-      feedState.onLibraryTaskProgress("Scanning: album.flac", 0.4);
+      feedState.handleLibraryTaskProgress("Scanning: album.flac", 0.4);
 
       auto const error = entry(rt::NotificationId{15}, rt::NotificationSeverity::Error, "Import failed", true);
-      feedState.onNotificationPosted(feed({error}), rt::NotificationId{15});
+      feedState.handleNotificationPosted(feed({error}), rt::NotificationId{15});
 
-      feedState.onLibraryTaskCompleted(9, feed({}));
+      feedState.handleLibraryTaskCompleted(9, feed({}));
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Success);
       CHECK(feedState.viewState().compact.text == "Scan complete: 9 tracks added");
@@ -81,11 +81,11 @@ namespace ao::uimodel::test
     SECTION("success and info do not override persistent warnings")
     {
       auto warningFeed = feed({entry(rt::NotificationId{2}, rt::NotificationSeverity::Warning, "Partial import")});
-      feedState.onNotificationPosted(warningFeed, rt::NotificationId{2});
+      feedState.handleNotificationPosted(warningFeed, rt::NotificationId{2});
 
       auto infoFeed = feed({entry(rt::NotificationId{2}, rt::NotificationSeverity::Warning, "Partial import"),
                             entry(rt::NotificationId{3}, rt::NotificationSeverity::Info, "Saved playlist")});
-      feedState.onNotificationPosted(infoFeed, rt::NotificationId{3});
+      feedState.handleNotificationPosted(infoFeed, rt::NotificationId{3});
 
       CHECK(feedState.viewState().compact.kind == ActivityStatusKind::Warning);
       CHECK(feedState.viewState().compact.text == "Partial import");

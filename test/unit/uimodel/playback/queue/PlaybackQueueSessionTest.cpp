@@ -63,20 +63,20 @@ namespace ao::uimodel::test
 
   TEST_CASE("PlaybackQueueSession - basic controls", "[uimodel][unit][playback]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{testLib.library(), changes};
-    auto viewService = ViewService{executor, testLib.library(), trackSourceCache};
+    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
+    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
 
-    auto playbackService = PlaybackService{executor, viewService, testLib.library(), notificationService};
+    auto playbackService = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
     addReadyAudioProvider(playbackService);
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const track1 = testLib.addTrack({.title = "Track 1", .uri = fixturePath});
-    auto const track2 = testLib.addTrack({.title = "Track 2", .uri = fixturePath});
-    auto const track3 = testLib.addTrack({.title = "Track 3", .uri = fixturePath});
+    auto const track1 = libraryFixture.addTrack({.title = "Track 1", .uri = fixturePath});
+    auto const track2 = libraryFixture.addTrack({.title = "Track 2", .uri = fixturePath});
+    auto const track3 = libraryFixture.addTrack({.title = "Track 3", .uri = fixturePath});
     auto const missingTrack = TrackId{999};
 
     auto queueSession = PlaybackQueueSession{playbackService, notificationService};
@@ -397,8 +397,8 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const firstTrack = fixture.testLib.addTrack({.title = "First", .uri = flacPath});
-    auto const restoredTrack = fixture.testLib.addTrack({.title = "Restored", .uri = flacPath});
+    auto const firstTrack = fixture.libraryFixture.addTrack({.title = "First", .uri = flacPath});
+    auto const restoredTrack = fixture.libraryFixture.addTrack({.title = "Restored", .uri = flacPath});
     auto const session = rt::PlaybackSessionState{
       .sourceListId = ListId{10},
       .trackId = restoredTrack,
@@ -433,8 +433,8 @@ namespace ao::uimodel::test
 
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const mp3Path = audio::test::requireAudioFixture("basic_metadata.mp3").string();
-    auto const currentTrack = fixture.testLib.addTrack({.title = "Current FLAC", .uri = flacPath});
-    auto const nextTrack = fixture.testLib.addTrack({.title = "Fallback MP3", .uri = mp3Path});
+    auto const currentTrack = fixture.libraryFixture.addTrack({.title = "Current FLAC", .uri = flacPath});
+    auto const nextTrack = fixture.libraryFixture.addTrack({.title = "Fallback MP3", .uri = mp3Path});
 
     auto queueSession = PlaybackQueueSession{fixture.playbackService, fixture.notificationService};
     REQUIRE(queueSession.playQueue({currentTrack, nextTrack}, currentTrack, ListId{10}));
@@ -451,7 +451,7 @@ namespace ao::uimodel::test
     }
 
     REQUIRE(isDrained);
-    fixture.renderTarget->onDrainComplete();
+    fixture.renderTarget->handleDrainComplete();
 
     for (std::int32_t i = 0; i < 100000 && queueSession.nowPlayingTrackId() != nextTrack; ++i)
     {
@@ -472,8 +472,8 @@ namespace ao::uimodel::test
     fixture.executor.drain();
 
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const brokenTrack = fixture.testLib.addTrack({.title = "Broken Track", .uri = "broken.txt"});
-    auto const playableTrack = fixture.testLib.addTrack({.title = "Playable Track", .uri = flacPath});
+    auto const brokenTrack = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
+    auto const playableTrack = fixture.libraryFixture.addTrack({.title = "Playable Track", .uri = flacPath});
 
     auto queueSession = PlaybackQueueSession{fixture.playbackService, fixture.notificationService};
     REQUIRE(queueSession.playQueue({brokenTrack, playableTrack}, brokenTrack, ListId{10}));
@@ -494,9 +494,9 @@ namespace ao::uimodel::test
     fixture.onDevicesChangedCb(fixture.status.devices);
     fixture.executor.drain();
 
-    auto const broken1 = fixture.testLib.addTrack({.title = "Broken 1", .uri = "broken1.txt"});
-    auto const broken2 = fixture.testLib.addTrack({.title = "Broken 2", .uri = "broken2.txt"});
-    auto const broken3 = fixture.testLib.addTrack({.title = "Broken 3", .uri = "broken3.txt"});
+    auto const broken1 = fixture.libraryFixture.addTrack({.title = "Broken 1", .uri = "broken1.txt"});
+    auto const broken2 = fixture.libraryFixture.addTrack({.title = "Broken 2", .uri = "broken2.txt"});
+    auto const broken3 = fixture.libraryFixture.addTrack({.title = "Broken 3", .uri = "broken3.txt"});
 
     auto queueSession = PlaybackQueueSession{fixture.playbackService, fixture.notificationService};
     REQUIRE(queueSession.playQueue({broken1, broken2, broken3}, broken1, ListId{10}));
@@ -519,11 +519,11 @@ namespace ao::uimodel::test
     fixture.executor.drain();
 
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const broken1 = fixture.testLib.addTrack({.title = "Broken 1", .uri = "broken1.txt"});
-    auto const playable1 = fixture.testLib.addTrack({.title = "Playable 1", .uri = flacPath});
-    auto const broken2 = fixture.testLib.addTrack({.title = "Broken 2", .uri = "broken2.txt"});
-    auto const broken3 = fixture.testLib.addTrack({.title = "Broken 3", .uri = "broken3.txt"});
-    auto const playable2 = fixture.testLib.addTrack({.title = "Playable 2", .uri = flacPath});
+    auto const broken1 = fixture.libraryFixture.addTrack({.title = "Broken 1", .uri = "broken1.txt"});
+    auto const playable1 = fixture.libraryFixture.addTrack({.title = "Playable 1", .uri = flacPath});
+    auto const broken2 = fixture.libraryFixture.addTrack({.title = "Broken 2", .uri = "broken2.txt"});
+    auto const broken3 = fixture.libraryFixture.addTrack({.title = "Broken 3", .uri = "broken3.txt"});
+    auto const playable2 = fixture.libraryFixture.addTrack({.title = "Playable 2", .uri = flacPath});
 
     auto queueSession = PlaybackQueueSession{fixture.playbackService, fixture.notificationService};
     REQUIRE(queueSession.playQueue({broken1, playable1, broken2, broken3, playable2}, broken1, ListId{10}));
@@ -547,9 +547,9 @@ namespace ao::uimodel::test
     fixture.executor.drain();
 
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const track1 = fixture.testLib.addTrack({.title = "Track 1", .uri = flacPath});
-    auto const track2 = fixture.testLib.addTrack({.title = "Track 2", .uri = flacPath});
-    auto const track3 = fixture.testLib.addTrack({.title = "Track 3", .uri = flacPath});
+    auto const track1 = fixture.libraryFixture.addTrack({.title = "Track 1", .uri = flacPath});
+    auto const track2 = fixture.libraryFixture.addTrack({.title = "Track 2", .uri = flacPath});
+    auto const track3 = fixture.libraryFixture.addTrack({.title = "Track 3", .uri = flacPath});
 
     auto queueSession = PlaybackQueueSession{fixture.playbackService, fixture.notificationService};
     REQUIRE(queueSession.playQueue({track1, track2, track3}, track1, ListId{10}));
@@ -573,14 +573,14 @@ namespace ao::uimodel::test
     fixture.executor.drain();
 
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const currentTrack = fixture.testLib.addTrack({.title = "Current Track", .uri = flacPath});
-    auto const nextTrack = fixture.testLib.addTrack({.title = "Next Track", .uri = flacPath});
+    auto const currentTrack = fixture.libraryFixture.addTrack({.title = "Current Track", .uri = flacPath});
+    auto const nextTrack = fixture.libraryFixture.addTrack({.title = "Next Track", .uri = flacPath});
 
     auto queueSession = PlaybackQueueSession{fixture.playbackService, fixture.notificationService};
     REQUIRE(queueSession.playQueue({currentTrack, nextTrack}, currentTrack, ListId{10}));
     REQUIRE(fixture.renderTarget != nullptr);
 
-    fixture.renderTarget->onBackendError("device lost");
+    fixture.renderTarget->handleBackendError("device lost");
 
     REQUIRE(fixture.executor.drainUntil([&] { return !queueSession.isActive(); }));
 

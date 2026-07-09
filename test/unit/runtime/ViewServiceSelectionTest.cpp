@@ -14,11 +14,11 @@ namespace ao::rt::test
 {
   TEST_CASE("ViewService - selectionDuration sums selected track durations", "[runtime][unit][view][selection]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto const trackA =
-      env.library.addTrack(library::test::TrackSpec{.title = "A", .duration = std::chrono::seconds{200}});
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .duration = std::chrono::seconds{200}});
     auto const trackB =
-      env.library.addTrack(library::test::TrackSpec{.title = "B", .duration = std::chrono::seconds{100}});
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .duration = std::chrono::seconds{100}});
 
     auto service = env.makeService();
     auto const result = service.createView({}, true);

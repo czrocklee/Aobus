@@ -478,9 +478,9 @@ namespace ao::gtk::test
       auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(runtime, callbacks);
       workflowPtr->importFrom(importPath);
 
-      executor->expectQueued();
+      executor->checkQueued();
       REQUIRE(executor->runOne());
-      executor->expectQueued(std::chrono::seconds{2});
+      executor->checkQueued(std::chrono::seconds{2});
 
       workflowPtr.reset();
     }

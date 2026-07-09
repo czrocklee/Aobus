@@ -11,7 +11,8 @@
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
 #include <ao/audio/backend/detail/AlsaPcmError.h>
 #include <ao/audio/backend/detail/AlsaPcmVolume.h>
-#include <ao/audio/backend/detail/AudioBackendShared.h>
+#include <ao/audio/backend/detail/AudioBackendFormatSupport.h>
+#include <ao/audio/backend/detail/AudioBackendRenderProgress.h>
 #include <ao/utility/ThreadName.h>
 
 #include <poll.h>
@@ -679,7 +680,7 @@ namespace ao::audio::backend
         if (renderResult.drained)
         {
           ::snd_pcm_drain(pcmPtr.get());
-          renderTarget->onDrainComplete();
+          renderTarget->handleDrainComplete();
           break;
         }
 
@@ -737,7 +738,7 @@ namespace ao::audio::backend
 
       auto const committedPositionFrames = detail::committedPositionFrames(
         static_cast<std::uint64_t>(committed), renderResult.positionFrameOffset, renderResult.positionFrames);
-      renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(committedPositionFrames));
+      renderTarget->handlePositionAdvanced(static_cast<std::uint32_t>(committedPositionFrames));
     }
   }
 
@@ -780,7 +781,7 @@ namespace ao::audio::backend
   {
     if (err == -EPIPE)
     {
-      renderTarget->onUnderrun();
+      renderTarget->handleUnderrun();
       ::snd_pcm_prepare(pcmPtr.get());
     }
     else if (err == -ESTRPIPE)
@@ -794,7 +795,7 @@ namespace ao::audio::backend
     {
       auto const errorMsg = std::string{"ALSA: Unrecoverable stream state"};
       fatalStreamError.store(true, std::memory_order_relaxed);
-      renderTarget->onBackendError(errorMsg);
+      renderTarget->handleBackendError(errorMsg);
     }
   }
 
@@ -1022,10 +1023,10 @@ namespace ao::audio::backend
 
     if (backendFormatChanged)
     {
-      _implPtr->renderTarget->onFormatChanged(_implPtr->format);
+      _implPtr->renderTarget->handleFormatChanged(_implPtr->format);
     }
 
-    _implPtr->renderTarget->onRouteReady(_implPtr->deviceName);
+    _implPtr->renderTarget->handleRouteReady(_implPtr->deviceName);
 
     _implPtr->pcmPtr = std::move(safePcmPtr);
 

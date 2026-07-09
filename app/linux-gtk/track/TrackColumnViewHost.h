@@ -31,7 +31,7 @@ namespace ao::gtk
 
     TrackColumnViewHost(Glib::RefPtr<TrackListModel> modelPtr,
                         uimodel::TrackColumnLayoutStore& layoutStore,
-                        Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
+                        Glib::RefPtr<Gtk::MultiSelection> const& selectionModelPtr,
                         ListId listId);
     ~TrackColumnViewHost();
 
@@ -65,7 +65,7 @@ namespace ao::gtk
     // The old generation is retired. Caller swaps the scrolled-window child.
     Gtk::ColumnView& rebuild(Glib::RefPtr<TrackListModel> modelPtr,
                              uimodel::TrackColumnLayoutStore& layoutStore,
-                             Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
+                             Glib::RefPtr<Gtk::MultiSelection> const& selectionModelPtr,
                              FactoryProvider const& factoryProvider,
                              ListId listId);
 

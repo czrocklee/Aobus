@@ -159,7 +159,7 @@ namespace ao::gtk::layout
         {
           _button.set_cursor(Gdk::Cursor::create("pointer"));
           _button.add_css_class("ao-clickable");
-          _button.signal_clicked().connect([this] { onImageClicked(); });
+          _button.signal_clicked().connect([this] { handleImageClicked(); });
         }
 
         _sub = _runtime.playback().onNowPlayingChanged([this](auto const&) { syncNowPlaying(); });
@@ -189,7 +189,7 @@ namespace ao::gtk::layout
       }
 
     private:
-      void onImageClicked()
+      void handleImageClicked()
       {
         if (_currentTrackId == kInvalidTrackId)
         {

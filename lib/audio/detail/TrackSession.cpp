@@ -105,7 +105,7 @@ namespace ao::audio::detail
 
   void TrackSession::negotiateFormat(std::filesystem::path const& path,
                                      DecodedStreamInfo& info,
-                                     std::unique_ptr<DecoderSession>& decoder,
+                                     std::unique_ptr<DecoderSession>& decoderPtr,
                                      Format& backendFormat,
                                      Device const& device,
                                      BackendId const& backendId,
@@ -120,7 +120,7 @@ namespace ao::audio::detail
 
     auto const plan = FormatNegotiator::buildPlan(info.sourceFormat, device.capabilities);
 
-    if (plan.requiresResample)
+    if (plan.isResampleRequired)
     {
       throwDecoderError(
         Error::Code::NotSupported,
@@ -128,7 +128,7 @@ namespace ao::audio::detail
           "{} does not support {} Hz and Aobus has no resampler yet", backendId, info.sourceFormat.sampleRate));
     }
 
-    if (plan.requiresChannelRemap)
+    if (plan.isChannelRemapRequired)
     {
       throwDecoderError(Error::Code::NotSupported,
                         std::format("{} does not support {} channels and Aobus has no channel remapper yet",
@@ -138,10 +138,10 @@ namespace ao::audio::detail
 
     if (!(plan.decoderOutputFormat == info.sourceFormat))
     {
-      decoder->close();
-      decoder = makeDecoder(decoderFactory, path, plan.decoderOutputFormat);
+      decoderPtr->close();
+      decoderPtr = makeDecoder(decoderFactory, path, plan.decoderOutputFormat);
 
-      if (auto const reOpenResult = decoder->open(path); !reOpenResult)
+      if (auto const reOpenResult = decoderPtr->open(path); !reOpenResult)
       {
         throwDecoderError(reOpenResult.error());
       }

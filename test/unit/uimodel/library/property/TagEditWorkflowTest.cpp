@@ -19,10 +19,10 @@ namespace ao::uimodel::test
 
   namespace
   {
-    bool trackHasTag(TestMusicLibrary& testLib, TrackId trackId, std::string const& expectedTag)
+    bool trackHasTag(MusicLibraryFixture& libraryFixture, TrackId trackId, std::string const& expectedTag)
     {
-      auto transaction = testLib.library().readTransaction();
-      auto reader = testLib.library().tracks().reader(transaction);
+      auto transaction = libraryFixture.library().readTransaction();
+      auto reader = libraryFixture.library().tracks().reader(transaction);
       auto const optView = reader.get(trackId);
 
       if (!optView)
@@ -30,21 +30,21 @@ namespace ao::uimodel::test
         return false;
       }
 
-      auto const& dictionary = testLib.library().dictionary();
+      auto const& dictionary = libraryFixture.library().dictionary();
 
       return std::ranges::any_of(
         optView->tags(), [&](auto const tagId) { return dictionary.getOrDefault(tagId) == expectedTag; });
     }
 
-    std::vector<std::string> trackTagNames(TestMusicLibrary& testLib, TrackId trackId)
+    std::vector<std::string> trackTagNames(MusicLibraryFixture& libraryFixture, TrackId trackId)
     {
-      auto transaction = testLib.library().readTransaction();
-      auto reader = testLib.library().tracks().reader(transaction);
+      auto transaction = libraryFixture.library().readTransaction();
+      auto reader = libraryFixture.library().tracks().reader(transaction);
       auto const optView = reader.get(trackId);
       REQUIRE(optView);
 
       auto result = std::vector<std::string>{};
-      auto const& dictionary = testLib.library().dictionary();
+      auto const& dictionary = libraryFixture.library().dictionary();
 
       for (auto const tagId : optView->tags())
       {
@@ -58,13 +58,13 @@ namespace ao::uimodel::test
 
   TEST_CASE("TagEditWorkflow - mutations report messages and final tag state", "[uimodel][unit][workflow][tag]")
   {
-    auto testLib = TestMusicLibrary{};
+    auto libraryFixture = MusicLibraryFixture{};
     auto changes = rt::LibraryChanges{};
-    auto writer = rt::LibraryWriter{testLib.library(), changes};
+    auto writer = rt::LibraryWriter{libraryFixture.library(), changes};
     auto workflow = TagEditWorkflow{writer};
 
-    auto trackId = testLib.addTrack("Target 1");
-    auto trackId2 = testLib.addTrack("Target 2");
+    auto trackId = libraryFixture.addTrack("Target 1");
+    auto trackId2 = libraryFixture.addTrack("Target 2");
 
     SECTION("no selected tracks does not mutate the library")
     {
@@ -72,8 +72,8 @@ namespace ao::uimodel::test
       auto result = workflow.apply(req);
       CHECK_FALSE(result.applied);
       CHECK(result.notificationText.empty());
-      CHECK(trackTagNames(testLib, trackId).empty());
-      CHECK(trackTagNames(testLib, trackId2).empty());
+      CHECK(trackTagNames(libraryFixture, trackId).empty());
+      CHECK(trackTagNames(libraryFixture, trackId2).empty());
     }
 
     SECTION("empty tag changes do not mutate selected tracks")
@@ -82,7 +82,7 @@ namespace ao::uimodel::test
       auto result = workflow.apply(req);
       CHECK_FALSE(result.applied);
       CHECK(result.notificationText.empty());
-      CHECK(trackTagNames(testLib, trackId).empty());
+      CHECK(trackTagNames(libraryFixture, trackId).empty());
     }
 
     SECTION("adding a single tag mutates the selected track and reports the count")
@@ -91,23 +91,23 @@ namespace ao::uimodel::test
       auto result = workflow.apply(req);
       CHECK(result.applied);
       CHECK(result.notificationText == "Tags added 1 for 1 track");
-      CHECK(trackTagNames(testLib, trackId) == std::vector<std::string>{"Tag1"});
-      CHECK(trackTagNames(testLib, trackId2).empty());
+      CHECK(trackTagNames(libraryFixture, trackId) == std::vector<std::string>{"Tag1"});
+      CHECK(trackTagNames(libraryFixture, trackId2).empty());
     }
 
     SECTION("removing a single tag mutates every selected track and reports the count")
     {
       auto const initialTags = std::vector<std::string>{"Tag1"};
       REQUIRE(writer.editTags(std::vector{trackId, trackId2}, initialTags, {}));
-      REQUIRE(trackTagNames(testLib, trackId) == std::vector<std::string>{"Tag1"});
-      REQUIRE(trackTagNames(testLib, trackId2) == std::vector<std::string>{"Tag1"});
+      REQUIRE(trackTagNames(libraryFixture, trackId) == std::vector<std::string>{"Tag1"});
+      REQUIRE(trackTagNames(libraryFixture, trackId2) == std::vector<std::string>{"Tag1"});
 
       auto const req = TagEditRequest{.selectedIds = {trackId, trackId2}, .tagsToRemove = {"Tag1"}};
       auto result = workflow.apply(req);
       CHECK(result.applied);
       CHECK(result.notificationText == "Tags removed 1 for 2 tracks");
-      CHECK(trackTagNames(testLib, trackId).empty());
-      CHECK(trackTagNames(testLib, trackId2).empty());
+      CHECK(trackTagNames(libraryFixture, trackId).empty());
+      CHECK(trackTagNames(libraryFixture, trackId2).empty());
     }
 
     SECTION("adding and removing tags reports requested counts and final tag sets")
@@ -117,8 +117,8 @@ namespace ao::uimodel::test
       auto result = workflow.apply(req);
       CHECK(result.applied);
       CHECK(result.notificationText == "Tags added 2 and removed 1 for 2 tracks");
-      CHECK(trackTagNames(testLib, trackId) == std::vector<std::string>{"Tag1", "Tag2"});
-      CHECK(trackTagNames(testLib, trackId2) == std::vector<std::string>{"Tag1", "Tag2"});
+      CHECK(trackTagNames(libraryFixture, trackId) == std::vector<std::string>{"Tag1", "Tag2"});
+      CHECK(trackTagNames(libraryFixture, trackId2) == std::vector<std::string>{"Tag1", "Tag2"});
     }
 
     SECTION("adding and removing tags mutates the library in one request")
@@ -131,8 +131,8 @@ namespace ao::uimodel::test
 
       CHECK(result.applied);
       CHECK(result.notificationText == "Tags added 1 and removed 1 for 1 track");
-      CHECK(trackHasTag(testLib, trackId, "NewTag"));
-      CHECK_FALSE(trackHasTag(testLib, trackId, "OldTag"));
+      CHECK(trackHasTag(libraryFixture, trackId, "NewTag"));
+      CHECK_FALSE(trackHasTag(libraryFixture, trackId, "OldTag"));
     }
   }
 } // namespace ao::uimodel::test

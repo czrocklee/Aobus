@@ -37,7 +37,7 @@ namespace ao::rt
 
 namespace ao::gtk
 {
-  class AppConfig;
+  class AppConfigStore;
   struct GtkUiServices;
   class ShellLayoutComponentStateStore;
   class ShellLayoutStore;
@@ -59,7 +59,7 @@ namespace ao::gtk
 
     ShellLayoutController(rt::AppRuntime& runtime,
                           Gtk::Window& parentWindow,
-                          std::shared_ptr<AppConfig> configPtr,
+                          std::shared_ptr<AppConfigStore> configStorePtr,
                           std::shared_ptr<ShellLayoutStore> layoutStorePtr,
                           std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
                           ThemeCoordinator& themeCoordinator);
@@ -79,8 +79,8 @@ namespace ao::gtk
     void attachToWindow();
     void bindServices(GtkUiServices const& services);
     void refreshExportedActions();
-    void loadLayout(AppConfig& config);
-    void openEditor(AppConfig& config);
+    void loadLayout(AppConfigStore& configStore);
+    void openEditor(AppConfigStore& configStore);
     void resetRuntimeLayoutState();
     void saveCurrentPanelSizesAsLayoutDefaults();
 
@@ -115,7 +115,7 @@ namespace ao::gtk
                                              uimodel::LayoutDocument document,
                                              uimodel::LayoutComponentStateDocument componentState);
 
-    void onEditorSaveRequest(layout::editor::LayoutSaveResult const& result);
+    void handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result);
 
     layout::ComponentRegistry _registry;
     layout::ActionRegistry _actionRegistry;
@@ -124,7 +124,7 @@ namespace ao::gtk
     std::unique_ptr<layout::GioActionBridgeSession> _gioBridgeSessionPtr;
     std::vector<rt::Subscription> _playbackSubs;
     uimodel::ShellLayoutSessionModel _session;
-    std::shared_ptr<AppConfig> _configPtr;
+    std::shared_ptr<AppConfigStore> _configStorePtr;
     std::shared_ptr<ShellLayoutStore> _layoutStorePtr;
     std::shared_ptr<ShellLayoutComponentStateStore> _componentStateStorePtr;
     ThemeCoordinator& _themeCoordinator;

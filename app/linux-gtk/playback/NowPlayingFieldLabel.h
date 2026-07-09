@@ -27,7 +27,7 @@ namespace ao::gtk
 
   private:
     void applyState(uimodel::NowPlayingViewState const& view);
-    void onLabelClicked();
+    void handleLabelClicked();
 
     rt::AppRuntime& _runtime;
     rt::TrackField _field;

@@ -68,9 +68,9 @@ namespace ao::gtk
     void rebuildChips();
     void insertBeforeTrigger(Gtk::Widget& child);
 
-    void onTagRemoveClicked(std::string const& tag);
-    void onAvailableTagClicked(std::string const& tag);
-    void onAddSubmitted(std::string const& tag);
+    void handleTagRemoveClicked(std::string const& tag);
+    void handleAvailableTagClicked(std::string const& tag);
+    void handleAddSubmitted(std::string const& tag);
 
     // Show/hide chips for the current add/search state (current chips hide while the entry is open;
     // suggested chips live-filter by the entry text), then reflow.

@@ -37,7 +37,7 @@ namespace ao::audio::test
 {
   namespace
   {
-    class BlockingPropertyBackend final : public Backend
+    class FakeBlockingPropertyBackend final : public Backend
     {
     public:
       Result<> open(Format const& /*format*/, RenderTarget* /*target*/) override { return {}; }
@@ -199,7 +199,7 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backendPtr = std::make_unique<BlockingPropertyBackend>();
+    auto backendPtr = std::make_unique<FakeBlockingPropertyBackend>();
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device};
 

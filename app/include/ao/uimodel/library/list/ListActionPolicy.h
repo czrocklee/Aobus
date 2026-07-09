@@ -14,11 +14,6 @@ namespace ao::uimodel
     bool canDelete = false;
   };
 
-  class ListActionPolicy final
-  {
-  public:
-    static ListActionViewState describeActions(ListId selectedListId, bool selectedListHasChildren);
-
-    static ListId parentForNewSmartList(ListId selectedListId);
-  };
+  ListActionViewState describeListActions(ListId selectedListId, bool selectedListHasChildren);
+  ListId parentForNewSmartList(ListId selectedListId);
 } // namespace ao::uimodel

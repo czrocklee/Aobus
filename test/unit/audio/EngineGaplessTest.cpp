@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "CapturingBackend.h"
 #include "EngineTestSupport.h"
+#include "FakeCapturingBackend.h"
 #include "test/unit/audio/ScriptedDecoderSession.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
@@ -29,7 +29,7 @@ namespace ao::audio::test
 {
   namespace
   {
-    std::size_t countBackendEvents(std::vector<CapturingBackend::Event> const& events, std::string_view name)
+    std::size_t countBackendEvents(std::vector<FakeCapturingBackend::Event> const& events, std::string_view name)
     {
       std::size_t count = 0;
 
@@ -49,7 +49,7 @@ namespace ao::audio::test
             "[audio][unit][engine][gapless]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
@@ -84,7 +84,7 @@ namespace ao::audio::test
     auto* const target = backendRaw->target();
     REQUIRE(target != nullptr);
 
-    target->onUnderrun();
+    target->handleUnderrun();
     CHECK(engine.status().underrunCount == 1);
 
     auto firstOut = std::array<std::byte, 4>{};
@@ -109,7 +109,7 @@ namespace ao::audio::test
             "[audio][unit][engine][gapless]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
@@ -152,7 +152,7 @@ namespace ao::audio::test
                                                                                    std::byte{0x23},
                                                                                    std::byte{0x24}});
 
-    target->onPositionAdvanced(renderResult.positionFrames);
+    target->handlePositionAdvanced(renderResult.positionFrames);
 
     REQUIRE(advancedLatch.waitForCount(1));
     CHECK(engine.status().elapsed == std::chrono::milliseconds{2});
@@ -162,7 +162,7 @@ namespace ao::audio::test
             "[audio][unit][engine-gapless][reclaim]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
@@ -229,7 +229,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - stop frees an armed but unspliced successor", "[audio][unit][engine-gapless][cancel]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
     auto const secondData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
@@ -259,7 +259,7 @@ namespace ao::audio::test
             "[audio][unit][engine-gapless][window]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
@@ -348,7 +348,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - prepared lossy same-format track takes drain fallback", "[audio][unit][engine][gapless]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
@@ -385,7 +385,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - prepared unknown codec track takes drain fallback", "[audio][unit][engine][gapless]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x35}, std::byte{0x36}, std::byte{0x37}, std::byte{0x38}};
@@ -422,7 +422,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - prepared lossless format mismatch takes drain fallback", "[audio][unit][engine][gapless]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const firstFormat = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const secondFormat = Format{.sampleRate = 2000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
@@ -459,7 +459,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - transport and route changes cancel prepared successor", "[audio][unit][engine-gapless][cancel]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x49}, std::byte{0x4A}, std::byte{0x4B}, std::byte{0x4C}};
@@ -506,7 +506,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - clearNext before end of stream restores drain fallback", "[audio][unit][engine][gapless]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x51}, std::byte{0x52}, std::byte{0x53}, std::byte{0x54}};
@@ -544,7 +544,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - clearNext returns empty after render consumed the successor", "[audio][unit][engine][gapless]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x81}, std::byte{0x82}, std::byte{0x83}, std::byte{0x84}};
@@ -577,7 +577,7 @@ namespace ao::audio::test
             "[audio][unit][engine][gapless]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
     auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
     auto const firstData = std::vector{std::byte{0x71}, std::byte{0x72}, std::byte{0x73}, std::byte{0x74}};

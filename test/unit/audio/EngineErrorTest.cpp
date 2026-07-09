@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "CapturingBackend.h"
 #include "EngineTestSupport.h"
+#include "FakeCapturingBackend.h"
 #include "ScriptedDecoderSession.h"
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
@@ -56,7 +56,7 @@ namespace ao::audio::test
 
     SECTION("Unsupported extension")
     {
-      auto engine = Engine{std::make_unique<CapturingBackend>(), device};
+      auto engine = Engine{std::make_unique<FakeCapturingBackend>(), device};
       auto const desc = PlaybackInput{.filePath = "song.txt"};
       auto failureFuture = captureNextFailure(engine);
 
@@ -86,7 +86,7 @@ namespace ao::audio::test
         return decPtr;
       };
 
-      auto engine = Engine{std::make_unique<CapturingBackend>(), device, factory};
+      auto engine = Engine{std::make_unique<FakeCapturingBackend>(), device, factory};
       auto const desc = PlaybackInput{.filePath = "song.flac"};
       auto failureFuture = captureNextFailure(engine);
 
@@ -107,7 +107,7 @@ namespace ao::audio::test
 
     SECTION("Backend open failure")
     {
-      auto backendPtr = std::make_unique<CapturingBackend>();
+      auto backendPtr = std::make_unique<FakeCapturingBackend>();
 
       backendPtr->setOpenResult(std::unexpected(Error{.message = "hw init failed"}));
 
@@ -144,7 +144,7 @@ namespace ao::audio::test
 
     SECTION("Initial offset seek failure")
     {
-      auto backendPtr = std::make_unique<CapturingBackend>();
+      auto backendPtr = std::make_unique<FakeCapturingBackend>();
       auto* const backend = backendPtr.get();
 
       auto const factory = [](auto const&, auto const& fmt)
@@ -182,8 +182,10 @@ namespace ao::audio::test
       CHECK(snap.statusText == "restore seek failed");
 
       auto const events = backend->events();
-      CHECK(std::ranges::none_of(events, [](CapturingBackend::Event const& event) { return event.name == "open"; }));
-      CHECK(std::ranges::none_of(events, [](CapturingBackend::Event const& event) { return event.name == "start"; }));
+      CHECK(
+        std::ranges::none_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "open"; }));
+      CHECK(
+        std::ranges::none_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "start"; }));
     }
   }
 
@@ -194,7 +196,7 @@ namespace ao::audio::test
                                .description = "Test",
                                .isDefault = false,
                                .backendId = kBackendNone};
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
 
     auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
     auto const factory = [fmt](auto const&, auto const&)
@@ -242,7 +244,7 @@ namespace ao::audio::test
   TEST_CASE("Engine - backend runtime error reports device failure", "[audio][unit][engine][error]")
   {
     auto const device = makeEngineTestDevice();
-    auto backendPtr = std::make_unique<CapturingBackend>();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* backend = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
     auto const desc = PlaybackInput{.filePath = "song.flac"};

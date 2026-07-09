@@ -20,7 +20,7 @@ namespace ao::rt
 
 namespace ao::gtk
 {
-  class AppConfig;
+  class AppConfigStore;
   class ShellLayoutComponentStateStore;
   class ShellLayoutStore;
   class MenuController;
@@ -39,7 +39,7 @@ namespace ao::gtk
   {
   public:
     explicit MainWindow(rt::AppRuntime& runtime,
-                        std::shared_ptr<AppConfig> configPtr,
+                        std::shared_ptr<AppConfigStore> configStorePtr,
                         std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                         std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr = nullptr);
     ~MainWindow() override;
@@ -68,7 +68,7 @@ namespace ao::gtk
     void installPlaybackSpaceShortcut();
 
     rt::AppRuntime& _runtime;
-    std::shared_ptr<AppConfig> _configPtr;
+    std::shared_ptr<AppConfigStore> _configStorePtr;
 
     std::unique_ptr<MainWindowCoordinator> _mainWindowCoordinatorPtr;
     ShellLayoutController _shellLayout;

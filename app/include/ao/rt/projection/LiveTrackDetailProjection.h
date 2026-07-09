@@ -44,7 +44,6 @@ namespace ao::rt
     Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) override;
 
   private:
-    void onSelectionChanged();
     TrackDetailSnapshot buildSnapshot(std::span<TrackId const> ids) const;
     void publishSnapshot();
 

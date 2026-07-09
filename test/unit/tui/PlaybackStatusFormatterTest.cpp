@@ -33,13 +33,13 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackStatusFormatter - active playback transports need clock ticks", "[tui][unit][playback]")
   {
-    CHECK_FALSE(needsTransportClockTick(audio::Transport::Idle));
-    CHECK(needsTransportClockTick(audio::Transport::Opening));
-    CHECK(needsTransportClockTick(audio::Transport::Buffering));
-    CHECK(needsTransportClockTick(audio::Transport::Playing));
-    CHECK_FALSE(needsTransportClockTick(audio::Transport::Paused));
-    CHECK(needsTransportClockTick(audio::Transport::Seeking));
-    CHECK_FALSE(needsTransportClockTick(audio::Transport::Stopping));
-    CHECK_FALSE(needsTransportClockTick(audio::Transport::Error));
+    CHECK_FALSE(shouldTickTransportClock(audio::Transport::Idle));
+    CHECK(shouldTickTransportClock(audio::Transport::Opening));
+    CHECK(shouldTickTransportClock(audio::Transport::Buffering));
+    CHECK(shouldTickTransportClock(audio::Transport::Playing));
+    CHECK_FALSE(shouldTickTransportClock(audio::Transport::Paused));
+    CHECK(shouldTickTransportClock(audio::Transport::Seeking));
+    CHECK_FALSE(shouldTickTransportClock(audio::Transport::Stopping));
+    CHECK_FALSE(shouldTickTransportClock(audio::Transport::Error));
   }
 } // namespace ao::tui::test

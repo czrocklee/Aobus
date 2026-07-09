@@ -62,7 +62,8 @@ namespace ao::gtk
     , _completionController{_entry,
                             [this](std::string_view text, std::size_t cursor) { return complete(text, cursor); }}
     , _debounceScheduler{std::move(debounceScheduler)}
-    , _textChangedConn{_entry.signal_changed().connect(sigc::mem_fun(*this, &TrackQuickFilter::onFilterTextChanged))}
+    , _textChangedConn{_entry.signal_changed().connect(
+        sigc::mem_fun(*this, &TrackQuickFilter::handleFilterTextChanged))}
     , _filterViewModel{_runtime.views(),
                        _runtime.workspace(),
                        [this](ao::uimodel::TrackFilterViewState const& state) { applyState(state); }}
@@ -82,7 +83,7 @@ namespace ao::gtk
     _clearButton.set_has_frame(false);
     _clearButton.set_tooltip_text("Clear filter");
     _clearButton.set_visible(false);
-    _clearButton.signal_clicked().connect(sigc::mem_fun(*this, &TrackQuickFilter::onClearClicked));
+    _clearButton.signal_clicked().connect(sigc::mem_fun(*this, &TrackQuickFilter::handleClearClicked));
 
     _createSmartListButton.add_css_class("ao-quick-filter-action");
     _createSmartListButton.add_css_class("ao-quick-filter-create");
@@ -90,7 +91,8 @@ namespace ao::gtk
     _createSmartListButton.set_has_frame(false);
     _createSmartListButton.set_tooltip_text("Create smart list from current filter");
     _createSmartListButton.set_sensitive(false);
-    _createSmartListButton.signal_clicked().connect(sigc::mem_fun(*this, &TrackQuickFilter::onCreateSmartListClicked));
+    _createSmartListButton.signal_clicked().connect(
+      sigc::mem_fun(*this, &TrackQuickFilter::handleCreateSmartListClicked));
 
     append(_entry);
     append(_clearButton);
@@ -150,7 +152,7 @@ namespace ao::gtk
     return _completer.complete(text, cursor);
   }
 
-  void TrackQuickFilter::onFilterTextChanged()
+  void TrackQuickFilter::handleFilterTextChanged()
   {
     updateClearButton();
     _debounceTimer.disconnect();
@@ -164,13 +166,13 @@ namespace ao::gtk
                                         : scheduleDefaultDebounce(kFilterDebounceInterval, std::move(callback));
   }
 
-  void TrackQuickFilter::onClearClicked()
+  void TrackQuickFilter::handleClearClicked()
   {
     _entry.set_text({});
     _entry.grab_focus();
   }
 
-  void TrackQuickFilter::onCreateSmartListClicked()
+  void TrackQuickFilter::handleCreateSmartListClicked()
   {
     if (!_resolvedExpression.empty())
     {

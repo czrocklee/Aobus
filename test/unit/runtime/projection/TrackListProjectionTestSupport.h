@@ -16,21 +16,21 @@
 
 namespace ao::rt::test
 {
-  struct TestEnv final
+  struct TrackListProjectionFixture final
   {
-    TestMusicLibrary lib;
+    MusicLibraryFixture libraryFixture;
     MutableTrackSource source;
     SmartListEvaluator engine;
     std::unique_ptr<SmartListSource> filteredPtr;
 
-    TestEnv()
-      : engine{lib.library()}
+    TrackListProjectionFixture()
+      : engine{libraryFixture.library()}
     {
     }
 
     LiveTrackListProjection createProjection(ViewId viewId)
     {
-      return LiveTrackListProjection{viewId, *filteredPtr, lib.library()};
+      return LiveTrackListProjection{viewId, *filteredPtr, libraryFixture.library()};
     }
 
     void setupFiltered(std::span<TrackId const> ids)
@@ -40,7 +40,7 @@ namespace ao::rt::test
         source.addInitial(id);
       }
 
-      filteredPtr = std::make_unique<SmartListSource>(source, lib.library(), engine);
+      filteredPtr = std::make_unique<SmartListSource>(source, libraryFixture.library(), engine);
       filteredPtr->reload();
     }
   };

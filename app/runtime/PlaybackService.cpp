@@ -363,9 +363,9 @@ namespace ao::rt
                        loc.file_name(),
                        loc.line());
 
-      if (auto const& logger = Log::appLogger(); logger)
+      if (auto const& loggerPtr = Log::appLogger(); loggerPtr)
       {
-        logger->flush();
+        loggerPtr->flush();
       }
 
       std::abort();

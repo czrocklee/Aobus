@@ -109,19 +109,19 @@ namespace ao::gtk
 
       if (item.type == uimodel::TrackPresentationMenuItemType::CreateCustomView)
       {
-        btn->signal_clicked().connect([this] { onCreateCustomViewClicked(); });
+        btn->signal_clicked().connect([this] { handleCreateCustomViewClicked(); });
       }
       else
       {
         auto const id = item.id;
-        btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
+        btn->signal_clicked().connect([this, id] { handlePresentationSelected(id); });
       }
 
       _menuBox.append(*btn);
     }
   }
 
-  void TrackPresentationButton::onPresentationSelected(std::string_view presentationId)
+  void TrackPresentationButton::handlePresentationSelected(std::string_view presentationId)
   {
     _popover.popdown();
 
@@ -150,7 +150,7 @@ namespace ao::gtk
       });
   }
 
-  void TrackPresentationButton::onCreateCustomViewClicked()
+  void TrackPresentationButton::handleCreateCustomViewClicked()
   {
     _popover.popdown();
 

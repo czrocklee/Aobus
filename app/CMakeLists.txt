@@ -50,17 +50,17 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/component/LayoutStatePromoter.cpp
     uimodel/layout/document/LayoutDocument.cpp
     uimodel/layout/document/LayoutNodeId.cpp
-    uimodel/layout/document/LayoutTemplateExpander.cpp
+    uimodel/layout/document/LayoutTemplateExpansion.cpp
     uimodel/layout/document/LayoutValue.cpp
     uimodel/layout/shell/ShellLayoutSessionModel.cpp
     uimodel/input/KeyChord.cpp
      uimodel/input/KeymapModel.cpp
      uimodel/input/KeymapStore.cpp
-    uimodel/preferences/PreferencesModel.cpp
+    uimodel/preferences/PreferencesEditorModel.cpp
     uimodel/field/TrackFieldEditCodec.cpp
      uimodel/field/TrackFieldEditPolicy.cpp
      uimodel/field/TrackFieldFormatter.cpp
-     uimodel/field/TrackInlineEditWorkflow.cpp
+     uimodel/field/TrackInlineEdit.cpp
     uimodel/library/detail/TrackCustomMetadataWorkflow.cpp
     uimodel/library/detail/TrackFieldGridSchema.cpp
     uimodel/library/list/ListActionPolicy.cpp

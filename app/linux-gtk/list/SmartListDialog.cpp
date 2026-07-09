@@ -258,21 +258,21 @@ namespace ao::gtk
     auto factoryPtr = Gtk::SignalListItemFactory::create();
 
     factoryPtr->signal_setup().connect(
-      [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+      [](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
       {
         auto* const label = Gtk::make_managed<Gtk::Label>("");
         label->set_halign(Gtk::Align::START);
         label->set_ellipsize(Pango::EllipsizeMode::END);
-        listItem->set_child(*label);
+        listItemPtr->set_child(*label);
       });
 
     factoryPtr->signal_bind().connect(
-      [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+      [](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
       {
-        auto const itemPtr = listItem->get_item();
+        auto const itemPtr = listItemPtr->get_item();
         auto rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
 
-        if (auto* const label = dynamic_cast<Gtk::Label*>(listItem->get_child()); rowPtr && label)
+        if (auto* const label = dynamic_cast<Gtk::Label*>(listItemPtr->get_child()); rowPtr && label)
         {
           auto const* title = rowPtr->stringField(rt::TrackField::Title);
           auto const* artist = rowPtr->stringField(rt::TrackField::Artist);

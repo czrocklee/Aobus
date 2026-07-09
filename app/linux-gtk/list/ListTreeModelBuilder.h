@@ -23,7 +23,7 @@ namespace ao::gtk
   class ListTreeModelBuilder final
   {
   public:
-    struct Result final
+    struct BuildResult final
     {
       Glib::RefPtr<Gio::ListStore<ListTreeItem>> storePtr;
       Glib::RefPtr<Gtk::TreeListModel> treeModelPtr;
@@ -31,6 +31,6 @@ namespace ao::gtk
       std::map<ListId, Glib::RefPtr<ListTreeItem>> nodesById;
     };
 
-    static Result build(rt::Library const& reads);
+    static BuildResult build(rt::Library const& reads);
   };
 } // namespace ao::gtk

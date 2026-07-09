@@ -104,7 +104,7 @@ namespace ao::query
   char variablePrefix(VariableType type);
   std::string variableDisplayName(VariableExpression const& variable);
 
-  bool requiresHotData(AccessProfile profile);
-  bool requiresColdData(AccessProfile profile);
+  bool isHotDataRequired(AccessProfile profile);
+  bool isColdDataRequired(AccessProfile profile);
   bool hasRequiredTrackData(AccessProfile profile, library::TrackView const& track);
 } // namespace ao::query

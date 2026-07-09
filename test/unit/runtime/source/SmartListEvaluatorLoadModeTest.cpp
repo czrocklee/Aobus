@@ -17,17 +17,17 @@ namespace ao::rt::test
   TEST_CASE("SmartListEvaluator - load mode optimization supports mixed access profiles",
             "[runtime][unit][smart-list][load-mode]")
   {
-    auto testLibrary = TestMusicLibrary{};
-    auto engine = SmartListEvaluator{testLibrary.library()};
+    auto libraryFixture = MusicLibraryFixture{};
+    auto engine = SmartListEvaluator{libraryFixture.library()};
     auto source = MutableTrackSource{};
 
-    auto hotList = SmartListSource{source, testLibrary.library(), engine};
+    auto hotList = SmartListSource{source, libraryFixture.library(), engine};
     hotList.setExpression("$year >= 2020"); // Hot metadata
 
-    auto coldList = SmartListSource{source, testLibrary.library(), engine};
+    auto coldList = SmartListSource{source, libraryFixture.library(), engine};
     coldList.setExpression("@duration >= 3m"); // Cold property
 
-    auto t1 = testLibrary.addTrack(makeSmartListSpec("Track", 2022, std::chrono::seconds{200}));
+    auto t1 = libraryFixture.addTrack(makeSmartListSpec("Track", 2022, std::chrono::seconds{200}));
     auto const batchArray = std::array{t1};
     source.batchInsert(batchArray);
 
@@ -41,16 +41,16 @@ namespace ao::rt::test
   TEST_CASE("SmartListEvaluator - hot and cold access profile optimization uses both readers",
             "[runtime][unit][smart-list][load-mode]")
   {
-    auto testLibrary = TestMusicLibrary{};
-    auto engine = SmartListEvaluator{testLibrary.library()};
+    auto libraryFixture = MusicLibraryFixture{};
+    auto engine = SmartListEvaluator{libraryFixture.library()};
     auto source = MutableTrackSource{};
 
-    auto list = SmartListSource{source, testLibrary.library(), engine};
+    auto list = SmartListSource{source, libraryFixture.library(), engine};
     // Requires both metadata and property reader
     list.setExpression("$year >= 2020 && @duration >= 3m");
 
-    auto t1 = testLibrary.addTrack(makeSmartListSpec("Track", 2022, std::chrono::seconds{200}));
-    auto t2 = testLibrary.addTrack(makeSmartListSpec("Bad", 2022, std::chrono::seconds{1}));
+    auto t1 = libraryFixture.addTrack(makeSmartListSpec("Track", 2022, std::chrono::seconds{200}));
+    auto t2 = libraryFixture.addTrack(makeSmartListSpec("Bad", 2022, std::chrono::seconds{1}));
     auto const batchArray = std::array{t1, t2};
     source.batchInsert(batchArray);
 

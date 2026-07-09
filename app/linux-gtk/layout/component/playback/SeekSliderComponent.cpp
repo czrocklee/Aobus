@@ -5,7 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
-#include "playback/SeekControl.h"
+#include "playback/SeekControlWidget.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -33,7 +33,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _control.widget(); }
 
     private:
-      SeekControl _control;
+      SeekControlWidget _control;
     };
 
     std::unique_ptr<LayoutComponent> createSeekSlider(LayoutContext& ctx, LayoutNode const& node)

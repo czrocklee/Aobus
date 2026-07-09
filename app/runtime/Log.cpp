@@ -41,7 +41,7 @@ namespace ao::rt
   bool Log::_initialized = false;
   std::mutex Log::_lifecycleMutex;
 
-  void Log::init(LogLevel level, std::filesystem::path logDir, LogConsoleMode consoleMode)
+  void Log::initialize(LogLevel level, std::filesystem::path logDir, LogConsoleMode consoleMode)
   {
     auto const lock = std::scoped_lock{_lifecycleMutex};
 
@@ -113,17 +113,17 @@ namespace ao::rt
 
     APP_LOG_INFO("Shutting down logging...");
 
-    auto const appPtr = _appLoggerPtr;
-    auto const audioPtr = _audioLoggerPtr;
+    auto const appLoggerPtr = _appLoggerPtr;
+    auto const audioLoggerPtr = _audioLoggerPtr;
 
-    if (appPtr)
+    if (appLoggerPtr)
     {
-      appPtr->flush();
+      appLoggerPtr->flush();
     }
 
-    if (audioPtr)
+    if (audioLoggerPtr)
     {
-      audioPtr->flush();
+      audioLoggerPtr->flush();
     }
 
     _appLoggerPtr = makeNullLogger("app");

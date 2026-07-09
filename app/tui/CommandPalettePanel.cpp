@@ -36,7 +36,7 @@ namespace ao::tui
     constexpr std::string_view kCommandPaletteFooter = "Tab complete  Enter run  Esc cancel";
     constexpr std::size_t kCommandCompletionRowCellReserve = 6;
 
-    struct CommandPaletteMetadata final
+    struct CommandPaletteEntryDescriptor final
     {
       std::string_view category{};
       std::string_view shortcut{};
@@ -59,13 +59,13 @@ namespace ao::tui
       return "/" + std::string{prefix};
     }
 
-    std::optional<CommandPaletteMetadata> commandPaletteMetadata(rt::CompletionItem const& item)
+    std::optional<CommandPaletteEntryDescriptor> commandPaletteEntryDescriptor(rt::CompletionItem const& item)
     {
       for (auto const& spec : commandPrefixSpecs())
       {
         if (item.insertText == spec.prefix && item.displayText == commandPrefixDisplayText(spec.prefix))
         {
-          return CommandPaletteMetadata{.category = spec.category, .shortcut = spec.shortcut};
+          return CommandPaletteEntryDescriptor{.category = spec.category, .shortcut = spec.shortcut};
         }
       }
 
@@ -73,7 +73,7 @@ namespace ao::tui
       {
         if (item.insertText == spec.alias && item.displayText == "/" + std::string{spec.alias})
         {
-          return CommandPaletteMetadata{.category = spec.category, .shortcut = spec.shortcut};
+          return CommandPaletteEntryDescriptor{.category = spec.category, .shortcut = spec.shortcut};
         }
       }
 
@@ -82,9 +82,10 @@ namespace ao::tui
 
     std::string_view commandPaletteTrailingText(rt::CompletionItem const& item)
     {
-      if (auto const optMetadata = commandPaletteMetadata(item); optMetadata && !optMetadata->shortcut.empty())
+      if (auto const optDescriptor = commandPaletteEntryDescriptor(item);
+          optDescriptor && !optDescriptor->shortcut.empty())
       {
-        return optMetadata->shortcut;
+        return optDescriptor->shortcut;
       }
 
       return item.detail;
@@ -126,9 +127,9 @@ namespace ao::tui
 
       for (auto const& item : completion.items)
       {
-        if (auto const optMetadata = commandPaletteMetadata(item); optMetadata)
+        if (auto const optDescriptor = commandPaletteEntryDescriptor(item); optDescriptor)
         {
-          categoryColumns = std::max(categoryColumns, cellWidth(optMetadata->category));
+          categoryColumns = std::max(categoryColumns, cellWidth(optDescriptor->category));
         }
 
         trailingColumns = std::max(trailingColumns, cellWidth(commandPaletteTrailingText(item)));
@@ -150,8 +151,8 @@ namespace ao::tui
 
         if (categoryColumns > 0)
         {
-          auto categoryPtr =
-            fixedText(commandPaletteMetadata(item).value_or(CommandPaletteMetadata{}).category, categoryColumns);
+          auto categoryPtr = fixedText(
+            commandPaletteEntryDescriptor(item).value_or(CommandPaletteEntryDescriptor{}).category, categoryColumns);
           cells.push_back(selected ? std::move(categoryPtr) : std::move(categoryPtr) | style::accent() | dim);
           cells.push_back(text("  "));
         }

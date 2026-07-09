@@ -19,34 +19,34 @@ namespace ao::rt::test
 {
   using namespace ao::library;
 
-  struct MockTrackSourceObserver : TrackSourceObserver
+  struct SpyTrackSourceNotifications : TrackSourceObserver
   {
     std::vector<std::pair<TrackId, std::size_t>> inserted;
     std::vector<std::pair<TrackId, std::size_t>> removed;
     std::int32_t resets = 0;
 
-    void onInserted(TrackId id, std::size_t index) override { inserted.emplace_back(id, index); }
-    void onRemoved(TrackId id, std::size_t index) override { removed.emplace_back(id, index); }
-    void onUpdated(TrackId /*id*/, std::size_t /*index*/) override {}
-    void onReset() override { resets++; }
+    void handleInserted(TrackId id, std::size_t index) override { inserted.emplace_back(id, index); }
+    void handleRemoved(TrackId id, std::size_t index) override { removed.emplace_back(id, index); }
+    void handleUpdated(TrackId /*id*/, std::size_t /*index*/) override {}
+    void handleReset() override { resets++; }
   };
 
   TEST_CASE("AllTracksSource - reload and track change notifications update source state",
             "[runtime][unit][source][all-tracks]")
   {
-    auto testLib = TestMusicLibrary{};
-    auto& store = testLib.library().tracks();
+    auto libraryFixture = MusicLibraryFixture{};
+    auto& store = libraryFixture.library().tracks();
 
     auto source = AllTracksSource{store};
-    auto listener = MockTrackSourceObserver{};
+    auto listener = SpyTrackSourceNotifications{};
     source.attach(&listener);
 
     SECTION("reloadFromStore populates and notifies reset")
     {
-      auto const t1 = testLib.addTrack("A");
-      auto const t2 = testLib.addTrack("B");
+      auto const t1 = libraryFixture.addTrack("A");
+      auto const t2 = libraryFixture.addTrack("B");
 
-      auto const transaction = testLib.library().readTransaction();
+      auto const transaction = libraryFixture.library().readTransaction();
       source.reloadFromStore(transaction);
 
       CHECK(listener.resets == 1);

@@ -39,8 +39,8 @@ namespace ao::gtk::layout
         if (ctx.track.detailScope != nullptr)
         {
           _scopeConn = ctx.track.detailScope->signalSnapshotChanged().connect([this, &ctx](auto const& snap)
-                                                                              { onSnapshot(ctx, snap); });
-          onSnapshot(ctx, ctx.track.detailScope->snapshot());
+                                                                              { handleSnapshot(ctx, snap); });
+          handleSnapshot(ctx, ctx.track.detailScope->snapshot());
         }
 
         _tagEditor.signalTagsChanged().connect(
@@ -79,7 +79,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _tagEditor; }
 
     private:
-      void onSnapshot(LayoutContext& ctx, rt::TrackDetailSnapshot const& snap)
+      void handleSnapshot(LayoutContext& ctx, rt::TrackDetailSnapshot const& snap)
       {
         _currentTrackIds = snap.trackIds;
         _tagEditor.setup(ctx.runtime.library(), _currentTrackIds);

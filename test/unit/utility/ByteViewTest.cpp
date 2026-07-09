@@ -18,7 +18,7 @@ namespace ao::utility::test
 {
   namespace
   {
-    struct Dummy final
+    struct LayoutRecord final
     {
       std::uint32_t a;
       std::uint32_t b;
@@ -45,8 +45,8 @@ namespace ao::utility::test
     {
       auto const str = std::string{"Hello"};
       auto const sView = std::string_view{str};
-      auto const dummy = Dummy{.a = 1, .b = 2};
-      auto arr = std::to_array<Dummy>({{.a = 1, .b = 2}, {.a = 3, .b = 4}});
+      auto const record = LayoutRecord{.a = 1, .b = 2};
+      auto arr = std::to_array<LayoutRecord>({{.a = 1, .b = 2}, {.a = 3, .b = 4}});
       auto vec = std::vector{std::byte{1}, std::byte{2}};
       auto const vecConst = std::vector{std::byte{1}, std::byte{2}};
 
@@ -59,14 +59,14 @@ namespace ao::utility::test
       auto v3 = bytes::view(vec.data(), vec.size());
       CHECK(v3.size() == 2);
 
-      auto v4 = bytes::view(&dummy);
-      CHECK(v4.size() == sizeof(Dummy));
+      auto v4 = bytes::view(&record);
+      CHECK(v4.size() == sizeof(LayoutRecord));
 
-      auto v5 = bytes::view(std::span<Dummy>{arr});
-      CHECK(v5.size() == 2 * sizeof(Dummy));
+      auto v5 = bytes::view(std::span<LayoutRecord>{arr});
+      CHECK(v5.size() == 2 * sizeof(LayoutRecord));
 
-      auto v6 = bytes::view(dummy);
-      CHECK(v6.size() == sizeof(Dummy));
+      auto v6 = bytes::view(record);
+      CHECK(v6.size() == sizeof(LayoutRecord));
 
       auto v7 = bytes::view(sView);
       CHECK(v7.size() == 5);
@@ -83,73 +83,73 @@ namespace ao::utility::test
 
     SECTION("bytes::tryLayout / requireLayout are always checked")
     {
-      auto const dummy = Dummy{.a = 7, .b = 9};
-      auto const full = bytes::view(dummy); // aligned, exact size
+      auto const record = LayoutRecord{.a = 7, .b = 9};
+      auto const full = bytes::view(record); // aligned, exact size
 
-      CHECK(bytes::tryLayout<Dummy>(full) != nullptr);
-      CHECK(bytes::requireLayout<Dummy>(full)->a == 7);
+      CHECK(bytes::tryLayout<LayoutRecord>(full) != nullptr);
+      CHECK(bytes::requireLayout<LayoutRecord>(full)->a == 7);
 
       // Too short for the target type.
-      auto const shortSpan = full.subspan(0, sizeof(Dummy) - 1);
-      CHECK(bytes::tryLayout<Dummy>(shortSpan) == nullptr);
-      CHECK_THROWS_AS(bytes::requireLayout<Dummy>(shortSpan), std::out_of_range);
+      auto const shortSpan = full.subspan(0, sizeof(LayoutRecord) - 1);
+      CHECK(bytes::tryLayout<LayoutRecord>(shortSpan) == nullptr);
+      CHECK_THROWS_AS(bytes::requireLayout<LayoutRecord>(shortSpan), std::out_of_range);
 
       // Misaligned for the target type (offset by one from an aligned buffer).
-      alignas(Dummy) auto aligned = std::array<std::byte, sizeof(Dummy) + alignof(Dummy)>{};
-      auto const misaligned = std::span<std::byte const>{aligned.data() + 1, sizeof(Dummy)};
-      CHECK(bytes::tryLayout<Dummy>(misaligned) == nullptr);
-      CHECK_THROWS_AS(bytes::requireLayout<Dummy>(misaligned), std::out_of_range);
+      alignas(LayoutRecord) auto aligned = std::array<std::byte, sizeof(LayoutRecord) + alignof(LayoutRecord)>{};
+      auto const misaligned = std::span<std::byte const>{aligned.data() + 1, sizeof(LayoutRecord)};
+      CHECK(bytes::tryLayout<LayoutRecord>(misaligned) == nullptr);
+      CHECK_THROWS_AS(bytes::requireLayout<LayoutRecord>(misaligned), std::out_of_range);
     }
 
     SECTION("layout:: functions")
     {
-      auto dummy = Dummy{.a = 42, .b = 84};
-      auto const span = bytes::view(dummy);
-      auto spanMut = std::span<std::byte>{reinterpret_cast<std::byte*>(&dummy), sizeof(Dummy)};
+      auto record = LayoutRecord{.a = 42, .b = 84};
+      auto const span = bytes::view(record);
+      auto spanMut = std::span<std::byte>{reinterpret_cast<std::byte*>(&record), sizeof(LayoutRecord)};
 
-      auto const* ptr = layout::view<Dummy>(span);
+      auto const* ptr = layout::view<LayoutRecord>(span);
       CHECK(ptr->a == 42);
 
-      auto* ptrMut = layout::viewMutable<Dummy>(spanMut);
+      auto* ptrMut = layout::viewMutable<LayoutRecord>(spanMut);
       ptrMut->a = 10;
-      CHECK(dummy.a == 10);
+      CHECK(record.a == 10);
 
-      auto const* p = layout::asPtr<Dummy>(span);
+      auto const* p = layout::asPtr<LayoutRecord>(span);
       CHECK(p->a == 10);
 
-      auto* legacy = layout::asLegacyPtr<Dummy>(span);
+      auto* legacy = layout::asLegacyPtr<LayoutRecord>(span);
       CHECK(legacy->a == 10);
 
-      auto const* constDummy = &dummy;
-      auto* legacy2 = layout::asLegacyPtr<Dummy>(constDummy);
+      auto const* constRecord = &record;
+      auto* legacy2 = layout::asLegacyPtr<LayoutRecord>(constRecord);
       CHECK(legacy2->a == 10);
 
-      CHECK(layout::size32(span) == static_cast<std::uint32_t>(sizeof(Dummy)));
+      CHECK(layout::size32(span) == static_cast<std::uint32_t>(sizeof(LayoutRecord)));
 
-      auto* mut = layout::asMutablePtr<Dummy>(spanMut);
+      auto* mut = layout::asMutablePtr<LayoutRecord>(spanMut);
       mut->b = 20;
-      CHECK(dummy.b == 20);
+      CHECK(record.b == 20);
 
-      auto arr = std::to_array<Dummy>({{.a = 1, .b = 2}, {.a = 3, .b = 4}});
-      auto arrSpan = bytes::view(std::span<Dummy>{arr});
-      auto arrSpanMut = std::span<std::byte>{reinterpret_cast<std::byte*>(arr.data()), 2 * sizeof(Dummy)};
+      auto arr = std::to_array<LayoutRecord>({{.a = 1, .b = 2}, {.a = 3, .b = 4}});
+      auto arrSpan = bytes::view(std::span<LayoutRecord>{arr});
+      auto arrSpanMut = std::span<std::byte>{reinterpret_cast<std::byte*>(arr.data()), 2 * sizeof(LayoutRecord)};
 
-      auto varr = layout::viewArray<Dummy>(arrSpan);
+      auto varr = layout::viewArray<LayoutRecord>(arrSpan);
       CHECK(varr.size() == 2);
       CHECK(varr[1].a == 3);
 
-      auto varrMut = layout::viewArrayMutable<Dummy>(arrSpanMut);
+      auto varrMut = layout::viewArrayMutable<LayoutRecord>(arrSpanMut);
       CHECK(varrMut.size() == 2);
       varrMut[1].a = 5;
       CHECK(arr[1].a == 5);
 
       struct Outer
       {
-        Dummy d;
-        Dummy d2;
+        LayoutRecord d;
+        LayoutRecord d2;
       };
       auto out = Outer{.d = {.a = 1, .b = 2}, .d2 = {.a = 3, .b = 4}};
-      auto const* inner = layout::viewAt<Dummy>(&out, sizeof(Dummy));
+      auto const* inner = layout::viewAt<LayoutRecord>(&out, sizeof(LayoutRecord));
       CHECK(inner->a == 3);
     }
 

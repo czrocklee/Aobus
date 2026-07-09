@@ -3,7 +3,7 @@
 
 #include "ShellLayoutController.h"
 
-#include "AppConfig.h"
+#include "AppConfigStore.h"
 #include "ShellLayoutComponentStateStore.h"
 #include "ShellLayoutStore.h"
 #include "app/GtkUiServices.h"
@@ -18,7 +18,7 @@
 #include "layout/runtime/LayoutHost.h"
 #include "layout/runtime/LayoutRuntime.h"
 #include "playback/AobusSoulWindow.h"
-#include "playback/OutputDeviceSelector.h"
+#include "playback/OutputDevicePopover.h"
 #include "tag/TagEditController.h"
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
@@ -71,10 +71,10 @@ namespace ao::gtk
 
     LayoutLoadResult loadLayoutOnWorker(ShellLayoutStore& store,
                                         ShellLayoutComponentStateStore* componentStateStore,
-                                        AppConfig& config)
+                                        AppConfigStore& configStore)
     {
       auto prefs = rt::AppPrefsState{};
-      config.loadAppPrefs(prefs);
+      configStore.loadAppPrefs(prefs);
 
       static constexpr auto kSupportedPresets = std::array<std::string_view, 2>{"classic", "modern"};
 
@@ -109,7 +109,7 @@ namespace ao::gtk
   } // namespace
   ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime,
                                                Gtk::Window& window,
-                                               std::shared_ptr<AppConfig> configPtr,
+                                               std::shared_ptr<AppConfigStore> configStorePtr,
                                                std::shared_ptr<ShellLayoutStore> layoutStorePtr,
                                                std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
                                                ThemeCoordinator& themeCoordinator)
@@ -117,7 +117,7 @@ namespace ao::gtk
     , _actionRegistry{}
     , _context{.registry = _registry, .actionRegistry = _actionRegistry, .runtime = runtime, .parentWindow = window}
     , _host{_registry}
-    , _configPtr{std::move(configPtr)}
+    , _configStorePtr{std::move(configStorePtr)}
     , _layoutStorePtr{std::move(layoutStorePtr)}
     , _componentStateStorePtr{std::move(componentStateStorePtr)}
     , _themeCoordinator{themeCoordinator}
@@ -259,7 +259,7 @@ namespace ao::gtk
                    uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [](layout::ActionActivationContext& ctx)
                    {
-                     auto* const popover = Gtk::make_managed<OutputDeviceSelector>(ctx.runtime.playback());
+                     auto* const popover = Gtk::make_managed<OutputDevicePopover>(ctx.runtime.playback());
                      popover->set_parent(ctx.anchorWidget);
                      popover->signal_closed().connect([popover] { popover->unparent(); });
                      popover->popup();
@@ -310,9 +310,9 @@ namespace ao::gtk
                    uimodel::LayoutActionCapability::None,
                    [this](layout::ActionActivationContext&)
                    {
-                     if (_configPtr)
+                     if (_configStorePtr)
                      {
-                       openEditor(*_configPtr);
+                       openEditor(*_configStorePtr);
                      }
                    },
                    {});
@@ -413,55 +413,55 @@ namespace ao::gtk
     }
   }
 
-  void ShellLayoutController::loadLayout(AppConfig& /*config*/)
+  void ShellLayoutController::loadLayout(AppConfigStore& /*configStore*/)
   {
     auto& runtime = _context.runtime.async();
-    runtime.spawnWithLifetime(&_tasks,
-                              [](ShellLayoutController* self,
-                                 std::shared_ptr<ShellLayoutStore> storePtr,
-                                 std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-                                 std::shared_ptr<AppConfig> configPtr) -> async::Task<void>
-                              {
-                                APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
+    runtime.spawnWithLifetime(
+      &_tasks,
+      [](ShellLayoutController* self,
+         std::shared_ptr<ShellLayoutStore> storePtr,
+         std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
+         std::shared_ptr<AppConfigStore> configStorePtr) -> async::Task<void>
+      {
+        APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
 
-                                auto* const asyncRuntime = &self->_context.runtime.async();
-                                auto optResult = std::optional<LayoutLoadResult>{};
-                                auto exceptionPtr = std::exception_ptr{};
+        auto* const asyncRuntime = &self->_context.runtime.async();
+        auto optResult = std::optional<LayoutLoadResult>{};
+        auto exceptionPtr = std::exception_ptr{};
 
-                                try
-                                {
-                                  co_await asyncRuntime->resumeOnWorker();
-                                  APP_LOG_DEBUG("ShellLayoutController: loading config on background worker thread");
+        try
+        {
+          co_await asyncRuntime->resumeOnWorker();
+          APP_LOG_DEBUG("ShellLayoutController: loading layout config on background worker thread");
 
-                                  if (storePtr && configPtr)
-                                  {
-                                    optResult = loadLayoutOnWorker(*storePtr, componentStateStorePtr.get(), *configPtr);
-                                  }
-                                }
-                                catch (std::exception const& e)
-                                {
-                                  async::rethrowIfOperationCancelled(e);
-                                  exceptionPtr = std::current_exception();
-                                }
+          if (storePtr && configStorePtr)
+          {
+            optResult = loadLayoutOnWorker(*storePtr, componentStateStorePtr.get(), *configStorePtr);
+          }
+        }
+        catch (std::exception const& e)
+        {
+          async::rethrowIfOperationCancelled(e);
+          exceptionPtr = std::current_exception();
+        }
 
-                                co_await asyncRuntime->resumeOnCallbackExecutor();
+        co_await asyncRuntime->resumeOnCallbackExecutor();
 
-                                if (exceptionPtr)
-                                {
-                                  self->logLayoutLoadFailure(exceptionPtr);
-                                  co_return;
-                                }
+        if (exceptionPtr)
+        {
+          self->logLayoutLoadFailure(exceptionPtr);
+          co_return;
+        }
 
-                                if (!optResult)
-                                {
-                                  co_return;
-                                }
+        if (!optResult)
+        {
+          co_return;
+        }
 
-                                APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
-                                self->applyLoadedLayoutWithFailureLogging(std::move(optResult->presetId),
-                                                                          std::move(optResult->document),
-                                                                          std::move(optResult->componentState));
-                              }(this, _layoutStorePtr, _componentStateStorePtr, _configPtr));
+        APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
+        self->applyLoadedLayoutWithFailureLogging(
+          std::move(optResult->presetId), std::move(optResult->document), std::move(optResult->componentState));
+      }(this, _layoutStorePtr, _componentStateStorePtr, _configStorePtr));
   }
 
   void ShellLayoutController::logLayoutLoadFailure(std::exception_ptr exceptionPtr)
@@ -536,10 +536,10 @@ namespace ao::gtk
     _host.setLayout(_context, snapshot.layout);
   }
 
-  void ShellLayoutController::openEditor(AppConfig& config)
+  void ShellLayoutController::openEditor(AppConfigStore& configStore)
   {
     auto prefs = rt::AppPrefsState{};
-    config.loadAppPrefs(prefs);
+    configStore.loadAppPrefs(prefs);
 
     auto const initialPresetId =
       uimodel::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
@@ -589,7 +589,7 @@ namespace ao::gtk
                                             { _themeCoordinator.setTheme(rt::themePresetFromString(themeId)); });
 
     dialogRaw->signalSaveRequest().connect([this](layout::editor::LayoutSaveResult const& result)
-                                           { this->onEditorSaveRequest(result); });
+                                           { this->handleEditorSaveRequested(result); });
 
     dialogRaw->signal_hide().connect(
       [this]
@@ -614,7 +614,7 @@ namespace ao::gtk
   }
 
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-  void ShellLayoutController::onEditorSaveRequest(layout::editor::LayoutSaveResult const& result)
+  void ShellLayoutController::handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result)
   {
     if (_layoutStorePtr)
     {
@@ -656,12 +656,12 @@ namespace ao::gtk
                                 : _componentStateStorePtr->load(snapshot.presetId)
                                     .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId));
 
-    if (_configPtr)
+    if (_configStorePtr)
     {
       auto prefsUpdate = rt::AppPrefsState{};
-      _configPtr->loadAppPrefs(prefsUpdate);
+      _configStorePtr->loadAppPrefs(prefsUpdate);
       prefsUpdate.lastLayoutPreset = snapshot.presetId;
-      _configPtr->saveAppPrefs(prefsUpdate);
+      _configStorePtr->saveAppPrefs(prefsUpdate);
       _themeCoordinator.setTheme(rt::themePresetFromString(prefsUpdate.lastThemePreset));
     }
 

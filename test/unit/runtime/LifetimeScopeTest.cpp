@@ -101,17 +101,17 @@ namespace ao::rt::test
 
       REQUIRE(reachedBarrierWait.waitUntil(true));
       barrier.release();
-      executor.expectQueued();
-      CHECK(reachedCallbackHop.get());
-      CHECK_FALSE(completed.get());
-      CHECK_FALSE(taskExited.get());
+      executor.checkQueued();
+      CHECK(reachedCallbackHop.load());
+      CHECK_FALSE(completed.load());
+      CHECK_FALSE(taskExited.load());
 
       executor.runUntilIdle();
-      CHECK(completed.get());
-      CHECK(taskExited.get());
+      CHECK(completed.load());
+      CHECK(taskExited.load());
     }
 
-    CHECK(completed.get());
+    CHECK(completed.load());
     runtime.requestStop();
     runtime.join();
   }
@@ -140,7 +140,7 @@ namespace ao::rt::test
     REQUIRE(reachedCallbackHop.waitUntil(true));
     REQUIRE(taskExited.waitUntil(true));
 
-    CHECK_FALSE(completed.get());
+    CHECK_FALSE(completed.load());
     runtime.requestStop();
     runtime.join();
   }
@@ -155,12 +155,12 @@ namespace ao::rt::test
     {
       auto scope = LifetimeScope{};
       runtime.spawnWithLifetime(&scope, pendingControlResumeTask(&runtime, completed));
-      executor.expectQueued();
+      executor.checkQueued();
     }
 
     executor.runUntilIdle();
 
-    CHECK_FALSE(completed.get());
+    CHECK_FALSE(completed.load());
     runtime.requestStop();
     runtime.join();
   }
@@ -190,12 +190,12 @@ namespace ao::rt::test
                     }
                   });
 
-    executor.expectQueued();
+    executor.checkQueued();
     signal.emit(CancellationType::all);
     executor.runUntilIdle();
 
     REQUIRE(sawCancellation.waitUntil(true));
-    CHECK_FALSE(completed.get());
+    CHECK_FALSE(completed.load());
 
     runtime.requestStop();
     runtime.join();
@@ -261,7 +261,7 @@ namespace ao::rt::test
       REQUIRE(completed.waitUntil(1));
     }
 
-    CHECK(completed.get() == 1);
+    CHECK(completed.load() == 1);
     runtime.requestStop();
     runtime.join();
   }

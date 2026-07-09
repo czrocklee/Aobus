@@ -10,7 +10,7 @@
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/preferences/PreferencesModel.h>
+#include <ao/uimodel/preferences/PreferencesEditorModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/listbox.h>

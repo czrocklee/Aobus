@@ -3,7 +3,7 @@
 
 #include <ao/audio/Subscription.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
-#include <ao/audio/backend/detail/AudioBackendShared.h>
+#include <ao/audio/backend/detail/AudioBackendVolumeMath.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <algorithm>

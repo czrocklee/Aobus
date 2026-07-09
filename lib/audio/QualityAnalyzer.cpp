@@ -66,7 +66,7 @@ namespace ao::audio
       assessment.findings.push_back(std::move(finding));
     }
 
-    bool invalidatesProvenPrecision(QualityFinding const& finding) noexcept
+    bool isPrecisionInvalidating(QualityFinding const& finding) noexcept
     {
       switch (finding.kind)
       {
@@ -92,7 +92,7 @@ namespace ao::audio
 
     bool hasPrecisionInvalidatingFinding(NodeQualityAssessment const& assessment) noexcept
     {
-      return std::ranges::any_of(assessment.findings, invalidatesProvenPrecision);
+      return std::ranges::any_of(assessment.findings, isPrecisionInvalidating);
     }
 
     bool hasVerifiedOutputEndpoint(std::vector<flow::Node const*> const& path) noexcept

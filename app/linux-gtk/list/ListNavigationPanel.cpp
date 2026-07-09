@@ -47,10 +47,10 @@ namespace ao::gtk
     _listScrolledWindow.set_child(_listView);
 
     auto factoryPtr = Gtk::SignalListItemFactory::create();
-    factoryPtr->signal_setup().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem)
-                                       { setupNavListItem(listItem); });
-    factoryPtr->signal_bind().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem)
-                                      { bindNavListItem(listItem); });
+    factoryPtr->signal_setup().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+                                       { setupNavListItem(listItemPtr); });
+    factoryPtr->signal_bind().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+                                      { bindNavListItem(listItemPtr); });
 
     _listView.set_factory(factoryPtr);
 
@@ -75,7 +75,7 @@ namespace ao::gtk
     _treeListModelPtr = std::move(result.treeModelPtr);
     _listSelectionModelPtr = std::move(result.selectionModelPtr);
     _listSelectionModelPtr->signal_selection_changed().connect(
-      sigc::mem_fun(*this, &ListNavigationPanel::onListSelectionChanged));
+      sigc::mem_fun(*this, &ListNavigationPanel::handleListSelectionChanged));
     _listView.set_model(_listSelectionModelPtr);
   }
 
@@ -156,7 +156,7 @@ namespace ao::gtk
     _listContextMenu.popup();
   }
 
-  void ListNavigationPanel::setupNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItem)
+  void ListNavigationPanel::setupNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
   {
     auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
     rowBox->set_halign(Gtk::Align::FILL);
@@ -187,9 +187,9 @@ namespace ao::gtk
     auto clickControllerPtr = Gtk::GestureClick::create();
     clickControllerPtr->set_button(GDK_BUTTON_SECONDARY);
     clickControllerPtr->signal_pressed().connect(
-      [this, listItem, rowBox](std::int32_t /*nPress*/, double xPosition, double yPosition)
+      [this, listItemPtr, rowBox](std::int32_t /*nPress*/, double xPosition, double yPosition)
       {
-        if (auto const position = listItem->get_position(); position != kInvalidListPosition)
+        if (auto const position = listItemPtr->get_position(); position != kInvalidListPosition)
         {
           _listSelectionModelPtr->set_selected(position);
         }
@@ -212,12 +212,12 @@ namespace ao::gtk
       });
 
     rowBox->add_controller(clickControllerPtr);
-    listItem->set_child(*rowBox);
+    listItemPtr->set_child(*rowBox);
   }
 
-  void ListNavigationPanel::bindNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItem)
+  void ListNavigationPanel::bindNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
   {
-    auto treeListRowPtr = std::dynamic_pointer_cast<Gtk::TreeListRow>(listItem->get_item());
+    auto treeListRowPtr = std::dynamic_pointer_cast<Gtk::TreeListRow>(listItemPtr->get_item());
 
     if (!treeListRowPtr)
     {
@@ -231,7 +231,7 @@ namespace ao::gtk
       return;
     }
 
-    auto* box = dynamic_cast<Gtk::Box*>(listItem->get_child());
+    auto* box = dynamic_cast<Gtk::Box*>(listItemPtr->get_child());
     auto* expander = box != nullptr ? dynamic_cast<Gtk::TreeExpander*>(box->get_first_child()) : nullptr;
     auto* icon = expander != nullptr ? dynamic_cast<Gtk::Image*>(expander->get_next_sibling()) : nullptr;
     auto* label = icon != nullptr ? dynamic_cast<Gtk::Label*>(icon->get_next_sibling()) : nullptr;
@@ -306,7 +306,7 @@ namespace ao::gtk
     }
   }
 
-  void ListNavigationPanel::onListSelectionChanged(std::uint32_t /*position*/, std::uint32_t /*nItems*/) const
+  void ListNavigationPanel::handleListSelectionChanged(std::uint32_t /*position*/, std::uint32_t /*nItems*/) const
   {
     if (_callbacks.onSelectionChanged)
     {

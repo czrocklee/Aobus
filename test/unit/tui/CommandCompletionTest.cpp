@@ -152,14 +152,14 @@ namespace ao::tui::test
   TEST_CASE("CommandCompletion - delegates expression completion to runtime query completer",
             "[tui][unit][completion][query]")
   {
-    auto testLib = rt::test::TestMusicLibrary{};
-    library::test::addTrack(testLib.library(),
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
+    library::test::addTrack(libraryFixture.library(),
                             library::test::TrackSpec{.title = "Expression Track",
                                                      .artist = "Aimer",
                                                      .uri = "/tmp/tui-expression-completion.flac",
                                                      .duration = std::chrono::seconds{120}});
     auto changes = rt::LibraryChanges{};
-    auto service = rt::CompletionService{testLib.library(), changes};
+    auto service = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = rt::QueryExpressionCompleter{service};
     auto context = CommandCompletionContext{
       .expressionCompleter = [&](std::string_view const text, std::size_t const cursor, std::size_t const limit)

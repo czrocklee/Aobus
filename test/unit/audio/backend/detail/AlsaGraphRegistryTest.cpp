@@ -3,7 +3,6 @@
 
 #include <ao/audio/Format.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
-#include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -67,18 +66,6 @@ TEST_CASE("AlsaGraphRegistry - published negotiated format reaches stream and si
   REQUIRE(receivedGraph.nodes[1].optFormat);
   CHECK(*receivedGraph.nodes[0].optFormat == negotiatedFormat);
   CHECK(*receivedGraph.nodes[1].optFormat == negotiatedFormat);
-}
-
-TEST_CASE("ALSA backend detail - current hardware container preserves requested signal precision",
-          "[audio][unit][alsa]")
-{
-  auto const requested = ao::audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .validBits = 16};
-  auto const currentHw = ao::audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 32, .validBits = 32};
-
-  auto const graphFormat = preserveRequestedSignalPrecision(requested, currentHw);
-
-  CHECK(graphFormat.bitDepth == 32);
-  CHECK(graphFormat.validBits == 16);
 }
 
 TEST_CASE("AlsaGraphRegistry - software volume publish updates subscribers", "[audio][unit][alsa]")

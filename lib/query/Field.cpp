@@ -337,24 +337,24 @@ namespace ao::query
     return name;
   }
 
-  bool requiresHotData(AccessProfile profile)
+  bool isHotDataRequired(AccessProfile profile)
   {
     return profile == AccessProfile::HotOnly || profile == AccessProfile::HotAndCold;
   }
 
-  bool requiresColdData(AccessProfile profile)
+  bool isColdDataRequired(AccessProfile profile)
   {
     return profile == AccessProfile::ColdOnly || profile == AccessProfile::HotAndCold;
   }
 
   bool hasRequiredTrackData(AccessProfile profile, library::TrackView const& track)
   {
-    if (requiresHotData(profile) && !track.isHotValid())
+    if (isHotDataRequired(profile) && !track.isHotValid())
     {
       return false;
     }
 
-    if (requiresColdData(profile) && !track.isColdValid())
+    if (isColdDataRequired(profile) && !track.isColdValid())
     {
       return false;
     }

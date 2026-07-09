@@ -22,20 +22,20 @@ namespace ao::query::test
     // Local canonicalizer for AST comparison without relying on Parser/Serializer
     struct Canonicalizer final
     {
-      void operator()(std::unique_ptr<BinaryExpression> const& binary)
+      void operator()(std::unique_ptr<BinaryExpression> const& binaryPtr)
       {
-        if (!binary)
+        if (!binaryPtr)
         {
           oss << "null";
           return;
         }
 
         oss << "(";
-        std::visit(*this, binary->operand);
+        std::visit(*this, binaryPtr->operand);
 
-        if (binary->optOperation)
+        if (binaryPtr->optOperation)
         {
-          switch (binary->optOperation->op)
+          switch (binaryPtr->optOperation->op)
           {
             case Operator::Add: oss << " + "; break;
             case Operator::And: oss << " and "; break;
@@ -51,29 +51,29 @@ namespace ao::query::test
             default: oss << " op "; break;
           }
 
-          std::visit(*this, binary->optOperation->operand);
+          std::visit(*this, binaryPtr->optOperation->operand);
         }
 
         oss << ")";
       }
 
-      void operator()(std::unique_ptr<UnaryExpression> const& unary)
+      void operator()(std::unique_ptr<UnaryExpression> const& unaryPtr)
       {
-        if (!unary)
+        if (!unaryPtr)
         {
           oss << "null";
           return;
         }
 
-        if (unary->op == Operator::Exists)
+        if (unaryPtr->op == Operator::Exists)
         {
-          std::visit(*this, unary->operand);
+          std::visit(*this, unaryPtr->operand);
           oss << "?";
           return;
         }
 
         oss << "not ";
-        std::visit(*this, unary->operand);
+        std::visit(*this, unaryPtr->operand);
       }
 
       void operator()(VariableExpression const& var) { oss << var.name; }

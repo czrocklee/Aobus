@@ -142,7 +142,8 @@ add_executable(ao_core_test
     unit/audio/FormatTest.cpp
     unit/audio/StreamingSourceTest.cpp
     unit/audio/PcmRingBufferTest.cpp
-    unit/audio/backend/detail/PipeWireSharedTest.cpp
+    unit/audio/backend/detail/AudioBackendFormatSupportTest.cpp
+    unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp
     unit/audio/backend/PipeWireMonitorTest.cpp
     unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
     unit/audio/backend/detail/AlsaPcmErrorTest.cpp
@@ -158,18 +159,17 @@ add_executable(ao_core_test
     unit/audio/EngineConcurrencyTest.cpp
     unit/audio/EnginePropertyTest.cpp
     unit/audio/EngineTransportTest.cpp
-    unit/audio/backend/detail/PipeWireMonitorHelpersTest.cpp
-    unit/audio/backend/detail/AlsaProviderHelpersTest.cpp
+    unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
 
      # ui model tests (no platform deps)
     unit/uimodel/field/TrackFieldEditCodecTest.cpp
      unit/uimodel/field/TrackFieldEditPolicyTest.cpp
      unit/uimodel/field/TrackFieldFormatterTest.cpp
-    unit/uimodel/field/TrackInlineEditWorkflowTest.cpp
+    unit/uimodel/field/TrackInlineEditTest.cpp
     unit/uimodel/input/KeyChordTest.cpp
     unit/uimodel/input/KeymapModelTest.cpp
     unit/uimodel/input/KeymapStoreTest.cpp
-    unit/uimodel/preferences/PreferencesModelTest.cpp
+    unit/uimodel/preferences/PreferencesEditorModelTest.cpp
     unit/uimodel/layout/action/LayoutActionCatalogTest.cpp
     unit/uimodel/layout/action/LayoutActionValidatorTest.cpp
     unit/uimodel/layout/component/AbsoluteCanvasGeometryTest.cpp
@@ -177,7 +177,7 @@ add_executable(ao_core_test
     unit/uimodel/layout/component/LayoutComponentStateTest.cpp
     unit/uimodel/layout/component/LayoutStatePromoterTest.cpp
     unit/uimodel/layout/document/LayoutModelTest.cpp
-    unit/uimodel/layout/document/LayoutTemplateExpanderTest.cpp
+    unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp
     unit/uimodel/layout/shell/ShellLayoutSessionModelTest.cpp
     unit/uimodel/library/detail/TrackCustomMetadataWorkflowTest.cpp
     unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp
@@ -398,7 +398,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
     unit/linux-gtk/app/GtkMainContextExecutorTest.cpp
-    unit/linux-gtk/app/AppConfigTest.cpp
+    unit/linux-gtk/app/AppConfigStoreTest.cpp
     unit/linux-gtk/app/MainWindowTest.cpp
     unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp
     unit/linux-gtk/app/ShellLayoutStoreTest.cpp
@@ -419,7 +419,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/track/TrackRowCacheTest.cpp
     unit/linux-gtk/track/TrackScrollBaselineTest.cpp
     unit/linux-gtk/track/SelectionInfoLabelTest.cpp
-    unit/linux-gtk/status/ActivityStatusTest.cpp
+    unit/linux-gtk/status/ActivityStatusWidgetTest.cpp
     unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp
     unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp
     unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp
@@ -457,14 +457,14 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/components/StatusComponentsTest.cpp
     unit/linux-gtk/playback/AudioPipelinePanelTest.cpp
     unit/linux-gtk/playback/AobusSoulWindowTest.cpp
-    unit/linux-gtk/playback/OutputDeviceSelectorTest.cpp
+    unit/linux-gtk/playback/OutputDevicePopoverTest.cpp
     unit/linux-gtk/playback/PlaybackUiComponentsTest.cpp
     unit/linux-gtk/playback/PlaybackDetailsWidgetTest.cpp
     unit/linux-gtk/playback/NowPlayingFieldLabelTest.cpp
     unit/linux-gtk/playback/NowPlayingStatusLabelTest.cpp
     unit/linux-gtk/playback/OutputDeviceListItemsTest.cpp
     unit/linux-gtk/playback/TransportButtonTest.cpp
-    unit/linux-gtk/playback/VolumeControlTest.cpp
+    unit/linux-gtk/playback/VolumeControlWidgetTest.cpp
 )
 
 target_link_libraries(ao_gtk_test PRIVATE aobus-gtk-lib PkgGTKMM ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)

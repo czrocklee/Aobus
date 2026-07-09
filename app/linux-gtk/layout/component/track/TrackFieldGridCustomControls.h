@@ -39,7 +39,7 @@ namespace ao::gtk::layout::track_field_grid
 
   private:
     void openPopover();
-    void onAddRequested();
+    void handleAddRequested();
 
     Gtk::Button _button;
     Gtk::Popover _popover;

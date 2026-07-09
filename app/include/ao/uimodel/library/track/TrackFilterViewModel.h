@@ -48,8 +48,8 @@ namespace ao::uimodel
     void updateFilter(std::string const& rawText);
 
   private:
-    void onFocusedViewChanged(rt::ViewId viewId);
-    void onFilterStatusChanged(rt::FilterStatusChanged const& status);
+    void handleFocusedViewChanged(rt::ViewId viewId);
+    void handleFilterStatusChanged(rt::FilterStatusChanged const& status);
     void refresh();
 
     rt::ViewService& _viewService;

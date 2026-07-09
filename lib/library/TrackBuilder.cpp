@@ -519,7 +519,7 @@ namespace ao::library
   {
     try
     {
-      auto const prepared = PreparedHot::create(this, transaction, dictionary);
+      auto const prepared = PreparedHot::make(this, transaction, dictionary);
       auto result = std::vector<std::byte>(prepared.size());
 
       prepared.writeTo(result);
@@ -537,7 +537,7 @@ namespace ao::library
   {
     try
     {
-      auto const prepared = PreparedCold::create(this, transaction, dictionary, resources);
+      auto const prepared = PreparedCold::make(this, transaction, dictionary, resources);
       auto result = std::vector<std::byte>(prepared.size());
 
       prepared.writeTo(result);
@@ -556,8 +556,8 @@ namespace ao::library
   {
     try
     {
-      auto const hot = PreparedHot::create(this, transaction, dictionary);
-      auto const cold = PreparedCold::create(this, transaction, dictionary, resources);
+      auto const hot = PreparedHot::make(this, transaction, dictionary);
+      auto const cold = PreparedCold::make(this, transaction, dictionary, resources);
 
       auto hotBytes = std::vector<std::byte>(hot.size());
       auto coldBytes = std::vector<std::byte>(cold.size());
@@ -576,9 +576,9 @@ namespace ao::library
   // Prepared structures for zero-copy serialization
   //=============================================================================
 
-  TrackBuilder::PreparedHot TrackBuilder::PreparedHot::create(TrackBuilder const* builder,
-                                                              lmdb::WriteTransaction& transaction,
-                                                              DictionaryStore& dictionary)
+  TrackBuilder::PreparedHot TrackBuilder::PreparedHot::make(TrackBuilder const* builder,
+                                                            lmdb::WriteTransaction& transaction,
+                                                            DictionaryStore& dictionary)
   {
     auto prepared = PreparedHot{};
 
@@ -677,10 +677,10 @@ namespace ao::library
     }
   }
 
-  TrackBuilder::PreparedCold TrackBuilder::PreparedCold::create(TrackBuilder const* builder,
-                                                                lmdb::WriteTransaction& transaction,
-                                                                DictionaryStore& dictionary,
-                                                                ResourceStore& resources)
+  TrackBuilder::PreparedCold TrackBuilder::PreparedCold::make(TrackBuilder const* builder,
+                                                              lmdb::WriteTransaction& transaction,
+                                                              DictionaryStore& dictionary,
+                                                              ResourceStore& resources)
   {
     auto prepared = PreparedCold{};
     prepared.resolveClassicalIds(builder, transaction, dictionary);
@@ -989,8 +989,8 @@ namespace ao::library
   {
     try
     {
-      return std::pair{PreparedHot::create(this, transaction, dictionary),
-                       PreparedCold::create(this, transaction, dictionary, resources)};
+      return std::pair{
+        PreparedHot::make(this, transaction, dictionary), PreparedCold::make(this, transaction, dictionary, resources)};
     }
     catch (detail::LibraryException const& ex)
     {
@@ -1003,7 +1003,7 @@ namespace ao::library
   {
     try
     {
-      return PreparedHot::create(this, transaction, dictionary);
+      return PreparedHot::make(this, transaction, dictionary);
     }
     catch (detail::LibraryException const& ex)
     {
@@ -1017,7 +1017,7 @@ namespace ao::library
   {
     try
     {
-      return PreparedCold::create(this, transaction, dictionary, resources);
+      return PreparedCold::make(this, transaction, dictionary, resources);
     }
     catch (detail::LibraryException const& ex)
     {

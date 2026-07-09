@@ -56,16 +56,17 @@ namespace ao::gtk::layout
 
     // Set up hover interaction
     _motionControllerPtr = Gtk::EventControllerMotion::create();
-    _motionEnterConn = _motionControllerPtr->signal_enter().connect([this](double, double) { onEnter(); });
-    _motionLeaveConn = _motionControllerPtr->signal_leave().connect([this] { onLeave(); });
+    _motionPointerEnteredConn =
+      _motionControllerPtr->signal_enter().connect([this](double, double) { handlePointerEntered(); });
+    _motionPointerLeftConn = _motionControllerPtr->signal_leave().connect([this] { handlePointerLeft(); });
     target.add_controller(_motionControllerPtr);
   }
 
   void ComponentTooltipController::detach()
   {
     _hoverTimeout.disconnect();
-    _motionEnterConn.disconnect();
-    _motionLeaveConn.disconnect();
+    _motionPointerEnteredConn.disconnect();
+    _motionPointerLeftConn.disconnect();
 
     if (_target != nullptr && _motionControllerPtr)
     {
@@ -83,7 +84,7 @@ namespace ao::gtk::layout
     _tooltipComponent = nullptr;
   }
 
-  void ComponentTooltipController::onEnter()
+  void ComponentTooltipController::handlePointerEntered()
   {
     _hoverTimeout.disconnect();
 
@@ -100,7 +101,7 @@ namespace ao::gtk::layout
       kDefaultHoverDelay.count());
   }
 
-  void ComponentTooltipController::onLeave()
+  void ComponentTooltipController::handlePointerLeft()
   {
     _hoverTimeout.disconnect();
     _popover.popdown();

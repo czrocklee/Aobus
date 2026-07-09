@@ -19,9 +19,9 @@ namespace ao::rt::test
 {
   TEST_CASE("ViewService - openListInView retargets view state", "[runtime][unit][view][list]")
   {
-    auto env = ViewServiceTestEnv{};
+    auto env = ViewServiceFixture{};
     auto service = env.makeService();
-    auto const trackId = env.library.addTrack(library::test::TrackSpec{.title = "List Track"});
+    auto const trackId = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "List Track"});
     auto const listId = ao::test::requireValue(env.writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Manual",
@@ -53,9 +53,9 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - setFilter updates filter state and projection", "[runtime][unit][view][filter]")
   {
-    auto env = ViewServiceTestEnv{};
-    auto const oldTrackId = env.library.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
-    auto const newTrackId = env.library.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
+    auto env = ViewServiceFixture{};
+    auto const oldTrackId = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
+    auto const newTrackId = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
     env.cachePtr->reloadAllTracks();
 
     auto service = env.makeService();
@@ -129,9 +129,9 @@ namespace ao::rt::test
 
   TEST_CASE("ViewService - openListInView with active filter preserves filter state", "[runtime][unit][view][filter]")
   {
-    auto env = ViewServiceTestEnv{};
-    auto const oldTrackId = env.library.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
-    auto const newTrackId = env.library.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
+    auto env = ViewServiceFixture{};
+    auto const oldTrackId = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
+    auto const newTrackId = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
     env.cachePtr->reloadAllTracks();
 
     auto const oldListId = ao::test::requireValue(env.writer.createList(LibraryWriter::ListDraft{

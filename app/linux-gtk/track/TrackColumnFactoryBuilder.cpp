@@ -54,8 +54,10 @@ namespace ao::gtk
     {
       label.set_has_tooltip();
       label.signal_query_tooltip().connect(
-        [&label](
-          std::int32_t /*x*/, std::int32_t /*y*/, bool /*keyboardTooltip*/, Glib::RefPtr<Gtk::Tooltip> const& tooltip)
+        [&label](std::int32_t /*x*/,
+                 std::int32_t /*y*/,
+                 bool /*keyboardTooltip*/,
+                 Glib::RefPtr<Gtk::Tooltip> const& tooltipPtr)
         {
           if (!isLabelTextEllipsized(label))
           {
@@ -69,9 +71,9 @@ namespace ao::gtk
             return false;
           }
 
-          if (tooltip != nullptr)
+          if (tooltipPtr != nullptr)
           {
-            tooltip->set_text(text);
+            tooltipPtr->set_text(text);
           }
 
           return true;
@@ -140,9 +142,9 @@ namespace ao::gtk
       }
     }
 
-    void updateStatusStyles(Glib::RefPtr<Gtk::ListItem> const& listItem, Glib::RefPtr<TrackRowObject> const& row)
+    void updateStatusStyles(Glib::RefPtr<Gtk::ListItem> const& listItemPtr, Glib::RefPtr<TrackRowObject> const& rowPtr)
     {
-      if (auto* const child = listItem->get_child(); child != nullptr)
+      if (auto* const child = listItemPtr->get_child(); child != nullptr)
       {
         auto* const cell = child->get_parent();
 
@@ -158,7 +160,7 @@ namespace ao::gtk
           return;
         }
 
-        if (row->status() == library::FileStatus::Missing)
+        if (rowPtr->status() == library::FileStatus::Missing)
         {
           rowWidget->add_css_class("ao-missing-row");
         }
@@ -169,18 +171,18 @@ namespace ao::gtk
       }
     }
 
-    void onTextColumnBindStatic(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                                rt::TrackField field,
-                                Glib::RefPtr<TrackRowObject> const& row)
+    void handleTextColumnBindStatic(Glib::RefPtr<Gtk::ListItem> const& listItemPtr,
+                                    rt::TrackField field,
+                                    Glib::RefPtr<TrackRowObject> const& rowPtr)
     {
-      auto* const label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+      auto* const label = dynamic_cast<Gtk::Label*>(listItemPtr->get_child());
 
       if (label != nullptr)
       {
         // displayText() hands back a cached string by pointer for both text-backed
         // and computed fields, so this bind copies straight into the label with no
         // intermediate ustring materialization.
-        auto const* const text = row->displayText(field);
+        auto const* const text = rowPtr->displayText(field);
         auto const& displayText = text != nullptr ? *text : Glib::ustring{};
         label->set_text(displayText);
       }
@@ -205,12 +207,12 @@ namespace ao::gtk
       updatePlayingStyles(listItem, field, isRowPlaying(*rowPtr, playingModel));
     }
 
-    void onTextColumnBind(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                          rt::TrackField field,
-                          bool editable,
-                          TrackListModel const& playingModel)
+    void handleTextColumnBind(Glib::RefPtr<Gtk::ListItem> const& listItemPtr,
+                              rt::TrackField field,
+                              bool editable,
+                              TrackListModel const& playingModel)
     {
-      auto const itemPtr = listItem->get_item();
+      auto const itemPtr = listItemPtr->get_item();
       auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
 
       if (rowPtr == nullptr)
@@ -220,11 +222,11 @@ namespace ao::gtk
 
       if (!editable)
       {
-        onTextColumnBindStatic(listItem, field, rowPtr);
+        handleTextColumnBindStatic(listItemPtr, field, rowPtr);
       }
       else
       {
-        auto* const stack = dynamic_cast<Gtk::Stack*>(listItem->get_child());
+        auto* const stack = dynamic_cast<Gtk::Stack*>(listItemPtr->get_child());
 
         if (stack != nullptr)
         {
@@ -250,8 +252,8 @@ namespace ao::gtk
       // (the same cell staying bound while the track switches) are handled by the
       // setup-time subscription to TrackListModel::signalPlayingChanged, because
       // the shared cached row objects make GTK skip the rebind on items_changed.
-      updateStatusStyles(listItem, rowPtr);
-      updatePlayingStyles(*listItem, field, isRowPlaying(*rowPtr, playingModel));
+      updateStatusStyles(listItemPtr, rowPtr);
+      updatePlayingStyles(*listItemPtr, field, isRowPlaying(*rowPtr, playingModel));
     }
   } // namespace
 
@@ -269,7 +271,7 @@ namespace ao::gtk
     auto* const playingModelRaw = &playingModel;
 
     factoryPtr->signal_setup().connect(
-      [field, editable, commitFn, playingModelRaw](Glib::RefPtr<Gtk::ListItem> const& listItem)
+      [field, editable, commitFn, playingModelRaw](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
       {
         // Hoisted so the inline-edit commit can be wired once below, after the
         // per-cell bind-data exists; left null for non-editable columns.
@@ -297,7 +299,7 @@ namespace ao::gtk
             label->add_css_class(kTagsCellCssClass);
           }
 
-          listItem->set_child(*label);
+          listItemPtr->set_child(*label);
         }
         else
         {
@@ -343,27 +345,27 @@ namespace ao::gtk
 
           stack->add(*entry, "edit");
 
-          listItem->set_child(*stack);
+          listItemPtr->set_child(*stack);
 
           editStack = stack;
           editEntry = entry;
           editLabel = label;
         }
 
-        // Allocate connection storage once per listItem lifetime, reused across bind/unbind
+        // Allocate connection storage once per listItemPtr lifetime, reused across bind/unbind
         auto* const bindData = new CellBindData{};
-        listItem->set_data(
+        listItemPtr->set_data(
           Glib::Quark{"bind-data"}, bindData, [](void* data) { delete static_cast<CellBindData*>(data); });
 
         // Wire the inline-edit commit once, for the cell's lifetime. The slot
-        // resolves the currently-bound row lazily from listItem->get_item() (the
+        // resolves the currently-bound row lazily from listItemPtr->get_item() (the
         // entry only commits while the cell it lives in is bound), so a recycled
         // cell needs no reconnect. The raw ListItem is safe to capture: the
         // connection is owned by bindData, owned by the ListItem.
         if (editEntry != nullptr)
         {
           bindData->commitConnection = editEntry->signal_activate().connect(
-            [item = listItem.get(), editEntry, editStack, editLabel, field, commitFn]
+            [item = listItemPtr.get(), editEntry, editStack, editLabel, field, commitFn]
             {
               auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(item->get_item());
 
@@ -384,12 +386,13 @@ namespace ao::gtk
         // handler captures the raw ListItem (the connection is owned by bindData,
         // owned by the ListItem, so it can never outlive it) to avoid a refcount
         // cycle.
-        bindData->playingChangedConnection = playingModelRaw->signalPlayingChanged().connect(
-          [item = listItem.get(), field, playingModelRaw] { restylePlayingFromModel(*item, field, *playingModelRaw); });
+        bindData->playingChangedConnection =
+          playingModelRaw->signalPlayingChanged().connect([item = listItemPtr.get(), field, playingModelRaw]
+                                                          { restylePlayingFromModel(*item, field, *playingModelRaw); });
       });
 
-    factoryPtr->signal_bind().connect([field, editable, playingModelRaw](Glib::RefPtr<Gtk::ListItem> const& listItem)
-                                      { onTextColumnBind(listItem, field, editable, *playingModelRaw); });
+    factoryPtr->signal_bind().connect([field, editable, playingModelRaw](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+                                      { handleTextColumnBind(listItemPtr, field, editable, *playingModelRaw); });
 
     return factoryPtr;
   }

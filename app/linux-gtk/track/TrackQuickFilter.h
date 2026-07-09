@@ -64,9 +64,9 @@ namespace ao::gtk
   private:
     std::optional<rt::CompletionResult> complete(std::string_view text, std::size_t cursor);
 
-    void onFilterTextChanged();
-    void onClearClicked();
-    void onCreateSmartListClicked();
+    void handleFilterTextChanged();
+    void handleClearClicked();
+    void handleCreateSmartListClicked();
     void applyState(uimodel::TrackFilterViewState const& view);
     void updateClearButton();
     void setActive(bool active);

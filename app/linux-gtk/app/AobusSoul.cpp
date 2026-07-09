@@ -156,9 +156,9 @@ namespace ao::gtk
     }
 
     _implPtr->tickId = add_tick_callback(
-      [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
+      [this](Glib::RefPtr<Gdk::FrameClock> const& clockPtr) -> bool
       {
-        auto const frameTime = uimodel::FrameClock::fromMicros(clock->get_frame_time());
+        auto const frameTime = uimodel::FrameClock::fromMicros(clockPtr->get_frame_time());
 
         if (!_implPtr->optFirstFrameTime)
         {
@@ -333,7 +333,7 @@ namespace ao::gtk
     return rgbaFromSoulRgb(uimodel::aobusSoulShiftRgb(rgb, shift), color.get_alpha());
   }
 
-  void AobusSoul::snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot)
+  void AobusSoul::snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshotPtr)
   {
     auto const width = static_cast<float>(get_width());
     auto const height = static_cast<float>(get_height());
@@ -362,11 +362,11 @@ namespace ao::gtk
     // 1. Draw 'a' if requested
     if (_implPtr->shouldShowFullLogo)
     {
-      snapshot->save();
-      snapshot->translate({aCenterX, centerY});
-      snapshot->scale(drawingScale, drawingScale);
+      snapshotPtr->save();
+      snapshotPtr->translate({aCenterX, centerY});
+      snapshotPtr->scale(drawingScale, drawingScale);
 
-      ::gtk_snapshot_push_stroke(snapshot->gobj(), _implPtr->unitPathAPtr.get(), _implPtr->cachedStrokeAPtr.get());
+      ::gtk_snapshot_push_stroke(snapshotPtr->gobj(), _implPtr->unitPathAPtr.get(), _implPtr->cachedStrokeAPtr.get());
 
       static constexpr float kRefBoundsX = -kUnitRadius * 2.0F;
       static constexpr float kRefBoundsY = -kUnitRadius * 2.0F;
@@ -375,10 +375,10 @@ namespace ao::gtk
       auto const aBounds = ::graphene_rect_t{
         .origin = {.x = kRefBoundsX, .y = kRefBoundsY}, .size = {.width = kRefBoundsW, .height = kRefBoundsH}};
 
-      ::gtk_snapshot_append_color(snapshot->gobj(), _implPtr->amber.gobj(), &aBounds);
-      ::gtk_snapshot_pop(snapshot->gobj());
+      ::gtk_snapshot_append_color(snapshotPtr->gobj(), _implPtr->amber.gobj(), &aBounds);
+      ::gtk_snapshot_pop(snapshotPtr->gobj());
 
-      snapshot->restore();
+      snapshotPtr->restore();
     }
 
     // 2. Draw 'o' (Soul)
@@ -397,19 +397,19 @@ namespace ao::gtk
 
     ::gsk_stroke_set_line_width(_implPtr->cachedStrokePtr.get(), currentStrokeBase / kRefHeight);
 
-    snapshot->save();
-    snapshot->translate({oCenterX, centerY});
-    snapshot->rotate(rotationAngle);
-    snapshot->scale(drawingScale, drawingScale);
+    snapshotPtr->save();
+    snapshotPtr->translate({oCenterX, centerY});
+    snapshotPtr->rotate(rotationAngle);
+    snapshotPtr->scale(drawingScale, drawingScale);
 
     static constexpr float kOpacityThreshold = 0.999F;
 
     if (currentOpacity < kOpacityThreshold)
     {
-      ::gtk_snapshot_push_opacity(snapshot->gobj(), currentOpacity);
+      ::gtk_snapshot_push_opacity(snapshotPtr->gobj(), currentOpacity);
     }
 
-    ::gtk_snapshot_push_stroke(snapshot->gobj(), _implPtr->unitPathOPtr.get(), _implPtr->cachedStrokePtr.get());
+    ::gtk_snapshot_push_stroke(snapshotPtr->gobj(), _implPtr->unitPathOPtr.get(), _implPtr->cachedStrokePtr.get());
 
     // Calculate Aura Flow (Hue Shift)
     float const hueShift = _implPtr->isStopped ? 0.0F : static_cast<float>(motion.hueShiftDegrees);
@@ -436,8 +436,8 @@ namespace ao::gtk
     auto const endPoint = ::graphene_point_t{.x = -kUnitRadius, .y = -kUnitRadius};
 
     ::gtk_snapshot_append_linear_gradient(
-      snapshot->gobj(), &gradientBounds, &startPoint, &endPoint, stops.data(), stops.size());
-    ::gtk_snapshot_pop(snapshot->gobj());
+      snapshotPtr->gobj(), &gradientBounds, &startPoint, &endPoint, stops.data(), stops.size());
+    ::gtk_snapshot_pop(snapshotPtr->gobj());
 
     // 3. Draw Inner Glyph if present
     if (_implPtr->currentGlyph != InnerGlyph::None)
@@ -446,33 +446,33 @@ namespace ao::gtk
         (_implPtr->currentGlyph == InnerGlyph::Sigil) ? _implPtr->pathSigilPtr.get() : _implPtr->pathSealPtr.get();
 
       // Glyphs are drawn without the Soul's rotation to remain readable, but they follow the breathing scale/opacity
-      snapshot->save();
-      snapshot->rotate(-rotationAngle); // Counter-rotate to stay upright
-      snapshot->scale(_implPtr->innerGlyphScale, _implPtr->innerGlyphScale);
+      snapshotPtr->save();
+      snapshotPtr->rotate(-rotationAngle); // Counter-rotate to stay upright
+      snapshotPtr->scale(_implPtr->innerGlyphScale, _implPtr->innerGlyphScale);
 
       if (_implPtr->currentGlyph == InnerGlyph::Sigil)
       {
-        ::gtk_snapshot_push_stroke(snapshot->gobj(), glyphPath, _implPtr->cachedStrokeGlyphPtr.get());
+        ::gtk_snapshot_push_stroke(snapshotPtr->gobj(), glyphPath, _implPtr->cachedStrokeGlyphPtr.get());
         ::gtk_snapshot_append_linear_gradient(
-          snapshot->gobj(), &gradientBounds, &startPoint, &endPoint, stops.data(), stops.size());
-        ::gtk_snapshot_pop(snapshot->gobj());
+          snapshotPtr->gobj(), &gradientBounds, &startPoint, &endPoint, stops.data(), stops.size());
+        ::gtk_snapshot_pop(snapshotPtr->gobj());
       }
       else
       {
         // Seal (Bars) looks better with a solid indicator color or slightly different gradient
-        ::gtk_snapshot_push_stroke(snapshot->gobj(), glyphPath, _implPtr->cachedStrokeGlyphPtr.get());
-        ::gtk_snapshot_append_color(snapshot->gobj(), shiftedAura.gobj(), &gradientBounds);
-        ::gtk_snapshot_pop(snapshot->gobj());
+        ::gtk_snapshot_push_stroke(snapshotPtr->gobj(), glyphPath, _implPtr->cachedStrokeGlyphPtr.get());
+        ::gtk_snapshot_append_color(snapshotPtr->gobj(), shiftedAura.gobj(), &gradientBounds);
+        ::gtk_snapshot_pop(snapshotPtr->gobj());
       }
 
-      snapshot->restore();
+      snapshotPtr->restore();
     }
 
     if (currentOpacity < kOpacityThreshold)
     {
-      ::gtk_snapshot_pop(snapshot->gobj());
+      ::gtk_snapshot_pop(snapshotPtr->gobj());
     }
 
-    snapshot->restore();
+    snapshotPtr->restore();
   }
 } // namespace ao::gtk

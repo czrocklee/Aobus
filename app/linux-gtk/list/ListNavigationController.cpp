@@ -44,9 +44,9 @@ namespace ao::gtk
     : _parent{parent}, _callbacks{std::move(callbacks)}, _runtime{runtime}, _themeController{themeController}
   {
     auto panelCallbacks = ListNavigationPanel::Callbacks{
-      .onSelectionChanged = [this](ListId listId) { onSelectionChanged(listId); },
+      .onSelectionChanged = [this](ListId listId) { handleSelectionChanged(listId); },
       .onContextMenuRequested = [this](ListId listId, Gdk::Rectangle const& rect)
-      { onContextMenuRequested(listId, rect); },
+      { handleContextMenuRequested(listId, rect); },
     };
 
     _panelPtr = std::make_unique<ListNavigationPanel>(std::move(panelCallbacks));
@@ -80,11 +80,13 @@ namespace ao::gtk
     _newListActionPtr->set_enabled(false);
 
     _deleteListActionPtr = Gio::SimpleAction::create("list-delete");
-    _deleteListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/) { onDeleteList(); });
+    _deleteListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
+                                                    { handleDeleteListActivated(); });
     _deleteListActionPtr->set_enabled(false);
 
     _editListActionPtr = Gio::SimpleAction::create("list-edit");
-    _editListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/) { onEditList(); });
+    _editListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
+                                                  { handleEditListActivated(); });
     _editListActionPtr->set_enabled(false);
   }
 
@@ -119,9 +121,9 @@ namespace ao::gtk
     _panelPtr->selectList(listId);
   }
 
-  void ListNavigationController::onSelectionChanged(ListId listId)
+  void ListNavigationController::handleSelectionChanged(ListId listId)
   {
-    auto const state = ao::uimodel::ListActionPolicy::describeActions(listId, _panelPtr->hasListChildren(listId));
+    auto const state = ao::uimodel::describeListActions(listId, _panelPtr->hasListChildren(listId));
 
     _newListActionPtr->set_enabled(state.canCreate);
     _deleteListActionPtr->set_enabled(state.canDelete);
@@ -133,9 +135,9 @@ namespace ao::gtk
     }
   }
 
-  void ListNavigationController::onContextMenuRequested(ListId listId, Gdk::Rectangle const& rect)
+  void ListNavigationController::handleContextMenuRequested(ListId listId, Gdk::Rectangle const& rect)
   {
-    auto const state = ao::uimodel::ListActionPolicy::describeActions(listId, _panelPtr->hasListChildren(listId));
+    auto const state = ao::uimodel::describeListActions(listId, _panelPtr->hasListChildren(listId));
 
     if (_newListActionPtr)
     {
@@ -157,7 +159,7 @@ namespace ao::gtk
 
   void ListNavigationController::openNewSmartListDialog()
   {
-    auto const parentListId = ao::uimodel::ListActionPolicy::parentForNewSmartList(_panelPtr->selectedListId());
+    auto const parentListId = ao::uimodel::parentForNewSmartList(_panelPtr->selectedListId());
     openNewListDialog(parentListId);
   }
 
@@ -290,7 +292,7 @@ namespace ao::gtk
     return true;
   }
 
-  void ListNavigationController::onEditList()
+  void ListNavigationController::handleEditListActivated()
   {
     if (_dataProvider == nullptr)
     {
@@ -307,7 +309,7 @@ namespace ao::gtk
     openEditListDialog(listId);
   }
 
-  void ListNavigationController::onDeleteList()
+  void ListNavigationController::handleDeleteListActivated()
   {
     if (_dataProvider == nullptr)
     {

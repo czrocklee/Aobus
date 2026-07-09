@@ -68,8 +68,6 @@ namespace ao::gtk
     void setLocalExpression(std::string_view expression);
 
   private:
-    friend class SmartListDialogTestPeer;
-
     void buildUi();
     void buildPreview();
     void configurePreviewColumns();

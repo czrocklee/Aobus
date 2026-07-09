@@ -253,7 +253,7 @@ namespace ao::gtk::test
 
     SECTION("binds to a projection and ignores missing resources")
     {
-      auto mockProjPtr = std::make_unique<ManualTrackDetailMock>();
+      auto mockProjPtr = std::make_unique<MockManualTrackDetail>();
       auto* mock = mockProjPtr.get();
 
       auto widget = ImageWidget{};

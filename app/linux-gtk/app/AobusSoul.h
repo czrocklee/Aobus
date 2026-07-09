@@ -57,7 +57,7 @@ namespace ao::gtk
   protected:
     void on_map() override;
     void on_unmap() override;
-    void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override;
+    void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshotPtr) override;
     Gtk::SizeRequestMode get_request_mode_vfunc() const override;
     void measure_vfunc(Gtk::Orientation orientation,
                        int forSize,

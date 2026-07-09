@@ -57,8 +57,8 @@ namespace ao::gtk
     TagEditRequestedSignal& signalTagEditRequested() noexcept { return _tagEditRequested; }
 
   private:
-    void onSelectionChanged(std::uint32_t position, std::uint32_t nItems);
-    void onActivateCurrentSelection();
+    void handleSelectionChanged(std::uint32_t position, std::uint32_t nItems);
+    void handleActivateCurrentSelection();
     TrackId trackIdAtPosition(std::uint32_t position) const noexcept;
 
     Gtk::ColumnView& _columnView;

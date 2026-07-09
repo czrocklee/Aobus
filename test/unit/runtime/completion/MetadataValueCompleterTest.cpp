@@ -21,9 +21,9 @@ namespace ao::rt::test
 {
   namespace
   {
-    void addMetadataValueTrack(TestMusicLibrary& testLib, std::string artist, std::string album)
+    void addMetadataValueTrack(MusicLibraryFixture& libraryFixture, std::string artist, std::string album)
     {
-      library::test::addTrack(testLib.library(),
+      library::test::addTrack(libraryFixture.library(),
                               library::test::TrackSpec{.title = "Metadata Value Track",
                                                        .artist = std::move(artist),
                                                        .album = std::move(album),
@@ -46,13 +46,13 @@ namespace ao::rt::test
 
   TEST_CASE("MetadataValueCompleter - completes supported field values", "[runtime][unit][completion][value]")
   {
-    auto testLib = TestMusicLibrary{};
-    addMetadataValueTrack(testLib, "Massive Attack", "Mezzanine");
-    addMetadataValueTrack(testLib, "Massive Attack", "Protection");
-    addMetadataValueTrack(testLib, "Mazzy Star", "So Tonight That I Might See");
+    auto libraryFixture = MusicLibraryFixture{};
+    addMetadataValueTrack(libraryFixture, "Massive Attack", "Mezzanine");
+    addMetadataValueTrack(libraryFixture, "Massive Attack", "Protection");
+    addMetadataValueTrack(libraryFixture, "Mazzy Star", "So Tonight That I Might See");
 
     auto changes = LibraryChanges{};
-    auto service = CompletionService{testLib.library(), changes};
+    auto service = CompletionService{libraryFixture.library(), changes};
 
     auto artistCompleter = MetadataValueCompleter{service, TrackField::Artist};
     auto artistItems = artistCompleter.complete("ma");
@@ -69,12 +69,12 @@ namespace ao::rt::test
   TEST_CASE("MetadataValueCompleter - rejects unsupported fields and limits results",
             "[runtime][unit][completion-value][limit]")
   {
-    auto testLib = TestMusicLibrary{};
-    addMetadataValueTrack(testLib, "Artist A", "Album A");
-    addMetadataValueTrack(testLib, "Artist B", "Album B");
+    auto libraryFixture = MusicLibraryFixture{};
+    addMetadataValueTrack(libraryFixture, "Artist A", "Album A");
+    addMetadataValueTrack(libraryFixture, "Artist B", "Album B");
 
     auto changes = LibraryChanges{};
-    auto service = CompletionService{testLib.library(), changes};
+    auto service = CompletionService{libraryFixture.library(), changes};
 
     auto titleCompleter = MetadataValueCompleter{service, TrackField::Title};
     CHECK(titleCompleter.complete("Metadata").empty());
@@ -87,12 +87,12 @@ namespace ao::rt::test
   TEST_CASE("MetadataValueCompleter - adapts entry text to whole-value replacement",
             "[runtime][unit][completion-value][provider]")
   {
-    auto testLib = TestMusicLibrary{};
-    addMetadataValueTrack(testLib, "Massive Attack", "Mezzanine");
-    addMetadataValueTrack(testLib, "Mazzy Star", "She Hangs Brightly");
+    auto libraryFixture = MusicLibraryFixture{};
+    addMetadataValueTrack(libraryFixture, "Massive Attack", "Mezzanine");
+    addMetadataValueTrack(libraryFixture, "Mazzy Star", "She Hangs Brightly");
 
     auto changes = LibraryChanges{};
-    auto service = CompletionService{testLib.library(), changes};
+    auto service = CompletionService{libraryFixture.library(), changes};
 
     auto provider = MetadataValueCompleter{service, TrackField::Artist}.asProvider();
     auto optResult = provider("ma suffix", 2);

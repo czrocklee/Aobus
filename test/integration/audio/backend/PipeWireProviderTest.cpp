@@ -3,7 +3,7 @@
 
 #include <ao/audio/Device.h>
 #include <ao/audio/backend/PipeWireProvider.h>
-#include <ao/audio/backend/detail/PipeWireShared.h>
+#include <ao/audio/backend/detail/PipeWireRuntime.h>
 #include <ao/utility/Raii.h>
 
 #include <catch2/catch_message.hpp>
@@ -38,7 +38,7 @@ namespace ao::audio::backend::test
 
   namespace
   {
-    struct [[nodiscard]] DummySinkGuard final
+    struct [[nodiscard]] NullAudioSinkGuard final
     {
       PipeWireEnvironmentGuard envGuard;
       PwThreadLoopPtr threadLoopPtr;
@@ -46,12 +46,12 @@ namespace ao::audio::backend::test
       PwCorePtr corePtr;
       PwProxyPtr<::pw_proxy> proxyPtr;
 
-      DummySinkGuard(DummySinkGuard const&) = delete;
-      DummySinkGuard& operator=(DummySinkGuard const&) = delete;
-      DummySinkGuard(DummySinkGuard&&) = delete;
-      DummySinkGuard& operator=(DummySinkGuard&&) = delete;
+      NullAudioSinkGuard(NullAudioSinkGuard const&) = delete;
+      NullAudioSinkGuard& operator=(NullAudioSinkGuard const&) = delete;
+      NullAudioSinkGuard(NullAudioSinkGuard&&) = delete;
+      NullAudioSinkGuard& operator=(NullAudioSinkGuard&&) = delete;
 
-      DummySinkGuard()
+      NullAudioSinkGuard()
       {
         threadLoopPtr.reset(::pw_thread_loop_new("TestSinkLoop", nullptr));
 
@@ -81,7 +81,7 @@ namespace ao::audio::backend::test
             auto propsPtr = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
                                                                                              "support.null-audio-sink",
                                                                                              "node.name",
-                                                                                             "rs-test-dummy-sink",
+                                                                                             "rs-test-null-sink",
                                                                                              "media.class",
                                                                                              "Audio/Sink",
                                                                                              "object.linger",
@@ -99,7 +99,7 @@ namespace ao::audio::backend::test
         }
       }
 
-      ~DummySinkGuard()
+      ~NullAudioSinkGuard()
       {
         if (threadLoopPtr)
         {
@@ -213,7 +213,7 @@ namespace ao::audio::backend::test
       }
     }
 
-    auto const sinkGuard = DummySinkGuard{};
+    auto const sinkGuard = NullAudioSinkGuard{};
 
     if (!sinkGuard.isValid())
     {
@@ -230,16 +230,16 @@ namespace ao::audio::backend::test
 
     SECTION("Enumeration finds the dummy sink")
     {
-      auto const found = devicesPtr->waitUntilContains("rs-test-dummy-sink", std::chrono::seconds{1});
+      auto const found = devicesPtr->waitUntilContains("rs-test-null-sink", std::chrono::seconds{1});
 
-      INFO("Expected PipeWire device 'rs-test-dummy-sink' after 1s; observed "
+      INFO("Expected PipeWire device 'rs-test-null-sink' after 1s; observed "
            << devicesPtr->updateCount() << " device snapshots: " << devicesPtr->describeSnapshot());
       CHECK(found);
     }
 
     SECTION("Enumeration exposes one logical device per id")
     {
-      auto const found = devicesPtr->waitUntilContains("rs-test-dummy-sink", std::chrono::seconds{1});
+      auto const found = devicesPtr->waitUntilContains("rs-test-null-sink", std::chrono::seconds{1});
       REQUIRE(found);
 
       INFO("Observed PipeWire device snapshot: " << devicesPtr->describeSnapshot());

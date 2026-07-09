@@ -4,7 +4,7 @@
 #include "preferences/PreferencesWindow.h"
 
 #include "app/FormBuilder.h"
-#include "playback/OutputDeviceSelector.h"
+#include "playback/OutputDevicePopover.h"
 #include "preferences/ShortcutEditorWidget.h"
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/PlaybackService.h>
@@ -12,7 +12,7 @@
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
-#include <ao/uimodel/preferences/PreferencesModel.h>
+#include <ao/uimodel/preferences/PreferencesEditorModel.h>
 
 #include <gtkmm/application.h> // NOLINT(misc-include-cleaner)
 #include <gtkmm/box.h>
@@ -174,7 +174,7 @@ namespace ao::gtk
   {
     _themeCombo.append(std::string{rt::themePresetToString(rt::ThemePresetId::Classic)}, "Classic");
     _themeCombo.append(std::string{rt::themePresetToString(rt::ThemePresetId::Modern)}, "Modern");
-    _themeComboConn = _themeCombo.signal_changed().connect([this] { onThemeChanged(); });
+    _themeComboConn = _themeCombo.signal_changed().connect([this] { handleThemeChanged(); });
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
     list->addRow("Theme", _themeCombo);
@@ -197,7 +197,7 @@ namespace ao::gtk
 
     _layoutPresetCombo.append(std::string{kClassicLayoutPresetId}, "Classic");
     _layoutPresetCombo.append(std::string{kModernLayoutPresetId}, "Modern");
-    _layoutPresetComboConn = _layoutPresetCombo.signal_changed().connect([this] { onLayoutPresetChanged(); });
+    _layoutPresetComboConn = _layoutPresetCombo.signal_changed().connect([this] { handleLayoutPresetChanged(); });
     list->addRow("Default preset", _layoutPresetCombo);
 
     _layoutPage.append(*list);
@@ -265,10 +265,11 @@ namespace ao::gtk
                                              rt::PlaybackService* playback,
                                              Gtk::Window* targetWindow)
   {
-    _modelPtr = std::make_unique<uimodel::PreferencesModel>(std::move(prefs),
-                                                            _callbacks.onPersistPreferences,
-                                                            _callbacks.onApplyTheme,
-                                                            uimodel::PreferencesModel::OutputApplyCallback{});
+    _modelPtr =
+      std::make_unique<uimodel::PreferencesEditorModel>(std::move(prefs),
+                                                        _callbacks.onPersistPreferences,
+                                                        _callbacks.onApplyTheme,
+                                                        uimodel::PreferencesEditorModel::OutputApplyCallback{});
 
     auto const blockTheme = ConnectionBlocker{_themeComboConn};
     auto const blockLayout = ConnectionBlocker{_layoutPresetComboConn};
@@ -320,7 +321,7 @@ namespace ao::gtk
     return _outputDeviceButton.get_popover() != nullptr;
   }
 
-  void PreferencesWindow::onLayoutPresetChanged()
+  void PreferencesWindow::handleLayoutPresetChanged()
   {
     if (!_modelPtr)
     {
@@ -337,7 +338,7 @@ namespace ao::gtk
     _modelPtr->setLayoutPreset(presetId.raw());
   }
 
-  void PreferencesWindow::onThemeChanged()
+  void PreferencesWindow::handleThemeChanged()
   {
     if (!_modelPtr)
     {
@@ -384,17 +385,17 @@ namespace ao::gtk
     refreshOutputSummary(*playback);
 
     auto* const selector =
-      Gtk::make_managed<OutputDeviceSelector>(*playback,
-                                              Gtk::PositionType::BOTTOM,
-                                              [this, playback](rt::OutputDeviceSelection const& selection)
-                                              {
-                                                if (_modelPtr)
-                                                {
-                                                  _modelPtr->setOutputDeviceConfirmed(selection);
-                                                }
+      Gtk::make_managed<OutputDevicePopover>(*playback,
+                                             Gtk::PositionType::BOTTOM,
+                                             [this, playback](rt::OutputDeviceSelection const& selection)
+                                             {
+                                               if (_modelPtr)
+                                               {
+                                                 _modelPtr->setOutputDeviceConfirmed(selection);
+                                               }
 
-                                                refreshOutputSummary(*playback);
-                                              });
+                                               refreshOutputSummary(*playback);
+                                             });
     _outputDeviceButton.set_popover(*selector);
   }
 } // namespace ao::gtk

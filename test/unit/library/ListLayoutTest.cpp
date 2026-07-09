@@ -17,7 +17,7 @@ namespace ao::library::test
 
   TEST_CASE("ListHeader - stores fields at stable offsets", "[library][unit][list]")
   {
-    CHECK(offsetof(ListHeader, trackIdsCount) == 0);
+    CHECK(offsetof(ListHeader, trackIdCount) == 0);
     CHECK(offsetof(ListHeader, nameOffset) == 4);
     CHECK(offsetof(ListHeader, nameLength) == 6);
     CHECK(offsetof(ListHeader, descOffset) == 8);

@@ -4,7 +4,7 @@
 #include "app/ThemeCoordinator.h"
 
 #include "../GtkTestSupport.h"
-#include "app/AppConfig.h"
+#include "app/AppConfigStore.h"
 #include <ao/rt/AppPrefsState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -131,18 +131,18 @@ namespace ao::gtk::test
   TEST_CASE("ThemeCoordinator - loads and saves app prefs", "[gtk][unit][app][theme]")
   {
     auto const tempDir = ao::test::TempDir{};
-    auto config = AppConfig{std::filesystem::path{tempDir.path()} / "config.yaml"};
+    auto configStore = AppConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
 
     auto coordinator = ThemeCoordinator{};
     coordinator.setTheme(rt::ThemePresetId::Modern);
-    coordinator.save(config);
+    coordinator.save(configStore);
 
     auto loaded = rt::AppPrefsState{};
-    config.loadAppPrefs(loaded);
+    configStore.loadAppPrefs(loaded);
     CHECK(loaded.lastThemePreset == "modern");
 
     auto restored = ThemeCoordinator{};
-    restored.load(config);
+    restored.load(configStore);
     CHECK(restored.activeTheme() == rt::ThemePresetId::Modern);
   }
 } // namespace ao::gtk::test
