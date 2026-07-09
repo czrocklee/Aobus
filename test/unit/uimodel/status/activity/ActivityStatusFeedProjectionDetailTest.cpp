@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/uimodel/status/activity/ActivityStatusFeedStateTestSupport.h"
-#include "uimodel/status/activity/ActivityStatusFeedState.h"
+#include "test/unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.h"
+#include "uimodel/status/activity/ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -15,9 +15,10 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ActivityStatusFeedState - projects detail feed items and helpers", "[uimodel][unit][status][activity]")
+  TEST_CASE("ActivityStatusFeedProjection - projects detail feed items and helpers",
+            "[uimodel][unit][status][activity]")
   {
-    auto feedState = ActivityStatusFeedState{};
+    auto feedProjection = ActivityStatusFeedProjection{};
     auto notification = entry(rt::NotificationId{12}, rt::NotificationSeverity::Error, "Write failed", true);
     notification.content.title = "Library Error";
     notification.content.iconName = "dialog-error-symbolic";
@@ -27,11 +28,11 @@ namespace ao::uimodel::test
                              notification,
                              progressEntry(rt::NotificationId{14}, "Importing", 0.25)});
 
-    feedState.initialize(currentFeed);
+    feedProjection.initialize(currentFeed);
 
     SECTION("detail items keep progress first and latest-first ordering")
     {
-      auto const& detail = feedState.viewState().detail;
+      auto const& detail = feedProjection.viewState().detail;
       REQUIRE(detail.items.size() == 3);
       CHECK(detail.hasActiveProgress);
       CHECK(detail.items[0].id == rt::NotificationId{14});
@@ -44,9 +45,9 @@ namespace ao::uimodel::test
 
     SECTION("synthetic library progress is retained as task detail")
     {
-      feedState.handleLibraryTaskProgress("Scanning: album.flac", 0.5);
+      feedProjection.handleLibraryTaskProgress("Scanning: album.flac", 0.5);
 
-      auto const& detail = feedState.viewState().detail;
+      auto const& detail = feedProjection.viewState().detail;
       REQUIRE(detail.optLibraryTask);
       CHECK(detail.optLibraryTask->message == "Scanning: album.flac");
       CHECK(detail.optLibraryTask->progressFraction == 0.5);
@@ -55,7 +56,7 @@ namespace ao::uimodel::test
 
     SECTION("detail items expose title icon sticky severity and actions")
     {
-      auto const& item = feedState.viewState().detail.items[2];
+      auto const& item = feedProjection.viewState().detail.items[2];
 
       CHECK(item.severity == rt::NotificationSeverity::Error);
       CHECK(item.title == "Library Error");
@@ -70,7 +71,7 @@ namespace ao::uimodel::test
 
     SECTION("clearable ids skip sticky and progress notifications")
     {
-      auto const ids = feedState.locallyHideableNotificationIds(currentFeed);
+      auto const ids = feedProjection.locallyHideableNotificationIds(currentFeed);
 
       REQUIRE(ids.size() == 1);
       CHECK(ids[0] == rt::NotificationId{13});
@@ -78,12 +79,12 @@ namespace ao::uimodel::test
 
     SECTION("detail dismiss ignores sticky and progress notifications")
     {
-      feedState.dismissDetailNotificationFromActivity(rt::NotificationId{12}, currentFeed);
-      feedState.dismissDetailNotificationFromActivity(rt::NotificationId{14}, currentFeed);
+      feedProjection.dismissDetailNotificationFromActivity(rt::NotificationId{12}, currentFeed);
+      feedProjection.dismissDetailNotificationFromActivity(rt::NotificationId{14}, currentFeed);
 
-      REQUIRE(feedState.viewState().detail.items.size() == 3);
-      CHECK(feedState.viewState().detail.items[0].id == rt::NotificationId{14});
-      CHECK(feedState.viewState().detail.items[2].id == rt::NotificationId{12});
+      REQUIRE(feedProjection.viewState().detail.items.size() == 3);
+      CHECK(feedProjection.viewState().detail.items[0].id == rt::NotificationId{14});
+      CHECK(feedProjection.viewState().detail.items[2].id == rt::NotificationId{12});
     }
 
     SECTION("rich default info remains detail eligible")
@@ -93,9 +94,9 @@ namespace ao::uimodel::test
       info.content.actions = {rt::NotificationAction{.id = "playlist.open", .label = "Open"}};
 
       auto const infoFeed = feed({info});
-      feedState.initialize(infoFeed);
+      feedProjection.initialize(infoFeed);
 
-      auto const& detail = feedState.viewState().detail;
+      auto const& detail = feedProjection.viewState().detail;
       REQUIRE(detail.items.size() == 1);
       CHECK(detail.items[0].id == rt::NotificationId{22});
       CHECK(detail.items[0].title == "Playlist");
@@ -110,9 +111,9 @@ namespace ao::uimodel::test
       progress.content.optProgress = rt::NotificationProgressState{
         .mode = rt::NotificationProgressMode::Indeterminate, .fraction = 0.0, .label = "Importing"};
 
-      feedState.initialize(feed({progress}));
+      feedProjection.initialize(feed({progress}));
 
-      auto const& detail = feedState.viewState().detail;
+      auto const& detail = feedProjection.viewState().detail;
       REQUIRE(detail.items.size() == 1);
       CHECK(detail.items[0].optProgressMode == rt::NotificationProgressMode::Indeterminate);
       CHECK(detail.hasActiveProgress);

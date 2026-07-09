@@ -64,7 +64,7 @@ namespace ao::gtk
 
   private:
     void buildUi();
-    void collectTagData();
+    void refreshTagState();
     void rebuildChips();
     void insertBeforeTrigger(Gtk::Widget& child);
 

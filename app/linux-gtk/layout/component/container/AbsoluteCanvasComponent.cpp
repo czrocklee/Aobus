@@ -140,7 +140,7 @@ namespace ao::gtk::layout
       void sortChildren()
       {
         std::ranges::stable_sort(_children,
-                                 [](ChildData const& childA, ChildData const& childB)
+                                 [](ChildLayoutState const& childA, ChildLayoutState const& childB)
                                  {
                                    return uimodel::ordersAbsoluteCanvasBefore(
                                      childA.zIndex, childA.insertOrder, childB.zIndex, childB.insertOrder);
@@ -506,7 +506,7 @@ namespace ao::gtk::layout
         _resizeCorner = uimodel::AbsoluteCanvasResizeCorner::None;
       }
 
-      struct ChildData final
+      struct ChildLayoutState final
       {
         std::string id;
         Gtk::Widget* widget;
@@ -522,7 +522,7 @@ namespace ao::gtk::layout
         std::int32_t startReqHeight;
       };
 
-      std::vector<ChildData> _children;
+      std::vector<ChildLayoutState> _children;
       std::string _selectedId;
       std::int32_t _insertCount = 0;
 
@@ -532,7 +532,7 @@ namespace ao::gtk::layout
       uimodel::AbsoluteCanvasResizeCorner _resizeCorner = uimodel::AbsoluteCanvasResizeCorner::None;
       std::function<void(std::string const&, std::int32_t, std::int32_t)> _onMoved;
       Glib::RefPtr<Gtk::GestureDrag> _dragPtr;
-      ChildData* _dragChild = nullptr;
+      ChildLayoutState* _dragChild = nullptr;
     };
 
     class AbsoluteCanvasComponent final : public LayoutComponent

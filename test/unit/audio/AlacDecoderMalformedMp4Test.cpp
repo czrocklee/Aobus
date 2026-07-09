@@ -28,7 +28,7 @@ namespace ao::audio::test
     constexpr std::size_t kAlacCookieChannelCountOffset = 21;
     constexpr std::size_t kAlacCookieSampleRateOffset = 32;
 
-    struct AlacFixtureData final
+    struct AlacFixtureBytes final
     {
       std::vector<std::uint8_t> cookie;
       std::vector<std::uint8_t> firstPacket;
@@ -64,7 +64,7 @@ namespace ao::audio::test
       bytes[offset + 3] = static_cast<std::uint8_t>(value);
     }
 
-    AlacFixtureData loadAlacFixture()
+    AlacFixtureBytes loadAlacFixture()
     {
       auto const path = std::filesystem::path{TAG_TEST_DATA_DIR} / "alac16.m4a";
 

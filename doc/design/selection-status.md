@@ -19,7 +19,7 @@ runtime activity state can be positioned independently by layout presets.
 
 `ActivityStatusViewModel` adapts runtime notifications and active library task
 progress into the shared compact/detail view state. Its private
-`ActivityStatusFeedState` keeps the detail/feed state for unresolved runtime
+`ActivityStatusFeedProjection` projects the detail/feed state for unresolved runtime
 notifications and task progress. The GTK `status.activityStatus` component renders
 the compact inline readout and opens a minimal detail popover only when detail
 content exists and the compact readout is visible. The popover renders active task
@@ -111,6 +111,6 @@ with the existing GTK-side `TrackSelectionController::selectedTracksDuration()`.
 - Widget smoke: `test/unit/linux-gtk/track/SelectionInfoLabelTest.cpp` covers the
   count text; duration correctness is proven at the layers above rather than
   re-proven through the widget.
-- Runtime activity status: `test/unit/uimodel/status/activity/ActivityStatusFeedState*Test.cpp`
+- Runtime activity status: `test/unit/uimodel/status/activity/ActivityStatusFeedProjection*Test.cpp`
   covers progress priority, transient completion, warning/error persistence, and
   compact dismissal semantics.

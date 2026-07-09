@@ -17,6 +17,7 @@ class NameAuditTest(unittest.TestCase):
                 "app/linux-gtk/FooController.h": "class FooController final {};",
                 "app/linux-gtk/layout/component/FooComponent.cpp": "class FooComponent final {};",
                 "test/unit/runtime/FakeService.cpp": "class FakeService final {};",
+                "test/unit/runtime/SpyObserver.cpp": "class SpyObserver final {};",
             }
             for name, source in files.items():
                 path = root / name
@@ -35,6 +36,7 @@ class NameAuditTest(unittest.TestCase):
                 "app/FooHelpers.h": "struct Foo final {};",
                 "lib/audio/BadController.cpp": "class BadController final {};",
                 "include/ao/FakeBackend.h": "class FakeBackend final {};",
+                "include/ao/SpyProbe.h": "class SpyProbe final {};",
             }
             for name, source in files.items():
                 path = root / name
@@ -54,7 +56,8 @@ class NameAuditTest(unittest.TestCase):
                     "generic-file",
                     "file names must use a concrete domain concept, not Utils/Util/Utility/Types",
                 ),
-                ("test-double", "Fake/Mock/Stub types belong in tests"),
+                ("test-double", "Fake/Mock/Spy/Stub types belong in tests"),
+                ("test-double", "Fake/Mock/Spy/Stub types belong in tests"),
                 (
                     "role-location",
                     "Controller types must live under one of: app/linux-gtk/, app/tui/, "

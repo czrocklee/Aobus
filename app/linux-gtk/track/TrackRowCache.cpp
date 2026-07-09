@@ -32,39 +32,39 @@ namespace ao::gtk
   {
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowCache::createRowFromData(rt::TrackRow data) const
+  Glib::RefPtr<TrackRowObject> TrackRowCache::createRowObject(rt::TrackRow row) const
   {
-    auto const rowPtr = TrackRowObject::create(data.id, *this);
+    auto const rowPtr = TrackRowObject::create(row.id, *this);
 
-    rowPtr->populate(toUString(std::move(data.title)),
-                     toUString(std::move(data.artist)),
-                     toUString(std::move(data.album)),
-                     toUString(std::move(data.albumArtist)),
-                     toUString(std::move(data.genre)),
-                     toUString(std::move(data.composer)),
-                     toUString(std::move(data.conductor)),
-                     toUString(std::move(data.ensemble)),
-                     toUString(std::move(data.work)),
-                     toUString(std::move(data.movement)),
-                     toUString(std::move(data.soloist)),
-                     toUString(std::move(data.tags)),
-                     data.duration,
-                     data.year,
-                     data.discNumber,
-                     data.discTotal,
-                     data.trackNumber,
-                     data.trackTotal,
-                     data.movementNumber,
-                     data.movementTotal,
-                     data.coverArtId,
-                     data.sampleRate,
-                     data.channels,
-                     data.bitDepth,
-                     data.codec,
-                     data.bitrate,
-                     data.fileSize,
-                     data.modifiedTime,
-                     data.status);
+    rowPtr->populate(toUString(std::move(row.title)),
+                     toUString(std::move(row.artist)),
+                     toUString(std::move(row.album)),
+                     toUString(std::move(row.albumArtist)),
+                     toUString(std::move(row.genre)),
+                     toUString(std::move(row.composer)),
+                     toUString(std::move(row.conductor)),
+                     toUString(std::move(row.ensemble)),
+                     toUString(std::move(row.work)),
+                     toUString(std::move(row.movement)),
+                     toUString(std::move(row.soloist)),
+                     toUString(std::move(row.tags)),
+                     row.duration,
+                     row.year,
+                     row.discNumber,
+                     row.discTotal,
+                     row.trackNumber,
+                     row.trackTotal,
+                     row.movementNumber,
+                     row.movementTotal,
+                     row.coverArtId,
+                     row.sampleRate,
+                     row.channels,
+                     row.bitDepth,
+                     row.codec,
+                     row.bitrate,
+                     row.fileSize,
+                     row.modifiedTime,
+                     row.status);
 
     return rowPtr;
   }
@@ -77,14 +77,14 @@ namespace ao::gtk
     }
 
     auto scope = _reads.reader();
-    auto optData = scope.trackRow(id);
+    auto optRow = scope.trackRow(id);
 
-    if (!optData)
+    if (!optRow)
     {
       return nullptr;
     }
 
-    auto const rowPtr = createRowFromData(std::move(*optData));
+    auto const rowPtr = createRowObject(std::move(*optRow));
     _rowCache.emplace(id, rowPtr);
     return rowPtr;
   }

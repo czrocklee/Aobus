@@ -29,7 +29,7 @@ GENERIC_SUFFIXES = ("Utils", "Util", "Utility", "Types")
 LEGACY_GENERIC_FILES = frozenset({"test/unit/TestUtils.h"})
 
 RECORD_DEFINITION_RE = re.compile(r"\b(?:class|struct)\s+([A-Z][A-Za-z0-9_]*)\b[^;{}]*\{", re.DOTALL)
-TEST_DOUBLE_RE = re.compile(r"^(?:Fake|Mock|Stub)[A-Z]")
+TEST_DOUBLE_RE = re.compile(r"^(?:Fake|Mock|Spy|Stub)[A-Z]")
 
 
 @dataclass(frozen=True)
@@ -158,7 +158,7 @@ def _audit_records(records: Sequence[Record], root: Path) -> list[Issue]:
         rel = relative.as_posix()
 
         if TEST_DOUBLE_RE.match(record.name) is not None and not rel.startswith("test/"):
-            issues.append(Issue(record.path, record.line, "test-double", "Fake/Mock/Stub types belong in tests"))
+            issues.append(Issue(record.path, record.line, "test-double", "Fake/Mock/Spy/Stub types belong in tests"))
 
         suffix = _role_suffix(record.name)
         if suffix is None:

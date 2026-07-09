@@ -135,11 +135,11 @@ namespace ao::audio
       return path;
     }
 
-    void processInputSources(flow::Node const& node,
-                             std::span<flow::Node const* const> path,
-                             boost::unordered_flat_map<std::string, std::set<std::string>> const& inputSources,
-                             flow::Graph const& graph,
-                             NodeQualityAssessment& targetAssessment)
+    void assessInputSources(flow::Node const& node,
+                            std::span<flow::Node const* const> path,
+                            boost::unordered_flat_map<std::string, std::set<std::string>> const& inputSources,
+                            flow::Graph const& graph,
+                            NodeQualityAssessment& targetAssessment)
     {
       if (inputSources.contains(node.id))
       {
@@ -362,7 +362,7 @@ namespace ao::audio
       };
 
       assessNodeSelfProperties(*node, assessment);
-      processInputSources(*node, path, inputSources, graph, assessment);
+      assessInputSources(*node, path, inputSources, graph, assessment);
 
       if (i > 0)
       {

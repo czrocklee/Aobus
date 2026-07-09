@@ -1105,7 +1105,7 @@ namespace ao::rt
     }
 
     auto& [preparedHot, preparedCold] = *preparedResult;
-    auto createResult = library::createPreparedTrackData(writer, preparedHot, preparedCold);
+    auto createResult = library::createPreparedTrackRecord(writer, preparedHot, preparedCold);
 
     if (!createResult)
     {

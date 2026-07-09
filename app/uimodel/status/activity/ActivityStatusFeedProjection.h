@@ -14,7 +14,7 @@
 
 namespace ao::uimodel
 {
-  class ActivityStatusFeedState final
+  class ActivityStatusFeedProjection final
   {
   public:
     void initialize(rt::NotificationFeedState const& feed);

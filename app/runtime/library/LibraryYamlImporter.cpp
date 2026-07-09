@@ -359,10 +359,10 @@ namespace ao::rt
                                std::string_view uriStr,
                                library::FileManifestStore::Reader const& manifestReader,
                                library::FileManifestBuilder& manifestBuilder) const;
-    Result<TrackId> writeTrackData(library::TrackStore::Writer& trackWriter,
-                                   std::optional<TrackId> const& optExistingTrackId,
-                                   library::TrackBuilder::PreparedHot const& preparedHot,
-                                   library::TrackBuilder::PreparedCold const& preparedCold) const;
+    Result<TrackId> writePreparedTrackRecord(library::TrackStore::Writer& trackWriter,
+                                             std::optional<TrackId> const& optExistingTrackId,
+                                             library::TrackBuilder::PreparedHot const& preparedHot,
+                                             library::TrackBuilder::PreparedCold const& preparedCold) const;
 
     void buildStaticListTracks(library::ListBuilder& builder,
                                ValidatedList const& importedList,
@@ -375,7 +375,7 @@ namespace ao::rt
                               library::ListStore::Writer& listWriter) const;
 
     Result<> overlayMetadata(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
-    Result<> overlayCustomData(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
+    Result<> overlayTagsAndCustomMetadata(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
     Result<> overlayTechnicalProperties(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
 
     Result<> loadFileBaseline(std::string_view uriStr,
@@ -933,7 +933,7 @@ namespace ao::rt
       return std::unexpected{result.error()};
     }
 
-    if (auto result = overlayCustomData(builder, trackNode); !result)
+    if (auto result = overlayTagsAndCustomMetadata(builder, trackNode); !result)
     {
       return std::unexpected{result.error()};
     }
@@ -961,7 +961,7 @@ namespace ao::rt
 
     auto& [preparedHot, preparedCold] = *preparedResult;
 
-    auto targetTrackIdResult = writeTrackData(trackWriter, optExistingTrackId, preparedHot, preparedCold);
+    auto targetTrackIdResult = writePreparedTrackRecord(trackWriter, optExistingTrackId, preparedHot, preparedCold);
 
     if (!targetTrackIdResult)
     {
@@ -1127,7 +1127,7 @@ namespace ao::rt
     return {};
   }
 
-  Result<TrackId> LibraryYamlImporter::Impl::writeTrackData(
+  Result<TrackId> LibraryYamlImporter::Impl::writePreparedTrackRecord(
     library::TrackStore::Writer& trackWriter,
     std::optional<TrackId> const& optExistingTrackId,
     library::TrackBuilder::PreparedHot const& preparedHot,
@@ -1136,7 +1136,7 @@ namespace ao::rt
     if (optExistingTrackId)
     {
       auto const targetTrackId = *optExistingTrackId;
-      auto writeResult = library::updatePreparedTrackData(trackWriter, targetTrackId, preparedHot, preparedCold);
+      auto writeResult = library::updatePreparedTrackRecord(trackWriter, targetTrackId, preparedHot, preparedCold);
 
       if (!writeResult)
       {
@@ -1146,7 +1146,7 @@ namespace ao::rt
       return targetTrackId;
     }
 
-    auto createResult = library::createPreparedTrackData(trackWriter, preparedHot, preparedCold);
+    auto createResult = library::createPreparedTrackRecord(trackWriter, preparedHot, preparedCold);
 
     if (!createResult)
     {
@@ -1349,8 +1349,8 @@ namespace ao::rt
     return {};
   }
 
-  Result<> LibraryYamlImporter::Impl::overlayCustomData(library::TrackBuilder& builder,
-                                                        ryml::ConstNodeRef const& trackNode) const
+  Result<> LibraryYamlImporter::Impl::overlayTagsAndCustomMetadata(library::TrackBuilder& builder,
+                                                                   ryml::ConstNodeRef const& trackNode) const
   {
     if (auto tagsNode = yaml::findChild(trackNode, "tags"); tagsNode.readable())
     {

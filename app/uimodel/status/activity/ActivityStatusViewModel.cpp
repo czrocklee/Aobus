@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "ActivityStatusFeedState.h"
+#include "ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/Subscription.h>
@@ -32,7 +32,7 @@ namespace ao::uimodel
     rt::NotificationService& notifications;
     std::function<void(ActivityStatusViewState const&)> onRender;
     ActivityStatusClock clock;
-    ActivityStatusFeedState feedState;
+    ActivityStatusFeedProjection feedProjection;
     std::optional<std::chrono::steady_clock::time_point> optAutoDismissDeadline{};
 
     rt::Subscription postedSub;
@@ -50,18 +50,18 @@ namespace ao::uimodel
         clock = defaultActivityStatusNow;
       }
 
-      feedState.initialize(notifications.feed());
+      feedProjection.initialize(notifications.feed());
 
       postedSub = notifications.onPosted(
         [this](rt::NotificationId const id)
         {
-          feedState.handleNotificationPosted(notifications.feed(), id);
+          feedProjection.handleNotificationPosted(notifications.feed(), id);
           publish();
         });
       changedSub = notifications.onChanged(
         [this]
         {
-          feedState.handleFeedChanged(notifications.feed());
+          feedProjection.handleFeedChanged(notifications.feed());
           publish();
         });
 
@@ -78,7 +78,7 @@ namespace ao::uimodel
 
       if (options.emitInitialState && onRender)
       {
-        onRender(feedState.viewState());
+        onRender(feedProjection.viewState());
       }
     }
 
@@ -88,13 +88,13 @@ namespace ao::uimodel
 
       if (onRender)
       {
-        onRender(feedState.viewState());
+        onRender(feedProjection.viewState());
       }
     }
 
     void syncAutoDismissDeadline()
     {
-      auto const& compact = feedState.viewState().compact;
+      auto const& compact = feedProjection.viewState().compact;
 
       if (!compact.optAutoDismissTimeout)
       {
@@ -110,31 +110,31 @@ namespace ao::uimodel
     void expireTransient()
     {
       optAutoDismissDeadline.reset();
-      feedState.handleTransientExpired(notifications.feed());
+      feedProjection.handleTransientExpired(notifications.feed());
       publish();
     }
 
     void dismissCompact()
     {
-      feedState.dismissCompact(notifications.feed());
+      feedProjection.dismissCompact(notifications.feed());
       publish();
     }
 
     void dismissDetailNotificationFromActivity(rt::NotificationId const id)
     {
-      feedState.dismissDetailNotificationFromActivity(id, notifications.feed());
+      feedProjection.dismissDetailNotificationFromActivity(id, notifications.feed());
       publish();
     }
 
     void handleLibraryTaskProgress(std::string message, double const fraction)
     {
-      feedState.handleLibraryTaskProgress(std::move(message), fraction);
+      feedProjection.handleLibraryTaskProgress(std::move(message), fraction);
       publish();
     }
 
     void handleLibraryTaskCompleted(std::size_t const count)
     {
-      feedState.handleLibraryTaskCompleted(count, notifications.feed());
+      feedProjection.handleLibraryTaskCompleted(count, notifications.feed());
       publish();
     }
   };
@@ -150,7 +150,7 @@ namespace ao::uimodel
 
   ActivityStatusViewState const& ActivityStatusViewModel::viewState() const noexcept
   {
-    return _implPtr->feedState.viewState();
+    return _implPtr->feedProjection.viewState();
   }
 
   bool ActivityStatusViewModel::hasPendingAutoDismiss() const noexcept

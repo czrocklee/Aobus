@@ -424,7 +424,7 @@ namespace ao::gtk
     _reads = &reads;
     _selectedTrackIds = std::move(selectedTrackIds);
 
-    collectTagData();
+    refreshTagState();
     rebuildChips();
   }
 
@@ -445,7 +445,7 @@ namespace ao::gtk
     child.insert_before(*this, *_addTrigger);
   }
 
-  void TagEditor::collectTagData()
+  void TagEditor::refreshTagState()
   {
     _currentTags.clear();
     _availableTagsByFrequency.clear();

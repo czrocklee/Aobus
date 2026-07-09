@@ -7,6 +7,37 @@ helper/support allocation.
 Test case names and Catch2 tags are covered separately in
 `doc/dev/testing/naming-and-assertions.md`.
 
+## How To Use This Document
+
+Start from what you are naming and read only the matching entry point:
+
+- A class, struct, or file role: the decision order in *Choosing A Role*, then
+  the role table in *Production Roles*.
+- A data-carrying struct: the payload order in *Data Payload Roles*.
+- A function or method: *Accessors And Predicates* for getters and predicates,
+  *General Verb Allocation* for action verbs, then the themed verb sections.
+- A variable, member, or parameter: *Identifier Shapes*, plus *Pointer Names*,
+  *Optional Names*, or *Time And Duration Names* when the type matches.
+- A word choice or abbreviation question: *Semantic Vocabulary* and *Boundary
+  Vocabulary*.
+
+Two meta-rules keep the rules cheap to apply. Both are about synonyms, not
+contracts: they apply only when the competing names are equally specific,
+describe the same contract, and imply the same layer and responsibility. A
+name that misstates any of those is a correctness finding, never churn —
+naming carries architectural meaning in this project, and these meta-rules are
+not an exit from that judgment.
+
+- **Tie-break:** when two allowed names both fit, pick the narrower or more
+  specific one. Only a genuine tie between equally specific, contract-equivalent
+  names is not worth escalating.
+- **No churn:** renaming between such equivalent names within one role or verb
+  family is not an improvement worth a diff.
+
+The body of this document states durable principles. Concrete outcomes of past
+reviews are precedents; they live in *Appendix: Precedents* and are removed
+once the code and the principles make them redundant.
+
 ## Goals
 
 - Prefer names that expose the domain concept, ownership, lifetime, or boundary.
@@ -15,17 +46,60 @@ Test case names and Catch2 tags are covered separately in
 - Keep external or compatibility vocabulary at the boundary and translate it
   before it becomes project-owned API.
 
+## Enforcement
+
+Naming rules run at three levels. Anything not listed under a mechanical check
+is review judgment; keep mechanical checks free of semantic inference (see
+*Review Practice*).
+
+`./ao name-audit`, run as part of `./ao hygiene`, enforces the mechanical file
+and class rules:
+
+- Banned catch-all file name suffixes: `Utils`, `Util`, `Utility`, `Types`.
+- Singular `*Helper` file names are banned; `*Helpers` files must live in
+  test, tool, or detail implementation areas.
+- Layer placement for role suffixes: `ViewModel`, `Service`, `Component`,
+  `Dialog`, `Widget`, `Panel`, `Controller`, `Coordinator`, `Host`, `Bridge`.
+- `Fake*`, `Mock*`, `Spy*`, and `Stub*` types must live under `test/`.
+
+Project clang-tidy checks, run by `./ao tidy` and on changed files by
+`./ao hygiene`, enforce identifier-level rules:
+
+- `IdentifierNamingExtensionsCheck`: `_camelCase` class members and plain
+  `camelCase` struct members (see *Identifier Shapes*).
+- `PointerNamingConventionCheck`: the `Ptr` suffix rules (see *Pointer Names*).
+- `OptionalNamingAndUsageCheck`: the `opt` prefix rules (see *Optional
+  Names*).
+- `ChronoNamingConventionCheck`: time noun rules for `std::chrono` types (see
+  *Time And Duration Names*).
+
+Everything else — role semantics, verb allocation, vocabulary — is enforced in
+review only.
+
 ## Identifier Shapes
 
 - Types, classes, structs, enum classes, and scoped enum values use
   `PascalCase`: `TrackStore`, `Metadata`, `Code::IoError`.
 - Functions and variables use `camelCase`: `loadMetadata()`, `trackCount`.
 - Non-static class data members use `_camelCase`: `_handle`, `_tracks`.
-- Struct data members use plain `camelCase`: `trackId`, `year`.
-- Constants use `kCamelCase`: `kMaxSize`, `kDefaultFlags`.
-- Unscoped constants use `kCamelCase`.
+- Struct data members use plain `camelCase`: `trackId`, `year`. This split
+  makes the class-vs-struct choice API-visible: promoting a struct to a class
+  renames its members. Keep structs strictly passive aggregates so that
+  promotion stays rare.
+- Constants use `kCamelCase`, whether class-scoped or unscoped: `kMaxSize`,
+  `kDefaultFlags`.
 - Use normal project acronym casing inside `PascalCase` names: `Id`, not `ID`;
   `Metadata`, not ambiguous `Meta`, unless matching a real external boundary.
+- Concepts use `PascalCase` and are named as the capability or constraint they
+  test: `Arithmetic`, `EnumType`, `HasRawMethod`, `PfrAggregate`. Do not add a
+  `*Concept` suffix or a `C` prefix.
+- Template parameters use `T` for a single unconstrained type, and a
+  `PascalCase` role name when the parameter has a contract: `Setter`,
+  `Scanner`, `PrimarySetter`.
+- Namespaces are short lowercase words. Project code lives under `ao::` with
+  established segments such as `rt`, `uimodel`, `library`, `async`, `audio`,
+  and `query`; `detail` scopes internals. Public `uimodel` namespace policy is
+  in *Uimodel Scope*.
 
 ## Type And Contract Names
 
@@ -57,31 +131,30 @@ Use a real stateful type when there is state, identity, lifecycle, or
 invariants; use domain-prefixed free functions for pure formatting, resolving,
 conversion, or factory helpers.
 
-### Model Names
+### Choosing A Role
 
-`Model` is the broadest stateful role name and should be rare. Use it only when
-the public contract owns in-memory state, exposes behavior over that state, and
-no narrower role below describes the contract.
+Work down this order and stop at the first match. The *Production Roles* table
+is the canonical contract for each role; the sections after it add only layer
+placement and nuance.
 
-- `*ViewModel` is toolkit-neutral UI-facing state plus user commands,
-  presentation decisions, or render callbacks. It belongs in `uimodel`, not in
-  GTK code, services, stores, or durable persistence boundaries.
-- `*InteractionModel` is toolkit-neutral transient input or gesture state, such
-  as drag, seek, resize, or selection interaction. It should not own runtime
-  service subscriptions or durable application state.
-- `*EditorModel` and `*FormModel` are stateful draft/editing contracts with
-  field state, validation, option selection, and collect/build methods for the
-  resulting domain change.
-- `*SessionModel` is active in-memory application session state that can be
-  loaded, reset, applied, promoted, or snapshotted. If the type owns an external
-  resource conversation rather than only application state, use `*Session`.
-- A framework adapter may use `*Model` when the external API itself uses model
-  vocabulary, such as a GTK `Gio::ListModel` implementation. Keep that
-  vocabulary at the adapter boundary.
-- Bare `*Model` is a fallback for behavior-bearing domain state such as a
-  keymap. Do not use it for passive snapshots, derived read models, static
-  policy functions, formatter/resolver groups, schema records, or umbrella
-  headers.
+1. Test double or test scaffolding: use *Test And Support Roles*.
+2. GTK or TUI surface: use *UI Roles* or *TUI Roles*.
+3. Owns a live resource conversation, subscriptions, side effects, or a
+   runtime workflow boundary: `*Service` or `*Session`.
+4. Owns source-of-truth state or persistence access: `*Store`.
+5. Derived read state over runtime/library state: `*Projection`; ordered
+   membership or stream supply: `*Source`.
+6. Retained, invalidatable derived lookup: `*Cache`.
+7. Mostly data: pick by origin and validity using the payload order in *Data
+   Payload Roles*.
+8. A step in a prepare/execute pipeline: `*Plan`, `*Compiler`, `*Evaluator`,
+   `*Builder`, `*Factory`, `*Operation`.
+9. Reshapes or crosses an interface boundary: `*Adapter`, `*Bridge`,
+   `*Provider`, `*Reader`/`*Writer`, `*Importer`/`*Exporter`, `*Parser`,
+   `*Formatter`, `*Resolver`.
+10. Behavior-bearing in-memory domain state with no narrower fit: the model
+    roles, then bare `*Model` as the last resort (see *Model Roles*).
+11. None of the above: prefer a plain domain noun over forcing a role suffix.
 
 ### Production Roles
 
@@ -134,38 +207,40 @@ no narrower role below describes the contract.
 | `*Info` | Observed facts from a runtime, decoder, parser, or external source. | Static declared capabilities, which should usually be `Descriptor`. |
 | `*Metadata` | User music metadata or real format/protocol metadata. | Generic descriptive fields for project-owned capabilities. |
 
+### Model Roles
+
+`Model` is the broadest stateful role name and should be rare. Use a model
+role only when the public contract owns in-memory state, exposes behavior over
+that state, and no non-model role in *Choosing A Role* fits first. The table
+above defines each model role; the rules here are placement and nuance only.
+
+- `*ViewModel` belongs in `uimodel`, not in GTK code, services, stores, or
+  durable persistence boundaries.
+- `*SessionModel` is application session state. If the type owns an external
+  resource conversation rather than only application state, use `*Session`.
+- A framework adapter may use `*Model` when the external API itself uses model
+  vocabulary, such as a GTK `Gio::ListModel` implementation. Keep that
+  vocabulary at the adapter boundary.
+- Bare `*Model` is a fallback for behavior-bearing domain state such as a
+  keymap.
+
 ### Runtime And Core Roles
 
 Runtime and core library code should not introduce `*Model` just because a type
-owns state. Use the runtime role that describes the boundary instead.
+owns state; the decision order in *Choosing A Role* names the boundary
+instead. Placement and nuance:
 
-- For state-owning types, prefer this decision order: live resource or workflow
-  boundary uses `Service` or `Session`; authoritative persistence uses `Store`;
-  derived read state uses `Projection` or `Source`; retained derived lookup uses
-  `Cache`; passive values use `State`.
-- `*Service` owns runtime behavior: commands, side effects, subscriptions,
-  async callbacks, lifecycle, and cross-store coordination.
-- `*Store` owns source-of-truth or persistence access. Nested `Reader` and
-  `Writer` types are appropriate for transaction-scoped store access.
-- `*Projection` is a derived read model over runtime or library state. It can
-  publish deltas, but it must not become the mutable source of truth.
-- `*Source` supplies ordered membership or stream data to projections or
-  pipelines. A source can notify observers, but it is not a service boundary.
-- `*Cache` retains non-authoritative derived data or runtime objects for reuse
-  and invalidates them when their source changes. It must not become the source
+- `*Store` may nest `Reader` and `Writer` types for transaction-scoped store
+  access.
+- `*Projection` can publish deltas, but it must not become the mutable source
   of truth.
-- `*State` and `*SessionState` are passive snapshots, persisted records, or
-  restore payloads. They should not own subscriptions, callbacks, or resources.
-- `*Session` owns a bounded live resource/activity lifetime. `*SessionModel`
-  remains an application-state model, not an external resource session.
+- `*Source` can notify observers, but it is not a service boundary.
 - `*Plan`, `*Compiler`, and `*Evaluator` split query/scan pipelines: compile or
   prepare a plan, then evaluate or apply it. Do not call a compiled plan a
   model.
 - `*Operation` is appropriate when applying prepared work needs a bounded
   execution object for progress, cancellation, transactions, or scoped
   resources. Prefer a free function when the work is pure or stateless.
-- `*Provider` supplies a backend family or capability and creates concrete
-  implementations. It is not a generic accessor.
 - `*View` is allowed in core storage for non-owning typed views, and in runtime
   workspace APIs where a user-visible workspace view is the domain object.
   GTK surfaces still use `Widget`, `Panel`, `Page`, `Dialog`, or `Window`.
@@ -173,35 +248,32 @@ owns state. Use the runtime role that describes the boundary instead.
 ### Data Payload Roles
 
 Payload suffixes describe where the data comes from and how long it is valid.
-Do not choose them by convenience or by field count.
+Do not choose them by convenience or by field count. Decide in this order
+before debating details:
 
-- `*State` is current observable state owned elsewhere. It may be mutable as a
-  value object, but it should not own subscriptions, callbacks, threads, or
-  resources.
+1. Static declared data is `*Descriptor`.
+2. Observed runtime or parsed data is `*Info`.
+3. User music or real protocol/file facts are `*Metadata`.
+4. Current observable values are `*State`.
+5. Point-in-time copies are `*Snapshot`.
+6. Construction inputs split by necessity: required is `*Config`, optional
+   knobs are `*Options`, a requested target shape is `*Spec`.
+7. Operation-boundary data splits by phase: input `*Request`, synchronous
+   response `*Reply`, completed summary `*Result`, in-flight update
+   `*Progress`, recoverable failure `*Failure`, queued/emitted payload
+   `*Event`.
+8. Persisted rows, log entries, external records, or registry entries with
+   record identity are `*Record`.
+
+Nuance beyond the table:
+
+- `*State` may be mutable as a value object, but it should not own
+  subscriptions, callbacks, threads, or resources.
 - `*SessionState` is a persisted or restorable session payload. Keep it stable
   enough for config/schema handling and separate from live `*Session` objects.
-- `*Snapshot` is a point-in-time copy from a live source. It is not a source of
-  truth and should not imply persistence.
-- `*Config` supplies required construction/initialization data. `*Options`
-  supplies optional behavior knobs. `*Spec` describes a requested target shape.
-- `*Descriptor` is static declared metadata for capabilities, actions,
-  properties, components, or registrations.
-- `*Info` is observed information returned by a runtime, decoder, parser, or
-  external source. Prefer `Descriptor` for static declared capabilities.
-- `*Metadata` is reserved for user music metadata and real file/protocol
-  metadata. Do not use it as a generic synonym for description.
-- `*Request`, `*Reply`, `*Result`, `*Progress`, and `*Failure` name data that
-  crosses an operation boundary. Use the narrowest one that matches the phase:
-  input, synchronous response, completed summary, in-flight update, or
-  recoverable failure.
-- `*Record` is for persisted rows, log entries, external records, or internal
-  registry entries with record identity. Avoid it for arbitrary data bundles.
+- `*Snapshot` is not a source of truth and should not imply persistence.
 - Avoid project-owned `*Data` unless the external format or API itself uses
   that term. Prefer a domain noun plus one of the roles above.
-- When reviewing payload names, use this ordering before debating details:
-  static declared data is `Descriptor`; observed runtime or parsed data is
-  `Info`; user music or real protocol/file facts are `Metadata`; current
-  observable values are `State`; point-in-time copies are `Snapshot`.
 
 ### UI Roles
 
@@ -253,14 +325,9 @@ Do not choose them by convenience or by field count.
   It should not also build navigation entries or track rows.
 - `*Section` names grouped track-table display data. Use a domain prefix such
   as `TrackSection`; do not hide section data in a broad presentation module.
-- `*RowHitRegion` names rendered terminal row hit-test geometry. Avoid `*Box`
-  when the type is not a layout box with size and positioning behavior.
-- Do not add TUI umbrella files such as `TuiPresentation` that mix navigation,
-  track rows, detail lines, selection movement, playback labels, and style
-  mapping. Split by the concrete concept: `LibraryNavigation`,
-  `TrackListEntry`, `TrackDetailLines`, `TrackPresentationNavigation`,
-  `PlaybackStatusFormatter`, `QualityIndicatorStyle`, and
-  `SelectionNavigation`.
+- Do not add TUI umbrella presentation files that mix navigation, track rows,
+  detail lines, selection movement, playback labels, and style mapping. Split
+  by the concrete concept (see *Appendix: Precedents* for the recorded split).
 
 ### Test And Support Roles
 
@@ -304,16 +371,9 @@ Do not choose them by convenience or by field count.
   clang-tidy check ids, file formats, protocols, or user-visible compatibility
   surfaces.
 
-### Enforcement
-
-Mechanical class/file naming checks live in `./ao name-audit` and run from
-`./ao hygiene`. The audit intentionally enforces only rules that are stable
-without semantic inference: banned catch-all file names, layer placement for
-role suffixes such as `ViewModel`, `Service`, `Component`, `Dialog`, `Widget`,
-`Panel`, `Controller`, `Coordinator`, `Host`, and `Bridge`, and keeping
-`Fake*`, `Mock*`, `Spy*`, and `Stub*` types in tests.
-
 ## Pointer Names
+
+Enforced by `PointerNamingConventionCheck` (see *Enforcement*).
 
 - Managed pointers (`std::shared_ptr`, `std::unique_ptr`, `std::weak_ptr`,
   `Glib::RefPtr`) must end with the `Ptr` suffix: `trackPtr`.
@@ -328,6 +388,8 @@ role suffixes such as `ViewModel`, `Service`, `Component`, `Dialog`, `Widget`,
 
 ## Optional Names
 
+Enforced by `OptionalNamingAndUsageCheck` (see *Enforcement*).
+
 - `std::optional` variables, fields, and parameters must use an `opt` prefix:
   `optUri`, `optView`.
 - Optional-returning functions should describe the domain rule, not the return
@@ -335,6 +397,31 @@ role suffixes such as `ViewModel`, `Service`, `Component`, `Dialog`, `Widget`,
   names like `optionalString()`.
 - Optional existence-check syntax is covered in `doc/dev/coding-style.md`
   because it is a C++ usage rule.
+
+## Time And Duration Names
+
+`std::chrono` types carry their unit and clock in the type, so names describe
+the time concept, never the unit or the container. Enforced by
+`ChronoNamingConventionCheck` (see *Enforcement*).
+
+- `std::chrono::duration` variables, fields, parameters, and returning
+  functions end with an approved duration noun: `duration`, `interval`,
+  `timeout`, `delay`, `period`, `time`, `offset`, `position`, `threshold`,
+  `elapsed`, `length`, `latency`, `remaining`, `budget`, `span`, `age`, or
+  `delta`.
+- `std::chrono::time_point` names end with an approved instant noun: `time`,
+  `timestamp`, `instant`, `deadline`, `point`, `epoch`, `mark`, `start`,
+  `end`, `expiry`, `origin`, or `now`. Local instant samples may use the
+  conventional short forms `tp` and ordered `t0`, `t1`, ... when measuring an
+  elapsed span between successive instants.
+- Do not stack two time nouns: `elapsed`, not `elapsedDuration`; `now`, not
+  `nowTime`; `timeout`, not `timeoutDuration`. Positional and descriptive
+  compounds such as `startTime` or `bufferedDuration` remain idiomatic.
+- Do not append unit tags such as `Ms` to chrono-typed names; the type carries
+  the unit.
+- Conversion and factory functions (`from*`, `to*`, `as*`, `make*`, `parse*`,
+  `convert*`) are named after their input or intent and are exempt from the
+  return-noun rule.
 
 ## Function And Method Names
 
@@ -381,7 +468,9 @@ role suffixes such as `ViewModel`, `Service`, `Component`, `Dialog`, `Widget`,
 
 ### General Verb Allocation
 
-Use the narrowest verb that describes the observable contract.
+Use the narrowest verb that describes the observable contract. The meta-rules
+in *How To Use This Document* apply here most often: when two verbs in one
+family both fit, pick the narrower one and stop.
 
 | Verb family | Use |
 | --- | --- |
@@ -636,6 +725,7 @@ Allowed project short forms are limited to stable, obvious vocabulary:
 - storage-handle `db`
 - temp-file `temp`
 - coordinate record fields `x` and `y`
+- chrono instant samples `tp` and `t0`..`tN` (see *Time And Duration Names*)
 
 Use `cancelled` for Aobus domain state, user-facing domain text, and async
 control-flow names. Use `canceled` only when matching external API, framework,
@@ -662,7 +752,35 @@ Examples:
 
 - Prefer renaming unclear project-owned names in code over documenting narrow
   exceptions.
+- Apply the tie-break and no-churn meta-rules from *How To Use This Document*:
+  synonym swaps within a family are not review findings; a name that misstates
+  the contract, layer, or responsibility always is.
 - Document a boundary principle once when a repeated external vocabulary could
   confuse future reviewers.
 - Keep mechanical naming checks in `./ao name-audit`; leave semantic role
   judgments to review unless they can be enforced without exception churn.
+- When a review outcome is too specific to be a principle, record it in
+  *Appendix: Precedents* instead of adding a body rule, and remove it once the
+  code makes it redundant.
+
+## Appendix: Precedents
+
+This appendix is deliberately small. It records the few concrete decisions
+that are prone to regressing; it is not review history. Every entry must name
+the body principle it applies and a removal condition, and is deleted when
+that condition holds. A candidate entry that cannot name both does not belong
+here — fix the code or add a principle instead.
+
+- Do not reintroduce a `TuiPresentation`-style umbrella file. The TUI
+  presentation module is split by concrete concept into `LibraryNavigation`,
+  `TrackListEntry`, `TrackDetailLines`, `TrackPresentationNavigation`,
+  `PlaybackStatusFormatter`, `QualityIndicatorStyle`, and
+  `SelectionNavigation`.
+  Principle: the umbrella-file ban in *TUI Roles* and *File Names*.
+  Remove when: that file set no longer matches the TUI presentation layer, or
+  the ban is enforced mechanically.
+- `*RowHitRegion`, not `*Box`, names rendered terminal row hit-test geometry;
+  the type is not a layout box with size and positioning behavior.
+  Principle: name the contract, not the storage or visual shape (*Type And
+  Contract Names*).
+  Remove when: the type is gone or a body rule covers hit-test geometry names.

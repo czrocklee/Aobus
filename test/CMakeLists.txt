@@ -218,10 +218,10 @@ add_executable(ao_core_test
     unit/uimodel/playback/seek/SeekViewModelTest.cpp
     unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp
     unit/uimodel/playback/transport/TransportViewModelTest.cpp
-    unit/uimodel/status/activity/ActivityStatusFeedStateCompactTest.cpp
-    unit/uimodel/status/activity/ActivityStatusFeedStateDetailTest.cpp
-    unit/uimodel/status/activity/ActivityStatusFeedStateNotificationTest.cpp
-    unit/uimodel/status/activity/ActivityStatusFeedStatePresentationTest.cpp
+    unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp
+    unit/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp
+    unit/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp
+    unit/uimodel/status/activity/ActivityStatusFeedProjectionPresentationTest.cpp
     unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp
 
     # app unit tests (no platform deps)

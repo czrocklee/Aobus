@@ -33,7 +33,7 @@ namespace ao::gtk
 {
   namespace
   {
-    struct CellBindData final
+    struct CellBindingState final
     {
       // Both connections are established once at setup and held for the cell's
       // lifetime; the scoped_connections auto-disconnect when this struct (owned
@@ -353,18 +353,19 @@ namespace ao::gtk
         }
 
         // Allocate connection storage once per listItemPtr lifetime, reused across bind/unbind
-        auto* const bindData = new CellBindData{};
-        listItemPtr->set_data(
-          Glib::Quark{"bind-data"}, bindData, [](void* data) { delete static_cast<CellBindData*>(data); });
+        auto* const bindingState = new CellBindingState{};
+        listItemPtr->set_data(Glib::Quark{"cell-binding-state"},
+                              bindingState,
+                              [](void* rawBindingState) { delete static_cast<CellBindingState*>(rawBindingState); });
 
         // Wire the inline-edit commit once, for the cell's lifetime. The slot
         // resolves the currently-bound row lazily from listItemPtr->get_item() (the
         // entry only commits while the cell it lives in is bound), so a recycled
         // cell needs no reconnect. The raw ListItem is safe to capture: the
-        // connection is owned by bindData, owned by the ListItem.
+        // connection is owned by bindingState, owned by the ListItem.
         if (editEntry != nullptr)
         {
-          bindData->commitConnection = editEntry->signal_activate().connect(
+          bindingState->commitConnection = editEntry->signal_activate().connect(
             [item = listItemPtr.get(), editEntry, editStack, editLabel, field, commitFn]
             {
               auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(item->get_item());
@@ -383,10 +384,10 @@ namespace ao::gtk
         }
 
         // Subscribe once, for the cell's lifetime, to the now-playing signal. The
-        // handler captures the raw ListItem (the connection is owned by bindData,
+        // handler captures the raw ListItem (the connection is owned by bindingState,
         // owned by the ListItem, so it can never outlive it) to avoid a refcount
         // cycle.
-        bindData->playingChangedConnection =
+        bindingState->playingChangedConnection =
           playingModelRaw->signalPlayingChanged().connect([item = listItemPtr.get(), field, playingModelRaw]
                                                           { restylePlayingFromModel(*item, field, *playingModelRaw); });
       });

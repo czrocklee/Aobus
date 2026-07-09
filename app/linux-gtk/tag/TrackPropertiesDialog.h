@@ -71,7 +71,7 @@ namespace ao::gtk
     void buildUi();
     void buildMetadataTab();
     void buildPropertiesTab();
-    void loadData();
+    void loadSelectedTrackFields();
     void loadFirstTrack(rt::LibraryReader const& scope, TrackId trackId);
     void loadSubsequentTrack(rt::LibraryReader const& scope, TrackId trackId);
     void handleSaveClicked();

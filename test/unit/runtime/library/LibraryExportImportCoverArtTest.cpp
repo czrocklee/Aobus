@@ -51,7 +51,7 @@ namespace ao::rt::test
                                                       TrackBuilder::PreparedHot const& preparedHot,
                                                       TrackBuilder::PreparedCold const& preparedCold)
     {
-      auto result = createPreparedTrackData(writer, preparedHot, preparedCold);
+      auto result = createPreparedTrackRecord(writer, preparedHot, preparedCold);
       REQUIRE(result);
       return *result;
     }

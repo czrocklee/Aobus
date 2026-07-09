@@ -132,7 +132,7 @@ namespace ao::audio::backend::detail
       }
     }
 
-    void processChoiceIntValues(::spa_pod_choice const* choice, std::vector<std::uint32_t>& output)
+    void collectChoiceIntValues(::spa_pod_choice const* choice, std::vector<std::uint32_t>& output)
     {
       auto const nVals = SPA_POD_CHOICE_N_VALUES(choice);
 
@@ -189,7 +189,7 @@ namespace ao::audio::backend::detail
       {
         auto const podSpan = utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
         auto const* choice = utility::layout::view<::spa_pod_choice>(podSpan);
-        processChoiceIntValues(choice, output);
+        collectChoiceIntValues(choice, output);
       }
     }
 

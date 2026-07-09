@@ -52,10 +52,10 @@ Keep GTK out of these tests. If a behavior can be expressed as
 Good shape:
 
 ```cpp
-auto feedState = ActivityStatusFeedState{};
-feedState.onNotificationPosted(feed({warning}), warning.id);
+auto feedProjection = ActivityStatusFeedProjection{};
+feedProjection.handleNotificationPosted(feed({warning}), warning.id);
 
-auto const& compact = feedState.viewState().compact;
+auto const& compact = feedProjection.viewState().compact;
 CHECK(compact.kind == ActivityStatusKind::Warning);
 CHECK(compact.text == "Partial import");
 ```

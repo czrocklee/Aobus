@@ -529,7 +529,7 @@ namespace ao::rt
                                        library::TrackBuilder::PreparedHot const& hot,
                                        library::TrackBuilder::PreparedCold const& cold)
   {
-    auto hotResult = library::updatePreparedHotTrackData(trackWriter, trackId, hot);
+    auto hotResult = library::updatePreparedHotTrackRecord(trackWriter, trackId, hot);
 
     if (!hotResult)
     {
@@ -537,7 +537,7 @@ namespace ao::rt
       return false;
     }
 
-    auto coldResult = library::updatePreparedColdTrackData(trackWriter, trackId, cold);
+    auto coldResult = library::updatePreparedColdTrackRecord(trackWriter, trackId, cold);
 
     if (!coldResult)
     {
@@ -553,7 +553,7 @@ namespace ao::rt
                                                          library::TrackBuilder::PreparedHot const& hot,
                                                          library::TrackBuilder::PreparedCold const& cold)
   {
-    auto createResult = library::createPreparedTrackData(trackWriter, hot, cold);
+    auto createResult = library::createPreparedTrackRecord(trackWriter, hot, cold);
 
     if (!createResult)
     {

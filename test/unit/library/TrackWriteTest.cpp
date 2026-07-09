@@ -27,7 +27,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("createPreparedTrackData writes prepared hot and cold track data", "[library][unit][track]")
+  TEST_CASE("createPreparedTrackRecord writes prepared hot and cold track records", "[library][unit][track]")
   {
     auto context = TrackSerializationContext{};
     auto builder = TrackBuilder::makeEmpty();
@@ -40,7 +40,7 @@ namespace ao::library::test
     auto transaction = beginWriteTransaction(fixture.env);
     auto writer = fixture.store.writer(transaction);
 
-    auto createResult = createPreparedTrackData(writer, preparedHot, preparedCold);
+    auto createResult = createPreparedTrackRecord(writer, preparedHot, preparedCold);
     REQUIRE(createResult);
 
     auto const& [trackId, view] = *createResult;
@@ -49,7 +49,7 @@ namespace ao::library::test
     CHECK(view.property().uri() == "/tmp/created.flac");
   }
 
-  TEST_CASE("updatePreparedTrackData replaces existing hot and cold track data", "[library][unit][track]")
+  TEST_CASE("updatePreparedTrackRecord replaces existing hot and cold track records", "[library][unit][track]")
   {
     auto context = TrackSerializationContext{};
     auto originalBuilder = TrackBuilder::makeEmpty();
@@ -65,11 +65,11 @@ namespace ao::library::test
     auto fixture = TrackStoreFixture{};
     auto transaction = beginWriteTransaction(fixture.env);
     auto writer = fixture.store.writer(transaction);
-    auto createResult = createPreparedTrackData(writer, originalHot, originalCold);
+    auto createResult = createPreparedTrackRecord(writer, originalHot, originalCold);
     REQUIRE(createResult);
 
     auto const trackId = createResult->first;
-    auto updateResult = updatePreparedTrackData(writer, trackId, updatedHot, updatedCold);
+    auto updateResult = updatePreparedTrackRecord(writer, trackId, updatedHot, updatedCold);
     REQUIRE(updateResult);
 
     auto optView = writer.get(trackId, TrackStore::Reader::LoadMode::Both);
@@ -102,7 +102,7 @@ namespace ao::library::test
       auto transaction = beginWriteTransaction(fixture.env);
       auto writer = fixture.store.writer(transaction);
 
-      auto createResult = createPreparedTrackData(writer, preparedHot, preparedCold);
+      auto createResult = createPreparedTrackRecord(writer, preparedHot, preparedCold);
       REQUIRE(createResult);
 
       auto const& [trackId, view] = *createResult;

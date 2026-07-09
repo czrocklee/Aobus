@@ -82,7 +82,7 @@ namespace ao::gtk
     set_default_size(-1, -1);
 
     buildUi();
-    loadData();
+    loadSelectedTrackFields();
 
     signal_response().connect([this](std::int32_t) { close(); });
   }
@@ -211,7 +211,7 @@ namespace ao::gtk
     return label;
   }
 
-  void TrackPropertiesDialog::loadData()
+  void TrackPropertiesDialog::loadSelectedTrackFields()
   {
     if (_trackIds.empty())
     {

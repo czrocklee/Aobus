@@ -22,13 +22,13 @@ namespace ao::uimodel
                                                   std::string const& description,
                                                   std::string const& expression)
   {
-    auto draftData = rt::LibraryWriter::ListDraft{};
-    draftData.kind = rt::LibraryWriter::ListKind::Smart;
-    draftData.parentId = parentListId;
-    draftData.listId = editListId;
-    draftData.name = name;
-    draftData.description = description;
-    draftData.expression = expression;
-    return draftData;
+    auto draft = rt::LibraryWriter::ListDraft{};
+    draft.kind = rt::LibraryWriter::ListKind::Smart;
+    draft.parentId = parentListId;
+    draft.listId = editListId;
+    draft.name = name;
+    draft.description = description;
+    draft.expression = expression;
+    return draft;
   }
 } // namespace ao::uimodel
