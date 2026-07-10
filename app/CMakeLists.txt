@@ -13,6 +13,7 @@ add_library(ao_app_runtime STATIC
     runtime/source/AllTracksSource.cpp
     runtime/ConfigStore.cpp
     runtime/PlaybackService.cpp
+    runtime/PlaybackQueueService.cpp
     runtime/library/LibraryWriter.cpp
     runtime/library/AudioIdentityIndexer.cpp
     runtime/library/LibraryScan.cpp
@@ -91,7 +92,6 @@ add_library(ao_app_uimodel STATIC
     uimodel/playback/output/OutputDeviceViewModel.cpp
     uimodel/playback/output/VolumeViewModel.cpp
     uimodel/playback/quality/AudioQualityFormatter.cpp
-    uimodel/playback/queue/PlaybackQueueSession.cpp
     uimodel/playback/seek/PlaybackPositionInterpolator.cpp
     uimodel/playback/seek/PlaybackTimeViewModel.cpp
     uimodel/playback/seek/SeekSliderInteractionModel.cpp

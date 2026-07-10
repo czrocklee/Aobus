@@ -14,14 +14,13 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppPrefsState.h>
-#include <ao/rt/PlaybackSessionState.h>
+#include <ao/rt/PlaybackQueueService.h>
 #include <ao/uimodel/layout/action/LayoutActionActivation.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/applicationwindow.h>
@@ -109,13 +108,12 @@ namespace ao::gtk::test
     auto const storePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
     auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state");
     auto themeController = ThemeCoordinator{};
-    auto queueSession = uimodel::PlaybackQueueSession{runtime.playback(), runtime.notifications()};
     auto commandSurface = uimodel::PlaybackCommandSurface{
-      runtime.playback(), &queueSession, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+      runtime.playback(), runtime.playbackQueue(), [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
     auto controller =
       ShellLayoutController{runtime, window, configStorePtr, storePtr, componentStateStorePtr, themeController};
     controller.bindServices(
-      GtkUiServices{.playbackQueueSession = &queueSession, .playbackCommandSurface = &commandSurface});
+      GtkUiServices{.playbackQueue = &runtime.playbackQueue(), .playbackCommandSurface = &commandSurface});
 
     SECTION("attachToWindow sets child")
     {
@@ -226,11 +224,13 @@ namespace ao::gtk::test
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       auto const trackId = library::test::addTrack(
         runtime.musicLibrary(), library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
-      REQUIRE(runtime.playback().restoreSession(rt::PlaybackSessionState{
-        .sourceListId = ListId{5},
-        .trackId = trackId,
-        .positionMs = 50,
-      }));
+      REQUIRE(runtime.playbackQueue().playQueue({trackId}, trackId, ListId{5}));
+      runtime.playback().seek(std::chrono::milliseconds{50});
+      REQUIRE(runtime.savePlaybackSession());
+      runtime.playback().stop();
+      auto const restored = runtime.restorePlaybackSession();
+      REQUIRE(restored);
+      REQUIRE(restored->restored);
       controller.attachToWindow();
       controller.refreshExportedActions();
 

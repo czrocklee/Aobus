@@ -12,7 +12,6 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/stack.h>
@@ -40,9 +39,7 @@ namespace ao::gtk::test
     auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
 
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
-    auto queueSession = uimodel::PlaybackQueueSession{runtime.playback(), runtime.notifications()};
-
-    auto host = TrackPageHost{stack, runtime, &queueSession, tagEditController, listNavigation, layoutStore};
+    auto host = TrackPageHost{stack, runtime, tagEditController, listNavigation, layoutStore};
 
     SECTION("initial state")
     {

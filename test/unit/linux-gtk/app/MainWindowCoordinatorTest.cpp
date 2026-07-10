@@ -10,6 +10,7 @@
 #include "portal/ImportExportCoordinator.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
@@ -20,20 +21,19 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
-#include <ao/rt/PlaybackSessionState.h>
+#include <ao/rt/PlaybackQueueService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
-#include <cstdint>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -51,24 +51,6 @@ namespace ao::gtk::test
     {
       library::test::updateTrackSpec(
         runtime.musicLibrary(), trackId, [&](library::test::TrackSpec& spec) { spec.title = std::string{title}; });
-    }
-
-    rt::PlaybackSessionState loadPlaybackSession(rt::AppRuntime& runtime)
-    {
-      auto session = rt::PlaybackSessionState{};
-      REQUIRE(runtime.configStore().load(rt::kPlaybackSessionConfigGroup, session));
-      return session;
-    }
-
-    void overwritePlaybackSession(rt::AppRuntime& runtime, TrackId trackId, std::uint64_t positionMs)
-    {
-      runtime.configStore().save(rt::kPlaybackSessionConfigGroup,
-                                 rt::PlaybackSessionState{
-                                   .sourceListId = rt::kAllTracksListId,
-                                   .trackId = trackId,
-                                   .positionMs = positionMs,
-                                 });
-      REQUIRE(runtime.configStore().flush());
     }
   } // namespace
 
@@ -170,16 +152,19 @@ namespace ao::gtk::test
     auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const trackId = addTrackWithTitle(runtime, "Restored Track");
-    auto session = rt::PlaybackSessionState{
-      .sourceListId = ListId{9999},
-      .trackId = trackId,
-      .positionMs = 6789,
-      .shuffleMode = rt::ShuffleMode::On,
-      .repeatMode = rt::RepeatMode::All,
-    };
-    runtime.configStore().save(rt::kPlaybackSessionConfigGroup, session);
-    REQUIRE(runtime.configStore().flush());
+    rt::test::addReadyAudioProvider(runtime.playback());
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const trackId =
+      library::test::addTrack(runtime.musicLibrary(), {.title = "Restored Track", .uri = fixturePath});
+    auto const sourceListId = ao::test::requireValue(
+      runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Temporary queue source"}));
+    REQUIRE(runtime.playbackQueue().playQueue({trackId}, trackId, sourceListId));
+    runtime.playback().seek(std::chrono::milliseconds{500});
+    runtime.playback().setShuffleMode(rt::ShuffleMode::On);
+    runtime.playback().setRepeatMode(rt::RepeatMode::All);
+    REQUIRE(runtime.savePlaybackSession());
+    REQUIRE(runtime.library().writer().deleteList(sourceListId));
+    runtime.playback().stop();
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
@@ -188,14 +173,14 @@ namespace ao::gtk::test
 
     coordinator.initializeSession();
 
-    auto* const queueSession = coordinator.playbackQueueSession();
-    REQUIRE(queueSession != nullptr);
-    CHECK(queueSession->isActive());
-    CHECK(queueSession->nowPlayingTrackId() == trackId);
-    CHECK(queueSession->sourceListId() == rt::kAllTracksListId);
+    auto* const queue = coordinator.playbackQueue();
+    REQUIRE(queue != nullptr);
+    REQUIRE(queue->state().optCurrentIndex);
+    CHECK(queue->state().trackIds[*queue->state().optCurrentIndex] == trackId);
+    CHECK(queue->state().sourceListId == rt::kAllTracksListId);
     CHECK(runtime.playback().state().transport == audio::Transport::Idle);
     CHECK(runtime.playback().state().nowPlaying.trackId == trackId);
-    CHECK(runtime.playback().state().elapsed == std::chrono::milliseconds{6789});
+    CHECK(runtime.playback().state().elapsed == std::chrono::milliseconds{500});
     CHECK(runtime.playback().state().mode.shuffle == rt::ShuffleMode::On);
     CHECK(runtime.playback().state().mode.repeat == rt::RepeatMode::All);
 
@@ -210,15 +195,11 @@ namespace ao::gtk::test
     auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const track1 = addTrackWithTitle(runtime, "Restored Track");
-    auto const track2 = addTrackWithTitle(runtime, "Changed Track");
-    auto session = rt::PlaybackSessionState{
-      .sourceListId = rt::kAllTracksListId,
-      .trackId = track1,
-      .positionMs = 100,
-    };
-    runtime.configStore().save(rt::kPlaybackSessionConfigGroup, session);
-    REQUIRE(runtime.configStore().flush());
+    rt::test::addReadyAudioProvider(runtime.playback());
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const track1 =
+      library::test::addTrack(runtime.musicLibrary(), {.title = "Restored Track", .uri = fixturePath});
+    auto const track2 = library::test::addTrack(runtime.musicLibrary(), {.title = "Changed Track", .uri = fixturePath});
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
@@ -226,39 +207,18 @@ namespace ao::gtk::test
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
     coordinator.initializeSession();
-
-    overwritePlaybackSession(runtime, track1, 1);
+    REQUIRE(runtime.playbackQueue().playQueue({track1, track2}, track1, rt::kAllTracksListId));
     runtime.playback().seek(std::chrono::milliseconds{250});
-    auto saved = loadPlaybackSession(runtime);
-    CHECK(saved.trackId == track1);
-    CHECK(saved.positionMs == 250);
-
-    overwritePlaybackSession(runtime, track1, 2);
-    REQUIRE(runtime.playback().restoreSession(rt::PlaybackSessionState{
-      .sourceListId = rt::kAllTracksListId,
-      .trackId = track2,
-      .positionMs = 400,
-    }));
-    saved = loadPlaybackSession(runtime);
-    CHECK(saved.trackId == track2);
-    CHECK(saved.positionMs == 400);
-
+    runtime.playbackQueue().next();
     runtime.playback().seek(std::chrono::milliseconds{550});
-    overwritePlaybackSession(runtime, track1, 3);
     runtime.playback().stop();
-    saved = loadPlaybackSession(runtime);
-    CHECK(saved.trackId == track2);
-    CHECK(saved.positionMs == 550);
 
-    REQUIRE(runtime.playback().restoreSession(rt::PlaybackSessionState{
-      .sourceListId = rt::kAllTracksListId,
-      .trackId = track1,
-      .positionMs = 700,
-    }));
-    overwritePlaybackSession(runtime, track2, 4);
-    coordinator.saveSession();
-    saved = loadPlaybackSession(runtime);
-    CHECK(saved.trackId == track1);
-    CHECK(saved.positionMs == 700);
+    auto const restored = runtime.restorePlaybackSession();
+    REQUIRE(restored);
+    REQUIRE(restored->restored);
+    CHECK(restored->trackId == track2);
+    CHECK(runtime.playback().state().nowPlaying.trackId == track2);
+    CHECK(runtime.playback().state().elapsed == std::chrono::milliseconds{550});
+    CHECK(runtime.playbackQueue().state().trackIds == std::vector{track1, track2});
   }
 } // namespace ao::gtk::test

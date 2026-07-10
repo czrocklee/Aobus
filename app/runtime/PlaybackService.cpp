@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/PlaybackSessionState.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
@@ -15,14 +17,12 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/PlaybackSessionState.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/Signal.h>
 #include <ao/rt/Subscription.h>
@@ -203,9 +203,9 @@ namespace ao::rt
       return kind == PlaybackFailureKind::TrackOpen || kind == PlaybackFailureKind::Decode;
     }
 
-    bool shouldPostDefaultFailureNotification(PlaybackFailure const& failure, bool const hasFailureSubscriber) noexcept
+    bool shouldPostDefaultFailureNotification(PlaybackFailure const& failure) noexcept
     {
-      return !hasFailureSubscriber || !isTrackFailureKind(failure.kind);
+      return isOutputFailureKind(failure.kind) || failure.disposition == PlaybackFailureDisposition::Unhandled;
     }
 
     std::chrono::milliseconds clampSessionElapsed(std::chrono::milliseconds elapsed,
@@ -440,6 +440,7 @@ namespace ao::rt
     Signal<PlaybackService::ShuffleModeChanged const&> shuffleModeChangedSignal;
     Signal<PlaybackService::RepeatModeChanged const&> repeatModeChangedSignal;
     Signal<PlaybackFailure const&> playbackFailureSignal;
+    std::shared_ptr<PlaybackFailureRecoveryHandler> playbackFailureRecoveryHandlerPtr;
 
     bool isClosing() const noexcept { return closing.load(std::memory_order_acquire); }
 
@@ -672,7 +673,9 @@ namespace ao::rt
       return currentSessionState();
     }
 
-    void restoreDeferredPlayback(PlaybackService::PlaybackRequest request, PlaybackSessionState const& session)
+    void restoreDeferredPlayback(PlaybackService::PlaybackRequest request,
+                                 PlaybackSessionState const& session,
+                                 std::move_only_function<void()> beforePublish)
     {
       discardPreparedRequests();
       clearPreparedNext();
@@ -700,6 +703,11 @@ namespace ao::rt
       state.duration = request.input.duration;
       state.transport = audio::Transport::Idle;
       rememberRestorableSession();
+
+      if (beforePublish)
+      {
+        beforePublish();
+      }
 
       announceNowPlaying(request, session.sourceListId);
 
@@ -805,7 +813,7 @@ namespace ao::rt
         .severity = NotificationSeverity::Error,
         .message = message,
         .sticky = !failure.recoverable,
-        .content = NotificationContentState{.title = "Playback error", .iconName = "dialog-error-symbolic"},
+        .content = NotificationContentState{.topic = NotificationTopic::PlaybackError},
       });
       optLastPlaybackFailureNotification =
         PlaybackFailureNotification{.kind = failure.kind, .trackId = failure.trackId, .notificationId = notificationId};
@@ -821,7 +829,23 @@ namespace ao::rt
                     failure.recoverable,
                     lastPlaybackError);
 
-      auto const hasFailureSubscriber = playbackFailureSignal.hasConnectedHandlers();
+      if (auto const recoveryHandlerPtr = playbackFailureRecoveryHandlerPtr; recoveryHandlerPtr)
+      {
+        if (isTrackFailureKind(failure.kind))
+        {
+          failure.disposition = (*recoveryHandlerPtr)(failure);
+        }
+        else
+        {
+          std::ignore = (*recoveryHandlerPtr)(failure);
+        }
+      }
+
+      if (isClosing())
+      {
+        return;
+      }
+
       playbackFailureSignal.emit(failure);
 
       if (isClosing())
@@ -829,7 +853,7 @@ namespace ao::rt
         return;
       }
 
-      if (shouldPostDefaultFailureNotification(failure, hasFailureSubscriber))
+      if (shouldPostDefaultFailureNotification(failure))
       {
         postOrUpdateFailureNotification(failure);
       }
@@ -1192,6 +1216,31 @@ namespace ao::rt
     auto const implPtr = _implPtr;
     implPtr->ensureOnExecutor();
     return implPtr->playbackFailureSignal.connect(std::move(handler));
+  }
+
+  void PlaybackService::bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler)
+  {
+    auto const implPtr = _implPtr;
+    implPtr->ensureOnExecutor();
+
+    if (!handler)
+    {
+      throwException<Exception>("Playback failure recovery handler must not be empty");
+    }
+
+    if (implPtr->playbackFailureRecoveryHandlerPtr)
+    {
+      throwException<Exception>("Playback failure recovery handler is already bound");
+    }
+
+    implPtr->playbackFailureRecoveryHandlerPtr = std::make_shared<PlaybackFailureRecoveryHandler>(std::move(handler));
+  }
+
+  void PlaybackService::unbindPlaybackFailureRecovery()
+  {
+    auto const implPtr = _implPtr;
+    implPtr->ensureOnExecutor();
+    implPtr->playbackFailureRecoveryHandlerPtr.reset();
   }
 
   PlaybackState const& PlaybackService::state() const
@@ -1588,39 +1637,16 @@ namespace ao::rt
       .trackId = trackId, .preferredListId = preferredListId, .preferredViewId = preferredViewId});
   }
 
-  PlaybackSessionState PlaybackService::sessionState() const
+  PlaybackSessionState PlaybackService::playbackSessionState()
   {
     auto const implPtr = _implPtr;
     implPtr->ensureOnExecutor();
+    implPtr->refreshState();
     return implPtr->snapshotSessionState();
   }
 
-  void PlaybackService::saveSession(ConfigStore& store)
-  {
-    auto const implPtr = _implPtr;
-    implPtr->ensureOnExecutor();
-    // refreshState picks up the latest elapsed/volume from the player so the
-    // saved snapshot reflects reality. rememberRestorableSession is not needed
-    // here: snapshotSessionState reads a live currentSessionState() when a
-    // track is active, and falls back to optLastRestorableSession otherwise,
-    // which stop() is responsible for capturing before clearing currentRequest.
-    implPtr->refreshState();
-    auto const session = implPtr->snapshotSessionState();
-
-    if (session.trackId == kInvalidTrackId)
-    {
-      return;
-    }
-
-    store.save(kPlaybackSessionConfigGroup, session);
-
-    if (auto const res = store.flush(); !res)
-    {
-      APP_LOG_ERROR("PlaybackService: Failed to flush session - {}", res.error().message);
-    }
-  }
-
-  Result<> PlaybackService::restoreSession(PlaybackSessionState const& session)
+  Result<> PlaybackService::restorePlaybackSession(PlaybackSessionState const& session,
+                                                   std::move_only_function<void()> beforePublish)
   {
     auto const implPtr = _implPtr;
     implPtr->ensureOnExecutor();
@@ -1645,7 +1671,7 @@ namespace ao::rt
         return std::unexpected{requestResult.error()};
       }
 
-      implPtr->restoreDeferredPlayback(std::move(*requestResult), normalizedSession);
+      implPtr->restoreDeferredPlayback(std::move(*requestResult), normalizedSession, std::move(beforePublish));
 
       if (implPtr->isClosing())
       {

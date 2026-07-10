@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 
 namespace ao::rt
@@ -19,6 +20,13 @@ namespace ao::rt
     DeviceLost,
   };
 
+  enum class PlaybackFailureDisposition : std::uint8_t
+  {
+    Unhandled,
+    Recovered,
+    Stopped,
+  };
+
   struct PlaybackFailure final
   {
     PlaybackFailureKind kind = PlaybackFailureKind::TrackOpen;
@@ -28,5 +36,8 @@ namespace ao::rt
     Error error;
     bool recoverable = false;
     std::string title{};
+    PlaybackFailureDisposition disposition = PlaybackFailureDisposition::Unhandled;
   };
+
+  using PlaybackFailureRecoveryHandler = std::move_only_function<PlaybackFailureDisposition(PlaybackFailure const&)>;
 } // namespace ao::rt

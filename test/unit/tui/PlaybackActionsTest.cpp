@@ -9,6 +9,7 @@
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include "tui/TrackListEntry.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/PlaybackQueueService.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -42,23 +43,31 @@ namespace ao::tui::test
     auto const firstId = fixture.libraryFixture.addTrack(first);
     auto const secondId = fixture.libraryFixture.addTrack(second);
     auto const tracks = std::vector{trackEntry(firstId), trackEntry(secondId)};
+    auto queue = rt::PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
 
-    CHECK(playSelected(fixture.playbackService, tracks, -4, ListId{7}));
+    CHECK(playSelected(queue, tracks, -4, ListId{7}));
     CHECK(fixture.playbackService.state().nowPlaying.trackId == firstId);
     CHECK(fixture.playbackService.state().nowPlaying.sourceListId == ListId{7});
     CHECK(fixture.playbackService.state().nowPlaying.title == "First");
+    CHECK(queue.state().trackIds == std::vector{firstId, secondId});
+    REQUIRE(queue.state().optCurrentIndex);
+    CHECK(*queue.state().optCurrentIndex == 0);
 
-    CHECK(playSelected(fixture.playbackService, tracks, 12, ListId{8}));
+    CHECK(playSelected(queue, tracks, 12, ListId{8}));
     CHECK(fixture.playbackService.state().nowPlaying.trackId == secondId);
     CHECK(fixture.playbackService.state().nowPlaying.sourceListId == ListId{8});
     CHECK(fixture.playbackService.state().nowPlaying.title == "Second");
+    CHECK(queue.state().trackIds == std::vector{firstId, secondId});
+    REQUIRE(queue.state().optCurrentIndex);
+    CHECK(*queue.state().optCurrentIndex == 1);
   }
 
   TEST_CASE("PlaybackActions - playSelected rejects an empty track list", "[tui][unit][playback]")
   {
     auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
+    auto queue = rt::PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
 
-    CHECK_FALSE(playSelected(fixture.playbackService, {}, 0, ListId{7}));
+    CHECK_FALSE(playSelected(queue, {}, 0, ListId{7}));
     CHECK(fixture.playbackService.state().nowPlaying.trackId == kInvalidTrackId);
     CHECK(fixture.playbackService.state().nowPlaying.sourceListId == kInvalidListId);
   }
@@ -76,8 +85,9 @@ namespace ao::tui::test
 
     auto const trackId = fixture.libraryFixture.addTrack(spec);
     auto const tracks = std::vector{trackEntry(trackId)};
+    auto queue = rt::PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
 
-    CHECK(togglePlayback(fixture.playbackService, tracks, 0, ListId{9}));
+    CHECK(togglePlayback(fixture.playbackService, queue, tracks, 0, ListId{9}));
     CHECK(fixture.playbackService.state().nowPlaying.trackId == trackId);
     CHECK(fixture.playbackService.state().nowPlaying.title == "Toggle Target");
   }

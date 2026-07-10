@@ -3,12 +3,12 @@
 
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/PlaybackQueueService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/Subscription.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <cstddef>
 #include <functional>
@@ -74,9 +74,9 @@ namespace ao::uimodel
   } // namespace
 
   PlaybackCommandSurface::PlaybackCommandSurface(rt::PlaybackService& playback,
-                                                 PlaybackQueueSession* queueSession,
+                                                 rt::PlaybackQueueService& queue,
                                                  std::function<void()> playSelection)
-    : _playback{playback}, _queueSession{queueSession}, _playSelection{std::move(playSelection)}
+    : _playback{playback}, _queue{queue}, _playSelection{std::move(playSelection)}
   {
     subscribeAvailabilityEvents();
   }
@@ -124,21 +124,9 @@ namespace ao::uimodel
 
       case PlaybackCommand::Stop: _playback.stop(); break;
 
-      case PlaybackCommand::Next:
-        if (_queueSession != nullptr)
-        {
-          _queueSession->next();
-        }
+      case PlaybackCommand::Next: _queue.next(); break;
 
-        break;
-
-      case PlaybackCommand::Previous:
-        if (_queueSession != nullptr)
-        {
-          _queueSession->previous();
-        }
-
-        break;
+      case PlaybackCommand::Previous: _queue.previous(); break;
 
       case PlaybackCommand::ToggleShuffle:
         _playback.setShuffleMode(state.mode.shuffle == rt::ShuffleMode::Off ? rt::ShuffleMode::On
@@ -157,8 +145,8 @@ namespace ao::uimodel
       case PlaybackCommand::Pause: return state.ready && isActivePlayback(state.transport);
       case PlaybackCommand::PlayPause: return canPlayPause(state);
       case PlaybackCommand::Stop: return canStop(state);
-      case PlaybackCommand::Next: return state.ready && _queueSession != nullptr && _queueSession->hasNext();
-      case PlaybackCommand::Previous: return state.ready && _queueSession != nullptr && _queueSession->hasPrevious();
+      case PlaybackCommand::Next: return state.ready && _queue.hasNext();
+      case PlaybackCommand::Previous: return state.ready && _queue.hasPrevious();
       case PlaybackCommand::ToggleShuffle:
       case PlaybackCommand::CycleRepeat: return state.ready;
     }
@@ -244,6 +232,9 @@ namespace ao::uimodel
     _availabilitySubs.push_back(_playback.onOutputDevicesChanged(notifyReady));
     _availabilitySubs.push_back(
       _playback.onQualityChanged([notifyReady](rt::PlaybackService::QualityChanged const&) { notifyReady(); }));
+    _availabilitySubs.push_back(
+      _queue.onChanged([this](rt::PlaybackQueueState const&)
+                       { emitAvailabilityChanged({PlaybackCommand::Next, PlaybackCommand::Previous}); }));
   }
 
   void PlaybackCommandSurface::emitAvailabilityChanged(std::initializer_list<PlaybackCommand> const commands)

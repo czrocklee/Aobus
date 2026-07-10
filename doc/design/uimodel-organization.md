@@ -52,7 +52,6 @@ ao/uimodel/
 │   ├── transport/
 │   ├── seek/
 │   ├── output/
-│   ├── queue/
 │   ├── quality/
 │   └── soul/
 ├── preferences/
@@ -197,8 +196,9 @@ Tags follow `[uimodel][unit][feature][component]`, e.g.
   patch generation from edited values. No GTK dialogs.
 - **`playback`** — now-playing view model and action policy (`now-playing/`),
   transport (`transport/`), seek/time interpolation (`seek/`), output and volume
-  (`output/`), queue (`queue/`), audio quality formatting (`quality/`), Aobus soul
-  model (`soul/`).
+  (`output/`), audio quality formatting (`quality/`), and Aobus soul model
+  (`soul/`). Queue orchestration belongs to runtime; UIModel may add a queue
+  display projection only when a queue surface exists.
 - **`preferences`** — platform-neutral application preferences models that
   convert user selections into persisted deltas and platform-supplied applier
   callbacks. No GTK widgets or config-store ownership.

@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <format>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace ao::rt
@@ -36,9 +37,16 @@ namespace ao::rt
     explicit ConfigStore(std::filesystem::path filePath, OpenMode mode = OpenMode::ReadWrite);
 
     Result<> flush();
+    Result<bool> contains(std::string_view group);
 
     template<typename T>
     void save(std::string_view group, T const& obj)
+    {
+      std::ignore = saveResult(group, obj);
+    }
+
+    template<typename T>
+    Result<> saveResult(std::string_view group, T const& obj)
     {
       if (_mode == OpenMode::ReadOnly)
       {
@@ -47,7 +55,7 @@ namespace ao::rt
 
       if (auto const result = ensureLoaded(); !result && result.error().code != Error::Code::NotFound)
       {
-        return;
+        return result;
       }
 
       if (!_root.is_map(0))
@@ -70,6 +78,7 @@ namespace ao::rt
       }
 
       yaml::write(child, obj);
+      return {};
     }
 
     template<typename T>

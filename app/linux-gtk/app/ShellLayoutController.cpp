@@ -28,6 +28,7 @@
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/PlaybackQueueService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -42,7 +43,6 @@
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <gtkmm/dialog.h>
 #include <gtkmm/object.h>
@@ -141,9 +141,10 @@ namespace ao::gtk
 
     auto const hasActiveQueue = [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
     {
-      if (auto* const queueSession = _context.playback.queueSession; queueSession != nullptr)
+      if (auto* const queue = _context.playback.queue; queue != nullptr)
       {
-        return uimodel::LayoutActionAvailability{.enabled = queueSession->isActive(), .disabledReason = ""};
+        return uimodel::LayoutActionAvailability{
+          .enabled = queue->state().optCurrentIndex.has_value(), .disabledReason = ""};
       }
 
       return uimodel::LayoutActionAvailability{.enabled = false, .disabledReason = ""};

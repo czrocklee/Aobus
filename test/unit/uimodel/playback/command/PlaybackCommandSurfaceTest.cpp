@@ -6,11 +6,10 @@
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/PlaybackSessionState.h>
+#include <ao/rt/PlaybackQueueService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -29,10 +28,11 @@ namespace ao::uimodel::test
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Command Track", .uri = fixturePath});
+    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
 
     std::int32_t playSelectionCount = 0;
     auto commands =
-      PlaybackCommandSurface{fixture.playbackService, nullptr, [&playSelectionCount] { ++playSelectionCount; }};
+      PlaybackCommandSurface{fixture.playbackService, queue, [&playSelectionCount] { ++playSelectionCount; }};
 
     SECTION("Play uses selection when idle without a current track")
     {
@@ -40,33 +40,6 @@ namespace ao::uimodel::test
 
       CHECK(playSelectionCount == 1);
       CHECK(fixture.playbackService.state().transport == audio::Transport::Idle);
-    }
-
-    SECTION("Play and PlayPause resume an idle restored track")
-    {
-      REQUIRE(fixture.playbackService.restoreSession(PlaybackSessionState{
-        .sourceListId = ListId{5},
-        .trackId = trackId,
-        .positionMs = 50,
-      }));
-
-      commands.execute(PlaybackCommand::Play);
-
-      CHECK(playSelectionCount == 0);
-      CHECK(fixture.playbackService.state().transport == audio::Transport::Playing);
-      CHECK(fixture.playbackService.state().nowPlaying.trackId == trackId);
-
-      fixture.playbackService.stop();
-      REQUIRE(fixture.playbackService.restoreSession(PlaybackSessionState{
-        .sourceListId = ListId{5},
-        .trackId = trackId,
-        .positionMs = 50,
-      }));
-
-      commands.execute(PlaybackCommand::PlayPause);
-
-      CHECK(playSelectionCount == 0);
-      CHECK(fixture.playbackService.state().transport == audio::Transport::Playing);
     }
 
     SECTION("PlayPause toggles between playing and paused")
@@ -105,8 +78,8 @@ namespace ao::uimodel::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const firstTrack = fixture.libraryFixture.addTrack({.title = "Queue First", .uri = fixturePath});
     auto const secondTrack = fixture.libraryFixture.addTrack({.title = "Queue Second", .uri = fixturePath});
-    auto queue = PlaybackQueueSession{fixture.playbackService, fixture.notificationService};
-    auto commands = PlaybackCommandSurface{fixture.playbackService, &queue, [] {}};
+    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
+    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
 
     SECTION("Next and Previous enablement follows real queue targets")
     {
@@ -117,31 +90,35 @@ namespace ao::uimodel::test
 
       commands.execute(PlaybackCommand::Next);
 
-      CHECK(queue.nowPlayingTrackId() == secondTrack);
+      REQUIRE(queue.state().optCurrentIndex);
+      CHECK(queue.state().trackIds[*queue.state().optCurrentIndex] == secondTrack);
       CHECK_FALSE(commands.isEnabled(PlaybackCommand::Next));
       CHECK(commands.isEnabled(PlaybackCommand::Previous));
 
       commands.execute(PlaybackCommand::Next);
 
-      CHECK(queue.nowPlayingTrackId() == secondTrack);
+      REQUIRE(queue.state().optCurrentIndex);
+      CHECK(queue.state().trackIds[*queue.state().optCurrentIndex] == secondTrack);
       CHECK(fixture.playbackService.state().transport == audio::Transport::Playing);
 
       commands.execute(PlaybackCommand::Previous);
 
-      CHECK(queue.nowPlayingTrackId() == firstTrack);
+      REQUIRE(queue.state().optCurrentIndex);
+      CHECK(queue.state().trackIds[*queue.state().optCurrentIndex] == firstTrack);
     }
 
     SECTION("Shuffle and repeat commands write through playback and re-prepare the queue")
     {
       REQUIRE(queue.playQueue({firstTrack, secondTrack}, secondTrack, ListId{9}));
       REQUIRE_FALSE(queue.hasNext());
-      REQUIRE_FALSE(queue.peekNext());
+      REQUIRE_FALSE(queue.state().optPendingNextIndex);
 
       commands.execute(PlaybackCommand::CycleRepeat);
 
       CHECK(fixture.playbackService.state().mode.repeat == rt::RepeatMode::All);
       CHECK(queue.hasNext());
-      CHECK(queue.peekNext() == firstTrack);
+      REQUIRE(queue.state().optPendingNextIndex);
+      CHECK(queue.state().trackIds[*queue.state().optPendingNextIndex] == firstTrack);
 
       commands.execute(PlaybackCommand::CycleRepeat);
       CHECK(fixture.playbackService.state().mode.repeat == rt::RepeatMode::One);
@@ -149,13 +126,14 @@ namespace ao::uimodel::test
       commands.execute(PlaybackCommand::CycleRepeat);
       CHECK(fixture.playbackService.state().mode.repeat == rt::RepeatMode::Off);
       REQUIRE_FALSE(queue.hasNext());
-      REQUIRE_FALSE(queue.peekNext());
+      REQUIRE_FALSE(queue.state().optPendingNextIndex);
 
       commands.execute(PlaybackCommand::ToggleShuffle);
 
       CHECK(fixture.playbackService.state().mode.shuffle == rt::ShuffleMode::On);
       CHECK(queue.hasNext());
-      CHECK(queue.peekNext() == firstTrack);
+      REQUIRE(queue.state().optPendingNextIndex);
+      CHECK(queue.state().trackIds[*queue.state().optPendingNextIndex] == firstTrack);
     }
   }
 
@@ -166,7 +144,8 @@ namespace ao::uimodel::test
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Capability Track", .uri = fixturePath});
-    auto commands = PlaybackCommandSurface{fixture.playbackService, nullptr, [] {}};
+    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
+    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
 
     REQUIRE(fixture.playbackService.playTrack(trackId, ListId{5}));
 
@@ -179,7 +158,8 @@ namespace ao::uimodel::test
             "[uimodel][unit][playback][command]")
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
-    auto commands = PlaybackCommandSurface{fixture.playbackService, nullptr, [] {}};
+    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
+    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
 
     std::int32_t playCount = 0;
     auto sub = commands.onAvailabilityChanged(PlaybackCommand::Play, [&playCount] { ++playCount; });
@@ -200,7 +180,8 @@ namespace ao::uimodel::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const firstTrack = fixture.libraryFixture.addTrack({.title = "Event First", .uri = fixturePath});
     auto const secondTrack = fixture.libraryFixture.addTrack({.title = "Event Second", .uri = fixturePath});
-    auto commands = PlaybackCommandSurface{fixture.playbackService, nullptr, [] {}};
+    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
+    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
 
     std::int32_t count = 0;
     auto sub = commands.onAvailabilityChanged([&count] { ++count; });

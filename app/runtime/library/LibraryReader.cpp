@@ -211,6 +211,14 @@ namespace ao::rt
     return rowDataFromView(id, library, *optView, transaction);
   }
 
+  bool LibraryReader::containsTrack(TrackId const id) const
+  {
+    auto const reader = _implPtr->library.tracks().reader(_implPtr->transaction);
+    return storageValueOrNullopt(
+             reader.get(id, library::TrackStore::Reader::LoadMode::Hot), "Failed to check track existence")
+      .has_value();
+  }
+
   ResourceId LibraryReader::trackCoverArtId(TrackId id) const
   {
     auto const reader = _implPtr->library.tracks().reader(_implPtr->transaction);

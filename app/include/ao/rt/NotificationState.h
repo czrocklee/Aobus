@@ -21,6 +21,13 @@ namespace ao::rt
     Error,
   };
 
+  enum class NotificationTopic : std::uint8_t
+  {
+    General,
+    PlaybackQueue,
+    PlaybackError,
+  };
+
   inline constexpr std::string_view kDefaultNotificationTemplate = "notification.message";
 
   enum class NotificationProgressMode : std::uint8_t
@@ -44,6 +51,7 @@ namespace ao::rt
 
   struct NotificationContentState final
   {
+    NotificationTopic topic = NotificationTopic::General;
     std::string templateId = std::string{kDefaultNotificationTemplate};
     std::string title{};
     std::string iconName{};

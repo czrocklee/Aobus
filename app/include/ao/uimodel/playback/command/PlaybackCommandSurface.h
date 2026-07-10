@@ -14,15 +14,18 @@
 #include <initializer_list>
 #include <vector>
 
+namespace ao::rt
+{
+  class PlaybackQueueService;
+}
+
 namespace ao::uimodel
 {
-  class PlaybackQueueSession;
-
   class PlaybackCommandSurface final
   {
   public:
     PlaybackCommandSurface(rt::PlaybackService& playback,
-                           PlaybackQueueSession* queueSession,
+                           rt::PlaybackQueueService& queue,
                            std::function<void()> playSelection);
     ~PlaybackCommandSurface() = default;
 
@@ -45,7 +48,7 @@ namespace ao::uimodel
     void emitAvailabilityChanged(std::initializer_list<PlaybackCommand> commands);
 
     rt::PlaybackService& _playback;
-    PlaybackQueueSession* _queueSession;
+    rt::PlaybackQueueService& _queue;
     std::function<void()> _playSelection;
     rt::Signal<> _availabilityChangedSignal;
     std::array<rt::Signal<>, kCommandCount> _commandAvailabilityChangedSignals;

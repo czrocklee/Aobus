@@ -5,6 +5,7 @@
 
 #include "CoreRuntime.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 
 #include <cstddef>
 #include <filesystem>
@@ -23,6 +24,7 @@ namespace ao::async
 namespace ao::rt
 {
   class ConfigStore;
+  class PlaybackQueueService;
   class PlaybackService;
   class WorkspaceService;
   class ViewService;
@@ -34,6 +36,13 @@ namespace ao::rt
     std::filesystem::path databasePath{};
     std::size_t musicLibraryMapSize = 0;
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
+  };
+
+  struct PlaybackSessionRestoreResult final
+  {
+    bool restored = false;
+    TrackId trackId = kInvalidTrackId;
+    ListId sourceListId = kInvalidListId;
   };
 
   class AppRuntime final : public CoreRuntime
@@ -48,9 +57,13 @@ namespace ao::rt
     AppRuntime& operator=(AppRuntime&&) = delete;
 
     PlaybackService& playback() noexcept;
+    PlaybackQueueService& playbackQueue() noexcept;
     WorkspaceService& workspace() noexcept;
     ViewService& views() noexcept;
     ConfigStore& configStore() noexcept;
+
+    Result<> savePlaybackSession();
+    Result<PlaybackSessionRestoreResult> restorePlaybackSession();
 
     void reloadAllTracks();
 

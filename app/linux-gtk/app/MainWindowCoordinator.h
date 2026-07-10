@@ -19,7 +19,6 @@ namespace ao::lmdb
 namespace ao::uimodel
 {
   class PlaybackCommandSurface;
-  class PlaybackQueueSession;
 }
 namespace ao::uimodel
 {
@@ -66,7 +65,7 @@ namespace ao::gtk
 
     TrackRowCache* trackRowCache();
     ImageCache* imageCache();
-    uimodel::PlaybackQueueSession* playbackQueueSession();
+    rt::PlaybackQueueService* playbackQueue();
     uimodel::PlaybackCommandSurface* playbackCommandSurface();
     TagEditController* tagEditController();
     portal::ImportExportCoordinator* importExportCoordinator();

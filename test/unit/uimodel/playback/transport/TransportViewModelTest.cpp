@@ -7,10 +7,9 @@
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/PlaybackSessionState.h>
+#include <ao/rt/PlaybackQueueService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -26,7 +25,8 @@ namespace ao::uimodel::test
   TEST_CASE("TransportViewModel - renders presentation for actions", "[uimodel][unit][playback]")
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
-    auto commands = PlaybackCommandSurface{fixture.playbackService, nullptr, [] {}};
+    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
+    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
 
     SECTION("Play action uses play icon and disabled command state")
     {
@@ -86,8 +86,8 @@ namespace ao::uimodel::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const firstTrack = fixture.libraryFixture.addTrack({.title = "First", .uri = fixturePath});
     auto const secondTrack = fixture.libraryFixture.addTrack({.title = "Second", .uri = fixturePath});
-    auto queue = PlaybackQueueSession{fixture.playbackService, fixture.notificationService};
-    auto commands = PlaybackCommandSurface{fixture.playbackService, &queue, [] {}};
+    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
+    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
     REQUIRE(queue.playQueue({firstTrack, secondTrack}, firstTrack, ListId{9}));
 
     auto nextLog = ao::test::RenderLog<TransportViewState>{};
@@ -111,7 +111,8 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
-    auto commands = PlaybackCommandSurface{fixture.playbackService, nullptr, [] {}};
+    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
+    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
 
     auto playLog = ao::test::RenderLog<TransportViewState>{};
     auto shuffleLog = ao::test::RenderLog<TransportViewState>{};
@@ -143,16 +144,13 @@ namespace ao::uimodel::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const firstTrack = fixture.libraryFixture.addTrack({.title = "First", .uri = fixturePath});
     auto const secondTrack = fixture.libraryFixture.addTrack({.title = "Second", .uri = fixturePath});
-    auto queue = PlaybackQueueSession{fixture.playbackService, fixture.notificationService};
-    auto commands = PlaybackCommandSurface{fixture.playbackService, &queue, [] {}};
+    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
+    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
 
-    SECTION("PlayPause resumes restored playback")
+    SECTION("PlayPause resumes paused playback")
     {
-      REQUIRE(fixture.playbackService.restoreSession(PlaybackSessionState{
-        .sourceListId = ListId{5},
-        .trackId = firstTrack,
-        .positionMs = 50,
-      }));
+      REQUIRE(queue.playQueue({firstTrack}, firstTrack, ListId{5}));
+      fixture.playbackService.pause();
 
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
@@ -173,7 +171,8 @@ namespace ao::uimodel::test
 
       vm.handleClick();
 
-      CHECK(queue.nowPlayingTrackId() == secondTrack);
+      REQUIRE(queue.state().optCurrentIndex);
+      CHECK(queue.state().trackIds[*queue.state().optCurrentIndex] == secondTrack);
     }
 
     SECTION("Shuffle delegates to mode command")
@@ -193,7 +192,8 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
-    auto commands = PlaybackCommandSurface{fixture.playbackService, nullptr, [] {}};
+    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
+    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
 
     auto log = ao::test::RenderLog<TransportViewState>{};
     auto viewModelPtr = std::make_unique<TransportViewModel>(fixture.playbackService,

@@ -25,13 +25,11 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/PlaybackQueueService.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/PlaybackSessionState.h>
-#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -45,14 +43,12 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/stack.h>
 #include <sigc++/scoped_connection.h>
 
 #include <chrono>
-#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -74,9 +70,8 @@ namespace ao::gtk
       : layoutConfig{runtime.musicLibrary().rootPath() / ".aobus"}
       , trackRowCache{runtime.library()}
       , imageCache{100}
-      , playbackQueueSession{runtime.playback(), runtime.notifications()}
       , playbackCommandSurface{runtime.playback(),
-                               &playbackQueueSession,
+                               runtime.playbackQueue(),
                                [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
       , trackPresentationCatalog{runtime.workspace()}
       , trackPresentationPreferences{trackPresentationCatalog}
@@ -106,12 +101,7 @@ namespace ao::gtk
                                      return std::nullopt;
                                    }},
                                  themeController}
-      , trackPageHost{stack,
-                      runtime,
-                      &playbackQueueSession,
-                      tagEditController,
-                      listNavigationController,
-                      trackColumnLayouts}
+      , trackPageHost{stack, runtime, tagEditController, listNavigationController, trackColumnLayouts}
       , importExportCoordinator{window,
                                 runtime,
                                 portal::ImportExportCallbacks{
@@ -170,88 +160,32 @@ namespace ao::gtk
       }
     }
 
-    std::vector<TrackId> trackIdsFrom(rt::TrackSource const& source) const
+    void restorePlaybackSession(rt::AppRuntime& runtime) const
     {
-      auto trackIds = std::vector<TrackId>{};
-      trackIds.reserve(source.size());
+      auto restored = runtime.restorePlaybackSession();
 
-      for (std::size_t index = 0; index < source.size(); ++index)
+      if (!restored)
       {
-        trackIds.push_back(source.trackIdAt(index));
-      }
-
-      return trackIds;
-    }
-
-    void restorePlaybackSession(rt::AppRuntime& runtime)
-    {
-      auto session = rt::PlaybackSessionState{};
-
-      if (auto const res = runtime.configStore().load(rt::kPlaybackSessionConfigGroup, session); !res)
-      {
-        if (res.error().code != Error::Code::NotFound)
-        {
-          APP_LOG_WARN("MainWindowCoordinator: Failed to restore playback session - {}", res.error().message);
-        }
-
+        APP_LOG_WARN("MainWindowCoordinator: Failed to restore playback session - {}", restored.error().message);
         return;
       }
 
-      if (session.trackId == kInvalidTrackId)
+      if (!restored->restored)
       {
         return;
       }
 
-      // TrackSourceCache::sourceFor silently falls back to the all-tracks source
-      // when a list id no longer exists. Resolve the saved list id explicitly so
-      // the queue receives the list id we actually want restored, instead of a
-      // fallback we inferred from a pointer comparison.
-      auto const sourceListId = resolveRestoreSourceListId(runtime, session.sourceListId);
-
-      if (auto& source = runtime.sources().sourceFor(sourceListId);
-          !playbackQueueSession.restoreQueue(trackIdsFrom(source), session, sourceListId))
-      {
-        APP_LOG_DEBUG("MainWindowCoordinator: Playback session restore skipped");
-        return;
-      }
-
-      if (auto const optRestoredTrackId = playbackQueueSession.nowPlayingTrackId(); optRestoredTrackId)
-      {
-        auto const spec = presentationForList(sourceListId, runtime);
-        runtime.workspace().navigateTo(sourceListId, {.optPresentation = spec});
-        runtime.playback().revealTrack(*optRestoredTrackId, rt::kInvalidViewId, sourceListId);
-      }
-    }
-
-    ListId resolveRestoreSourceListId(rt::AppRuntime& runtime, ListId savedListId) const
-    {
-      if (savedListId == kInvalidListId || savedListId == rt::kAllTracksListId)
-      {
-        return rt::kAllTracksListId;
-      }
-
-      auto const transaction = runtime.musicLibrary().readTransaction();
-      auto const optView = rt::storageValueOrNullopt(
-        runtime.musicLibrary().lists().reader(transaction).get(savedListId), "Restored playback session list lookup");
-
-      if (!optView)
-      {
-        APP_LOG_DEBUG(
-          "MainWindowCoordinator: Saved source list {} no longer exists, restoring from All Tracks", savedListId.raw());
-        return rt::kAllTracksListId;
-      }
-
-      return savedListId;
+      auto const spec = presentationForList(restored->sourceListId, runtime);
+      runtime.workspace().navigateTo(restored->sourceListId, {.optPresentation = spec});
+      runtime.playback().revealTrack(restored->trackId, rt::kInvalidViewId, restored->sourceListId);
     }
 
     void savePlaybackSession(rt::AppRuntime& runtime)
     {
-      if (runtime.playback().sessionState().trackId == kInvalidTrackId)
+      if (auto const saved = runtime.savePlaybackSession(); !saved)
       {
-        return;
+        APP_LOG_WARN("MainWindowCoordinator: Failed to save playback session - {}", saved.error().message);
       }
-
-      runtime.playback().saveSession(runtime.configStore());
     }
 
     void startPlaybackSessionPersistence(rt::AppRuntime& runtime)
@@ -292,7 +226,6 @@ namespace ao::gtk
     ThemeCoordinator themeController;
     TrackRowCache trackRowCache;
     ImageCache imageCache;
-    uimodel::PlaybackQueueSession playbackQueueSession;
     uimodel::PlaybackCommandSurface playbackCommandSurface;
     ao::uimodel::TrackPresentationCatalog trackPresentationCatalog;
     ao::uimodel::ListPresentationPreferenceStore trackPresentationPreferences;
@@ -468,7 +401,7 @@ namespace ao::gtk
   {
     return GtkUiServices{.trackRowCache = &_implPtr->trackRowCache,
                          .imageCache = &_implPtr->imageCache,
-                         .playbackQueueSession = &_implPtr->playbackQueueSession,
+                         .playbackQueue = &_runtime.playbackQueue(),
                          .playbackCommandSurface = &_implPtr->playbackCommandSurface,
                          .tagEditController = &_implPtr->tagEditController,
                          .importExportCoordinator = &_implPtr->importExportCoordinator,
@@ -506,9 +439,9 @@ namespace ao::gtk
   {
     return &_implPtr->imageCache;
   }
-  uimodel::PlaybackQueueSession* MainWindowCoordinator::playbackQueueSession()
+  rt::PlaybackQueueService* MainWindowCoordinator::playbackQueue()
   {
-    return &_implPtr->playbackQueueSession;
+    return &_runtime.playbackQueue();
   }
   uimodel::PlaybackCommandSurface* MainWindowCoordinator::playbackCommandSurface()
   {

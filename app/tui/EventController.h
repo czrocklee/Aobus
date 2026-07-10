@@ -29,7 +29,9 @@
 
 namespace ao::rt
 {
+  class AppRuntime;
   class NotificationService;
+  class PlaybackQueueService;
 }
 
 namespace ao::tui
@@ -52,7 +54,7 @@ namespace ao::tui
     EventController(ftxui::ScreenInteractive& screen,
                     ShellInteractionModel& shell,
                     LibraryController& library,
-                    rt::PlaybackService& playback,
+                    rt::AppRuntime& runtime,
                     EventControllerBindings bindings = {});
 
     bool isQualityHoverVisible() const noexcept { return _qualityHoverVisible; }
@@ -100,6 +102,7 @@ namespace ao::tui
     ShellInteractionModel& _shell;
     LibraryController& _library;
     rt::PlaybackService& _playback;
+    rt::PlaybackQueueService& _playbackQueue;
     OutputDeviceController* _outputDevices = nullptr;
     TuiHitRegions* _hitRegions = nullptr;
     std::vector<TrackColumnWidthOverride>* _trackColumnWidthOverrides = nullptr;

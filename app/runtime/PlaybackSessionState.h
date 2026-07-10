@@ -3,23 +3,26 @@
 
 #pragma once
 
-#include "PlaybackState.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/PlaybackState.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <string_view>
+#include <vector>
 
 namespace ao::rt
 {
   inline constexpr auto kPlaybackSessionConfigGroup = std::string_view{"playback-session"};
-  inline constexpr std::uint32_t kPlaybackSessionSchemaVersion = 1;
+  inline constexpr std::uint32_t kPlaybackSessionSchemaVersion = 2;
 
   struct PlaybackSessionState final
   {
     std::uint32_t schemaVersion = kPlaybackSessionSchemaVersion;
+    std::vector<TrackId> queueTrackIds{};
+    std::uint64_t currentQueueIndex = 0;
     ListId sourceListId = kInvalidListId;
     TrackId trackId = kInvalidTrackId;
     std::uint64_t positionMs = 0;

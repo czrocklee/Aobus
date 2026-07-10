@@ -15,6 +15,7 @@
 #include "TrackSection.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
@@ -120,12 +121,13 @@ namespace ao::tui
   EventController::EventController(ftxui::ScreenInteractive& screen,
                                    ShellInteractionModel& shell,
                                    LibraryController& library,
-                                   rt::PlaybackService& playback,
+                                   rt::AppRuntime& runtime,
                                    EventControllerBindings bindings)
     : _screen{screen}
     , _shell{shell}
     , _library{library}
-    , _playback{playback}
+    , _playback{runtime.playback()}
+    , _playbackQueue{runtime.playbackQueue()}
     , _outputDevices{bindings.outputDevices}
     , _hitRegions{bindings.hitRegions}
     , _trackColumnWidthOverrides{bindings.trackColumnWidthOverrides}
@@ -282,7 +284,8 @@ namespace ao::tui
 
   void EventController::togglePlaybackFromSelection()
   {
-    if (!togglePlayback(_playback, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
+    if (!togglePlayback(
+          _playback, _playbackQueue, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
     {
       postActivityNotification(
         rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
@@ -319,7 +322,7 @@ namespace ao::tui
         break;
       case CommandAction::Reload: reloadActiveList(); break;
       case CommandAction::Play:
-        if (!playSelected(_playback, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
+        if (!playSelected(_playbackQueue, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
         {
           postActivityNotification(
             rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
@@ -988,7 +991,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::Return)
     {
-      if (!playSelected(_playback, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
+      if (!playSelected(_playbackQueue, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
       {
         postActivityNotification(
           rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
@@ -999,7 +1002,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::Character("p"))
     {
-      if (!playSelected(_playback, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
+      if (!playSelected(_playbackQueue, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
       {
         postActivityNotification(
           rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");

@@ -201,7 +201,6 @@ add_executable(ao_core_test
     unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp
     unit/uimodel/playback/output/VolumeViewModelTest.cpp
     unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp
-    unit/uimodel/playback/queue/PlaybackQueueSessionTest.cpp
     unit/uimodel/playback/seek/PlaybackPositionInterpolatorTest.cpp
     unit/uimodel/playback/seek/PlaybackTimeViewModelTest.cpp
     unit/uimodel/playback/seek/SeekSliderInteractionModelTest.cpp
@@ -243,6 +242,8 @@ add_executable(ao_core_test
     unit/runtime/PlaybackServiceOutputTest.cpp
     unit/runtime/PlaybackServiceSelectionTest.cpp
     unit/runtime/PlaybackServiceTest.cpp
+    unit/runtime/PlaybackQueueServiceTest.cpp
+    unit/runtime/PlaybackSessionTest.cpp
     unit/runtime/source/AllTracksSourceTest.cpp
     unit/runtime/source/TrackSourceCacheTest.cpp
     unit/runtime/projection/TrackDetailProjectionTest.cpp

@@ -210,7 +210,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackService.state().nowPlaying.title == "Prepared Track");
   }
 
-  TEST_CASE("PlaybackService playback - subscribed track open failure emits without default notification",
+  TEST_CASE("PlaybackService playback - unrelated failure observer does not suppress default notification",
             "[runtime][unit][playback][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
@@ -232,8 +232,36 @@ namespace ao::rt::test
     CHECK(failures.front().sourceListId == ListId{7});
     CHECK(failures.front().title == "Broken Track");
     CHECK(failures.front().recoverable);
+    CHECK(failures.front().disposition == PlaybackFailureDisposition::Unhandled);
     CHECK(failures.front().error.message.contains("Unsupported audio file extension"));
-    CHECK(fixture.notificationService.feed().entries.empty());
+    auto const feed = fixture.notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().message.contains("Broken Track"));
+  }
+
+  TEST_CASE("PlaybackService playback - multiple failure observers do not suppress default notification",
+            "[runtime][unit][playback][error]")
+  {
+    auto fixture = PlaybackFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
+    auto firstFailures = std::vector<PlaybackFailure>{};
+    auto secondFailures = std::vector<PlaybackFailure>{};
+    auto firstSub = fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure)
+                                                              { firstFailures.push_back(failure); });
+    auto secondSub = fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure)
+                                                               { secondFailures.push_back(failure); });
+
+    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
+    REQUIRE(fixture.executor.drainUntil([&] { return !secondFailures.empty(); }));
+
+    REQUIRE(firstFailures.size() == 1);
+    REQUIRE(secondFailures.size() == 1);
+    CHECK(firstFailures.front().disposition == PlaybackFailureDisposition::Unhandled);
+    CHECK(secondFailures.front().disposition == PlaybackFailureDisposition::Unhandled);
+    REQUIRE(fixture.notificationService.feed().entries.size() == 1);
   }
 
   TEST_CASE("PlaybackService playback - unhandled track open failure publishes default notification",

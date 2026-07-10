@@ -4,7 +4,6 @@
 #pragma once
 
 #include "PlaybackFailure.h"
-#include "PlaybackSessionState.h"
 #include "PlaybackState.h"
 #include "Subscription.h"
 #include "ViewIds.h"
@@ -36,9 +35,12 @@ namespace ao::audio
 
 namespace ao::rt
 {
+  class PlaybackQueueService;
+  class AppRuntime;
   class NotificationService;
   class ViewService;
-  class ConfigStore;
+  struct PlaybackSessionState;
+  struct PlaybackServiceTestAccess;
 
   class PlaybackService final
   {
@@ -160,18 +162,16 @@ namespace ao::rt
     void revealPlayingTrack();
     void revealTrack(TrackId trackId, ViewId preferredViewId = kInvalidViewId, ListId preferredListId = kInvalidListId);
 
-    PlaybackSessionState sessionState() const;
-    void saveSession(ConfigStore& store);
-
-    // Restores a sanitized session as an idle now-playing state and arms a
-    // deferred resume token consumed on the next explicit play/resume.
-    // Returns FormatRejected for unsupported schema versions (caller should
-    // discard the persisted session), NotFound when the saved track id is
-    // invalid or no longer resolves in the library (caller may fall back to
-    // a different candidate), or Generic on unexpected I/O failures.
-    Result<> restoreSession(PlaybackSessionState const& session);
-
   private:
+    friend class AppRuntime;
+    friend class PlaybackQueueService;
+    friend struct PlaybackServiceTestAccess;
+
+    void bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler);
+    void unbindPlaybackFailureRecovery();
+    PlaybackSessionState playbackSessionState();
+    Result<> restorePlaybackSession(PlaybackSessionState const& session, std::move_only_function<void()> beforePublish);
+
     struct Impl;
     std::shared_ptr<Impl> _implPtr;
   };

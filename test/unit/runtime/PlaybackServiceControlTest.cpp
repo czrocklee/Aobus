@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/PlaybackSessionState.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/ConfigStore.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
-#include <ao/rt/PlaybackSessionState.h>
+#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -18,8 +18,20 @@
 
 #include <chrono>
 #include <cstdint>
-#include <filesystem>
 #include <limits>
+
+namespace ao::rt
+{
+  struct PlaybackServiceTestAccess final
+  {
+    static PlaybackSessionState sessionState(PlaybackService& service) { return service.playbackSessionState(); }
+
+    static Result<> restoreSession(PlaybackService& service, PlaybackSessionState const& session)
+    {
+      return service.restorePlaybackSession(session, {});
+    }
+  };
+} // namespace ao::rt
 
 namespace ao::rt::test
 {
@@ -153,21 +165,10 @@ namespace ao::rt::test
     CHECK(idleFired);
     CHECK(fixture.playbackService.state().nowPlaying.trackId == kInvalidTrackId);
 
-    auto const stoppedSession = fixture.playbackService.sessionState();
+    auto const stoppedSession = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
     CHECK(stoppedSession.trackId == TrackId{1});
     CHECK(stoppedSession.sourceListId == ListId{1});
     CHECK(stoppedSession.positionMs == 50);
-
-    auto const tempDir = ao::test::TempDir{};
-    auto sessionStore = ConfigStore{std::filesystem::path{tempDir.path()} / "workspace.yaml"};
-    fixture.playbackService.saveSession(sessionStore);
-
-    auto reloadedStore = ConfigStore{std::filesystem::path{tempDir.path()} / "workspace.yaml"};
-    auto reloadedSession = PlaybackSessionState{};
-    REQUIRE(reloadedStore.load(kPlaybackSessionConfigGroup, reloadedSession));
-    CHECK(reloadedSession.trackId == TrackId{1});
-    CHECK(reloadedSession.sourceListId == ListId{1});
-    CHECK(reloadedSession.positionMs == 50);
   }
 
   TEST_CASE("PlaybackService control - seek updates state and fires event", "[runtime][unit][playback][control]")
@@ -318,7 +319,7 @@ namespace ao::rt::test
       .muted = true,
     };
 
-    REQUIRE(fixture.playbackService.restoreSession(session));
+    REQUIRE(PlaybackServiceTestAccess::restoreSession(fixture.playbackService, session));
 
     auto const restored = fixture.playbackService.state();
     CHECK(restored.transport == audio::Transport::Idle);
@@ -349,20 +350,14 @@ namespace ao::rt::test
     CHECK(deferredSeekFired);
     CHECK(fixture.playbackService.state().elapsed == std::chrono::milliseconds{75});
 
-    auto const tempDir = ao::test::TempDir{};
-    auto sessionStore = ConfigStore{std::filesystem::path{tempDir.path()} / "workspace.yaml"};
-    fixture.playbackService.saveSession(sessionStore);
-
-    auto reloadedStore = ConfigStore{std::filesystem::path{tempDir.path()} / "workspace.yaml"};
-    auto reloadedSession = PlaybackSessionState{};
-    REQUIRE(reloadedStore.load(kPlaybackSessionConfigGroup, reloadedSession));
-    CHECK(reloadedSession.sourceListId == ListId{10});
-    CHECK(reloadedSession.trackId == trackId);
-    CHECK(reloadedSession.positionMs == 75);
-    CHECK(reloadedSession.shuffleMode == ShuffleMode::On);
-    CHECK(reloadedSession.repeatMode == RepeatMode::All);
-    CHECK(reloadedSession.volume == 0.5F);
-    CHECK(reloadedSession.muted == true);
+    auto const snapshot = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
+    CHECK(snapshot.sourceListId == ListId{10});
+    CHECK(snapshot.trackId == trackId);
+    CHECK(snapshot.positionMs == 75);
+    CHECK(snapshot.shuffleMode == ShuffleMode::On);
+    CHECK(snapshot.repeatMode == RepeatMode::All);
+    CHECK(snapshot.volume == 0.5F);
+    CHECK(snapshot.muted == true);
 
     fixture.onDevicesChangedCb(fixture.status.devices);
     CHECK(fixture.renderTarget == nullptr);
@@ -393,7 +388,7 @@ namespace ao::rt::test
       .muted = true,
     };
 
-    REQUIRE(fixture.playbackService.restoreSession(session));
+    REQUIRE(PlaybackServiceTestAccess::restoreSession(fixture.playbackService, session));
 
     auto const restored = fixture.playbackService.state();
     CHECK(restored.nowPlaying.trackId == trackId);
@@ -403,66 +398,56 @@ namespace ao::rt::test
     CHECK(restored.volume.level == 1.0F);
     CHECK(restored.volume.muted == true);
 
-    auto const tempDir = ao::test::TempDir{};
-    auto sessionStore = ConfigStore{std::filesystem::path{tempDir.path()} / "workspace.yaml"};
-    fixture.playbackService.saveSession(sessionStore);
-
-    auto reloadedStore = ConfigStore{std::filesystem::path{tempDir.path()} / "workspace.yaml"};
-    auto reloadedSession = PlaybackSessionState{};
-    REQUIRE(reloadedStore.load(kPlaybackSessionConfigGroup, reloadedSession));
-    CHECK(reloadedSession.positionMs == 0);
-    CHECK(reloadedSession.shuffleMode == ShuffleMode::Off);
-    CHECK(reloadedSession.repeatMode == RepeatMode::Off);
-    CHECK(reloadedSession.volume == 1.0F);
+    auto const snapshot = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
+    CHECK(snapshot.positionMs == 0);
+    CHECK(snapshot.shuffleMode == ShuffleMode::Off);
+    CHECK(snapshot.repeatMode == RepeatMode::Off);
+    CHECK(snapshot.volume == 1.0F);
   }
 
-  TEST_CASE("PlaybackService control - restore failure does not overwrite persisted session",
+  TEST_CASE("PlaybackService control - restore failure does not overwrite live restorable state",
             "[runtime][unit][playback-control][session]")
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Restored Track", .uri = fixturePath});
-    auto const tempDir = ao::test::TempDir{};
-    auto sessionStore = ConfigStore{std::filesystem::path{tempDir.path()} / "workspace.yaml"};
     auto const storedSession = PlaybackSessionState{
       .sourceListId = ListId{10},
-      .trackId = TrackId{42},
+      .trackId = trackId,
       .positionMs = 1234,
       .shuffleMode = ShuffleMode::On,
       .repeatMode = RepeatMode::All,
       .volume = 0.25F,
       .muted = true,
     };
-    sessionStore.save(kPlaybackSessionConfigGroup, storedSession);
-    REQUIRE(sessionStore.flush());
+    REQUIRE(PlaybackServiceTestAccess::restoreSession(fixture.playbackService, storedSession));
 
-    auto const schemaResult = fixture.playbackService.restoreSession(PlaybackSessionState{
-      .schemaVersion = kPlaybackSessionSchemaVersion + 1,
-      .sourceListId = ListId{10},
-      .trackId = trackId,
-      .positionMs = 5678,
-    });
+    auto const schemaResult =
+      PlaybackServiceTestAccess::restoreSession(fixture.playbackService,
+                                                PlaybackSessionState{
+                                                  .schemaVersion = kPlaybackSessionSchemaVersion + 1,
+                                                  .sourceListId = ListId{10},
+                                                  .trackId = trackId,
+                                                  .positionMs = 5678,
+                                                });
     REQUIRE_FALSE(schemaResult);
     CHECK(schemaResult.error().code == Error::Code::FormatRejected);
 
-    auto const restoreResult = fixture.playbackService.restoreSession(PlaybackSessionState{
-      .sourceListId = ListId{10},
-      .trackId = TrackId{9999},
-      .positionMs = 5678,
-    });
+    auto const restoreResult = PlaybackServiceTestAccess::restoreSession(fixture.playbackService,
+                                                                         PlaybackSessionState{
+                                                                           .sourceListId = ListId{10},
+                                                                           .trackId = TrackId{9999},
+                                                                           .positionMs = 5678,
+                                                                         });
     CHECK_FALSE(restoreResult);
 
-    fixture.playbackService.saveSession(sessionStore);
-
-    auto reloadedStore = ConfigStore{std::filesystem::path{tempDir.path()} / "workspace.yaml"};
-    auto reloadedSession = PlaybackSessionState{};
-    REQUIRE(reloadedStore.load(kPlaybackSessionConfigGroup, reloadedSession));
-    CHECK(reloadedSession.sourceListId == storedSession.sourceListId);
-    CHECK(reloadedSession.trackId == storedSession.trackId);
-    CHECK(reloadedSession.positionMs == storedSession.positionMs);
-    CHECK(reloadedSession.shuffleMode == storedSession.shuffleMode);
-    CHECK(reloadedSession.repeatMode == storedSession.repeatMode);
-    CHECK(reloadedSession.volume == storedSession.volume);
-    CHECK(reloadedSession.muted == storedSession.muted);
+    auto const snapshot = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
+    CHECK(snapshot.sourceListId == storedSession.sourceListId);
+    CHECK(snapshot.trackId == storedSession.trackId);
+    CHECK(snapshot.positionMs == storedSession.positionMs);
+    CHECK(snapshot.shuffleMode == storedSession.shuffleMode);
+    CHECK(snapshot.repeatMode == storedSession.repeatMode);
+    CHECK(snapshot.volume == storedSession.volume);
+    CHECK(snapshot.muted == storedSession.muted);
   }
 } // namespace ao::rt::test

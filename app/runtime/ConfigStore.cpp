@@ -36,6 +36,16 @@ namespace ao::rt
     return utility::writeAtomically(_filePath, yaml, utility::AtomicFilePermissions::OwnerReadWrite);
   }
 
+  Result<bool> ConfigStore::contains(std::string_view const group)
+  {
+    if (auto const loaded = ensureLoaded(); !loaded)
+    {
+      return std::unexpected{loaded.error()};
+    }
+
+    return _root.is_map(0) && _root.rootref()[yaml::toCsubstr(group)].readable();
+  }
+
   Result<> ConfigStore::ensureLoaded()
   {
     if (_loaded)

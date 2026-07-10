@@ -436,7 +436,7 @@ namespace ao::tui
     auto events = EventController{screen,
                                   shell,
                                   library,
-                                  playback,
+                                  runtime,
                                   EventControllerBindings{
                                     .outputDevices = &outputDevices,
                                     .hitRegions = &hitRegions,

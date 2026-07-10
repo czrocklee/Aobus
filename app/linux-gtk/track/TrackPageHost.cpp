@@ -12,6 +12,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/PlaybackQueueService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -21,7 +22,6 @@
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
@@ -40,13 +40,11 @@ namespace ao::gtk
 {
   TrackPageHost::TrackPageHost(Gtk::Stack& stack,
                                rt::AppRuntime& runtime,
-                               ao::uimodel::PlaybackQueueSession* queueSession,
                                TagEditController& tagEditController,
                                ListNavigationController& listNavigation,
                                uimodel::TrackColumnLayoutStore& layoutStore)
     : _stack{stack}
     , _runtime{runtime}
-    , _playbackQueueSession{queueSession}
     , _tagEditController{tagEditController}
     , _listNavigation{listNavigation}
     , _layoutStore{layoutStore}
@@ -381,10 +379,8 @@ namespace ao::gtk
     page->signalTrackActivated().connect(
       [this, page](TrackId id)
       {
-        if (_playbackQueueSession)
-        {
-          _playbackQueueSession->playQueue(page->selectionController().visibleTrackIds(), id, page->listId());
-        }
+        std::ignore =
+          _runtime.playbackQueue().playQueue(page->selectionController().visibleTrackIds(), id, page->listId());
       });
 
     page->signalCreateSmartListRequested().connect(

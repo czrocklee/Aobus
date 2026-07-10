@@ -14,11 +14,10 @@
 #include <ao/audio/Transport.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/rt/PlaybackSessionState.h>
+#include <ao/rt/PlaybackQueueService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/queue/PlaybackQueueSession.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -32,6 +31,7 @@
 #include <fstream>
 #include <ios>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -78,6 +78,18 @@ namespace ao::gtk::platform::test
       }
 
       return true;
+    }
+
+    std::optional<TrackId> currentQueueTrack(rt::PlaybackQueueService const& queue)
+    {
+      auto const& state = queue.state();
+
+      if (!state.optCurrentIndex || *state.optCurrentIndex >= state.trackIds.size())
+      {
+        return std::nullopt;
+      }
+
+      return state.trackIds[*state.optCurrentIndex];
     }
   } // namespace
 
@@ -137,9 +149,12 @@ namespace ao::gtk::platform::test
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime.playback());
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const resourceId = addResource(runtime.musicLibrary(), kPngBytes);
     auto const trackId = library::test::addTrack(
-      runtime.musicLibrary(), library::test::TrackSpec{.title = "Cover Track", .coverArtId = resourceId});
+      runtime.musicLibrary(),
+      library::test::TrackSpec{.title = "Cover Track", .uri = fixturePath, .coverArtId = resourceId});
     auto const cacheDir = fixture.tempDir().path() / "mpris-art";
     std::filesystem::create_directories(cacheDir);
     auto const stalePath = cacheDir / (std::to_string(resourceId.raw()) + ".img");
@@ -152,10 +167,7 @@ namespace ao::gtk::platform::test
 
     auto cache = MprisArtUrlCache{runtime.library(), cacheDir};
 
-    REQUIRE(runtime.playback().restoreSession(rt::PlaybackSessionState{
-      .sourceListId = ListId{5},
-      .trackId = trackId,
-    }));
+    REQUIRE(runtime.playbackQueue().playQueue({trackId}, trackId, ListId{5}));
     CHECK(runtime.playback().state().nowPlaying.coverArtId == resourceId);
 
     auto const url = cache.urlForResource(runtime.playback().state().nowPlaying.coverArtId);
@@ -238,9 +250,9 @@ namespace ao::gtk::platform::test
       library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "First", .uri = fixturePath});
     auto const secondTrack =
       library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "Second", .uri = fixturePath});
-    auto queue = uimodel::PlaybackQueueSession{playback, runtime.notifications()};
+    auto& queue = runtime.playbackQueue();
     std::int32_t playSelectionCount = 0;
-    auto commands = uimodel::PlaybackCommandSurface{playback, &queue, [&playSelectionCount] { ++playSelectionCount; }};
+    auto commands = uimodel::PlaybackCommandSurface{playback, queue, [&playSelectionCount] { ++playSelectionCount; }};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
@@ -250,9 +262,9 @@ namespace ao::gtk::platform::test
 
     REQUIRE(queue.playQueue({firstTrack, secondTrack}, firstTrack, ListId{8}));
     CHECK(endpoint.dispatchPlayerMethod("Next"));
-    CHECK(queue.nowPlayingTrackId() == secondTrack);
+    CHECK(currentQueueTrack(queue) == secondTrack);
     CHECK(endpoint.dispatchPlayerMethod("Previous"));
-    CHECK(queue.nowPlayingTrackId() == firstTrack);
+    CHECK(currentQueueTrack(queue) == firstTrack);
 
     CHECK(endpoint.dispatchPlayerMethod("Pause"));
     CHECK(playback.state().transport == audio::Transport::Paused);
@@ -264,8 +276,8 @@ namespace ao::gtk::platform::test
   TEST_CASE("MprisBridge - root methods dispatch to injected GTK lifecycle callbacks", "[gtk][unit][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
-    auto queue = uimodel::PlaybackQueueSession{fixture.runtime().playback(), fixture.runtime().notifications()};
-    auto commands = uimodel::PlaybackCommandSurface{fixture.runtime().playback(), &queue, [] {}};
+    auto& queue = fixture.runtime().playbackQueue();
+    auto commands = uimodel::PlaybackCommandSurface{fixture.runtime().playback(), queue, [] {}};
     std::int32_t raiseCount = 0;
     std::int32_t quitCount = 0;
     auto callbacks = MprisBridge::Callbacks{
@@ -294,8 +306,8 @@ namespace ao::gtk::platform::test
   TEST_CASE("MprisBridge - unsupported player methods are rejected", "[gtk][unit][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
-    auto queue = uimodel::PlaybackQueueSession{fixture.runtime().playback(), fixture.runtime().notifications()};
-    auto commands = uimodel::PlaybackCommandSurface{fixture.runtime().playback(), &queue, [] {}};
+    auto& queue = fixture.runtime().playbackQueue();
+    auto commands = uimodel::PlaybackCommandSurface{fixture.runtime().playback(), queue, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{fixture.runtime().playback(), commands, callbacks};
 
@@ -313,8 +325,8 @@ namespace ao::gtk::platform::test
       library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "First", .uri = fixturePath});
     auto const secondTrack =
       library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "Second", .uri = fixturePath});
-    auto queue = uimodel::PlaybackQueueSession{playback, runtime.notifications()};
-    auto commands = uimodel::PlaybackCommandSurface{playback, &queue, [] {}};
+    auto& queue = runtime.playbackQueue();
+    auto commands = uimodel::PlaybackCommandSurface{playback, queue, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
@@ -334,9 +346,9 @@ namespace ao::gtk::platform::test
     checkCapability("CanGoPrevious", uimodel::PlaybackCommand::Previous);
 
     REQUIRE(endpoint.dispatchPlayerMethod("Next"));
-    CHECK(queue.nowPlayingTrackId() == secondTrack);
+    CHECK(currentQueueTrack(queue) == secondTrack);
     REQUIRE(endpoint.dispatchPlayerMethod("Next"));
-    CHECK(queue.nowPlayingTrackId() == secondTrack);
+    CHECK(currentQueueTrack(queue) == secondTrack);
     CHECK(playback.state().nowPlaying.trackId == secondTrack);
 
     checkCapability("CanGoNext", uimodel::PlaybackCommand::Next);
@@ -349,8 +361,8 @@ namespace ao::gtk::platform::test
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
-    auto queue = uimodel::PlaybackQueueSession{playback, fixture.runtime().notifications()};
-    auto commands = uimodel::PlaybackCommandSurface{playback, &queue, [] {}};
+    auto& queue = fixture.runtime().playbackQueue();
+    auto commands = uimodel::PlaybackCommandSurface{playback, queue, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
@@ -373,8 +385,8 @@ namespace ao::gtk::platform::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = library::test::addTrack(
       runtime.musicLibrary(), library::test::TrackSpec{.title = "Rate Track", .uri = fixturePath});
-    auto queue = uimodel::PlaybackQueueSession{playback, runtime.notifications()};
-    auto commands = uimodel::PlaybackCommandSurface{playback, &queue, [] {}};
+    auto& queue = runtime.playbackQueue();
+    auto commands = uimodel::PlaybackCommandSurface{playback, queue, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
@@ -401,8 +413,8 @@ namespace ao::gtk::platform::test
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
-    auto queue = uimodel::PlaybackQueueSession{playback, fixture.runtime().notifications()};
-    auto commands = uimodel::PlaybackCommandSurface{playback, &queue, [] {}};
+    auto& queue = fixture.runtime().playbackQueue();
+    auto commands = uimodel::PlaybackCommandSurface{playback, queue, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
@@ -435,26 +447,28 @@ namespace ao::gtk::platform::test
     auto const track2 =
       library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "Queue 2", .uri = fixturePath});
 
-    auto queueSession = uimodel::PlaybackQueueSession{playback, runtime.notifications()};
+    auto& queueSession = runtime.playbackQueue();
     REQUIRE(queueSession.playQueue({track1, track2}, track2, ListId{10}));
     REQUIRE_FALSE(queueSession.hasNext());
-    REQUIRE_FALSE(queueSession.peekNext());
+    REQUIRE_FALSE(queueSession.state().optPendingNextIndex);
 
-    auto commands = uimodel::PlaybackCommandSurface{playback, &queueSession, [] {}};
+    auto commands = uimodel::PlaybackCommandSurface{playback, queueSession, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     CHECK(endpoint.dispatchSetLoopStatus("Playlist"));
     CHECK(queueSession.hasNext());
-    CHECK(queueSession.peekNext() == track1);
+    REQUIRE(queueSession.state().optPendingNextIndex);
+    CHECK(queueSession.state().trackIds[*queueSession.state().optPendingNextIndex] == track1);
 
     CHECK(endpoint.dispatchSetLoopStatus("None"));
     REQUIRE_FALSE(queueSession.hasNext());
-    REQUIRE_FALSE(queueSession.peekNext());
+    REQUIRE_FALSE(queueSession.state().optPendingNextIndex);
 
     CHECK(endpoint.dispatchSetShuffle(true));
     CHECK(queueSession.hasNext());
-    CHECK(queueSession.peekNext() == track1);
+    REQUIRE(queueSession.state().optPendingNextIndex);
+    CHECK(queueSession.state().trackIds[*queueSession.state().optPendingNextIndex] == track1);
   }
 
   TEST_CASE("MprisBridge - seek methods update playback service position", "[gtk][unit][mpris]")
@@ -473,35 +487,32 @@ namespace ao::gtk::platform::test
     auto const nextTrackId = library::test::addTrack(
       runtime.musicLibrary(), library::test::TrackSpec{.title = "MPRIS Next", .uri = fixturePath});
 
-    REQUIRE(playback.restoreSession(rt::PlaybackSessionState{
-      .sourceListId = ListId{5},
-      .trackId = trackId,
-      .positionMs = 5'000,
-    }));
+    REQUIRE(runtime.playbackQueue().playQueue({trackId, nextTrackId}, trackId, ListId{5}));
+    playback.seek(std::chrono::milliseconds{500});
 
-    auto queue = uimodel::PlaybackQueueSession{playback, runtime.notifications()};
-    auto commands = uimodel::PlaybackCommandSurface{playback, &queue, [] {}};
+    auto& queue = runtime.playbackQueue();
+    auto commands = uimodel::PlaybackCommandSurface{playback, queue, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
-    CHECK(endpoint.dispatchSeek(2'000'000));
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{7000});
+    CHECK(endpoint.dispatchSeek(200'000));
+    CHECK(playback.state().elapsed == std::chrono::milliseconds{700});
 
-    CHECK(endpoint.dispatchSetPosition(MprisBridge::trackObjectPath(trackId), 1'500'000));
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{1500});
+    CHECK(endpoint.dispatchSetPosition(MprisBridge::trackObjectPath(trackId), 150'000));
+    CHECK(playback.state().elapsed == std::chrono::milliseconds{150});
 
     CHECK(endpoint.dispatchSetPosition("/org/mpris/MediaPlayer2/Track/999", 4'000'000));
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{1500});
+    CHECK(playback.state().elapsed == std::chrono::milliseconds{150});
 
     CHECK(endpoint.dispatchSetPosition(MprisBridge::trackObjectPath(trackId), -1));
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{1500});
+    CHECK(playback.state().elapsed == std::chrono::milliseconds{150});
 
     CHECK(endpoint.dispatchSetPosition(MprisBridge::trackObjectPath(trackId), 99'000'000));
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{1500});
+    CHECK(playback.state().elapsed == std::chrono::milliseconds{150});
 
     REQUIRE(queue.playQueue({trackId, nextTrackId}, trackId, ListId{5}));
     CHECK(endpoint.dispatchSeek(99'000'000));
-    CHECK(queue.nowPlayingTrackId() == nextTrackId);
+    CHECK(currentQueueTrack(queue) == nextTrackId);
     CHECK(playback.state().nowPlaying.trackId == nextTrackId);
 
     playback.stop();
