@@ -207,10 +207,10 @@ namespace ao::lmdb::test
 
     // Delete
     {
-      auto wtxn = beginWriteTransaction(env);
-      auto writer = db.writer(wtxn);
-      REQUIRE(writer.del(1));
-      REQUIRE(wtxn.commit());
+      auto deleteTransaction = beginWriteTransaction(env);
+      auto deleteWriter = db.writer(deleteTransaction);
+      REQUIRE(deleteWriter.del(1));
+      REQUIRE(deleteTransaction.commit());
     }
 
     // Verify deleted

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/AudioScalars.h>
@@ -18,8 +19,6 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
-#include <system_error>
-#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -38,27 +37,6 @@ namespace ao::rt::test
       tree.callbacks(yaml::callbacks());
       return tree;
     }
-
-    struct DirectoryPermissionRestorer final
-    {
-      explicit DirectoryPermissionRestorer(std::filesystem::path path)
-        : path{std::move(path)}
-      {
-      }
-
-      DirectoryPermissionRestorer(DirectoryPermissionRestorer const&) = delete;
-      DirectoryPermissionRestorer& operator=(DirectoryPermissionRestorer const&) = delete;
-      DirectoryPermissionRestorer(DirectoryPermissionRestorer&&) = delete;
-      DirectoryPermissionRestorer& operator=(DirectoryPermissionRestorer&&) = delete;
-
-      ~DirectoryPermissionRestorer()
-      {
-        auto ec = std::error_code{};
-        std::filesystem::permissions(path, std::filesystem::perms::owner_all, std::filesystem::perm_options::add, ec);
-      }
-
-      std::filesystem::path path;
-    };
   } // namespace
 
   TEST_CASE("LibraryYaml - delta export writes changed and unreadable tracks",
@@ -160,14 +138,12 @@ namespace ao::rt::test
   TEST_CASE("LibraryYaml - delta export reports filesystem inspection errors",
             "[runtime][workflow][import-export][delta]")
   {
-#ifdef _WIN32
-    SKIP("std::filesystem permissions do not make directories unreadable on Windows");
-#endif
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto const blockedDir = std::filesystem::path{temp.path()} / "blocked";
     std::filesystem::create_directory(blockedDir);
-    auto restorePermissions = DirectoryPermissionRestorer{blockedDir};
+    auto const blockedFile = blockedDir / "song.flac";
+    std::ofstream{blockedFile} << "content";
 
     {
       library::test::addTrack(ml,
@@ -185,7 +161,12 @@ namespace ao::rt::test
                                                        .bitDepth = BitDepth{}});
     }
 
-    std::filesystem::permissions(blockedDir, std::filesystem::perms::none, std::filesystem::perm_options::replace);
+    auto const denied = ao::test::ScopedDirectoryAccessGuard{blockedDir, ao::test::DeniedDirectoryAccess::Read};
+
+    if (!denied.effective())
+    {
+      SKIP("the current process bypasses directory read restrictions");
+    }
 
     auto exporter = LibraryYamlExporter{ml};
     auto const result = exporter.exportToYaml(std::filesystem::path{temp.path()} / "delta.yaml", ExportMode::Delta);
@@ -197,16 +178,14 @@ namespace ao::rt::test
   TEST_CASE("LibraryYaml - delta import reports filesystem inspection errors",
             "[runtime][workflow][import-export][delta]")
   {
-#ifdef _WIN32
-    SKIP("std::filesystem permissions do not make directories unreadable on Windows");
-#endif
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "delta-import.yaml";
     auto const blockedDir = std::filesystem::path{temp.path()} / "blocked";
     std::filesystem::create_directory(blockedDir);
-    auto restorePermissions = DirectoryPermissionRestorer{blockedDir};
+    auto const blockedFile = blockedDir / "song.flac";
+    std::ofstream{blockedFile} << "content";
 
     {
       auto yaml = std::ofstream{yamlPath};
@@ -219,7 +198,12 @@ namespace ao::rt::test
            << "  lists: []\n";
     }
 
-    std::filesystem::permissions(blockedDir, std::filesystem::perms::none, std::filesystem::perm_options::replace);
+    auto const denied = ao::test::ScopedDirectoryAccessGuard{blockedDir, ao::test::DeniedDirectoryAccess::Read};
+
+    if (!denied.effective())
+    {
+      SKIP("the current process bypasses directory read restrictions");
+    }
 
     auto const result = importer.importFromYaml(yamlPath);
 

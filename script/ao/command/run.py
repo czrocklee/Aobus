@@ -10,6 +10,9 @@ from ..core.proc import die
 from . import build
 
 HELP = "Build and run an application enabled by the native profile"
+NAME = "run"
+# True when ao.bat must initialize the MSVC/vcpkg build environment first.
+REQUIRES_BUILD_ENV = True
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,7 @@ examples:
 
 WINDOWS_EPILOG = """\
 examples:
+  ao.bat run cli                         # build and run the CLI in debug mode
   ao.bat run tui                         # build and run the TUI in debug mode
   ao.bat run tui -n                      # run without rebuilding
   ao.bat run tui release                 # build and run the release TUI
@@ -47,7 +51,7 @@ examples:
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     profile = builddir.platform_profile()
     parser = subparsers.add_parser(
-        "run",
+        NAME,
         help=HELP,
         description=HELP,
         epilog=WINDOWS_EPILOG if builddir.platform_profile().name == "windows" else EPILOG,

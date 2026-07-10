@@ -19,7 +19,8 @@
 #include <cstdint>
 
 using namespace clang;
-using namespace clang::ast_matchers;
+
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -235,6 +236,8 @@ namespace clang::tidy::readability
 
   void ThreadingPolicyCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     // Match std::thread usages (Rule 4.4.2)
     finder->addMatcher(
       varDecl(hasType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(cxxRecordDecl(hasName("::std::thread")))))),

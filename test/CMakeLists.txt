@@ -7,14 +7,8 @@ target_compile_options(ao_test_options INTERFACE
   $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,15>>:-Wno-mismatched-new-delete>
 )
 
-if(PIPEWIRE_FOUND)
-  target_compile_definitions(ao_test_options INTERFACE PIPEWIRE_FOUND)
-  target_link_libraries(ao_test_options INTERFACE PkgPipeWire)
-endif()
-
-if(ALSA_FOUND)
-  target_compile_definitions(ao_test_options INTERFACE ALSA_FOUND)
-  target_link_libraries(ao_test_options INTERFACE PkgALSA PkgUDEV)
+if(LINUX)
+  target_link_libraries(ao_test_options INTERFACE PkgPipeWire PkgALSA PkgUDEV)
 endif()
 
 # ao_core_test: portable unit + integration tests
@@ -283,14 +277,11 @@ add_executable(ao_core_test
 )
 
 target_link_libraries(ao_core_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
-if(PIPEWIRE_FOUND)
+if(LINUX)
   target_sources(ao_core_test PRIVATE
+    unit/FilesystemTestSupportPosix.cpp
     unit/audio/backend/PipeWireMonitorTest.cpp
     unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
-  )
-endif()
-if(ALSA_FOUND)
-  target_sources(ao_core_test PRIVATE
     unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
     unit/audio/backend/detail/AlsaPcmErrorTest.cpp
     unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
@@ -298,11 +289,13 @@ if(ALSA_FOUND)
 endif()
 if(WIN32)
   target_sources(ao_core_test PRIVATE
+    unit/FilesystemTestSupportWindows.cpp
     unit/audio/backend/WasapiProviderTest.cpp
     unit/audio/backend/WasapiSharedBackendTest.cpp
     unit/audio/backend/detail/WasapiGraphRegistryTest.cpp
     unit/audio/backend/detail/WasapiStringsTest.cpp
   )
+  target_link_libraries(ao_core_test PRIVATE advapi32)
 endif()
 add_test(NAME ao_core_test COMMAND ao_core_test)
 
@@ -385,7 +378,7 @@ add_executable(ao_integration_test
 )
 
 target_link_libraries(ao_integration_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
-if(PIPEWIRE_FOUND)
+if(LINUX)
   target_sources(ao_integration_test PRIVATE integration/audio/backend/PipeWireProviderTest.cpp)
 endif()
 

@@ -190,6 +190,8 @@ class CompileDatabaseProvisioningTest(unittest.TestCase):
                         "windows-tidy",
                         "-B",
                         str(build_dir),
+                        "-U",
+                        "AOBUS_BUILD_*",
                         "-DAOBUS_BUILD_LINT_PLUGIN=ON",
                     ],
                     "configure",
@@ -421,6 +423,48 @@ class CompileCommandCoverageTest(unittest.TestCase):
             self.assertEqual(list(plan.targets), [])
 
 
+class FilteredCompileDatabaseTest(unittest.TestCase):
+    def test_removes_only_exact_driver_arguments_from_both_database_forms(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "build"
+            destination = root / "filtered"
+            first = root / "First.cpp"
+            second = root / "Second.cpp"
+            first.touch()
+            second.touch()
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "directory": str(root),
+                            "file": str(first),
+                            "arguments": ["cl.exe", "/ZC:PREPROCESSOR", "/c", str(first)],
+                        },
+                        {
+                            "directory": str(root),
+                            "file": str(second),
+                            "command": f"cl.exe /Zc:preprocessor /Zc:preprocessor- /c {second}",
+                        },
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            database_dir = tidyengine.write_filtered_compile_database(
+                build_dir,
+                destination,
+                ("/Zc:preprocessor",),
+            )
+
+            self.assertEqual(database_dir, destination)
+            entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
+            self.assertEqual(entries[0]["arguments"], ["cl.exe", "/c", str(first)])
+            self.assertNotIn(" /Zc:preprocessor ", entries[1]["command"])
+            self.assertIn("/Zc:preprocessor-", entries[1]["command"])
+
+
 class HeaderCompileDatabaseTest(unittest.TestCase):
     def test_arguments_command_is_copied_with_header_as_exact_input(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -440,7 +484,7 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
                         {
                             "directory": str(build_dir),
                             "file": str(source),
-                            "arguments": ["clang++", "-DFEATURE=1", "-c", str(source)],
+                            "arguments": ["clang++", "/TP", "-DFEATURE=1", "-c", str(source)],
                             "output": "Player.obj",
                         }
                     ]
@@ -453,6 +497,7 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
                 build_dir,
                 [target],
                 destination,
+                excluded_arguments=("/TP",),
             )
 
             self.assertEqual(database_dir, destination)
@@ -477,7 +522,7 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
             source.touch()
             header.touch()
             build_dir.mkdir()
-            command = f'clang++ -DFEATURE=1 -c "{source}" -o Player.obj'
+            command = f'clang++ /TP -DFEATURE=1 -c "{source}" -o Player.obj'
             (build_dir / "compile_commands.json").write_text(
                 json.dumps([{"directory": str(build_dir), "file": str(source), "command": command}]),
                 encoding="utf-8",
@@ -487,11 +532,13 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
                 build_dir,
                 [tidyengine.CompileCommandTarget(header, source)],
                 destination,
+                excluded_arguments=("/TP",),
             )
 
             entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
             rewritten = entries[0]["command"]
             self.assertIn("-DFEATURE=1", rewritten)
+            self.assertNotIn("/TP", rewritten)
             self.assertIn(f'"{header.resolve()}"', rewritten)
             self.assertNotIn(str(source), rewritten)
             self.assertEqual(entries[0]["file"], header.resolve().as_posix())

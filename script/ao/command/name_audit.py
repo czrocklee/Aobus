@@ -6,6 +6,10 @@ import sys
 from ..core import nameaudit
 
 HELP = "Report class/file names that drift from project role vocabulary"
+NAME = "name-audit"
+# True when ao.bat must initialize the MSVC/vcpkg build environment first.
+REQUIRES_BUILD_ENV = False
+
 
 EPILOG = """\
 The audit is advisory by default: it reports issues and exits zero. Use
@@ -20,7 +24,7 @@ examples:
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(
-        "name-audit",
+        NAME,
         help=HELP,
         description=HELP,
         epilog=EPILOG,

@@ -10,9 +10,12 @@ from typing import Literal
 
 from ..core import builddir, linttest, tooltest
 from ..core.proc import die, run
-from . import build
 
 HELP = "Build incrementally and run C++ and tooling test suites with optional Catch2 filters"
+NAME = "test"
+# True when ao.bat must initialize the MSVC/vcpkg build environment first.
+REQUIRES_BUILD_ENV = True
+
 
 EPILOG = """\
 Pass any valid Catch2 filter string as the last argument. Quote it to avoid shell
@@ -110,7 +113,7 @@ def virtual_gtk_display() -> Generator[dict[str, str], None, None]:
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     profile = builddir.platform_profile()
     parser = subparsers.add_parser(
-        "test", help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+        NAME, help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("filter", nargs="?", default="", help="Catch2 test filter")
     suite = parser.add_mutually_exclusive_group()
@@ -263,11 +266,8 @@ def run_suites(
 
 
 def run_command(args: argparse.Namespace) -> int:
-    profile = builddir.platform_profile()
     build_dir = (
-        Path(args.path)
-        if args.path
-        else builddir.build_dir("debug", clang=args.clang, asan=args.asan, tsan=args.tsan, with_tests=True)
+        Path(args.path) if args.path else builddir.build_dir("debug", clang=args.clang, asan=args.asan, tsan=args.tsan)
     )
 
     suites = suites_for(args.suite)
@@ -275,20 +275,6 @@ def run_command(args: argparse.Namespace) -> int:
     if not args.no_build:
         targets = [target for suite in suites if (target := SUITES[suite].target) is not None]
         if targets:
-            if profile.name == "windows":
-                build_args = argparse.Namespace(
-                    flavor="debug",
-                    clean=False,
-                    clang=args.clang,
-                    asan=args.asan,
-                    tsan=args.tsan,
-                    verbose=False,
-                    path=args.path,
-                )
-                result = build.do_build(build_args, targets, with_tests=True)
-                build_dir = result.build_dir
-                return run_suites(suites, build_dir, test_filter=args.filter, list_only=args.list)
-
             if not build_dir.is_dir():
                 raise die(f"build directory {build_dir} does not exist. Run ./ao build first to configure the project.")
             print("=====================================")

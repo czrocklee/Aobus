@@ -26,7 +26,7 @@
 
 #include <optional>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -49,6 +49,8 @@ namespace clang::tidy::readability
 
   void UseStdNumbersCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     auto builtinLoc = typeLoc(loc(builtinType())).bind("tl");
     auto builtinTypeMatcher = builtinType().bind("bt");
 
@@ -244,21 +246,21 @@ namespace clang::tidy::readability
 
         auto const* contextDecl = static_cast<Decl const*>(nullptr);
 
-        if (auto const* decl = result.Nodes.getNodeAs<VarDecl>("var"); decl != nullptr)
+        if (auto const* variableDecl = result.Nodes.getNodeAs<VarDecl>("var"); variableDecl != nullptr)
         {
-          contextDecl = decl;
+          contextDecl = variableDecl;
         }
-        else if (auto const* decl = result.Nodes.getNodeAs<FieldDecl>("field"); decl != nullptr)
+        else if (auto const* fieldDecl = result.Nodes.getNodeAs<FieldDecl>("field"); fieldDecl != nullptr)
         {
-          contextDecl = decl;
+          contextDecl = fieldDecl;
         }
-        else if (auto const* decl = result.Nodes.getNodeAs<ParmVarDecl>("parm"); decl != nullptr)
+        else if (auto const* parameterDecl = result.Nodes.getNodeAs<ParmVarDecl>("parm"); parameterDecl != nullptr)
         {
-          contextDecl = decl;
+          contextDecl = parameterDecl;
         }
-        else if (auto const* decl = result.Nodes.getNodeAs<FunctionDecl>("func_ret"); decl != nullptr)
+        else if (auto const* functionDecl = result.Nodes.getNodeAs<FunctionDecl>("func_ret"); functionDecl != nullptr)
         {
-          contextDecl = decl;
+          contextDecl = functionDecl;
         }
 
         return MatchContext{.builtinLoc = builtinLoc,

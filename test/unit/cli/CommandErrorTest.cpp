@@ -21,7 +21,6 @@ namespace ao::cli::test
     try
     {
       throwCommandError(error);
-      FAIL("throwCommandError was expected to throw");
     }
     catch (CommandError const& ex)
     {
@@ -42,7 +41,6 @@ namespace ao::cli::test
     try
     {
       throwCommandError(error, "export failed: {}", error.message);
-      FAIL("throwCommandError was expected to throw");
     }
     catch (CommandError const& ex)
     {
@@ -60,7 +58,6 @@ namespace ao::cli::test
     try
     {
       throwCommandError(Error::Code::InvalidInput, "fresh failure");
-      FAIL("throwCommandError was expected to throw");
     }
     catch (CommandError const& ex)
     {
@@ -81,7 +78,6 @@ namespace ao::cli::test
       try
       {
         throwCommandError(Error::Code::NotFound, "track not found: {}", TrackId{42});
-        FAIL("throwCommandError was expected to throw");
       }
       catch (CommandError const& ex)
       {
@@ -99,7 +95,6 @@ namespace ao::cli::test
       try
       {
         throwCommandError(Error::Code::FormatRejected, "filter error: {}", "bad token");
-        FAIL("throwCommandError was expected to throw");
       }
       catch (CommandError const& ex)
       {

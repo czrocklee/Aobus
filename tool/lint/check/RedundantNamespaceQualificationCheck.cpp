@@ -24,7 +24,7 @@
 
 #include <algorithm>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -235,6 +235,8 @@ namespace clang::tidy::readability
 
   void RedundantNamespaceQualificationCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     finder->addMatcher(declRefExpr().bind("declRef"), this);
     finder->addMatcher(typeLoc().bind("typeLoc"), this);
   }

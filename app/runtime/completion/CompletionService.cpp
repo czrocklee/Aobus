@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -200,7 +201,7 @@ namespace ao::rt
 
       for (auto const& [_, view] : reader.cold())
       {
-        for (auto const& [dictionaryId, _] : view.customMetadata())
+        for (auto const dictionaryId : view.customMetadata() | std::views::keys)
         {
           addValue(counts, dictionary.getOrDefault(dictionaryId));
         }

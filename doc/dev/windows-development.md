@@ -1,8 +1,9 @@
 # Windows development
 
-The native Windows build provides the FTXUI terminal application, the shared
-core libraries, native tests, and a dedicated clang-tidy configuration. The GTK
-and CLI frontends and the council tool are not enabled in the Windows presets.
+The native Windows build provides the CLI and FTXUI terminal applications, the
+shared core libraries, native tests, and a dedicated clang-tidy configuration.
+The GTK frontend and council tool are not available in the Windows development
+profile.
 
 The source checkout may live on a local disk, a mapped drive such as `Y:`, or a
 network-backed workspace. Build trees and managed development tools are kept on
@@ -64,10 +65,11 @@ The checkout key is stable for one checkout and keeps two clones or linked
 worktrees from sharing CMake and vcpkg state. LLVM downloads and verified SDKs
 are intentionally shared. The tool fingerprint changes when the managed Python
 or locked requirements change, allowing a new virtual environment to be built
-before the portal switches to it. Application-only commands use the
-`windows-tui-debug` or `windows-tui-release` preset directory. Test commands
-and `check` use the corresponding `-tests` directory, and `tidy` uses the
-separate `windows-tidy` directory.
+before the portal switches to it. Build, run, test, and check commands share the
+`windows-debug` or `windows-release` flavor directory. Tests and their vcpkg
+dependencies are part of the normal development graph; selecting a CMake target
+limits what is compiled without changing presets. `tidy` uses the separate
+`windows-tidy` directory.
 
 The portal normally stores an opaque ID in the checkout's private Git directory.
 For a read-only checkout or a linked worktree whose Git directory is not visible
@@ -104,8 +106,10 @@ or SSH session that invokes `ao.bat`.
 Run all commands from the repository root, including when that root is mapped:
 
 ```bat
-ao.bat build                 rem debug TUI build
-ao.bat build release         rem release TUI build
+ao.bat build                 rem debug build of all enabled targets
+ao.bat build release         rem release build of all enabled targets
+ao.bat build --target aobus-tui  rem build only the TUI target
+ao.bat run cli               rem incrementally build and run the CLI
 ao.bat run tui               rem incrementally build and run the TUI
 ao.bat test                  rem core and TUI tests
 ao.bat test --all            rem all Windows suites, including tooling
@@ -116,11 +120,15 @@ ao.bat hygiene               rem check formatting, audits, and lint
 ```
 
 The portal initializes the Visual Studio x64 environment when a build-capable
-command is selected. `start-msbuild-env.bat <command> [args...]` remains useful
-when another development tool needs to run inside that environment.
+command is selected; each command declares that need in its module under
+`script/ao/command/`, and Visual Studio discovery is shared with
+`start-msbuild-env.bat` through `script/ao/windows-vsenv.bat`.
+`start-msbuild-env.bat <command> [args...]` remains useful when another
+development tool needs to run inside that environment; it honors a preset
+`VCPKG_ROOT` and otherwise defaults to the Visual Studio bundled vcpkg.
 
 The default Windows test group is `core` and `tui`. The Windows `all` group and
-`ao.bat check` add `integration` and the Python `tooling` suite. Catch2
+`ao.bat check` add CLI, integration, and the Python `tooling` suite. Catch2
 executables are resolved with the `.exe` suffix automatically. The managed
 checkout environment supplies the pinned Ruff and mypy tools used by formatting,
 tidy, hygiene, and tooling tests; these commands do not depend on ambient

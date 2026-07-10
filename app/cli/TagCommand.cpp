@@ -39,6 +39,27 @@ namespace ao::cli
     std::optional<std::vector<TrackId>> optTrackIds{};
     std::vector<std::string> tags{};
   };
+
+  struct TagFrequencyDto final
+  {
+    std::string name{};
+    std::uint64_t count = 0;
+  };
+
+  struct TagFrequencyListDto final
+  {
+    std::vector<TagFrequencyDto> tags{};
+  };
+
+  struct TagMutationReportDto final
+  {
+    std::string action{};
+    std::string tag{};
+    bool dryRun = false;
+    std::uint64_t updated = 0;
+    std::vector<TrackId> trackIds{};
+    std::vector<rt::TrackTagsChange> changes{};
+  };
 } // namespace ao::cli
 
 template<>
@@ -64,17 +85,6 @@ namespace ao::cli
 {
   namespace
   {
-    struct TagFrequencyDto final
-    {
-      std::string name{};
-      std::uint64_t count = 0;
-    };
-
-    struct TagFrequencyListDto final
-    {
-      std::vector<TagFrequencyDto> tags{};
-    };
-
     std::vector<TrackId> resolveTargets(CliContext& context,
                                         std::vector<std::uint32_t> const& rawIds,
                                         std::string const& filter)
@@ -140,16 +150,6 @@ namespace ao::cli
       auto const tags = reader.selectionTags(trackIds);
       printTags(trackIds, tags, context.options().format, context.io().out);
     }
-
-    struct TagMutationReportDto final
-    {
-      std::string action{};
-      std::string tag{};
-      bool dryRun = false;
-      std::uint64_t updated = 0;
-      std::vector<TrackId> trackIds{};
-      std::vector<rt::TrackTagsChange> changes{};
-    };
 
     void formatMutation(std::string_view action,
                         std::string const& tagName,

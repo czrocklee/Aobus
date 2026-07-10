@@ -13,7 +13,7 @@
 
 #include <cstdint>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -98,6 +98,8 @@ namespace clang::tidy::readability
 
   void MemberOrderCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     finder->addMatcher(
       cxxRecordDecl(isDefinition(), unless(isExpansionInSystemHeader()), unless(isImplicit())).bind("record"), this);
   }

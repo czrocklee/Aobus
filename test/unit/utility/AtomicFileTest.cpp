@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/utility/AtomicFile.h>
 
@@ -74,23 +75,19 @@ namespace ao::utility::test
 
   TEST_CASE("AtomicFile - fails when parent directory is not writable", "[utility][unit][atomicfile]")
   {
-#ifdef _WIN32
-    SKIP("std::filesystem permissions do not make directories unwritable on Windows");
-#else
     auto const tempDir = ao::test::TempDir{};
     auto const readonlyDir = std::filesystem::path{tempDir.path()} / "readonly";
     std::filesystem::create_directories(readonlyDir);
-    std::filesystem::permissions(readonlyDir,
-                                 std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec,
-                                 std::filesystem::perm_options::replace);
+    auto const denied = ao::test::ScopedDirectoryAccessGuard{readonlyDir, ao::test::DeniedDirectoryAccess::Write};
+
+    if (!denied.effective())
+    {
+      SKIP("the current process bypasses directory write restrictions");
+    }
 
     auto const targetPath = readonlyDir / "config.yaml";
     auto const result = writeAtomically(targetPath, "version: 1\n");
     CHECK_FALSE(result.has_value());
-
-    std::filesystem::permissions(
-      readonlyDir, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
-#endif
   }
 
   TEST_CASE("AtomicFile - fails to overwrite a directory", "[utility][unit][atomicfile]")

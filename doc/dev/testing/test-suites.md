@@ -19,10 +19,10 @@ The `./ao test` command exposes individual suites and two suite groups:
 `default` is intentionally the normal development loop. On Linux, the TUI, CLI,
 integration, council, tooling, and lint suites take longer, so they are included
 only when selected directly or through `all`. The Windows `all` group contains
-core, TUI, integration, and tooling. The normal Windows test presets do not
-build GTK, CLI, the council tool, or the lint integration suite. Native
-`ao.bat tidy` uses a separate `windows-tidy` preset that builds the
-self-contained `AobusClangTidy.exe`.
+core, TUI, CLI, integration, and tooling. The normal Windows presets do not
+build GTK, the council tool, or the lint integration suite. Native `ao.bat tidy`
+uses a separate `windows-tidy` preset that builds the self-contained
+`AobusClangTidy.exe`.
 
 The tooling gate uses the pinned Ruff and mypy environment supplied by Nix on
 Linux and the checkout-specific managed environment supplied by `ao.bat` on
@@ -37,9 +37,9 @@ interactive test command and the full gate cannot drift apart.
 `--no-build` applies uniformly. Catch2 executables and the native lint artifact
 must already exist in the selected build tree; tooling tests never need a CMake
 build. `--path`, compiler, and sanitizer options select the same tree for C++
-and lint integration suites. On Windows, a build-enabled test command configures
-the matching `windows-tui-*-tests` preset automatically; application-only and
-test-enabled trees are intentionally separate under the local state root.
+and lint integration suites. On both platforms, build and test commands reuse
+the same flavor tree. Tests are configured by default, while `cmake --build
+--target ...` limits an incremental build to the selected suite targets.
 
 Tooling tests are exposed as `./ao test --tooling` on Linux and
 `ao.bat test --tooling` on Windows, not as a separate top-level command. Their

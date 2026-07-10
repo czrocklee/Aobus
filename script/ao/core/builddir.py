@@ -4,6 +4,7 @@ import hashlib
 import ntpath
 import os
 import re
+import sys
 import time
 import uuid
 from collections.abc import Mapping
@@ -12,7 +13,16 @@ from pathlib import Path
 
 from .paths import PROJECT_ROOT
 
-BUILD_ROOT = Path("/tmp/build")
+
+def linux_build_root(*, environ: Mapping[str, str] | None = None) -> Path:
+    """Return the Linux build root, host-overridable via AOBUS_BUILD_ROOT."""
+    environment = os.environ if environ is None else environ
+    if override := environment.get("AOBUS_BUILD_ROOT"):
+        return Path(override)
+    return Path("/tmp/build")
+
+
+BUILD_ROOT = linux_build_root()
 
 _CHECKOUT_ID_FILE = "aobus-checkout-id"
 _CHECKOUT_KEY_LENGTH = 12
@@ -142,13 +152,8 @@ PRESETS = {
 }
 
 WINDOWS_PRESETS = {
-    "debug": "windows-tui-debug",
-    "release": "windows-tui-release",
-}
-
-WINDOWS_TEST_PRESETS = {
-    "debug": "windows-tui-debug-tests",
-    "release": "windows-tui-release-tests",
+    "debug": "windows-debug",
+    "release": "windows-release",
 }
 
 TIDY_PRESETS = {
@@ -164,7 +169,6 @@ class PlatformProfile:
     name: str
     build_root: Path
     presets: dict[str, str]
-    test_presets: dict[str, str]
     executable_suffix: str
     apps: tuple[str, ...]
     default_suites: tuple[str, ...]
@@ -176,7 +180,6 @@ LINUX_PROFILE = PlatformProfile(
     name="linux",
     build_root=BUILD_ROOT,
     presets=PRESETS,
-    test_presets=PRESETS,
     executable_suffix="",
     apps=("cli", "tui", "gtk"),
     default_suites=("core", "gtk"),
@@ -188,11 +191,10 @@ WINDOWS_PROFILE = PlatformProfile(
     name="windows",
     build_root=WINDOWS_BUILD_ROOT,
     presets=WINDOWS_PRESETS,
-    test_presets=WINDOWS_TEST_PRESETS,
     executable_suffix=".exe",
-    apps=("tui",),
+    apps=("cli", "tui"),
     default_suites=("core", "tui"),
-    all_suites=("core", "tui", "integration", "tooling"),
+    all_suites=("core", "tui", "cli", "integration", "tooling"),
     compiler="msvc",
 )
 
@@ -204,7 +206,11 @@ def platform_profile(os_name: str | None = None) -> PlatformProfile:
     """Return the native development profile for an ``os.name`` value."""
     if (os.name if os_name is None else os_name) == "nt":
         return replace(WINDOWS_PROFILE, build_root=windows_build_root())
-    return LINUX_PROFILE
+    if os_name is None and sys.platform != "linux":
+        raise RuntimeError(
+            f"Aobus native development supports Linux and Windows; there is no profile for {sys.platform!r}."
+        )
+    return replace(LINUX_PROFILE, build_root=linux_build_root())
 
 
 def flavors(os_name: str | None = None) -> tuple[str, ...]:
@@ -234,10 +240,8 @@ def analyze_dir(os_name: str | None = None) -> Path:
     return profile.build_root / name
 
 
-def preset(flavor: str, *, with_tests: bool = False, os_name: str | None = None) -> str:
-    profile = platform_profile(os_name)
-    presets = profile.test_presets if with_tests else profile.presets
-    return presets[flavor]
+def preset(flavor: str, *, os_name: str | None = None) -> str:
+    return platform_profile(os_name).presets[flavor]
 
 
 def suffix(*, clang: bool = False, asan: bool = False, tsan: bool = False) -> str:
@@ -250,21 +254,20 @@ def build_dir(
     clang: bool = False,
     asan: bool = False,
     tsan: bool = False,
-    with_tests: bool = False,
     os_name: str | None = None,
 ) -> Path:
     """Resolve the native build tree for a flavor.
 
     The BUILD_DIR environment variable always wins, which lets callers redirect builds into
     dedicated host-persistent trees. Linux PGO steps share one tree so step 2 can consume the
-    profile data of step 1. Windows keeps application-only and test-enabled trees separate.
+    profile data of step 1. Each Windows flavor has one tree shared by builds and tests.
     """
     if override := os.environ.get("BUILD_DIR"):
         return Path(override)
 
     profile = platform_profile(os_name)
     if profile.name == "windows":
-        name = preset(flavor, with_tests=with_tests, os_name="nt")
+        name = preset(flavor, os_name="nt")
         return profile.build_root / f"{name}{suffix(clang=clang, asan=asan, tsan=tsan)}"
 
     if flavor in ("pgo1", "pgo2"):

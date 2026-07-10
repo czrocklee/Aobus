@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::aobus
 {
@@ -327,7 +327,7 @@ namespace clang::tidy::aobus
       bool findDefinitionAndCheckSameFile(CXXRecordDecl const* crd,
                                           FileID refFile,
                                           FileID& outWeakDefFile,
-                                          SourceManager& sm) const
+                                          SourceManager& sourceManager) const
       {
         bool inSame = false;
 
@@ -335,7 +335,7 @@ namespace clang::tidy::aobus
         {
           if (redecl->getLocation().isValid())
           {
-            FileID const declFile = sm.getFileID(sm.getExpansionLoc(redecl->getLocation()));
+            FileID const declFile = sourceManager.getFileID(sourceManager.getExpansionLoc(redecl->getLocation()));
 
             if (declFile == refFile)
             {
@@ -439,6 +439,8 @@ namespace clang::tidy::aobus
 
   void StrictForwardDeclarationCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     finder->addMatcher(translationUnitDecl().bind("tu"), this);
   }
 

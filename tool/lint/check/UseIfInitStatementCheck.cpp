@@ -24,7 +24,7 @@
 #include <iterator>
 #include <string>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -134,6 +134,8 @@ namespace clang::tidy::readability
 
   void UseIfInitStatementCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     // Matcher 1: Variable declared before control statement
     finder->addMatcher(declStmt(hasParent(compoundStmt().bind("block"))).bind("decl"), this);
 

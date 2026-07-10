@@ -6,6 +6,18 @@
 #pragma GCC diagnostic ignored "-Wdangling-pointer"
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
+#ifdef _MSC_VER
+// lexy's expression parser instantiates unreachable fallback branches when the
+// grammar's operator set is exhaustive; the templates are instantiated at the
+// end of the translation unit, after any warning(pop), so C4702 stays disabled
+// for the whole file.
+#pragma warning(disable : 4702)
+// MSVC emits C4305 while probing std::variant's converting constructor with
+// lexy's captureless callback lambdas (function pointer -> bool); that
+// alternative is never selected, so the truncation warning is noise.
+#pragma warning(push)
+#pragma warning(disable : 4305)
+#endif
 
 #include "detail/Lexical.h"
 #include "detail/Normalize.h"
@@ -214,4 +226,7 @@ namespace ao::query
 
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
+#endif
+#ifdef _MSC_VER
+#pragma warning(pop)
 #endif

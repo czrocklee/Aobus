@@ -95,7 +95,7 @@ namespace ao::tag::mpeg::id3v2::test
     {
       auto input = std::vector{std::byte{0xD8}, std::byte{0x3D}, std::byte{0xDE}, std::byte{0x00}};
       auto output = convertToUtf8(input, Encoding::Utf16Be);
-      CHECK(output == std::string{char(0xF0), char(0x9F), char(0x98), char(0x80)});
+      CHECK(output == std::string{"\xF0\x9F\x98\x80"});
     }
   }
 } // namespace ao::tag::mpeg::id3v2::test

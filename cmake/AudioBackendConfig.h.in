@@ -1,0 +1,9 @@
+#pragma once
+
+// Native audio backend availability for the configured platform. Generated
+// from cmake/AudioBackendConfig.h.in so backend selection is an includable
+// fact instead of compile definitions leaking through target link graphs.
+
+#cmakedefine01 AOBUS_HAS_WASAPI
+#cmakedefine01 AOBUS_HAS_PIPEWIRE
+#cmakedefine01 AOBUS_HAS_ALSA

@@ -56,11 +56,13 @@ translation units absent from the current host's `compile_commands.json`, then
 continue with the files that are natively covered. Explicitly requesting an
 uncovered translation unit fails. A header uses a same-component implementation
 with the same stem (including a recognized platform suffix such as `Windows`,
-`Linux`, or `Posix`). The portal copies that implementation's exact native
-compiler flags into a temporary compilation database and checks the header
-itself as the main file. A header without a safe companion is deferred. These
-rules cover main-file-only checks and prevent clang-tidy's fallback to a nearby
-but unrelated compile command from producing a false green result.
+`Linux`, or `Posix`). The portal copies that implementation's native compiler
+flags into a temporary compilation database and checks the header itself as the
+main file. On Windows, it removes the translation unit's `/TP` after replacing
+the input because the header invocation supplies `-x c++-header` explicitly. A
+header without a safe companion is deferred. These rules cover main-file-only
+checks and prevent clang-tidy's fallback to a nearby but unrelated compile
+command from producing a false green result.
 
 Windows tidy uses the checkout-specific `windows-tidy` tree below the local
 Windows build root and the pinned official LLVM 22.1.8 development archive. By
@@ -73,6 +75,12 @@ SDK's `clangTidyMain`. The official Windows `clang-tidy.exe` does not export the
 symbols required by an out-of-tree DLL, so it cannot load the Linux-style
 plugin. Do not substitute `clang-tidy.exe` from Visual Studio or `PATH`; it
 would omit every `aobus-*` check.
+
+The portal also removes the exact `/Zc:preprocessor` token from a temporary copy
+of the Windows compilation database before Clang replay. The flag enables the
+standards-conforming MSVC preprocessor in real product builds, where it remains
+required, but it has no Clang equivalent and Clang rejects it as an unused
+driver argument. No other `/Zc:preprocessor*` spelling is removed.
 
 The Windows analysis command also defines `_USE_STD_VECTOR_ALGORITHMS=0` for
 clang-tidy only. This works around

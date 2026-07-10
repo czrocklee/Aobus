@@ -19,7 +19,6 @@ namespace ao::query::test
     try
     {
       detail::throwQueryError(error);
-      FAIL("throwQueryError was expected to throw");
     }
     catch (detail::QueryException const& ex)
     {
@@ -37,7 +36,6 @@ namespace ao::query::test
     try
     {
       detail::throwQueryError("fresh failure");
-      FAIL("throwQueryError was expected to throw");
     }
     catch (detail::QueryException const& ex)
     {
@@ -56,7 +54,6 @@ namespace ao::query::test
     try
     {
       detail::throwQueryError("field '{}' is unsupported for field {}", "duration", "Duration");
-      FAIL("throwQueryError was expected to throw");
     }
     catch (detail::QueryException const& ex)
     {

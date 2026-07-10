@@ -17,7 +17,8 @@
 #include <llvm/Support/Casting.h>
 
 using namespace clang;
-using namespace clang::ast_matchers;
+
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -179,6 +180,8 @@ namespace clang::tidy::readability
 
   void AsyncCancellationGuardCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     finder->addMatcher(cxxCatchStmt().bind("catch"), this);
   }
 

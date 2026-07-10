@@ -137,15 +137,6 @@ namespace ao::cli
 
       return queryMatchingTrackIds(ml, filter);
     }
-
-    struct TrackUpdateReportDto final
-    {
-      bool dryRun = false;
-      std::uint64_t matched = 0;
-      std::uint64_t updated = 0;
-      std::vector<TrackId> trackIds{};
-      std::vector<rt::TrackChangeRecord> changes{};
-    };
   } // namespace
 
   struct TrackCreateReportDto final
@@ -156,6 +147,25 @@ namespace ao::cli
     std::string uri{};
     std::string title{};
     std::string artist{};
+  };
+
+  struct TrackUpdateReportDto final
+  {
+    bool dryRun = false;
+    std::uint64_t matched = 0;
+    std::uint64_t updated = 0;
+    std::vector<TrackId> trackIds{};
+    std::vector<rt::TrackChangeRecord> changes{};
+  };
+
+  struct TrackDeleteReportDto final
+  {
+    std::string action{};
+    bool dryRun = false;
+    TrackId trackId{};
+    std::string uri{};
+    std::string title{};
+    std::vector<ListId> removedFromListIds{};
   };
 } // namespace ao::cli
 
@@ -177,16 +187,6 @@ namespace ao::cli
 {
   namespace
   {
-    struct TrackDeleteReportDto final
-    {
-      std::string action{};
-      bool dryRun = false;
-      TrackId trackId{};
-      std::string uri{};
-      std::string title{};
-      std::vector<ListId> removedFromListIds{};
-    };
-
     void formatUpdateReply(rt::UpdateTrackMetadataReply const& reply,
                            bool dryRun,
                            std::uint64_t matched,
@@ -294,6 +294,7 @@ namespace ao::cli
     }
   } // namespace
 
+  // NOLINTNEXTLINE(bugprone-exception-escape) -- MSVC's std::map move constructor may allocate its sentinel.
   struct TrackRecordDto final
   {
     TrackId id{};

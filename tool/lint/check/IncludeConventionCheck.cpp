@@ -21,7 +21,7 @@
 
 #include <memory>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -71,6 +71,8 @@ namespace clang::tidy::readability
 
   void IncludeConventionCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     finder->addMatcher(decl(isExpansionInMainFile()).bind("decl"), this);
   }
 

@@ -10,13 +10,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# cd first so shell.nix's $PWD-based hooks (ccache dir) resolve to the repository.
+cd "$ROOT"
 
 if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]; then
-    # cd first so shell.nix's $PWD-based hooks (ccache dir) resolve to the repository.
-    cd "$ROOT"
     exec nix-shell "$ROOT/shell.nix" --run "AO_IN_NIX_PORTAL=1 $(printf '%q ' "$ROOT/ao" "$@")"
 fi
 
-cd "$ROOT"
 export PYTHONPATH="$ROOT/script${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 -m ao "$@"

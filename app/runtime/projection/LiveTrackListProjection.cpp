@@ -612,7 +612,7 @@ namespace ao::rt
     library::MusicLibrary& library;
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy;
-    std::string id = std::string{kDefaultTrackPresentationId};
+    std::string presentationId = std::string{kDefaultTrackPresentationId};
     std::vector<TrackField> visibleFields;
     std::vector<TrackField> redundantFields;
     Comparator comparator;
@@ -1681,7 +1681,7 @@ namespace ao::rt
   {
     auto spec = normalizeTrackPresentationSpec(presentation);
 
-    _implPtr->id = spec.id;
+    _implPtr->presentationId = spec.id;
     _implPtr->visibleFields = spec.visibleFields;
     _implPtr->redundantFields = spec.redundantFields;
 
@@ -1755,7 +1755,7 @@ namespace ao::rt
   TrackPresentationSpec LiveTrackListProjection::presentation() const
   {
     return TrackPresentationSpec{
-      .id = _implPtr->id,
+      .id = _implPtr->presentationId,
       .groupBy = _implPtr->groupBy,
       .sortBy = _implPtr->sortBy,
       .visibleFields = _implPtr->visibleFields,

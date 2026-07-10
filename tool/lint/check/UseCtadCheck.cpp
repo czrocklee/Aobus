@@ -24,7 +24,7 @@
 #include <cstdint>
 #include <string>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -852,6 +852,8 @@ namespace clang::tidy::readability
 
   void UseCtadCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     auto explicitTemplateTypeLoc = templateSpecializationTypeLoc();
 
     finder->addMatcher(cxxTemporaryObjectExpr(unless(isExpansionInSystemHeader()),

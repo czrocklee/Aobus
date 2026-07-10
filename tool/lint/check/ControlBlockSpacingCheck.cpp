@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -164,6 +164,8 @@ namespace clang::tidy::readability
 
   void ControlBlockSpacingCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     finder->addMatcher(stmt(anyOf(ifStmt(unless(hasParent(ifStmt()))),
                                   forStmt(),
                                   cxxForRangeStmt(),
@@ -596,10 +598,10 @@ namespace clang::tidy::readability
       {
         for (auto const& grandparent : result.Context->getParents(*parentCatch))
         {
-          if (auto const* parentTry = grandparent.get<CXXTryStmt>(); parentTry != nullptr)
+          if (auto const* grandparentTry = grandparent.get<CXXTryStmt>(); grandparentTry != nullptr)
           {
-            if (std::uint32_t const handlerCount = parentTry->getNumHandlers();
-                handlerCount > 0 && parentTry->getHandler(handlerCount - 1) != parentCatch)
+            if (std::uint32_t const handlerCount = grandparentTry->getNumHandlers();
+                handlerCount > 0 && grandparentTry->getHandler(handlerCount - 1) != parentCatch)
             {
               isIntermediateBranch = true;
             }

@@ -529,12 +529,21 @@ namespace ao::tag::mp4
 
     using AtomHandler = void (*)(library::TrackBuilder&, AtomView const&);
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4267) // gperf's generated hash narrows size_t lengths
+#else
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wold-style-cast"
 #pragma GCC diagnostic ignored "-Wconversion"
 #pragma GCC diagnostic ignored "-Wsign-conversion"
+#endif
 #include "tag/mp4/AtomDispatch.h"
+#ifdef _MSC_VER
+#pragma warning(pop)
+#else
 #pragma GCC diagnostic pop
+#endif
 
     constexpr auto kIlstPath = std::to_array<std::string_view>({
       "root",

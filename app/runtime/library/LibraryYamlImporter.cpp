@@ -1008,8 +1008,13 @@ namespace ao::rt
   {
     auto decodedCoverBlobs = std::vector<std::vector<std::byte>>{};
 
-    if (auto const coversNode = yaml::findChild(trackNode, "covers"); coversNode.readable() && coversNode.is_seq())
+    if (auto const coversNode = yaml::findChild(trackNode, "covers"); coversNode.readable())
     {
+      if (!coversNode.is_seq())
+      {
+        return makeError(Error::Code::FormatRejected, "Track covers must be a sequence");
+      }
+
       builder.coverArt().clear();
       decodedCoverBlobs.reserve(coversNode.num_children());
 
@@ -1049,10 +1054,6 @@ namespace ao::rt
           return makeError(Error::Code::FormatRejected, "Track cover data must be non-empty base64");
         }
       }
-    }
-    else if (auto const coversNode = yaml::findChild(trackNode, "covers"); coversNode.readable())
-    {
-      return makeError(Error::Code::FormatRejected, "Track covers must be a sequence");
     }
 
     return decodedCoverBlobs;

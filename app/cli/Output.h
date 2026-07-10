@@ -31,6 +31,8 @@ namespace ao::cli
     }
   } // namespace detail
 
+  // Boost.PFR member-name reflection requires DTO types with external linkage
+  // on MSVC; do not pass function-local or anonymous-namespace aggregates.
   template<typename T>
   void emitDocument(std::ostream& os, OutputFormat format, T const& dto)
   {

@@ -7,6 +7,10 @@ from ..core import builddir
 from ..core.proc import die, run
 
 HELP = "Build and run the Aobus council executable"
+NAME = "council"
+# True when ao.bat must initialize the MSVC/vcpkg build environment first.
+REQUIRES_BUILD_ENV = False
+
 
 EPILOG = """\
 examples:
@@ -18,7 +22,7 @@ examples:
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(
-        "council", help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+        NAME, help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("-p", "--path", metavar="<dir>", help="build directory (default: /tmp/build/debug)")
     parser.add_argument("-n", "--no-build", action="store_true", help="skip the incremental executable build")
@@ -29,6 +33,9 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def run_command(args: argparse.Namespace) -> int:
+    if builddir.platform_profile().name != "linux":
+        raise die("council is supported on Linux only because native Windows profiles do not build developer tools.")
+
     build_path = Path(args.path) if args.path else builddir.build_dir("debug")
     executable = build_path / "tool" / "council" / "aobus-council"
     council_args = list(args.council_args)

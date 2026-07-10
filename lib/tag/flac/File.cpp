@@ -78,12 +78,21 @@ namespace ao::tag::flac
       }
     }
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4267) // gperf's generated hash narrows size_t lengths
+#else
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wold-style-cast"
 #pragma GCC diagnostic ignored "-Wconversion"
 #pragma GCC diagnostic ignored "-Wsign-conversion"
+#endif
 #include "tag/flac/VorbisCommentDispatch.h"
+#ifdef _MSC_VER
+#pragma warning(pop)
+#else
 #pragma GCC diagnostic pop
+#endif
   } // namespace
 
   Result<library::TrackBuilder> File::loadTrackImpl() const

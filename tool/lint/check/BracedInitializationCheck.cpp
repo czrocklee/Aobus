@@ -22,7 +22,7 @@
 #include <optional>
 #include <string>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -313,6 +313,8 @@ namespace clang::tidy::readability
 
   void BracedInitializationCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     finder->addMatcher(cxxCtorInitializer(isWritten()).bind("ctor_init"), this);
     finder->addMatcher(cxxTemporaryObjectExpr(unless(isListInitialization())).bind("temp_obj"), this);
     finder->addMatcher(cxxFunctionalCastExpr(unless(hasDescendant(initListExpr()))).bind("func_cast"), this);

@@ -251,12 +251,21 @@ namespace ao::tag::mpeg::id3v2
       }
     }
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4267) // gperf's generated hash narrows size_t lengths
+#else
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wold-style-cast"
 #pragma GCC diagnostic ignored "-Wconversion"
 #pragma GCC diagnostic ignored "-Wsign-conversion"
+#endif
 #include "tag/mpeg/id3v2/FrameDispatch.h"
+#ifdef _MSC_VER
+#pragma warning(pop)
+#else
 #pragma GCC diagnostic pop
+#endif
 
     // Walk the frame list using the version-appropriate view (v2.3 and v2.4 encode
     // frame sizes differently) and route each known frame to its handler.

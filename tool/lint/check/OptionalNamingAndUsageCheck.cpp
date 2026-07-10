@@ -16,8 +16,6 @@
 
 #include <cstdint>
 
-using namespace clang::ast_matchers;
-
 namespace
 {
   constexpr std::int32_t kMaxParentWalkDepth = 12;
@@ -100,10 +98,14 @@ namespace
   }
 } // namespace
 
+using clang::ast_matchers::MatchFinder;
+
 namespace clang::tidy::readability
 {
   void OptionalNamingAndUsageCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     // Robustly match std::optional by looking for the template specialization
     auto isOptionalType = hasType(qualType(hasUnqualifiedDesugaredType(
       recordType(hasDeclaration(classTemplateSpecializationDecl(hasName("::std::optional")))))));

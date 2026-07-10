@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -16,10 +17,6 @@
 #include <runtime/library/ScanPlanBuilder.h>
 
 #include <catch2/catch_test_macros.hpp>
-
-#ifndef _WIN32
-#include <unistd.h>
-#endif
 
 #include <chrono>
 #include <cstddef>
@@ -41,15 +38,6 @@ namespace ao::rt::test
       std::uint64_t payloadLength = 0;
       utility::Hash128 signature = {};
     };
-
-    bool runningAsRoot() noexcept
-    {
-#ifdef _WIN32
-      return false;
-#else
-      return ::geteuid() == 0;
-#endif
-    }
 
     void createFile(std::filesystem::path const& path)
     {
@@ -225,9 +213,6 @@ namespace ao::rt::test
 
   TEST_CASE("ScanPlanBuilder - reports IO errors while scanning", "[runtime][unit][library-scan][error]")
   {
-#ifdef _WIN32
-    SKIP("std::filesystem permissions do not make directories unreadable on Windows");
-#endif
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
     auto const musicRoot = std::filesystem::path{root} / "music";
@@ -237,21 +222,17 @@ namespace ao::rt::test
     createFile(musicRoot / "ok_dir" / "song1.flac");
     createFile(musicRoot / "another.mp3");
 
-    // Make restricted_dir inaccessible.
-    // permissions() is a no-op when running as root, so skip in that case.
-    std::filesystem::permissions(musicRoot / "restricted_dir", std::filesystem::perms::none);
+    auto const denied =
+      ao::test::ScopedDirectoryAccessGuard{musicRoot / "restricted_dir", ao::test::DeniedDirectoryAccess::Read};
 
-    if (runningAsRoot())
+    if (!denied.effective())
     {
-      SKIP("permissions test is meaningless when running as root");
+      SKIP("the current process bypasses directory read restrictions");
     }
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
     auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
-
-    // Reset permissions so ao::test::TempDir can clean up
-    std::filesystem::permissions(musicRoot / "restricted_dir", std::filesystem::perms::owner_all);
 
     // We expect:
     // 1. ok_dir/song1.flac (New)

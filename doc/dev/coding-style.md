@@ -174,3 +174,11 @@ Detailed naming policy lives in `doc/dev/naming-conventions.md`.
     - 5.3.2. Do not return an empty `std::string` to indicate success
     - 5.3.3. Do not use `std::optional` to signal an error — use `std::expected` and let `std::nullopt` mean "absent, not broken"
     - 5.3.4. Do not catch exceptions in low-level implementation code only to stringify them; catch at meaningful adapter boundaries and preserve error code/context when converting to `ao::Result<T>`
+- 6\. Platform-Specific Code
+  - 6.1. File-Level Separation
+    - 6.1.1. Put platform implementations in separate files selected by CMake (`if(WIN32)`/`elseif(LINUX)`), using a platform suffix or a platform file family: `SignalExitWatcherPosix.cpp` / `SignalExitWatcherWindows.cpp`, `backend/WasapiProvider.cpp` / `backend/PipeWireProvider.cpp`.
+    - 6.1.2. Small localized branches — a conditional include plus a call or two, as in `AudioBackendBootstrap.cpp` — may use preprocessor conditionals in place. Once a branch grows beyond that, split it into per-platform files.
+  - 6.2. Platform Capability Macros
+    - 6.2.1. Audio backend availability comes from the generated `<ao/audio/BackendConfig.h>`: test `AOBUS_HAS_WASAPI` / `AOBUS_HAS_PIPEWIRE` / `AOBUS_HAS_ALSA` with `#if` (they are always defined to `0` or `1`).
+    - 6.2.2. Do not introduce new platform macros through target compile definitions; extend the generated config header instead so availability stays visible in one place.
+    - 6.2.3. Raw compiler/OS macros (`_WIN32`, `__linux__`) belong only inside platform-suffixed files or the small branches allowed by 6.1.2.

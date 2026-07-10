@@ -23,8 +23,8 @@ namespace ao::audio::detail::test
       ao::test::mp4::addAtom(data, "mdat", payload);
 
       auto const config = ao::test::mp4::makeAtom("alac", {9, 8, 7});
-      auto const track =
-        ao::test::mp4::makeCompleteAudioTrackAtom("alac", config, timescale, 88200, payload.size(), 1024, 8);
+      auto const track = ao::test::mp4::makeCompleteAudioTrackAtom(
+        "alac", config, timescale, 88200, static_cast<std::uint32_t>(payload.size()), 1024, 8);
       auto const moov = ao::test::mp4::makeAtom("moov", track);
       data.insert(data.end(), moov.begin(), moov.end());
       return data;

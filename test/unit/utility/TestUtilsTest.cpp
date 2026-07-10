@@ -3,11 +3,15 @@
 
 #include "test/unit/TestUtils.h"
 
+#include "test/unit/FilesystemTestSupport.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <system_error>
 #include <utility>
 
 namespace ao::test
@@ -58,5 +62,60 @@ namespace ao::test
 
     CHECK_FALSE(std::filesystem::exists(firstPath));
     CHECK_FALSE(std::filesystem::exists(secondPath));
+  }
+
+  TEST_CASE("FilesystemTestSupport - read denial restores directory access", "[utility][unit][test-support]")
+  {
+    auto const temp = TempDir{};
+    auto const blocked = temp.path() / "blocked";
+    auto const child = blocked / "child.txt";
+    std::filesystem::create_directory(blocked);
+    std::ofstream{child} << "content";
+
+    {
+      auto const denied = ScopedDirectoryAccessGuard{blocked, DeniedDirectoryAccess::Read};
+
+      if (!denied.effective())
+      {
+        SKIP("the current process bypasses directory read restrictions");
+      }
+
+      auto ec = std::error_code{};
+      [[maybe_unused]] auto const iterator = std::filesystem::directory_iterator{blocked, ec};
+      CHECK(ec == std::errc::permission_denied);
+
+      ec.clear();
+      CHECK_FALSE(std::filesystem::exists(child, ec));
+      CHECK(ec == std::errc::permission_denied);
+    }
+
+    CHECK(std::filesystem::exists(child));
+    CHECK(readFile(child) == "content");
+  }
+
+  TEST_CASE("FilesystemTestSupport - write denial restores directory access", "[utility][unit][test-support]")
+  {
+    auto const temp = TempDir{};
+    auto const blocked = temp.path() / "blocked";
+    auto const child = blocked / "child.txt";
+    std::filesystem::create_directory(blocked);
+
+    {
+      auto const denied = ScopedDirectoryAccessGuard{blocked, DeniedDirectoryAccess::Write};
+
+      if (!denied.effective())
+      {
+        SKIP("the current process bypasses directory write restrictions");
+      }
+
+      auto output = std::ofstream{child};
+      CHECK_FALSE(output);
+    }
+
+    auto output = std::ofstream{child};
+    REQUIRE(output);
+    output << "content";
+    output.close();
+    CHECK(readFile(child) == "content");
   }
 } // namespace ao::test

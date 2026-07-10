@@ -20,6 +20,10 @@ from . import format as format_command
 from . import name_audit, test_audit, tidy
 
 HELP = "Run the commit gate: format --check, naming audits, then tidy (check-only, never edits files)"
+NAME = "hygiene"
+# True when ao.bat must initialize the MSVC/vcpkg build environment first.
+REQUIRES_BUILD_ENV = True
+
 
 EPILOG = """\
 With no paths, checks files changed against local main + working tree + staged + untracked.
@@ -35,7 +39,7 @@ Register = Callable[["argparse._SubParsersAction[argparse.ArgumentParser]"], Non
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(
-        "hygiene", help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+        NAME, help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("files", nargs="*", metavar="file", help="explicit files to check")
     parser.add_argument("--all", action="store_true", help="check every source in the project folders")

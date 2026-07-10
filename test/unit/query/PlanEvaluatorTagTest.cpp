@@ -286,8 +286,8 @@ namespace ao::query::test
 
       REQUIRE(!tagB.empty());
 
-      auto const spec = TrackSpec{.tags = {tagA}};
-      auto trackA = TrackFixture{spec, &dictionary};
+      auto const collisionSpec = TrackSpec{.tags = {tagA}};
+      auto trackA = TrackFixture{collisionSpec, &dictionary};
 
       auto planB = compileOk(compiler, parseOk("#" + tagB));
 

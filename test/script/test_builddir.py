@@ -25,11 +25,34 @@ class BuildDirTest(unittest.TestCase):
     def test_linux_plain_flavors_map_to_their_own_tree(self):
         with mock.patch.dict("os.environ", {}, clear=False):
             os.environ.pop("BUILD_DIR", None)
+            os.environ.pop("AOBUS_BUILD_ROOT", None)
             self.assertEqual(builddir.build_dir("debug", os_name="posix"), Path("/tmp/build/debug"))
             self.assertEqual(builddir.build_dir("release", os_name="posix"), Path("/tmp/build/release"))
             self.assertEqual(builddir.build_dir("profile", os_name="posix"), Path("/tmp/build/profile"))
 
-    def test_windows_profile_separates_app_and_test_trees(self):
+    def test_linux_build_root_honors_aobus_build_root(self):
+        self.assertEqual(builddir.linux_build_root(environ={}), Path("/tmp/build"))
+        self.assertEqual(
+            builddir.linux_build_root(environ={"AOBUS_BUILD_ROOT": "/var/cache/aobus"}),
+            Path("/var/cache/aobus"),
+        )
+        environment = {"AOBUS_BUILD_ROOT": "/var/cache/aobus"}
+        with mock.patch.dict("os.environ", environment, clear=False):
+            os.environ.pop("BUILD_DIR", None)
+            self.assertEqual(builddir.platform_profile("posix").build_root, Path("/var/cache/aobus"))
+            self.assertEqual(builddir.build_dir("debug", os_name="posix"), Path("/var/cache/aobus/debug"))
+
+    def test_native_profile_rejects_unsupported_platforms(self):
+        with (
+            mock.patch("ao.core.builddir.os.name", "posix"),
+            mock.patch("ao.core.builddir.sys.platform", "darwin"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "darwin"):
+                builddir.platform_profile()
+            # Explicit os_name values keep working for cross-profile queries.
+            self.assertEqual(builddir.platform_profile("posix").name, "linux")
+
+    def test_windows_builds_and_tests_share_one_flavor_tree(self):
         environment = {
             "AOBUS_STATE_ROOT": "C:/Users/Alice/AppData/Local/Aobus",
             "AOBUS_CHECKOUT_ID": "checkout-a",
@@ -38,27 +61,26 @@ class BuildDirTest(unittest.TestCase):
             root = builddir.windows_build_root()
             self.assertEqual(
                 builddir.build_dir("debug", os_name="nt"),
-                root / "windows-tui-debug",
+                root / "windows-debug",
             )
             self.assertEqual(
-                builddir.build_dir("debug", with_tests=True, os_name="nt"),
-                root / "windows-tui-debug-tests",
-            )
-            self.assertEqual(
-                builddir.build_dir("release", with_tests=True, os_name="nt"),
-                root / "windows-tui-release-tests",
+                builddir.build_dir("release", os_name="nt"),
+                root / "windows-release",
             )
 
     def test_windows_profile_exposes_only_built_apps_and_suites(self):
         profile = builddir.platform_profile("nt")
-        self.assertEqual(profile.apps, ("tui",))
+        self.assertEqual(profile.apps, ("cli", "tui"))
         self.assertEqual(profile.default_suites, ("core", "tui"))
-        self.assertEqual(profile.all_suites, ("core", "tui", "integration", "tooling"))
+        self.assertEqual(profile.all_suites, ("core", "tui", "cli", "integration", "tooling"))
         self.assertEqual(builddir.flavors("nt"), ("debug", "release"))
 
     def test_tidy_uses_a_dedicated_native_preset_and_tree(self):
-        self.assertEqual(builddir.tidy_preset("posix"), "linux-debug")
-        self.assertEqual(builddir.tidy_dir("posix"), Path("/tmp/build/debug-clang-tidy"))
+        with mock.patch.dict("os.environ", {}, clear=False):
+            os.environ.pop("BUILD_DIR", None)
+            os.environ.pop("AOBUS_BUILD_ROOT", None)
+            self.assertEqual(builddir.tidy_preset("posix"), "linux-debug")
+            self.assertEqual(builddir.tidy_dir("posix"), Path("/tmp/build/debug-clang-tidy"))
         self.assertEqual(builddir.tidy_preset("nt"), "windows-tidy")
         self.assertEqual(builddir.tidy_dir("nt"), builddir.windows_build_root() / "windows-tidy")
 
@@ -130,6 +152,7 @@ class BuildDirTest(unittest.TestCase):
     def test_suffixes_combine_in_fixed_order(self):
         with mock.patch.dict("os.environ", {}, clear=False):
             os.environ.pop("BUILD_DIR", None)
+            os.environ.pop("AOBUS_BUILD_ROOT", None)
             self.assertEqual(builddir.build_dir("debug", clang=True, os_name="posix"), Path("/tmp/build/debug-clang"))
             self.assertEqual(builddir.build_dir("debug", asan=True, os_name="posix"), Path("/tmp/build/debug-asan"))
             self.assertEqual(builddir.build_dir("debug", tsan=True, os_name="posix"), Path("/tmp/build/debug-tsan"))

@@ -13,28 +13,9 @@ if "%CMD%"=="" (
   exit /b 1
 )
 
-set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-if not exist "%VSWHERE%" (
-  echo ERROR: vswhere.exe was not found at:
-  echo   "%VSWHERE%"
-  exit /b 1
-)
+call "%AOBUS_ROOT%\script\ao\windows-vsenv.bat"
+if errorlevel 1 exit /b %ERRORLEVEL%
 
-set "VSROOT="
-for /f "usebackq delims=" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSROOT=%%i"
-if "%VSROOT%"=="" (
-  echo ERROR: vswhere.exe found no Visual Studio installation with the C++ x64 toolset.
-  exit /b 1
-)
-
-set "VSDEVCMD=%VSROOT%\Common7\Tools\VsDevCmd.bat"
-if not exist "%VSDEVCMD%" (
-  echo ERROR: VsDevCmd.bat was not found at:
-  echo   "%VSDEVCMD%"
-  exit /b 1
-)
-
-set "VCPKG_ROOT=%VSROOT%\VC\vcpkg"
 if not exist "%VCPKG_ROOT%\vcpkg.exe" (
   echo ERROR: vcpkg.exe was not found at:
   echo   "%VCPKG_ROOT%\vcpkg.exe"

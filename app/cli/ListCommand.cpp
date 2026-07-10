@@ -128,6 +128,11 @@ namespace ao::cli
     std::optional<std::string> optFilter{};
     std::vector<ListTrackRowDto> tracks{};
   };
+
+  struct ListDetailDocumentDto final
+  {
+    ListDetailDto list{};
+  };
 } // namespace ao::cli
 
 template<>
@@ -284,11 +289,6 @@ namespace ao::cli
 
       if (context.options().format == OutputFormat::Yaml)
       {
-        struct ListDetailDocumentDto final
-        {
-          ListDetailDto list{};
-        };
-
         emitDocument(
           context.io().out, context.options().format, ListDetailDocumentDto{.list = toListDetailDto(node, rows)});
         return;
@@ -326,6 +326,27 @@ namespace ao::cli
     ListId parentId{};
     std::optional<std::string> optFilter{};
   };
+
+  struct ListUpdateReportDto final
+  {
+    std::string action{};
+    bool dryRun = false;
+    ListId listId{};
+    bool changed = false;
+    std::vector<rt::ListFieldChange> fields{};
+    std::vector<TrackId> addedTrackIds{};
+    std::vector<TrackId> removedTrackIds{};
+  };
+
+  struct ListDeleteReportDto final
+  {
+    std::string action{};
+    bool dryRun = false;
+    ListId listId{};
+    std::string name{};
+    std::string type{};
+    std::uint64_t trackCount = 0;
+  };
 } // namespace ao::cli
 
 template<>
@@ -351,27 +372,6 @@ namespace ao::cli
 {
   namespace
   {
-    struct ListUpdateReportDto final
-    {
-      std::string action{};
-      bool dryRun = false;
-      ListId listId{};
-      bool changed = false;
-      std::vector<rt::ListFieldChange> fields{};
-      std::vector<TrackId> addedTrackIds{};
-      std::vector<TrackId> removedTrackIds{};
-    };
-
-    struct ListDeleteReportDto final
-    {
-      std::string action{};
-      bool dryRun = false;
-      ListId listId{};
-      std::string name{};
-      std::string type{};
-      std::uint64_t trackCount = 0;
-    };
-
     std::string draftKindName(rt::LibraryWriter::ListKind kind)
     {
       return kind == rt::LibraryWriter::ListKind::Smart ? "smart" : "manual";

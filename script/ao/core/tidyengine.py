@@ -114,6 +114,10 @@ def ensure_compile_db(
             "-B",
             str(build_dir),
         ]
+        if selected_preset == builddir.tidy_preset("nt"):
+            # This dedicated tree must follow current platform defaults even
+            # after a preset stops overriding an AOBUS_BUILD_* cache option.
+            configure += ["-U", "AOBUS_BUILD_*"]
     elif (build_dir / "CMakeCache.txt").is_file():
         print("compile_commands.json missing, running cmake configure...")
         configure = ["cmake", str(PROJECT_ROOT), "-B", str(build_dir)]
@@ -561,6 +565,7 @@ def write_header_compile_database(
     build_dir: Path,
     targets: list[CompileCommandTarget],
     destination: Path,
+    excluded_arguments: tuple[str, ...] = (),
 ) -> Path:
     """Write exact synthetic commands that make selected headers the main files."""
     entries = {_path_key(entry.path): entry for entry in _compile_database_entries(build_dir)}
@@ -571,11 +576,46 @@ def write_header_compile_database(
         entry = entries.get(_path_key(target.translation_unit))
         if entry is None:
             raise die(f"compile command disappeared for mapped translation unit {target.translation_unit}.")
-        synthetic.append(_replace_compile_input(entry, target.selected))
+        data = _replace_compile_input(entry, target.selected)
+        synthetic.append(_without_compile_arguments(data, excluded_arguments))
 
     destination.mkdir(parents=True, exist_ok=True)
     database = destination / "compile_commands.json"
     database.write_text(json.dumps(synthetic, indent=2) + "\n", encoding="utf-8")
+    return destination
+
+
+def _without_compile_arguments(data: dict[str, object], excluded_arguments: tuple[str, ...]) -> dict[str, object]:
+    """Return one compile command with exact driver arguments removed."""
+    filtered = dict(data)
+    excluded = {argument.casefold() for argument in excluded_arguments}
+    arguments = filtered.get("arguments")
+    if isinstance(arguments, list) and all(isinstance(argument, str) for argument in arguments):
+        filtered["arguments"] = [argument for argument in arguments if argument.casefold() not in excluded]
+    elif isinstance(command := filtered.get("command"), str):
+        for argument in excluded_arguments:
+            pattern = rf"(?<!\S){re.escape(argument)}(?=\s|$)"
+            command = re.sub(pattern, "", command, flags=re.IGNORECASE)
+        filtered["command"] = command
+    else:
+        raise die("compile command has neither string command nor argument list.")
+    return filtered
+
+
+def write_filtered_compile_database(
+    build_dir: Path,
+    destination: Path,
+    excluded_arguments: tuple[str, ...],
+) -> Path:
+    """Copy a compile database while removing exact driver-only arguments."""
+    filtered: list[dict[str, object]] = []
+
+    for entry in _compile_database_entries(build_dir):
+        filtered.append(_without_compile_arguments(entry.data, excluded_arguments))
+
+    destination.mkdir(parents=True, exist_ok=True)
+    database = destination / "compile_commands.json"
+    database.write_text(json.dumps(filtered, indent=2) + "\n", encoding="utf-8")
     return destination
 
 

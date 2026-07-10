@@ -14,6 +14,10 @@ from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
 
 HELP = "Run the Clang Static Analyzer (report-only unless --fail-on-diagnostics)"
+NAME = "analyze"
+# True when ao.bat must initialize the MSVC/vcpkg build environment first.
+REQUIRES_BUILD_ENV = True
+
 
 EPILOG = """\
 Analyzer diagnostics are report-only by default; tool failures still return non-zero.
@@ -55,7 +59,7 @@ HEADER_FILTER = project_header_filter()
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(
-        "analyze", help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+        NAME, help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     tidyengine.add_scope_arguments(parser, verb="analyze")
     parser.add_argument("--fail-on-diagnostics", action="store_true", help="return non-zero when diagnostics are found")

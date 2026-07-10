@@ -228,21 +228,21 @@ namespace ao::rt::test
 
       {
         auto transaction = libraryFixture.library().writeTransaction();
-        auto writer = libraryFixture.library().lists().writer(transaction);
+        auto listWriter = libraryFixture.library().lists().writer(transaction);
 
         auto parentBuilder = ListBuilder::makeEmpty();
         parentBuilder.name("Parent");
-        parentId = ao::test::requireValue(writer.create(parentBuilder.serialize())).first;
+        parentId = ao::test::requireValue(listWriter.create(parentBuilder.serialize())).first;
 
         auto childBuilder = ListBuilder::makeEmpty();
         childBuilder.name("Child");
         childBuilder.parentId(parentId);
-        childId = ao::test::requireValue(writer.create(childBuilder.serialize())).first;
+        childId = ao::test::requireValue(listWriter.create(childBuilder.serialize())).first;
 
         auto grandchildBuilder = ListBuilder::makeEmpty();
         grandchildBuilder.name("Grandchild");
         grandchildBuilder.parentId(childId);
-        grandchildId = ao::test::requireValue(writer.create(grandchildBuilder.serialize())).first;
+        grandchildId = ao::test::requireValue(listWriter.create(grandchildBuilder.serialize())).first;
 
         REQUIRE(transaction.commit());
       }

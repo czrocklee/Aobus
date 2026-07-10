@@ -15,7 +15,7 @@
 #include <array>
 #include <cctype>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -209,6 +209,8 @@ namespace clang::tidy::readability
 
   void ChronoNamingConventionCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     auto chronoQualType = [](StringRef qualifiedName)
     {
       return qualType(hasCanonicalType(anyOf(
@@ -294,21 +296,22 @@ namespace clang::tidy::readability
 
     auto const& nodes = result.Nodes;
 
-    if (auto const* decl = nodes.getNodeAs<DeclaratorDecl>("durationDecl"); decl != nullptr)
+    if (auto const* durationDecl = nodes.getNodeAs<DeclaratorDecl>("durationDecl"); durationDecl != nullptr)
     {
-      processDecl(decl, false, false);
+      processDecl(durationDecl, false, false);
     }
-    else if (auto const* func = nodes.getNodeAs<FunctionDecl>("durationFunc"); func != nullptr)
+    else if (auto const* durationFunction = nodes.getNodeAs<FunctionDecl>("durationFunc"); durationFunction != nullptr)
     {
-      processDecl(func, true, false);
+      processDecl(durationFunction, true, false);
     }
-    else if (auto const* decl = nodes.getNodeAs<DeclaratorDecl>("timePointDecl"); decl != nullptr)
+    else if (auto const* timePointDecl = nodes.getNodeAs<DeclaratorDecl>("timePointDecl"); timePointDecl != nullptr)
     {
-      processDecl(decl, false, true);
+      processDecl(timePointDecl, false, true);
     }
-    else if (auto const* func = nodes.getNodeAs<FunctionDecl>("timePointFunc"); func != nullptr)
+    else if (auto const* timePointFunction = nodes.getNodeAs<FunctionDecl>("timePointFunc");
+             timePointFunction != nullptr)
     {
-      processDecl(func, true, true);
+      processDecl(timePointFunction, true, true);
     }
   }
 } // namespace clang::tidy::readability

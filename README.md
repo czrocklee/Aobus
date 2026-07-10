@@ -47,7 +47,10 @@ Aobus uses CMake with pinned Nix dependencies on Linux and vcpkg on Windows.
 ./ao build release
 ```
 
-### Windows TUI
+The portal re-enters the pinned `nix-shell` automatically. Set
+`AOBUS_BUILD_ROOT` to move build trees off the default `/tmp/build`.
+
+### Windows
 
 Install Visual Studio Build Tools with the C++ x64 toolset, then use the Windows
 portal from a Command Prompt or PowerShell terminal. The portal provisions its

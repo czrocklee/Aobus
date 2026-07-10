@@ -5,6 +5,10 @@ import argparse
 from . import build, test
 
 HELP = "Build everything and run every suite enabled by the native profile"
+NAME = "check"
+# True when ao.bat must initialize the MSVC/vcpkg build environment first.
+REQUIRES_BUILD_ENV = True
+
 
 EPILOG = """\
 examples:
@@ -17,7 +21,7 @@ examples:
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(
-        "check", help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+        NAME, help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     build.add_build_arguments(parser)
     parser.set_defaults(func=run_command)
@@ -28,7 +32,7 @@ def run_command(args: argparse.Namespace) -> int:
         print(f"Note: tests only run for debug/release; use ./ao build for {args.flavor}.")
         return build.run_command(args)
 
-    result = build.do_build(args, targets=[], with_tests=True)
+    result = build.do_build(args, targets=[])
 
     print("Running tests...")
     suites = test.suites_for("all")

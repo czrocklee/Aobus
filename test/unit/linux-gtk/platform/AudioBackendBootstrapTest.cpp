@@ -4,6 +4,7 @@
 #include "platform/AudioBackendBootstrap.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/audio/BackendConfig.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackService.h>
@@ -25,9 +26,8 @@ namespace ao::gtk::test
   } // namespace
 
   // The provider metadata is hardcoded, so each compiled-in backend surfaces in
-  // availableOutputBackends regardless of whether a daemon or hardware is present. The
-  // PIPEWIRE_FOUND/ALSA_FOUND macros reach this TU through ao_audio's PUBLIC
-  // definitions.
+  // availableOutputBackends regardless of whether a daemon or hardware is present.
+  // <ao/audio/BackendConfig.h> states which backends this platform compiles in.
   TEST_CASE("registerPlatformAudioBackends registers the compiled-in audio backends", "[gtk][unit][platform][audio]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -39,10 +39,10 @@ namespace ao::gtk::test
     registerPlatformAudioBackends(fixture.runtime());
     drainGtkEvents();
 
-#ifdef PIPEWIRE_FOUND
+#if AOBUS_HAS_PIPEWIRE
     CHECK(hasBackend(playback.state(), audio::kBackendPipeWire));
 #endif
-#ifdef ALSA_FOUND
+#if AOBUS_HAS_ALSA
     CHECK(hasBackend(playback.state(), audio::kBackendAlsa));
 #endif
   }

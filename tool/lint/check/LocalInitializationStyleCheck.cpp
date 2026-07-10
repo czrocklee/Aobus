@@ -25,7 +25,7 @@
 
 #include <string>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -229,6 +229,8 @@ namespace clang::tidy::readability
 
   void LocalInitializationStyleCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     // Match explicit type declarations that use CXXConstructExpr or InitListExpr.
     // We want to skip 'auto x = some_function()' which binds a CallExpr to the VarDecl.
     auto hasBadInit = anyOf(hasInitializer(ignoringImplicit(cxxConstructExpr().bind("init"))),

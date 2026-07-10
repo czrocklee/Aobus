@@ -37,7 +37,6 @@ namespace ao::audio::test
     try
     {
       detail::throwDecoderError(error);
-      FAIL("throwDecoderError was expected to throw");
     }
     catch (detail::DecoderException const& ex)
     {
@@ -56,7 +55,6 @@ namespace ao::audio::test
     try
     {
       detail::throwDecoderError(Error::Code::NotSupported, "fresh failure");
-      FAIL("throwDecoderError was expected to throw");
     }
     catch (detail::DecoderException const& ex)
     {

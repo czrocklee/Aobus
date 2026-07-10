@@ -5,4 +5,4 @@ add_library(ao_lmdb STATIC
     Database.cpp
 )
 target_include_directories(ao_lmdb PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
-target_link_libraries(ao_lmdb PUBLIC lmdb)
+target_link_libraries(ao_lmdb PUBLIC PkgLMDB)

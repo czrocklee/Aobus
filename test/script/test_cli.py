@@ -12,6 +12,7 @@ from ao.__main__ import main, make_parser, parse_arguments
 from ao.command import build as build_command
 from ao.command import check as check_command
 from ao.command import council as council_command
+from ao.command import coverage as coverage_command
 from ao.command import run as run_command_mod
 from ao.command import test as test_command
 from ao.command import tidy as tidy_command
@@ -33,9 +34,19 @@ class WindowsBatchPortalTest(unittest.TestCase):
         portal = Path(__file__).resolve().parents[2] / "ao.bat"
         content = portal.read_text(encoding="utf-8").lower()
 
-        for command in ("analyze", "format", "hygiene", "tidy"):
-            expected = f'if /i "%~1"=="{command}" set "needs_build_env=1"'
-            self.assertIn(expected, content)
+        # ao.bat asks the portal package which commands need MSVC/vcpkg instead
+        # of keeping its own command list.
+        self.assertIn("-m ao.core.buildenv", content)
+        self.assertIn('if not "%needs_build_env%"=="1" goto environment_ready', content)
+        self.assertNotIn('if /i "%~1"=="build" set "needs_build_env=1"', content)
+
+    def test_visual_studio_discovery_does_not_trust_an_ambient_installation_root(self):
+        helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "windows-vsenv.bat"
+        content = helper.read_text(encoding="utf-8").lower()
+
+        self.assertNotIn("if defined vsroot", content)
+        self.assertIn("microsoft.visualstudio.component.vc.tools.x86.x64", content)
+        self.assertIn('set "vsroot="', content)
 
     def test_python_bootstrap_does_not_trust_ambient_path_aliases(self):
         portal = Path(__file__).resolve().parents[2] / "ao.bat"
@@ -46,14 +57,22 @@ class WindowsBatchPortalTest(unittest.TestCase):
         self.assertIn("bootstrap-python.ps1", content)
         self.assertIn("ao.core.pythonenv", content)
 
-    def test_tidy_preset_uses_release_dependencies_without_vcpkg_llvm(self):
+    def test_windows_presets_separate_platform_from_build_type(self):
         presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
         presets = json.loads(presets_file.read_text(encoding="utf-8"))["configurePresets"]
+        windows_presets = {preset["name"]: preset for preset in presets if preset["name"].startswith("windows-")}
         tidy_preset = next(preset for preset in presets if preset["name"] == "windows-tidy")
 
-        self.assertEqual(tidy_preset["inherits"], "windows-tui-release-tests")
-        self.assertEqual(tidy_preset["cacheVariables"]["VCPKG_TARGET_TRIPLET"], "x64-windows")
-        self.assertEqual(tidy_preset["cacheVariables"]["VCPKG_MANIFEST_FEATURES"], "tests")
+        self.assertEqual(set(windows_presets), {"windows-base", "windows-debug", "windows-release", "windows-tidy"})
+        self.assertEqual(windows_presets["windows-debug"]["inherits"], "windows-base")
+        self.assertEqual(windows_presets["windows-release"]["inherits"], "windows-base")
+        base_cache = windows_presets["windows-base"]["cacheVariables"]
+        self.assertFalse(any(name.startswith("AOBUS_BUILD_") for name in base_cache))
+        self.assertEqual(tidy_preset["inherits"], "windows-release")
+        self.assertEqual(tidy_preset["cacheVariables"], {"AOBUS_BUILD_LINT_PLUGIN": "ON"})
+
+        manifest = json.loads((presets_file.parent / "vcpkg.json").read_text(encoding="utf-8"))
+        self.assertIn("tests", manifest["default-features"])
 
     def test_windows_presets_keep_build_trees_out_of_the_source_checkout(self):
         presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
@@ -111,16 +130,16 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.flavor, "debug")
         self.assertFalse(args.asan)
 
-    def test_windows_test_build_selects_the_test_configure_preset(self):
+    def test_windows_build_selects_the_shared_flavor_preset(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = self.parse(["build", "-p", temp_dir])
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
                 with mock.patch.object(build_command, "run", return_value=0) as run:
-                    result = build_command.do_build(args, ["ao_core_test"], with_tests=True)
+                    result = build_command.do_build(args, ["ao_core_test"])
 
         configure = run.call_args_list[0].args[0]
-        self.assertIn("windows-tui-debug-tests", configure)
-        self.assertEqual(result.preset, "windows-tui-debug-tests")
+        self.assertIn("windows-debug", configure)
+        self.assertEqual(result.preset, "windows-debug")
         self.assertEqual(result.compiler, "msvc")
 
     def test_council_forwards_subcommand_arguments(self):
@@ -139,14 +158,27 @@ class CliParseTest(unittest.TestCase):
             binary.touch()
             args = self.parse(["council", "-p", str(build_dir), "validate-config", "--registry", "config.yaml"])
 
-            with mock.patch.object(council_command, "run", return_value=0) as run:
-                self.assertEqual(council_command.run_command(args), 0)
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+                with mock.patch.object(council_command, "run", return_value=0) as run:
+                    self.assertEqual(council_command.run_command(args), 0)
 
         self.assertEqual(
             run.call_args_list[0].args[0],
             ["cmake", "--build", str(build_dir), "--parallel", "--target", "aobus-council"],
         )
         self.assertEqual(run.call_args_list[1].args[0], [str(binary), "validate-config", "--registry", "config.yaml"])
+
+    def test_council_rejects_windows_before_building_an_unsupported_target(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            args = self.parse(["council", "-p", str(build_dir), "validate-config"])
+
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+                with mock.patch.object(council_command, "run") as run:
+                    with self.assertRaisesRegex(SystemExit, "1"):
+                        council_command.run_command(args)
+
+        run.assert_not_called()
 
     def test_test_suite_shortcuts(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
@@ -292,46 +324,35 @@ class CliParseTest(unittest.TestCase):
                     with mock.patch.object(check_command.build, "print_summary"):
                         self.assertEqual(check_command.run_command(args), 0)
 
-        do_build.assert_called_once_with(args, targets=[], with_tests=True)
+        do_build.assert_called_once_with(args, targets=[])
         run_suites.assert_called_once_with(
             test_command.SUITE_GROUPS["all"],
             result.build_dir,
             log=result.log,
         )
 
-    def test_windows_test_configures_the_test_preset_and_runs_native_default_suites(self):
-        args = self.parse(["test"])
-        result = BuildResult(
-            build_dir=builddir.WINDOWS_BUILD_ROOT / "windows-tui-debug-tests",
-            log=builddir.WINDOWS_BUILD_ROOT / "windows-tui-debug-tests" / "build.log",
-            compiler="msvc",
-            preset="windows-tui-debug-tests",
-        )
+    def test_windows_test_reuses_the_shared_debug_tree(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["test", "-p", temp_dir])
+            build_dir = Path(temp_dir)
 
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-            with mock.patch.object(test_command.build, "do_build", return_value=result) as do_build:
-                with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
-                    self.assertEqual(test_command.run_command(args), 0)
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+                with mock.patch.object(test_command, "run", return_value=0) as run:
+                    with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
+                        self.assertEqual(test_command.run_command(args), 0)
 
-        build_args = do_build.call_args.args[0]
-        self.assertEqual(build_args.flavor, "debug")
-        self.assertIsNone(build_args.path)
-        self.assertEqual(do_build.call_args.args[1], ["ao_core_test", "ao_tui_test"])
-        self.assertTrue(do_build.call_args.kwargs["with_tests"])
-        run_suites.assert_called_once_with(
-            ("core", "tui"),
-            result.build_dir,
-            test_filter="",
-            list_only=False,
+        run.assert_called_once_with(
+            ["cmake", "--build", str(build_dir), "--parallel", "--target", "ao_core_test", "ao_tui_test"]
         )
+        run_suites.assert_called_once_with(("core", "tui"), build_dir, test_filter="", list_only=False)
 
     def test_windows_check_runs_only_native_suites(self):
         args = self.parse(["check"])
         result = BuildResult(
-            build_dir=builddir.WINDOWS_BUILD_ROOT / "windows-tui-debug-tests",
-            log=builddir.WINDOWS_BUILD_ROOT / "windows-tui-debug-tests" / "build.log",
+            build_dir=builddir.WINDOWS_BUILD_ROOT / "windows-debug",
+            log=builddir.WINDOWS_BUILD_ROOT / "windows-debug" / "build.log",
             compiler="msvc",
-            preset="windows-tui-debug-tests",
+            preset="windows-debug",
         )
 
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
@@ -340,9 +361,9 @@ class CliParseTest(unittest.TestCase):
                     with mock.patch.object(check_command.build, "print_summary"):
                         self.assertEqual(check_command.run_command(args), 0)
 
-        do_build.assert_called_once_with(args, targets=[], with_tests=True)
+        do_build.assert_called_once_with(args, targets=[])
         run_suites.assert_called_once_with(
-            ("core", "tui", "integration", "tooling"),
+            ("core", "tui", "cli", "integration", "tooling"),
             result.build_dir,
             log=result.log,
         )
@@ -398,6 +419,13 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.suite, "tui")
         self.assertEqual(args.scope, ["app/tui"])
         self.assertEqual(args.filter, "[tui]")
+
+    def test_coverage_rejects_windows_before_configuring_a_linux_build(self):
+        args = self.parse(["coverage"])
+
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+            with self.assertRaisesRegex(SystemExit, "1"):
+                coverage_command.run_command(args)
 
     def test_tidy_scope_and_passthrough_arguments(self):
         args = self.parse(

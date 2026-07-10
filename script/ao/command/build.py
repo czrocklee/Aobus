@@ -9,6 +9,10 @@ from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 
 HELP = "Configure and build a native flavor"
+NAME = "build"
+# True when ao.bat must initialize the MSVC/vcpkg build environment first.
+REQUIRES_BUILD_ENV = True
+
 
 EPILOG = """\
 examples:
@@ -21,9 +25,10 @@ examples:
 
 WINDOWS_EPILOG = """\
 examples:
-  ao.bat build                       # incremental debug TUI build
-  ao.bat build release --clean       # clean release TUI build
-  ao.bat build --target aobus-tui    # build a single target
+  ao.bat build                       # incremental debug build
+  ao.bat build release --clean       # clean release build
+  ao.bat build --target aobus-tui    # build only the TUI target
+  ao.bat build --target aobus        # build only the CLI target
 """
 
 
@@ -42,7 +47,7 @@ def add_build_arguments(parser: argparse.ArgumentParser) -> None:
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(
-        "build",
+        NAME,
         help=HELP,
         description=HELP,
         epilog=WINDOWS_EPILOG if builddir.platform_profile().name == "windows" else EPILOG,
@@ -63,9 +68,9 @@ class BuildResult:
     preset: str = ""
 
 
-def do_build(args: argparse.Namespace, targets: list[str], *, with_tests: bool = False) -> BuildResult:
+def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
     """Shared by `ao build` and `ao check`. Raises SystemExit on failure."""
-    preset = builddir.preset(args.flavor, with_tests=with_tests)
+    preset = builddir.preset(args.flavor)
     build_dir = (
         Path(args.path)
         if getattr(args, "path", None)
@@ -74,7 +79,6 @@ def do_build(args: argparse.Namespace, targets: list[str], *, with_tests: bool =
             clang=args.clang,
             asan=args.asan,
             tsan=args.tsan,
-            with_tests=with_tests,
         )
     )
 

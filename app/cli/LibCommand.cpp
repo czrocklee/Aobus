@@ -56,6 +56,46 @@
 
 namespace ao::cli
 {
+  struct LibraryMetadataDto final
+  {
+    std::string libraryId{};
+    std::uint64_t libraryVersion = 0;
+    std::string flags{};
+    std::string createdTime{};
+  };
+
+  struct LibraryTransferDto final
+  {
+    std::string action{};
+    std::string path{};
+    std::string mode{};
+  };
+
+  struct ImportReportDto final
+  {
+    std::string action{};
+    std::string path{};
+    std::string mode{};
+    bool dryRun = false;
+    std::uint64_t tracksCreated = 0;
+    std::uint64_t tracksUpdated = 0;
+    std::uint64_t tracksDeleted = 0;
+    std::uint64_t listsCreated = 0;
+    std::uint64_t listsDeleted = 0;
+  };
+
+  struct LibraryStats final
+  {
+    std::size_t tracks = 0;
+    std::size_t lists = 0;
+    std::size_t resources = 0;
+    std::size_t resourceBytes = 0;
+    std::size_t manifest = 0;
+    std::size_t dictionary = 0;
+    std::size_t tags = 0;
+    std::uint64_t diskBytes = 0;
+  };
+
   namespace
   {
     std::string formatTimestamp(std::chrono::sys_time<std::chrono::milliseconds> timestamp)
@@ -63,21 +103,6 @@ namespace ao::cli
       auto const tp = std::chrono::system_clock::time_point{timestamp.time_since_epoch()};
       return std::format("{:%Y-%m-%d %H:%M:%S}", tp);
     }
-
-    struct LibraryMetadataDto final
-    {
-      std::string libraryId{};
-      std::uint64_t libraryVersion = 0;
-      std::string flags{};
-      std::string createdTime{};
-    };
-
-    struct LibraryTransferDto final
-    {
-      std::string action{};
-      std::string path{};
-      std::string mode{};
-    };
 
     LibraryMetadataDto toLibraryMetadataDto(library::MusicLibrary& ml)
     {
@@ -130,19 +155,6 @@ namespace ao::cli
         std::println(os, "Library imported from '{}' using mode '{}'.", path, modeStr);
       }
     }
-
-    struct ImportReportDto final
-    {
-      std::string action{};
-      std::string path{};
-      std::string mode{};
-      bool dryRun = false;
-      std::uint64_t tracksCreated = 0;
-      std::uint64_t tracksUpdated = 0;
-      std::uint64_t tracksDeleted = 0;
-      std::uint64_t listsCreated = 0;
-      std::uint64_t listsDeleted = 0;
-    };
 
     void printLibraryImport(std::ostream& os,
                             OutputFormat format,
@@ -272,18 +284,6 @@ namespace ao::cli
         default: return "Unknown";
       }
     }
-
-    struct LibraryStats final
-    {
-      std::size_t tracks = 0;
-      std::size_t lists = 0;
-      std::size_t resources = 0;
-      std::size_t resourceBytes = 0;
-      std::size_t manifest = 0;
-      std::size_t dictionary = 0;
-      std::size_t tags = 0;
-      std::uint64_t diskBytes = 0;
-    };
 
     std::uint64_t directorySize(std::filesystem::path const& path)
     {
@@ -430,14 +430,72 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::VerifyIssueDto>
 
 namespace ao::cli
 {
+  struct VerifyReportDto final
+  {
+    bool ok = false;
+    std::vector<VerifyIssueDto> issues{};
+  };
+
+  struct RelinkCandidateDto final
+  {
+    std::string oldUri{};
+    std::string newUri{};
+    TrackId trackId{};
+    std::uint64_t audioPayloadLength = 0;
+  };
+
+  struct RelinkListDto final
+  {
+    std::vector<std::string> missing{};
+    std::vector<std::string> newFiles{};
+    std::vector<RelinkCandidateDto> candidates{};
+  };
+
+  struct RelinkApplyDto final
+  {
+    bool dryRun = false;
+    std::string oldUri{};
+    std::string newUri{};
+    TrackId trackId{};
+  };
+
+  struct FingerprintReportDto final
+  {
+    std::int32_t completed = 0;
+    std::int32_t skipped = 0;
+    std::int32_t failures = 0;
+    bool cancelled = false;
+  };
+
+  struct ResourceRecordDto final
+  {
+    ResourceId id{};
+    std::uint64_t size = 0;
+  };
+
+  struct ResourceListDto final
+  {
+    std::vector<ResourceRecordDto> resources{};
+  };
+
+  struct ResourceExportDto final
+  {
+    ResourceId id{};
+    std::string output{};
+    std::uint64_t size = 0;
+  };
+
+  struct ManifestRecordDto final
+  {
+    std::string uri{};
+    TrackId trackId{};
+    std::uint64_t fileSize = 0;
+    std::uint64_t mtime = 0;
+    std::string status{};
+  };
+
   namespace
   {
-    struct VerifyReportDto final
-    {
-      bool ok = false;
-      std::vector<VerifyIssueDto> issues{};
-    };
-
     VerifyIssueDto toVerifyIssueDto(rt::ScanItem const& item)
     {
       return VerifyIssueDto{.type = std::string{scanClassificationName(item.classification)},
@@ -517,29 +575,6 @@ namespace ao::cli
     {
       std::uint64_t payloadLength = 0;
       utility::Hash128 signature = {};
-    };
-
-    struct RelinkCandidateDto final
-    {
-      std::string oldUri{};
-      std::string newUri{};
-      TrackId trackId{};
-      std::uint64_t audioPayloadLength = 0;
-    };
-
-    struct RelinkListDto final
-    {
-      std::vector<std::string> missing{};
-      std::vector<std::string> newFiles{};
-      std::vector<RelinkCandidateDto> candidates{};
-    };
-
-    struct RelinkApplyDto final
-    {
-      bool dryRun = false;
-      std::string oldUri{};
-      std::string newUri{};
-      TrackId trackId{};
     };
 
     RelinkIdentity relinkIdentityFromItem(rt::ScanItem const& item)
@@ -877,14 +912,6 @@ namespace ao::cli
       applyRelink(ml, plan, candidate, dryRun, format, os);
     }
 
-    struct FingerprintReportDto final
-    {
-      std::int32_t completed = 0;
-      std::int32_t skipped = 0;
-      std::int32_t failures = 0;
-      bool cancelled = false;
-    };
-
     void printBackfillFailure(rt::AudioIdentityIndexFailure const& failure, std::ostream& err)
     {
       if (failure.uri.empty())
@@ -954,24 +981,6 @@ namespace ao::cli
 
       printFingerprintReport(*result, format, os);
     }
-
-    struct ResourceRecordDto final
-    {
-      ResourceId id{};
-      std::uint64_t size = 0;
-    };
-
-    struct ResourceListDto final
-    {
-      std::vector<ResourceRecordDto> resources{};
-    };
-
-    struct ResourceExportDto final
-    {
-      ResourceId id{};
-      std::string output{};
-      std::uint64_t size = 0;
-    };
 
     std::vector<ResourceRecordDto> resourceRecords(library::MusicLibrary& ml)
     {
@@ -1060,17 +1069,9 @@ namespace ao::cli
 
       printResourceExport(id, path, bytes.size(), format, os);
     }
-
-    struct ManifestRecordDto final
-    {
-      std::string uri{};
-      TrackId trackId{};
-      std::uint64_t fileSize = 0;
-      std::uint64_t mtime = 0;
-      std::string status{};
-    };
   } // namespace
 
+  // NOLINTNEXTLINE(bugprone-exception-escape) -- MSVC's std::map move constructor may allocate its sentinel.
   struct LibraryDumpDto final
   {
     std::optional<LibraryMetadataDto> optMetadata{};

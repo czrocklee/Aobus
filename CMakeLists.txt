@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.30)
 
 project(aobus VERSION 0.1.0)
 
+if(NOT WIN32 AND NOT LINUX)
+  message(FATAL_ERROR
+    "Aobus supports Linux and Windows hosts only; no audio backend or "
+    "development profile exists for this platform.")
+endif()
+
 option(AOBUS_ENABLE_ASAN "Enable address/undefined sanitizers (debug builds only)" OFF)
 option(AOBUS_ENABLE_TSAN "Enable thread sanitizer (debug builds only)" OFF)
 
@@ -10,16 +16,14 @@ if(UNIX AND NOT WIN32)
   set(AOBUS_DEFAULT_BUILD_GTK ON)
 endif()
 
-set(AOBUS_DEFAULT_BUILD_TESTS ON)
 set(AOBUS_DEFAULT_BUILD_TOOLS ON)
 if(WIN32)
-  set(AOBUS_DEFAULT_BUILD_TESTS OFF)
   set(AOBUS_DEFAULT_BUILD_TOOLS OFF)
 endif()
 
 option(AOBUS_BUILD_CLI "Build the command-line frontend" ON)
 option(AOBUS_BUILD_GTK "Build the GTK frontend" ${AOBUS_DEFAULT_BUILD_GTK})
-option(AOBUS_BUILD_TESTS "Build test targets" ${AOBUS_DEFAULT_BUILD_TESTS})
+option(AOBUS_BUILD_TESTS "Build test targets" ON)
 option(AOBUS_BUILD_TOOLS "Build developer tools" ${AOBUS_DEFAULT_BUILD_TOOLS})
 option(AOBUS_BUILD_LINT_PLUGIN "Build the Aobus clang-tidy plugin" ${AOBUS_BUILD_TOOLS})
 option(AOBUS_BUILD_TUI "Build the terminal frontend" ON)
@@ -30,6 +34,15 @@ include(cmake/Gperf.cmake)
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/ao")
 configure_file(cmake/AppVersion.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/ao/AppVersion.h" @ONLY)
+
+# Native audio backend availability, consumed as <ao/audio/BackendConfig.h>.
+if(WIN32)
+  set(AOBUS_HAS_WASAPI 1)
+elseif(LINUX)
+  set(AOBUS_HAS_PIPEWIRE 1)
+  set(AOBUS_HAS_ALSA 1)
+endif()
+configure_file(cmake/AudioBackendConfig.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/ao/audio/BackendConfig.h" @ONLY)
 
 if(AOBUS_BUILD_TESTS)
   enable_testing()

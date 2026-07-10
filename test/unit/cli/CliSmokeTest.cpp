@@ -30,6 +30,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -149,6 +150,24 @@ namespace ao::cli::test
       return static_cast<std::uint32_t>(std::stoul(std::string{value}));
     }
 
+    void setEnvironmentVariable(std::string const& name, std::string const& value)
+    {
+#ifdef _WIN32
+      std::ignore = ::_putenv_s(name.c_str(), value.c_str());
+#else
+      std::ignore = ::setenv(name.c_str(), value.c_str(), 1);
+#endif
+    }
+
+    void unsetEnvironmentVariable(std::string const& name)
+    {
+#ifdef _WIN32
+      std::ignore = ::_putenv_s(name.c_str(), "");
+#else
+      std::ignore = ::unsetenv(name.c_str());
+#endif
+    }
+
     class [[nodiscard]] EnvVarGuard final
     {
     public:
@@ -161,18 +180,18 @@ namespace ao::cli::test
           _previous = previous;
         }
 
-        ::setenv(_name.c_str(), value.string().c_str(), 1);
+        setEnvironmentVariable(_name, value.string());
       }
 
       ~EnvVarGuard()
       {
         if (!_hadPrevious)
         {
-          ::unsetenv(_name.c_str());
+          unsetEnvironmentVariable(_name);
         }
         else
         {
-          ::setenv(_name.c_str(), _previous.c_str(), 1);
+          setEnvironmentVariable(_name, _previous);
         }
       }
 

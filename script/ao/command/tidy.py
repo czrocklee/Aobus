@@ -21,6 +21,10 @@ from ..core.proc import die
 from ..core.tidyconfig import CONFIG_BASE
 
 HELP = "Run C++ clang-tidy and Python Ruff/mypy checks"
+NAME = "tidy"
+# True when ao.bat must initialize the MSVC/vcpkg build environment first.
+REQUIRES_BUILD_ENV = True
+
 
 EPILOG = """\
 scope: with no arguments, checks files changed against local main + working tree +
@@ -211,7 +215,7 @@ FIX_REPLACEMENT_RE = re.compile(r"^\s+- FilePath:")
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(
-        "tidy", help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+        NAME, help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     tidyengine.add_scope_arguments(parser, verb="check")
     parser.add_argument("--fix", action="store_true", help="apply exported fixes automatically (use with caution)")
@@ -659,6 +663,15 @@ def run_command(args: argparse.Namespace) -> int:
             return 1
 
         mapped_headers = [target for target in coverage_plan.targets if target.is_header]
+        native_database_dir = build_dir
+        if toolchain.resource_dir is not None:
+            native_database_dir = tidyengine.make_tmpdir("tidy-windows-db-")
+            stack.callback(shutil.rmtree, native_database_dir, ignore_errors=True)
+            tidyengine.write_filtered_compile_database(
+                build_dir,
+                native_database_dir,
+                ("/Zc:preprocessor",),
+            )
         header_database_dir: Path | None = None
         if mapped_headers:
             translation_units = {absolute_path(target.translation_unit) for target in mapped_headers}
@@ -674,9 +687,10 @@ def run_command(args: argparse.Namespace) -> int:
             header_database_dir = tidyengine.make_tmpdir("tidy-header-db-")
             stack.callback(shutil.rmtree, header_database_dir, ignore_errors=True)
             tidyengine.write_header_compile_database(
-                build_dir,
+                native_database_dir,
                 mapped_headers,
                 header_database_dir,
+                excluded_arguments=("/TP",) if toolchain.resource_dir is not None else (),
             )
 
         clang_tidy = toolchain.clang_tidy
@@ -715,7 +729,7 @@ def run_command(args: argparse.Namespace) -> int:
             if args.fix:
                 extra.append(f"-export-fixes={log.with_suffix('.yaml')}")
             config = " ".join(CONFIG_BASE.replace("PLACEHOLDER", checks).split())
-            compile_database = header_database_dir if invocation.is_header else build_dir
+            compile_database = header_database_dir if invocation.is_header else native_database_dir
             if compile_database is None:
                 raise die(f"synthetic compile database was not created for {invocation.selected}")
             command = [

@@ -17,6 +17,10 @@ from ..core.proc import capture, die, run
 from .test import SUITE_TARGETS, run_suite
 
 HELP = "Build with --coverage, run tests, and report uncovered lines per source file"
+NAME = "coverage"
+# True when ao.bat must initialize the MSVC/vcpkg build environment first.
+REQUIRES_BUILD_ENV = False
+
 
 EPILOG = """\
 examples:
@@ -33,7 +37,7 @@ YELLOW, GREEN, RESET = "\033[33m", "\033[32m", "\033[0m"
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(
-        "coverage", help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+        NAME, help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("filter", nargs="?", default="", help="Catch2 test filter")
     suite = parser.add_mutually_exclusive_group()
@@ -254,6 +258,9 @@ def report(
 
 
 def run_command(args: argparse.Namespace) -> int:
+    if builddir.platform_profile().name != "linux":
+        raise die("coverage is supported on Linux only because it requires GCC and gcov.")
+
     build_dir = Path(args.path) if args.path else builddir.COVERAGE_DIR
 
     if not (build_dir / "CMakeCache.txt").is_file():

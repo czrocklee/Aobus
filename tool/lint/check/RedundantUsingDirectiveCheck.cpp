@@ -12,7 +12,7 @@
 #include <clang/Basic/SourceLocation.h>
 #include <llvm/Support/Casting.h>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::readability
 {
@@ -60,6 +60,8 @@ namespace clang::tidy::readability
 
   void RedundantUsingDirectiveCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     finder->addMatcher(usingDirectiveDecl().bind("using"), this);
   }
 

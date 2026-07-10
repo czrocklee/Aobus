@@ -21,6 +21,7 @@ if(MSVC)
     /Zc:preprocessor
     /utf-8
     /W4
+    /WX
   )
 
   add_compile_definitions(

@@ -16,7 +16,7 @@
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
 
-using namespace clang::ast_matchers;
+using clang::ast_matchers::MatchFinder;
 
 namespace clang::tidy::modernize
 {
@@ -121,6 +121,8 @@ namespace clang::tidy::modernize
 
   void UseStdToArrayCheck::registerMatchers(MatchFinder* finder)
   {
+    using namespace clang::ast_matchers;
+
     finder->addMatcher(varDecl(unless(isExpansionInSystemHeader()),
                                unless(isImplicit()),
                                unless(parmVarDecl()),

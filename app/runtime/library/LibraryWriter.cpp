@@ -606,7 +606,7 @@ namespace ao::rt
     Result<CreateTrackReply> applyCreateTrackFromFile(std::filesystem::path const& path, MutationMode mode);
 
     library::MusicLibrary& library;
-    LibraryChanges& changes;
+    LibraryChanges& libraryChanges;
   };
 
   LibraryWriter::LibraryWriter(library::MusicLibrary& library, LibraryChanges& changes)
@@ -785,7 +785,7 @@ namespace ao::rt
 
     if (!reply.mutatedIds.empty())
     {
-      this->changes.notifyTracksMutated(reply.mutatedIds);
+      libraryChanges.notifyTracksMutated(reply.mutatedIds);
     }
 
     return reply;
@@ -872,7 +872,7 @@ namespace ao::rt
 
     if (!reply.mutatedIds.empty())
     {
-      this->changes.notifyTracksMutated(reply.mutatedIds);
+      libraryChanges.notifyTracksMutated(reply.mutatedIds);
     }
 
     return reply;
@@ -909,7 +909,7 @@ namespace ao::rt
       return storageError("Failed to commit list creation", result.error());
     }
 
-    this->changes.notifyListsMutated({listId}, {});
+    libraryChanges.notifyListsMutated({listId}, {});
 
     return listId;
   }
@@ -955,7 +955,7 @@ namespace ao::rt
       return storageError("Failed to commit list update", result.error());
     }
 
-    this->changes.notifyListsMutated({draft.listId}, {});
+    libraryChanges.notifyListsMutated({draft.listId}, {});
     return reply;
   }
 
@@ -990,7 +990,7 @@ namespace ao::rt
       return storageError("Failed to commit list delete", result.error());
     }
 
-    this->changes.notifyListsMutated({}, {listId});
+    libraryChanges.notifyListsMutated({}, {listId});
     return reply;
   }
 
@@ -1043,11 +1043,11 @@ namespace ao::rt
 
     if (!reply.removedFromListIds.empty())
     {
-      this->changes.notifyListsMutated(reply.removedFromListIds, {});
+      libraryChanges.notifyListsMutated(reply.removedFromListIds, {});
     }
 
-    this->changes.notifyTrackCollectionChanged({}, {trackId});
-    this->changes.notifyTracksMutated({trackId});
+    libraryChanges.notifyTrackCollectionChanged({}, {trackId});
+    libraryChanges.notifyTracksMutated({trackId});
     return reply;
   }
 
@@ -1156,8 +1156,8 @@ namespace ao::rt
       return storageError("Failed to commit track creation", result.error());
     }
 
-    this->changes.notifyTrackCollectionChanged({id}, {});
-    this->changes.notifyTracksMutated({id});
+    libraryChanges.notifyTrackCollectionChanged({id}, {});
+    libraryChanges.notifyTracksMutated({id});
     return reply;
   }
 } // namespace ao::rt

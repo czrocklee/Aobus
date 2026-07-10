@@ -24,6 +24,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/PlaybackSessionState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/completion/CompletionItem.h>
@@ -66,6 +67,16 @@ namespace ao::tui::test
 
       LibraryController makeLibrary() { return LibraryController{runtime}; }
     };
+
+    void prepareSeekablePlayback(EventControllerFixture& fixture, LibraryController const& library)
+    {
+      REQUIRE_FALSE(library.tracks().empty());
+      REQUIRE(fixture.runtime.playback().restoreSession(rt::PlaybackSessionState{
+        .sourceListId = library.currentListId(),
+        .trackId = library.tracks()[0].id,
+      }));
+      REQUIRE(fixture.runtime.playback().state().duration > std::chrono::milliseconds{0});
+    }
 
     void enterCommand(EventController& controller, std::string_view text)
     {
@@ -1056,12 +1067,9 @@ namespace ao::tui::test
             "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
     auto library = fixture.makeLibrary();
-    REQUIRE_FALSE(library.tracks().empty());
-    REQUIRE(fixture.runtime.playback().playTrack(library.tracks()[0].id, library.currentListId()));
+    prepareSeekablePlayback(fixture, library);
     auto const duration = fixture.runtime.playback().state().duration;
-    REQUIRE(duration > std::chrono::milliseconds{0});
 
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
@@ -1090,12 +1098,9 @@ namespace ao::tui::test
   TEST_CASE("EventController - mouse drag on seek rail clamps release outside the rail", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
     auto library = fixture.makeLibrary();
-    REQUIRE_FALSE(library.tracks().empty());
-    REQUIRE(fixture.runtime.playback().playTrack(library.tracks()[0].id, library.currentListId()));
+    prepareSeekablePlayback(fixture, library);
     auto const duration = fixture.runtime.playback().state().duration;
-    REQUIRE(duration > std::chrono::milliseconds{0});
 
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
@@ -1149,10 +1154,8 @@ namespace ao::tui::test
   TEST_CASE("EventController - modal overlays block seek rail mouse clicks", "[tui][regression][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
     auto library = fixture.makeLibrary();
-    REQUIRE_FALSE(library.tracks().empty());
-    REQUIRE(fixture.runtime.playback().playTrack(library.tracks()[0].id, library.currentListId()));
+    prepareSeekablePlayback(fixture, library);
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
@@ -1174,10 +1177,8 @@ namespace ao::tui::test
   TEST_CASE("EventController - command mode blocks seek rail mouse clicks", "[tui][regression][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
     auto library = fixture.makeLibrary();
-    REQUIRE_FALSE(library.tracks().empty());
-    REQUIRE(fixture.runtime.playback().playTrack(library.tracks()[0].id, library.currentListId()));
+    prepareSeekablePlayback(fixture, library);
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
@@ -1257,10 +1258,8 @@ namespace ao::tui::test
   TEST_CASE("EventController - modal overlays cancel active seek rail drags", "[tui][regression][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
     auto library = fixture.makeLibrary();
-    REQUIRE_FALSE(library.tracks().empty());
-    REQUIRE(fixture.runtime.playback().playTrack(library.tracks()[0].id, library.currentListId()));
+    prepareSeekablePlayback(fixture, library);
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};

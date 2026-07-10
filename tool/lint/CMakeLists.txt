@@ -88,6 +88,9 @@ if(WIN32)
   # Official Windows clang-tidy binaries do not export the C++ symbols needed
   # by an out-of-tree DLL. Link the checks and clangTidyMain into one executable
   # instead, so every module registers in the same in-process registry.
+  # LLVM disables exceptions for this executable; remove CMake's default
+  # enable flag before llvm_update_compile_flags adds the matching MSVC flag.
+  string(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
   add_executable(AobusClangTidy
     AobusClangTidyMain.cpp
     ${AOBUS_LINT_PLUGIN_SOURCES}
@@ -98,6 +101,9 @@ if(WIN32)
   )
   set_property(TARGET AobusClangTidy PROPERTY MSVC_RUNTIME_LIBRARY MultiThreaded)
   llvm_update_compile_flags(AobusClangTidy)
+  # Template instantiations in LLVM's ADT/bit.h expose compile-time unreachable
+  # branches as C4702 even though the SDK headers are marked external.
+  target_compile_options(AobusClangTidy PRIVATE /wd4702)
   set(AOBUS_LINT_TARGET AobusClangTidy)
 else()
   # Keep the established Linux linkage and libAobusLintPlugin.so path.
