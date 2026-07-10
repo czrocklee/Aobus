@@ -128,7 +128,7 @@ namespace ao::uimodel::test
       CHECK(optPromotion->componentState.components.empty());
 
       auto const& promotedSplit = optPromotion->layout.root.children.front();
-      CHECK(promotedSplit.props.find("position") == promotedSplit.props.end());
+      CHECK_FALSE(promotedSplit.props.contains("position"));
       CHECK(promotedSplit.props.at("initialPositionPercent").asDouble() == 0.68);
 
       model.applyPanelSizePromotion(std::move(*optPromotion));

@@ -85,7 +85,7 @@ namespace ao::utility::test
 
     for (std::size_t index = 0; index < 4099; ++index)
     {
-      bytes.push_back(static_cast<std::byte>((index * 131U + 17U) & 0xFFU));
+      bytes.push_back(static_cast<std::byte>(((index * 131U) + 17U) & 0xFFU));
     }
 
     auto const all = std::span<std::byte const>{bytes};

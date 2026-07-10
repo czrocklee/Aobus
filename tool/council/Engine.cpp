@@ -250,8 +250,7 @@ namespace ao::council
 
     bool containsAny(std::string_view haystack, std::initializer_list<std::string_view> needles)
     {
-      return std::ranges::any_of(
-        needles, [&](std::string_view needle) { return haystack.find(needle) != std::string_view::npos; });
+      return std::ranges::any_of(needles, [&](std::string_view needle) { return haystack.contains(needle); });
     }
 
     std::string trimAsciiWhitespace(std::string value)

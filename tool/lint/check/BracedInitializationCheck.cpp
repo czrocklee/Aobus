@@ -53,8 +53,8 @@ namespace clang::tidy::readability
       }
 
       return llvm::StringSwitch<bool>{name}
-        .Cases("vector", "deque", "list", "forward_list", true)
-        .Cases("basic_string", "string", true)
+        .Cases({"vector", "deque", "list", "forward_list"}, true)
+        .Cases({"basic_string", "string"}, true)
         .Default(false);
     }
 
@@ -141,7 +141,7 @@ namespace clang::tidy::readability
               ignoredFirstArgument != nullptr &&
               (isa<StringLiteral>(ignoredFirstArgument) || isa<CXXBindTemporaryExpr>(ignoredFirstArgument)))
           {
-            if (var->getType().getCanonicalType().getAsString().find("string") != std::string::npos)
+            if (var->getType().getCanonicalType().getAsString().contains("string"))
             {
               return true;
             }

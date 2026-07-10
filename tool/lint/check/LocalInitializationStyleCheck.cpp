@@ -55,10 +55,10 @@ namespace clang::tidy::readability
 
       StringRef const name = record->getName();
       return llvm::StringSwitch<bool>{name}
-        .Cases("vector", "deque", "list", "forward_list", true)
-        .Cases("set", "multiset", "unordered_set", "unordered_multiset", true)
-        .Cases("map", "multimap", "unordered_map", "unordered_multimap", true)
-        .Cases("basic_string", "string", true)
+        .Cases({"vector", "deque", "list", "forward_list"}, true)
+        .Cases({"set", "multiset", "unordered_set", "unordered_multiset"}, true)
+        .Cases({"map", "multimap", "unordered_map", "unordered_multimap"}, true)
+        .Cases({"basic_string", "string"}, true)
         .Default(false);
     }
 
@@ -390,7 +390,7 @@ namespace clang::tidy::readability
 
       if (bool const hasLiteral = hasStringLiteralArgument(init); isString && hasLiteral)
       {
-        auto const suffix = StringRef{varType.getAsString().find("string_view") != StringRef::npos ? "sv" : "s"};
+        auto const suffix = StringRef{varType.getAsString().contains("string_view") ? "sv" : "s"};
         diag(loc, "prefer standard literals 'auto %0 = \"...\"%1' over explicit string construction")
           << var->getName() << suffix;
       }

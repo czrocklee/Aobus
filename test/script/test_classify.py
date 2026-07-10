@@ -55,6 +55,12 @@ class TidyChecksTest(unittest.TestCase):
         self.assertNotIn("-*", disables)
         self.assertTrue(all(token.startswith("-") for token in disables))
 
+    def test_clang_22_policy_exclusions_are_mode_specific(self):
+        self.assertIn("-misc-multiple-inheritance", tidy.STRICT_CHECKS.split(","))
+        self.assertNotIn("-modernize-use-designated-initializers", tidy.STRICT_CHECKS.split(","))
+        self.assertIn("-modernize-use-designated-initializers", tidy.RELAXED_CHECKS.split(","))
+        self.assertIn("-bugprone-throwing-static-initialization", tidy.RELAXED_CHECKS.split(","))
+
 
 class TidySplitExistingTest(unittest.TestCase):
     def test_files_outside_the_repository_keep_their_absolute_path(self):

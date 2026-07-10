@@ -50,7 +50,6 @@ namespace ao::gtk
     MainWindow& operator=(MainWindow&&) = delete;
 
     void saveSession();
-    void on_hide() override;
 
     portal::ImportExportCoordinator& importExportCoordinator();
 
@@ -63,6 +62,9 @@ namespace ao::gtk
     void applyTheme(rt::ThemePresetId theme);
     rt::PlaybackService& playbackService();
     uimodel::LayoutActionCatalog const& layoutActionCatalog() const;
+
+  protected:
+    void on_hide() override;
 
   private:
     void installPlaybackSpaceShortcut();

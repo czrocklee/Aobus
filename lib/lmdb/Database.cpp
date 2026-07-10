@@ -124,7 +124,7 @@ namespace ao::lmdb
   std::optional<std::span<std::byte const>> Database::Reader::get(std::span<std::byte const> keyView) const
   {
     auto key = makeVal(keyView.data(), keyView.size());
-    auto val = ::MDB_val{0, nullptr};
+    auto val = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
     int const rc = ::mdb_get(_txn, _dbi, &key, &val);
 
     if (rc == MDB_NOTFOUND)
@@ -139,8 +139,8 @@ namespace ao::lmdb
   std::uint32_t Database::Reader::maxKey() const
   {
     auto cursorPtr = create(_txn, _dbi);
-    auto key = ::MDB_val{0, nullptr};
-    auto val = ::MDB_val{0, nullptr};
+    auto key = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
+    auto val = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
 
     int const rc = ::mdb_cursor_get(cursorPtr.get(), &key, &val, MDB_LAST);
 
@@ -186,8 +186,8 @@ namespace ao::lmdb
       return;
     }
 
-    auto key = ::MDB_val{0, nullptr};
-    auto val = ::MDB_val{0, nullptr};
+    auto key = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
+    auto val = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
 
     if (int const rc = ::mdb_cursor_get(_cursorPtr.get(), &key, &val, MDB_FIRST); rc == MDB_NOTFOUND)
     {
@@ -227,8 +227,8 @@ namespace ao::lmdb
 
   void Database::Reader::Iterator::next()
   {
-    auto key = ::MDB_val{0, nullptr};
-    auto val = ::MDB_val{0, nullptr};
+    auto key = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
+    auto val = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
 
     if (int const rc = ::mdb_cursor_get(_cursorPtr.get(), &key, &val, MDB_NEXT); rc == MDB_NOTFOUND)
     {
@@ -248,7 +248,7 @@ namespace ao::lmdb
   {
     if (_kind == Database::KeyKind::Integer)
     {
-      auto key = ::MDB_val{0, nullptr};
+      auto key = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
 
       int const rc = ::mdb_cursor_get(_cursorPtr.get(), &key, nullptr, MDB_LAST);
 
@@ -426,7 +426,7 @@ namespace ao::lmdb
   {
     ensureActive();
     auto key = makeVal(keyView.data(), keyView.size());
-    auto val = ::MDB_val{0, nullptr};
+    auto val = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
     int const rc = ::mdb_cursor_get(_cursorPtr.get(), &key, &val, MDB_SET);
 
     if (rc == MDB_NOTFOUND)

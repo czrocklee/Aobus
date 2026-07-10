@@ -7,7 +7,7 @@ if(WIN32)
   find_package(LLVM ${AOBUS_LLVM_SDK_VERSION} EXACT REQUIRED CONFIG
     PATHS "${LLVM_DIR}" NO_DEFAULT_PATH)
 else()
-  find_package(LLVM REQUIRED CONFIG)
+  find_package(LLVM 22.1 REQUIRED CONFIG)
 endif()
 list(APPEND CMAKE_MODULE_PATH ${LLVM_CMAKE_DIR})
 include(AddLLVM)
@@ -16,7 +16,7 @@ if(WIN32)
   find_package(Clang ${AOBUS_LLVM_SDK_VERSION} EXACT REQUIRED CONFIG
     PATHS "${Clang_DIR}" NO_DEFAULT_PATH)
 else()
-  find_package(Clang REQUIRED CONFIG)
+  find_package(Clang 22.1 REQUIRED CONFIG)
 endif()
 
 if(WIN32)
@@ -34,7 +34,6 @@ if(WIN32)
 endif()
 
 add_definitions(${LLVM_DEFINITIONS})
-include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
 
 set(AOBUS_LINT_PLUGIN_SOURCES
   check/AsyncCancellationGuardCheck.cpp
@@ -113,6 +112,10 @@ set_target_properties(${AOBUS_LINT_TARGET} PROPERTIES
 )
 
 target_include_directories(${AOBUS_LINT_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(${AOBUS_LINT_TARGET} SYSTEM PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CLANG_INCLUDE_DIRS}
+)
 target_compile_options(${AOBUS_LINT_TARGET} PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-null-dereference>
 )

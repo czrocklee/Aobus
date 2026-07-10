@@ -92,7 +92,7 @@ namespace ao::audio
 
     struct PlaybackItem final
     {
-      PlaybackItemId id;
+      PlaybackItemId id = {};
       PlaybackInput input;
     };
 

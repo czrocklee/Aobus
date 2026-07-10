@@ -466,7 +466,7 @@ namespace ao::council
         replaceAll(argument, "{prompt-file}", "");
       }
 
-      return argument.find('{') != std::string::npos || argument.find('}') != std::string::npos;
+      return argument.contains('{') || argument.contains('}');
     }
 
     void requireNoPlaceholders(std::vector<std::string> const& argv,
@@ -486,7 +486,7 @@ namespace ao::council
     {
       for (auto& argument : argv)
       {
-        if (argument.find("{effort}") != std::string::npos && agent.effort.empty())
+        if (argument.contains("{effort}") && agent.effort.empty())
         {
           throwException<ParseFailure>("agent '{}' argv uses '{{effort}}' but effort is empty", agent.id);
         }

@@ -48,7 +48,7 @@ namespace ao::audio::test
       // (96000 % 44100) = 7800
       // 48000 is chosen as "closest" via modulo
       CHECK(plan.deviceFormat.sampleRate == 48000);
-      CHECK(plan.reason.find("resampling required") != std::string::npos);
+      CHECK(plan.reason.contains("resampling required"));
     }
 
     SECTION("Bit depth conversion required")
@@ -59,7 +59,7 @@ namespace ao::audio::test
 
       CHECK(plan.isBitDepthConversionRequired == true);
       CHECK(plan.deviceFormat.bitDepth == 32); // Max element
-      CHECK(plan.reason.find("bit depth conversion required") != std::string::npos);
+      CHECK(plan.reason.contains("bit depth conversion required"));
     }
 
     SECTION("Channel remapping required")
@@ -69,7 +69,7 @@ namespace ao::audio::test
 
       CHECK(plan.isChannelRemapRequired == true);
       CHECK(plan.deviceFormat.channels == 6); // First element
-      CHECK(plan.reason.find("channel remapping required") != std::string::npos);
+      CHECK(plan.reason.contains("channel remapping required"));
     }
 
     SECTION("Decoder output format negotiation - 24-bit source")

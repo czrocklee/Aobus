@@ -26,9 +26,8 @@ namespace ao::gtk
   {
     void validatePresetId(std::string_view presetId)
     {
-      if (presetId.empty() || presetId.find('/') != std::string_view::npos ||
-          presetId.find('\\') != std::string_view::npos || presetId.find("..") != std::string_view::npos ||
-          presetId.find('\0') != std::string_view::npos)
+      if (presetId.empty() || presetId.contains('/') || presetId.contains('\\') || presetId.contains("..") ||
+          presetId.contains('\0'))
       {
         throwException<Exception>("Invalid preset ID: path traversal attempt or empty ID");
       }

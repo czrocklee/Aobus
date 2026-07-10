@@ -19,7 +19,6 @@
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Lexer.h>
 #include <llvm/ADT/StringRef.h>
-#include <llvm/Config/llvm-config.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -33,13 +32,7 @@ namespace clang::tidy::readability
   {
     TemplateSpecializationTypeLoc getExplicitTemplateTypeLoc(TypeLoc typeLoc)
     {
-#if LLVM_VERSION_MAJOR >= 22
       return typeLoc.getUnqualifiedLoc().getAs<TemplateSpecializationTypeLoc>();
-#else
-      auto const elaboratedLoc = typeLoc.getAs<ElaboratedTypeLoc>();
-      return elaboratedLoc.isNull() ? TemplateSpecializationTypeLoc{}
-                                    : elaboratedLoc.getNamedTypeLoc().getAs<TemplateSpecializationTypeLoc>();
-#endif
     }
 
     std::string getTemplateName(TemplateSpecializationTypeLoc const& tsLoc)
@@ -859,11 +852,7 @@ namespace clang::tidy::readability
 
   void UseCtadCheck::registerMatchers(MatchFinder* finder)
   {
-#if LLVM_VERSION_MAJOR >= 22
     auto explicitTemplateTypeLoc = templateSpecializationTypeLoc();
-#else
-    auto explicitTemplateTypeLoc = elaboratedTypeLoc(hasNamedTypeLoc(templateSpecializationTypeLoc()));
-#endif
 
     finder->addMatcher(cxxTemporaryObjectExpr(unless(isExpansionInSystemHeader()),
                                               hasTypeLoc(explicitTemplateTypeLoc),

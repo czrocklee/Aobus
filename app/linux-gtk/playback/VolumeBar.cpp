@@ -289,7 +289,7 @@ namespace ao::gtk
         float const currentWidth = drawWidth * progress;
         crPtr->move_to(hPadding, vPadding + drawHeight);
         crPtr->line_to(hPadding + currentWidth, vPadding + drawHeight);
-        float const hAtW = drawHeight * (kMinThicknessFactor + kMaxThicknessFactor * (currentWidth / drawWidth));
+        float const hAtW = drawHeight * (kMinThicknessFactor + (kMaxThicknessFactor * (currentWidth / drawWidth)));
         crPtr->line_to(hPadding + currentWidth, vPadding + drawHeight - hAtW);
         crPtr->line_to(hPadding, vPadding + drawHeight - (drawHeight * kMinThicknessFactor));
       }

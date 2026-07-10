@@ -22,73 +22,76 @@
 
 namespace ao::gtk
 {
-  class AudioPipelinePanelInspector
+  namespace
   {
-  public:
-    explicit AudioPipelinePanelInspector(AudioPipelinePanel& widget)
-      : _widget{widget}
+    class AudioPipelinePanelInspector final
     {
-    }
-
-    std::int32_t childCount() const
-    {
-      std::int32_t count = 0;
-      auto* child = _widget.get_first_child();
-
-      while (child != nullptr)
+    public:
+      explicit AudioPipelinePanelInspector(AudioPipelinePanel& widget)
+        : _widget{widget}
       {
-        count++;
-        child = child->get_next_sibling();
       }
 
-      return count;
-    }
-
-    bool hasCssClass(std::string const& className) const { return _widget.has_css_class(className); }
-
-    std::vector<std::string> labelTexts() const
-    {
-      auto labels = std::vector<std::string>{};
-      collectLabelTexts(_widget, labels);
-      return labels;
-    }
-
-    bool hasDescendantCssClass(std::string const& className) const { return containsCssClass(_widget, className); }
-
-  private:
-    static void collectLabelTexts(Gtk::Widget& widget, std::vector<std::string>& labels)
-    {
-      if (auto* const label = dynamic_cast<Gtk::Label*>(&widget); label != nullptr)
+      std::int32_t childCount() const
       {
-        labels.push_back(label->get_text().raw());
-      }
+        std::int32_t count = 0;
+        auto* child = _widget.get_first_child();
 
-      for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        collectLabelTexts(*child, labels);
-      }
-    }
-
-    static bool containsCssClass(Gtk::Widget& widget, std::string const& className)
-    {
-      if (widget.has_css_class(className))
-      {
-        return true;
-      }
-
-      for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
-      {
-        if (containsCssClass(*child, className))
+        while (child != nullptr)
         {
-          return true;
+          count++;
+          child = child->get_next_sibling();
+        }
+
+        return count;
+      }
+
+      bool hasCssClass(std::string const& className) const { return _widget.has_css_class(className); }
+
+      std::vector<std::string> labelTexts() const
+      {
+        auto labels = std::vector<std::string>{};
+        collectLabelTexts(_widget, labels);
+        return labels;
+      }
+
+      bool hasDescendantCssClass(std::string const& className) const { return containsCssClass(_widget, className); }
+
+    private:
+      static void collectLabelTexts(Gtk::Widget& widget, std::vector<std::string>& labels)
+      {
+        if (auto* const label = dynamic_cast<Gtk::Label*>(&widget); label != nullptr)
+        {
+          labels.push_back(label->get_text().raw());
+        }
+
+        for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+        {
+          collectLabelTexts(*child, labels);
         }
       }
 
-      return false;
-    }
+      static bool containsCssClass(Gtk::Widget& widget, std::string const& className)
+      {
+        if (widget.has_css_class(className))
+        {
+          return true;
+        }
 
-    AudioPipelinePanel& _widget;
-  };
+        for (auto* child = widget.get_first_child(); child != nullptr; child = child->get_next_sibling())
+        {
+          if (containsCssClass(*child, className))
+          {
+            return true;
+          }
+        }
+
+        return false;
+      }
+
+      AudioPipelinePanel& _widget;
+    };
+  } // namespace
 } // namespace ao::gtk
 
 namespace ao::gtk::test

@@ -48,7 +48,7 @@ namespace ao::cli::test
 
     bool contains(std::string_view text, std::string_view expected)
     {
-      return text.find(expected) != std::string_view::npos;
+      return text.contains(expected);
     }
 
     CliResult runArgs(std::vector<std::string> args)

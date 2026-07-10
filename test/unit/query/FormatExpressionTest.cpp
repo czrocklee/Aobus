@@ -106,7 +106,7 @@ namespace ao::query::test
     auto ast = parseOk(R"($id + ": " + $title)");
     auto compiler = FormatCompiler{&fixture.dictionary()};
     auto const error = compileError(compiler, ast);
-    CHECK(error.message.find("unknown metadata field '$id'") != std::string::npos);
+    CHECK(error.message.contains("unknown metadata field '$id'"));
   }
 
   TEST_CASE("FormatExpression - formats unknown codecs as empty", "[query][unit][format-expression]")

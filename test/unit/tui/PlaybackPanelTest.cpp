@@ -108,15 +108,15 @@ namespace ao::tui::test
 
     auto const text = renderPlaybackText(playbackBar(PlaybackBarViewState{.playbackState = &state}));
 
-    CHECK(text.find("Aobus") == std::string::npos);
-    CHECK(text.find("Library") == std::string::npos);
-    CHECK(text.find("view:") == std::string::npos);
+    CHECK_FALSE(text.contains("Aobus"));
+    CHECK_FALSE(text.contains("Library"));
+    CHECK_FALSE(text.contains("view:"));
     CHECK(containsBrailleGlyph(text));
-    CHECK(text.find("No active track") != std::string::npos);
-    CHECK(text.find('-') != std::string::npos);
-    CHECK(text.find("0:00") != std::string::npos);
-    CHECK(text.find("--:--") != std::string::npos);
-    CHECK(text.find("Vol 100%") != std::string::npos);
+    CHECK(text.contains("No active track"));
+    CHECK(text.contains('-'));
+    CHECK(text.contains("0:00"));
+    CHECK(text.contains("--:--"));
+    CHECK(text.contains("Vol 100%"));
   }
 
   TEST_CASE("PlaybackPanel - playback bar renders current track timing and volume", "[tui][unit][playback]")
@@ -130,14 +130,14 @@ namespace ao::tui::test
     auto const text = renderPlaybackText(
       playbackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{65}}));
 
-    CHECK(text.find("view:") == std::string::npos);
-    CHECK(text.find("Signal Path") != std::string::npos);
-    CHECK(text.find("Artist") != std::string::npos);
-    CHECK(text.find("Aobus") == std::string::npos);
+    CHECK_FALSE(text.contains("view:"));
+    CHECK(text.contains("Signal Path"));
+    CHECK(text.contains("Artist"));
+    CHECK_FALSE(text.contains("Aobus"));
     CHECK(containsBrailleGlyph(text));
-    CHECK(text.find("1:05") != std::string::npos);
-    CHECK(text.find("2:05") != std::string::npos);
-    CHECK(text.find("Vol 42%") != std::string::npos);
+    CHECK(text.contains("1:05"));
+    CHECK(text.contains("2:05"));
+    CHECK(text.contains("Vol 42%"));
   }
 
   TEST_CASE("PlaybackPanel - playback bar anchors the soul button at the far left", "[tui][unit][playback]")
@@ -163,9 +163,9 @@ namespace ao::tui::test
     auto const text = renderPlaybackText(
       playbackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{50}}));
 
-    CHECK(text.find("50%") == std::string::npos);
-    CHECK(text.find("●") != std::string::npos);
-    CHECK(text.find("1:40") != std::string::npos);
+    CHECK_FALSE(text.contains("50%"));
+    CHECK(text.contains("●"));
+    CHECK(text.contains("1:40"));
   }
 
   TEST_CASE("PlaybackPanel - playback bar reflects only the seek rail", "[tui][unit][playback]")
@@ -180,7 +180,7 @@ namespace ao::tui::test
                   playbackBar(PlaybackBarViewState{
                     .playbackState = &state, .displayElapsed = std::chrono::seconds{50}, .seekRailBox = &seekRailBox}));
 
-    CHECK(screen.ToString().find("0:50") != std::string::npos);
+    CHECK(screen.ToString().contains("0:50"));
     CHECK(seekRailBox.y_min == 0);
     CHECK(seekRailBox.y_max == 0);
     CHECK(seekRailBox.x_min < seekRailBox.x_max);
@@ -249,9 +249,9 @@ namespace ao::tui::test
 
     CHECK(playbackBarRows(20) == 1);
     CHECK(playbackBarRows(24) == 1);
-    CHECK(screen.ToString().find("Signal Path") != std::string::npos);
-    CHECK(screen.ToString().find("0:50") != std::string::npos);
-    CHECK(screen.ToString().find("1:40") != std::string::npos);
+    CHECK(screen.ToString().contains("Signal Path"));
+    CHECK(screen.ToString().contains("0:50"));
+    CHECK(screen.ToString().contains("1:40"));
     CHECK(seekRailBox.y_min == 0);
     CHECK(seekRailBox.y_max == 0);
   }
@@ -268,8 +268,8 @@ namespace ao::tui::test
     auto const text =
       renderPlaybackText(playbackBar(PlaybackBarViewState{.playbackState = &state, .outputView = &output}));
 
-    CHECK(text.find("PW") != std::string::npos);
-    CHECK(text.find("No active track") != std::string::npos);
+    CHECK(text.contains("PW"));
+    CHECK(text.contains("No active track"));
   }
 
   TEST_CASE("PlaybackPanel - hovered output selector uses the interactive surface", "[tui][unit][playback]")
@@ -299,11 +299,11 @@ namespace ao::tui::test
 
     auto const text = renderPlaybackText(qualityPanel(state));
 
-    CHECK(text.find("Quality") == std::string::npos);
-    CHECK(text.find("Audio Pipeline") == std::string::npos);
-    CHECK(text.find("No audio pipeline yet") != std::string::npos);
-    CHECK(text.find("a toggle") != std::string::npos);
-    CHECK(text.find("Esc close") != std::string::npos);
+    CHECK_FALSE(text.contains("Quality"));
+    CHECK_FALSE(text.contains("Audio Pipeline"));
+    CHECK(text.contains("No audio pipeline yet"));
+    CHECK(text.contains("a toggle"));
+    CHECK(text.contains("Esc close"));
   }
 
   TEST_CASE("PlaybackPanel - quality panel renders selected device pipeline and findings", "[tui][unit][playback]")
@@ -365,13 +365,13 @@ namespace ao::tui::test
 
     auto const text = renderPlaybackText(qualityPanel(state));
 
-    CHECK(text.find("Studio DAC") != std::string::npos);
-    CHECK(text.find("Quality") == std::string::npos);
-    CHECK(text.find("[Source] FLAC") != std::string::npos);
-    CHECK(text.find("44.1 kHz") != std::string::npos);
-    CHECK(text.find("[Device] DAC") != std::string::npos);
-    CHECK(text.find("Software volume attenuation") != std::string::npos);
-    CHECK(text.find("Pipeline intervention") != std::string::npos);
+    CHECK(text.contains("Studio DAC"));
+    CHECK_FALSE(text.contains("Quality"));
+    CHECK(text.contains("[Source] FLAC"));
+    CHECK(text.contains("44.1 kHz"));
+    CHECK(text.contains("[Device] DAC"));
+    CHECK(text.contains("Software volume attenuation"));
+    CHECK(text.contains("Pipeline intervention"));
   }
 
   TEST_CASE("PlaybackPanel - quality panel width follows content and terminal bounds", "[tui][unit][playback]")
@@ -427,12 +427,12 @@ namespace ao::tui::test
 
     auto const text = renderPlaybackText(outputDevicePanel(view, 2, &rowHitRegions));
 
-    CHECK(text.find("Output Devices") != std::string::npos);
-    CHECK(text.find("PipeWire") != std::string::npos);
-    CHECK(text.find("Studio DAC") != std::string::npos);
-    CHECK(text.find("USB interface") != std::string::npos);
-    CHECK(text.find("PipeWire: Studio DAC") != std::string::npos);
-    CHECK(text.find("Enter select") != std::string::npos);
+    CHECK(text.contains("Output Devices"));
+    CHECK(text.contains("PipeWire"));
+    CHECK(text.contains("Studio DAC"));
+    CHECK(text.contains("USB interface"));
+    CHECK(text.contains("PipeWire: Studio DAC"));
+    CHECK(text.contains("Enter select"));
     REQUIRE(rowHitRegions.size() == 2);
     CHECK(rowHitRegions[0].rowIndex == 1);
     CHECK(rowHitRegions[0].backendId == audio::BackendId{"pipewire"});
@@ -498,7 +498,7 @@ namespace ao::tui::test
 
     auto const text = renderPlaybackText(outputDevicePanel(view, 1), 48, 24);
 
-    CHECK(text.find("very_long_identifier") == std::string::npos);
-    CHECK(text.find("o toggle") != std::string::npos);
+    CHECK_FALSE(text.contains("very_long_identifier"));
+    CHECK(text.contains("o toggle"));
   }
 } // namespace ao::tui::test

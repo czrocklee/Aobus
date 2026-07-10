@@ -31,8 +31,8 @@ namespace ao::lmdb::test
       CHECK(std::string_view{result.error().location.file_name()}.ends_with("ResultErrorTest.cpp"));
 
       auto const fn = std::string_view{result.error().location.function_name()};
-      CHECK(fn.find("resultFromCode") == std::string_view::npos);
-      CHECK(fn.find("lmdbError") == std::string_view::npos);
+      CHECK_FALSE(fn.contains("resultFromCode"));
+      CHECK_FALSE(fn.contains("lmdbError"));
     }
 
     SECTION("lmdbError captures the caller and classifies the code")

@@ -208,7 +208,9 @@ namespace ao::tui
 
     std::string trim(std::string_view value)
     {
+      // NOLINTNEXTLINE(readability-qualified-auto)
       auto begin = value.begin();
+      // NOLINTNEXTLINE(readability-qualified-auto)
       auto end = value.end();
 
       while (begin != end && std::isspace(static_cast<unsigned char>(*begin)) != 0)
@@ -262,6 +264,7 @@ namespace ao::tui
       }
     }
 
+    // NOLINTNEXTLINE(readability-qualified-auto)
     auto const aliasIt = std::ranges::find_if(
       kAliasCommands, [&](CommandAliasSpec const& aliasCommand) { return command == aliasCommand.alias; });
 

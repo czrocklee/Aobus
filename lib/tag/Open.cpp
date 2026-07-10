@@ -52,6 +52,7 @@ namespace ao::tag
 
     Creator const* findCreator(std::string_view ext)
     {
+      // NOLINTNEXTLINE(readability-qualified-auto)
       auto const it = std::ranges::find(kCreatorsByExtension, ext, &std::pair<std::string_view, Creator>::first);
       return it != kCreatorsByExtension.end() ? &it->second : nullptr;
     }

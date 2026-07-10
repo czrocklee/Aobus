@@ -69,12 +69,12 @@ namespace ao::uimodel::test
     CHECK(result.residualCount == 1);
 
     auto const& split = doc.root.children[0];
-    CHECK(split.props.find("position") == split.props.end());
+    CHECK_FALSE(split.props.contains("position"));
     CHECK(split.props.at("initialPositionPercent").asDouble() == 0.42);
 
     auto const& collapsible = doc.root.children[1];
     CHECK(collapsible.props.at("position").asInt() == 320);
-    CHECK(collapsible.props.find("initialPositionPercent") == collapsible.props.end());
+    CHECK_FALSE(collapsible.props.contains("initialPositionPercent"));
 
     CHECK_FALSE(stateDoc.components.contains("main-paned"));
     REQUIRE(stateDoc.components.contains("detail-split"));

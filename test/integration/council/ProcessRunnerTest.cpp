@@ -245,8 +245,8 @@ namespace ao::council::test
     CHECK(result.exitCode == 0);
     // Append-mode writes interleave at chunk granularity but never clobber each other.
     auto const log = ao::test::readFile(sinkPath);
-    CHECK(log.find("out-line") != std::string::npos);
-    CHECK(log.find("err-line") != std::string::npos);
+    CHECK(log.contains("out-line"));
+    CHECK(log.contains("err-line"));
   }
 
   TEST_CASE("Process runner - onLaunch reports a live pid", "[council][integration][process]")
@@ -287,7 +287,7 @@ namespace ao::council::test
     CHECK(result.status == ProcessStatus::Exited);
     CHECK(result.exitCode == 0);
     CHECK(result.standardOutput == "survives\n");
-    CHECK(result.standardError.find("cannot open sink") != std::string::npos);
+    CHECK(result.standardError.contains("cannot open sink"));
   }
 
   TEST_CASE("Process runner - unread standard input neither kills nor hangs the runner",

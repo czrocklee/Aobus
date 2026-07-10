@@ -59,7 +59,6 @@ namespace ao::gtk
     Glib::ustring text() const;
     void setPosition(std::int32_t position);
     std::int32_t position() const;
-    void activate();
 
   private:
     std::optional<rt::CompletionResult> complete(std::string_view text, std::size_t cursor);

@@ -48,8 +48,8 @@ namespace ao::rt::test
       catch (Exception const& e)
       {
         auto const message = std::string_view{e.what()};
-        CHECK(message.find("load value") != std::string_view::npos);
-        CHECK(message.find("read failed") != std::string_view::npos);
+        CHECK(message.contains("load value"));
+        CHECK(message.contains("read failed"));
         CHECK(std::string_view{e.location().file_name()} == errorLocation.file_name());
         CHECK(e.location().line() == errorLocation.line());
       }

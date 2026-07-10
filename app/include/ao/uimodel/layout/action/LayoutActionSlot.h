@@ -19,7 +19,7 @@ namespace ao::uimodel
 
   using LayoutActionSlotMask = std::uint32_t;
 
-  constexpr LayoutActionSlotMask slotBit(LayoutActionSlot const slot)
+  constexpr LayoutActionSlotMask slotBit(LayoutActionSlot const slot) noexcept
   {
     return 1U << static_cast<std::uint8_t>(slot);
   }

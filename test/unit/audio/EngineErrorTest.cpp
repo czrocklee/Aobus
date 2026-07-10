@@ -69,10 +69,10 @@ namespace ao::audio::test
       CHECK(failure.input.filePath == desc.filePath);
       CHECK(failure.generation > 0);
       CHECK(failure.recoverable);
-      CHECK(failure.error.message.find("Unsupported audio file extension") != std::string::npos);
+      CHECK(failure.error.message.contains("Unsupported audio file extension"));
 
       CHECK(engine.status().transport == Transport::Error);
-      CHECK(engine.status().statusText.find("Unsupported audio file extension") != std::string::npos);
+      CHECK(engine.status().statusText.contains("Unsupported audio file extension"));
     }
 
     SECTION("Decoder open failure")

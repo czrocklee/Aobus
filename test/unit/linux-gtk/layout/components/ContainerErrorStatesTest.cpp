@@ -26,8 +26,8 @@ namespace ao::gtk::layout::test
     {
       auto* const label = dynamic_cast<Gtk::Label*>(&compPtr.widget());
       REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("[Layout Error]") != std::string::npos);
-      CHECK(label->get_label().find(expectedFragment) != std::string::npos);
+      CHECK(label->get_label().raw().contains("[Layout Error]"));
+      CHECK(label->get_label().raw().contains(expectedFragment));
     };
 
     SECTION("split with 0 children returns error")

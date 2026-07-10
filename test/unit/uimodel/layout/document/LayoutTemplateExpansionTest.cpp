@@ -78,7 +78,7 @@ namespace ao::uimodel::test
 
     CHECK(expanded.props.at("label").asString() == "Override");
     CHECK(expanded.props.at("icon").asString() == "emblem-system");
-    CHECK(expanded.props.find("templateId") == expanded.props.end());
+    CHECK_FALSE(expanded.props.contains("templateId"));
   }
 
   TEST_CASE("LayoutTemplateExpansion - appends use-site children after expanded children",

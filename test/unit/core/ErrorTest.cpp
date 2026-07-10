@@ -87,7 +87,7 @@ namespace ao::test
       auto const& loc = result.error().location;
       CHECK(loc.line() == expectedLine);
       CHECK(std::string_view{loc.file_name()}.ends_with("ErrorTest.cpp"));
-      CHECK(std::string_view{loc.function_name()}.find("makeError") == std::string_view::npos);
+      CHECK_FALSE(std::string_view{loc.function_name()}.contains("makeError"));
     }
 
     SECTION("Direct aggregate Error captures its own construction site")

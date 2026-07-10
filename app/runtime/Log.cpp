@@ -36,7 +36,11 @@ namespace ao::rt
     }
   } // namespace
 
+  // Null loggers must exist before initialize(); allocation failure during
+  // process startup is unrecoverable.
+  // NOLINTNEXTLINE(bugprone-throwing-static-initialization)
   std::shared_ptr<spdlog::logger> Log::_appLoggerPtr = makeNullLogger("app");
+  // NOLINTNEXTLINE(bugprone-throwing-static-initialization)
   std::shared_ptr<spdlog::logger> Log::_audioLoggerPtr = makeNullLogger("audio");
   bool Log::_initialized = false;
   std::mutex Log::_lifecycleMutex;

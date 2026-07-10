@@ -58,10 +58,10 @@ namespace ao::council::test
 
     auto const document = emitTraceEvent("hostile-field", {{"value", hostile}});
     CHECK_FALSE(hasRawUnsafeByte(document));
-    CHECK(document.find("\\x1B") != std::string::npos);
-    CHECK(document.find("\\x07") != std::string::npos);
-    CHECK(document.find("\\x7F") != std::string::npos);
-    CHECK(document.find("\\xFF") != std::string::npos);
+    CHECK(document.contains("\\x1B"));
+    CHECK(document.contains("\\x07"));
+    CHECK(document.contains("\\x7F"));
+    CHECK(document.contains("\\xFF"));
     REQUIRE(appendYamlDocument(path, document));
 
     auto stream = readScalarStream(path, "aobus-council-trace-event/v1");
@@ -149,7 +149,7 @@ namespace ao::council::test
 
     auto stream = readScalarStream(path, "aobus-council-trace-event/v1");
     REQUIRE_FALSE(stream);
-    CHECK(stream.error().message.find("stream field 'details' must be a scalar") != std::string::npos);
+    CHECK(stream.error().message.contains("stream field 'details' must be a scalar"));
   }
 
   TEST_CASE("YAML stream - incomplete tail is recoverable", "[council][unit][yaml]")

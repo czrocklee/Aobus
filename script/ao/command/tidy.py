@@ -62,6 +62,7 @@ STRICT_CHECKS = ",".join(
         "-cppcoreguidelines-pro-bounds-constant-array-index",  # table dispatch is fine
         "-cppcoreguidelines-pro-bounds-pointer-arithmetic",  # common in layout/audio code
         "-misc-no-recursion",  # recursion is idiomatic in some modules
+        "-misc-multiple-inheritance",  # renamed Fuchsia policy conflicts with GTK/framework composition
         "-misc-non-private-member-variables-in-classes",  # impl structs use this pattern
         "-modernize-use-trailing-return-type",  # style choice: prefer leading type
         "-modernize-use-nodiscard",  # not enforced globally
@@ -80,12 +81,14 @@ RELAXED_CHECKS = ",".join(
         STRICT_CHECKS,
         # === additionally disabled for test code ===
         "-bugprone-unchecked-optional-access",  # test code uses .value() liberally
+        "-bugprone-throwing-static-initialization",  # test process startup does not need production static-init policy
         "-bugprone-unused-return-value",  # tests often discard return values
         "-cppcoreguidelines-avoid-c-arrays",  # Catch2 API and test data arrays
         "-cppcoreguidelines-avoid-magic-numbers",  # not enforced in tests
         "-cppcoreguidelines-pro-type-reinterpret-cast",  # common pattern in test mocks
         "-cppcoreguidelines-pro-type-vararg",  # debug helpers use printf-style
         "-portability-template-virtual-member-function",  # test fixtures use vfunc_* pattern
+        "-modernize-use-designated-initializers",  # positional expected-data tables are clearer in tests
         "-readability-function-cognitive-complexity",  # test bodies are inherently complex
         "-readability-identifier-length",  # test locals (id, v, it) are fine
         "-readability-magic-numbers",  # not enforced in tests
@@ -701,6 +704,8 @@ def run_command(args: argparse.Namespace) -> int:
                 extra.append("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0")
             if invocation.is_header:
                 extra.append(f"-line-filter={path_line_filter([invocation.selected])}")
+                extra.append("--extra-arg-before=-x")
+                extra.append("--extra-arg-before=c++-header")
             if "linux-gtk/" in invocation.compile_command_source.as_posix():
                 # GTK framework patterns: gtkmm widget trees own children, printf-style APIs.
                 checks += ",-cppcoreguidelines-owning-memory"

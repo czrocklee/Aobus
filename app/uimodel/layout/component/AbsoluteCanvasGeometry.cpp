@@ -101,7 +101,7 @@ namespace ao::uimodel
       return value;
     }
 
-    return ((value + gridSize / 2) / gridSize) * gridSize;
+    return ((value + (gridSize / 2)) / gridSize) * gridSize;
   }
 
   AbsoluteCanvasRect updateAbsoluteCanvasMoveDrag(AbsoluteCanvasRect startRect,

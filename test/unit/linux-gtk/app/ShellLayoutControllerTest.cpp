@@ -360,10 +360,10 @@ namespace ao::gtk::test
       REQUIRE(savedSplit != nullptr);
       REQUIRE(savedCollapsible != nullptr);
 
-      CHECK(savedSplit->props.find("position") == savedSplit->props.end());
+      CHECK_FALSE(savedSplit->props.contains("position"));
       CHECK(savedSplit->props.at("initialPositionPercent").asDouble() == 0.42);
       CHECK(savedCollapsible->props.at("position").asInt() == 320);
-      CHECK(savedCollapsible->props.find("initialPositionPercent") == savedCollapsible->props.end());
+      CHECK_FALSE(savedCollapsible->props.contains("initialPositionPercent"));
 
       auto optPromotedState = componentStateStorePtr->load("classic");
       REQUIRE(optPromotedState);

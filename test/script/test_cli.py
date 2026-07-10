@@ -414,9 +414,15 @@ class CliParseTest(unittest.TestCase):
 
         ensure_compile_db.assert_not_called()
         verify.assert_called_once_with(toolchain)
-        self.assertEqual(toolchain.clang_tidy, str(artifact))
-        self.assertIsNone(toolchain.plugin)
-        self.assertEqual(toolchain.resource_dir, sdk_root / "lib" / "clang" / "22")
+        profile = builddir.platform_profile()
+        if profile.name == "windows":
+            self.assertEqual(toolchain.clang_tidy, str(artifact))
+            self.assertIsNone(toolchain.plugin)
+            self.assertEqual(toolchain.resource_dir, sdk_root / "lib" / "clang" / "22")
+        else:
+            self.assertEqual(toolchain.clang_tidy, "clang-tidy")
+            self.assertEqual(toolchain.plugin, artifact)
+            self.assertIsNone(toolchain.resource_dir)
 
     def test_tidy_build_uses_the_native_lint_preset(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -446,9 +452,15 @@ class CliParseTest(unittest.TestCase):
             preset=builddir.tidy_preset(),
             reconfigure_preset=False,
         )
-        self.assertEqual(toolchain.clang_tidy, str(artifact))
-        self.assertIsNone(toolchain.plugin)
-        self.assertEqual(toolchain.resource_dir, sdk_root / "lib" / "clang" / "22")
+        profile = builddir.platform_profile()
+        if profile.name == "windows":
+            self.assertEqual(toolchain.clang_tidy, str(artifact))
+            self.assertIsNone(toolchain.plugin)
+            self.assertEqual(toolchain.resource_dir, sdk_root / "lib" / "clang" / "22")
+        else:
+            self.assertEqual(toolchain.clang_tidy, "clang-tidy")
+            self.assertEqual(toolchain.plugin, artifact)
+            self.assertIsNone(toolchain.resource_dir)
 
     def test_tidy_artifact_path_is_native(self):
         build_dir = Path("build")

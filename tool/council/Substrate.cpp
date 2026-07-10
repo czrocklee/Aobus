@@ -234,7 +234,7 @@ namespace ao::council
 
     bool hasDirectorySeparator(std::string const& value)
     {
-      return value.find('/') != std::string::npos;
+      return value.contains('/');
     }
 
     std::filesystem::path canonicalExecutable(std::filesystem::path const& path)

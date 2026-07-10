@@ -647,7 +647,7 @@ namespace ao::audio::backend
 
       // Use the ALSA areas formula to compute the correct destination pointer,
       // respecting any hardware-specific first/step values.
-      auto* const dst = static_cast<std::byte*>(areas[0].addr) + ((areas[0].first + offset * areas[0].step) / 8);
+      auto* const dst = static_cast<std::byte*>(areas[0].addr) + ((areas[0].first + (offset * areas[0].step)) / 8);
       auto const bytesToRead = static_cast<std::size_t>(frames) * bytesPerFrame;
 
       auto const renderResult = renderTarget->renderPcm({dst, bytesToRead});

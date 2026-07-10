@@ -94,7 +94,7 @@ namespace ao::test
       auto result = yaml::scalarAs<double>(tree.rootref(), "duration");
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.find("duration") != std::string::npos);
+      CHECK(result.error().message.contains("duration"));
     }
   }
 
@@ -110,7 +110,7 @@ namespace ao::test
     }
     catch (Exception const& e)
     {
-      CHECK(std::string_view{e.what()}.find("fixture.yaml") != std::string_view::npos);
+      CHECK(std::string_view{e.what()}.contains("fixture.yaml"));
     }
   }
 } // namespace ao::test

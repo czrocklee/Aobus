@@ -50,12 +50,12 @@ namespace ao::rt::test
       auto content = std::string{(std::istreambuf_iterator{ifs}), std::istreambuf_iterator<char>{}};
 
       // We expect the initialized message and the test log to be present
-      CHECK(content.find("Logging initialized") != std::string::npos);
-      CHECK(content.find("Test app debug log") != std::string::npos);
+      CHECK(content.contains("Logging initialized"));
+      CHECK(content.contains("Test app debug log"));
 
       // Audio log writes to the same file sink, let's verify
-      CHECK(content.find("Test audio info log") != std::string::npos);
-      CHECK(content.find("Shutting down logging") != std::string::npos);
+      CHECK(content.contains("Test audio info log"));
+      CHECK(content.contains("Shutting down logging"));
     }
 
     SECTION("Initialize with empty directory (defaults to current_path/logs)")

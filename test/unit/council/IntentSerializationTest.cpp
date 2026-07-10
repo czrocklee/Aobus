@@ -90,7 +90,7 @@ body: |
 
     auto intent = loadIntent(path);
     REQUIRE_FALSE(intent);
-    CHECK(intent.error().message.find("unknown field 'scope'") != std::string::npos);
+    CHECK(intent.error().message.contains("unknown field 'scope'"));
   }
 
   TEST_CASE("Intent - rejects path-reserved phase ids", "[council][unit][yaml]")
@@ -110,7 +110,7 @@ body: |
 
     auto intent = loadIntent(path);
     REQUIRE_FALSE(intent);
-    CHECK(intent.error().message.find("reserved") != std::string::npos);
+    CHECK(intent.error().message.contains("reserved"));
   }
 
   TEST_CASE("Intent - rejects path traversal in focus hints", "[council][unit][yaml]")
@@ -132,6 +132,6 @@ body: |
 
     auto intent = loadIntent(path);
     REQUIRE_FALSE(intent);
-    CHECK(intent.error().message.find("traverse outside") != std::string::npos);
+    CHECK(intent.error().message.contains("traverse outside"));
   }
 } // namespace ao::council::test

@@ -80,8 +80,8 @@ namespace ao::gtk::layout::test
       auto& widget = rootComponentPtr->widget();
       auto* const label = dynamic_cast<Gtk::Label*>(&widget);
       REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("[Layout Error]") != std::string::npos);
-      CHECK(label->get_label().find("nonexistent.component") != std::string::npos);
+      CHECK(label->get_label().raw().contains("[Layout Error]"));
+      CHECK(label->get_label().raw().contains("nonexistent.component"));
     }
 
     SECTION("Box component forwards cssClasses to widget")

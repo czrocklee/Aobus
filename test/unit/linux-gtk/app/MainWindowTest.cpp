@@ -69,7 +69,8 @@ namespace ao::gtk::test
     configStorePtr->loadAppSession(before);
     REQUIRE(before.lastLibraryPath.empty());
 
-    window.on_hide();
+    window.present();
+    window.hide();
 
     auto after = rt::AppSessionState{};
     configStorePtr->loadAppSession(after);

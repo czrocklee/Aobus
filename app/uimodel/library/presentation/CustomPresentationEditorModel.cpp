@@ -95,7 +95,7 @@ namespace ao::uimodel
 
   void CustomPresentationEditorModel::addSortTerm()
   {
-    _sortTerms.push_back({rt::TrackSortField::Title, true});
+    _sortTerms.push_back({.field = rt::TrackSortField::Title, .ascending = true});
   }
 
   bool CustomPresentationEditorModel::removeSortTerm(std::size_t index)

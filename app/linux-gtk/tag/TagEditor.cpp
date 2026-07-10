@@ -603,7 +603,7 @@ namespace ao::gtk
       {
         // Suggested chips live-filter by a case-insensitive substring of the entry text; with no
         // query (entry closed or empty) every suggestion is shown.
-        child->set_visible(search.empty() || ao::utility::toLower(avail->tag()).find(search) != std::string::npos);
+        child->set_visible(search.empty() || ao::utility::toLower(avail->tag()).contains(search));
       }
       else
       {

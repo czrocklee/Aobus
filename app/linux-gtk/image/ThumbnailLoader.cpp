@@ -111,7 +111,7 @@ namespace ao::gtk
     {
       if (onReady)
       {
-        it->second.push_back({std::move(statePtr), std::move(onReady)});
+        it->second.push_back({.statePtr = std::move(statePtr), .onReady = std::move(onReady)});
       }
 
       return request;
@@ -119,7 +119,7 @@ namespace ao::gtk
 
     if (auto& waiters = _inFlight[key]; onReady)
     {
-      waiters.push_back({std::move(statePtr), std::move(onReady)});
+      waiters.push_back({.statePtr = std::move(statePtr), .onReady = std::move(onReady)});
     }
 
     spawnDecode(key);

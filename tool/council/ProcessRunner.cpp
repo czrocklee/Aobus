@@ -407,9 +407,8 @@ namespace ao::council
     try
     {
       auto context = asio::io_context{};
-      auto command = request.argv.front().find('/') == std::string::npos
-                       ? process::environment::find_executable(request.argv.front())
-                       : boost::filesystem::path{request.argv.front()};
+      auto command = !request.argv.front().contains('/') ? process::environment::find_executable(request.argv.front())
+                                                         : boost::filesystem::path{request.argv.front()};
       auto executable = process::environment::find_executable("setsid");
 
       if (command.empty())

@@ -40,12 +40,12 @@ namespace ao::tui::test
   {
     auto const text = renderText(helpPane());
 
-    CHECK(text.find("/current") != std::string::npos);
-    CHECK(text.find("/view <id>") != std::string::npos);
-    CHECK(text.find("/output") != std::string::npos);
-    CHECK(text.find("/views") != std::string::npos);
-    CHECK(text.find("/notifications") != std::string::npos);
-    CHECK(text.find("{ / }") != std::string::npos);
+    CHECK(text.contains("/current"));
+    CHECK(text.contains("/view <id>"));
+    CHECK(text.contains("/output"));
+    CHECK(text.contains("/views"));
+    CHECK(text.contains("/notifications"));
+    CHECK(text.contains("{ / }"));
   }
 
   TEST_CASE("Render - side panes size to content and terminal bounds", "[tui][unit][render]")
@@ -122,7 +122,7 @@ namespace ao::tui::test
     REQUIRE(optViewLabelBox);
     REQUIRE(optViewValueBox);
     REQUIRE(optFooterBox);
-    CHECK(rendered.text.find("view:") == std::string::npos);
+    CHECK_FALSE(rendered.text.contains("view:"));
     CHECK(optListLabelBox->y_min == 4);
     CHECK(optListValueBox->y_min == 4);
     CHECK(optViewLabelBox->y_min == 4);
@@ -214,26 +214,26 @@ namespace ao::tui::test
     auto shell = ShellInteractionModel{};
     auto const rendered = renderElement(statusBar(StatusBarViewState{.shell = &shell}), 140, 1);
 
-    CHECK(rendered.text.find("Ready") == std::string::npos);
-    CHECK(rendered.text.find("3 / 8 tracks") == std::string::npos);
+    CHECK_FALSE(rendered.text.contains("Ready"));
+    CHECK_FALSE(rendered.text.contains("3 / 8 tracks"));
     CHECK(lineIndexContaining(rendered.text, "/ command") == 0);
-    CHECK(rendered.text.find("/ command") != std::string::npos);
-    CHECK(rendered.text.find("l lists") != std::string::npos);
-    CHECK(rendered.text.find("v view") != std::string::npos);
-    CHECK(rendered.text.find("n notif") != std::string::npos);
-    CHECK(rendered.text.find("d detail") != std::string::npos);
-    CHECK(rendered.text.find("a pipeline") != std::string::npos);
-    CHECK(rendered.text.find("o output") != std::string::npos);
-    CHECK(rendered.text.find("Ctrl-L current") != std::string::npos);
-    CHECK(rendered.text.find("q quit") != std::string::npos);
-    CHECK(rendered.text.find("Mode:") == std::string::npos);
-    CHECK(rendered.text.find("Filter:") == std::string::npos);
-    CHECK(rendered.text.find("view:") == std::string::npos);
+    CHECK(rendered.text.contains("/ command"));
+    CHECK(rendered.text.contains("l lists"));
+    CHECK(rendered.text.contains("v view"));
+    CHECK(rendered.text.contains("n notif"));
+    CHECK(rendered.text.contains("d detail"));
+    CHECK(rendered.text.contains("a pipeline"));
+    CHECK(rendered.text.contains("o output"));
+    CHECK(rendered.text.contains("Ctrl-L current"));
+    CHECK(rendered.text.contains("q quit"));
+    CHECK_FALSE(rendered.text.contains("Mode:"));
+    CHECK_FALSE(rendered.text.contains("Filter:"));
+    CHECK_FALSE(rendered.text.contains("view:"));
 
     auto const optShortcutBox = findTextCells(rendered.screen, "/ command");
     REQUIRE(optShortcutBox);
     CHECK(optShortcutBox->x_min > 0);
-    CHECK(rendered.text.find("│") == std::string::npos);
+    CHECK_FALSE(rendered.text.contains("│"));
 
     auto const shortcutPixel = rendered.screen.PixelAt(optShortcutBox->x_min, optShortcutBox->y_min);
     CHECK(shortcutPixel.foreground_color == ftxui::Color::Cyan);
@@ -245,10 +245,10 @@ namespace ao::tui::test
     auto shell = ShellInteractionModel{};
     auto const rendered = renderElement(statusBar(StatusBarViewState{.terminalColumns = 80, .shell = &shell}), 140, 2);
 
-    CHECK(rendered.text.find("Ready") == std::string::npos);
-    CHECK(rendered.text.find("3 / 8 tracks") == std::string::npos);
+    CHECK_FALSE(rendered.text.contains("Ready"));
+    CHECK_FALSE(rendered.text.contains("3 / 8 tracks"));
     CHECK(lineIndexContaining(rendered.text, "/ command") == 0);
-    CHECK(rendered.text.find("q quit") != std::string::npos);
+    CHECK(rendered.text.contains("q quit"));
     CHECK(rendered.screen.PixelAt(0, 0).character == "/");
   }
 
@@ -257,8 +257,8 @@ namespace ao::tui::test
     auto shell = ShellInteractionModel{};
     auto const rendered = renderText(statusBar(StatusBarViewState{.filterDraft = "Aimer", .shell = &shell}));
 
-    CHECK(rendered.find("Filter: Aimer") != std::string::npos);
-    CHECK(rendered.find("Filter: -") == std::string::npos);
+    CHECK(rendered.contains("Filter: Aimer"));
+    CHECK_FALSE(rendered.contains("Filter: -"));
   }
 
   TEST_CASE("Render - status bar uses overlay-specific help for every overlay", "[tui][unit][render]")
@@ -287,9 +287,9 @@ namespace ao::tui::test
 
       auto const rendered = renderText(statusBar(StatusBarViewState{.shell = &shell}));
 
-      CHECK(rendered.find(item.label) != std::string::npos);
-      CHECK(rendered.find(item.hint) != std::string::npos);
-      CHECK(rendered.find("/ command") == std::string::npos);
+      CHECK(rendered.contains(item.label));
+      CHECK(rendered.contains(item.hint));
+      CHECK_FALSE(rendered.contains("/ command"));
     }
   }
 
@@ -309,9 +309,9 @@ namespace ao::tui::test
       180,
       1);
 
-    CHECK(rendered.text.find("warn") != std::string::npos);
-    CHECK(rendered.text.find("Partial import") != std::string::npos);
-    CHECK(rendered.text.find("Ready") == std::string::npos);
+    CHECK(rendered.text.contains("warn"));
+    CHECK(rendered.text.contains("Partial import"));
+    CHECK_FALSE(rendered.text.contains("Ready"));
     CHECK(activityBox.x_min == 0);
     CHECK(activityBox.y_min == 0);
   }
@@ -384,10 +384,10 @@ namespace ao::tui::test
 
     auto const rendered = renderElement(notificationCenterPanel(state, &rowHitRegions), 64, 12);
 
-    CHECK(rendered.text.find("Notifications") != std::string::npos);
-    CHECK(rendered.text.find("Scan failed") != std::string::npos);
-    CHECK(rendered.text.find("Permission denied") != std::string::npos);
-    CHECK(rendered.text.find("click clearable row") != std::string::npos);
+    CHECK(rendered.text.contains("Notifications"));
+    CHECK(rendered.text.contains("Scan failed"));
+    CHECK(rendered.text.contains("Permission denied"));
+    CHECK(rendered.text.contains("click clearable row"));
     REQUIRE(rowHitRegions.size() == 1);
     CHECK(rowHitRegions.front().id == rt::NotificationId{9});
     CHECK(rowHitRegions.front().dismissible);
@@ -401,10 +401,10 @@ namespace ao::tui::test
 
     auto const rendered = renderText(statusBar(StatusBarViewState{.terminalColumns = 100, .shell = &shell}));
 
-    CHECK(rendered.find("Command") == std::string::npos);
-    CHECK(rendered.find("/view albums") == std::string::npos);
-    CHECK(rendered.find("Tab complete") == std::string::npos);
-    CHECK(rendered.find("/ command") != std::string::npos);
+    CHECK_FALSE(rendered.contains("Command"));
+    CHECK_FALSE(rendered.contains("/view albums"));
+    CHECK_FALSE(rendered.contains("Tab complete"));
+    CHECK(rendered.contains("/ command"));
   }
 
   TEST_CASE("Render - command palette keeps ratio-sized dimensions stable across completion content",
@@ -457,8 +457,8 @@ namespace ao::tui::test
     auto const rendered =
       renderElement(commandPalettePanel(shell, 48) | ftxui::size(ftxui::HEIGHT, ftxui::EQUAL, 12), 48, 12);
 
-    CHECK(rendered.text.find("Option 7") != std::string::npos);
-    CHECK(rendered.text.find("Tab complete") != std::string::npos);
+    CHECK(rendered.text.contains("Option 7"));
+    CHECK(rendered.text.contains("Tab complete"));
   }
 
   TEST_CASE("Render - command palette shows input and inline completion suffix", "[tui][unit][render]")
@@ -473,11 +473,11 @@ namespace ao::tui::test
 
     auto const rendered = renderText(commandPalettePanel(shell));
 
-    CHECK(rendered.find("Command Palette") != std::string::npos);
-    CHECK(rendered.find("/A") != std::string::npos);
-    CHECK(rendered.find("imer") != std::string::npos);
-    CHECK(rendered.find("Aimer") != std::string::npos);
-    CHECK(rendered.find("Tab complete") != std::string::npos);
+    CHECK(rendered.contains("Command Palette"));
+    CHECK(rendered.contains("/A"));
+    CHECK(rendered.contains("imer"));
+    CHECK(rendered.contains("Aimer"));
+    CHECK(rendered.contains("Tab complete"));
   }
 
   TEST_CASE("Render - command palette renders without completion matches", "[tui][unit][render]")
@@ -487,9 +487,9 @@ namespace ao::tui::test
 
     auto const rendered = renderText(commandPalettePanel(shell));
 
-    CHECK(rendered.find("/view albums") != std::string::npos);
-    CHECK(rendered.find("No matches") != std::string::npos);
-    CHECK(rendered.find("Enter run") != std::string::npos);
+    CHECK(rendered.contains("/view albums"));
+    CHECK(rendered.contains("No matches"));
+    CHECK(rendered.contains("Enter run"));
   }
 
   TEST_CASE("Render - command palette keeps empty input separate from suggestions", "[tui][unit][render]")
@@ -504,9 +504,9 @@ namespace ao::tui::test
 
     auto const rendered = renderText(commandPalettePanel(shell));
 
-    CHECK(rendered.find("/_") != std::string::npos);
-    CHECK(rendered.find("/output") != std::string::npos);
-    CHECK(rendered.find("Tab complete") != std::string::npos);
+    CHECK(rendered.contains("/_"));
+    CHECK(rendered.contains("/output"));
+    CHECK(rendered.contains("Tab complete"));
   }
 
   TEST_CASE("Render - command palette renders completion metadata and fallback details", "[tui][unit][render]")
@@ -524,12 +524,12 @@ namespace ao::tui::test
 
     auto const rendered = renderElement(commandPalettePanel(shell, 48), 48, 8);
 
-    CHECK(rendered.text.find("Command Palette") != std::string::npos);
-    CHECK(rendered.text.find("/view") != std::string::npos);
-    CHECK(rendered.text.find("view") != std::string::npos);
-    CHECK(rendered.text.find('v') != std::string::npos);
-    CHECK(rendered.text.find("Aimer") != std::string::npos);
-    CHECK(rendered.text.find("artist") != std::string::npos);
+    CHECK(rendered.text.contains("Command Palette"));
+    CHECK(rendered.text.contains("/view"));
+    CHECK(rendered.text.contains("view"));
+    CHECK(rendered.text.contains('v'));
+    CHECK(rendered.text.contains("Aimer"));
+    CHECK(rendered.text.contains("artist"));
     auto const optSelected = findTextCells(rendered.screen, "Aimer");
     REQUIRE(optSelected);
     CHECK_FALSE(rendered.screen.PixelAt(optSelected->x_min, optSelected->y_min).inverted);
@@ -546,10 +546,10 @@ namespace ao::tui::test
 
     auto const rendered = renderElement(commandPalettePanel(shell, 32), 32, 8);
 
-    CHECK(rendered.text.find('v') != std::string::npos);
-    CHECK(rendered.text.find("artist") != std::string::npos);
-    CHECK(rendered.text.find("/v") == std::string::npos);
-    CHECK(rendered.text.find("view") == std::string::npos);
+    CHECK(rendered.text.contains('v'));
+    CHECK(rendered.text.contains("artist"));
+    CHECK_FALSE(rendered.text.contains("/v"));
+    CHECK_FALSE(rendered.text.contains("view"));
   }
 
   TEST_CASE("Render - presentation panel renders selected and active views", "[tui][unit][render]")
@@ -562,11 +562,11 @@ namespace ao::tui::test
 
     auto const rendered = renderElement(presentationPanel(items, "albums", 1, &rowHitRegions), 48, 16);
 
-    CHECK(rendered.text.find("Views") != std::string::npos);
-    CHECK(rendered.text.find("albums") != std::string::npos);
-    CHECK(rendered.text.find("* Albums") != std::string::npos);
-    CHECK(rendered.text.find("Grouped by album.") != std::string::npos);
-    CHECK(rendered.text.find("songs") == std::string::npos);
+    CHECK(rendered.text.contains("Views"));
+    CHECK(rendered.text.contains("albums"));
+    CHECK(rendered.text.contains("* Albums"));
+    CHECK(rendered.text.contains("Grouped by album."));
+    CHECK_FALSE(rendered.text.contains("songs"));
     REQUIRE(rowHitRegions.size() == 2);
     CHECK(rowHitRegions[1].rowIndex == 1);
     CHECK_FALSE(rendered.screen.PixelAt(rowHitRegions[1].box.x_min, rowHitRegions[1].box.y_min).inverted);
@@ -594,7 +594,7 @@ namespace ao::tui::test
 
     auto const rendered = renderElement(presentationPanel(items, "wide", 0, nullptr, wideColumns), wideColumns, 16);
 
-    CHECK(rendered.text.find("Detailed description") != std::string::npos);
+    CHECK(rendered.text.contains("Detailed description"));
   }
 
   TEST_CASE("Render - presentation panel handles empty and out-of-range selection", "[tui][unit][render]")
@@ -602,8 +602,8 @@ namespace ao::tui::test
     auto rowHitRegions = std::vector<PresentationRowHitRegion>{};
     auto rendered = renderElement(presentationPanel({}, "", 99, &rowHitRegions), 48, 16);
 
-    CHECK(rendered.text.find("default") != std::string::npos);
-    CHECK(rendered.text.find("No views available") != std::string::npos);
+    CHECK(rendered.text.contains("default"));
+    CHECK(rendered.text.contains("No views available"));
     CHECK(rowHitRegions.empty());
 
     auto const items = std::vector<TrackPresentationNavEntry>{

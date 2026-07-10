@@ -29,8 +29,7 @@ namespace ao::gtk
 
   std::filesystem::path ShellLayoutStore::filePath(std::string_view presetId) const
   {
-    if (presetId.empty() || presetId.find('/') != std::string_view::npos ||
-        presetId.find('\\') != std::string_view::npos || presetId.find("..") != std::string_view::npos)
+    if (presetId.empty() || presetId.contains('/') || presetId.contains('\\') || presetId.contains(".."))
     {
       ao::throwException<ao::Exception>("Invalid preset ID: path traversal attempt or empty ID");
     }

@@ -30,6 +30,7 @@ namespace clang::tidy::readability
 {
   namespace
   {
+    // RecursiveASTVisitor customization points intentionally shadow its CRTP defaults.
     class UsageVisitor : public RecursiveASTVisitor<UsageVisitor>
     {
     public:
@@ -38,7 +39,7 @@ namespace clang::tidy::readability
       {
       }
 
-      bool VisitDeclRefExpr(DeclRefExpr* declRefExpr)
+      bool VisitDeclRefExpr(DeclRefExpr* declRefExpr) // NOLINT(bugprone-derived-method-shadowing-base-method)
       {
         if (declRefExpr->getDecl() == _varDecl)
         {

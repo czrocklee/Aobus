@@ -27,108 +27,111 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::findWidget;
   using ao::gtk::test::walkWidgets;
 
-  enum class TrackFieldGridSection : std::uint8_t
+  namespace
   {
-    Metadata,
-    Technical
-  };
-
-  struct TrackFieldGridRowSlots final
-  {
-    Gtk::Widget* label = nullptr;
-    Gtk::Widget* value = nullptr;
-  };
-
-  class TrackFieldGridProbe final
-  {
-  public:
-    explicit TrackFieldGridProbe(Gtk::Grid& grid)
-      : _grid{grid}
+    enum class TrackFieldGridSection : std::uint8_t
     {
-    }
+      Metadata,
+      Technical
+    };
 
-    Gtk::Button* header(TrackFieldGridSection const section) const
+    struct TrackFieldGridRowSlots final
     {
-      switch (section)
+      Gtk::Widget* label = nullptr;
+      Gtk::Widget* value = nullptr;
+    };
+
+    class TrackFieldGridProbe final
+    {
+    public:
+      explicit TrackFieldGridProbe(Gtk::Grid& grid)
+        : _grid{grid}
       {
-        case TrackFieldGridSection::Metadata: return findWidgetByClass<Gtk::Button>("ao-track-detail-section-meta");
-        case TrackFieldGridSection::Technical: return findWidgetByClass<Gtk::Button>("ao-track-detail-section-tech");
       }
 
-      return nullptr;
-    }
-
-    Gtk::Button* showEmptyFieldsButton() const { return findWidgetByClass<Gtk::Button>("ao-detail-show-all-button"); }
-
-    Gtk::Button* addCustomMetadataButton() const
-    {
-      return findWidgetByClass<Gtk::Button>("ao-detail-add-custom-metadata-button");
-    }
-
-    Gtk::Popover* addCustomMetadataPopover() const
-    {
-      auto* const button = addCustomMetadataButton();
-
-      if (button == nullptr)
+      Gtk::Button* header(TrackFieldGridSection const section) const
       {
+        switch (section)
+        {
+          case TrackFieldGridSection::Metadata: return findWidgetByClass<Gtk::Button>("ao-track-detail-section-meta");
+          case TrackFieldGridSection::Technical: return findWidgetByClass<Gtk::Button>("ao-track-detail-section-tech");
+        }
+
         return nullptr;
       }
 
-      return ao::gtk::test::findWidget<Gtk::Popover>(*button);
-    }
+      Gtk::Button* showEmptyFieldsButton() const { return findWidgetByClass<Gtk::Button>("ao-detail-show-all-button"); }
 
-    TrackFieldGridRowSlots fieldRow(rt::TrackField const field) const
-    {
-      return {.label = findWidgetByClass<Gtk::Widget>(fieldSlotClass(field, "label")),
-              .value = findWidgetByClass<Gtk::Widget>(fieldSlotClass(field, "value"))};
-    }
+      Gtk::Button* addCustomMetadataButton() const
+      {
+        return findWidgetByClass<Gtk::Button>("ao-detail-add-custom-metadata-button");
+      }
 
-    TrackFieldGridRowSlots customRow() const
-    {
-      return {.label = findWidgetByClass<Gtk::Widget>("ao-track-field-grid-custom-label-slot"),
-              .value = findWidgetByClass<Gtk::Widget>("ao-track-field-grid-custom-value-slot")};
-    }
+      Gtk::Popover* addCustomMetadataPopover() const
+      {
+        auto* const button = addCustomMetadataButton();
 
-    std::int32_t topRowOf(Gtk::Widget& child) const
-    {
-      std::int32_t left = 0;
-      std::int32_t top = -1;
-      std::int32_t width = 0;
-      std::int32_t height = 0;
-      _grid.query_child(child, left, top, width, height);
-      return top;
-    }
+        if (button == nullptr)
+        {
+          return nullptr;
+        }
 
-  private:
-    static std::string fieldSlotClass(rt::TrackField const field, std::string_view const slotName)
-    {
-      auto className = std::string{"ao-track-field-grid-field-"};
-      className += std::string{rt::trackFieldId(field)};
-      className += "-";
-      className += std::string{slotName};
-      className += "-slot";
-      return className;
-    }
+        return ao::gtk::test::findWidget<Gtk::Popover>(*button);
+      }
 
-    template<typename Widget>
-    Widget* findWidgetByClass(std::string_view const className) const
-    {
-      Widget* found = nullptr;
-      walkWidgets(_grid,
-                  [&](Gtk::Widget& widget)
-                  {
-                    if (found != nullptr || !widget.has_css_class(std::string{className}))
+      TrackFieldGridRowSlots fieldRow(rt::TrackField const field) const
+      {
+        return {.label = findWidgetByClass<Gtk::Widget>(fieldSlotClass(field, "label")),
+                .value = findWidgetByClass<Gtk::Widget>(fieldSlotClass(field, "value"))};
+      }
+
+      TrackFieldGridRowSlots customRow() const
+      {
+        return {.label = findWidgetByClass<Gtk::Widget>("ao-track-field-grid-custom-label-slot"),
+                .value = findWidgetByClass<Gtk::Widget>("ao-track-field-grid-custom-value-slot")};
+      }
+
+      std::int32_t topRowOf(Gtk::Widget& child) const
+      {
+        std::int32_t left = 0;
+        std::int32_t top = -1;
+        std::int32_t width = 0;
+        std::int32_t height = 0;
+        _grid.query_child(child, left, top, width, height);
+        return top;
+      }
+
+    private:
+      static std::string fieldSlotClass(rt::TrackField const field, std::string_view const slotName)
+      {
+        auto className = std::string{"ao-track-field-grid-field-"};
+        className += std::string{rt::trackFieldId(field)};
+        className += "-";
+        className += std::string{slotName};
+        className += "-slot";
+        return className;
+      }
+
+      template<typename Widget>
+      Widget* findWidgetByClass(std::string_view const className) const
+      {
+        Widget* found = nullptr;
+        walkWidgets(_grid,
+                    [&](Gtk::Widget& widget)
                     {
-                      return;
-                    }
+                      if (found != nullptr || !widget.has_css_class(std::string{className}))
+                      {
+                        return;
+                      }
 
-                    found = dynamic_cast<Widget*>(&widget);
-                  });
-      return found;
-    }
+                      found = dynamic_cast<Widget*>(&widget);
+                    });
+        return found;
+      }
 
-    Gtk::Grid& _grid;
-  };
+      Gtk::Grid& _grid;
+    };
+  } // namespace
 
   TEST_CASE("TrackFieldGrid - lays out collapsible metadata sections", "[gtk][unit][geometry]")
   {

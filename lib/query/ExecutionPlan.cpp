@@ -400,6 +400,7 @@ namespace ao::query
 
       while (!lexeme.empty())
       {
+        // NOLINTNEXTLINE(readability-qualified-auto)
         auto const suffixStart = std::ranges::find_if(lexeme, [](unsigned char ch) { return std::isalpha(ch) != 0; });
 
         if (suffixStart == lexeme.end())
@@ -410,6 +411,7 @@ namespace ao::query
         auto const suffixOffset = static_cast<std::size_t>(std::distance(lexeme.begin(), suffixStart));
         auto const numberPart = lexeme.substr(0, suffixOffset);
         auto const suffixAndRest = lexeme.substr(suffixOffset);
+        // NOLINTNEXTLINE(readability-qualified-auto)
         auto const nextNumber =
           std::ranges::find_if(suffixAndRest, [](unsigned char ch) { return std::isdigit(ch) != 0; });
         auto const suffixSize = static_cast<std::size_t>(std::distance(suffixAndRest.begin(), nextNumber));

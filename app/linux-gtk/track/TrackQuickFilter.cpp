@@ -142,11 +142,6 @@ namespace ao::gtk
     return _entry.get_position();
   }
 
-  void TrackQuickFilter::activate()
-  {
-    _entry.activate();
-  }
-
   std::optional<rt::CompletionResult> TrackQuickFilter::complete(std::string_view text, std::size_t cursor)
   {
     return _completer.complete(text, cursor);

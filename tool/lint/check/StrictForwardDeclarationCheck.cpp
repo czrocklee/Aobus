@@ -85,9 +85,8 @@ namespace clang::tidy::aobus
       }
 
       std::string const typeName = pointee.getAsString();
-      bool const isSmartPtr =
-        typeName.find("unique_ptr") != std::string::npos || typeName.find("shared_ptr") != std::string::npos ||
-        typeName.find("weak_ptr") != std::string::npos || typeName.find("RefPtr") != std::string::npos;
+      bool const isSmartPtr = typeName.contains("unique_ptr") || typeName.contains("shared_ptr") ||
+                              typeName.contains("weak_ptr") || typeName.contains("RefPtr");
 
       if (isSmartPtr)
       {
@@ -108,6 +107,7 @@ namespace clang::tidy::aobus
       return nullptr;
     }
 
+    // RecursiveASTVisitor customization points intentionally shadow its CRTP defaults.
     struct FwdDeclVisitor : public RecursiveASTVisitor<FwdDeclVisitor>
     {
       std::set<CXXRecordDecl const*> strongRefs;
@@ -168,19 +168,21 @@ namespace clang::tidy::aobus
         }
       }
 
-      bool shouldVisitTemplateInstantiations() const { return false; }
+      bool shouldVisitTemplateInstantiations() const // NOLINT(bugprone-derived-method-shadowing-base-method)
+      {
+        return false;
+      }
 
-      bool VisitFieldDecl(FieldDecl* decl)
+      bool VisitFieldDecl(FieldDecl* decl) // NOLINT(bugprone-derived-method-shadowing-base-method)
       {
         if (!isHeader(decl->getLocation()))
         {
           return true;
         }
 
-        if (QualType const qt = decl->getType(); qt->isPointerType() || qt->isReferenceType() ||
-                                                 qt.getAsString().find("unique_ptr") != std::string::npos ||
-                                                 qt.getAsString().find("shared_ptr") != std::string::npos ||
-                                                 qt.getAsString().find("RefPtr") != std::string::npos)
+        if (QualType const qt = decl->getType();
+            qt->isPointerType() || qt->isReferenceType() || qt.getAsString().contains("unique_ptr") ||
+            qt.getAsString().contains("shared_ptr") || qt.getAsString().contains("RefPtr"))
         {
           weakRefs.push_back(decl);
         }
@@ -192,7 +194,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitParmVarDecl(ParmVarDecl* decl)
+      bool VisitParmVarDecl(ParmVarDecl* decl) // NOLINT(bugprone-derived-method-shadowing-base-method)
       {
         if (!isHeader(decl->getLocation()))
         {
@@ -211,7 +213,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitFunctionDecl(FunctionDecl* decl)
+      bool VisitFunctionDecl(FunctionDecl* decl) // NOLINT(bugprone-derived-method-shadowing-base-method)
       {
         if (!isHeader(decl->getLocation()))
         {
@@ -226,7 +228,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitCXXRecordDecl(CXXRecordDecl* decl)
+      bool VisitCXXRecordDecl(CXXRecordDecl* decl) // NOLINT(bugprone-derived-method-shadowing-base-method)
       {
         if (decl->hasDefinition())
         {
@@ -242,7 +244,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitMemberExpr(MemberExpr* expr)
+      bool VisitMemberExpr(MemberExpr* expr) // NOLINT(bugprone-derived-method-shadowing-base-method)
       {
         if (auto const* md = dyn_cast<CXXMethodDecl>(expr->getMemberDecl()); md != nullptr)
         {
@@ -262,7 +264,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitDeclRefExpr(DeclRefExpr* expr)
+      bool VisitDeclRefExpr(DeclRefExpr* expr) // NOLINT(bugprone-derived-method-shadowing-base-method)
       {
         if (auto const* md = dyn_cast<CXXMethodDecl>(expr->getDecl()); md != nullptr)
         {
@@ -285,7 +287,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitCXXConstructExpr(CXXConstructExpr* expr)
+      bool VisitCXXConstructExpr(CXXConstructExpr* expr) // NOLINT(bugprone-derived-method-shadowing-base-method)
       {
         if (auto const* md = expr->getConstructor(); md != nullptr)
         {
@@ -298,7 +300,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitCXXDeleteExpr(CXXDeleteExpr* expr)
+      bool VisitCXXDeleteExpr(CXXDeleteExpr* expr) // NOLINT(bugprone-derived-method-shadowing-base-method)
       {
         if (auto const* crd = getRecordDeclFromType(expr->getDestroyedType()); crd != nullptr)
         {

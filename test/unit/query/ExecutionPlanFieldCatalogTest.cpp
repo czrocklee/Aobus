@@ -39,9 +39,9 @@ namespace ao::query::test
     auto expr = parseOk("$gerne = 'x'");
     auto compiler = QueryCompiler{};
     auto const error = compileError(compiler, expr);
-    CHECK(error.message.find("did you mean '$genre'?") != std::string::npos);
-    CHECK(error.message.find("available metadata fields:") != std::string::npos);
-    CHECK(error.message.find("$movement ($m)") != std::string::npos);
+    CHECK(error.message.contains("did you mean '$genre'?"));
+    CHECK(error.message.contains("available metadata fields:"));
+    CHECK(error.message.contains("$movement ($m)"));
   }
 
   TEST_CASE("ExecutionPlan - rejects unknown property fields", "[query][unit][execution-plan][catalog]")
@@ -49,8 +49,8 @@ namespace ao::query::test
     auto expr = parseOk("@samplerate > 0");
     auto compiler = QueryCompiler{};
     auto const error = compileError(compiler, expr);
-    CHECK(error.message.find("did you mean '@sampleRate'?") != std::string::npos);
-    CHECK(error.message.find("available property fields:") != std::string::npos);
+    CHECK(error.message.contains("did you mean '@sampleRate'?"));
+    CHECK(error.message.contains("available property fields:"));
   }
 
   TEST_CASE("ExecutionPlan - rejects track ids as query fields", "[query][unit][execution-plan][catalog]")
@@ -58,7 +58,7 @@ namespace ao::query::test
     auto expr = parseOk("$id = 1");
     auto compiler = QueryCompiler{};
     auto const error = compileError(compiler, expr);
-    CHECK(error.message.find("unknown metadata field '$id'") != std::string::npos);
+    CHECK(error.message.contains("unknown metadata field '$id'"));
   }
 
   TEST_CASE("ExecutionPlan - maps every supported metadata catalog name", "[query][unit][execution-plan][catalog]")

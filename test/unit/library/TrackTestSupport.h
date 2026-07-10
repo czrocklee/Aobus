@@ -6,6 +6,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>

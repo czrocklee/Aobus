@@ -19,17 +19,20 @@ namespace ao::rt::test
 {
   using namespace ao::library;
 
-  struct SpyTrackSourceNotifications : TrackSourceObserver
+  namespace
   {
-    std::vector<std::pair<TrackId, std::size_t>> inserted;
-    std::vector<std::pair<TrackId, std::size_t>> removed;
-    std::int32_t resets = 0;
+    struct SpyTrackSourceNotifications : TrackSourceObserver
+    {
+      std::vector<std::pair<TrackId, std::size_t>> inserted;
+      std::vector<std::pair<TrackId, std::size_t>> removed;
+      std::int32_t resets = 0;
 
-    void handleInserted(TrackId id, std::size_t index) override { inserted.emplace_back(id, index); }
-    void handleRemoved(TrackId id, std::size_t index) override { removed.emplace_back(id, index); }
-    void handleUpdated(TrackId /*id*/, std::size_t /*index*/) override {}
-    void handleReset() override { resets++; }
-  };
+      void handleInserted(TrackId id, std::size_t index) override { inserted.emplace_back(id, index); }
+      void handleRemoved(TrackId id, std::size_t index) override { removed.emplace_back(id, index); }
+      void handleUpdated(TrackId /*id*/, std::size_t /*index*/) override {}
+      void handleReset() override { resets++; }
+    };
+  } // namespace
 
   TEST_CASE("AllTracksSource - reload and track change notifications update source state",
             "[runtime][unit][source][all-tracks]")

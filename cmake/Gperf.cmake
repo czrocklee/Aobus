@@ -23,7 +23,11 @@ function(add_gperf_header out_var input relative_output)
     VERBATIM
   )
 
-  set_property(GLOBAL APPEND PROPERTY AOBUS_GENERATED_HEADERS "${output}")
+  string(MAKE_C_IDENTIFIER "${relative_output}" target_name)
+  set(target_name "gperf_${target_name}")
+  add_custom_target(${target_name} DEPENDS "${output}")
+
+  set_property(GLOBAL APPEND PROPERTY AOBUS_GENERATED_HEADERS "${target_name}")
 
   set(${out_var} "${output}" PARENT_SCOPE)
 endfunction()

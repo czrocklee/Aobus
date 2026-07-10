@@ -69,8 +69,8 @@ namespace ao::council::test
     });
     REQUIRE(diff.status == ProcessStatus::Exited);
     REQUIRE(diff.exitCode == 0);
-    CHECK(diff.standardOutput.find("+changed") != std::string::npos);
-    CHECK(diff.standardOutput.find("+added") != std::string::npos);
+    CHECK(diff.standardOutput.contains("+changed"));
+    CHECK(diff.standardOutput.contains("+added"));
   }
 
   TEST_CASE("Snapshot provider - stale git locks in the source do not break the base",

@@ -49,7 +49,7 @@ namespace ao::council::test
 
     REQUIRE(result.status == ProcessStatus::Exited);
     CHECK(result.exitCode == 0);
-    CHECK(result.standardOutput.find("registry valid") != std::string::npos);
+    CHECK(result.standardOutput.contains("registry valid"));
   }
 
   TEST_CASE("Council CLI - configuration errors use the configuration exit code", "[council][integration][cli]")
@@ -67,7 +67,7 @@ councils: {}
 
     REQUIRE(result.status == ProcessStatus::Exited);
     CHECK(result.exitCode == 5);
-    CHECK(result.standardError.find("invalid registry schema") != std::string::npos);
+    CHECK(result.standardError.contains("invalid registry schema"));
   }
 
   TEST_CASE("Council CLI - intent input errors use the CLI exit code", "[council][integration][cli]")
@@ -97,7 +97,7 @@ body: |
 
     REQUIRE(result.status == ProcessStatus::Exited);
     CHECK(result.exitCode == 64);
-    CHECK(result.standardError.find("invalid intent schema") != std::string::npos);
+    CHECK(result.standardError.contains("invalid intent schema"));
   }
 
   TEST_CASE("Council CLI - resolved intent errors use the CLI exit code", "[council][integration][cli]")
@@ -127,7 +127,7 @@ body: |
 
     REQUIRE(result.status == ProcessStatus::Exited);
     CHECK(result.exitCode == 64);
-    CHECK(result.standardError.find("no definition for task-kind 'missing-council'") != std::string::npos);
+    CHECK(result.standardError.contains("no definition for task-kind 'missing-council'"));
     CHECK_FALSE(std::filesystem::exists(tempPath(temp) / "out"));
   }
 
@@ -148,7 +148,7 @@ body: |
 
     REQUIRE(result.status == ProcessStatus::Exited);
     CHECK(result.exitCode == 2);
-    CHECK(result.standardError.find("must be outside repository") != std::string::npos);
+    CHECK(result.standardError.contains("must be outside repository"));
   }
 
   TEST_CASE("Council CLI - infrastructure errors use the infrastructure exit code", "[council][integration][cli]")

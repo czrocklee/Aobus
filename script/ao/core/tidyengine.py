@@ -312,6 +312,20 @@ def _common_parent_suffix_length(left: Path, right: Path, root: Path) -> int:
     return count
 
 
+def _common_parent_prefix_length(left: Path, right: Path, root: Path) -> int:
+    try:
+        left_parts = left.resolve().relative_to(root.resolve()).parent.parts
+        right_parts = right.resolve().relative_to(root.resolve()).parent.parts
+    except ValueError:
+        return 0
+    count = 0
+    for left_part, right_part in zip(left_parts, right_parts, strict=False):
+        if os.path.normcase(left_part) != os.path.normcase(right_part):
+            break
+        count += 1
+    return count
+
+
 def _translation_unit_tier(path: Path, root: Path) -> int:
     try:
         top = path.resolve().relative_to(root.resolve()).parts[0]
@@ -427,6 +441,43 @@ def compile_command_plan(
             translation_unit = _header_translation_unit(path, compiled, project_root)
         else:
             translation_unit = None
+        if translation_unit is None:
+            # Explicit lint fixtures and temporary files are intentionally absent
+            # from the native compile database. Ordinary project files must never
+            # borrow unrelated flags: without a safe companion they are deferred.
+            try:
+                resolved_path = path.resolve()
+                relative_path = resolved_path.relative_to(project_root.resolve())
+                is_under_root = True
+                is_lint_fixture = relative_path.parts[:4] == ("test", "integration", "lint", "fixture")
+            except ValueError:
+                is_under_root = False
+                is_lint_fixture = False
+
+            # Do not use fallback for files that are platform-specific and incompatible with this platform
+            is_incompatible = False
+            path_lower = path.as_posix().lower()
+            if builddir.platform_profile().name == "linux":
+                if "wasapi" in path_lower or "win32" in path_lower:
+                    is_incompatible = True
+            elif builddir.platform_profile().name == "windows":
+                if any(x in path_lower for x in ("alsa", "pipewire", "linux", "gtk")):
+                    is_incompatible = True
+
+            if (not is_under_root or is_lint_fixture) and not is_incompatible and compiled:
+                # Find the best matching translation unit based on common parent directory prefix
+                best_match = None
+                best_length = -1
+                for entry in compiled:
+                    if entry.path.suffix.lower() in _TRANSLATION_UNIT_SUFFIXES:
+                        length = _common_parent_prefix_length(path, entry.path, project_root)
+                        if length > best_length:
+                            best_length = length
+                            best_match = entry.path
+                translation_unit = best_match if best_match is not None else compiled[0].path
+            else:
+                translation_unit = None
+
         if translation_unit is None:
             deferred.append(path)
         else:

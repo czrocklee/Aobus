@@ -211,6 +211,9 @@ namespace ao::audio
   {
   }
 
+  // Result error materialization may allocate; DecoderSession intentionally
+  // fails fast if an allocation escapes this noexcept boundary.
+  // NOLINTNEXTLINE(bugprone-exception-escape)
   Result<PcmBlock> AlacDecoderSession::readNextBlock() noexcept
   {
     if (_implPtr->packetSource.isAtEnd())

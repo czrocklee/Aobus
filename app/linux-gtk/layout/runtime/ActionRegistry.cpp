@@ -30,7 +30,7 @@ namespace ao::gtk::layout
       return false;
     }
 
-    _entries.push_back({descriptor.id, std::move(handler), std::move(stateProvider)});
+    _entries.push_back({.id = descriptor.id, .handler = std::move(handler), .stateProvider = std::move(stateProvider)});
     return true;
   }
 

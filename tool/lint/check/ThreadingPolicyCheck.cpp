@@ -79,12 +79,13 @@ namespace clang::tidy::readability
       return false;
     }
 
+    // RecursiveASTVisitor customization points intentionally shadow its CRTP defaults.
     struct UseFinder final : RecursiveASTVisitor<UseFinder>
     {
       VarDecl const* target{};
       bool found = false;
 
-      bool VisitCXXMemberCallExpr(CXXMemberCallExpr* call)
+      bool VisitCXXMemberCallExpr(CXXMemberCallExpr* call) // NOLINT(bugprone-derived-method-shadowing-base-method)
       {
         if (auto const* method = call->getMethodDecl(); method != nullptr)
         {
@@ -113,7 +114,10 @@ namespace clang::tidy::readability
         return checkCallArgs(call);
       }
 
-      bool VisitCallExpr(CallExpr* call) { return checkCallArgs(call); }
+      bool VisitCallExpr(CallExpr* call) // NOLINT(bugprone-derived-method-shadowing-base-method)
+      {
+        return checkCallArgs(call);
+      }
 
     private:
       bool isConditionVariableWait(CallExpr const* call)

@@ -280,6 +280,49 @@ class CompileCommandCoverageTest(unittest.TestCase):
 
             self.assertEqual(list(plan.deferred), [unused])
 
+    def test_test_header_without_safe_companion_is_deferred(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            build_dir = Path(temp_dir) / "build"
+            native = root / "test" / "unit" / "utility" / "AtomicFileTest.cpp"
+            header = root / "test" / "council" / "TestSupport.h"
+            for path in (native, header):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").write_text(
+                json.dumps([{"directory": str(build_dir), "file": str(native), "command": f"clang++ -c {native}"}]),
+                encoding="utf-8",
+            )
+
+            plan = tidyengine.compile_command_plan(build_dir, [header], project_root=root)
+
+            self.assertEqual(list(plan.deferred), [header])
+            self.assertEqual(list(plan.targets), [])
+
+    def test_explicit_lint_fixture_can_borrow_native_flags(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            build_dir = Path(temp_dir) / "build"
+            native = root / "tool" / "lint" / "Check.cpp"
+            fixture = root / "test" / "integration" / "lint" / "fixture" / "check" / "case.cpp"
+            for path in (native, fixture):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").write_text(
+                json.dumps([{"directory": str(build_dir), "file": str(native), "command": f"clang++ -c {native}"}]),
+                encoding="utf-8",
+            )
+
+            plan = tidyengine.compile_command_plan(build_dir, [fixture], project_root=root)
+
+            self.assertEqual(list(plan.deferred), [])
+            self.assertEqual(
+                [(target.selected, target.translation_unit) for target in plan.targets],
+                [(fixture.resolve(), native.resolve())],
+            )
+
     def test_conditional_include_does_not_claim_header_coverage(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "repo"

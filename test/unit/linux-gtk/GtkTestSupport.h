@@ -381,15 +381,13 @@ namespace ao::gtk::test
                   static_cast<char const*>(fields[i].value), static_cast<std::size_t>(fields[i].length)};
               }
 
-              if (msg.find("Finalizing ") != std::string_view::npos &&
-                  msg.find("has children left") != std::string_view::npos)
+              if (msg.contains("Finalizing ") && msg.contains("has children left"))
               {
                 return G_LOG_WRITER_HANDLED;
               }
 
-              if (msg.find(
-                    "New application windows must be added after the GApplication::startup signal has been emitted") !=
-                  std::string_view::npos)
+              if (msg.contains(
+                    "New application windows must be added after the GApplication::startup signal has been emitted"))
               {
                 return G_LOG_WRITER_HANDLED;
               }
@@ -487,7 +485,7 @@ namespace ao::gtk::test
     bool _mounted = false;
   };
 
-  class AllocationHost final : public Gtk::Widget
+  class AllocationHost final : public Gtk::Widget // NOLINT(misc-multiple-inheritance)
   {
   public:
     explicit AllocationHost(Gtk::Widget& child)

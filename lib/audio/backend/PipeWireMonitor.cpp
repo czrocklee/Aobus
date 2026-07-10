@@ -49,21 +49,21 @@ namespace ao::audio::backend
 {
   using namespace detail;
 
-  enum class NodeBindingRole : std::uint8_t
-  {
-    Stream,
-    Sink,
-  };
-
   // --- Internal monitor operations ---
 
   namespace
   {
+    enum class NodeBindingRole : std::uint8_t
+    {
+      Stream,
+      Sink,
+    };
+
     bool isActiveLink(::pw_link_state state) noexcept
     {
       return state == PW_LINK_STATE_PAUSED || state == PW_LINK_STATE_ACTIVE;
     }
-  }
+  } // namespace
 
   // --- PipeWireMonitor Impl ---
 
@@ -134,7 +134,7 @@ namespace ao::audio::backend
       PipeWireMonitor::DeviceCallback callback;
     };
 
-    struct CallbackInvocationScope final
+    struct [[nodiscard]] CallbackInvocationScope final
     {
       explicit CallbackInvocationScope(Impl& impl)
         : impl{impl}
@@ -233,40 +233,41 @@ namespace ao::audio::backend
     std::uint64_t nextSubscriptionId = 1;
     std::vector<GraphSubscription> graphSubscriptions;
     std::vector<DeviceSubscription> deviceSubscriptions;
-    std::shared_ptr<RefreshSignal> refreshSignal = std::make_shared<RefreshSignal>();
+    std::shared_ptr<RefreshSignal> refreshSignalPtr = std::make_shared<RefreshSignal>();
     std::jthread refreshThread;
 
-    void startRefreshThread(std::shared_ptr<Impl> const& self)
+    void startRefreshThread(std::shared_ptr<Impl> const& selfPtr)
     {
-      auto const weakSelf = std::weak_ptr<Impl>{self};
-      auto const signal = refreshSignal;
-      refreshThread = std::jthread{[weakSelf, signal](std::stop_token const& stopToken)
-                                   {
-                                     setCurrentThreadName("PipeWireRefresh");
+      auto const weakSelfPtr = std::weak_ptr<Impl>{selfPtr};
+      auto const signalPtr = refreshSignalPtr;
+      refreshThread =
+        std::jthread{[weakSelfPtr, signalPtr](std::stop_token const& stopToken)
+                     {
+                       setCurrentThreadName("PipeWireRefresh");
 
-                                     while (!stopToken.stop_requested())
-                                     {
-                                       auto lock = std::unique_lock{signal->mutex};
-                                       signal->cv.wait(lock, stopToken, [&signal] { return signal->requested; });
+                       while (!stopToken.stop_requested())
+                       {
+                         auto lock = std::unique_lock{signalPtr->mutex};
+                         signalPtr->cv.wait(lock, stopToken, [&signalPtr] { return signalPtr->requested; });
 
-                                       if (stopToken.stop_requested())
-                                       {
-                                         return;
-                                       }
+                         if (stopToken.stop_requested())
+                         {
+                           return;
+                         }
 
-                                       signal->requested = false;
-                                       lock.unlock();
+                         signalPtr->requested = false;
+                         lock.unlock();
 
-                                       auto const impl = weakSelf.lock();
+                         auto const implPtr = weakSelfPtr.lock();
 
-                                       if (!impl)
-                                       {
-                                         return;
-                                       }
+                         if (!implPtr)
+                         {
+                           return;
+                         }
 
-                                       impl->refresh();
-                                     }
-                                   }};
+                         implPtr->refresh();
+                       }
+                     }};
     }
 
     void triggerRefresh()
@@ -277,11 +278,11 @@ namespace ao::audio::backend
       }
 
       {
-        auto const lock = std::scoped_lock{refreshSignal->mutex};
-        refreshSignal->requested = true;
+        auto const lock = std::scoped_lock{refreshSignalPtr->mutex};
+        refreshSignalPtr->requested = true;
       }
 
-      refreshSignal->cv.notify_one();
+      refreshSignalPtr->cv.notify_one();
     }
 
     void start();
@@ -499,7 +500,7 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    static inline ::pw_core_events const coreEvents = []
+    static inline ::pw_core_events const coreEvents = [] // NOLINT(bugprone-throwing-static-initialization)
     {
       auto ev = ::pw_core_events{};
       ev.version = PW_VERSION_CORE_EVENTS;
@@ -507,7 +508,7 @@ namespace ao::audio::backend
       return ev;
     }();
 
-    static inline ::pw_registry_events const registryEvents = []
+    static inline ::pw_registry_events const registryEvents = [] // NOLINT(bugprone-throwing-static-initialization)
     {
       auto ev = ::pw_registry_events{};
       ev.version = PW_VERSION_REGISTRY_EVENTS;
@@ -516,7 +517,7 @@ namespace ao::audio::backend
       return ev;
     }();
 
-    static inline ::pw_node_events const streamNodeEvents = []
+    static inline ::pw_node_events const streamNodeEvents = [] // NOLINT(bugprone-throwing-static-initialization)
     {
       auto ev = ::pw_node_events{};
       ev.version = PW_VERSION_NODE_EVENTS;
@@ -525,7 +526,7 @@ namespace ao::audio::backend
       return ev;
     }();
 
-    static inline ::pw_node_events const sinkNodeEvents = []
+    static inline ::pw_node_events const sinkNodeEvents = [] // NOLINT(bugprone-throwing-static-initialization)
     {
       auto ev = ::pw_node_events{};
       ev.version = PW_VERSION_NODE_EVENTS;
@@ -545,48 +546,48 @@ namespace ao::audio::backend
 
   PipeWireMonitor::~PipeWireMonitor()
   {
-    if (auto const impl = std::move(_implPtr))
+    if (auto const implPtr = std::move(_implPtr); implPtr)
     {
-      impl->shutdown();
+      implPtr->shutdown();
     }
   }
 
   void PipeWireMonitor::start()
   {
-    auto const impl = _implPtr;
-    impl->start();
+    auto const implPtr = _implPtr;
+    implPtr->start();
   }
 
   void PipeWireMonitor::stop()
   {
-    auto const impl = _implPtr;
-    impl->shutdown();
+    auto const implPtr = _implPtr;
+    implPtr->shutdown();
   }
 
   Subscription PipeWireMonitor::subscribeDevices(DeviceCallback callback)
   {
-    auto const impl = _implPtr;
-    return impl->subscribeDevices(std::move(callback));
+    auto const implPtr = _implPtr;
+    return implPtr->subscribeDevices(std::move(callback));
   }
 
   std::vector<Device> PipeWireMonitor::enumerateSinks() const
   {
-    auto const impl = _implPtr;
-    auto const lock = std::scoped_lock{impl->mutex};
-    return impl->enumerateSinks();
+    auto const implPtr = _implPtr;
+    auto const lock = std::scoped_lock{implPtr->mutex};
+    return implPtr->enumerateSinks();
   }
 
   Subscription PipeWireMonitor::subscribeGraph(std::string_view routeAnchor,
                                                std::function<void(flow::Graph const&)> callback)
   {
-    auto const impl = _implPtr;
-    return impl->subscribeGraph(routeAnchor, std::move(callback));
+    auto const implPtr = _implPtr;
+    return implPtr->subscribeGraph(routeAnchor, std::move(callback));
   }
 
   void PipeWireMonitor::refresh()
   {
-    auto const impl = _implPtr;
-    impl->refresh();
+    auto const implPtr = _implPtr;
+    implPtr->refresh();
   }
 
   // --- Impl Implementations ---
@@ -628,7 +629,7 @@ namespace ao::audio::backend
 
     stopping.store(true, std::memory_order_release);
 
-    auto isReentrantCallback = false;
+    bool isReentrantCallback = false;
 
     if (callbackMutex.try_lock())
     {
@@ -637,7 +638,7 @@ namespace ao::audio::backend
     }
 
     refreshThread.request_stop();
-    refreshSignal->cv.notify_all();
+    refreshSignalPtr->cv.notify_all();
 
     if (refreshThread.joinable())
     {
@@ -687,7 +688,7 @@ namespace ao::audio::backend
       return {};
     }
 
-    auto id = std::uint64_t{0};
+    std::uint64_t id = 0;
     auto devices = std::vector<Device>{};
     auto const callbackLock = std::scoped_lock{callbackMutex};
 
@@ -700,7 +701,7 @@ namespace ao::audio::backend
       }
 
       id = nextSubscriptionId++;
-      deviceSubscriptions.push_back({id, callback});
+      deviceSubscriptions.push_back({.id = id, .callback = callback});
       devices = enumerateSinks();
     }
 
@@ -732,22 +733,22 @@ namespace ao::audio::backend
       }
     }
 
-    return Subscription{[weakImpl = weak_from_this(), id]
+    return Subscription{[weakImplPtr = weak_from_this(), id]
                         {
-                          auto const impl = weakImpl.lock();
+                          auto const implPtr = weakImplPtr.lock();
 
-                          if (!impl)
+                          if (!implPtr)
                           {
                             return;
                           }
 
-                          auto const callbackLock = std::scoped_lock{impl->callbackMutex};
-                          auto const lock = std::scoped_lock{impl->mutex};
-                          auto const it = std::ranges::find(impl->deviceSubscriptions, id, &DeviceSubscription::id);
+                          auto const callbackLock = std::scoped_lock{implPtr->callbackMutex};
+                          auto const lock = std::scoped_lock{implPtr->mutex};
+                          auto const it = std::ranges::find(implPtr->deviceSubscriptions, id, &DeviceSubscription::id);
 
-                          if (it != impl->deviceSubscriptions.end())
+                          if (it != implPtr->deviceSubscriptions.end())
                           {
-                            impl->deviceSubscriptions.erase(it);
+                            implPtr->deviceSubscriptions.erase(it);
                           }
                         }};
   }
@@ -760,7 +761,7 @@ namespace ao::audio::backend
       return {};
     }
 
-    auto id = std::uint64_t{0};
+    std::uint64_t id = 0;
     auto const callbackLock = std::scoped_lock{callbackMutex};
 
     {
@@ -772,32 +773,33 @@ namespace ao::audio::backend
       }
 
       id = nextSubscriptionId++;
-      graphSubscriptions.push_back({id, std::string{routeAnchor}, std::move(callback)});
+      graphSubscriptions.push_back(
+        {.id = id, .routeAnchor = std::string{routeAnchor}, .callback = std::move(callback)});
     }
 
     triggerRefresh();
 
-    return Subscription{[weakImpl = weak_from_this(), id]
+    return Subscription{[weakImplPtr = weak_from_this(), id]
                         {
-                          auto const impl = weakImpl.lock();
+                          auto const implPtr = weakImplPtr.lock();
 
-                          if (!impl)
+                          if (!implPtr)
                           {
                             return;
                           }
 
-                          auto const callbackLock = std::scoped_lock{impl->callbackMutex};
+                          auto const callbackLock = std::scoped_lock{implPtr->callbackMutex};
                           {
-                            auto const lock = std::scoped_lock{impl->mutex};
-                            auto const it = std::ranges::find(impl->graphSubscriptions, id, &GraphSubscription::id);
+                            auto const lock = std::scoped_lock{implPtr->mutex};
+                            auto const it = std::ranges::find(implPtr->graphSubscriptions, id, &GraphSubscription::id);
 
-                            if (it != impl->graphSubscriptions.end())
+                            if (it != implPtr->graphSubscriptions.end())
                             {
-                              impl->graphSubscriptions.erase(it);
+                              implPtr->graphSubscriptions.erase(it);
                             }
                           }
 
-                          impl->triggerRefresh();
+                          implPtr->triggerRefresh();
                         }};
   }
 

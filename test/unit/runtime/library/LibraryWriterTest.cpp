@@ -204,8 +204,8 @@ namespace ao::rt::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::ValueTooLarge);
-    CHECK(result.error().message.find("Failed to serialize cold track data") != std::string::npos);
-    CHECK(result.error().message.find("exceeds uint16_t") != std::string::npos);
+    CHECK(result.error().message.contains("Failed to serialize cold track data"));
+    CHECK(result.error().message.contains("exceeds uint16_t"));
 
     CHECK(mutated.empty());
 
@@ -308,7 +308,7 @@ namespace ao::rt::test
       auto const result = service.createList(draft);
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.find("invalid list filter") != std::string::npos);
+      CHECK(result.error().message.contains("invalid list filter"));
       CHECK(libraryFixture.library().lists().reader(libraryFixture.library().readTransaction()).begin() ==
             library::ListStore::Reader::Iterator{});
     }
@@ -323,7 +323,7 @@ namespace ao::rt::test
       auto const result = service.createList(draft);
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.find("list parent not found") != std::string::npos);
+      CHECK(result.error().message.contains("list parent not found"));
     }
 
     SECTION("self parent")
@@ -338,7 +338,7 @@ namespace ao::rt::test
       auto const result = service.updateList(draft);
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.find("list parent cannot be the list itself") != std::string::npos);
+      CHECK(result.error().message.contains("list parent cannot be the list itself"));
     }
 
     SECTION("descendant parent")
@@ -365,7 +365,7 @@ namespace ao::rt::test
       auto const result = service.updateList(parentDraft);
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.find("list parent cannot be a descendant of the list") != std::string::npos);
+      CHECK(result.error().message.contains("list parent cannot be a descendant of the list"));
     }
   }
 
@@ -403,7 +403,7 @@ namespace ao::rt::test
     auto const result = service.updateList(draft);
     REQUIRE(!result);
     CHECK(result.error().code == Error::Code::NotFound);
-    CHECK(result.error().message.find("list not found: 999") != std::string::npos);
+    CHECK(result.error().message.contains("list not found: 999"));
   }
 
   TEST_CASE("LibraryWriter - deleteList publishes ListsMutated", "[runtime][unit][library][mutation]")

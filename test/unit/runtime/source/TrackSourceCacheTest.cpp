@@ -24,15 +24,18 @@ namespace ao::rt::test
 {
   using namespace ao::library;
 
-  struct SpyTrackSourceRemovals final : TrackSourceObserver
+  namespace
   {
-    std::vector<std::pair<TrackId, std::size_t>> removed{};
+    struct SpyTrackSourceRemovals final : TrackSourceObserver
+    {
+      std::vector<std::pair<TrackId, std::size_t>> removed{};
 
-    void handleReset() override {}
-    void handleInserted(TrackId /*id*/, std::size_t /*index*/) override {}
-    void handleUpdated(TrackId /*id*/, std::size_t /*index*/) override {}
-    void handleRemoved(TrackId id, std::size_t index) override { removed.emplace_back(id, index); }
-  };
+      void handleReset() override {}
+      void handleInserted(TrackId /*id*/, std::size_t /*index*/) override {}
+      void handleUpdated(TrackId /*id*/, std::size_t /*index*/) override {}
+      void handleRemoved(TrackId id, std::size_t index) override { removed.emplace_back(id, index); }
+    };
+  } // namespace
 
   TEST_CASE("TrackSourceCache - source lookup and list refresh maintain source state",
             "[runtime][unit][source][track-source-cache]")

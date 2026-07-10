@@ -204,9 +204,10 @@ namespace ao::audio::backend
                            .name = "ALSA",
                            .description = "Advanced Linux Sound Architecture (Direct Hardware Access)",
                            .iconName = "audio-card-symbolic",
-                           .supportedProfiles = {{kProfileExclusive,
-                                                  "Exclusive Mode",
-                                                  "Direct hardware access for low-latency, bit-perfect playback"}}},
+                           .supportedProfiles = {{.id = kProfileExclusive,
+                                                  .name = "Exclusive Mode",
+                                                  .description =
+                                                    "Direct hardware access for low-latency, bit-perfect playback"}}},
             .devices = _implPtr->cachedDevices};
   }
 

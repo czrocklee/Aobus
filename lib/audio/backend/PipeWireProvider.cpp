@@ -67,13 +67,16 @@ namespace ao::audio::backend
 
   BackendProvider::Status PipeWireProvider::status() const
   {
-    return {.descriptor =
-              {.id = kBackendPipeWire,
-               .name = "PipeWire",
-               .description = "Modern Linux audio server with low latency",
-               .iconName = "media-playback-start-symbolic",
-               .supportedProfiles = {{kProfileShared, "Shared Mode", "System-level mixing with other applications"},
-                                     {kProfileExclusive, "Exclusive Mode", "Direct access to the hardware device"}}},
+    return {.descriptor = {.id = kBackendPipeWire,
+                           .name = "PipeWire",
+                           .description = "Modern Linux audio server with low latency",
+                           .iconName = "media-playback-start-symbolic",
+                           .supportedProfiles = {{.id = kProfileShared,
+                                                  .name = "Shared Mode",
+                                                  .description = "System-level mixing with other applications"},
+                                                 {.id = kProfileExclusive,
+                                                  .name = "Exclusive Mode",
+                                                  .description = "Direct access to the hardware device"}}},
             .devices = _implPtr->monitor.enumerateSinks()};
   }
 

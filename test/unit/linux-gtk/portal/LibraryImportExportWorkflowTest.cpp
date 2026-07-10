@@ -6,6 +6,7 @@
 #include "portal/ImportExportCallbacks.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
@@ -54,12 +55,10 @@ namespace ao::gtk::test
     {
       auto const feed = fixture.runtime().notifications().feed();
 
-      return std::ranges::any_of(feed.entries,
-                                 [&](auto const& entry)
-                                 {
-                                   return entry.severity == severity && std::string_view{entry.message}.find(
-                                                                          messageFragment) != std::string_view::npos;
-                                 });
+      return std::ranges::any_of(
+        feed.entries,
+        [&](auto const& entry)
+        { return entry.severity == severity && std::string_view{entry.message}.contains(messageFragment); });
     }
 
     portal::ImportExportCallbacks callbacksWithMutationCounter(std::int32_t& mutationCallbackCount)
@@ -391,8 +390,8 @@ namespace ao::gtk::test
       }));
 
     auto const exportedYaml = readTextFile(target);
-    CHECK(std::string_view{exportedYaml}.find("Test Title") != std::string_view::npos);
-    CHECK(std::string_view{exportedYaml}.find("Test Artist") != std::string_view::npos);
+    CHECK(std::string_view{exportedYaml}.contains("Test Title"));
+    CHECK(std::string_view{exportedYaml}.contains("Test Artist"));
     CHECK(mutationCallbackCount == 0);
   }
 

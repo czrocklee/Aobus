@@ -405,9 +405,9 @@ namespace ao::rt::test
 
       for (std::size_t index = 0; index < count; ++index)
       {
-        auto const scrambled = (index * 48271 + 9973) % count;
+        auto const scrambled = ((index * 48271) + 9973) % count;
         auto const poolIndex = [poolSize = pool.size()](std::size_t value, std::size_t salt) -> std::size_t
-        { return (value * 1103515245 + salt * 12345) % poolSize; };
+        { return ((value * 1103515245) + (salt * 12345)) % poolSize; };
 
         entries.push_back(SortCacheOrderEntry{
           .trackId = TrackId{static_cast<std::uint32_t>(scrambled + 1)},
@@ -1021,8 +1021,8 @@ namespace ao::rt::test
       {
         auto const spec = library::test::TrackSpec{
           .title = std::format("Track {:06d}", index),
-          .artist = std::format("Artist {:04d}", index % (trackCount / 50 + 1)),
-          .album = std::format("Album {:04d}", index % (trackCount / 200 + 1)),
+          .artist = std::format("Artist {:04d}", index % ((trackCount / 50) + 1)),
+          .album = std::format("Album {:04d}", index % ((trackCount / 200) + 1)),
           .genre = std::format("Genre {:02d}", index % 20),
           .year = static_cast<std::uint16_t>(1990 + (index % 35)),
           .discNumber = static_cast<std::uint16_t>(1 + (index % 3)),

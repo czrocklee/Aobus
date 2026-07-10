@@ -87,7 +87,7 @@ namespace ao::gtk::layout::test
 
       auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("trackRowCache missing") != std::string::npos);
+      CHECK(label->get_label().raw().contains("trackRowCache missing"));
     }
 
     SECTION("library.listTree shows error when listNavigationController missing")
@@ -101,7 +101,7 @@ namespace ao::gtk::layout::test
 
       auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("listNavigationController missing") != std::string::npos);
+      CHECK(label->get_label().raw().contains("listNavigationController missing"));
     }
 
     SECTION("tracks.table shows error when trackPageGraph missing")
@@ -119,7 +119,7 @@ namespace ao::gtk::layout::test
 
       auto* const label = dynamic_cast<Gtk::Label*>(child);
       REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("trackPageHost missing") != std::string::npos);
+      CHECK(label->get_label().raw().contains("trackPageHost missing"));
     }
   }
 

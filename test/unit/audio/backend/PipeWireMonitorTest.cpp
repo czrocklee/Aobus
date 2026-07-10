@@ -68,8 +68,6 @@ namespace ao::audio::backend::test
   TEST_CASE("PipeWireMonitor - graph callback may destroy the monitor off the native loop",
             "[audio][regression][pipewire][monitor]")
   {
-    using namespace std::chrono_literals;
-
     auto monitorPtr = std::make_unique<PipeWireMonitor>();
     auto callbackStarted = std::binary_semaphore{0};
     auto allowDestroy = std::binary_semaphore{0};
@@ -87,9 +85,9 @@ namespace ao::audio::backend::test
                                                  monitorDestroyed.release();
                                                });
 
-    REQUIRE(callbackStarted.try_acquire_for(5s));
+    REQUIRE(callbackStarted.try_acquire_for(std::chrono::seconds{5}));
     allowDestroy.release();
-    REQUIRE(monitorDestroyed.try_acquire_for(5s));
+    REQUIRE(monitorDestroyed.try_acquire_for(std::chrono::seconds{5}));
     CHECK_FALSE(monitorPtr);
     CHECK(callbackThreadId != subscribeThreadId);
 
@@ -100,8 +98,6 @@ namespace ao::audio::backend::test
   TEST_CASE("PipeWireMonitor - cancellation suppresses a callback copied by refresh",
             "[audio][regression][pipewire][monitor]")
   {
-    using namespace std::chrono_literals;
-
     auto monitor = PipeWireMonitor{};
     auto firstDelivered = std::binary_semaphore{0};
     auto secondDelivered = std::binary_semaphore{0};
@@ -123,7 +119,7 @@ namespace ao::audio::backend::test
                                                secondSub.reset();
                                              }
                                            });
-    REQUIRE(firstDelivered.try_acquire_for(5s));
+    REQUIRE(firstDelivered.try_acquire_for(std::chrono::seconds{5}));
 
     secondSub = monitor.subscribeGraph("43",
                                        [&](flow::Graph const&)
@@ -133,7 +129,7 @@ namespace ao::audio::backend::test
                                            secondDelivered.release();
                                          }
                                        });
-    REQUIRE(secondDelivered.try_acquire_for(5s));
+    REQUIRE(secondDelivered.try_acquire_for(std::chrono::seconds{5}));
 
     auto const secondCallbacksBeforeCancellation = secondCallbackCount.load(std::memory_order_relaxed);
     cancelSecond.store(true, std::memory_order_release);

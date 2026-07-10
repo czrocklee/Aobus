@@ -261,34 +261,34 @@ namespace ao::council::test
     CHECK_FALSE(std::filesystem::exists(phase / "members" / "member-a" / "r3" / "prompt.md"));
 
     auto const evidence = readFile(phase / "evidence.yaml");
-    CHECK(evidence.find("schema: aobus-council-evidence/v1") != std::string::npos);
-    CHECK(evidence.find("round: r1") != std::string::npos);
-    CHECK(evidence.find("round: r2") != std::string::npos);
-    CHECK(evidence.find("agent: member-a") != std::string::npos);
-    CHECK(evidence.find("members/member-a/r1/stdout.txt") != std::string::npos);
-    CHECK(evidence.find("usable: true") != std::string::npos);
+    CHECK(evidence.contains("schema: aobus-council-evidence/v1"));
+    CHECK(evidence.contains("round: r1"));
+    CHECK(evidence.contains("round: r2"));
+    CHECK(evidence.contains("agent: member-a"));
+    CHECK(evidence.contains("members/member-a/r1/stdout.txt"));
+    CHECK(evidence.contains("usable: true"));
 
     auto const trace = readFile(phase / "trace.yaml");
-    CHECK(trace.find("member-started") != std::string::npos);
-    CHECK(trace.find("member-launched") != std::string::npos);
-    CHECK(trace.find("member-finished") != std::string::npos);
-    CHECK(trace.find("phase-completed") != std::string::npos);
+    CHECK(trace.contains("member-started"));
+    CHECK(trace.contains("member-launched"));
+    CHECK(trace.contains("member-finished"));
+    CHECK(trace.contains("phase-completed"));
     auto const prompt = readFile(phase / "members" / "member-a" / "r1" / "prompt.md");
-    CHECK(prompt.find("Depth: challenge") != std::string::npos);
-    CHECK(prompt.find("Round: 1 of 2 (independent review)") != std::string::npos);
-    CHECK(prompt.find("Depth contract: actively challenge assumptions") != std::string::npos);
-    CHECK(prompt.find("Focus hints (advisory, not an enforcement boundary)") != std::string::npos);
-    CHECK(prompt.find("git diff --stat refs/aobus-council/base..HEAD") != std::string::npos);
+    CHECK(prompt.contains("Depth: challenge"));
+    CHECK(prompt.contains("Round: 1 of 2 (independent review)"));
+    CHECK(prompt.contains("Depth contract: actively challenge assumptions"));
+    CHECK(prompt.contains("Focus hints (advisory, not an enforcement boundary)"));
+    CHECK(prompt.contains("git diff --stat refs/aobus-council/base..HEAD"));
     auto const challengePrompt = readFile(phase / "members" / "member-a" / "r2" / "prompt.md");
-    CHECK(challengePrompt.find("Round: 2 of 2 (cross-challenge)") != std::string::npos);
-    CHECK(challengePrompt.find("chair for synthesis") != std::string::npos);
-    CHECK(challengePrompt.find("--- member-b ---") != std::string::npos);
-    CHECK(challengePrompt.find("--- member-a ---") == std::string::npos);
+    CHECK(challengePrompt.contains("Round: 2 of 2 (cross-challenge)"));
+    CHECK(challengePrompt.contains("chair for synthesis"));
+    CHECK(challengePrompt.contains("--- member-b ---"));
+    CHECK_FALSE(challengePrompt.contains("--- member-a ---"));
 
     auto const* memberA = memberRequest(fake, "member-a");
     REQUIRE(memberA != nullptr);
     CHECK(memberA->cwd == phase / "members" / "member-a" / "r1" / "workspace");
-    CHECK(memberA->standardInput.find("Depth: challenge") != std::string::npos);
+    CHECK(memberA->standardInput.contains("Depth: challenge"));
     REQUIRE(memberA->optStdoutSink);
     REQUIRE(memberA->optStderrSink);
     CHECK(memberA->optStdoutSink->path == phase / "members" / "member-a" / "r1" / "stdout.txt");
@@ -320,8 +320,8 @@ namespace ao::council::test
     CHECK_FALSE(std::filesystem::exists(phaseRoot / "members" / "member-a" / "r2" / "prompt.md"));
 
     auto const prompt = readFile(phaseRoot / "members" / "member-a" / "r1" / "prompt.md");
-    CHECK(prompt.find("Depth: panel") != std::string::npos);
-    CHECK(prompt.find("Round: 1 of 1 (independent review)") != std::string::npos);
+    CHECK(prompt.contains("Depth: panel"));
+    CHECK(prompt.contains("Round: 1 of 1 (independent review)"));
   }
 
   TEST_CASE("Runner - full depth adds self-revision after peer challenge", "[council][integration][engine]")
@@ -344,13 +344,13 @@ namespace ao::council::test
     CHECK(std::filesystem::exists(phaseRoot / "members" / "member-a" / "r3" / "prompt.md"));
 
     auto const revisionPrompt = readFile(phaseRoot / "members" / "member-a" / "r3" / "prompt.md");
-    CHECK(revisionPrompt.find("Depth: full") != std::string::npos);
-    CHECK(revisionPrompt.find("Round: 3 of 3 (self-revision)") != std::string::npos);
+    CHECK(revisionPrompt.contains("Depth: full"));
+    CHECK(revisionPrompt.contains("Round: 3 of 3 (self-revision)"));
     auto const challengePrompt = readFile(phaseRoot / "members" / "member-a" / "r2" / "prompt.md");
-    CHECK(challengePrompt.find("draft authors for self-revision") != std::string::npos);
-    CHECK(revisionPrompt.find("Your original review:") != std::string::npos);
-    CHECK(revisionPrompt.find("Your own challenge notes:") != std::string::npos);
-    CHECK(revisionPrompt.find("Revise your original review") != std::string::npos);
+    CHECK(challengePrompt.contains("draft authors for self-revision"));
+    CHECK(revisionPrompt.contains("Your original review:"));
+    CHECK(revisionPrompt.contains("Your own challenge notes:"));
+    CHECK(revisionPrompt.contains("Revise your original review"));
   }
 
   TEST_CASE("Runner - challenge depth fails when peer challenge misses quorum", "[council][integration][engine]")
@@ -440,10 +440,10 @@ namespace ao::council::test
     CHECK(std::filesystem::exists(skippedRoot / "evidence.yaml"));
     CHECK(std::filesystem::exists(skippedRoot / "dossier.md"));
     auto const skippedEvidence = readFile(skippedRoot / "evidence.yaml");
-    CHECK(skippedEvidence.find("rounds: []") != std::string::npos);
+    CHECK(skippedEvidence.contains("rounds: []"));
     auto const skippedTrace = readFile(skippedRoot / "trace.yaml");
-    CHECK(skippedTrace.find("phase-started") != std::string::npos);
-    CHECK(skippedTrace.find("phase-completed") != std::string::npos);
+    CHECK(skippedTrace.contains("phase-started"));
+    CHECK(skippedTrace.contains("phase-completed"));
   }
 
   TEST_CASE("Runner - empty member output does not satisfy quorum", "[council][integration][engine]")
@@ -489,7 +489,7 @@ namespace ao::council::test
     CHECK(run->failed);
 
     auto const evidence = readFile(tempPath(temp) / "out" / "phase-a" / "evidence.yaml");
-    CHECK(evidence.find("usable: false") != std::string::npos);
+    CHECK(evidence.contains("usable: false"));
   }
 
   TEST_CASE("Runner - auth prompts on either stream do not satisfy quorum", "[council][integration][engine]")
@@ -516,7 +516,7 @@ namespace ao::council::test
     CHECK(run->failed);
 
     auto const evidence = readFile(tempPath(temp) / "out" / "phase-a" / "evidence.yaml");
-    CHECK(evidence.find("usable: false") != std::string::npos);
+    CHECK(evidence.contains("usable: false"));
   }
 
   TEST_CASE("Runner - stderr-only successful reviews satisfy quorum", "[council][integration][engine]")
@@ -540,8 +540,8 @@ namespace ao::council::test
     CHECK(run->manifests.front().failure == FailureReason::None);
 
     auto const evidence = readFile(tempPath(temp) / "out" / "phase-a" / "evidence.yaml");
-    CHECK(evidence.find("usable: true") != std::string::npos);
-    CHECK(evidence.find("review-stream: stderr") != std::string::npos);
+    CHECK(evidence.contains("usable: true"));
+    CHECK(evidence.contains("review-stream: stderr"));
   }
 
   TEST_CASE("Runner - auth-related review text is not treated as an auth prompt", "[council][integration][engine]")
@@ -598,13 +598,13 @@ namespace ao::council::test
 
     REQUIRE_FALSE(run);
     CHECK(run.error().code == Error::Code::Conflict);
-    CHECK(run.error().message.find("real repository changed") != std::string::npos);
+    CHECK(run.error().message.contains("real repository changed"));
 
     auto const manifest = readFile(tempPath(temp) / "out" / "phase-a" / "manifest.yaml");
-    CHECK(manifest.find("failure: real-tree-changed") != std::string::npos);
-    CHECK(manifest.find("delegated results were discarded") != std::string::npos);
+    CHECK(manifest.contains("failure: real-tree-changed"));
+    CHECK(manifest.contains("delegated results were discarded"));
     auto const trace = readFile(tempPath(temp) / "out" / "phase-a" / "trace.yaml");
-    CHECK(trace.find("run-discarded") != std::string::npos);
+    CHECK(trace.contains("run-discarded"));
   }
 
   TEST_CASE("Runner - sandbox launch failures are infrastructure errors", "[council][integration][engine]")
@@ -624,14 +624,14 @@ namespace ao::council::test
     REQUIRE(run);
     REQUIRE(run->manifests.size() == 1);
     CHECK(run->manifests.front().failure == FailureReason::InfrastructureFailed);
-    CHECK(run->manifests.front().summary.find("sandbox launch failed") != std::string::npos);
+    CHECK(run->manifests.front().summary.contains("sandbox launch failed"));
     CHECK(run->failed);
 
     auto const phaseRoot = tempPath(temp) / "out" / "phase-a";
     CHECK(std::filesystem::exists(phaseRoot / "evidence.yaml"));
     CHECK(std::filesystem::exists(phaseRoot / "dossier.md"));
     auto const manifest = readFile(phaseRoot / "manifest.yaml");
-    CHECK(manifest.find("failure: infrastructure-failed") != std::string::npos);
+    CHECK(manifest.contains("failure: infrastructure-failed"));
   }
 
   TEST_CASE("Runner - infrastructure failures skip dependent phases but keep scheduling",
@@ -690,9 +690,9 @@ namespace ao::council::test
     CHECK_FALSE(run->failed);
 
     auto const evidence = readFile(tempPath(temp) / "out" / "phase-a" / "evidence.yaml");
-    CHECK(evidence.find("agent: member-c") != std::string::npos);
-    CHECK(evidence.find("status: launch-failed") != std::string::npos);
-    CHECK(evidence.find("usable: false") != std::string::npos);
+    CHECK(evidence.contains("agent: member-c"));
+    CHECK(evidence.contains("status: launch-failed"));
+    CHECK(evidence.contains("usable: false"));
   }
 
   TEST_CASE("Runner - prompt delivery modes are reflected in member requests", "[council][integration][engine]")
@@ -715,10 +715,9 @@ namespace ao::council::test
       auto const* memberA = memberRequest(fake, "member-a");
       REQUIRE(memberA != nullptr);
       CHECK(memberA->standardInput.empty());
-      CHECK(std::ranges::any_of(
-        memberA->argv,
-        [](std::string const& value)
-        { return value.find("You are one member of an Aobus council review.") != std::string::npos; }));
+      CHECK(std::ranges::any_of(memberA->argv,
+                                [](std::string const& value)
+                                { return value.contains("You are one member of an Aobus council review."); }));
     }
 
     SECTION("file delivery appends the prompt path to argv")
@@ -736,7 +735,7 @@ namespace ao::council::test
         std::ranges::contains(memberA->argv, (tempPath(temp) / "repo" / ".git" / "aobus-council-prompt.md").string()));
       CHECK(readFile(tempPath(temp) / "out" / "phase-a" / "members" / "member-a" / "r1" / "workspace" / ".git" /
                      "aobus-council-prompt.md")
-              .find("You are one member of an Aobus council review.") != std::string::npos);
+              .contains("You are one member of an Aobus council review."));
       CHECK_FALSE(std::filesystem::exists(tempPath(temp) / "out" / "phase-a" / "members" / "member-a" / "r1" /
                                           "workspace" / ".aobus-council-prompt.md"));
     }
@@ -757,7 +756,7 @@ namespace ao::council::test
       CHECK(std::ranges::count(memberA->argv, promptPath) == 1);
       CHECK(readFile(tempPath(temp) / "out" / "phase-a" / "members" / "member-a" / "r1" / "workspace" / ".git" /
                      "aobus-council-prompt.md")
-              .find("You are one member of an Aobus council review.") != std::string::npos);
+              .contains("You are one member of an Aobus council review."));
     }
 
     SECTION("runtime placeholder replacement does not rescan prompt text")
@@ -774,9 +773,8 @@ namespace ao::council::test
       REQUIRE(memberA != nullptr);
       auto const promptPath = (tempPath(temp) / "repo" / ".git" / "aobus-council-prompt.md").string();
       CHECK_FALSE(std::ranges::contains(memberA->argv, promptPath));
-      CHECK(std::ranges::any_of(memberA->argv,
-                                [](std::string const& value)
-                                { return value.find("literal {prompt-file} marker") != std::string::npos; }));
+      CHECK(std::ranges::any_of(
+        memberA->argv, [](std::string const& value) { return value.contains("literal {prompt-file} marker"); }));
     }
   }
 
@@ -803,7 +801,7 @@ namespace ao::council::test
 
     REQUIRE_FALSE(run);
     CHECK(run.error().code == Error::Code::InvalidState);
-    CHECK(run.error().message.find("must be outside repository") != std::string::npos);
+    CHECK(run.error().message.contains("must be outside repository"));
     CHECK_FALSE(std::filesystem::exists(tempPath(temp) / "repo/out"));
   }
 
@@ -843,7 +841,7 @@ namespace ao::council::test
 
     REQUIRE_FALSE(run);
     CHECK(run.error().code == Error::Code::InvalidInput);
-    CHECK(run.error().message.find("no definition for task-kind 'missing-council'") != std::string::npos);
+    CHECK(run.error().message.contains("no definition for task-kind 'missing-council'"));
     CHECK_FALSE(std::filesystem::exists(tempPath(temp) / "out"));
     CHECK(fake.requests.empty());
   }
@@ -859,7 +857,7 @@ namespace ao::council::test
 
     REQUIRE_FALSE(run);
     CHECK(run.error().code == Error::Code::InvalidState);
-    CHECK(run.error().message.find("must be empty") != std::string::npos);
+    CHECK(run.error().message.contains("must be empty"));
   }
 
   TEST_CASE("Runner - output path symlinks are rejected", "[council][integration][engine]")
@@ -874,6 +872,6 @@ namespace ao::council::test
 
     REQUIRE_FALSE(run);
     CHECK(run.error().code == Error::Code::InvalidState);
-    CHECK(run.error().message.find("fresh directory") != std::string::npos);
+    CHECK(run.error().message.contains("fresh directory"));
   }
 } // namespace ao::council::test

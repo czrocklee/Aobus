@@ -89,18 +89,18 @@ namespace ao::gtk::layout
                     std::int32_t zIndex)
       {
         child.set_parent(*this);
-        _children.push_back({id,
-                             &child,
-                             xPosition,
-                             yPosition,
-                             width,
-                             height,
-                             zIndex,
-                             _insertCount++,
-                             xPosition,
-                             yPosition,
-                             width,
-                             height});
+        _children.push_back({.id = id,
+                             .widget = &child,
+                             .x = xPosition,
+                             .y = yPosition,
+                             .reqWidth = width,
+                             .reqHeight = height,
+                             .zIndex = zIndex,
+                             .insertOrder = _insertCount++,
+                             .startX = xPosition,
+                             .startY = yPosition,
+                             .startReqWidth = width,
+                             .startReqHeight = height});
       }
 
       void setSelectedChild(std::string const& id)

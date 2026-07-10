@@ -164,10 +164,10 @@ namespace ao::tui
             _onExit();
           }
         }
-        catch (...)
+        // Signal-triggered shutdown is best effort; callback failures must not
+        // terminate the watcher thread.
+        catch (...) // NOLINT(bugprone-empty-catch)
         {
-          // Signal-triggered shutdown is best effort and must not terminate the
-          // watcher thread if an exit callback fails.
         }
       }
 
@@ -176,7 +176,7 @@ namespace ao::tui
       std::atomic_bool _running{true};
     };
 
-  public:
+  public: // NOLINT(aobus-readability-member-order): State must be complete before the inline constructor uses it.
     explicit Impl(std::move_only_function<void()> onExit)
       : _statePtr{std::make_shared<State>(std::move(onExit))}
     {
@@ -187,7 +187,7 @@ namespace ao::tui
 
       _thread = std::thread{[statePtr = _statePtr] { statePtr->run(); }};
 
-      auto expected = std::int32_t{-1};
+      std::int32_t expected = -1;
       _ownsSignalHandlers = gSignalWriteFd.compare_exchange_strong(expected, _statePtr->writeFd());
 
       if (_ownsSignalHandlers)

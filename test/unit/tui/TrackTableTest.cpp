@@ -138,7 +138,7 @@ namespace ao::tui::test
     REQUIRE_FALSE(first.empty());
     REQUIRE_FALSE(second.empty());
 
-    CHECK(first.find('>') == std::string::npos);
+    CHECK_FALSE(first.contains('>'));
     CHECK(second.find('>') == 0);
     CHECK(first.find('7') == second.find('8'));
   }
@@ -148,8 +148,8 @@ namespace ao::tui::test
     auto const tracks = std::vector<TrackListEntry>{};
     auto const text = renderText(trackTableView(tracks, 0, kInvalidTrackId, rt::defaultTrackPresentationSpec()));
 
-    CHECK(text.find("Title") != std::string::npos);
-    CHECK(text.find("No tracks found. Run `aobus init` in this library first.") != std::string::npos);
+    CHECK(text.contains("Title"));
+    CHECK(text.contains("No tracks found. Run `aobus init` in this library first."));
   }
 
   TEST_CASE("TrackTable - presentation controls visible columns", "[tui][unit][track-table]")
@@ -161,13 +161,13 @@ namespace ao::tui::test
 
     auto const text = renderText(trackTableView(tracks, -1, kInvalidTrackId, presentation));
 
-    CHECK(text.find("Title") != std::string::npos);
-    CHECK(text.find("Year") != std::string::npos);
-    CHECK(text.find("Duration") != std::string::npos);
-    CHECK(text.find("Artist") == std::string::npos);
-    CHECK(text.find("Album") == std::string::npos);
-    CHECK(text.find("2026") != std::string::npos);
-    CHECK(text.find("1:05") != std::string::npos);
+    CHECK(text.contains("Title"));
+    CHECK(text.contains("Year"));
+    CHECK(text.contains("Duration"));
+    CHECK_FALSE(text.contains("Artist"));
+    CHECK_FALSE(text.contains("Album"));
+    CHECK(text.contains("2026"));
+    CHECK(text.contains("1:05"));
   }
 
   TEST_CASE("TrackTable - maps track rows through section headers", "[tui][unit][track-table]")
@@ -420,8 +420,8 @@ namespace ao::tui::test
       .id = "short", .visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
     auto const rendered = renderElement(trackTableView(tracks, 24, kInvalidTrackId, presentation), 48, 7);
 
-    CHECK(rendered.text.find("Track 24") != std::string::npos);
-    CHECK(rendered.text.find("Track 00") == std::string::npos);
+    CHECK(rendered.text.contains("Track 24"));
+    CHECK_FALSE(rendered.text.contains("Track 00"));
   }
 
   TEST_CASE("TrackTable - empty field fallbacks are visible", "[tui][unit][track-table]")
@@ -446,7 +446,7 @@ namespace ao::tui::test
 
     CHECK(row.find("--") == trackNumberColumn + std::string_view{"Track #"}.size() - std::string_view{"--"}.size());
     CHECK(row.at(artistColumn) == '-');
-    CHECK(row.find("--:--") != std::string::npos);
+    CHECK(row.contains("--:--"));
   }
 
   TEST_CASE("TrackTable - library chooser width follows labels and terminal bounds", "[tui][unit][track-table]")
@@ -460,7 +460,7 @@ namespace ao::tui::test
 
     auto const text = renderText(libraryChooserPane(labels, 1, wideColumns), wideColumns);
 
-    CHECK(text.find("Very Long Smart List") != std::string::npos);
+    CHECK(text.contains("Very Long Smart List"));
   }
 
   TEST_CASE("TrackTable - title column expands on wide terminals", "[tui][unit][track-table]")
@@ -477,6 +477,6 @@ namespace ao::tui::test
     auto const text = renderText(
       trackTableView(tracks, -1, kInvalidTrackId, presentation, TrackTableViewOptions{.availableColumns = 140}), 140);
 
-    CHECK(text.find("wide-terminal-tail") != std::string::npos);
+    CHECK(text.contains("wide-terminal-tail"));
   }
 } // namespace ao::tui::test

@@ -41,9 +41,8 @@ namespace ao::rt::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::IoError);
-    CHECK(result.error().message.find("Failed to read") != std::string::npos);
-    CHECK(std::string_view{result.error().location.file_name()}.find("LibraryYamlImporter.cpp") !=
-          std::string_view::npos);
+    CHECK(result.error().message.contains("Failed to read"));
+    CHECK(std::string_view{result.error().location.file_name()}.contains("LibraryYamlImporter.cpp"));
   }
 
   TEST_CASE("LibraryTaskService - exportLibraryAsync returns failure for invalid path",

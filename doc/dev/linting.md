@@ -27,8 +27,9 @@ drive-by lint sweep.
   `tool/`.
 - `RELAXED` checks apply to C++ tests under `test/`. Test mode keeps the same
   baseline but disables test-noisy checks such as unchecked optional access,
-  discarded return values, cognitive complexity, identifier length, magic
-  numbers, C arrays, C varargs, and test-only casts.
+  discarded return values, throwing static initialization, designated
+  initializers for positional expected-data tables, cognitive complexity,
+  identifier length, magic numbers, C arrays, C varargs, and test-only casts.
 - `test/main.cpp` and non-fixture files under `test/integration/lint/` are
   ignored by normal tidy runs.
 - Lint checker fixtures under `test/integration/lint/fixture/` are skipped in
@@ -87,6 +88,14 @@ headers; configuration fails closed when any required SDK file is missing.
 
 Start by deciding whether the warning points at a real code issue, a project
 style issue, a tool false positive, or an unavoidable external API shape.
+
+LLVM upgrades can add checks to an enabled wildcard family, rename checks from
+another policy family into one Aobus enables, or broaden an existing check.
+Review the release notes and the resulting diagnostic classes as a policy
+change: explicitly disable rules that conflict with project architecture, tune
+new options that restore the intended scope, and fix findings that match Aobus
+policy. Do not convert a toolchain-wide policy mismatch into repeated local
+suppressions.
 
 - Treat correctness, lifetime, ownership, optional access, and special-member
   warnings as real problems unless the local code proves otherwise.

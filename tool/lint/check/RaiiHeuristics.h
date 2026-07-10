@@ -140,8 +140,8 @@ namespace clang::tidy::aobus
     // 3. Check for standard library locks
     if (llvm::StringRef{name}.starts_with("std::"))
     {
-      if (name.find("lock_guard") != std::string::npos || name.find("unique_lock") != std::string::npos ||
-          name.find("shared_lock") != std::string::npos || name.find("scoped_lock") != std::string::npos)
+      if (name.contains("lock_guard") || name.contains("unique_lock") || name.contains("shared_lock") ||
+          name.contains("scoped_lock"))
       {
         return true;
       }

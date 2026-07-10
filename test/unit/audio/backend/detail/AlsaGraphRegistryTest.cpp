@@ -190,18 +190,18 @@ TEST_CASE("AlsaGraphRegistry - subscription reset stops updates", "[audio][unit]
 
 TEST_CASE("AlsaGraphRegistry - initial callback may destroy registry", "[audio][regression][alsa][lifecycle]")
 {
-  auto registry = std::make_unique<AlsaGraphRegistry>();
-  auto callbackCount = std::int32_t{0};
+  auto registryPtr = std::make_unique<AlsaGraphRegistry>();
+  std::int32_t callbackCount = 0;
 
-  auto sub = registry->subscribe("hw:0,0",
-                                 [&](Graph const&)
-                                 {
-                                   ++callbackCount;
-                                   registry.reset();
-                                 });
+  auto sub = registryPtr->subscribe("hw:0,0",
+                                    [&](Graph const&)
+                                    {
+                                      ++callbackCount;
+                                      registryPtr.reset();
+                                    });
 
   CHECK(callbackCount == 1);
-  CHECK_FALSE(registry);
+  CHECK_FALSE(registryPtr);
   CHECK_FALSE(sub);
   sub.reset();
 }
@@ -221,32 +221,32 @@ TEST_CASE("AlsaGraphRegistry - subscription may outlive registry", "[audio][regr
 
 TEST_CASE("AlsaGraphRegistry - volume callback may destroy registry", "[audio][regression][alsa][lifecycle]")
 {
-  auto registry = std::make_unique<AlsaGraphRegistry>();
-  auto callbackCount = std::int32_t{0};
-  auto sub = registry->subscribe("hw:0,0",
-                                 [&](Graph const&)
-                                 {
-                                   ++callbackCount;
+  auto registryPtr = std::make_unique<AlsaGraphRegistry>();
+  std::int32_t callbackCount = 0;
+  auto sub = registryPtr->subscribe("hw:0,0",
+                                    [&](Graph const&)
+                                    {
+                                      ++callbackCount;
 
-                                   if (callbackCount == 2)
-                                   {
-                                     registry.reset();
-                                   }
-                                 });
+                                      if (callbackCount == 2)
+                                      {
+                                        registryPtr.reset();
+                                      }
+                                    });
 
-  registry->publish({.routeAnchor = "hw:0,0", .volume = 0.5F, .volumeMode = AlsaVolumeControlMode::HardwareMixer});
+  registryPtr->publish({.routeAnchor = "hw:0,0", .volume = 0.5F, .volumeMode = AlsaVolumeControlMode::HardwareMixer});
 
   CHECK(callbackCount == 2);
-  CHECK_FALSE(registry);
+  CHECK_FALSE(registryPtr);
   sub.reset();
 }
 
 TEST_CASE("AlsaGraphRegistry - volume callback may publish reentrantly", "[audio][regression][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
-  auto callbackCount = std::int32_t{0};
-  auto nestedPublish = false;
-  auto observedVolume = 1.0F;
+  std::int32_t callbackCount = 0;
+  bool nestedPublish = false;
+  float observedVolume = 1.0F;
   auto sub = registry.subscribe(
     "hw:0,0",
     [&](Graph const& graph)
@@ -275,9 +275,9 @@ TEST_CASE("AlsaGraphRegistry - cancellation removes a callback already copied fo
           "[audio][regression][alsa][subscription]")
 {
   auto registry = AlsaGraphRegistry{};
-  auto cancelSecond = false;
-  auto firstCalls = std::int32_t{0};
-  auto secondCalls = std::int32_t{0};
+  bool cancelSecond = false;
+  std::int32_t firstCalls = 0;
+  std::int32_t secondCalls = 0;
   auto secondSub = ao::audio::Subscription{};
   auto firstSub = registry.subscribe("hw:0,0",
                                      [&](Graph const&)

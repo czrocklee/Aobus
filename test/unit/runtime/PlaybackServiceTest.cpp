@@ -231,7 +231,7 @@ namespace ao::rt::test
     CHECK(failures.front().sourceListId == ListId{7});
     CHECK(failures.front().title == "Broken Track");
     CHECK(failures.front().recoverable);
-    CHECK(failures.front().error.message.find("Unsupported audio file extension") != std::string::npos);
+    CHECK(failures.front().error.message.contains("Unsupported audio file extension"));
     CHECK(fixture.notificationService.feed().entries.empty());
   }
 
@@ -251,8 +251,8 @@ namespace ao::rt::test
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
     CHECK_FALSE(feed.entries.front().sticky);
-    CHECK(feed.entries.front().message.find("Broken Track") != std::string::npos);
-    CHECK(feed.entries.front().message.find("Unsupported audio file extension") != std::string::npos);
+    CHECK(feed.entries.front().message.contains("Broken Track"));
+    CHECK(feed.entries.front().message.contains("Unsupported audio file extension"));
 
     std::int32_t updateCount = 0;
     auto updateSub = fixture.notificationService.onUpdated([&](NotificationId) { ++updateCount; });
@@ -315,7 +315,7 @@ namespace ao::rt::test
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().sticky);
-    CHECK(feed.entries.front().message.find("Could not start playback") != std::string::npos);
+    CHECK(feed.entries.front().message.contains("Could not start playback"));
   }
 
   TEST_CASE("PlaybackService playback - backend error publishes sticky device failure",
@@ -350,7 +350,7 @@ namespace ao::rt::test
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
     CHECK(feed.entries.front().sticky);
-    CHECK(feed.entries.front().message.find("Playback device failed") != std::string::npos);
-    CHECK(feed.entries.front().message.find("device lost") != std::string::npos);
+    CHECK(feed.entries.front().message.contains("Playback device failed"));
+    CHECK(feed.entries.front().message.contains("device lost"));
   }
 } // namespace ao::rt::test

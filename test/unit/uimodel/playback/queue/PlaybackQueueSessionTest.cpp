@@ -44,7 +44,7 @@ namespace ao::uimodel::test
 
       for (auto const& entry : notifications.feed().entries)
       {
-        if (entry.severity == severity && entry.message.find(messageFragment) != std::string::npos)
+        if (entry.severity == severity && entry.message.contains(messageFragment))
         {
           ++count;
         }

@@ -68,7 +68,7 @@ namespace ao::council::test
 
     auto resolved = resolvePhase(*registry, intent);
     REQUIRE_FALSE(resolved);
-    CHECK(resolved.error().message.find("no definition for task-kind 'missing-council'") != std::string::npos);
+    CHECK(resolved.error().message.contains("no definition for task-kind 'missing-council'"));
   }
 
   TEST_CASE("Registry - rejects invalid intent overrides", "[council][unit][yaml]")
@@ -84,7 +84,7 @@ namespace ao::council::test
       intent.overrides.optQuorum = 2;
       auto resolved = resolvePhase(*registry, intent);
       REQUIRE_FALSE(resolved);
-      CHECK(resolved.error().message.find("unknown agent") != std::string::npos);
+      CHECK(resolved.error().message.contains("unknown agent"));
     }
 
     SECTION("duplicate agent")
@@ -93,7 +93,7 @@ namespace ao::council::test
       intent.overrides.optQuorum = 2;
       auto resolved = resolvePhase(*registry, intent);
       REQUIRE_FALSE(resolved);
-      CHECK(resolved.error().message.find("repeats agent") != std::string::npos);
+      CHECK(resolved.error().message.contains("repeats agent"));
     }
 
     SECTION("duplicate vendor")
@@ -102,7 +102,7 @@ namespace ao::council::test
       intent.overrides.optQuorum = 2;
       auto resolved = resolvePhase(*registry, intent);
       REQUIRE_FALSE(resolved);
-      CHECK(resolved.error().message.find("repeats vendor") != std::string::npos);
+      CHECK(resolved.error().message.contains("repeats vendor"));
     }
 
     SECTION("quorum outside roster")
@@ -111,7 +111,7 @@ namespace ao::council::test
       intent.overrides.optQuorum = 3;
       auto resolved = resolvePhase(*registry, intent);
       REQUIRE_FALSE(resolved);
-      CHECK(resolved.error().message.find("quorum must be between") != std::string::npos);
+      CHECK(resolved.error().message.contains("quorum must be between"));
     }
   }
 
@@ -128,7 +128,7 @@ councils: {}
 
     auto registry = loadRegistry(path);
     REQUIRE_FALSE(registry);
-    CHECK(registry.error().message.find("invalid registry schema") != std::string::npos);
+    CHECK(registry.error().message.contains("invalid registry schema"));
   }
 
   TEST_CASE("Registry - rejects path-reserved agent ids", "[council][unit][yaml]")
@@ -153,7 +153,7 @@ councils:
 
     auto registry = loadRegistry(path);
     REQUIRE_FALSE(registry);
-    CHECK(registry.error().message.find("reserved") != std::string::npos);
+    CHECK(registry.error().message.contains("reserved"));
   }
 
   TEST_CASE("Registry - roster members must be independent", "[council][unit][yaml]")
@@ -186,7 +186,7 @@ councils:
 
     auto registry = loadRegistry(path);
     REQUIRE_FALSE(registry);
-    CHECK(registry.error().message.find("repeats vendor") != std::string::npos);
+    CHECK(registry.error().message.contains("repeats vendor"));
   }
 
   TEST_CASE("Registry - prompt placeholders survive agent materialization", "[council][unit][yaml]")
@@ -242,6 +242,6 @@ councils:
 
     auto registry = loadRegistry(path);
     REQUIRE_FALSE(registry);
-    CHECK(registry.error().message.find("effort is empty") != std::string::npos);
+    CHECK(registry.error().message.contains("effort is empty"));
   }
 } // namespace ao::council::test

@@ -159,7 +159,7 @@ namespace ao::query::test
       binaryPtr->optOperation = BinaryExpression::Operation{
         .op = c.op, .operand = VariableExpression{.type = VariableType::Metadata, .name = "b"}};
 
-      CHECK(serialize(Expression{std::move(binaryPtr)}).find(c.expected) != std::string::npos);
+      CHECK(serialize(Expression{std::move(binaryPtr)}).contains(c.expected));
     }
   }
 

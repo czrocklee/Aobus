@@ -120,6 +120,7 @@ namespace clang::tidy::readability
       return false;
     }
 
+    // RecursiveASTVisitor customization points intentionally shadow its CRTP defaults.
     struct ExternCUsageVisitor : public RecursiveASTVisitor<ExternCUsageVisitor>
     {
       ValueDecl const* targetDecl;
@@ -130,7 +131,8 @@ namespace clang::tidy::readability
       {
       }
 
-      bool VisitCallExpr(CallExpr* call) // NOLINT(readability-identifier-naming)
+      // NOLINTNEXTLINE(bugprone-derived-method-shadowing-base-method,readability-identifier-naming)
+      bool VisitCallExpr(CallExpr* call)
       {
         if (auto const* calleeDecl = call->getDirectCallee(); calleeDecl != nullptr)
         {

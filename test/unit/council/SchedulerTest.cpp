@@ -30,7 +30,7 @@ namespace ao::council::test
     auto result = Scheduler::validate({first, second});
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().message.find("duplicate phase id") != std::string::npos);
+    CHECK(result.error().message.contains("duplicate phase id"));
   }
 
   TEST_CASE("Scheduler - rejects unknown dependencies", "[council][unit][scheduler]")
@@ -41,7 +41,7 @@ namespace ao::council::test
     auto result = Scheduler::validate({item});
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().message.find("unknown phase") != std::string::npos);
+    CHECK(result.error().message.contains("unknown phase"));
   }
 
   TEST_CASE("Scheduler - rejects dependency cycles", "[council][unit][scheduler]")
@@ -54,6 +54,6 @@ namespace ao::council::test
     auto result = Scheduler::validate({first, second});
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().message.find("dependency cycle") != std::string::npos);
+    CHECK(result.error().message.contains("dependency cycle"));
   }
 } // namespace ao::council::test
