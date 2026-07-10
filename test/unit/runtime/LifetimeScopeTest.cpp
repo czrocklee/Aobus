@@ -33,7 +33,7 @@ namespace ao::rt::test
       Task<void> run()
       {
         co_await runtime.resumeOnWorker();
-        (*completed)++;
+        completed.increment();
       }
 
       Runtime& runtime;

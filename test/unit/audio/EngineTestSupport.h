@@ -69,7 +69,7 @@ namespace ao::audio::test
         .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
       auto data = std::vector(100, std::byte{0});
 
-      decPtr->setReadScript({{data, false}, {{}, true}});
+      decPtr->setReadScript({{.data = data, .endOfStream = false}, {.data = {}, .endOfStream = true}});
       return decPtr;
     };
   }
@@ -101,7 +101,7 @@ namespace ao::audio::test
         if (track.path == path)
         {
           auto decPtr = std::make_unique<ScriptedDecoderSession>(track.info);
-          decPtr->setReadScript({{track.data, false}, {{}, true}});
+          decPtr->setReadScript({{.data = track.data, .endOfStream = false}, {.data = {}, .endOfStream = true}});
           return decPtr;
         }
       }
@@ -141,7 +141,7 @@ namespace ao::audio::test
           countersPtr->created.fetch_add(1, std::memory_order_relaxed);
           auto destroyCounterPtr = std::shared_ptr<std::atomic<std::size_t>>{countersPtr, &countersPtr->destroyed};
           auto decPtr = std::make_unique<ScriptedDecoderSession>(track.info);
-          decPtr->setReadScript({{track.data, false}, {{}, true}});
+          decPtr->setReadScript({{.data = track.data, .endOfStream = false}, {.data = {}, .endOfStream = true}});
           decPtr->setDestroyCounter(std::move(destroyCounterPtr));
           return decPtr;
         }
@@ -177,7 +177,7 @@ namespace ao::audio::test
         if (entry.track.path == path)
         {
           auto decPtr = std::make_unique<ScriptedDecoderSession>(entry.track.info);
-          decPtr->setReadScript({{entry.track.data, false}, {{}, true}});
+          decPtr->setReadScript({{.data = entry.track.data, .endOfStream = false}, {.data = {}, .endOfStream = true}});
 
           if (entry.optSeekScript)
           {

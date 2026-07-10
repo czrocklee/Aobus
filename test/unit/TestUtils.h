@@ -9,10 +9,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <ios>
 #include <iterator>
+#include <random>
 #include <span>
 #include <string>
 #include <string_view>
@@ -45,66 +48,124 @@ namespace ao::test
   public:
     TempDir()
     {
-      std::string tmpl = (std::filesystem::temp_directory_path() / "ao_test_XXXXXX").string();
+      auto const root = std::filesystem::temp_directory_path();
+      auto device = std::random_device{};
+      auto distribution = std::uniform_int_distribution<std::uint64_t>{};
 
-      char const* const result = ::mkdtemp(tmpl.data());
-
-      if (result == nullptr)
+      for (std::uint32_t attempt = 0; attempt < 100; ++attempt)
       {
-        throwException<Exception>("mkdtemp failed");
+        auto candidate = root / std::format("ao_test_{:016x}", distribution(device));
+
+        if (auto ec = std::error_code{}; std::filesystem::create_directory(candidate, ec))
+        {
+          _path = std::move(candidate);
+          return;
+        }
       }
 
-      _path = result;
+      throwException<Exception>("failed to create temporary test directory");
     }
 
-    ~TempDir()
-    {
-      auto ec = std::error_code{};
-      std::filesystem::remove_all(_path, ec);
-    }
+    ~TempDir() noexcept { cleanup(); }
 
     TempDir(TempDir const&) = delete;
     TempDir& operator=(TempDir const&) = delete;
 
-    TempDir(TempDir&&) = default;
-    TempDir& operator=(TempDir&&) = default;
+    TempDir(TempDir&& other) noexcept
+      : _path{std::exchange(other._path, {})}
+    {
+    }
+
+    TempDir& operator=(TempDir&& other) noexcept
+    {
+      _path.swap(other._path);
+      return *this;
+    }
 
     std::filesystem::path const& path() const { return _path; }
 
   private:
+    void cleanup() noexcept
+    {
+      if (_path.empty())
+      {
+        return;
+      }
+
+      auto ec = std::error_code{};
+
+      try
+      {
+#ifdef _WIN32
+        // Extended paths let cleanup traverse test fixtures that intentionally
+        // exercise paths beyond MAX_PATH.
+        auto const native = std::filesystem::absolute(_path).wstring();
+        auto const cleanupPath = native.starts_with(L"\\\\") ? std::filesystem::path{L"\\\\?\\UNC\\" + native.substr(2)}
+                                                             : std::filesystem::path{L"\\\\?\\" + native};
+        std::filesystem::remove_all(cleanupPath, ec);
+#else
+        std::filesystem::remove_all(_path, ec);
+#endif
+      }
+      catch (...)
+      {
+        ec = std::make_error_code(std::errc::io_error);
+      }
+
+      if (ec)
+      {
+        try
+        {
+          auto const pathString = _path.string();
+          // NOLINTNEXTLINE(modernize-use-std-print): C I/O cannot throw from this noexcept cleanup path.
+          std::fprintf(stderr,
+                       "Aobus test temporary directory cleanup failed for %s (error %d)\n",
+                       pathString.c_str(),
+                       ec.value());
+        }
+        catch (...)
+        {
+          // NOLINTNEXTLINE(modernize-use-std-print): C I/O is the allocation-free fallback in a catch handler.
+          std::fprintf(stderr, "Aobus test temporary directory cleanup failed (error %d)\n", ec.value());
+        }
+      }
+    }
+
     std::filesystem::path _path;
   };
 
+  // TempDir owns cleanup even though TempFile's destructor can remain defaulted.
+  // NOLINTNEXTLINE(aobus-modernize-nodiscard-usage)
   struct [[nodiscard]] TempFile final
   {
+  public:
+    // Test call sites intentionally expose the fixture path as simple data.
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
     std::filesystem::path path;
 
     explicit TempFile(std::string_view ext)
     {
-      path = std::filesystem::temp_directory_path() / ("ao_test" + std::string{ext});
-
+      path = _directory.path() / ("file" + std::string{ext});
       auto ofs = std::ofstream{path, std::ios::binary};
       ofs << "dummy content";
     }
 
     explicit TempFile(std::span<std::uint8_t const> data, std::string_view ext = ".bin")
     {
-      path = std::filesystem::temp_directory_path() / ("ao_test" + std::string{ext});
-
+      path = _directory.path() / ("file" + std::string{ext});
       auto ofs = std::ofstream{path, std::ios::binary};
       ofs.write(reinterpret_cast<char const*>(data.data()), static_cast<std::streamsize>(data.size()));
     }
 
-    ~TempFile() noexcept
-    {
-      auto ec = std::error_code{};
-      std::filesystem::remove(path, ec);
-    }
+    ~TempFile() noexcept = default;
 
     TempFile(TempFile const&) = delete;
     TempFile& operator=(TempFile const&) = delete;
     TempFile(TempFile&&) = delete;
     TempFile& operator=(TempFile&&) = delete;
+
+  private:
+    TempDir _directory;
   };
 
   inline std::string readFile(std::filesystem::path const& path)

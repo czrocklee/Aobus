@@ -49,7 +49,8 @@ namespace ao::rt
   AppRuntime::AppRuntime(AppRuntimeDependencies dependencies)
     : CoreRuntime{std::move(dependencies.executorPtr),
                   std::move(dependencies.musicRoot),
-                  std::move(dependencies.databasePath)}
+                  std::move(dependencies.databasePath),
+                  dependencies.musicLibraryMapSize}
     , _implPtr{std::make_unique<Impl>(*this, std::move(dependencies.workspaceConfigStorePtr))}
   {
   }
@@ -74,11 +75,6 @@ namespace ao::rt
   ConfigStore& AppRuntime::configStore() noexcept
   {
     return *_implPtr->workspaceConfigStorePtr;
-  }
-
-  async::Runtime& AppRuntime::async() noexcept
-  {
-    return CoreRuntime::async();
   }
 
   void AppRuntime::reloadAllTracks()

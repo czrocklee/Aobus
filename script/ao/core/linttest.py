@@ -14,7 +14,7 @@ from pathlib import Path
 from .paths import PROJECT_ROOT
 
 FIXTURE_DIR = PROJECT_ROOT / "test" / "integration" / "lint" / "fixture"
-DIAGNOSTIC_RE = re.compile(r"^([^:]+):(\d+):(\d+): warning: (.*) \[(.*)\]$")
+DIAGNOSTIC_RE = re.compile(r"^(.+):(\d+):(\d+): warning: (.*) \[(.*)\]$")
 POSITIVE_RE = re.compile(r"//\s*POSITIVE(?::\s*([a-zA-Z0-9_-]+))?")
 NEGATIVE_RE = re.compile(r"//\s*NEGATIVE(?::\s*([a-zA-Z0-9_-]+))?")
 FIX_TO_RE = re.compile(r"//\s*(?:POSITIVE:\s*)?FIX-TO:\s*(.*)")
@@ -389,7 +389,7 @@ def run(build_dir: Path, *, log: Path | None = None, jobs: int | None = None) ->
     if not fixtures:
         reporter.write(f"ERROR: no lint fixtures found in {FIXTURE_DIR}")
         return 1
-    run_dir = Path(tempfile.mkdtemp(prefix="aobus-lint-integration-", dir="/tmp"))
+    run_dir = Path(tempfile.mkdtemp(prefix="aobus-lint-integration-"))
     failed = True
     try:
         reporter.write("=== Diagnostic Verification ===")

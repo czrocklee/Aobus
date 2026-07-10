@@ -3,6 +3,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -15,6 +16,10 @@
 #include <runtime/library/ScanPlanBuilder.h>
 
 #include <catch2/catch_test_macros.hpp>
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstddef>
@@ -36,6 +41,15 @@ namespace ao::rt::test
       std::uint64_t payloadLength = 0;
       utility::Hash128 signature = {};
     };
+
+    bool runningAsRoot() noexcept
+    {
+#ifdef _WIN32
+      return false;
+#else
+      return ::geteuid() == 0;
+#endif
+    }
 
     void createFile(std::filesystem::path const& path)
     {
@@ -147,7 +161,7 @@ namespace ao::rt::test
     createFile(musicRoot / "changed.m4a");
     createFile(musicRoot / "unsupported.txt");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
 
     // Setup manifest for existing files
     {
@@ -211,6 +225,9 @@ namespace ao::rt::test
 
   TEST_CASE("ScanPlanBuilder - reports IO errors while scanning", "[runtime][unit][library-scan][error]")
   {
+#ifdef _WIN32
+    SKIP("std::filesystem permissions do not make directories unreadable on Windows");
+#endif
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
     auto const musicRoot = std::filesystem::path{root} / "music";
@@ -224,12 +241,12 @@ namespace ao::rt::test
     // permissions() is a no-op when running as root, so skip in that case.
     std::filesystem::permissions(musicRoot / "restricted_dir", std::filesystem::perms::none);
 
-    if (::geteuid() == 0)
+    if (runningAsRoot())
     {
       SKIP("permissions test is meaningless when running as root");
     }
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
     auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
 
@@ -275,7 +292,7 @@ namespace ao::rt::test
     auto const musicRoot = std::filesystem::path{temp.path()} / "empty_music";
     std::filesystem::create_directories(musicRoot);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
 
@@ -290,7 +307,7 @@ namespace ao::rt::test
     // the scan fails - distinguishing "cannot scan" from "scanned an empty root".
     auto const musicRoot = std::filesystem::path{temp.path()} / "does_not_exist";
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     auto scanner = ScanPlanBuilder{ml};
     auto const result = scanner.buildPlan();
 
@@ -310,7 +327,7 @@ namespace ao::rt::test
     std::filesystem::copy_file(sourceFile, movedFile);
     auto const identity = requireAudioIdentity(movedFile);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
     putManifestEntry(ml, "old-name.flac", TrackId{42}, identity);
 
     auto scanner = ScanPlanBuilder{ml};
@@ -342,7 +359,7 @@ namespace ao::rt::test
     auto const identity = AudioIdentity{.payloadLength = static_cast<std::uint64_t>(audioPayload.size()),
                                         .signature = utility::xxh3Hash128(std::as_bytes(std::span{audioPayload}))};
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
     putManifestEntry(ml, "old-title.flac", TrackId{42}, identity);
 
     auto scanner = ScanPlanBuilder{ml};
@@ -373,7 +390,7 @@ namespace ao::rt::test
     auto wrongSignature = actualIdentity.signature;
     wrongSignature.bytes[0] = static_cast<std::byte>(std::to_integer<std::uint8_t>(wrongSignature.bytes[0]) ^ 0xFFU);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
     putManifestEntry(ml,
                      "old-name.flac",
                      TrackId{42},
@@ -428,7 +445,7 @@ namespace ao::rt::test
     std::filesystem::copy_file(sourceFile, secondMovedFile);
     auto const identity = requireAudioIdentity(firstMovedFile);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
     putManifestEntry(ml, "old/copy-a.flac", TrackId{100}, identity);
     putManifestEntry(ml, "old/copy-b.flac", TrackId{200}, identity);
 
@@ -450,7 +467,7 @@ namespace ao::rt::test
 
     createFile(musicRoot / "nested" / "dir" / "song.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{root} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
     auto scanner = ScanPlanBuilder{ml};
     auto const plan = scanner.buildPlan().value();
 
@@ -460,8 +477,8 @@ namespace ao::rt::test
     for (auto const& item : plan.items)
     {
       CHECK(item.uri == "nested/dir/song.flac");
-      CHECK(item.uri.find('\\') == std::string::npos);
-      CHECK(item.uri.find("./") == std::string::npos);
+      CHECK_FALSE(item.uri.contains('\\'));
+      CHECK_FALSE(item.uri.contains("./"));
     }
   }
 } // namespace ao::rt::test

@@ -78,8 +78,8 @@ namespace ao::audio
       return std::get<T>(*result);
     }
 
-    virtual BackendId backendId() const noexcept = 0;
-    virtual ProfileId profileId() const noexcept = 0;
+    virtual BackendId backendId() const = 0;
+    virtual ProfileId profileId() const = 0;
 
   protected:
     Backend() = default;

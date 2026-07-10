@@ -7,7 +7,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <memory>
+#include <semaphore>
+#include <thread>
 #include <vector>
 
 namespace ao::audio::backend::test
@@ -58,5 +63,82 @@ namespace ao::audio::backend::test
     // erase from the (now-empty) internal lists. This must not crash.
     deviceSub.reset();
     graphSub.reset();
+  }
+
+  TEST_CASE("PipeWireMonitor - graph callback may destroy the monitor off the native loop",
+            "[audio][regression][pipewire][monitor]")
+  {
+    using namespace std::chrono_literals;
+
+    auto monitorPtr = std::make_unique<PipeWireMonitor>();
+    auto callbackStarted = std::binary_semaphore{0};
+    auto allowDestroy = std::binary_semaphore{0};
+    auto monitorDestroyed = std::binary_semaphore{0};
+    auto callbackThreadId = std::thread::id{};
+    auto const subscribeThreadId = std::this_thread::get_id();
+
+    auto graphSub = monitorPtr->subscribeGraph("42",
+                                               [&](flow::Graph const&)
+                                               {
+                                                 callbackThreadId = std::this_thread::get_id();
+                                                 callbackStarted.release();
+                                                 allowDestroy.acquire();
+                                                 monitorPtr.reset();
+                                                 monitorDestroyed.release();
+                                               });
+
+    REQUIRE(callbackStarted.try_acquire_for(5s));
+    allowDestroy.release();
+    REQUIRE(monitorDestroyed.try_acquire_for(5s));
+    CHECK_FALSE(monitorPtr);
+    CHECK(callbackThreadId != subscribeThreadId);
+
+    // The monitor is already gone; the handle must use weak state and remain safe.
+    graphSub.reset();
+  }
+
+  TEST_CASE("PipeWireMonitor - cancellation suppresses a callback copied by refresh",
+            "[audio][regression][pipewire][monitor]")
+  {
+    using namespace std::chrono_literals;
+
+    auto monitor = PipeWireMonitor{};
+    auto firstDelivered = std::binary_semaphore{0};
+    auto secondDelivered = std::binary_semaphore{0};
+    auto cancelSecond = std::atomic{false};
+    auto firstCallbackCount = std::atomic<std::int32_t>{0};
+    auto secondCallbackCount = std::atomic<std::int32_t>{0};
+    auto secondSub = Subscription{};
+
+    auto firstSub = monitor.subscribeGraph("42",
+                                           [&](flow::Graph const&)
+                                           {
+                                             if (firstCallbackCount.fetch_add(1, std::memory_order_relaxed) == 0)
+                                             {
+                                               firstDelivered.release();
+                                             }
+
+                                             if (cancelSecond.load(std::memory_order_acquire))
+                                             {
+                                               secondSub.reset();
+                                             }
+                                           });
+    REQUIRE(firstDelivered.try_acquire_for(5s));
+
+    secondSub = monitor.subscribeGraph("43",
+                                       [&](flow::Graph const&)
+                                       {
+                                         if (secondCallbackCount.fetch_add(1, std::memory_order_relaxed) == 0)
+                                         {
+                                           secondDelivered.release();
+                                         }
+                                       });
+    REQUIRE(secondDelivered.try_acquire_for(5s));
+
+    auto const secondCallbacksBeforeCancellation = secondCallbackCount.load(std::memory_order_relaxed);
+    cancelSecond.store(true, std::memory_order_release);
+    monitor.refresh();
+
+    CHECK(secondCallbackCount.load(std::memory_order_relaxed) == secondCallbacksBeforeCancellation);
   }
 } // namespace ao::audio::backend::test

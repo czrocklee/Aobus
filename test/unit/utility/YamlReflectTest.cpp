@@ -6,6 +6,7 @@
 #include <ao/yaml/Reflect.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <c4/yml/tree.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
@@ -18,39 +19,44 @@
 
 namespace ao::yaml::test
 {
+  // NOTE: fixture types deliberately have external linkage (no anonymous
+  // namespace): boost.pfr reflection rejects internal-linkage types under
+  // MSVC (error C7631).
+  // NOLINTBEGIN(misc-use-internal-linkage) — external linkage is required by boost.pfr on MSVC.
+  enum class FixtureState : std::uint8_t
+  {
+    Ready,
+    Done,
+  };
+
+  struct NestedDto final
+  {
+    std::string name;
+    std::int32_t count = 0;
+  };
+
+  struct ReflectFixtureDto final
+  {
+    std::string text;
+    std::string emptyText;
+    std::string_view view;
+    std::int32_t number = 0;
+    bool ok = false;
+    std::optional<std::string> optOmitted;
+    std::optional<std::string> optPresent;
+    std::vector<std::string> emptyNames;
+    std::vector<NestedDto> nested;
+    std::map<std::string, std::string> labels;
+    TrackId trackId{};
+    ListId listId{};
+    std::filesystem::path path;
+    FixtureState state = FixtureState::Ready;
+    std::uint32_t newCount = 0;
+  };
+  // NOLINTEND(misc-use-internal-linkage)
+
   namespace
   {
-    enum class FixtureState : std::uint8_t
-    {
-      Ready,
-      Done,
-    };
-
-    struct NestedDto final
-    {
-      std::string name;
-      std::int32_t count = 0;
-    };
-
-    struct ReflectFixtureDto final
-    {
-      std::string text;
-      std::string emptyText;
-      std::string_view view;
-      std::int32_t number = 0;
-      bool ok = false;
-      std::optional<std::string> optOmitted;
-      std::optional<std::string> optPresent;
-      std::vector<std::string> emptyNames;
-      std::vector<NestedDto> nested;
-      std::map<std::string, std::string> labels;
-      TrackId trackId{};
-      ListId listId{};
-      std::filesystem::path path;
-      FixtureState state = FixtureState::Ready;
-      std::uint32_t newCount = 0;
-    };
-
     ryml::Tree parseYaml(std::string_view text)
     {
       auto context = CallbackContext{"<reflect-test>"};
@@ -140,12 +146,12 @@ namespace ao::yaml::test
 
     auto const jsonText = toJsonString(dto);
 
-    CHECK(jsonText.find("\"view\": \"123\"") != std::string::npos);
-    CHECK(jsonText.find("\"number\": 123") != std::string::npos);
-    CHECK(jsonText.find("\"emptyText\": \"\"") != std::string::npos);
-    CHECK(jsonText.find("\"emptyNames\": []") != std::string::npos);
-    CHECK(jsonText.find("\"labels\": {") != std::string::npos);
-    CHECK(jsonText.find("\"omitted\"") == std::string::npos);
-    CHECK(jsonText.find("\"new\": 5") != std::string::npos);
+    CHECK(jsonText.contains("\"view\": \"123\""));
+    CHECK(jsonText.contains("\"number\": 123"));
+    CHECK(jsonText.contains("\"emptyText\": \"\""));
+    CHECK(jsonText.contains("\"emptyNames\": []"));
+    CHECK(jsonText.contains("\"labels\": {"));
+    CHECK_FALSE(jsonText.contains("\"omitted\""));
+    CHECK(jsonText.contains("\"new\": 5"));
   }
 } // namespace ao::yaml::test

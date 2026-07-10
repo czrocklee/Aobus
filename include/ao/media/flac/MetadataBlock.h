@@ -69,16 +69,15 @@ namespace ao::media::flac
   public:
     virtual ~MetadataBlock() = default;
 
+    virtual MetadataBlockType type() const = 0;
+    virtual std::uint32_t size() const = 0;
+
   protected:
     MetadataBlock() = default;
     MetadataBlock(MetadataBlock const&) = default;
     MetadataBlock& operator=(MetadataBlock const&) = default;
     MetadataBlock(MetadataBlock&&) = default;
     MetadataBlock& operator=(MetadataBlock&&) = default;
-
-    virtual MetadataBlockType type() const = 0;
-
-    virtual std::uint32_t size() const = 0;
   };
 
   class MetadataBlockView : public MetadataBlock

@@ -1,2 +1,6 @@
-add_subdirectory(lint)
-add_subdirectory(council)
+if(AOBUS_BUILD_LINT_PLUGIN)
+  add_subdirectory(lint)
+endif()
+if(AOBUS_BUILD_TOOLS)
+  add_subdirectory(council)
+endif()

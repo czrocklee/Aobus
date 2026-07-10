@@ -4,7 +4,6 @@ add_library(aobus-tui-lib STATIC
     CommandPalettePanel.cpp
     CommandCompletionProvider.cpp
     CommandCompletionState.cpp
-    CoverArt.cpp
     EventController.cpp
     Executor.cpp
     LibraryController.cpp
@@ -33,11 +32,18 @@ add_library(aobus-tui-lib STATIC
     ShellInteractionModel.cpp
     SoulButton.cpp
     TextCell.cpp
+    CoverArt.cpp
 )
+
+if(WIN32)
+    target_sources(aobus-tui-lib PRIVATE SignalExitWatcherWindows.cpp)
+else()
+    target_sources(aobus-tui-lib PRIVATE SignalExitWatcherPosix.cpp)
+endif()
 
 target_include_directories(aobus-tui-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(aobus-tui-lib PUBLIC ao_app_runtime ao_app_uimodel ftxui::component)
-target_link_libraries(aobus-tui-lib PRIVATE PkgGDKPIXBUF)
+target_link_libraries(aobus-tui-lib PRIVATE PkgStb)
 
 add_executable(aobus-tui
     AudioBackendBootstrap.cpp
@@ -52,7 +58,6 @@ target_link_libraries(aobus-tui PRIVATE
     ao
     ao_audio
     CLI11::CLI11
-    PkgGDKPIXBUF
     ftxui::component
     ftxui::dom
     ftxui::screen

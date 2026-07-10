@@ -64,8 +64,8 @@ namespace ao::audio::flow
    */
   struct Graph final
   {
-    std::vector<Node> nodes;
-    std::vector<Connection> connections;
+    std::vector<Node> nodes{};
+    std::vector<Connection> connections{};
 
     bool operator==(Graph const&) const = default;
   };

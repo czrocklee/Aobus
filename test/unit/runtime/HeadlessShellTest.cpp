@@ -27,10 +27,10 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto const workspaceConfigPath = std::filesystem::path{tempDir.path()} / "workspace.yaml";
-    auto runtime = makeRuntime(tempDir);
 
     SECTION("Initial layout is empty")
     {
+      auto runtime = makeRuntime(tempDir);
       auto const layout = runtime.workspace().layoutState();
       CHECK(layout.openViews.empty());
       CHECK(layout.activeViewId == kInvalidViewId);
@@ -38,6 +38,7 @@ namespace ao::rt::test
 
     SECTION("Navigate to list ID creates a view and marks it active")
     {
+      auto runtime = makeRuntime(tempDir);
       auto const listId = ListId{42};
       runtime.workspace().navigateTo(listId);
 
@@ -52,6 +53,7 @@ namespace ao::rt::test
 
     SECTION("Navigate to All Tracks does not reuse a filtered All Tracks view")
     {
+      auto runtime = makeRuntime(tempDir);
       auto const filteredView = runtime.views().createView(
         TrackListViewConfig{.listId = kAllTracksListId, .filterExpression = "$artist ~ \"A\""});
 
@@ -70,6 +72,7 @@ namespace ao::rt::test
 
     SECTION("Closing a view updates the layout")
     {
+      auto runtime = makeRuntime(tempDir);
       runtime.workspace().navigateTo(ListId{1});
       runtime.workspace().navigateTo(ListId{2});
 
@@ -88,15 +91,17 @@ namespace ao::rt::test
 
     SECTION("Session persistence works across instances")
     {
-      // Setup state in first runtime
-      runtime.workspace().navigateTo(ListId{10});
-      runtime.workspace().navigateTo(ListId{20});
-      runtime.workspace().saveSession(runtime.configStore());
+      {
+        auto runtime = makeRuntime(tempDir);
+        runtime.workspace().navigateTo(ListId{10});
+        runtime.workspace().navigateTo(ListId{20});
+        runtime.workspace().saveSession(runtime.configStore());
 
-      auto loaded = WorkspaceSessionState{};
-      auto verifyStore = ConfigStore{workspaceConfigPath};
-      REQUIRE(verifyStore.load("workspace", loaded));
-      CHECK(loaded.openViews.size() == 2);
+        auto loaded = WorkspaceSessionState{};
+        auto verifyStore = ConfigStore{workspaceConfigPath};
+        REQUIRE(verifyStore.load("workspace", loaded));
+        CHECK(loaded.openViews.size() == 2);
+      }
 
       // Create new runtime with same persistence
       auto session2 = makeRuntime(tempDir);
@@ -110,24 +115,26 @@ namespace ao::rt::test
 
     SECTION("Session persistence preserves groupBy across instances")
     {
-      // Setup grouped view in first runtime
-      runtime.workspace().navigateTo(ListId{10});
-      auto const viewId = runtime.workspace().layoutState().activeViewId;
-      auto const* artistPreset = builtinTrackPresentationPreset("artists");
-      REQUIRE(artistPreset != nullptr);
-      runtime.views().setPresentation(viewId, artistPreset->spec);
+      {
+        auto runtime = makeRuntime(tempDir);
+        runtime.workspace().navigateTo(ListId{10});
+        auto const viewId = runtime.workspace().layoutState().activeViewId;
+        auto const* artistPreset = builtinTrackPresentationPreset("artists");
+        REQUIRE(artistPreset != nullptr);
+        runtime.views().setPresentation(viewId, artistPreset->spec);
 
-      auto const savedState = runtime.views().trackListState(viewId);
-      CHECK(savedState.groupBy == TrackGroupKey::AlbumArtist);
-      CHECK_FALSE(savedState.sortBy.empty());
+        auto const savedState = runtime.views().trackListState(viewId);
+        CHECK(savedState.groupBy == TrackGroupKey::AlbumArtist);
+        CHECK_FALSE(savedState.sortBy.empty());
 
-      runtime.workspace().saveSession(runtime.configStore());
+        runtime.workspace().saveSession(runtime.configStore());
 
-      auto loaded = WorkspaceSessionState{};
-      auto verifyStore = ConfigStore{workspaceConfigPath};
-      REQUIRE(verifyStore.load("workspace", loaded));
-      REQUIRE(loaded.openViews.size() == 1);
-      CHECK(loaded.openViews[0].groupBy == TrackGroupKey::AlbumArtist);
+        auto loaded = WorkspaceSessionState{};
+        auto verifyStore = ConfigStore{workspaceConfigPath};
+        REQUIRE(verifyStore.load("workspace", loaded));
+        REQUIRE(loaded.openViews.size() == 1);
+        CHECK(loaded.openViews[0].groupBy == TrackGroupKey::AlbumArtist);
+      }
 
       // Restore in new runtime
       auto session2 = makeRuntime(tempDir);
@@ -143,9 +150,11 @@ namespace ao::rt::test
 
     SECTION("Session persistence preserves groupBy=None")
     {
-      // Ungrouped view
-      runtime.workspace().navigateTo(ListId{10});
-      runtime.workspace().saveSession(runtime.configStore());
+      {
+        auto runtime = makeRuntime(tempDir);
+        runtime.workspace().navigateTo(ListId{10});
+        runtime.workspace().saveSession(runtime.configStore());
+      }
 
       auto session2 = makeRuntime(tempDir);
 

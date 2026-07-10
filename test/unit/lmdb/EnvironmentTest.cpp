@@ -27,7 +27,8 @@ namespace ao::lmdb::test
   TEST_CASE("Environment - open returns IoError for missing directory", "[lmdb][unit][environment]")
   {
     auto temp = ao::test::TempDir{};
-    auto const result = Environment::open(temp.path() / "missing", {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto const result =
+      Environment::open((temp.path() / "missing").string(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::IoError);
@@ -36,7 +37,7 @@ namespace ao::lmdb::test
   TEST_CASE("Environment - open returns environment on success", "[lmdb][unit][environment]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = Environment::open(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto env = Environment::open(temp.path().string(), {.flags = MDB_CREATE, .maxDatabases = 20});
     CHECK(env);
 
     auto txn = WriteTransaction::begin(*env);
@@ -48,11 +49,13 @@ namespace ao::lmdb::test
     auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_test";
     std::filesystem::create_directory(path);
 
-    auto env1 = openEnvironment(path.string(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    {
+      auto env1 = openEnvironment(path.string(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
-    auto env2 = Environment{std::move(env1)};
-    // env1 is now in moved-from state
-    // env2 should own the environment
+      auto env2 = Environment{std::move(env1)};
+      // env1 is now in moved-from state
+      // env2 should own the environment
+    }
 
     std::filesystem::remove_all(path);
   }
@@ -62,10 +65,12 @@ namespace ao::lmdb::test
     auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_assign_test";
     std::filesystem::create_directory(path);
 
-    auto env1 = openEnvironment(path.string(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    {
+      auto env1 = openEnvironment(path.string(), {.flags = MDB_CREATE, .maxDatabases = 20});
 
-    auto env2 = openEnvironment(path.string(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    env2 = std::move(env1);
+      auto env2 = openEnvironment(path.string(), {.flags = MDB_CREATE, .maxDatabases = 20});
+      env2 = std::move(env1);
+    }
 
     std::filesystem::remove_all(path);
   }

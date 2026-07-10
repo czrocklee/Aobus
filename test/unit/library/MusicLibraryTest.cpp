@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/MetadataLayout.h>
@@ -43,15 +44,17 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
 
-    auto firstResult = MusicLibrary::open(temp.path(), temp.path());
-    REQUIRE(firstResult);
-    auto const& first = *firstResult;
-    auto const firstHeader = MetadataHeader{first.metadataHeader()};
+    auto const firstHeader = [&]
+    {
+      auto firstResult = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE(firstResult);
+      auto const header = MetadataHeader{firstResult->metadataHeader()};
+      CHECK(header.magic == kMetadataMagic);
+      CHECK(header.libraryVersion == kLibraryVersion);
+      return header;
+    }();
 
-    CHECK(firstHeader.magic == kMetadataMagic);
-    CHECK(firstHeader.libraryVersion == kLibraryVersion);
-
-    auto reopenedResult = MusicLibrary::open(temp.path(), temp.path());
+    auto reopenedResult = openTestMusicLibrary(temp.path(), temp.path());
     REQUIRE(reopenedResult);
     auto const& reopened = *reopenedResult;
     CHECK(reopened.metadataHeader().libraryId == firstHeader.libraryId);
@@ -68,7 +71,7 @@ namespace ao::library::test
     {
       createLibraryMetadataHeader(temp.path(), kLibraryVersion + 1);
 
-      auto const result = MusicLibrary::open(temp.path(), temp.path());
+      auto const result = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
     }
@@ -78,7 +81,7 @@ namespace ao::library::test
       static_assert(kLegacyV1LibraryVersion != kLibraryVersion);
       createLibraryMetadataHeader(temp.path(), kLegacyV1LibraryVersion);
 
-      auto const result = MusicLibrary::open(temp.path(), temp.path());
+      auto const result = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
     }
@@ -88,7 +91,7 @@ namespace ao::library::test
       static_assert(kPreviousColdLayoutLibraryVersion != kLibraryVersion);
       createLibraryMetadataHeader(temp.path(), kPreviousColdLayoutLibraryVersion);
 
-      auto const result = MusicLibrary::open(temp.path(), temp.path());
+      auto const result = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
     }
@@ -97,7 +100,7 @@ namespace ao::library::test
   TEST_CASE("MusicLibrary - accessors return valid references", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
-    auto const ml = MusicLibrary{temp.path(), temp.path()};
+    auto const ml = makeTestMusicLibrary(temp.path(), temp.path());
 
     // All store accessors should be callable without crashing
     CHECK_NOTHROW(ml.tracks());
@@ -111,7 +114,7 @@ namespace ao::library::test
   TEST_CASE("MusicLibrary - read and write transactions work", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = makeTestMusicLibrary(temp.path(), temp.path());
 
     auto wtxn = ml.writeTransaction();
     CHECK_NOTHROW(wtxn.commit());

@@ -14,7 +14,7 @@ namespace ao::tag::flac
   public:
     using TagFile::TagFile;
 
-  private:
+  protected:
     Result<library::TrackBuilder> loadTrackImpl() const override;
     Result<AudioPayload> audioPayloadImpl() const override;
   };

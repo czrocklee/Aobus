@@ -11,6 +11,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <utility>
@@ -30,12 +31,17 @@ namespace ao::rt
     TrackSourceCache trackSourceCache;
     NotificationService notificationService;
 
-    Impl(std::unique_ptr<async::Executor> execPtr, std::filesystem::path musicRoot, std::filesystem::path databasePath)
+    Impl(std::unique_ptr<async::Executor> execPtr,
+         std::filesystem::path musicRoot,
+         std::filesystem::path databasePath,
+         std::size_t musicLibraryMapSize)
       : executorPtr{std::move(execPtr)}
       , asyncRuntime{*executorPtr}
       , musicRoot{std::move(musicRoot)}
       , databasePath{std::move(databasePath)}
-      , musicLibrary{this->musicRoot, this->databasePath}
+      , musicLibrary{this->musicRoot,
+                     this->databasePath,
+                     library::MusicLibrary::Options{.mapSize = musicLibraryMapSize}}
       , libraryChanges{}
       , libraryFacade{asyncRuntime, musicLibrary, libraryChanges}
       , completionService{musicLibrary, libraryChanges}
@@ -47,8 +53,12 @@ namespace ao::rt
 
   CoreRuntime::CoreRuntime(std::unique_ptr<async::Executor> executorPtr,
                            std::filesystem::path musicRoot,
-                           std::filesystem::path databasePath)
-    : _implPtr{std::make_unique<Impl>(std::move(executorPtr), std::move(musicRoot), std::move(databasePath))}
+                           std::filesystem::path databasePath,
+                           std::size_t musicLibraryMapSize)
+    : _implPtr{std::make_unique<Impl>(std::move(executorPtr),
+                                      std::move(musicRoot),
+                                      std::move(databasePath),
+                                      musicLibraryMapSize)}
   {
   }
 

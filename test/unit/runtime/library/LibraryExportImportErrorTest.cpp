@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/ListStore.h>
@@ -24,7 +25,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryYaml - import reports invalid input errors", "[runtime][workflow][import-export][error]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "bad.yaml";
 
@@ -238,7 +239,7 @@ library:
   TEST_CASE("LibraryYaml - import handles structural corruption cases", "[runtime][workflow][import-export][error]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "corrupt.yaml";
 
@@ -256,7 +257,7 @@ library:
       auto const result = importer.importFromYaml(yamlPath);
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.find("library.tracks must be a sequence") != std::string::npos);
+      CHECK(result.error().message.contains("library.tracks must be a sequence"));
     }
 
     SECTION("List missing mandatory ID")
@@ -274,7 +275,7 @@ library:
       auto const result = importer.importFromYaml(yamlPath);
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.find("missing required 'id'") != std::string::npos);
+      CHECK(result.error().message.contains("missing required 'id'"));
     }
 
     SECTION("List entry points to non-existent track")

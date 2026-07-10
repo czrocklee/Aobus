@@ -24,9 +24,11 @@
 #include <atomic>
 #include <cassert>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <exception>
 #include <expected>
 #include <functional>
 #include <memory>
@@ -47,6 +49,18 @@ namespace ao::audio
 {
   namespace
   {
+    template<typename Action>
+    void terminateOnException(Action&& action) noexcept
+    {
+      try
+      {
+        std::forward<Action>(action)();
+      }
+      catch (...)
+      {
+        std::terminate();
+      }
+    }
   } // namespace
 
   // ── Engine::Impl: data bucket + callbacks + handlers ────────────
@@ -156,6 +170,8 @@ namespace ao::audio
       ~EngineEventQueue()
       {
         assert(!_eventThread.joinable() && "EngineEventQueue owner must stop the queue before destruction");
+        assert(!_running.load(std::memory_order_acquire) &&
+               "EngineEventQueue worker must exit before queue destruction");
         assert(_playbackEvents.empty() && "EngineEventQueue owner must clear playback events before destruction");
         assert(_rtSignalRing.read_available() == 0 &&
                "EngineEventQueue owner must drain RT signals before destruction");
@@ -168,11 +184,41 @@ namespace ao::audio
 
       void start(RtSignalProcessor processNextRtSignal, PlaybackEventProcessor processPlaybackEvent)
       {
-        _eventThread =
-          std::jthread{[this,
-                        processNextRtSignal = std::move(processNextRtSignal),
-                        processPlaybackEvent = std::move(processPlaybackEvent)](std::stop_token stopToken) mutable
-                       { run(stopToken, processNextRtSignal, processPlaybackEvent); }};
+        _running.store(true, std::memory_order_release);
+
+        try
+        {
+          _eventThread =
+            std::jthread{[this,
+                          processNextRtSignal = std::move(processNextRtSignal),
+                          processPlaybackEvent = std::move(processPlaybackEvent)](std::stop_token stopToken) mutable
+                         {
+                           run(stopToken, processNextRtSignal, processPlaybackEvent);
+                           _running.store(false, std::memory_order_release);
+                           _running.notify_all();
+                         }};
+        }
+        catch (...)
+        {
+          _running.store(false, std::memory_order_release);
+          _running.notify_all();
+          throw;
+        }
+      }
+
+      bool isCurrentThread() const noexcept { return _currentQueue == this; }
+
+      void waitForExit() const noexcept
+      {
+        if (isCurrentThread())
+        {
+          return;
+        }
+
+        while (_running.load(std::memory_order_acquire))
+        {
+          _running.wait(true, std::memory_order_acquire);
+        }
       }
 
       void enqueuePlaybackEvent(PlaybackEvent event)
@@ -230,7 +276,19 @@ namespace ao::audio
         {
           _eventThread.request_stop();
           _eventSignal.release();
-          _eventThread.join();
+
+          if (isCurrentThread())
+          {
+            // The worker's callbacks keep Engine::Impl alive until run()
+            // returns. Detaching here avoids joining the current thread; the
+            // stop checks below prevent another callback from observing an
+            // owner that reentrantly destroyed Engine/Player.
+            _eventThread.detach();
+          }
+          else
+          {
+            _eventThread.join();
+          }
         }
 
         {
@@ -249,22 +307,51 @@ namespace ao::audio
       boost::lockfree::spsc_queue<RtSignal, boost::lockfree::capacity<kRtSignalCapacity>> _rtSignalRing;
       std::counting_semaphore<> _eventSignal{0};
       std::jthread _eventThread;
+      std::atomic<bool> _running{false};
 
-      static void runNotifications(Notifications& notifications)
+      class [[nodiscard]] CurrentQueueGuard final
+      {
+      public:
+        explicit CurrentQueueGuard(EngineEventQueue& queue)
+          : _previous{std::exchange(_currentQueue, &queue)}
+        {
+        }
+
+        ~CurrentQueueGuard() { _currentQueue = _previous; }
+
+        CurrentQueueGuard(CurrentQueueGuard const&) = delete;
+        CurrentQueueGuard& operator=(CurrentQueueGuard const&) = delete;
+        CurrentQueueGuard(CurrentQueueGuard&&) = delete;
+        CurrentQueueGuard& operator=(CurrentQueueGuard&&) = delete;
+
+      private:
+        EngineEventQueue* _previous;
+      };
+
+      static bool runNotifications(std::stop_token const& stopToken, Notifications& notifications)
       {
         for (auto& notification : notifications)
         {
+          if (stopToken.stop_requested())
+          {
+            return false;
+          }
+
           if (notification)
           {
             notification();
           }
         }
+
+        return !stopToken.stop_requested();
       }
 
       void run(std::stop_token stopToken,
                RtSignalProcessor& processNextRtSignal,
                PlaybackEventProcessor& processPlaybackEvent)
       {
+        auto const currentQueueGuard = CurrentQueueGuard{*this};
+
         while (true)
         {
           _eventSignal.acquire();
@@ -279,6 +366,11 @@ namespace ao::audio
           // processes the signal in one externally serialized critical section.
           while (true)
           {
+            if (stopToken.stop_requested())
+            {
+              return;
+            }
+
             auto optNotifications = processNextRtSignal();
 
             if (!optNotifications)
@@ -286,11 +378,19 @@ namespace ao::audio
               break;
             }
 
-            runNotifications(*optNotifications);
+            if (!runNotifications(stopToken, *optNotifications))
+            {
+              return;
+            }
           }
 
           while (true)
           {
+            if (stopToken.stop_requested())
+            {
+              return;
+            }
+
             auto optEvent = std::optional<PlaybackEvent>{};
             {
               auto const lock = std::scoped_lock{_playbackEventMutex};
@@ -304,11 +404,15 @@ namespace ao::audio
               _playbackEvents.pop_front();
             }
 
-            auto notifications = processPlaybackEvent(*optEvent);
-            runNotifications(notifications);
+            if (auto notifications = processPlaybackEvent(*optEvent); !runNotifications(stopToken, notifications))
+            {
+              return;
+            }
           }
         }
       }
+
+      inline static thread_local EngineEventQueue* _currentQueue = nullptr;
     };
 
     Device currentDevice;
@@ -319,6 +423,16 @@ namespace ao::audio
     // do not take this lock; they may run on the render thread while stop()
     // waits for that thread to quiesce.
     mutable std::mutex controlMutex;
+    std::condition_variable shutdownCv;
+
+    enum class LifecycleState : std::uint8_t
+    {
+      Running,
+      ShuttingDown,
+      Shutdown,
+    };
+
+    LifecycleState lifecycleState = LifecycleState::Running;
 
     class [[nodiscard]] ControlLock final
     {
@@ -326,11 +440,19 @@ namespace ao::audio
       explicit ControlLock(Impl& owner)
         : _lock{owner.controlMutex}
       {
+        if (owner.lifecycleState != LifecycleState::Running)
+        {
+          return;
+        }
+
         owner.waitForSpliceHandoff();
         owner.settlePendingRtSignals();
+        _active = true;
       }
 
       ~ControlLock();
+
+      explicit operator bool() const noexcept { return _active; }
 
       ControlLock(ControlLock const&) = delete;
       ControlLock& operator=(ControlLock const&) = delete;
@@ -338,7 +460,8 @@ namespace ao::audio
       ControlLock& operator=(ControlLock&&) = delete;
 
     private:
-      std::scoped_lock<std::mutex> _lock;
+      std::unique_lock<std::mutex> _lock;
+      bool _active = false;
     };
 
     std::atomic<bool> backendStarted{false};
@@ -390,45 +513,105 @@ namespace ao::audio
       : currentDevice{std::move(device)}, decoderFactory{std::move(decoderFactory)}, backendPtr{std::move(backendPtr)}
     {
       syncBackendIdentity();
-      eventQueue.start(
-        [this] -> std::optional<Notifications>
-        {
-          auto const lock = std::scoped_lock{controlMutex};
-          auto signal = RtSignal{};
+    }
 
-          if (!eventQueue.tryPopRtSignal(signal))
+    void startEventWorker(std::shared_ptr<Impl> const& selfPtr)
+    {
+      eventQueue.start(
+        [selfPtr] -> std::optional<Notifications>
+        {
+          auto const lock = std::scoped_lock{selfPtr->controlMutex};
+
+          if (selfPtr->lifecycleState != LifecycleState::Running)
           {
             return std::nullopt;
           }
 
-          return processRtSignal(signal);
+          auto signal = RtSignal{};
+
+          if (!selfPtr->eventQueue.tryPopRtSignal(signal))
+          {
+            return std::nullopt;
+          }
+
+          return selfPtr->processRtSignal(signal);
         },
-        [this](PlaybackEvent& event)
+        [selfPtr](PlaybackEvent& event)
         {
-          auto const lock = std::scoped_lock{controlMutex};
-          return processPlaybackEvent(event);
+          auto const lock = std::scoped_lock{selfPtr->controlMutex};
+
+          if (selfPtr->lifecycleState != LifecycleState::Running)
+          {
+            return Notifications{};
+          }
+
+          return selfPtr->processPlaybackEvent(event);
         });
     }
 
-    ~Impl()
+    ~Impl() { shutdown(); }
+
+    void shutdown() noexcept
     {
-      retireSessions();
-      eventQueue.stop([this](RtSignal const& signal) { discardSpliceSignalNode(signal.splicedNode); });
+      terminateOnException(
+        [this]
+        {
+          {
+            auto lock = std::unique_lock{controlMutex};
 
-      if (backendPtr)
-      {
-        backendPtr->stop();
-        backendPtr->close();
-        resetRenderTarget();
-      }
+            if (lifecycleState == LifecycleState::Shutdown)
+            {
+              lock.unlock();
+              eventQueue.waitForExit();
+              return;
+            }
 
-      timeline.clear();
+            if (lifecycleState == LifecycleState::ShuttingDown)
+            {
+              // An external shutdown joins this worker. It must be allowed to
+              // return from its callback before that join can complete.
+              if (eventQueue.isCurrentThread())
+              {
+                return;
+              }
 
-      // The render thread is now stopped. Drain the signal ring once more to free
-      // any splice signal it posted after the event queue stopped but before
-      // the backend stopped, then free any armed-but-never-spliced lookahead node.
-      eventQueue.drainRtSignals([this](RtSignal const& signal) { discardSpliceSignalNode(signal.splicedNode); });
-      clearPreparedNext();
+              shutdownCv.wait(lock, [this] { return lifecycleState == LifecycleState::Shutdown; });
+              lock.unlock();
+              eventQueue.waitForExit();
+              return;
+            }
+
+            waitForSpliceHandoff();
+            settlePendingRtSignals();
+            lifecycleState = LifecycleState::ShuttingDown;
+            retireSessions();
+          }
+
+          eventQueue.stop([this](RtSignal const& signal) { discardSpliceSignalNode(signal.splicedNode); });
+
+          {
+            auto const lock = std::scoped_lock{controlMutex};
+
+            if (backendPtr)
+            {
+              backendPtr->stop();
+              backendPtr->close();
+              resetRenderTarget();
+            }
+
+            timeline.clear();
+
+            // The render thread is now stopped. Drain the signal ring once more to free
+            // any splice signal it posted after the event queue stopped but before
+            // the backend stopped, then free any armed-but-never-spliced lookahead node.
+            eventQueue.drainRtSignals([this](RtSignal const& signal) { discardSpliceSignalNode(signal.splicedNode); });
+            clearPreparedNext();
+            backendPtr.reset();
+            lifecycleState = LifecycleState::Shutdown;
+          }
+
+          shutdownCv.notify_all();
+        });
     }
 
     Impl(Impl const&) = delete;
@@ -704,41 +887,57 @@ namespace ao::audio
 
       void handleRouteReady(std::string_view routeAnchor) noexcept override
       {
-        if (!owner.isActiveRenderTarget(generation))
-        {
-          return;
-        }
+        terminateOnException(
+          [&]
+          {
+            if (!owner.isActiveRenderTarget(generation))
+            {
+              return;
+            }
 
-        owner.enqueuePlaybackEvent(
-          RouteReadyEvent{.generation = generation, .backendId = backendId, .routeAnchor = std::string{routeAnchor}});
+            owner.enqueuePlaybackEvent(RouteReadyEvent{
+              .generation = generation, .backendId = backendId, .routeAnchor = std::string{routeAnchor}});
+          });
       }
 
       void handleFormatChanged(Format const& format) noexcept override
       {
-        if (owner.isActiveRenderTarget(generation))
-        {
-          owner.enqueuePlaybackEvent(FormatChangedEvent{.generation = generation, .format = format});
-        }
+        terminateOnException(
+          [&]
+          {
+            if (owner.isActiveRenderTarget(generation))
+            {
+              owner.enqueuePlaybackEvent(FormatChangedEvent{.generation = generation, .format = format});
+            }
+          });
       }
 
       void handlePropertyChanged(PropertySnapshot snapshot) noexcept override
       {
-        if (!owner.isActiveRenderTarget(generation))
-        {
-          return;
-        }
+        terminateOnException(
+          [&]
+          {
+            if (!owner.isActiveRenderTarget(generation))
+            {
+              return;
+            }
 
-        owner.enqueuePlaybackEvent(PropertyChangedEvent{.generation = generation, .snapshot = std::move(snapshot)});
+            owner.enqueuePlaybackEvent(PropertyChangedEvent{.generation = generation, .snapshot = std::move(snapshot)});
+          });
       }
 
       void handleBackendError(std::string_view message) noexcept override
       {
-        if (!owner.isActiveRenderTarget(generation))
-        {
-          return;
-        }
+        terminateOnException(
+          [&]
+          {
+            if (!owner.isActiveRenderTarget(generation))
+            {
+              return;
+            }
 
-        owner.enqueuePlaybackEvent(BackendErrorEvent{.generation = generation, .message = std::string{message}});
+            owner.enqueuePlaybackEvent(BackendErrorEvent{.generation = generation, .message = std::string{message}});
+          });
       }
 
       Impl& owner;
@@ -1791,22 +1990,46 @@ namespace ao::audio
   // ── Engine ──────────────────────────────────────────────────────
 
   Engine::Engine(std::unique_ptr<Backend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory)
-    : _implPtr{std::make_unique<Impl>(std::move(backendPtr), device, std::move(decoderFactory))}
+    : _implPtr{std::make_shared<Impl>(std::move(backendPtr), device, std::move(decoderFactory))}
   {
     _implPtr->syncBackendStatus();
+    _implPtr->startEventWorker(_implPtr);
   }
 
-  Engine::~Engine() = default;
+  Engine::~Engine()
+  {
+    shutdown();
+  }
+
+  void Engine::shutdown() noexcept
+  {
+    if (_implPtr)
+    {
+      _implPtr->shutdown();
+    }
+  }
 
   void Engine::setBackend(std::unique_ptr<Backend> backendPtr, Device const& device)
   {
     auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return;
+    }
+
     _implPtr->setBackendUnlocked(std::move(backendPtr), device);
   }
 
   void Engine::updateDevice(Device const& device)
   {
     auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return;
+    }
+
     _implPtr->updateDeviceUnlocked(device);
   }
 
@@ -1838,6 +2061,18 @@ namespace ao::audio
   {
     auto const lock = std::scoped_lock{_implPtr->stateMutex};
     _implPtr->onStateChanged = std::move(callback);
+  }
+
+  void Engine::defer(std::function<void()> callback)
+  {
+    if (!callback)
+    {
+      return;
+    }
+
+    auto notifications = Impl::Notifications{};
+    notifications.push_back(std::move(callback));
+    _implPtr->enqueuePlaybackEvent(Impl::DeferredNotifications{.notifications = std::move(notifications)});
   }
 
   Engine::RouteStatus Engine::routeStatus() const
@@ -1875,48 +2110,96 @@ namespace ao::audio
   void Engine::play(PlaybackItem const& item, std::chrono::milliseconds const initialOffset)
   {
     auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return;
+    }
+
     _implPtr->playUnlocked(item, initialOffset);
   }
 
   Result<Engine::PreparedNextResult> Engine::setNext(PlaybackItem const& item)
   {
     auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return makeError(Error::Code::InvalidState, "Engine is shut down");
+    }
+
     return _implPtr->setNextUnlocked(item);
   }
 
   std::optional<Engine::PlaybackItemId> Engine::clearNext()
   {
     auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return std::nullopt;
+    }
+
     return _implPtr->clearNextUnlocked();
   }
 
   void Engine::pause()
   {
     auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return;
+    }
+
     _implPtr->pauseUnlocked();
   }
 
   void Engine::resume()
   {
     auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return;
+    }
+
     _implPtr->resumeUnlocked();
   }
 
   void Engine::stop()
   {
     auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return;
+    }
+
     _implPtr->stopUnlocked();
   }
 
   void Engine::seek(std::chrono::milliseconds offset)
   {
     auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return;
+    }
+
     _implPtr->seekUnlocked(offset);
   }
 
   Result<> Engine::setVolume(float volume)
   {
     auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return makeError(Error::Code::InvalidState, "Engine is shut down");
+    }
+
     return _implPtr->setVolumeUnlocked(volume);
   }
 
@@ -1929,6 +2212,12 @@ namespace ao::audio
   Result<> Engine::setMuted(bool muted)
   {
     auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return makeError(Error::Code::InvalidState, "Engine is shut down");
+    }
+
     return _implPtr->setMutedUnlocked(muted);
   }
 

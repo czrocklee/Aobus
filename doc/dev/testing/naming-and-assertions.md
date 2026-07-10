@@ -80,6 +80,11 @@ not `[shortcuts]`.
 Use kebab case for multi-word tags: `[track-store]` not `[track_store]` or
 `[trackstore]`.
 
+Catch2 opt-in integration drivers may use a hidden final tag with a leading
+dot, such as `[.manual]`. The tag body must still use kebab case. Reserve hidden
+tags for tests that require real hardware or deliberate manual execution; do
+not hide ordinary unit or regression coverage.
+
 Use the advisory audit when reviewing naming/tag cleanup or checking a focused
 directory:
 

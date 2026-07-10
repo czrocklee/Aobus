@@ -1187,12 +1187,12 @@ namespace ao::audio::backend
     return {};
   }
 
-  BackendId AlsaExclusiveBackend::backendId() const noexcept
+  BackendId AlsaExclusiveBackend::backendId() const
   {
     return kBackendAlsa;
   }
 
-  ProfileId AlsaExclusiveBackend::profileId() const noexcept
+  ProfileId AlsaExclusiveBackend::profileId() const
   {
     return kProfileExclusive;
   }

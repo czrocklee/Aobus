@@ -15,3 +15,4 @@ add_library(ao_media STATIC
     "${MEDIA_ATOM_DISPATCH_HEADER}"
 )
 target_include_directories(ao_media PUBLIC ${AO_PUBLIC_INCLUDE_DIR} ${AO_GENERATED_INCLUDE_DIR})
+target_link_libraries(ao_media PUBLIC ao_utility)

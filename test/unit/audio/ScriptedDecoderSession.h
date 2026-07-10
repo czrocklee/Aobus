@@ -69,7 +69,8 @@ namespace ao::audio::test
       _destroyCounterPtr = std::move(counterPtr);
     }
 
-    Result<> open(std::filesystem::path const& path) noexcept override
+    // Test-double bookkeeping may allocate behind DecoderSession's required noexcept boundary.
+    Result<> open(std::filesystem::path const& path) noexcept override // NOLINT(bugprone-exception-escape)
     {
       _opened = true;
       _lastOpenedPath = path;
@@ -79,7 +80,8 @@ namespace ao::audio::test
     void close() noexcept override { _closed = true; }
     void flush() noexcept override { _flushed = true; }
 
-    Result<> seek(std::chrono::milliseconds offset) noexcept override
+    // Script replacement and the test observer may allocate behind the required noexcept boundary.
+    Result<> seek(std::chrono::milliseconds offset) noexcept override // NOLINT(bugprone-exception-escape)
     {
       _lastSeekOffset = offset;
       ++_seekCount;
@@ -98,7 +100,8 @@ namespace ao::audio::test
       return _seekResult;
     }
 
-    Result<PcmBlock> readNextBlock() noexcept override
+    // Returning scripted byte storage may allocate behind DecoderSession's required noexcept boundary.
+    Result<PcmBlock> readNextBlock() noexcept override // NOLINT(bugprone-exception-escape)
     {
       _readCount++;
 

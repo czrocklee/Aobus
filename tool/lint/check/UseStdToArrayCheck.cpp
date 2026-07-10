@@ -15,6 +15,7 @@
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
+#include <llvm/Config/llvm-config.h>
 
 using namespace clang::ast_matchers;
 
@@ -77,6 +78,9 @@ namespace clang::tidy::modernize
 
     bool hasExplicitTemplateArgs(TypeLoc const cleanTypeLoc)
     {
+#if LLVM_VERSION_MAJOR >= 22
+      auto const tsLoc = cleanTypeLoc.getAs<TemplateSpecializationTypeLoc>();
+#else
       auto tsLoc = TemplateSpecializationTypeLoc{};
       auto searchLoc = TypeLoc{cleanTypeLoc};
 
@@ -96,6 +100,7 @@ namespace clang::tidy::modernize
 
         break;
       }
+#endif
 
       return !tsLoc.isNull() && tsLoc.getLAngleLoc().isValid();
     }

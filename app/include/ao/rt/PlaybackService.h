@@ -173,6 +173,6 @@ namespace ao::rt
 
   private:
     struct Impl;
-    std::unique_ptr<Impl> _implPtr;
+    std::shared_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

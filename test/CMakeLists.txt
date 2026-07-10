@@ -3,7 +3,7 @@ add_library(ao_test_options INTERFACE)
 target_include_directories(ao_test_options INTERFACE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
 target_compile_definitions(ao_test_options INTERFACE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
 target_compile_options(ao_test_options INTERFACE
-  -Wno-array-bounds
+  $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>:-Wno-array-bounds>
   $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,15>>:-Wno-mismatched-new-delete>
 )
 
@@ -31,6 +31,7 @@ add_executable(ao_core_test
     unit/utility/UuidTest.cpp
     unit/utility/YamlReflectTest.cpp
     unit/utility/RymlAdapterTest.cpp
+    unit/utility/TestUtilsTest.cpp
     unit/core/AudioCodecTest.cpp
     unit/core/ExceptionTest.cpp
     unit/core/ErrorTest.cpp
@@ -144,10 +145,6 @@ add_executable(ao_core_test
     unit/audio/PcmRingBufferTest.cpp
     unit/audio/backend/detail/AudioBackendFormatSupportTest.cpp
     unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp
-    unit/audio/backend/PipeWireMonitorTest.cpp
-    unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
-    unit/audio/backend/detail/AlsaPcmErrorTest.cpp
-    unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
     unit/audio/PcmConversionTest.cpp
     unit/audio/PlayerTest.cpp
     unit/audio/EngineDrainTest.cpp
@@ -159,7 +156,6 @@ add_executable(ao_core_test
     unit/audio/EngineConcurrencyTest.cpp
     unit/audio/EnginePropertyTest.cpp
     unit/audio/EngineTransportTest.cpp
-    unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
 
      # ui model tests (no platform deps)
     unit/uimodel/field/TrackFieldEditCodecTest.cpp
@@ -287,8 +283,30 @@ add_executable(ao_core_test
 )
 
 target_link_libraries(ao_core_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
+if(PIPEWIRE_FOUND)
+  target_sources(ao_core_test PRIVATE
+    unit/audio/backend/PipeWireMonitorTest.cpp
+    unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
+  )
+endif()
+if(ALSA_FOUND)
+  target_sources(ao_core_test PRIVATE
+    unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
+    unit/audio/backend/detail/AlsaPcmErrorTest.cpp
+    unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
+  )
+endif()
+if(WIN32)
+  target_sources(ao_core_test PRIVATE
+    unit/audio/backend/WasapiProviderTest.cpp
+    unit/audio/backend/WasapiSharedBackendTest.cpp
+    unit/audio/backend/detail/WasapiGraphRegistryTest.cpp
+    unit/audio/backend/detail/WasapiStringsTest.cpp
+  )
+endif()
 add_test(NAME ao_core_test COMMAND ao_core_test)
 
+if(AOBUS_BUILD_TUI)
 # ao_tui_test: terminal frontend unit tests
 add_executable(ao_tui_test
     unit/tui/AnchoredOverlayTest.cpp
@@ -303,6 +321,7 @@ add_executable(ao_tui_test
     unit/tui/PlaybackStatusFormatterTest.cpp
     unit/tui/QualityIndicatorStyleTest.cpp
     unit/tui/SelectionNavigationTest.cpp
+    unit/tui/SignalExitWatcherTest.cpp
     unit/tui/TrackDetailLinesTest.cpp
     unit/tui/TrackListEntryTest.cpp
     unit/tui/TrackPresentationNavigationTest.cpp
@@ -320,7 +339,9 @@ add_executable(ao_tui_test
 
 target_link_libraries(ao_tui_test PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
 add_test(NAME ao_tui_test COMMAND ao_tui_test)
+endif()
 
+if(AOBUS_BUILD_CLI)
 # ao_cli_test: command-line frontend tests
 add_executable(ao_cli_test
     unit/cli/CommandErrorTest.cpp
@@ -330,7 +351,9 @@ add_executable(ao_cli_test
 
 target_link_libraries(ao_cli_test PRIVATE aobus-cli-lib ao_test_options Catch2::Catch2WithMain)
 add_test(NAME ao_cli_test COMMAND ao_cli_test)
+endif()
 
+if(AOBUS_BUILD_TOOLS)
 # ao_council_test: council tool unit and integration tests
 add_executable(ao_council_test
     unit/council/CouncilSchemaTest.cpp
@@ -352,21 +375,29 @@ target_compile_definitions(ao_council_test PRIVATE
 )
 add_dependencies(ao_council_test aobus-council)
 add_test(NAME ao_council_test COMMAND ao_council_test)
+endif()
 
 # ao_integration_test: standalone integration tests (full gate only, not the default ./ao test loop)
 add_executable(ao_integration_test
     integration/audio/DecoderIntegrationTest.cpp
     integration/audio/GraphIntegrityTest.cpp
-    integration/audio/backend/PipeWireProviderTest.cpp
     integration/tag/TagTest.cpp
 )
 
 target_link_libraries(ao_integration_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
+if(PIPEWIRE_FOUND)
+  target_sources(ao_integration_test PRIVATE integration/audio/backend/PipeWireProviderTest.cpp)
+endif()
+
+if(WIN32)
+  target_sources(ao_integration_test PRIVATE integration/audio/backend/WasapiProviderTest.cpp)
+endif()
 
 # Not using add_test() here to keep it out of default 'ctest' runs, 
 # or use labels/properties if preferred. For now, it's just a manual driver.
 
 
+if(AOBUS_BUILD_GTK)
 # ao_gtk_test: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_gtk_test
     unit/linux-gtk/common/DismissControllerTest.cpp
@@ -472,6 +503,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
     target_link_libraries(ao_gtk_test PRIVATE -Wl,-u,aobus_get_resource)
 endif()
 add_test(NAME ao_gtk_test COMMAND ao_gtk_test)
+endif()
 
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
 add_executable(ao_perf_baseline

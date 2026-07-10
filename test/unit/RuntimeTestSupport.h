@@ -97,8 +97,8 @@ namespace ao::rt::test
       {
       }
 
-      audio::BackendId backendId() const noexcept override { return backendIdValue; }
-      audio::ProfileId profileId() const noexcept override { return profileIdValue; }
+      audio::BackendId backendId() const override { return backendIdValue; }
+      audio::ProfileId profileId() const override { return profileIdValue; }
     };
 
     struct ReadyAudioProvider final : audio::BackendProvider
@@ -166,7 +166,7 @@ namespace ao::rt::test
   {
   public:
     MusicLibraryFixture()
-      : _tempDir{}, _library{_tempDir.path(), _tempDir.path()}
+      : _tempDir{}, _library{library::test::makeTestMusicLibrary(_tempDir.path(), _tempDir.path())}
     {
     }
 
@@ -195,38 +195,58 @@ namespace ao::rt::test
   class AsyncTestState final
   {
   public:
-    static auto create(T initial) { return AsyncTestState{std::make_shared<std::atomic<T>>(initial)}; }
+    static auto create(T initial) { return AsyncTestState{std::make_shared<Data>(initial)}; }
 
-    void set(T value) { *_dataPtr = value; }
-    T load() const { return _dataPtr->load(); }
-
-    bool waitUntil(T expected, std::chrono::milliseconds timeout = std::chrono::milliseconds{500})
+    void set(T value) const
     {
-      auto start = std::chrono::steady_clock::now();
-
-      while (std::chrono::steady_clock::now() - start < timeout)
       {
-        if (load() == expected)
-        {
-          return true;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        auto const lock = std::scoped_lock{_dataPtr->mutex};
+        _dataPtr->value.store(value);
       }
 
-      return load() == expected;
+      _dataPtr->cv.notify_all();
     }
 
-    std::atomic<T>* operator->() { return _dataPtr.get(); }
-    std::atomic<T>& operator*() { return *_dataPtr; }
+    T increment() const
+    {
+      T result = {};
+
+      {
+        auto const lock = std::scoped_lock{_dataPtr->mutex};
+        result = _dataPtr->value.fetch_add(1) + 1;
+      }
+
+      _dataPtr->cv.notify_all();
+      return result;
+    }
+
+    T load() const { return _dataPtr->value.load(); }
+
+    bool waitUntil(T expected, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
+    {
+      auto lock = std::unique_lock{_dataPtr->mutex};
+      return _dataPtr->cv.wait_for(lock, timeout, [this, expected] { return load() == expected; });
+    }
 
   private:
-    explicit AsyncTestState(std::shared_ptr<std::atomic<T>> dataPtr)
+    struct Data final
+    {
+      explicit Data(T initial)
+        : value{initial}
+      {
+      }
+
+      std::atomic<T> value;
+      std::mutex mutex;
+      std::condition_variable cv;
+    };
+
+    explicit AsyncTestState(std::shared_ptr<Data> dataPtr)
       : _dataPtr{std::move(dataPtr)}
     {
     }
 
-    std::shared_ptr<std::atomic<T>> _dataPtr;
+    std::shared_ptr<Data> _dataPtr;
   };
 
   /**
@@ -266,8 +286,12 @@ namespace ao::rt::test
 
     void dispatch(std::move_only_function<void()> task) override
     {
-      auto const lock = std::scoped_lock{_mutex};
-      _tasks.push_back(std::move(task));
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        _tasks.push_back(std::move(task));
+      }
+
+      _cv.notify_all();
     }
 
     void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
@@ -305,36 +329,22 @@ namespace ao::rt::test
       return _tasks.size();
     }
 
-    bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::milliseconds{500}) const
+    bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
     {
-      auto const deadline = std::chrono::steady_clock::now() + timeout;
-
-      while (std::chrono::steady_clock::now() < deadline)
-      {
-        if (queuedCount() != 0)
-        {
-          return true;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
-      }
-
-      return queuedCount() != 0;
+      auto lock = std::unique_lock{_mutex};
+      return _cv.wait_for(lock, timeout, [this] { return !_tasks.empty(); });
     }
 
-    void checkQueued(std::chrono::milliseconds timeout = std::chrono::milliseconds{500}) const
+    void checkQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
     {
       INFO("Timed out waiting for queued executor task");
       REQUIRE(waitUntilQueued(timeout));
     }
 
-  protected:
-    std::mutex& taskMutex() noexcept { return _mutex; }
-    std::deque<std::move_only_function<void()>>& queuedTasks() noexcept { return _tasks; }
-
   private:
     mutable std::mutex _mutex;
     std::deque<std::move_only_function<void()>> _tasks;
+    mutable std::condition_variable _cv;
   };
 
   /**
@@ -353,23 +363,9 @@ namespace ao::rt::test
   public:
     bool isCurrent() const noexcept override { return std::this_thread::get_id() == _ownerThreadId; }
 
-    void dispatch(std::move_only_function<void()> task) override
-    {
-      {
-        auto const lock = std::scoped_lock{taskMutex()};
-        queuedTasks().push_back(std::move(task));
-      }
-
-      _cv.notify_all();
-    }
+    void dispatch(std::move_only_function<void()> task) override { ManualExecutor::dispatch(std::move(task)); }
 
     void drain() { runUntilIdle(); }
-
-    bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2})
-    {
-      auto lock = std::unique_lock{taskMutex()};
-      return _cv.wait_for(lock, timeout, [this] { return !queuedTasks().empty(); });
-    }
 
     template<typename Predicate>
     bool drainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{2})
@@ -400,7 +396,6 @@ namespace ao::rt::test
 
   private:
     std::thread::id _ownerThreadId = std::this_thread::get_id();
-    std::condition_variable _cv;
   };
 
   /**
@@ -412,6 +407,7 @@ namespace ao::rt::test
       .executorPtr = std::make_unique<MockExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
     }};

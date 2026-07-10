@@ -22,7 +22,7 @@ namespace ao::rt::test
   {
     std::filesystem::path copyFixtureAudio(MusicLibraryFixture const& libraryFixture, std::string const& name)
     {
-      auto const source = std::filesystem::current_path() / "test/integration/tag/test_data/empty.flac";
+      auto const source = std::filesystem::path{TAG_TEST_DATA_DIR} / "empty.flac";
 
       if (!std::filesystem::exists(source))
       {
@@ -83,7 +83,7 @@ namespace ao::rt::test
     auto const duplicateResult = writer.createTrackFromFile(absValidFile);
     REQUIRE(!duplicateResult);
     CHECK(duplicateResult.error().code == Error::Code::Conflict);
-    CHECK(duplicateResult.error().message.find("already imported") != std::string::npos);
+    CHECK(duplicateResult.error().message.contains("already imported"));
   }
 
   TEST_CASE("LibraryWriter - createTrackFromFile accepts root-relative paths", "[runtime][unit][library][track-create]")
@@ -146,11 +146,16 @@ namespace ao::rt::test
 
     SECTION("outside root")
     {
-      auto const outsideFile = std::filesystem::current_path() / "README.md";
+      auto const outsideTemp = ao::test::TempDir{};
+      auto const outsideFile = outsideTemp.path() / "outside.flac";
+      {
+        auto out = std::ofstream{outsideFile};
+        out << "not audio";
+      }
       auto const trackIdResult = writer.createTrackFromFile(outsideFile);
       REQUIRE(!trackIdResult);
       CHECK(trackIdResult.error().code == Error::Code::InvalidInput);
-      CHECK(trackIdResult.error().message.find("outside music root") != std::string::npos);
+      CHECK(trackIdResult.error().message.contains("outside music root"));
     }
   }
 } // namespace ao::rt::test

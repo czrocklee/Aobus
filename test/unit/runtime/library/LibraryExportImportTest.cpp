@@ -94,7 +94,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryYaml - round trip preserves tracks, covers, and lists", "[runtime][workflow][import-export][yaml]")
   {
     auto const temp1 = ao::test::TempDir{};
-    auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
+    auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
     auto const smartListName = std::string{"Smart List "} + std::string(256, 'S');
     auto const smartFilter = std::string{"@duration > 60 and "} + std::string(256, 'x');
     auto const manualListName = std::string{"Manual List "} + std::string(256, 'M');
@@ -154,7 +154,7 @@ namespace ao::rt::test
 
     // 3. Import into a new library
     auto const temp2 = ao::test::TempDir{};
-    auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
+    auto ml2 = library::test::makeTestMusicLibrary(temp2.path(), temp2.path());
 
     // Pre-create the track in ml2 to test overlay (since physical file song.flac doesn't exist)
     {
@@ -244,7 +244,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryYaml - restore preserves classical metadata fields", "[runtime][workflow][import-export][yaml]")
   {
     auto const temp1 = ao::test::TempDir{};
-    auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
+    auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
 
     // 1. Setup initial library with new fields
     {
@@ -285,7 +285,7 @@ namespace ao::rt::test
 
     // 3. Import into a new library (Restore mode)
     auto const temp2 = ao::test::TempDir{};
-    auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
+    auto ml2 = library::test::makeTestMusicLibrary(temp2.path(), temp2.path());
     auto importer = LibraryYamlImporter{ml2};
 
     // Use Restore mode (default) - should not try to read physical file "full-fields.flac"
@@ -329,7 +329,7 @@ namespace ao::rt::test
             "[runtime][workflow][import-export][merge]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
 
     auto const* const uri1 = "track1.flac";
     auto const* const uri2 = "track2.flac";
@@ -406,7 +406,7 @@ library:
     SECTION("restore into empty target")
     {
       auto const sourceTemp = ao::test::TempDir{};
-      auto source = MusicLibrary{sourceTemp.path(), sourceTemp.path()};
+      auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
       auto const trackId =
         library::test::addTrack(source, library::test::TrackSpec{.title = "Source", .uri = "source.flac"});
 
@@ -420,7 +420,7 @@ library:
       REQUIRE(LibraryYamlExporter{source}.exportToYaml(yamlPath, ExportMode::Full));
 
       auto const targetTemp = ao::test::TempDir{};
-      auto target = MusicLibrary{targetTemp.path(), targetTemp.path()};
+      auto target = library::test::makeTestMusicLibrary(targetTemp.path(), targetTemp.path());
       auto importer = LibraryYamlImporter{target};
       auto const report = importer.previewImportFromYaml(yamlPath, ImportMode::Restore);
 
@@ -437,7 +437,7 @@ library:
     SECTION("merge reports updates and creates without committing")
     {
       auto const temp = ao::test::TempDir{};
-      auto ml = MusicLibrary{temp.path(), temp.path()};
+      auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
       auto const existingTrackId =
         library::test::addTrack(ml, library::test::TrackSpec{.title = "Original", .uri = "track1.flac"});
 
@@ -496,7 +496,7 @@ library:
             "[runtime][workflow][import-export][uri]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "canonization.yaml";
 
@@ -539,9 +539,9 @@ library:
     for (auto const& [id, view] : trackReader)
     {
       auto builder = TrackBuilder::fromView(view, ml.dictionary());
-      CHECK(builder.property().uri().find("./") == std::string_view::npos);
-      CHECK(builder.property().uri().find('\\') == std::string_view::npos);
-      CHECK(builder.property().uri().find("..") == std::string_view::npos);
+      CHECK_FALSE(builder.property().uri().contains("./"));
+      CHECK_FALSE(builder.property().uri().contains('\\'));
+      CHECK_FALSE(builder.property().uri().contains(".."));
       count++;
     }
 
@@ -570,14 +570,13 @@ library:
             "[runtime][workflow][import-export][yaml]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "coverage.yaml";
 
     // Create symlink to valid flac
     auto const songPath = std::filesystem::path{temp.path()} / "A.flac";
-    std::filesystem::copy_file(
-      std::filesystem::current_path() / "test/integration/tag/test_data/basic_metadata.flac", songPath);
+    std::filesystem::copy_file(std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac", songPath);
 
     {
       auto yaml = std::ofstream{yamlPath};
@@ -641,7 +640,7 @@ library:
             "[runtime][regression][import-export][yaml]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto const uri = std::string{"tagged.flac"};
     auto const songPath = std::filesystem::path{temp.path()} / uri;
     std::filesystem::copy_file(std::filesystem::path{TAG_TEST_DATA_DIR} / "classical_metadata.flac", songPath);

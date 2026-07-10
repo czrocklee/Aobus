@@ -54,13 +54,13 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/document/LayoutValue.cpp
     uimodel/layout/shell/ShellLayoutSessionModel.cpp
     uimodel/input/KeyChord.cpp
-     uimodel/input/KeymapModel.cpp
-     uimodel/input/KeymapStore.cpp
+    uimodel/input/KeymapModel.cpp
+    uimodel/input/KeymapStore.cpp
     uimodel/preferences/PreferencesEditorModel.cpp
     uimodel/field/TrackFieldEditCodec.cpp
-     uimodel/field/TrackFieldEditPolicy.cpp
-     uimodel/field/TrackFieldFormatter.cpp
-     uimodel/field/TrackInlineEdit.cpp
+    uimodel/field/TrackFieldEditPolicy.cpp
+    uimodel/field/TrackFieldFormatter.cpp
+    uimodel/field/TrackInlineEdit.cpp
     uimodel/library/detail/TrackCustomMetadataWorkflow.cpp
     uimodel/library/detail/TrackFieldGridSchema.cpp
     uimodel/library/list/ListActionPolicy.cpp
@@ -142,10 +142,23 @@ set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](ao/lmdb
 set(AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView))")
 set(AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX [=[/platform/|/MainWindowCoordinator\.cpp|/AudioBackendBootstrap\.]=])
 
+set(AO_GUARDRAIL_REGEX_DIR "${CMAKE_CURRENT_BINARY_DIR}/guardrail-regex")
+file(MAKE_DIRECTORY "${AO_GUARDRAIL_REGEX_DIR}")
+function(ao_write_guardrail_regex out_var name pattern)
+  set(_path "${AO_GUARDRAIL_REGEX_DIR}/${name}.regex")
+  file(WRITE "${_path}" "${pattern}")
+  set(${out_var} "${_path}" PARENT_SCOPE)
+endfunction()
+
+ao_write_guardrail_regex(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX_FILE "rt-public" "${AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX}")
+ao_write_guardrail_regex(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX_FILE "uimodel-core" "${AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX}")
+ao_write_guardrail_regex(AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX_FILE "gtk-core" "${AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX}")
+ao_write_guardrail_regex(AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX_FILE "linux-gtk-exclude" "${AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX}")
+
 add_custom_target(ao_rt_public_boundary_report
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/rt"
-          "-DFORBIDDEN_REGEX=${AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX}"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
   COMMENT "Checking storage/control-plane includes that leak through ao/rt public headers"
@@ -170,12 +183,12 @@ add_custom_target(ao_uimodel_platform_boundary_report
 add_custom_target(ao_uimodel_core_boundary_report
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/uimodel"
-          "-DFORBIDDEN_REGEX=${AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX}"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app/uimodel"
-          "-DFORBIDDEN_REGEX=${AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX}"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
   COMMENT "Checking storage/control-plane includes in ao_app_uimodel"
@@ -184,24 +197,28 @@ add_custom_target(ao_uimodel_core_boundary_report
 
 add_dependencies(ao_app_uimodel ao_uimodel_platform_boundary_report ao_uimodel_core_boundary_report)
 
-add_custom_target(ao_linux_gtk_core_boundary_report
-  COMMAND ${CMAKE_COMMAND}
-          "-DROOTS=${CMAKE_SOURCE_DIR}/app/linux-gtk"
-          "-DFORBIDDEN_REGEX=${AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX}"
-          "-DEXCLUDE_REGEX=${AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX}"
-          -DMODE=enforce
-          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
-  COMMENT "Checking direct storage/library includes in linux-gtk"
-  VERBATIM
-)
+if(AOBUS_BUILD_GTK)
+  add_custom_target(ao_linux_gtk_core_boundary_report
+    COMMAND ${CMAKE_COMMAND}
+            "-DROOTS=${CMAKE_SOURCE_DIR}/app/linux-gtk"
+            "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX_FILE}"
+            "-DEXCLUDE_REGEX_FILE=${AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX_FILE}"
+            -DMODE=enforce
+            -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+    COMMENT "Checking direct storage/library includes in linux-gtk"
+    VERBATIM
+  )
+endif()
 
 add_custom_target(ao_layering_boundary_report
   DEPENDS
     ao_rt_public_boundary_report
     ao_uimodel_platform_boundary_report
     ao_uimodel_core_boundary_report
-    ao_linux_gtk_core_boundary_report
 )
+if(AOBUS_BUILD_GTK)
+  add_dependencies(ao_layering_boundary_report ao_linux_gtk_core_boundary_report)
+endif()
 
 # Configure-time check: ao_app_uimodel must not link platform UI targets
 get_target_property(_ao_uimodel_links ao_app_uimodel LINK_LIBRARIES)
@@ -213,9 +230,15 @@ foreach(_lib IN LISTS _ao_uimodel_links)
 endforeach()
 
 # Frontends
-add_subdirectory(linux-gtk)
-add_subdirectory(cli)
-add_subdirectory(tui)
+if(AOBUS_BUILD_GTK)
+  add_subdirectory(linux-gtk)
+endif()
+if(AOBUS_BUILD_CLI)
+  add_subdirectory(cli)
+endif()
+if(AOBUS_BUILD_TUI)
+  add_subdirectory(tui)
+endif()
 
 # Placeholders for future platforms
 # add_subdirectory(windows-winui)

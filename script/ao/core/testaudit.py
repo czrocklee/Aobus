@@ -34,7 +34,9 @@ KNOWN_TYPES = frozenset({"integration", "regression", "smoke", "unit", "workflow
 TAG_RE = re.compile(r"\[([^\[\]]+)\]")
 TEST_CASE_RE = re.compile(r"\bTEST_CASE\s*\(")
 STRING_LITERAL_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
-TAG_STYLE_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+# Catch2 treats a leading dot as an opt-in hidden tag. The tag body still uses
+# the project's kebab-case convention (for example, [.manual]).
+TAG_STYLE_RE = re.compile(r"\.?[a-z0-9]+(?:-[a-z0-9]+)*")
 FUNCTION_LEVEL_NAME_RE = re.compile(r"(?:[a-z][A-Za-z0-9_]*|operator\S+)\s+[a-z].+")
 
 

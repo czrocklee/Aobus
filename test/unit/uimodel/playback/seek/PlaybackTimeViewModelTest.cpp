@@ -24,7 +24,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("PlaybackTimeViewModel - view state generation", "[uimodel][unit][playback]")
+  TEST_CASE("PlaybackTimeViewModel - initial view state", "[uimodel][unit][playback]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
@@ -33,38 +33,59 @@ namespace ao::uimodel::test
     auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
     auto playback = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
-    addReadyAudioProvider(playback);
 
     auto log = ao::test::RenderLog<PlaybackTimeViewState>{};
     auto const viewModel = PlaybackTimeViewModel{playback, [&log](auto const& view) { log.render(view); }};
 
-    SECTION("Initial render")
-    {
-      REQUIRE(!log.empty());
-      CHECK(log.last().elapsed == std::chrono::milliseconds{0});
-      CHECK(log.last().duration == std::chrono::milliseconds{0});
-    }
+    REQUIRE(!log.empty());
+    CHECK(log.last().elapsed == std::chrono::milliseconds{0});
+    CHECK(log.last().duration == std::chrono::milliseconds{0});
+  }
 
-    SECTION("onSeekUpdate triggers refresh with Preview and Final modes")
-    {
-      auto const trackId = libraryFixture.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
-      auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-      auto desc = PlaybackService::PlaybackRequest{
-        .item = NowPlayingInfo{.trackId = trackId, .title = "Seek Test", .artist = "Artist"},
-        .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{30}},
-      };
-      REQUIRE(playback.play(desc, kInvalidListId));
+  TEST_CASE("PlaybackTimeViewModel - seek updates render preview and final modes", "[uimodel][unit][playback]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = QueuedExecutor{};
+    auto changes = LibraryChanges{};
+    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
+    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
+    auto notificationService = NotificationService{};
+    auto playback = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
+    addReadyAudioProvider(playback);
+    REQUIRE(executor.drainUntil([&] { return playback.state().ready; }));
 
-      log.clear();
-      playback.seek(std::chrono::seconds{5}, PlaybackService::SeekMode::Final);
-      REQUIRE(!log.empty());
-      CHECK(log.last().elapsed > std::chrono::milliseconds{0});
-      CHECK(log.last().immediateUpdate == true);
+    auto log = ao::test::RenderLog<PlaybackTimeViewState>{};
+    auto const viewModel = PlaybackTimeViewModel{playback, [&log](auto const& view) { log.render(view); }};
 
-      log.clear();
-      playback.seek(std::chrono::seconds{10}, PlaybackService::SeekMode::Preview);
-      REQUIRE(!log.empty());
-    }
+    auto const trackId = libraryFixture.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto desc = PlaybackService::PlaybackRequest{
+      .item = NowPlayingInfo{.trackId = trackId, .title = "Seek Test", .artist = "Artist"},
+      .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{30}},
+    };
+    REQUIRE(playback.play(desc, kInvalidListId));
+    auto const expectedDuration = playback.state().duration;
+    REQUIRE(expectedDuration > std::chrono::milliseconds{0});
+
+    log.clear();
+    playback.seek(std::chrono::milliseconds{500}, PlaybackService::SeekMode::Final);
+    REQUIRE(!log.empty());
+    CHECK(log.last().duration == expectedDuration);
+    CHECK(log.last().elapsed == std::chrono::milliseconds{500});
+    CHECK(log.last().isPlaying == true);
+    CHECK(log.last().isPreviewing == false);
+    CHECK(log.last().immediateUpdate == true);
+    CHECK(playback.state().elapsed == std::chrono::milliseconds{500});
+
+    log.clear();
+    playback.seek(std::chrono::milliseconds{250}, PlaybackService::SeekMode::Preview);
+    REQUIRE(!log.empty());
+    CHECK(log.last().duration == expectedDuration);
+    CHECK(log.last().elapsed == std::chrono::milliseconds{250});
+    CHECK(log.last().isPlaying == true);
+    CHECK(log.last().isPreviewing == true);
+    CHECK(log.last().immediateUpdate == false);
+    CHECK(playback.state().elapsed == std::chrono::milliseconds{500});
   }
 
   TEST_CASE("PlaybackTimeViewModel - formats display text for each label mode", "[uimodel][unit][playback]")

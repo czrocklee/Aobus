@@ -9,7 +9,7 @@ from ao.core import testregistry
 
 class TestRegistryTest(unittest.TestCase):
     def test_real_test_sources_exclude_lint_fixtures(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             registered = root / "test" / "unit" / "utility" / "RegisteredTest.cpp"
             fixture = root / "test" / "integration" / "lint" / "fixture" / "RuleFixtureTest.cpp"
@@ -21,7 +21,7 @@ class TestRegistryTest(unittest.TestCase):
             self.assertEqual(testregistry.real_test_sources(root), ["unit/utility/RegisteredTest.cpp"])
 
     def test_registered_test_sources_ignore_comments_and_normalize_paths(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             cmake_file = root / "test" / "CMakeLists.txt"
             cmake_file.parent.mkdir()
@@ -42,7 +42,7 @@ add_executable(ao_core_test
             )
 
     def test_unregistered_test_sources_report_repo_relative_paths(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             cmake_file = root / "test" / "CMakeLists.txt"
             registered = root / "test" / "unit" / "utility" / "RegisteredTest.cpp"

@@ -142,7 +142,8 @@ namespace ao::library::test
       constexpr std::size_t kValueSize = kUint16Max - sizeof(CustomMetadataBlockHeader) - sizeof(CustomMetadataEntry);
 
       auto builder = TrackBuilder::makeEmpty();
-      builder.customMetadata().add("key", std::string(kValueSize, 'v'));
+      auto const value = std::string(kValueSize, 'v');
+      builder.customMetadata().add("key", value);
 
       auto const result = context.trySerializeCold(builder);
       REQUIRE_FALSE(result);

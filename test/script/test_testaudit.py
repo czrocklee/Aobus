@@ -9,7 +9,7 @@ from ao.core import testaudit
 
 class TestAuditTest(unittest.TestCase):
     def test_parse_test_cases_handles_multiline_invocations(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "ExampleTest.cpp"
             path.write_text(
                 "\n".join(
@@ -52,6 +52,16 @@ class TestAuditTest(unittest.TestCase):
 
         self.assertEqual(testaudit._audit_case(case), [])
 
+    def test_audit_accepts_hidden_kebab_case_tag(self):
+        case = testaudit.TestCase(
+            path=Path("/repo/test/integration/audio/WasapiProviderTest.cpp"),
+            line=12,
+            name="WasapiProvider - renders through a real endpoint",
+            tags=("audio", "integration", "wasapi", ".manual"),
+        )
+
+        self.assertEqual(testaudit._audit_case(case), [])
+
     def test_audit_reports_legacy_name_and_tag_drift(self):
         case = testaudit.TestCase(
             path=Path("/repo/test/unit/audio/EngineTest.cpp"),
@@ -76,7 +86,7 @@ class TestAuditTest(unittest.TestCase):
         )
 
     def test_resolve_files_ignores_lint_fixtures(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             real = root / "test" / "unit" / "core" / "RealTest.cpp"
             fixture = root / "test" / "integration" / "lint" / "fixture" / "aobus-check" / "BasicTest.cpp"

@@ -81,12 +81,33 @@ Player state. Layers that aggregate `Player` (e.g. `PlaybackService`) receive
 Player callbacks already on their executor thread rather than on Engine's worker
 or provider callback threads.
 
+`Engine::shutdown` participates in the same control serialization as public
+commands. The first caller changes the lifecycle from running to shutting down
+under the control lock, retires the render session, stops the event queue, and
+then closes the backend under that lock. Commands that arrive after the lifecycle
+transition do not enter backend or timeline logic (`Result`-returning commands
+report `InvalidState`); concurrent shutdown callers wait for the one teardown to
+finish. Repeated shutdown after completion is a no-op.
+
+Shutdown may itself originate in an event-worker notification, because a user
+callback may destroy its owner. In that case the queue requests stop but does not
+join its own thread. The worker holds shared ownership of Engine internals until
+its loop returns, and checks the stop request between notifications, so no later
+notification from the same event observes the destroyed owner. A shutdown from
+any other thread waits for the worker to finish (joining it when it is still
+joinable). This self-worker exception changes only how the worker is reclaimed;
+backend and timeline teardown still run once through the serialized lifecycle.
+
 `Player` uses a shared teardown gate as a queued-task neutralizer: a task still
 queued when `~Player` begins sees the closed gate and returns without touching
 `Player` internals. `Player` public methods and teardown are executor-owned, and
 the executor must outlive the `Player`. User callbacks run on that executor and
 must return promptly; they may destroy `Player` reentrantly as long as the
-destruction also occurs on the executor thread.
+destruction also occurs on the executor thread. Engine and executor callbacks
+lock a weak reference to shared Player internals for the duration of the current
+dispatch. Reentrant destruction closes the gate and shuts the Engine down, while
+that temporary ownership keeps callback state and stopped providers alive until
+the callback stack has unwound.
 
 ## Playback Input Boundary
 
@@ -181,12 +202,19 @@ storage in a release build, so a violation logs a critical message and aborts
 rather than degrading to an unobserved data race. The check is a cheap thread-id
 comparison (`Executor::isCurrent()`). The `Subscription` handles they return must
 likewise be reset on that thread, since they mutate the same unguarded signal
-handler storage that `emit` walks.
+state that `emit` walks. A subscription may outlive its signal owner: the handle
+keeps only a weak reference and late reset becomes a no-op.
 `PlaybackState` is written in exactly two places —
 control commands, and the `Player` callbacks that `Player` marshals onto that same
 executor — so confining all callers to one thread upholds a single-writer model
-with no locking, and the service holds no internal gate of its own (teardown
-drains through `Player`).
+with no state mutex. `PlaybackService` callbacks weak-lock shared service
+internals for one executor turn. Teardown marks those internals closing, closes
+Player's gate, joins callback producers when teardown is external, and
+disconnects every runtime signal. If a signal handler destroys the service
+reentrantly, the current strong reference keeps the signal emission and callback
+stack alive while the closing check prevents the command from calling Player or
+emitting another signal. Only after that quiescence may destruction read
+executor-affine state (for example, to report the released output device).
 
 Because of that affinity, control commands publish synchronously: after calling
 `Player` they refresh the `PlaybackState` snapshot and emit their command-specific

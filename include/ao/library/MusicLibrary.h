@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/lmdb/Transaction.h>
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 
@@ -25,10 +26,20 @@ namespace ao::library
   class MusicLibrary final
   {
   public:
+    struct Options final
+    {
+      // Zero selects the production default map size.
+      std::size_t mapSize = 0;
+    };
+
     explicit MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath);
+    MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath, Options options);
     ~MusicLibrary();
 
     static Result<MusicLibrary> open(std::filesystem::path musicRoot, std::filesystem::path databasePath);
+    static Result<MusicLibrary> open(std::filesystem::path musicRoot,
+                                     std::filesystem::path databasePath,
+                                     Options options);
 
     MusicLibrary(MusicLibrary const&) = delete;
     MusicLibrary& operator=(MusicLibrary const&) = delete;
@@ -61,7 +72,7 @@ namespace ao::library
   private:
     MusicLibrary() = default;
 
-    Result<> initialize(std::filesystem::path musicRoot, std::filesystem::path databasePath);
+    Result<> initialize(std::filesystem::path musicRoot, std::filesystem::path databasePath, Options options);
 
     struct Impl;
     std::unique_ptr<Impl> _implPtr;

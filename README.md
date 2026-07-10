@@ -29,7 +29,9 @@ Aobus (pronounced /'eɪ.oʊ.bʌs/) is a modern music application designed for au
 
 ## 🛠 Building
 
-Aobus uses CMake and Nix-shell for dependency management.
+Aobus uses CMake with pinned Nix dependencies on Linux and vcpkg on Windows.
+
+### Linux
 
 ```bash
 # Debug build + full test suites (the standard validation gate)
@@ -44,6 +46,22 @@ Aobus uses CMake and Nix-shell for dependency management.
 # Release build for production
 ./ao build release
 ```
+
+### Windows TUI
+
+Install Visual Studio Build Tools with the C++ x64 toolset and Python, then use
+the Windows portal from a Command Prompt or PowerShell terminal:
+
+```bat
+ao.bat build
+ao.bat run tui
+ao.bat test
+ao.bat check
+```
+
+`ao.bat` initializes the Visual Studio environment and uses the vcpkg bundled
+with Visual Studio. See [Windows development](doc/dev/windows-development.md)
+for prerequisites, build trees, and suite availability.
 
 ## 🧪 Running Tests
 

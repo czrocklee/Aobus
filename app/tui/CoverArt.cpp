@@ -4,31 +4,45 @@
 #include "CoverArt.h"
 
 #include <ao/utility/Base64.h>
-#include <ao/utility/ByteView.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wformat-nonliteral"
+// stb implementation lives in this translation unit (its only consumer).
+// Embedded cover art is not limited to PNG and JPEG, so retain stb's complete
+// set of supported image decoders here.
+#ifdef _MSC_VER
+#pragma warning(push, 0)
 #endif
-#include <gdk-pixbuf/gdk-pixbuf.h>
-#include <glib-object.h>
-#include <glib.h>
-#ifdef __clang__
-#pragma clang diagnostic pop
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_NO_STDIO
+#include <stb_image.h>
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include <stb_image_resize2.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STBI_WRITE_NO_STDIO
+#include <stb_image_write.h>
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+#ifdef _MSC_VER
+#pragma warning(pop)
 #endif
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -36,6 +50,11 @@ namespace ao::tui
 {
   namespace
   {
+    constexpr int kDecodedChannels = 4; // stb decodes to RGBA below
+    constexpr auto kKittyPayloadChunkSize = std::size_t{4096};
+    constexpr int kPreviewColumns = 30;
+    constexpr int kPreviewRows = 16;
+
     struct Pixel final
     {
       std::uint8_t red = 0;
@@ -43,175 +62,71 @@ namespace ao::tui
       std::uint8_t blue = 0;
     };
 
-    struct PixbufDeleter final
+    struct StbiDeleter final
     {
-      void operator()(GdkPixbuf* pixbuf) const noexcept
-      {
-        if (pixbuf != nullptr)
-        {
-          ::g_object_unref(pixbuf);
-        }
-      }
+      void operator()(unsigned char* pixels) const noexcept { ::stbi_image_free(pixels); }
     };
 
-    struct LoaderDeleter final
+    using StbiPixelsPtr = std::unique_ptr<unsigned char, StbiDeleter>;
+
+    struct DecodedImage final
     {
-      void operator()(GdkPixbufLoader* loader) const noexcept
-      {
-        if (loader != nullptr)
-        {
-          ::g_object_unref(loader);
-        }
-      }
+      StbiPixelsPtr pixelsPtr{};
+      std::int32_t width = 0;
+      std::int32_t height = 0;
     };
 
-    struct ErrorDeleter final
+    stbi_uc const* asStbiBytes(std::byte const* encodedBytes) noexcept
     {
-      void operator()(GError* error) const noexcept
-      {
-        if (error != nullptr)
-        {
-          ::g_error_free(error);
-        }
-      }
-    };
-
-    using PixbufPtr = std::unique_ptr<GdkPixbuf, PixbufDeleter>;
-    using LoaderPtr = std::unique_ptr<GdkPixbufLoader, LoaderDeleter>;
-    using ErrorPtr = std::unique_ptr<GError, ErrorDeleter>;
-    using BufferPtr = std::unique_ptr<gchar, decltype(&g_free)>;
-
-    constexpr auto kKittyPayloadChunkSize = std::size_t{4096};
-    constexpr int kPreviewColumns = 30;
-    constexpr int kPreviewRows = 16;
-
-    void closeLoaderSilently(GdkPixbufLoader* loader)
-    {
-      auto* rawError = static_cast<GError*>(nullptr);
-      std::ignore = ::gdk_pixbuf_loader_close(loader, &rawError);
-      auto errorPtr = ErrorPtr{rawError};
+      // stb's C API accepts an unsigned-byte view over the encoded byte buffer.
+      return reinterpret_cast<stbi_uc const*>(encodedBytes); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
-    PixbufPtr decodePixbuf(std::vector<std::byte> const& bytes)
+    std::optional<DecodedImage> decodeImage(std::vector<std::byte> const& bytes)
     {
-      if (bytes.empty())
+      if (bytes.empty() || bytes.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
       {
-        return {};
+        return std::nullopt;
       }
 
-      auto loaderPtr = LoaderPtr{::gdk_pixbuf_loader_new()};
+      int width = 0;
+      int height = 0;
+      int sourceChannels = 0;
+      auto pixelsPtr = StbiPixelsPtr{::stbi_load_from_memory(asStbiBytes(bytes.data()),
+                                                             static_cast<std::int32_t>(bytes.size()),
+                                                             &width,
+                                                             &height,
+                                                             &sourceChannels,
+                                                             kDecodedChannels)};
 
-      if (loaderPtr == nullptr)
+      if (pixelsPtr == nullptr || width <= 0 || height <= 0)
       {
-        return {};
+        return std::nullopt;
       }
 
-      auto* rawError = static_cast<GError*>(nullptr);
-      auto const byteSpan = std::span<std::byte const>{bytes.data(), bytes.size()};
-      auto const* data = utility::bytes::unsignedCharData(byteSpan);
-
-      if (::gdk_pixbuf_loader_write(loaderPtr.get(), data, bytes.size(), &rawError) == FALSE)
-      {
-        auto errorPtr = ErrorPtr{rawError};
-        closeLoaderSilently(loaderPtr.get());
-        return {};
-      }
-
-      rawError = nullptr;
-
-      if (::gdk_pixbuf_loader_close(loaderPtr.get(), &rawError) == FALSE)
-      {
-        auto errorPtr = ErrorPtr{rawError};
-        return {};
-      }
-
-      auto* pixbuf = ::gdk_pixbuf_loader_get_pixbuf(loaderPtr.get());
-
-      if (pixbuf == nullptr)
-      {
-        return {};
-      }
-
-      (::g_object_ref)(pixbuf);
-      return PixbufPtr{pixbuf};
+      return DecodedImage{.pixelsPtr = std::move(pixelsPtr), .width = width, .height = height};
     }
 
-    PixbufPtr squareScaledPixbuf(GdkPixbuf* pixbuf, std::int32_t const pixelWidth, std::int32_t const pixelHeight)
+    Pixel compositePixel(unsigned char const* pixel)
     {
-      if (pixbuf == nullptr || pixelWidth <= 0 || pixelHeight <= 0)
-      {
-        return {};
-      }
-
-      auto const width = ::gdk_pixbuf_get_width(pixbuf);
-      auto const height = ::gdk_pixbuf_get_height(pixbuf);
-      auto const cropSide = std::min(width, height);
-
-      if (cropSide <= 0)
-      {
-        return {};
-      }
-
-      auto const cropX = (width - cropSide) / 2;
-      auto const cropY = (height - cropSide) / 2;
-      auto croppedPtr = PixbufPtr{::gdk_pixbuf_new_subpixbuf(pixbuf, cropX, cropY, cropSide, cropSide)};
-
-      if (croppedPtr == nullptr)
-      {
-        return {};
-      }
-
-      return PixbufPtr{::gdk_pixbuf_scale_simple(croppedPtr.get(), pixelWidth, pixelHeight, GDK_INTERP_BILINEAR)};
-    }
-
-    Pixel pixelAt(GdkPixbuf const* pixbuf, std::int32_t const column, std::int32_t const row)
-    {
-      auto const nChannels = ::gdk_pixbuf_get_n_channels(pixbuf);
-      auto const rowStride = ::gdk_pixbuf_get_rowstride(pixbuf);
-      auto const hasAlpha = ::gdk_pixbuf_get_has_alpha(pixbuf) == TRUE;
-      auto const* pixels = ::gdk_pixbuf_read_pixels(pixbuf);
-      auto const pixelOffset =
-        (static_cast<std::ptrdiff_t>(row) * rowStride) + (static_cast<std::ptrdiff_t>(column) * nChannels);
-      auto const* pixel = pixels + pixelOffset;
-
       auto red = pixel[0];
       auto green = pixel[1];
       auto blue = pixel[2];
+      auto const alpha = static_cast<std::int32_t>(pixel[3]);
+      constexpr int kBackground = 18;
+      constexpr int kOpaqueAlpha = 255;
 
-      if (hasAlpha && nChannels >= 4)
+      if (alpha < kOpaqueAlpha)
       {
-        auto const alpha = static_cast<std::int32_t>(pixel[3]);
-        constexpr int kBackground = 18;
-        constexpr int kOpaqueAlpha = 255;
-        red = static_cast<guchar>((static_cast<std::int32_t>(red) * alpha + kBackground * (kOpaqueAlpha - alpha)) /
-                                  kOpaqueAlpha);
-        green = static_cast<guchar>((static_cast<std::int32_t>(green) * alpha + kBackground * (kOpaqueAlpha - alpha)) /
-                                    kOpaqueAlpha);
-        blue = static_cast<guchar>((static_cast<std::int32_t>(blue) * alpha + kBackground * (kOpaqueAlpha - alpha)) /
-                                   kOpaqueAlpha);
+        red = static_cast<unsigned char>(
+          ((static_cast<std::int32_t>(red) * alpha) + (kBackground * (kOpaqueAlpha - alpha))) / kOpaqueAlpha);
+        green = static_cast<unsigned char>(
+          ((static_cast<std::int32_t>(green) * alpha) + (kBackground * (kOpaqueAlpha - alpha))) / kOpaqueAlpha);
+        blue = static_cast<unsigned char>(
+          ((static_cast<std::int32_t>(blue) * alpha) + (kBackground * (kOpaqueAlpha - alpha))) / kOpaqueAlpha);
       }
 
       return Pixel{.red = red, .green = green, .blue = blue};
-    }
-
-    Pixel sampleSquare(GdkPixbuf const* pixbuf,
-                       std::int32_t const cropX,
-                       std::int32_t const cropY,
-                       std::int32_t const cropSide,
-                       std::size_t const sampleX,
-                       std::size_t const sampleY,
-                       std::size_t const sampleWidth,
-                       std::size_t const sampleHeight)
-    {
-      auto const column =
-        cropX + std::clamp(static_cast<std::int32_t>((sampleX * static_cast<std::size_t>(cropSide)) / sampleWidth),
-                           0,
-                           cropSide - 1);
-      auto const row =
-        cropY + std::clamp(static_cast<std::int32_t>((sampleY * static_cast<std::size_t>(cropSide)) / sampleHeight),
-                           0,
-                           cropSide - 1);
-      return pixelAt(pixbuf, column, row);
     }
 
     ftxui::Decorator cellColor(CoverArtCell const& cell)
@@ -225,30 +140,54 @@ namespace ao::tui
                                                     std::size_t const columns,
                                                     std::size_t const rows)
   {
-    if (columns == 0 || rows == 0)
+    if (columns == 0 || rows == 0 ||
+        columns > static_cast<std::size_t>(std::numeric_limits<int>::max() / kDecodedChannels) ||
+        rows > static_cast<std::size_t>(std::numeric_limits<int>::max() / 2))
     {
       return std::nullopt;
     }
 
-    auto pixbufPtr = decodePixbuf(bytes);
+    auto const optImage = decodeImage(bytes);
 
-    if (pixbufPtr == nullptr)
+    if (!optImage)
     {
       return std::nullopt;
     }
 
-    auto const width = ::gdk_pixbuf_get_width(pixbufPtr.get());
-    auto const height = ::gdk_pixbuf_get_height(pixbufPtr.get());
-    auto const cropSide = std::min(width, height);
+    auto const cropSide = std::min(optImage->width, optImage->height);
 
     if (cropSide <= 0)
     {
       return std::nullopt;
     }
 
-    auto const cropX = (width - cropSide) / 2;
-    auto const cropY = (height - cropSide) / 2;
+    auto const cropX = (optImage->width - cropSide) / 2;
+    auto const cropY = (optImage->height - cropSide) / 2;
     auto const sampleHeight = rows * 2;
+    auto const inputStride = static_cast<std::ptrdiff_t>(optImage->width) * kDecodedChannels;
+    auto const* cropStart = optImage->pixelsPtr.get() + (static_cast<std::ptrdiff_t>(cropY) * inputStride) +
+                            (static_cast<std::ptrdiff_t>(cropX) * kDecodedChannels);
+
+    if (columns > std::numeric_limits<std::size_t>::max() / sampleHeight / kDecodedChannels)
+    {
+      return std::nullopt;
+    }
+
+    auto scaled = std::vector<unsigned char>(columns * sampleHeight * kDecodedChannels);
+
+    if (::stbir_resize_uint8_srgb(cropStart,
+                                  cropSide,
+                                  cropSide,
+                                  static_cast<std::int32_t>(inputStride),
+                                  scaled.data(),
+                                  static_cast<std::int32_t>(columns),
+                                  static_cast<std::int32_t>(sampleHeight),
+                                  static_cast<std::int32_t>(columns * kDecodedChannels),
+                                  STBIR_RGBA) == nullptr)
+    {
+      return std::nullopt;
+    }
+
     auto preview = CoverArtRows{};
     preview.reserve(rows);
 
@@ -259,9 +198,10 @@ namespace ao::tui
 
       for (std::size_t col = 0; col < columns; ++col)
       {
-        auto const top = sampleSquare(pixbufPtr.get(), cropX, cropY, cropSide, col, row * 2, columns, sampleHeight);
-        auto const bottom =
-          sampleSquare(pixbufPtr.get(), cropX, cropY, cropSide, col, (row * 2) + 1, columns, sampleHeight);
+        auto const topOffset = (((row * 2) * columns) + col) * kDecodedChannels;
+        auto const bottomOffset = ((((row * 2) + 1) * columns) + col) * kDecodedChannels;
+        auto const top = compositePixel(scaled.data() + topOffset);
+        auto const bottom = compositePixel(scaled.data() + bottomOffset);
 
         previewRow.push_back(CoverArtCell{.topRed = top.red,
                                           .topGreen = top.green,
@@ -281,32 +221,72 @@ namespace ao::tui
                                                           std::int32_t const pixelWidth,
                                                           std::int32_t const pixelHeight)
   {
-    auto pixbufPtr = decodePixbuf(bytes);
-    auto scaledPtr = squareScaledPixbuf(pixbufPtr.get(), pixelWidth, pixelHeight);
-
-    if (scaledPtr == nullptr)
+    if (pixelWidth <= 0 || pixelHeight <= 0 || pixelWidth > std::numeric_limits<int>::max() / kDecodedChannels)
     {
       return std::nullopt;
     }
 
-    auto* rawBuffer = static_cast<gchar*>(nullptr);
-    gsize bufferSize = 0;
+    auto const optImage = decodeImage(bytes);
 
-    if (auto* rawError = static_cast<GError*>(nullptr);
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-        ::gdk_pixbuf_save_to_buffer(scaledPtr.get(), &rawBuffer, &bufferSize, "png", &rawError, nullptr) == FALSE)
+    if (!optImage)
     {
-      auto errorPtr = ErrorPtr{rawError};
       return std::nullopt;
     }
 
-    auto bufferPtr = BufferPtr{rawBuffer, ::g_free};
-    auto result = std::vector<std::byte>{};
-    result.reserve(bufferSize);
+    auto const cropSide = std::min(optImage->width, optImage->height);
 
-    auto const bufferBytes = std::as_bytes(std::span{bufferPtr.get(), bufferSize});
-    result.insert(result.end(), bufferBytes.begin(), bufferBytes.end());
-    return result;
+    if (cropSide <= 0)
+    {
+      return std::nullopt;
+    }
+
+    auto const cropX = (optImage->width - cropSide) / 2;
+    auto const cropY = (optImage->height - cropSide) / 2;
+    auto const inputStride = static_cast<std::ptrdiff_t>(optImage->width) * kDecodedChannels;
+    auto const* cropStart = optImage->pixelsPtr.get() + (static_cast<std::ptrdiff_t>(cropY) * inputStride) +
+                            (static_cast<std::ptrdiff_t>(cropX) * kDecodedChannels);
+
+    auto const scaledWidth = static_cast<std::size_t>(pixelWidth);
+    auto const scaledHeight = static_cast<std::size_t>(pixelHeight);
+
+    if (scaledWidth > std::numeric_limits<std::size_t>::max() / scaledHeight / kDecodedChannels)
+    {
+      return std::nullopt;
+    }
+
+    auto scaled = std::vector<unsigned char>(scaledWidth * scaledHeight * kDecodedChannels);
+
+    if (::stbir_resize_uint8_srgb(cropStart,
+                                  cropSide,
+                                  cropSide,
+                                  static_cast<std::int32_t>(inputStride),
+                                  scaled.data(),
+                                  pixelWidth,
+                                  pixelHeight,
+                                  pixelWidth * kDecodedChannels,
+                                  STBIR_RGBA) == nullptr)
+    {
+      return std::nullopt;
+    }
+
+    auto png = std::vector<std::byte>{};
+    // stb owns this callback signature and requires its exact C `int` size.
+    // NOLINTNEXTLINE(aobus-modernize-use-std-numbers)
+    auto const appendChunk = [](void* context, void* data, int size)
+    {
+      auto* out = static_cast<std::vector<std::byte>*>(context);
+      auto const chunk = std::span{static_cast<std::byte const*>(data), static_cast<std::size_t>(size)};
+      out->insert(out->end(), chunk.begin(), chunk.end());
+    };
+
+    if (::stbi_write_png_to_func(
+          appendChunk, &png, pixelWidth, pixelHeight, kDecodedChannels, scaled.data(), pixelWidth * kDecodedChannels) ==
+        0)
+    {
+      return std::nullopt;
+    }
+
+    return png;
   }
 
   std::string kittyDeleteVisibleImagesEscape()

@@ -23,6 +23,8 @@ namespace ao::utility
    * The temp file is created in the same directory as the target, optionally
    * chmod'd, fully written, fsync'd, and renamed over the target. The parent
    * directory is fsync'd on success. Temp files are removed on failure.
+   * On Windows, permission values are advisory; the replaced file inherits the
+   * destination directory ACLs.
    */
   Result<> writeAtomically(std::filesystem::path const& targetPath,
                            std::string_view data,

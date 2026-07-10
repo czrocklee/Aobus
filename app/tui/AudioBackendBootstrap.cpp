@@ -13,6 +13,9 @@
 #ifdef PIPEWIRE_FOUND
 #include <ao/audio/backend/PipeWireProvider.h>
 #endif
+#ifdef WASAPI_FOUND
+#include <ao/audio/backend/WasapiProvider.h>
+#endif
 
 namespace ao::tui
 {
@@ -23,6 +26,9 @@ namespace ao::tui
 #endif
 #ifdef ALSA_FOUND
     runtime.addAudioProvider(std::make_unique<audio::backend::AlsaProvider>());
+#endif
+#ifdef WASAPI_FOUND
+    runtime.addAudioProvider(std::make_unique<audio::backend::WasapiProvider>());
 #endif
   }
 } // namespace ao::tui

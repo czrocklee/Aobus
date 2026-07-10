@@ -4,7 +4,7 @@ import argparse
 
 from . import build, test
 
-HELP = "Build everything and run all test suites (the old ./build.sh debug flow)"
+HELP = "Build everything and run every suite enabled by the native profile"
 
 EPILOG = """\
 examples:
@@ -28,11 +28,12 @@ def run_command(args: argparse.Namespace) -> int:
         print(f"Note: tests only run for debug/release; use ./ao build for {args.flavor}.")
         return build.run_command(args)
 
-    result = build.do_build(args, targets=[])
+    result = build.do_build(args, targets=[], with_tests=True)
 
     print("Running tests...")
-    if (status := test.run_suites(test.SUITE_GROUPS["all"], result.build_dir, log=result.log)) != 0:
+    suites = test.suites_for("all")
+    if (status := test.run_suites(suites, result.build_dir, log=result.log)) != 0:
         return status
 
-    build.print_summary(args, result, tests="all registered suites")
+    build.print_summary(args, result, tests=f"all native suites ({', '.join(suites)})")
     return 0

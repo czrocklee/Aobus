@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..core import gitfiles
+from ..core import builddir, gitfiles, tidyengine
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die
 
@@ -67,14 +67,18 @@ def run_clang_format(files: list[str], *, check: bool) -> int:
     mode = ["--dry-run", "-Werror"] if check else ["-i"]
     action = "Checking" if check else "Formatting"
     print(f"{action} {len(files)} file(s) with clang-format...")
+    clang_format = "clang-format"
+    if builddir.platform_profile().name == "windows":
+        tidyengine.ensure_windows_llvm_sdk(builddir.TIDY_DIR)
+        clang_format = tidyengine.clang_tool(builddir.TIDY_DIR, "clang-format")
 
     status = 0
     for start in range(0, len(files), CHUNK):
         chunk = files[start : start + CHUNK]
         try:
-            result = subprocess.run(["clang-format", *mode, *chunk], cwd=PROJECT_ROOT)
+            result = subprocess.run([clang_format, *mode, *chunk], cwd=PROJECT_ROOT)
         except FileNotFoundError as exc:
-            raise die("clang-format not found. Enter the project shell with ./ao or nix-shell.") from exc
+            raise die(f"clang-format not found: {clang_format}") from exc
         if result.returncode != 0:
             status = result.returncode
 

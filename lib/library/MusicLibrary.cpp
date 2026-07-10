@@ -122,12 +122,19 @@ namespace ao::library
     {
     }
 
-    static Result<std::unique_ptr<Impl>> create(std::filesystem::path musicRoot, std::filesystem::path databasePath)
+    static Result<std::unique_ptr<Impl>> create(std::filesystem::path musicRoot,
+                                                std::filesystem::path databasePath,
+                                                std::size_t mapSize)
     {
+      if (mapSize == 0)
+      {
+        mapSize = kLmdbMapSize;
+      }
+
       auto env = lmdb::Environment::open(
         databasePath.string(),
         lmdb::Environment::Options{
-          .flags = lmdb::kEnvNoTls, .mode = kLmdbFileMode, .maxDatabases = kLmdbMaxDatabases, .mapSize = kLmdbMapSize});
+          .flags = lmdb::kEnvNoTls, .mode = kLmdbFileMode, .maxDatabases = kLmdbMaxDatabases, .mapSize = mapSize});
 
       if (!env)
       {
@@ -200,8 +207,13 @@ namespace ao::library
   };
 
   MusicLibrary::MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
+    : MusicLibrary{std::move(musicRoot), std::move(databasePath), Options{}}
   {
-    if (auto result = initialize(std::move(musicRoot), std::move(databasePath)); !result)
+  }
+
+  MusicLibrary::MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath, Options options)
+  {
+    if (auto result = initialize(std::move(musicRoot), std::move(databasePath), options); !result)
     {
       throwException<Exception>("Failed to open music library: {}", result.error().message);
     }
@@ -213,9 +225,16 @@ namespace ao::library
 
   Result<MusicLibrary> MusicLibrary::open(std::filesystem::path musicRoot, std::filesystem::path databasePath)
   {
+    return open(std::move(musicRoot), std::move(databasePath), Options{});
+  }
+
+  Result<MusicLibrary> MusicLibrary::open(std::filesystem::path musicRoot,
+                                          std::filesystem::path databasePath,
+                                          Options options)
+  {
     auto library = MusicLibrary{};
 
-    if (auto result = library.initialize(std::move(musicRoot), std::move(databasePath)); !result)
+    if (auto result = library.initialize(std::move(musicRoot), std::move(databasePath), options); !result)
     {
       return std::unexpected{result.error()};
     }
@@ -223,12 +242,14 @@ namespace ao::library
     return library;
   }
 
-  Result<> MusicLibrary::initialize(std::filesystem::path musicRoot, std::filesystem::path databasePath)
+  Result<> MusicLibrary::initialize(std::filesystem::path musicRoot,
+                                    std::filesystem::path databasePath,
+                                    Options options)
   {
     try
     {
       std::filesystem::create_directories(databasePath);
-      auto impl = Impl::create(std::move(musicRoot), std::move(databasePath));
+      auto impl = Impl::create(std::move(musicRoot), std::move(databasePath), options.mapSize);
 
       if (!impl)
       {

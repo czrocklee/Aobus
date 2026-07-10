@@ -1,0 +1,57 @@
+{
+  "name": "aobus",
+  "version-string": "0.1.0",
+  "builtin-baseline": "40a9bd4ccdf5dc14ff76d4ed47d46a226ce84a83",
+  "dependencies": [
+    "alac",
+    "boost-algorithm",
+    "boost-asio",
+    "boost-container",
+    "boost-endian",
+    "boost-filesystem",
+    "boost-headers",
+    "boost-interprocess",
+    "boost-lockfree",
+    "boost-pfr",
+    "boost-process",
+    "boost-unordered",
+    "cli11",
+    "c4core",
+    "fdk-aac",
+    "ftxui",
+    "foonathan-lexy",
+    "gsl-lite",
+    {
+      "name": "gperf",
+      "host": true
+    },
+    {
+      "name": "python3",
+      "host": true
+    },
+    "libflac",
+    "lmdb",
+    "mimalloc",
+    "mpg123",
+    "ryml",
+    {
+      "name": "spdlog",
+      "default-features": false,
+      "features": [
+        "tz-offset"
+      ],
+      "$reason": "Disabling the default fmt feature makes the port build spdlog with SPDLOG_USE_STD_FORMAT, matching the Linux build."
+    },
+    "stb",
+    "xxhash"
+  ],
+  "features": {
+    "tests": {
+      "description": "Dependencies needed to build Aobus unit tests.",
+      "dependencies": [
+        "catch2",
+        "fakeit"
+      ]
+    }
+  }
+}

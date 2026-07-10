@@ -526,12 +526,12 @@ namespace ao::audio::backend
     _implPtr->destroyStream();
   }
 
-  BackendId PipeWireBackend::backendId() const noexcept
+  BackendId PipeWireBackend::backendId() const
   {
     return kBackendPipeWire;
   }
 
-  ProfileId PipeWireBackend::profileId() const noexcept
+  ProfileId PipeWireBackend::profileId() const
   {
     return _exclusiveMode ? kProfileExclusive : kProfileShared;
   }

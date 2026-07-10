@@ -20,12 +20,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <expected>
 #include <filesystem>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::audio
@@ -34,6 +36,19 @@ namespace ao::audio
   {
     constexpr std::uint8_t kMp3PcmBitDepth = 16;
     constexpr std::uint8_t kFloat32BitDepth = 32;
+
+    template<typename Action>
+    decltype(auto) terminateOnException(Action&& action) noexcept
+    {
+      try
+      {
+        return std::forward<Action>(action)();
+      }
+      catch (...)
+      {
+        std::terminate();
+      }
+    }
 
     std::uint8_t channelCountFromMpg123(std::int32_t channels) noexcept
     {
@@ -101,11 +116,11 @@ namespace ao::audio
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    static ssize_t readCb(void* handle, void* buf, size_t sz)
+    static mpg123_ssize_t readCb(void* handle, void* buf, size_t sz)
     {
       auto* self = static_cast<Impl*>(handle);
       auto const count = self->fileCursor.read({static_cast<std::byte*>(buf), sz});
-      return static_cast<ssize_t>(count);
+      return static_cast<mpg123_ssize_t>(count);
     }
 
     static off_t lseekCb(void* handle, off_t offset, std::int32_t whence)
@@ -218,7 +233,112 @@ namespace ao::audio
       info.isLossy = true;
       info.codec = AudioCodec::Mp3;
     }
+
+    Result<PcmBlock> readNextBlock();
   };
+
+  Result<PcmBlock> Mp3DecoderSession::Impl::readNextBlock()
+  {
+    auto* const impl = this;
+
+    try
+    {
+      if (impl->optTerminalError)
+      {
+        return std::unexpected{*impl->optTerminalError};
+      }
+
+      if (!impl->fileCursor.isOpen() || impl->eof)
+      {
+        return PcmBlock{.bytes = {}, .endOfStream = true};
+      }
+
+      size_t done = 0;
+
+      while (true)
+      {
+        int const err = ::mpg123_read(impl->mh,
+                                      utility::layout::asLegacyPtr<unsigned char>(impl->decodeBuffer.data()),
+                                      impl->decodeBuffer.size(),
+                                      &done);
+
+        if (err == MPG123_DONE)
+        {
+          impl->eof = true;
+
+          if (done == 0)
+          {
+            return PcmBlock{.bytes = {}, .endOfStream = true};
+          }
+
+          break;
+        }
+
+        if (err == MPG123_NEW_FORMAT)
+        {
+          auto const previousInfo = impl->info;
+
+          impl->refreshStreamInfo();
+
+          if (!(impl->info.outputFormat == previousInfo.outputFormat))
+          {
+            impl->info = previousInfo;
+            detail::throwDecoderError(Error::Code::NotSupported, "MP3 stream changed output format during playback");
+          }
+
+          if (done == 0)
+          {
+            continue;
+          }
+
+          break;
+        }
+
+        if (err != MPG123_OK)
+        {
+          detail::throwDecoderError(
+            Error::Code::DecodeFailed, "MP3 decode error: " + mpg123ErrorMessage(impl->mh, err));
+        }
+
+        break;
+      }
+
+      if (done == 0)
+      {
+        impl->eof = true;
+        return PcmBlock{.bytes = {}, .endOfStream = true};
+      }
+
+      auto const bytesPerFrame =
+        static_cast<std::uint32_t>(impl->info.outputFormat.channels) * (impl->info.outputFormat.bitDepth / 8U);
+
+      if (bytesPerFrame == 0)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "Invalid MP3 output format");
+      }
+
+      std::uint32_t const frames = static_cast<std::uint32_t>(done / bytesPerFrame);
+
+      if ((done % bytesPerFrame) != 0 || frames == 0)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "Misaligned MP3 decoder output");
+      }
+
+      std::uint64_t const currentFrameIndex = impl->nextFrameIndex;
+      impl->nextFrameIndex += frames;
+
+      return PcmBlock{.bytes = {impl->decodeBuffer.data(), done},
+                      .bitDepth = impl->info.outputFormat.bitDepth,
+                      .frames = frames,
+                      .firstFrameIndex = currentFrameIndex,
+                      .endOfStream = false};
+    }
+    catch (detail::DecoderException const& ex)
+    {
+      impl->optTerminalError = ex.error();
+      return std::unexpected{ex.error()};
+    }
+  }
 
   Mp3DecoderSession::Mp3DecoderSession(Format outputFormat)
     : _implPtr{std::make_unique<Impl>(outputFormat)}
@@ -311,36 +431,40 @@ namespace ao::audio
 
   Result<> Mp3DecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
-    if (!_implPtr->fileCursor.isOpen())
-    {
-      return makeError(Error::Code::SeekFailed, "MP3 decoder is not open");
-    }
+    return terminateOnException(
+      [this, offset] -> Result<>
+      {
+        if (!_implPtr->fileCursor.isOpen())
+        {
+          return makeError(Error::Code::SeekFailed, "MP3 decoder is not open");
+        }
 
-    if (offset > _implPtr->info.duration)
-    {
-      return makeError(Error::Code::SeekFailed, "Seek offset out of bounds");
-    }
+        if (offset > _implPtr->info.duration)
+        {
+          return makeError(Error::Code::SeekFailed, "Seek offset out of bounds");
+        }
 
-    auto const sampleRate = _implPtr->info.sourceFormat.sampleRate;
+        auto const sampleRate = _implPtr->info.sourceFormat.sampleRate;
 
-    if (sampleRate == 0)
-    {
-      return makeError(Error::Code::SeekFailed, "Sample rate is 0");
-    }
+        if (sampleRate == 0)
+        {
+          return makeError(Error::Code::SeekFailed, "Sample rate is 0");
+        }
 
-    auto const sampleOffset = static_cast<off_t>(durationToSamples(offset, sampleRate));
+        auto const sampleOffset = static_cast<off_t>(durationToSamples(offset, sampleRate));
 
-    auto const actualOffset = ::mpg123_seek(_implPtr->mh, sampleOffset, SEEK_SET);
+        auto const actualOffset = ::mpg123_seek(_implPtr->mh, sampleOffset, SEEK_SET);
 
-    if (actualOffset < 0)
-    {
-      return makeError(Error::Code::SeekFailed, "MP3 seek failed: " + mpg123ErrorMessage(_implPtr->mh, MPG123_ERR));
-    }
+        if (actualOffset < 0)
+        {
+          return makeError(Error::Code::SeekFailed, "MP3 seek failed: " + mpg123ErrorMessage(_implPtr->mh, MPG123_ERR));
+        }
 
-    _implPtr->nextFrameIndex = static_cast<std::uint64_t>(actualOffset);
-    _implPtr->optTerminalError.reset();
-    _implPtr->eof = false;
-    return {};
+        _implPtr->nextFrameIndex = static_cast<std::uint64_t>(actualOffset);
+        _implPtr->optTerminalError.reset();
+        _implPtr->eof = false;
+        return {};
+      });
   }
 
   void Mp3DecoderSession::flush() noexcept
@@ -350,103 +474,7 @@ namespace ao::audio
 
   Result<PcmBlock> Mp3DecoderSession::readNextBlock() noexcept
   {
-    try
-    {
-      if (_implPtr->optTerminalError)
-      {
-        return std::unexpected{*_implPtr->optTerminalError};
-      }
-
-      if (!_implPtr->fileCursor.isOpen() || _implPtr->eof)
-      {
-        return PcmBlock{.bytes = {}, .endOfStream = true};
-      }
-
-      size_t done = 0;
-
-      while (true)
-      {
-        int const err = ::mpg123_read(_implPtr->mh,
-                                      utility::layout::asLegacyPtr<unsigned char>(_implPtr->decodeBuffer.data()),
-                                      _implPtr->decodeBuffer.size(),
-                                      &done);
-
-        if (err == MPG123_DONE)
-        {
-          _implPtr->eof = true;
-
-          if (done == 0)
-          {
-            return PcmBlock{.bytes = {}, .endOfStream = true};
-          }
-
-          break;
-        }
-
-        if (err == MPG123_NEW_FORMAT)
-        {
-          auto const previousInfo = _implPtr->info;
-
-          _implPtr->refreshStreamInfo();
-
-          if (!(_implPtr->info.outputFormat == previousInfo.outputFormat))
-          {
-            _implPtr->info = previousInfo;
-            detail::throwDecoderError(Error::Code::NotSupported, "MP3 stream changed output format during playback");
-          }
-
-          if (done == 0)
-          {
-            continue;
-          }
-
-          break;
-        }
-
-        if (err != MPG123_OK)
-        {
-          detail::throwDecoderError(
-            Error::Code::DecodeFailed, "MP3 decode error: " + mpg123ErrorMessage(_implPtr->mh, err));
-        }
-
-        break;
-      }
-
-      if (done == 0)
-      {
-        _implPtr->eof = true;
-        return PcmBlock{.bytes = {}, .endOfStream = true};
-      }
-
-      auto const bytesPerFrame =
-        static_cast<std::uint32_t>(_implPtr->info.outputFormat.channels) * (_implPtr->info.outputFormat.bitDepth / 8U);
-
-      if (bytesPerFrame == 0)
-      {
-        detail::throwDecoderError(Error::Code::DecodeFailed, "Invalid MP3 output format");
-      }
-
-      std::uint32_t const frames = static_cast<std::uint32_t>(done / bytesPerFrame);
-
-      if ((done % bytesPerFrame) != 0 || frames == 0)
-      {
-        detail::throwDecoderError(Error::Code::DecodeFailed, "Misaligned MP3 decoder output");
-      }
-
-      std::uint64_t const currentFrameIndex = _implPtr->nextFrameIndex;
-      _implPtr->nextFrameIndex += frames;
-
-      return PcmBlock{.bytes = {_implPtr->decodeBuffer.data(), done},
-                      .bitDepth = _implPtr->info.outputFormat.bitDepth,
-                      .frames = frames,
-                      .firstFrameIndex = currentFrameIndex,
-                      .endOfStream = false};
-    }
-    catch (detail::DecoderException const& ex)
-    {
-      _implPtr->optTerminalError = ex.error();
-      return std::unexpected{ex.error()};
-    }
+    return terminateOnException([this] { return _implPtr->readNextBlock(); });
   }
 
   DecodedStreamInfo Mp3DecoderSession::streamInfo() const noexcept

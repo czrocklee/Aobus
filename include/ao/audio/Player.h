@@ -72,6 +72,10 @@ namespace ao::audio
     explicit Player(async::Executor& executor);
     ~Player();
 
+    /// Stops providers and quiesces Engine callbacks before an owner releases Player.
+    /// Idempotent; no other methods may be called after shutdown.
+    void shutdown() noexcept;
+
     Player(Player const&) = delete;
     Player& operator=(Player const&) = delete;
     Player(Player&&) = delete;
@@ -118,6 +122,6 @@ namespace ao::audio
 
   private:
     struct Impl;
-    std::unique_ptr<Impl> _implPtr;
+    std::shared_ptr<Impl> _implPtr;
   };
 } // namespace ao::audio

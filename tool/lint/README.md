@@ -1,25 +1,31 @@
-# Custom Clang-Tidy Checks
+# Aobus clang-tidy checks
 
-This directory contains custom clang-tidy checks for the Aobus project.
+This directory owns the `aobus-*` clang-tidy checks and their registration
+module. Use `./ao tidy` or `ao.bat tidy`; the portal owns check selection,
+compile databases, tool discovery, and diagnostic handling.
 
-## `EmptyLineBeforeIfCheck`
+Linux builds `libAobusLintPlugin.so` against the Nix-provided LLVM development
+packages and loads it into the matching `clang-tidy` process.
 
-A custom readability check that enforces an empty line before `if` statements, unless the `if` statement is the first statement inside a block `{`.
+Official Windows LLVM binaries do not export the symbols needed by an
+out-of-tree DLL plugin. The `windows-tidy` preset therefore downloads the pinned
+official development archive and builds `AobusClangTidy.exe`, linking the same
+check sources directly with `clangTidyMain`. This keeps upstream and Aobus check
+registries in one process without relying on an unstable cross-package C++ ABI.
 
-### How to Build and Use
+CMake serializes access to the shared SDK under `out/toolchains/` and reuses it
+only when its required files and version-plus-SHA completion marker validate.
+An invalid automatic cache is removed and re-extracted from the SHA-verified
+archive. For an offline configure, extract the exact pinned archive first and
+run the following from an initialized Visual Studio x64 developer prompt with
+`VCPKG_ROOT` set (`start-msbuild-env.bat cmd` opens one):
 
-Custom clang-tidy checks are typically compiled into a dynamic plugin or built directly inside the LLVM `clang-tools-extra` source tree.
-
-#### Building as a Clang-Tidy Plugin
-
-You can build this as a standalone shared library (`.so`) if you have LLVM/Clang development packages installed.
-
-1. Create a `CMakeLists.txt` here using LLVM's CMake macros (`add_llvm_library(... MODULE)`).
-2. Compile it to produce `EmptyLineBeforeIfPlugin.so`.
-3. Load the plugin and run it on your code:
-
-```bash
-clang-tidy -load=./EmptyLineBeforeIfPlugin.so -checks="-*,readability-empty-line-before-if" your_file.cpp
+```bat
+cmake --preset windows-tidy -DAOBUS_LLVM_SDK_ROOT=C:/path/to/clang+llvm-22.1.8-x86_64-pc-windows-msvc
 ```
 
-*Note: For complex logic (e.g., properly ignoring block comments `/* ... */` and line comments `// ...` before the `if`), you may need to extend the character stream parser or integrate `Lexer::getRawToken` to navigate token boundaries more accurately.*
+`AOBUS_LLVM_SDK_ROOT` is a CMake cache option, not an environment variable, and
+the pre-provisioned directory is validated but never modified.
+
+Checker behavior is covered by fixtures under
+`test/integration/lint/fixture/`; run them with `./ao test --lint` on Linux.

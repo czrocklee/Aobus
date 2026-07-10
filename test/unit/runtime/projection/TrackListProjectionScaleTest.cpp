@@ -5,6 +5,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>
@@ -27,16 +28,37 @@ namespace ao::rt::test
     auto& lib = libraryFixture.library();
 
     int const kTrackCount = 10000;
-    auto ids = std::vector<TrackId>{};
-    ids.reserve(kTrackCount);
-
-    for (std::int32_t index = 0; index < kTrackCount; ++index)
+    auto addTracks = [&lib](std::int32_t count, auto&& makeSpec)
     {
-      ids.push_back(
-        libraryFixture.addTrack(library::test::TrackSpec{.title = std::format("Track {:05d}", index),
-                                                         .artist = std::format("Artist {:03d}", index % 100),
-                                                         .album = std::format("Album {:03d}", index % 500)}));
-    }
+      auto transaction = lib.writeTransaction();
+      auto writer = lib.tracks().writer(transaction);
+      auto result = std::vector<TrackId>{};
+      result.reserve(static_cast<std::size_t>(count));
+
+      for (std::int32_t index = 0; index < count; ++index)
+      {
+        auto builder = library::TrackBuilder::makeEmpty();
+        auto const spec = makeSpec(index);
+        library::test::applyTrackSpec(builder, spec);
+
+        auto data = builder.serialize(transaction, lib.dictionary(), lib.resources());
+        REQUIRE(data);
+        auto createResult = writer.createHotCold(data->first, data->second);
+        REQUIRE(createResult);
+        result.push_back(createResult->first);
+      }
+
+      REQUIRE(transaction.commit());
+      return result;
+    };
+
+    auto ids = addTracks(kTrackCount,
+                         [](std::int32_t index)
+                         {
+                           return library::test::TrackSpec{.title = std::format("Track {:05d}", index),
+                                                           .artist = std::format("Artist {:03d}", index % 100),
+                                                           .album = std::format("Album {:03d}", index % 500)};
+                         });
 
     auto source = MutableTrackSource{};
     source.setInitial(ids);
@@ -49,14 +71,9 @@ namespace ao::rt::test
 
     SECTION("Batch insertion performance (incremental merge)")
     {
-      auto newIds = std::vector<TrackId>{};
-      newIds.reserve(100);
-
-      for (std::int32_t index = 0; index < 100; ++index)
-      {
-        newIds.push_back(
-          libraryFixture.addTrack(library::test::TrackSpec{.title = std::format("New Track {:05d}", index)}));
-      }
+      auto newIds = addTracks(100,
+                              [](std::int32_t index)
+                              { return library::test::TrackSpec{.title = std::format("New Track {:05d}", index)}; });
 
       source.batchInsert(newIds);
 

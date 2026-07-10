@@ -5,6 +5,7 @@
 
 #include "linux-gtk/app/GtkMainContextExecutor.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackService.h>
@@ -584,6 +585,7 @@ namespace ao::gtk::test
         .executorPtr = std::make_unique<GtkMainContextExecutor>(),
         .musicRoot = musicRoot,
         .databasePath = databasePath,
+        .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
         .workspaceConfigStorePtr = std::move(configStorePtr),
       });
     }
@@ -605,6 +607,7 @@ namespace ao::gtk::test
       .executorPtr = std::make_unique<GtkMainContextExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = tempDir.path() / ".aobus" / "library",
+      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
     }};
   }

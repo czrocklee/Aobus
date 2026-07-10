@@ -11,12 +11,17 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <fcntl.h>
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 #include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -30,11 +35,11 @@ namespace ao::rt::test
     {
       co_await runtime->resumeOnWorker();
       // Now on worker thread — the thread switch is the behavior under test.
-      (*counter)++;
+      counter.increment();
 
       co_await runtime->resumeOnCallbackExecutor();
       // Now back on UI (ImmediateExecutor for tests)
-      (*counter)++;
+      counter.increment();
 
       co_return std::this_thread::get_id();
     }
@@ -45,26 +50,78 @@ namespace ao::rt::test
       throwException<Exception>("Test failure");
     }
 
-    /// RAII guard that redirects stderr to /dev/null for its lifetime.
+#ifdef _WIN32
+    std::int32_t stderrFileDescriptor()
+    {
+      return ::_fileno(stderr);
+    }
+
+    std::int32_t duplicateFileDescriptor(std::int32_t const fd)
+    {
+      return ::_dup(fd);
+    }
+
+    std::int32_t openNullDevice()
+    {
+      return ::_open("NUL", _O_WRONLY);
+    }
+
+    void duplicateFileDescriptorTo(std::int32_t const source, std::int32_t const target)
+    {
+      std::ignore = ::_dup2(source, target);
+    }
+
+    void closeFileDescriptor(std::int32_t const fd)
+    {
+      std::ignore = ::_close(fd);
+    }
+#else
+    std::int32_t stderrFileDescriptor()
+    {
+      return STDERR_FILENO;
+    }
+
+    std::int32_t duplicateFileDescriptor(std::int32_t const fd)
+    {
+      return ::dup(fd);
+    }
+
+    std::int32_t openNullDevice()
+    {
+      return ::open("/dev/null", O_WRONLY);
+    }
+
+    void duplicateFileDescriptorTo(std::int32_t const source, std::int32_t const target)
+    {
+      std::ignore = ::dup2(source, target);
+    }
+
+    void closeFileDescriptor(std::int32_t const fd)
+    {
+      std::ignore = ::close(fd);
+    }
+#endif
+
+    /// RAII guard that redirects stderr to the platform null device for its lifetime.
     /// Used to silence the intentional "unhandled exception" diagnostic that
     /// spawnLogged emits when exercising the exception-logging path.
     class StderrSilencer final
     {
     public:
       StderrSilencer()
-        : _savedFd{::dup(STDERR_FILENO)}
+        : _stderrFd{stderrFileDescriptor()}, _savedFd{duplicateFileDescriptor(_stderrFd)}
       {
         std::fflush(stderr);
-        int const devNull = ::open("/dev/null", O_WRONLY);
-        ::dup2(devNull, STDERR_FILENO);
-        ::close(devNull);
+        std::int32_t const devNull = openNullDevice();
+        duplicateFileDescriptorTo(devNull, _stderrFd);
+        closeFileDescriptor(devNull);
       }
 
       ~StderrSilencer()
       {
         std::fflush(stderr);
-        ::dup2(_savedFd, STDERR_FILENO);
-        ::close(_savedFd);
+        duplicateFileDescriptorTo(_savedFd, _stderrFd);
+        closeFileDescriptor(_savedFd);
       }
 
       StderrSilencer(StderrSilencer const&) = delete;
@@ -73,7 +130,8 @@ namespace ao::rt::test
       StderrSilencer& operator=(StderrSilencer&&) = delete;
 
     private:
-      int _savedFd{-1};
+      std::int32_t _stderrFd{-1};
+      std::int32_t _savedFd{-1};
     };
   } // namespace
 
@@ -260,5 +318,49 @@ namespace ao::rt::test
     signal.emit(2);
 
     CHECK(calls == 1);
+  }
+
+  TEST_CASE("Signal - handler can destroy owner and subscriptions can outlive it",
+            "[runtime][regression][signal][lifecycle]")
+  {
+    auto signalPtr = std::make_unique<Signal<std::int32_t>>();
+    auto order = std::vector<std::int32_t>{};
+    auto firstSubscription = Subscription{};
+    auto secondSubscription = Subscription{};
+
+    firstSubscription = signalPtr->connect(
+      [&](std::int32_t value)
+      {
+        order.push_back(value);
+        firstSubscription.reset();
+        signalPtr.reset();
+      });
+    secondSubscription = signalPtr->connect([&](std::int32_t value) { order.push_back(100 + value); });
+
+    auto* const signal = signalPtr.get();
+    signal->emit(1);
+
+    CHECK(signalPtr == nullptr);
+    CHECK(order == std::vector<std::int32_t>{1});
+
+    // The remaining handle keeps only a weak State reference after its owner is
+    // gone, so late teardown is a no-op rather than a call through a dangling
+    // Signal pointer.
+    secondSubscription.reset();
+  }
+
+  TEST_CASE("Signal - posted emission is cancelled when owner is destroyed", "[runtime][regression][signal][lifecycle]")
+  {
+    auto executor = ManualExecutor{};
+    auto signalPtr = std::make_unique<Signal<std::int32_t>>();
+    std::int32_t calls = 0;
+    auto subscription = signalPtr->connect([&](std::int32_t) { ++calls; });
+
+    signalPtr->post(executor, 1);
+    signalPtr.reset();
+    subscription.reset();
+    executor.runUntilIdle();
+
+    CHECK(calls == 0);
   }
 } // namespace ao::rt::test

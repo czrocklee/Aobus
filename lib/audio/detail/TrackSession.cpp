@@ -112,7 +112,9 @@ namespace ao::audio::detail
                                      ProfileId const& profileId,
                                      DecoderFactoryFn const& decoderFactory)
   {
-    if (backendId == kBackendPipeWire && profileId == kProfileShared)
+    // Shared-mode server backends (PipeWire, WASAPI) convert any stream format
+    // themselves, so the decoder output passes through unnegotiated.
+    if ((backendId == kBackendPipeWire || backendId == kBackendWasapi) && profileId == kProfileShared)
     {
       backendFormat = info.outputFormat;
       return;

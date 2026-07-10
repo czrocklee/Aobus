@@ -20,95 +20,100 @@
 
 namespace ao::rt::test
 {
+  // NOTE: fixture types deliberately have external linkage (no anonymous
+  // namespace): boost.pfr reflection rejects internal-linkage types under
+  // MSVC (error C7631).
+  // NOLINTBEGIN(misc-use-internal-linkage) — external linkage is required by boost.pfr on MSVC.
+  enum class Color : std::uint8_t
+  {
+    Red,
+    Green,
+    Blue,
+  };
+
+  enum class Flags : std::uint8_t
+  {
+    None = 0,
+    Read = 1,
+    Write = 2,
+    Execute = 4,
+  };
+
   namespace
   {
-    enum class Color : std::uint8_t
-    {
-      Red,
-      Green,
-      Blue,
-    };
-
-    enum class Flags : std::uint8_t
-    {
-      None = 0,
-      Read = 1,
-      Write = 2,
-      Execute = 4,
-    };
-
     constexpr Flags operator|(Flags a, Flags b)
     {
       return static_cast<Flags>(static_cast<std::uint8_t>(a) | static_cast<std::uint8_t>(b));
     }
-
-    struct Inner final
-    {
-      std::int32_t value = 0;
-      std::string label{};
-    };
-
-    struct ComplexAggregate final
-    {
-      std::int32_t count = 0;
-      double rate = 0.0;
-      bool enabled = true;
-      std::string name{};
-      Color color = Color::Red;
-      std::optional<int> optScore{};
-      std::optional<std::string> optNote{};
-      std::vector<Inner> items{};
-      std::map<std::string, int, std::less<>> scores{};
-      Inner nested{};
-    };
-
-    struct AllOptional final
-    {
-      std::optional<int> optInt{};
-      std::optional<double> optDouble{};
-      std::optional<std::string> optString{};
-      std::optional<Color> optColor{};
-    };
-
-    struct WithEnums final
-    {
-      Color simple = Color::Red;
-      Flags bitmask = Flags::Read;
-    };
-
-    struct TestIdTag final
-    {};
-    using TestId = utility::StrongType<std::uint32_t, TestIdTag>;
-
-    struct WithTaggedId final
-    {
-      TestId id{};
-      std::string label{};
-    };
-
-    struct TestStringTag final
-    {};
-    using TestStringId = utility::StrongType<std::string, TestStringTag>;
-
-    struct WithStrongId final
-    {
-      TestStringId id{};
-      std::int32_t count = 0;
-    };
-
-    struct WithEmptyContainers final
-    {
-      std::vector<int> numbers{};
-      std::map<std::string, int, std::less<>> dictionary{};
-    };
-
-    struct DeepNested final
-    {
-      ComplexAggregate level1{};
-      std::vector<ComplexAggregate> more{};
-    };
   } // namespace
 
+  struct Inner final
+  {
+    std::int32_t value = 0;
+    std::string label{};
+  };
+
+  // NOLINTNEXTLINE(bugprone-exception-escape) — clang models MSVC's standard-library map move as throwing.
+  struct ComplexAggregate final
+  {
+    std::int32_t count = 0;
+    double rate = 0.0;
+    bool enabled = true;
+    std::string name{};
+    Color color = Color::Red;
+    std::optional<int> optScore{};
+    std::optional<std::string> optNote{};
+    std::vector<Inner> items{};
+    std::map<std::string, int, std::less<>> scores{};
+    Inner nested{};
+  };
+
+  struct AllOptional final
+  {
+    std::optional<int> optInt{};
+    std::optional<double> optDouble{};
+    std::optional<std::string> optString{};
+    std::optional<Color> optColor{};
+  };
+
+  struct WithEnums final
+  {
+    Color simple = Color::Red;
+    Flags bitmask = Flags::Read;
+  };
+
+  struct TestIdTag final
+  {};
+  using TestId = utility::StrongType<std::uint32_t, TestIdTag>;
+
+  struct WithTaggedId final
+  {
+    TestId id{};
+    std::string label{};
+  };
+
+  struct TestStringTag final
+  {};
+  using TestStringId = utility::StrongType<std::string, TestStringTag>;
+
+  struct WithStrongId final
+  {
+    TestStringId id{};
+    std::int32_t count = 0;
+  };
+
+  struct WithEmptyContainers final
+  {
+    std::vector<int> numbers{};
+    std::map<std::string, int, std::less<>> dictionary{};
+  };
+
+  struct DeepNested final
+  {
+    ComplexAggregate level1{};
+    std::vector<ComplexAggregate> more{};
+  };
+  // NOLINTEND(misc-use-internal-linkage)
   TEST_CASE("ConfigStore - persists aggregate values and defaults", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
@@ -131,7 +136,7 @@ namespace ao::rt::test
 
       configStore.save("complex", original);
       REQUIRE(configStore.flush());
-      CHECK(ao::test::readFile(configPath).find("enabled: false") != std::string::npos);
+      CHECK(ao::test::readFile(configPath).contains("enabled: false"));
 
       auto reloaded = ConfigStore{configPath};
       auto loaded = ComplexAggregate{};
@@ -163,7 +168,7 @@ namespace ao::rt::test
       auto const original = ComplexAggregate{};
       configStore.save("complex", original);
       REQUIRE(configStore.flush());
-      CHECK(ao::test::readFile(configPath).find("enabled: true") != std::string::npos);
+      CHECK(ao::test::readFile(configPath).contains("enabled: true"));
 
       auto reloaded = ConfigStore{configPath};
       auto loaded = ComplexAggregate{.count = -1, .name = "garbage"};
@@ -455,7 +460,9 @@ namespace ao::rt::test
 
     SECTION("Failed file inspection is not cached as loaded")
     {
-      auto failingStore = ConfigStore{std::filesystem::path{tempDir.path()} / std::string(300, 'x')};
+      auto const configDirectory = std::filesystem::path{tempDir.path()} / "config-directory";
+      std::filesystem::create_directory(configDirectory);
+      auto failingStore = ConfigStore{configDirectory};
       auto obj = ComplexAggregate{.count = 99};
 
       auto firstResult = failingStore.load("anything", obj);

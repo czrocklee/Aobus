@@ -52,7 +52,7 @@ namespace ao::tag
 
     Creator const* findCreator(std::string_view ext)
     {
-      auto const* const it = std::ranges::find(kCreatorsByExtension, ext, &std::pair<std::string_view, Creator>::first);
+      auto const it = std::ranges::find(kCreatorsByExtension, ext, &std::pair<std::string_view, Creator>::first);
       return it != kCreatorsByExtension.end() ? &it->second : nullptr;
     }
   } // namespace

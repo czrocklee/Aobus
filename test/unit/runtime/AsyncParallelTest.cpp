@@ -10,9 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
-#include <chrono>
 #include <cstdint>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -34,23 +32,10 @@ namespace ao::rt::test
       co_return;
     }
 
-    // Completes only after both instances are in flight simultaneously (or a
-    // 2-second deadline passes, leaving sawBoth false).
-    Task<> rendezvousTask(std::atomic<std::int32_t>* inFlight, std::atomic<bool>* sawBoth)
+    Task<> rendezvousTask(AsyncTestState<std::int32_t> started, AsyncBarrier* release)
     {
-      inFlight->fetch_add(1);
-      auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
-
-      while (inFlight->load() < 2 && std::chrono::steady_clock::now() < deadline)
-      {
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
-      }
-
-      if (inFlight->load() >= 2)
-      {
-        sawBoth->store(true);
-      }
-
+      started.increment();
+      release->wait();
       co_return;
     }
 
@@ -106,16 +91,19 @@ namespace ao::rt::test
   {
     auto executor = MockExecutor{};
     auto runtime = Runtime{executor, 2};
-    auto inFlight = std::atomic<std::int32_t>{0};
-    auto sawBoth = std::atomic<bool>{false};
+    auto started = AsyncTestState<std::int32_t>::create(0);
+    auto release = AsyncBarrier{};
 
     auto tasks = std::vector<Task<>>{};
-    tasks.push_back(rendezvousTask(&inFlight, &sawBoth));
-    tasks.push_back(rendezvousTask(&inFlight, &sawBoth));
+    tasks.push_back(rendezvousTask(started, &release));
+    tasks.push_back(rendezvousTask(started, &release));
 
-    runtime.spawn(awaitAllTask(&runtime, std::move(tasks))).get();
+    auto future = runtime.spawn(awaitAllTask(&runtime, std::move(tasks)));
+    auto const bothStarted = started.waitUntil(2);
+    release.release();
+    future.get();
 
-    CHECK(sawBoth.load());
+    CHECK(bothStarted);
   }
 
   TEST_CASE("whenAll - awaiting coroutine holds no pool thread", "[runtime][unit][async]")

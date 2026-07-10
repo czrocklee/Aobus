@@ -208,8 +208,8 @@ namespace ao::tui
 
     std::string trim(std::string_view value)
     {
-      auto const* begin = value.begin();
-      auto const* end = value.end();
+      auto begin = value.begin();
+      auto end = value.end();
 
       while (begin != end && std::isspace(static_cast<unsigned char>(*begin)) != 0)
       {
@@ -262,7 +262,7 @@ namespace ao::tui
       }
     }
 
-    auto const* const aliasIt = std::ranges::find_if(
+    auto const aliasIt = std::ranges::find_if(
       kAliasCommands, [&](CommandAliasSpec const& aliasCommand) { return command == aliasCommand.alias; });
 
     if (aliasIt != kAliasCommands.end())
@@ -292,18 +292,16 @@ namespace ao::tui
 
   std::string_view overlayHint(Overlay const overlay)
   {
-    using namespace std::literals;
-
     switch (overlay)
     {
       case Overlay::None: return kWorkspaceHint;
-      case Overlay::ListChooser: return "l toggle  Enter open  Esc close"sv;
-      case Overlay::DetailPanel: return "d toggle  Esc close"sv;
-      case Overlay::QualityPanel: return "a toggle  Esc close"sv;
-      case Overlay::OutputDevices: return "o toggle  Enter select  Esc close"sv;
-      case Overlay::PresentationPanel: return "v toggle  Enter select  Esc close"sv;
-      case Overlay::Notifications: return "n toggle  x hide compact  Esc close"sv;
-      case Overlay::Help: return "Esc close"sv;
+      case Overlay::ListChooser: return "l toggle  Enter open  Esc close";
+      case Overlay::DetailPanel: return "d toggle  Esc close";
+      case Overlay::QualityPanel: return "a toggle  Esc close";
+      case Overlay::OutputDevices: return "o toggle  Enter select  Esc close";
+      case Overlay::PresentationPanel: return "v toggle  Enter select  Esc close";
+      case Overlay::Notifications: return "n toggle  x hide compact  Esc close";
+      case Overlay::Help: return "Esc close";
     }
 
     return kWorkspaceHint;

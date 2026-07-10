@@ -24,6 +24,17 @@ add_library(ao_audio STATIC
 target_include_directories(ao_audio PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
 target_link_libraries(ao_audio PUBLIC ao_media ao_utility PkgFLAC PkgALAC PkgFDKAAC PkgMPG123)
 
+if(WIN32)
+    target_compile_definitions(ao_audio PUBLIC WASAPI_FOUND)
+    target_sources(ao_audio PRIVATE
+        backend/WasapiProvider.cpp
+        backend/WasapiSharedBackend.cpp
+        backend/detail/WasapiGraphRegistry.cpp
+        backend/detail/WasapiStrings.cpp
+    )
+    target_link_libraries(ao_audio PRIVATE avrt ole32)
+endif()
+
 if(LINUX)
     target_compile_definitions(ao_audio PUBLIC PIPEWIRE_FOUND ALSA_FOUND)
     target_sources(ao_audio PRIVATE

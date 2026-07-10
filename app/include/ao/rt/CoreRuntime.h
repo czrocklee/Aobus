@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 
@@ -33,7 +34,8 @@ namespace ao::rt
   public:
     CoreRuntime(std::unique_ptr<async::Executor> executorPtr,
                 std::filesystem::path musicRoot,
-                std::filesystem::path databasePath);
+                std::filesystem::path databasePath,
+                std::size_t musicLibraryMapSize = 0);
     virtual ~CoreRuntime();
 
     CoreRuntime(CoreRuntime const&) = delete;

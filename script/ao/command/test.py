@@ -10,6 +10,7 @@ from typing import Literal
 
 from ..core import builddir, linttest, tooltest
 from ..core.proc import die, run
+from . import build
 
 HELP = "Build incrementally and run C++ and tooling test suites with optional Catch2 filters"
 
@@ -19,13 +20,13 @@ globbing, e.g. "[layout],[model]" (OR logic) or "[audio][backend]" (AND logic).
 Filters and --list apply to Catch2 suites; non-Catch2 suites report their suite name.
 
 examples:
-  ./ao test                          # build and run the default core + GTK suites
-  ./ao test --all                    # build and run every suite
+  ./ao test                          # build and run the native default suites
+  ./ao test --all                    # build and run every native suite
   ./ao test -n                       # run the default suites without building
-  ./ao test --gtk "[layout]"         # GTK tests matching [layout]
   ./ao test --core "[audio][backend]"
+  ./ao test --tui "[layout]"
   ./ao test --tooling                # test the ao development tooling
-  ./ao test --gtk --list "[layout]"  # list matching GTK tests
+  ./ao test --core --list "[audio]"  # list matching core tests
 """
 
 
@@ -52,9 +53,25 @@ SUITE_TARGETS = {
 }
 
 SUITE_GROUPS = {
-    "default": ("core", "gtk"),
-    "all": ("core", "tui", "cli", "gtk", "integration", "council", "tooling", "lint"),
+    "default": builddir.LINUX_PROFILE.default_suites,
+    "all": builddir.LINUX_PROFILE.all_suites,
 }
+
+
+def suite_groups() -> dict[str, tuple[str, ...]]:
+    """Return suite groups containing only targets enabled by the native profile."""
+    profile = builddir.platform_profile()
+    return {"default": profile.default_suites, "all": profile.all_suites}
+
+
+def suites_for(selection: str) -> tuple[str, ...]:
+    groups = suite_groups()
+    suites = groups.get(selection, (selection,))
+    unavailable = [suite for suite in suites if suite not in builddir.platform_profile().all_suites]
+    if unavailable:
+        available = ", ".join(builddir.platform_profile().all_suites)
+        raise die(f"suite '{unavailable[0]}' is unavailable on this platform. Available suites: {available}.")
+    return suites
 
 
 @contextmanager
@@ -91,6 +108,7 @@ def virtual_gtk_display() -> Generator[dict[str, str], None, None]:
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+    profile = builddir.platform_profile()
     parser = subparsers.add_parser(
         "test", help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -98,31 +116,27 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     suite = parser.add_mutually_exclusive_group()
     suite.add_argument(
         "--suite",
-        choices=(*SUITES, *SUITE_GROUPS),
+        choices=(*profile.all_suites, *SUITE_GROUPS),
         default="default",
         help="test suite or group (default: default)",
     )
-    suite.add_argument("--core", dest="suite", action="store_const", const="core", help="shortcut for --suite core")
-    suite.add_argument("--tui", dest="suite", action="store_const", const="tui", help="shortcut for --suite tui")
-    suite.add_argument("--cli", dest="suite", action="store_const", const="cli", help="shortcut for --suite cli")
-    suite.add_argument("--gtk", dest="suite", action="store_const", const="gtk", help="shortcut for --suite gtk")
+    for name in profile.all_suites:
+        suite.add_argument(
+            f"--{name}",
+            dest="suite",
+            action="store_const",
+            const=name,
+            help=f"shortcut for --suite {name}",
+        )
     suite.add_argument(
-        "--integration",
+        "--default",
         dest="suite",
         action="store_const",
-        const="integration",
-        help="shortcut for --suite integration",
+        const="default",
+        help=f"run {', '.join(profile.default_suites)} suites",
     )
-    suite.add_argument(
-        "--council", dest="suite", action="store_const", const="council", help="shortcut for --suite council"
-    )
-    suite.add_argument(
-        "--tooling", dest="suite", action="store_const", const="tooling", help="shortcut for --suite tooling"
-    )
-    suite.add_argument("--lint", dest="suite", action="store_const", const="lint", help="shortcut for --suite lint")
-    suite.add_argument("--default", dest="suite", action="store_const", const="default", help="run core and GTK suites")
-    suite.add_argument("--all", dest="suite", action="store_const", const="all", help="run every suite")
-    parser.add_argument("-p", "--path", metavar="<dir>", help="build directory (default: /tmp/build/debug)")
+    suite.add_argument("--all", dest="suite", action="store_const", const="all", help="run every native suite")
+    parser.add_argument("-p", "--path", metavar="<dir>", help="override the native test build directory")
     parser.add_argument("--clang", action="store_true", help="test the clang build tree")
     sanitizers = parser.add_mutually_exclusive_group()
     sanitizers.add_argument("--asan", action="store_true", help="test the ASan/UBSan build tree")
@@ -181,7 +195,7 @@ def run_suite(
     if spec.kind != "catch2" or spec.target is None:
         raise ValueError(f"{name} is not a Catch2 suite")
 
-    binary = build_dir / "test" / spec.target
+    binary = builddir.executable(build_dir / "test" / spec.target)
     if not binary.is_file():
         raise die(f"{name} test binary not found at {binary}. Build first, e.g. with ./ao build.")
 
@@ -249,15 +263,32 @@ def run_suites(
 
 
 def run_command(args: argparse.Namespace) -> int:
+    profile = builddir.platform_profile()
     build_dir = (
-        Path(args.path) if args.path else builddir.build_dir("debug", clang=args.clang, asan=args.asan, tsan=args.tsan)
+        Path(args.path)
+        if args.path
+        else builddir.build_dir("debug", clang=args.clang, asan=args.asan, tsan=args.tsan, with_tests=True)
     )
 
-    suites = SUITE_GROUPS.get(args.suite, (args.suite,))
+    suites = suites_for(args.suite)
 
     if not args.no_build:
         targets = [target for suite in suites if (target := SUITES[suite].target) is not None]
         if targets:
+            if profile.name == "windows":
+                build_args = argparse.Namespace(
+                    flavor="debug",
+                    clean=False,
+                    clang=args.clang,
+                    asan=args.asan,
+                    tsan=args.tsan,
+                    verbose=False,
+                    path=args.path,
+                )
+                result = build.do_build(build_args, targets, with_tests=True)
+                build_dir = result.build_dir
+                return run_suites(suites, build_dir, test_filter=args.filter, list_only=args.list)
+
             if not build_dir.is_dir():
                 raise die(f"build directory {build_dir} does not exist. Run ./ao build first to configure the project.")
             print("=====================================")

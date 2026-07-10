@@ -14,6 +14,7 @@
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <c4/yml/tree.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
@@ -52,7 +53,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryYaml - list-only export restores lists by track URI", "[runtime][workflow][import-export][list]")
   {
     auto const temp1 = ao::test::TempDir{};
-    auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
+    auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
 
     auto trackId = kInvalidTrackId;
     auto const* const uri = "special-list-song.flac";
@@ -90,7 +91,7 @@ namespace ao::rt::test
 
     // 4. Import into a library that has the SAME track but DIFFERENT TrackId
     auto const temp2 = ao::test::TempDir{};
-    auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
+    auto ml2 = library::test::makeTestMusicLibrary(temp2.path(), temp2.path());
 
     auto targetTrackId = kInvalidTrackId;
     {
@@ -142,7 +143,7 @@ namespace ao::rt::test
             "[runtime][workflow][import-export][list]")
   {
     auto temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
 
     auto trackId = kInvalidTrackId;
     {
@@ -209,7 +210,7 @@ library:
   TEST_CASE("LibraryYaml - import drops dangling list references", "[runtime][workflow][import-export][list]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "list-edges.yaml";
 

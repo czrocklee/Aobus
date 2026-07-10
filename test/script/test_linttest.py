@@ -12,7 +12,7 @@ from ao.core import linttest
 
 class LintTestVerifierTest(unittest.TestCase):
     def test_fixture_discovery_uses_parent_directory_as_check_name(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             check_dir = root / "aobus-example"
             check_dir.mkdir()
@@ -171,7 +171,7 @@ int original;
 
 class LintTestRunnerTest(unittest.TestCase):
     def test_diagnostic_stage_rejects_nonzero_tidy_exit_without_expected_output(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             fixture_path = root / "BasicFixture.cpp"
             fixture_path.write_text("int valid;\n", encoding="utf-8")
@@ -185,7 +185,7 @@ class LintTestRunnerTest(unittest.TestCase):
             self.assertIn("clang-tidy exited with status 2", log.read_text(encoding="utf-8"))
 
     def test_diagnostic_stage_accepts_nonzero_tidy_exit_for_expected_warnings(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             fixture_path = root / "BasicFixture.cpp"
             fixture_path.write_text("int bad; // POSITIVE\n", encoding="utf-8")
@@ -203,7 +203,7 @@ class LintTestRunnerTest(unittest.TestCase):
             self.assertNotIn("clang-tidy exited", log.read_text(encoding="utf-8"))
 
     def test_diagnostic_stage_rejects_compiler_errors_even_with_expected_warnings(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             fixture_path = root / "BasicFixture.cpp"
             fixture_path.write_text("int bad; // POSITIVE\n", encoding="utf-8")
@@ -226,7 +226,7 @@ class LintTestRunnerTest(unittest.TestCase):
             self.assertIn("clang-tidy exited with status 1", text)
 
     def test_runner_requires_existing_compile_database_and_plugin(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(linttest.run(build_dir), 1)
@@ -236,7 +236,7 @@ class LintTestRunnerTest(unittest.TestCase):
                 self.assertEqual(linttest.run(build_dir), 1)
 
     def test_compiler_error_smoke_requires_fatal_errors_but_allows_unused_code(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
 
             def run_canary(command, **_kwargs):
@@ -255,7 +255,7 @@ class LintTestRunnerTest(unittest.TestCase):
             self.assertTrue(success)
 
     def test_compiler_error_smoke_rejects_a_suppressed_parse_error(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             completed = linttest.subprocess.CompletedProcess([], 0, stdout="")
 
@@ -269,7 +269,7 @@ class LintTestRunnerTest(unittest.TestCase):
             )
 
     def test_fix_stage_rejects_unchanged_files_with_fix_expectations(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             fixture_dir = root / "fixture"
             fixture_dir.mkdir()
@@ -291,7 +291,7 @@ class LintTestRunnerTest(unittest.TestCase):
             )
 
     def test_fix_stage_accepts_nonzero_tidy_exit_when_expected_fix_is_applied(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             fixture_dir = root / "fixture"
             fixture_dir.mkdir()
@@ -320,7 +320,7 @@ class LintTestRunnerTest(unittest.TestCase):
             self.assertNotIn("ERROR:", log.read_text(encoding="utf-8"))
 
     def test_runner_aggregates_all_stages_and_removes_success_workspace(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir) / "build"
             build_dir.mkdir()
             (build_dir / "compile_commands.json").touch()

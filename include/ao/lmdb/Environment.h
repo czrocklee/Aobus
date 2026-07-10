@@ -20,7 +20,11 @@ namespace ao::lmdb
   // Mirror of LMDB's native integer typedefs so callers need not include
   // <lmdb.h>. Equivalence with MDB_dbi / mdb_mode_t is asserted in the .cpp.
   using DbiHandle = unsigned int; // == MDB_dbi
-  using EnvMode = unsigned int;   // == mdb_mode_t
+#ifdef _MSC_VER
+  using EnvMode = int; // == mdb_mode_t
+#else
+  using EnvMode = unsigned int; // == mdb_mode_t
+#endif
 
   // Mirror of the MDB_NOTLS env flag (the only flag consumers configure). The
   // value is verified against the real macro in Environment.cpp.

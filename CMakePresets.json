@@ -50,6 +50,65 @@
         "CMAKE_CXX_FLAGS": "-fno-omit-frame-pointer",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
+    },
+    {
+      "name": "windows-tui-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "AOBUS_BUILD_CLI": "OFF",
+        "AOBUS_BUILD_GTK": "OFF",
+        "AOBUS_BUILD_TESTS": "OFF",
+        "AOBUS_BUILD_TOOLS": "OFF",
+        "AOBUS_BUILD_TUI": "ON"
+      }
+    },
+    {
+      "name": "windows-tui-debug",
+      "inherits": "windows-tui-base",
+      "binaryDir": "out/build/windows-tui-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-tui-debug-tests",
+      "inherits": "windows-tui-debug",
+      "binaryDir": "out/build/windows-tui-debug-tests",
+      "cacheVariables": {
+        "AOBUS_BUILD_TESTS": "ON",
+        "VCPKG_MANIFEST_FEATURES": "tests"
+      }
+    },
+    {
+      "name": "windows-tidy",
+      "inherits": "windows-tui-release-tests",
+      "binaryDir": "out/build/windows-tidy",
+      "cacheVariables": {
+        "AOBUS_BUILD_LINT_PLUGIN": "ON",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_MANIFEST_FEATURES": "tests"
+      }
+    },
+    {
+      "name": "windows-tui-release",
+      "inherits": "windows-tui-base",
+      "binaryDir": "out/build/windows-tui-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-tui-release-tests",
+      "inherits": "windows-tui-release",
+      "binaryDir": "out/build/windows-tui-release-tests",
+      "cacheVariables": {
+        "AOBUS_BUILD_TESTS": "ON",
+        "VCPKG_MANIFEST_FEATURES": "tests"
+      }
     }
   ]
 }

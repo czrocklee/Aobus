@@ -19,6 +19,7 @@
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Lexer.h>
 #include <llvm/ADT/StringRef.h>
+#include <llvm/Config/llvm-config.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -30,6 +31,17 @@ namespace clang::tidy::readability
 {
   namespace
   {
+    TemplateSpecializationTypeLoc getExplicitTemplateTypeLoc(TypeLoc typeLoc)
+    {
+#if LLVM_VERSION_MAJOR >= 22
+      return typeLoc.getUnqualifiedLoc().getAs<TemplateSpecializationTypeLoc>();
+#else
+      auto const elaboratedLoc = typeLoc.getAs<ElaboratedTypeLoc>();
+      return elaboratedLoc.isNull() ? TemplateSpecializationTypeLoc{}
+                                    : elaboratedLoc.getNamedTypeLoc().getAs<TemplateSpecializationTypeLoc>();
+#endif
+    }
+
     std::string getTemplateName(TemplateSpecializationTypeLoc const& tsLoc)
     {
       if (auto const* tst = tsLoc.getTypePtr(); tst != nullptr)
@@ -847,7 +859,11 @@ namespace clang::tidy::readability
 
   void UseCtadCheck::registerMatchers(MatchFinder* finder)
   {
+#if LLVM_VERSION_MAJOR >= 22
+    auto explicitTemplateTypeLoc = templateSpecializationTypeLoc();
+#else
     auto explicitTemplateTypeLoc = elaboratedTypeLoc(hasNamedTypeLoc(templateSpecializationTypeLoc()));
+#endif
 
     finder->addMatcher(cxxTemporaryObjectExpr(unless(isExpansionInSystemHeader()),
                                               hasTypeLoc(explicitTemplateTypeLoc),
@@ -878,15 +894,7 @@ namespace clang::tidy::readability
         return;
       }
 
-      auto const typeLoc = tempObj->getTypeSourceInfo()->getTypeLoc();
-      auto const elabLoc = typeLoc.getAs<ElaboratedTypeLoc>();
-
-      if (elabLoc.isNull())
-      {
-        return;
-      }
-
-      auto const tsLoc = elabLoc.getNamedTypeLoc().getAs<TemplateSpecializationTypeLoc>();
+      auto const tsLoc = getExplicitTemplateTypeLoc(tempObj->getTypeSourceInfo()->getTypeLoc());
 
       if (tsLoc.isNull())
       {
@@ -921,15 +929,7 @@ namespace clang::tidy::readability
         return;
       }
 
-      auto const typeLoc = varDecl->getTypeSourceInfo()->getTypeLoc();
-      auto const elabLoc = typeLoc.getAs<ElaboratedTypeLoc>();
-
-      if (elabLoc.isNull())
-      {
-        return;
-      }
-
-      auto const tsLoc = elabLoc.getNamedTypeLoc().getAs<TemplateSpecializationTypeLoc>();
+      auto const tsLoc = getExplicitTemplateTypeLoc(varDecl->getTypeSourceInfo()->getTypeLoc());
 
       if (tsLoc.isNull())
       {

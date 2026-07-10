@@ -81,8 +81,8 @@ namespace ao::audio
       return {};
     }
 
-    BackendId backendId() const noexcept override { return BackendId{kBackendNone}; }
-    ProfileId profileId() const noexcept override { return ProfileId{kProfileShared}; }
+    BackendId backendId() const override { return BackendId{kBackendNone}; }
+    ProfileId profileId() const override { return ProfileId{kProfileShared}; }
 
   private:
     float _volume = 1.0F;

@@ -6,6 +6,7 @@
 #include "CoreRuntime.h"
 #include <ao/CoreIds.h>
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 
@@ -31,6 +32,7 @@ namespace ao::rt
     std::unique_ptr<async::Executor> executorPtr{};
     std::filesystem::path musicRoot{};
     std::filesystem::path databasePath{};
+    std::size_t musicLibraryMapSize = 0;
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
   };
 
@@ -49,7 +51,6 @@ namespace ao::rt
     WorkspaceService& workspace() noexcept;
     ViewService& views() noexcept;
     ConfigStore& configStore() noexcept;
-    async::Runtime& async() noexcept;
 
     void reloadAllTracks();
 

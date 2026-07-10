@@ -43,7 +43,7 @@ namespace ao::audio
     }
   } // namespace
 
-  struct Player::Impl final
+  struct Player::Impl final : std::enable_shared_from_this<Player::Impl>
   {
     struct ProviderRecord
     {
@@ -67,7 +67,7 @@ namespace ao::audio
       std::atomic<bool> shuttingDown{false};
 
       bool canAcceptCallbacks() const noexcept { return !shuttingDown.load(std::memory_order_acquire); }
-      void shutdown() noexcept { shuttingDown.store(true, std::memory_order_release); }
+      bool shutdown() noexcept { return !shuttingDown.exchange(true, std::memory_order_acq_rel); }
     };
 
     explicit Impl(async::Executor& exec)
@@ -80,18 +80,23 @@ namespace ao::audio
     Impl& operator=(Impl const&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    ~Impl()
+    ~Impl() { shutdown(); }
+
+    void shutdown() noexcept
     {
-      gatePtr->shutdown();
+      if (!gatePtr->shutdown())
+      {
+        return;
+      }
 
       // Teardown order:
       //   1. Unsubscribe graph and device callbacks so no new callbacks fire.
       //   2. Shut down providers' async activity (monitor threads, PW event loops) so no
       //      in-flight callbacks can race with engine/backend destruction.
-      //   3. Destroy the engine (which closes/destroys the active backend). At this point
-      //      the backend may still touch provider-owned state (e.g. AlsaGraphRegistry),
-      //      which is why providers are still alive.
-      //   4. Destroy providers last.
+      //   3. Stop the engine, which closes/destroys the active backend while
+      //      provider-owned state (e.g. AlsaGraphRegistry) is still alive.
+      //   4. Retain the stopped Engine wrapper and providers until Impl itself
+      //      is reclaimed, so a reentrant callback can finish unwinding safely.
       graphSubscription.reset();
 
       for (auto& recordPtr : providers)
@@ -106,8 +111,16 @@ namespace ao::audio
 
       // Defensive: prevent dangling use if Engine teardown somehow triggers handleRouteChanged.
       activeBackendProvider = nullptr;
-      enginePtr.reset();
-      providers.clear();
+
+      if (enginePtr)
+      {
+        enginePtr->shutdown();
+      }
+
+      // Retain the stopped Engine wrapper until Impl is reclaimed. A provider
+      // callback that passed the atomic gate immediately before shutdown may
+      // still be unwinding through deferInternal(); Engine::defer safely drops
+      // work after its event queue has stopped.
     }
 
     async::Executor& executor;
@@ -135,22 +148,46 @@ namespace ao::audio
     std::function<void(std::vector<BackendProvider::Status> const&)> onOutputDevicesChanged;
     std::function<void(QualityResult const&, bool)> onQualityChanged;
 
-    void handleOutputDevicesChanged(Player* owner, BackendProvider* provider, std::vector<Device> const& devices);
-    void handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation);
+    void handleOutputDevicesChanged(BackendProvider* provider, std::vector<Device> const& devices);
+    void handleSystemGraphChanged(flow::Graph const& graph, std::uint64_t generation);
+    void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);
+    Result<> setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
+    Player::Status snapshot() const;
+    bool isReady() const;
     void updateMergedGraph();
 
     template<typename Task>
-    static void dispatchInternal(async::Executor& executor, std::shared_ptr<CallbackGate> gatePtr, Task task)
+    void dispatchInternal(Task task)
     {
+      auto weakSelfPtr = weak_from_this();
       executor.dispatch(
-        [gatePtr = std::move(gatePtr), task = std::move(task)] mutable
+        [weakSelfPtr = std::move(weakSelfPtr), task = std::move(task)] mutable
         {
-          if (!gatePtr->canAcceptCallbacks())
+          auto selfPtr = weakSelfPtr.lock();
+
+          if (!selfPtr || !selfPtr->gatePtr->canAcceptCallbacks())
           {
             return;
           }
 
-          task();
+          task(*selfPtr);
+        });
+    }
+
+    // Provider callbacks can be synchronous backend-control callbacks. Hand
+    // graph work through Engine's event queue first so even an inline executor
+    // cannot run Player/user callbacks while Engine holds its control lock.
+    template<typename Task>
+    void deferInternal(Task task)
+    {
+      auto weakSelfPtr = weak_from_this();
+      enginePtr->defer(
+        [weakSelfPtr = std::move(weakSelfPtr), task = std::move(task)] mutable
+        {
+          if (auto selfPtr = weakSelfPtr.lock(); selfPtr && selfPtr->gatePtr->canAcceptCallbacks())
+          {
+            selfPtr->dispatchInternal(std::move(task));
+          }
         });
     }
 
@@ -161,16 +198,19 @@ namespace ao::audio
     template<typename Slot, typename... Args>
     void dispatchOutward(Slot Impl::* slot, Args... args)
     {
+      auto weakSelfPtr = weak_from_this();
       executor.dispatch(
-        [this, slot, gatePtr = gatePtr, args = std::make_tuple(std::move(args)...)] mutable
+        [weakSelfPtr = std::move(weakSelfPtr), slot, args = std::make_tuple(std::move(args)...)] mutable
         {
-          if (!gatePtr->canAcceptCallbacks())
+          auto selfPtr = weakSelfPtr.lock();
+
+          if (!selfPtr || !selfPtr->gatePtr->canAcceptCallbacks())
           {
             return;
           }
 
-          auto callback = std::decay_t<decltype(this->*slot)>{};
-          callback = this->*slot;
+          auto callback = std::decay_t<decltype(selfPtr.get()->*slot)>{};
+          callback = selfPtr.get()->*slot;
 
           if (callback)
           {
@@ -180,9 +220,7 @@ namespace ao::audio
     }
   };
 
-  void Player::Impl::handleOutputDevicesChanged(Player* owner,
-                                                BackendProvider* provider,
-                                                std::vector<Device> const& devices)
+  void Player::Impl::handleOutputDevicesChanged(BackendProvider* provider, std::vector<Device> const& devices)
   {
     // Update individual provider cache
     auto const it =
@@ -235,7 +273,7 @@ namespace ao::audio
     {
       // Try to apply pending output
       auto const pending = PendingOutputDeviceSelection{*optPendingOutputDeviceSelection};
-      std::ignore = owner->setOutputDevice(pending.backend, pending.deviceId, pending.profile);
+      std::ignore = setOutputDevice(pending.backend, pending.deviceId, pending.profile);
     }
 
     auto snapshot = std::vector<BackendProvider::Status>{};
@@ -247,7 +285,7 @@ namespace ao::audio
     dispatchOutward(&Impl::onOutputDevicesChanged, std::move(snapshot));
   }
 
-  void Player::Impl::handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation)
+  void Player::Impl::handleSystemGraphChanged(flow::Graph const& graph, std::uint64_t generation)
   {
     if (generation != playbackGeneration.load(std::memory_order_acquire))
     {
@@ -260,7 +298,155 @@ namespace ao::audio
       updateMergedGraph();
     }
 
-    auto const playerStatus = owner->status();
+    auto const playerStatus = snapshot();
+    dispatchOutward(&Impl::onQualityChanged, qualityResultFromStatus(playerStatus), playerStatus.isReady);
+  }
+
+  Result<> Player::Impl::setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
+  {
+    if (auto const currentSnap = enginePtr->status();
+        backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
+    {
+      optPendingOutputDeviceSelection.reset();
+      dispatchOutward(&Impl::onStateChanged);
+      return {};
+    }
+
+    auto const recordIt = std::ranges::find_if(
+      providers, [&](auto const& recordPtr) { return recordPtr->providerPtr->status().descriptor.id == backend; });
+
+    if (recordIt == providers.end())
+    {
+      return makeError(Error::Code::NotFound, "No provider registered for backend " + backend.raw());
+    }
+
+    auto allDevicesCopy = std::vector<Device>{};
+    {
+      auto const lock = std::scoped_lock{backendsMutex};
+      allDevicesCopy = allDevices;
+    }
+
+    auto const it = std::ranges::find_if(
+      allDevicesCopy, [&](Device const& dev) { return dev.backendId == backend && dev.id == deviceId; });
+
+    if (it == allDevicesCopy.end())
+    {
+      optPendingOutputDeviceSelection =
+        PendingOutputDeviceSelection{.backend = backend, .deviceId = deviceId, .profile = profile};
+      dispatchOutward(&Impl::onStateChanged);
+      return {};
+    }
+
+    optPendingOutputDeviceSelection.reset();
+
+    auto const& device = *it;
+    auto newBackendPtr = (*recordIt)->providerPtr->createBackend(device, profile);
+    playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
+    graphSubscription.reset();
+
+    {
+      auto const lock = std::scoped_lock{graphMutex};
+      cachedRouteStatus = {};
+      cachedSystemGraph = {};
+      mergedGraph = {};
+      qualityResult = {};
+    }
+
+    activeBackendProvider = (*recordIt)->providerPtr.get();
+    enginePtr->setBackend(std::move(newBackendPtr), device);
+    return {};
+  }
+
+  Player::Status Player::Impl::snapshot() const
+  {
+    auto playerStatus = Player::Status{};
+
+    if (enginePtr)
+    {
+      playerStatus.engine = enginePtr->status();
+    }
+
+    {
+      auto const lock = std::scoped_lock{backendsMutex};
+      playerStatus.availableBackends = cachedBackends;
+    }
+
+    {
+      auto const lock = std::scoped_lock{graphMutex};
+      playerStatus.flow = mergedGraph;
+      playerStatus.sourceQuality = qualityResult.sourceQuality;
+      playerStatus.pipelineQuality = qualityResult.pipelineQuality;
+      playerStatus.quality = qualityResult.overall;
+      playerStatus.qualityFullyVerified = qualityResult.fullyVerified;
+      playerStatus.qualityAssessments = qualityResult.assessments;
+    }
+
+    playerStatus.isReady = isReady();
+    playerStatus.volume = playerStatus.engine.volume;
+    playerStatus.muted = playerStatus.engine.muted;
+    playerStatus.volumeAvailable = playerStatus.engine.volumeAvailable;
+    playerStatus.volumeIsHardwareAssisted = playerStatus.engine.volumeIsHardwareAssisted;
+    return playerStatus;
+  }
+
+  bool Player::Impl::isReady() const
+  {
+    return enginePtr && enginePtr->backendId() != kBackendNone && !optPendingOutputDeviceSelection;
+  }
+
+  void Player::Impl::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)
+  {
+    if (generation != playbackGeneration.load(std::memory_order_acquire))
+    {
+      return;
+    }
+
+    auto lock = std::unique_lock{graphMutex};
+    cachedRouteStatus = status;
+    lock.unlock();
+
+    auto const hasRoute = status.optAnchor && activeBackendProvider != nullptr;
+
+    if (hasRoute)
+    {
+      if (!graphSubscription)
+      {
+        auto const weakSelfPtr = weak_from_this();
+        auto subscription = activeBackendProvider->subscribeGraph(
+          status.optAnchor->id,
+          [weakSelfPtr, generation](flow::Graph const& graph)
+          {
+            if (auto selfPtr = weakSelfPtr.lock(); selfPtr && selfPtr->gatePtr->canAcceptCallbacks())
+            {
+              selfPtr->deferInternal([graph = flow::Graph{graph}, generation](Impl& impl)
+                                     { impl.handleSystemGraphChanged(graph, generation); });
+            }
+          });
+
+        if (!gatePtr->canAcceptCallbacks())
+        {
+          return;
+        }
+
+        graphSubscription = std::move(subscription);
+      }
+    }
+    else
+    {
+      graphSubscription.reset();
+    }
+
+    lock.lock();
+
+    if (!hasRoute)
+    {
+      cachedSystemGraph = {};
+    }
+
+    updateMergedGraph();
+    lock.unlock();
+
+    auto const playerStatus = snapshot();
     dispatchOutward(&Impl::onQualityChanged, qualityResultFromStatus(playerStatus), playerStatus.isReady);
   }
 
@@ -331,7 +517,7 @@ namespace ao::audio
   }
 
   Player::Player(async::Executor& executor)
-    : _implPtr{std::make_unique<Impl>(executor)}
+    : _implPtr{std::make_shared<Impl>(executor)}
   {
     // Start with a NullBackend until a provider provides something real
     _implPtr->enginePtr = std::make_unique<Engine>(std::make_unique<NullBackend>(),
@@ -341,100 +527,143 @@ namespace ao::audio
                                                           .backendId = kBackendNone,
                                                           .capabilities = {}});
 
-    auto* const gen = &_implPtr->playbackGeneration;
+    auto const weakImplPtr = std::weak_ptr<Impl>{_implPtr};
     _implPtr->enginePtr->setOnTrackEnded(
-      [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor]
-      { Impl::dispatchInternal(executor, gatePtr, [this] { _implPtr->dispatchOutward(&Impl::onTrackEnded); }); });
+      [weakImplPtr]
+      {
+        if (auto implPtr = weakImplPtr.lock(); implPtr && implPtr->gatePtr->canAcceptCallbacks())
+        {
+          implPtr->dispatchOutward(&Impl::onTrackEnded);
+        }
+      });
 
     _implPtr->enginePtr->setOnTrackAdvanced(
-      [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor, gen](Engine::TrackAdvanced const& event)
+      [weakImplPtr](Engine::TrackAdvanced const& event)
       {
-        auto const advancedGeneration = gen->fetch_add(1, std::memory_order_acq_rel) + 1;
-        Impl::dispatchInternal(executor,
-                               gatePtr,
-                               [this, event, advancedGeneration]
-                               {
-                                 if (advancedGeneration != _implPtr->playbackGeneration.load(std::memory_order_acquire))
-                                 {
-                                   return;
-                                 }
+        auto implPtr = weakImplPtr.lock();
 
-                                 {
-                                   auto const lock = std::scoped_lock{_implPtr->graphMutex};
-                                   _implPtr->cachedRouteStatus = {};
-                                   _implPtr->cachedSystemGraph = {};
-                                   _implPtr->mergedGraph = {};
-                                   _implPtr->qualityResult = {};
-                                 }
+        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
+        {
+          return;
+        }
 
-                                 _implPtr->graphSubscription.reset();
+        auto const advancedGeneration = implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+        implPtr->dispatchInternal(
+          [event = Engine::TrackAdvanced{event}, advancedGeneration](Impl& self)
+          {
+            if (advancedGeneration != self.playbackGeneration.load(std::memory_order_acquire))
+            {
+              return;
+            }
 
-                                 if (auto callback = _implPtr->onTrackAdvanced; callback)
-                                 {
-                                   callback(event);
-                                 }
-                               });
+            {
+              auto const lock = std::scoped_lock{self.graphMutex};
+              self.cachedRouteStatus = {};
+              self.cachedSystemGraph = {};
+              self.mergedGraph = {};
+              self.qualityResult = {};
+            }
+
+            self.graphSubscription.reset();
+
+            if (auto callback = self.onTrackAdvanced; callback)
+            {
+              callback(event);
+            }
+          });
       });
 
     _implPtr->enginePtr->setOnPlaybackFailure(
-      [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor](Engine::PlaybackFailure const& failure)
+      [weakImplPtr](Engine::PlaybackFailure const& failure)
       {
-        Impl::dispatchInternal(executor,
-                               gatePtr,
-                               [this, failure]
-                               {
-                                 if (auto callback = _implPtr->onPlaybackFailure; callback)
-                                 {
-                                   callback(failure);
-                                 }
-                               });
+        if (auto implPtr = weakImplPtr.lock(); implPtr && implPtr->gatePtr->canAcceptCallbacks())
+        {
+          implPtr->dispatchInternal(
+            [failure = Engine::PlaybackFailure{failure}](Impl& self)
+            {
+              if (auto callback = self.onPlaybackFailure; callback)
+              {
+                callback(failure);
+              }
+            });
+        }
       });
 
-    _implPtr->enginePtr->setOnStateChanged([this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor]
-                                           { _implPtr->dispatchOutward(&Impl::onStateChanged); });
+    _implPtr->enginePtr->setOnStateChanged(
+      [weakImplPtr]
+      {
+        if (auto implPtr = weakImplPtr.lock(); implPtr && implPtr->gatePtr->canAcceptCallbacks())
+        {
+          implPtr->dispatchOutward(&Impl::onStateChanged);
+        }
+      });
 
     _implPtr->enginePtr->setOnRouteChanged(
-      [this, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor, gen](Engine::RouteStatus const& status)
+      [weakImplPtr](Engine::RouteStatus const& status)
       {
+        auto implPtr = weakImplPtr.lock();
+
+        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
+        {
+          return;
+        }
+
         // Capture generation at the Engine event boundary so a route event
         // queued before a later stop/play cannot be applied to the new session.
-        auto const generation = gen->load(std::memory_order_acquire);
-        Impl::dispatchInternal(
-          executor, gatePtr, [this, status, generation] { handleRouteChanged(status, generation); });
+        auto const generation = implPtr->playbackGeneration.load(std::memory_order_acquire);
+        implPtr->dispatchInternal([status = Engine::RouteStatus{status}, generation](Impl& self)
+                                  { self.handleRouteChanged(status, generation); });
       });
   }
 
   void Player::setOnTrackEnded(std::function<void()> callback)
   {
-    _implPtr->onTrackEnded = std::move(callback);
+    auto const implPtr = _implPtr;
+    implPtr->onTrackEnded = std::move(callback);
   }
 
   void Player::setOnTrackAdvanced(std::function<void(Engine::TrackAdvanced const&)> callback)
   {
-    _implPtr->onTrackAdvanced = std::move(callback);
+    auto const implPtr = _implPtr;
+    implPtr->onTrackAdvanced = std::move(callback);
   }
 
   void Player::setOnPlaybackFailure(std::function<void(Engine::PlaybackFailure const&)> callback)
   {
-    _implPtr->onPlaybackFailure = std::move(callback);
+    auto const implPtr = _implPtr;
+    implPtr->onPlaybackFailure = std::move(callback);
   }
 
   void Player::setOnStateChanged(std::function<void()> callback)
   {
-    _implPtr->onStateChanged = std::move(callback);
+    auto const implPtr = _implPtr;
+    implPtr->onStateChanged = std::move(callback);
   }
 
   void Player::setOnOutputDevicesChanged(std::function<void(std::vector<BackendProvider::Status> const&)> callback)
   {
-    _implPtr->onOutputDevicesChanged = std::move(callback);
+    auto const implPtr = _implPtr;
+    implPtr->onOutputDevicesChanged = std::move(callback);
   }
 
   void Player::setOnQualityChanged(std::function<void(QualityResult const& quality, bool ready)> callback)
   {
-    _implPtr->onQualityChanged = std::move(callback);
+    auto const implPtr = _implPtr;
+    implPtr->onQualityChanged = std::move(callback);
   }
 
-  Player::~Player() = default;
+  Player::~Player()
+  {
+    shutdown();
+  }
+
+  void Player::shutdown() noexcept
+  {
+    if (auto const implPtr = _implPtr; implPtr)
+    {
+      implPtr->shutdown();
+    }
+  }
 
   void Player::addProvider(std::unique_ptr<BackendProvider> providerPtr)
   {
@@ -443,27 +672,41 @@ namespace ao::audio
       return;
     }
 
+    auto const implPtr = _implPtr;
     auto recordPtr = std::make_unique<Impl::ProviderRecord>();
     recordPtr->providerPtr = std::move(providerPtr);
 
     auto* const provider = recordPtr->providerPtr.get();
     auto* const recordRaw = recordPtr.get();
-    _implPtr->providers.push_back(std::move(recordPtr));
+    implPtr->providers.push_back(std::move(recordPtr));
 
-    recordRaw->subscription = provider->subscribeDevices(
-      [this, provider, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor](std::vector<Device> const& devices)
+    auto const weakImplPtr = std::weak_ptr<Impl>{implPtr};
+    auto subscription = provider->subscribeDevices(
+      [weakImplPtr, provider](std::vector<Device> const& devices)
       {
-        Impl::dispatchInternal(executor,
-                               gatePtr,
-                               [this, provider, devices]
-                               { _implPtr->handleOutputDevicesChanged(this, provider, devices); });
+        auto implPtr = weakImplPtr.lock();
+
+        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
+        {
+          return false;
+        }
+
+        implPtr->dispatchInternal([provider, devices = std::vector<Device>{devices}](Impl& self)
+                                  { self.handleOutputDevicesChanged(provider, devices); });
         return true;
       });
+
+    if (implPtr->gatePtr->canAcceptCallbacks())
+    {
+      recordRaw->subscription = std::move(subscription);
+    }
   }
 
   Result<> Player::play(Engine::PlaybackItem const& item, std::chrono::milliseconds const initialOffset)
   {
-    if (!isReady())
+    auto const implPtr = _implPtr;
+
+    if (!implPtr->isReady())
     {
       // Not an internal fault: device discovery simply has not finished. Hand
       // the condition back so the caller can decide whether to report or retry.
@@ -471,218 +714,123 @@ namespace ao::audio
         Error::Code::InvalidState, "Playback ignored: audio backend is not ready (pending device discovery)");
     }
 
-    _implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
+    implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
     {
-      auto const lock = std::scoped_lock{_implPtr->graphMutex};
-      _implPtr->cachedRouteStatus = {};
-      _implPtr->cachedSystemGraph = {};
-      _implPtr->mergedGraph = {};
-      _implPtr->qualityResult = {};
+      auto const lock = std::scoped_lock{implPtr->graphMutex};
+      implPtr->cachedRouteStatus = {};
+      implPtr->cachedSystemGraph = {};
+      implPtr->mergedGraph = {};
+      implPtr->qualityResult = {};
     }
-    _implPtr->graphSubscription.reset();
-    _implPtr->enginePtr->play(item, initialOffset);
+    implPtr->graphSubscription.reset();
+    implPtr->enginePtr->play(item, initialOffset);
     return {};
   }
 
   Result<Engine::PreparedNextResult> Player::prepareNext(Engine::PlaybackItem const& item)
   {
-    if (!isReady())
+    auto const implPtr = _implPtr;
+
+    if (!implPtr->isReady())
     {
       return makeError(
         Error::Code::InvalidState, "Prepared playback ignored: audio backend is not ready (pending device discovery)");
     }
 
-    return _implPtr->enginePtr->setNext(item);
+    return implPtr->enginePtr->setNext(item);
   }
 
   std::optional<Engine::PlaybackItemId> Player::clearPreparedNext()
   {
-    return _implPtr->enginePtr->clearNext();
+    auto const implPtr = _implPtr;
+    return implPtr->enginePtr->clearNext();
   }
 
   Result<> Player::setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
   {
-    if (auto const currentSnap = _implPtr->enginePtr->status();
-        backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
-    {
-      _implPtr->optPendingOutputDeviceSelection.reset();
-      _implPtr->dispatchOutward(&Impl::onStateChanged);
-      return {};
-    }
-
-    auto const recordIt = std::ranges::find_if(_implPtr->providers,
-                                               [&](auto const& recordPtr)
-                                               { return recordPtr->providerPtr->status().descriptor.id == backend; });
-
-    if (recordIt == _implPtr->providers.end())
-    {
-      return makeError(Error::Code::NotFound, "No provider registered for backend " + backend.raw());
-    }
-
-    // 2. Find the Device matching the kind and id from our cache
-    auto allDevicesCopy = std::vector<Device>{};
-    {
-      auto const lock = std::scoped_lock{_implPtr->backendsMutex};
-      allDevicesCopy = _implPtr->allDevices;
-    }
-
-    auto const it = std::ranges::find_if(
-      allDevicesCopy, [&](Device const& dev) { return dev.backendId == backend && dev.id == deviceId; });
-
-    if (it == allDevicesCopy.end())
-    {
-      // If we don't have it yet, store it as pending.
-      _implPtr->optPendingOutputDeviceSelection =
-        Impl::PendingOutputDeviceSelection{.backend = backend, .deviceId = deviceId, .profile = profile};
-      _implPtr->dispatchOutward(&Impl::onStateChanged);
-      return {};
-    }
-
-    // Found it! Clear any pending output.
-    _implPtr->optPendingOutputDeviceSelection.reset();
-
-    // 4. Create the backend and swap it in the engine
-    auto const& device = *it;
-    auto newBackendPtr = (*recordIt)->providerPtr->createBackend(device, profile);
-    _implPtr->activeBackendProvider = (*recordIt)->providerPtr.get();
-    _implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
-    _implPtr->enginePtr->setBackend(std::move(newBackendPtr), device);
-    return {};
+    auto const implPtr = _implPtr;
+    return implPtr->setOutputDevice(backend, deviceId, profile);
   }
 
   void Player::pause()
   {
-    _implPtr->enginePtr->pause();
+    auto const implPtr = _implPtr;
+    implPtr->enginePtr->pause();
   }
 
   void Player::resume()
   {
-    _implPtr->enginePtr->resume();
+    auto const implPtr = _implPtr;
+    implPtr->enginePtr->resume();
   }
 
   void Player::stop()
   {
-    _implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
+    auto const implPtr = _implPtr;
+    implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
     {
-      auto const lock = std::scoped_lock{_implPtr->graphMutex};
-      _implPtr->cachedRouteStatus = {};
-      _implPtr->cachedSystemGraph = {};
-      _implPtr->mergedGraph = {};
-      _implPtr->qualityResult = {};
+      auto const lock = std::scoped_lock{implPtr->graphMutex};
+      implPtr->cachedRouteStatus = {};
+      implPtr->cachedSystemGraph = {};
+      implPtr->mergedGraph = {};
+      implPtr->qualityResult = {};
     }
-    _implPtr->graphSubscription.reset();
-    _implPtr->enginePtr->stop();
+    implPtr->graphSubscription.reset();
+    implPtr->enginePtr->stop();
   }
 
   void Player::seek(std::chrono::milliseconds offset)
   {
-    _implPtr->enginePtr->seek(offset);
+    auto const implPtr = _implPtr;
+    implPtr->enginePtr->seek(offset);
   }
 
   Result<> Player::setVolume(float vol)
   {
-    return _implPtr->enginePtr->setVolume(vol);
+    auto const implPtr = _implPtr;
+    return implPtr->enginePtr->setVolume(vol);
   }
 
   Result<> Player::setMuted(bool muted)
   {
-    return _implPtr->enginePtr->setMuted(muted);
+    auto const implPtr = _implPtr;
+    return implPtr->enginePtr->setMuted(muted);
   }
 
   Result<> Player::toggleMute()
   {
-    auto const engineStatus = _implPtr->enginePtr->status();
-    return setMuted(!engineStatus.muted);
+    auto const implPtr = _implPtr;
+    auto const engineStatus = implPtr->enginePtr->status();
+    return implPtr->enginePtr->setMuted(!engineStatus.muted);
   }
 
   Player::Status Player::status() const
   {
-    auto status = Player::Status{};
-    status.engine = _implPtr->enginePtr->status();
-
-    {
-      auto const lock = std::scoped_lock{_implPtr->backendsMutex};
-      status.availableBackends = _implPtr->cachedBackends;
-    }
-
-    {
-      auto const lock = std::scoped_lock{_implPtr->graphMutex};
-      status.flow = _implPtr->mergedGraph;
-      status.sourceQuality = _implPtr->qualityResult.sourceQuality;
-      status.pipelineQuality = _implPtr->qualityResult.pipelineQuality;
-      status.quality = _implPtr->qualityResult.overall;
-      status.qualityFullyVerified = _implPtr->qualityResult.fullyVerified;
-      status.qualityAssessments = _implPtr->qualityResult.assessments;
-    }
-    status.isReady = isReady();
-
-    status.volume = status.engine.volume;
-    status.muted = status.engine.muted;
-    status.volumeAvailable = status.engine.volumeAvailable;
-    status.volumeIsHardwareAssisted = status.engine.volumeIsHardwareAssisted;
-    return status;
+    auto const implPtr = _implPtr;
+    return implPtr->snapshot();
   }
 
   Transport Player::transport() const
   {
-    return _implPtr->enginePtr->transport();
+    auto const implPtr = _implPtr;
+    return implPtr->enginePtr->transport();
   }
 
   bool Player::isReady() const
   {
-    return _implPtr->enginePtr->backendId() != kBackendNone && !_implPtr->optPendingOutputDeviceSelection;
+    auto const implPtr = _implPtr;
+    return implPtr->isReady();
   }
 
   void Player::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)
   {
-    if (generation != _implPtr->playbackGeneration.load(std::memory_order_acquire))
-    {
-      return;
-    }
-
-    auto lock = std::unique_lock{_implPtr->graphMutex};
-    _implPtr->cachedRouteStatus = status;
-    lock.unlock();
-
-    // Check if we have a valid anchor and manager to subscribe to the system graph
-    auto const hasRoute = status.optAnchor && _implPtr->activeBackendProvider != nullptr;
-
-    if (hasRoute)
-    {
-      if (!_implPtr->graphSubscription)
-      {
-        _implPtr->graphSubscription = _implPtr->activeBackendProvider->subscribeGraph(
-          status.optAnchor->id,
-          [this, generation, gatePtr = _implPtr->gatePtr, &executor = _implPtr->executor](flow::Graph const& graph)
-          {
-            Impl::dispatchInternal(executor,
-                                   gatePtr,
-                                   [this, graph, generation]
-                                   { _implPtr->handleSystemGraphChanged(this, graph, generation); });
-          });
-      }
-    }
-    else
-    {
-      _implPtr->graphSubscription.reset();
-    }
-
-    lock.lock();
-
-    if (!hasRoute)
-    {
-      _implPtr->cachedSystemGraph = {};
-    }
-
-    _implPtr->updateMergedGraph();
-    lock.unlock();
-
-    auto const playerStatus = this->status();
-    _implPtr->dispatchOutward(&Impl::onQualityChanged, qualityResultFromStatus(playerStatus), playerStatus.isReady);
+    auto const implPtr = _implPtr;
+    implPtr->handleRouteChanged(status, generation);
   }
 
   std::uint64_t Player::playbackGeneration() const noexcept
   {
-    return _implPtr->playbackGeneration.load(std::memory_order_acquire);
+    auto const implPtr = _implPtr;
+    return implPtr->playbackGeneration.load(std::memory_order_acquire);
   }
 } // namespace ao::audio

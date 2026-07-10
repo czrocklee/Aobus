@@ -21,6 +21,7 @@
 #include "Render.h"
 #include "SelectionNavigation.h"
 #include "ShellInteractionModel.h"
+#include "SignalExitWatcher.h"
 #include "StatusBar.h"
 #include "Style.h"
 #include "TrackPresentationNavigation.h"
@@ -45,7 +46,6 @@
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
-#include <fcntl.h>
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/loop.hpp>
@@ -53,14 +53,10 @@
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
 #include <ftxui/screen/terminal.hpp>
-#include <unistd.h>
 
 #include <algorithm>
-#include <array>
 #include <atomic>
-#include <cerrno>
 #include <chrono>
-#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -73,7 +69,6 @@
 #include <string>
 #include <string_view>
 #include <thread>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -87,18 +82,6 @@ namespace ao::tui
     constexpr std::int32_t kKittyCoverArtColumns = 768;
     constexpr std::int32_t kKittyCoverArtRows = 384;
     constexpr std::int32_t kNotificationCenterPanelRows = 12;
-    std::atomic<std::int32_t> gSignalWriteFd{-1}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-
-    // POSIX signal handlers must use the C ABI int parameter type.
-    void exitSignalHandler(int /*signal*/) // NOLINT(aobus-modernize-use-std-numbers)
-    {
-      if (auto const fd = gSignalWriteFd.load(std::memory_order_relaxed); fd >= 0)
-      {
-        auto const token = std::byte{1};
-        [[maybe_unused]] auto const ignored = ::write(fd, &token, sizeof(token));
-      }
-    }
-
     ftxui::Element commandPalettePopover(ShellInteractionModel const& shell,
                                          std::int32_t const terminalColumns,
                                          std::int32_t const terminalRows)
@@ -206,7 +189,7 @@ namespace ao::tui
       auto const* termProgram = std::getenv("TERM_PROGRAM");
 
       return std::getenv("KITTY_WINDOW_ID") != nullptr || std::getenv("WEZTERM_EXECUTABLE") != nullptr ||
-             (term != nullptr && std::string_view{term}.find("xterm-kitty") != std::string_view::npos) ||
+             (term != nullptr && std::string_view{term}.contains("xterm-kitty")) ||
              (termProgram != nullptr && std::string_view{termProgram} == "WezTerm");
     }
 
@@ -280,130 +263,6 @@ namespace ao::tui
       std::function<bool()> _shouldTick;
       std::atomic_bool _running{true};
       std::thread _thread;
-    };
-
-    class SignalExitWatcher final
-    {
-    public:
-      explicit SignalExitWatcher(ftxui::ScreenInteractive& screen)
-        : _screen{screen}
-      {
-        if (::pipe(_pipe.data()) != 0)
-        {
-          return;
-        }
-
-        makeWriteEndNonBlocking();
-        gSignalWriteFd.store(_pipe[1], std::memory_order_relaxed);
-        _termInstalled = install(SIGTERM, _oldTerm);
-        _hupInstalled = install(SIGHUP, _oldHup);
-        _thread = std::thread{[this] { run(); }};
-      }
-
-      ~SignalExitWatcher()
-      {
-        restore(SIGTERM, _oldTerm, _termInstalled);
-        restore(SIGHUP, _oldHup, _hupInstalled);
-        gSignalWriteFd.store(-1, std::memory_order_relaxed);
-        _running.store(false);
-        wake();
-
-        if (_thread.joinable())
-        {
-          _thread.join();
-        }
-
-        closePipe();
-      }
-
-      SignalExitWatcher(SignalExitWatcher const&) = delete;
-      SignalExitWatcher& operator=(SignalExitWatcher const&) = delete;
-      SignalExitWatcher(SignalExitWatcher&&) = delete;
-      SignalExitWatcher& operator=(SignalExitWatcher&&) = delete;
-
-    private:
-      using SignalAction = struct sigaction;
-
-      static bool install(int const signal, SignalAction& oldAction)
-      {
-        auto action = SignalAction{};
-        action.sa_handler = exitSignalHandler;
-        ::sigemptyset(&action.sa_mask);
-        action.sa_flags = 0;
-        return ::sigaction(signal, &action, &oldAction) == 0;
-      }
-
-      static void restore(int const signal, SignalAction const& oldAction, bool const installed)
-      {
-        if (installed)
-        {
-          std::ignore = ::sigaction(signal, &oldAction, nullptr);
-        }
-      }
-
-      void wake() const
-      {
-        if (_pipe[1] >= 0)
-        {
-          auto const token = std::byte{1};
-          [[maybe_unused]] auto const ignored = ::write(_pipe[1], &token, sizeof(token));
-        }
-      }
-
-      void makeWriteEndNonBlocking() const
-      {
-        if (auto const flags = ::fcntl(_pipe[1], F_GETFL, 0); flags >= 0)
-        {
-          std::ignore = ::fcntl(_pipe[1], F_SETFL, flags | O_NONBLOCK); // NOLINT(cppcoreguidelines-pro-type-vararg)
-        }
-      }
-
-      void closePipe()
-      {
-        for (auto& fd : _pipe)
-        {
-          if (fd >= 0)
-          {
-            std::ignore = ::close(fd);
-            fd = -1;
-          }
-        }
-      }
-
-      void run()
-      {
-        while (_running.load())
-        {
-          auto token = std::byte{};
-          auto const result = ::read(_pipe[0], &token, 1);
-
-          if (result > 0)
-          {
-            if (_running.load())
-            {
-              _screen.Post(_screen.ExitLoopClosure());
-            }
-
-            continue;
-          }
-
-          if (result < 0 && errno == EINTR)
-          {
-            continue;
-          }
-
-          break;
-        }
-      }
-
-      ftxui::ScreenInteractive& _screen;
-      std::array<int, 2> _pipe{-1, -1};
-      SignalAction _oldTerm{};
-      SignalAction _oldHup{};
-      bool _termInstalled = false;
-      bool _hupInstalled = false;
-      std::atomic_bool _running{true};
-      std::thread _thread{};
     };
 
     std::optional<CoverArtRows> loadCoverArtPreview(rt::AppRuntime& runtime, ResourceId const resourceId)
@@ -807,7 +666,7 @@ namespace ao::tui
       ftxui::CatchEvent(rendererPtr, [&](ftxui::Event const& event) { return events.handleEvent(event); });
 
     auto loop = ftxui::Loop{&screen, componentPtr};
-    auto signalExit = SignalExitWatcher{screen};
+    auto signalExit = SignalExitWatcher{[&screen] { screen.Post(screen.ExitLoopClosure()); }};
     auto refreshTick = PeriodicRefresh{screen,
                                        kPlaybackTickInterval,
                                        [&clockTickActive, &activityAutoDismissActive]

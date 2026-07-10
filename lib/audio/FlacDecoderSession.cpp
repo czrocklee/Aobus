@@ -236,6 +236,9 @@ namespace ao::audio
     _implPtr->info = {};
   }
 
+  // Result error materialization may allocate; DecoderSession requires fail-fast
+  // termination if that escapes its recoverable decoder-error boundary.
+  // NOLINTNEXTLINE(bugprone-exception-escape)
   Result<> FlacDecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
     try
@@ -282,6 +285,9 @@ namespace ao::audio
     _implPtr->bufferedFrames = 0;
   }
 
+  // Result error materialization may allocate; DecoderSession requires fail-fast
+  // termination if that escapes its recoverable decoder-error boundary.
+  // NOLINTNEXTLINE(bugprone-exception-escape)
   Result<PcmBlock> FlacDecoderSession::readNextBlock() noexcept
   {
     try
@@ -427,12 +433,12 @@ namespace ao::audio
     auto* const impl = utility::unsafeDowncast<Impl>(clientData);
 
     auto const channels = frame->header.channels;
-    auto const bps = frame->header.bits_per_sample;
     auto const blockSize = frame->header.blocksize;
+    std::uint8_t const sourceBitDepth = static_cast<std::uint8_t>(frame->header.bits_per_sample);
+    std::uint8_t const outputBitDepth =
+      (impl->requestedOutput.bitDepth != 0) ? impl->requestedOutput.bitDepth : sourceBitDepth;
 
-    auto const outBps = (impl->requestedOutput.bitDepth != 0) ? impl->requestedOutput.bitDepth : bps;
-
-    if (outBps == 16)
+    if (outputBitDepth == 16)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 2);
       auto* out = utility::layout::asMutablePtr<std::int16_t>(impl->pcmBuffer);
@@ -441,11 +447,11 @@ namespace ao::audio
       {
         for (std::uint32_t ch = 0; channels > 0 && ch < channels; ++ch)
         {
-          *out++ = static_cast<std::int16_t>(alignSample(buffer[ch][i], bps, outBps));
+          *out++ = static_cast<std::int16_t>(alignSample(buffer[ch][i], sourceBitDepth, outputBitDepth));
         }
       }
     }
-    else if (outBps == 24)
+    else if (outputBitDepth == 24)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 3);
       auto* out = utility::layout::asMutablePtr<std::uint8_t>(impl->pcmBuffer);
@@ -454,14 +460,14 @@ namespace ao::audio
       {
         for (std::uint32_t ch = 0; channels > 0 && ch < channels; ++ch)
         {
-          auto const val = alignSample(buffer[ch][i], bps, outBps);
+          auto const val = alignSample(buffer[ch][i], sourceBitDepth, outputBitDepth);
           *out++ = static_cast<std::uint8_t>(val & kLowByteMask);
           *out++ = static_cast<std::uint8_t>((val >> 8) & kLowByteMask);
           *out++ = static_cast<std::uint8_t>((val >> 16) & kLowByteMask);
         }
       }
     }
-    else if (outBps == 32)
+    else if (outputBitDepth == 32)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 4);
       auto const dst = utility::layout::viewArrayMutable<std::int32_t>(impl->pcmBuffer);
@@ -474,7 +480,7 @@ namespace ao::audio
       }
 
       interleaveAndPadPcmSamples<std::int32_t, std::int32_t>(
-        impl->channelSpans, dst, static_cast<std::uint8_t>(32 - bps));
+        impl->channelSpans, dst, static_cast<std::uint8_t>(32U - sourceBitDepth));
     }
     else
     {
@@ -482,7 +488,7 @@ namespace ao::audio
     }
 
     impl->bufferedFrames = blockSize;
-    impl->info.outputFormat.bitDepth = static_cast<std::uint8_t>(outBps);
+    impl->info.outputFormat.bitDepth = outputBitDepth;
     impl->info.outputFormat.channels = static_cast<std::uint8_t>(channels);
     impl->info.outputFormat.sampleRate = frame->header.sample_rate;
 

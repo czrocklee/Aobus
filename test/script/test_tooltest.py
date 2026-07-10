@@ -57,7 +57,7 @@ class ToolTestRunnerTest(unittest.TestCase):
     def test_captured_output_is_appended_to_the_gate_log(self):
         completed = tooltest.subprocess.CompletedProcess([], 0, stdout="Ran 2 tests in 0.001s\n\nOK\n")
 
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             log = Path(temp_dir) / "build.log"
             status, _ = self._run(completed, log=log)
 

@@ -44,8 +44,8 @@ namespace ao::audio::test
     void flush() override { _real.flush(); }
     void stop() override { _real.stop(); }
     void close() override { _real.close(); }
-    BackendId backendId() const noexcept override { return _real.backendId(); }
-    ProfileId profileId() const noexcept override { return _real.profileId(); }
+    BackendId backendId() const override { return _real.backendId(); }
+    ProfileId profileId() const override { return _real.profileId(); }
     Result<> setProperty(PropertyId id, PropertyValue const& value) override { return _real.setProperty(id, value); }
 
     Result<PropertyValue> property(PropertyId id) const override { return _real.property(id); }

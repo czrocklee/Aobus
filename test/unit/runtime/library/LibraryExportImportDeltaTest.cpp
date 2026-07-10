@@ -11,6 +11,7 @@
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <c4/yml/tree.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
@@ -64,7 +65,7 @@ namespace ao::rt::test
             "[runtime][workflow][import-export][delta]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
 
     auto coverResourceId = kInvalidResourceId;
     {
@@ -128,9 +129,9 @@ namespace ao::rt::test
                                                      .channels = Channels{},
                                                      .bitDepth = BitDepth{}});
 
-    std::filesystem::copy_file(std::filesystem::current_path() / "test/integration/tag/test_data/with_cover.flac",
-                               std::filesystem::path{temp.path()} / "cover.flac");
-    std::filesystem::copy_file(std::filesystem::current_path() / "test/integration/tag/test_data/with_cover.flac",
+    std::filesystem::copy_file(
+      std::filesystem::path{TAG_TEST_DATA_DIR} / "with_cover.flac", std::filesystem::path{temp.path()} / "cover.flac");
+    std::filesystem::copy_file(std::filesystem::path{TAG_TEST_DATA_DIR} / "with_cover.flac",
                                std::filesystem::path{temp.path()} / "cover-removed.flac");
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "delta.yaml";
@@ -159,8 +160,11 @@ namespace ao::rt::test
   TEST_CASE("LibraryYaml - delta export reports filesystem inspection errors",
             "[runtime][workflow][import-export][delta]")
   {
+#ifdef _WIN32
+    SKIP("std::filesystem permissions do not make directories unreadable on Windows");
+#endif
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto const blockedDir = std::filesystem::path{temp.path()} / "blocked";
     std::filesystem::create_directory(blockedDir);
     auto restorePermissions = DirectoryPermissionRestorer{blockedDir};
@@ -193,8 +197,11 @@ namespace ao::rt::test
   TEST_CASE("LibraryYaml - delta import reports filesystem inspection errors",
             "[runtime][workflow][import-export][delta]")
   {
+#ifdef _WIN32
+    SKIP("std::filesystem permissions do not make directories unreadable on Windows");
+#endif
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "delta-import.yaml";
     auto const blockedDir = std::filesystem::path{temp.path()} / "blocked";

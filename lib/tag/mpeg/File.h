@@ -18,10 +18,11 @@ namespace ao::tag::mpeg
   public:
     using TagFile::TagFile;
 
-  private:
+  protected:
     Result<library::TrackBuilder> loadTrackImpl() const override;
     Result<AudioPayload> audioPayloadImpl() const override;
 
+  private:
     std::chrono::milliseconds calculateDuration(FrameView const& frame, bool hasId3v1) const;
   };
 } // namespace ao::tag::mpeg

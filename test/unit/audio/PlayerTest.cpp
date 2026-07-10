@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "AudioFixtureSupport.h"
 #include "BackendTestSupport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include <ao/AudioCodec.h>
+#include <ao/Error.h>
 #include <ao/async/ImmediateExecutor.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
@@ -12,9 +14,12 @@
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Player.h>
+#include <ao/audio/Property.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/RouteAnchor.h>
+#include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -23,10 +28,15 @@
 #include <fakeit.hpp>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <semaphore>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -61,8 +71,8 @@ namespace ao::audio::test
       {
       }
 
-      BackendId backendId() const noexcept override { return _backendId; }
-      ProfileId profileId() const noexcept override { return _profileId; }
+      BackendId backendId() const override { return _backendId; }
+      ProfileId profileId() const override { return _profileId; }
 
     private:
       BackendId _backendId;
@@ -89,6 +99,158 @@ namespace ao::audio::test
                                                     .supportedProfiles = {}},
                                      .devices = {}};
     }
+
+    inline auto const& kSynchronousGraphBackend = kBackendAlsa;
+
+    struct SynchronousGraphProbe final
+    {
+      std::mutex mutex;
+      BackendProvider::OnGraphChangedCallback graphCallback;
+      std::string activeRoute;
+      std::uint64_t activeSubscription = 0;
+      std::uint64_t nextSubscription = 1;
+      std::vector<std::string> subscribedRoutes;
+      std::counting_semaphore<8> graphSubscribed{0};
+
+      void publish(std::string const& route)
+      {
+        auto callback = BackendProvider::OnGraphChangedCallback{};
+
+        {
+          auto const lock = std::scoped_lock{mutex};
+
+          if (route == activeRoute)
+          {
+            callback = graphCallback;
+          }
+        }
+
+        if (callback)
+        {
+          callback(flow::Graph{.nodes = {flow::Node{.id = route + "-sink", .type = flow::NodeType::Sink}}});
+        }
+      }
+
+      std::size_t subscriptionCount()
+      {
+        auto const lock = std::scoped_lock{mutex};
+        return subscribedRoutes.size();
+      }
+    };
+
+    class SynchronousGraphBackend final : public NullBackend
+    {
+    public:
+      SynchronousGraphBackend(std::shared_ptr<SynchronousGraphProbe> probePtr, std::string route)
+        : _probePtr{std::move(probePtr)}, _route{std::move(route)}
+      {
+      }
+
+      Result<> open(Format const& /*format*/, RenderTarget* target) override
+      {
+        target->handleRouteReady(_route);
+        return {};
+      }
+
+      Result<> setProperty(PropertyId id, PropertyValue const& value) override
+      {
+        auto result = NullBackend::setProperty(id, value);
+
+        if (result && (id == PropertyId::Volume || id == PropertyId::Muted))
+        {
+          _probePtr->publish(_route);
+        }
+
+        return result;
+      }
+
+      BackendId backendId() const override { return kSynchronousGraphBackend; }
+      ProfileId profileId() const override { return kProfileShared; }
+
+    private:
+      std::shared_ptr<SynchronousGraphProbe> _probePtr;
+      std::string _route;
+    };
+
+    class SynchronousGraphProvider final : public BackendProvider
+    {
+    public:
+      explicit SynchronousGraphProvider(std::shared_ptr<SynchronousGraphProbe> probePtr)
+        : _probePtr{std::move(probePtr)}
+      {
+      }
+
+      void shutdown() noexcept override {}
+
+      Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      {
+        callback(devices());
+        return {};
+      }
+
+      Status status() const override
+      {
+        return {
+          .descriptor = {.id = kSynchronousGraphBackend,
+                         .name = "Synchronous Graph",
+                         .description = "Test provider",
+                         .iconName = "audio-card-symbolic",
+                         .supportedProfiles = {{.id = kProfileShared, .name = "Shared", .description = "Shared"}}},
+          .devices = devices()};
+      }
+
+      std::unique_ptr<Backend> createBackend(Device const& device, ProfileId const& /*profile*/) override
+      {
+        return std::make_unique<SynchronousGraphBackend>(_probePtr, device.id.raw());
+      }
+
+      Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override
+      {
+        auto const route = std::string{routeAnchor};
+        std::uint64_t subscription = 0;
+
+        {
+          auto const lock = std::scoped_lock{_probePtr->mutex};
+          subscription = _probePtr->nextSubscription++;
+          _probePtr->activeSubscription = subscription;
+          _probePtr->activeRoute = route;
+          _probePtr->graphCallback = std::move(callback);
+          _probePtr->subscribedRoutes.push_back(route);
+        }
+
+        _probePtr->graphSubscribed.release();
+        return Subscription{[weakProbePtr = std::weak_ptr{_probePtr}, subscription]
+                            {
+                              if (auto probePtr = weakProbePtr.lock(); probePtr)
+                              {
+                                auto const lock = std::scoped_lock{probePtr->mutex};
+
+                                if (probePtr->activeSubscription == subscription)
+                                {
+                                  probePtr->activeSubscription = 0;
+                                  probePtr->activeRoute.clear();
+                                  probePtr->graphCallback = {};
+                                }
+                              }
+                            }};
+      }
+
+    private:
+      static std::vector<Device> devices()
+      {
+        return {{.id = DeviceId{"route-a"},
+                 .displayName = "Route A",
+                 .description = "Test",
+                 .isDefault = true,
+                 .backendId = kSynchronousGraphBackend},
+                {.id = DeviceId{"route-b"},
+                 .displayName = "Route B",
+                 .description = "Test",
+                 .backendId = kSynchronousGraphBackend}};
+      }
+
+      std::shared_ptr<SynchronousGraphProbe> _probePtr;
+    };
   } // namespace
 
   TEST_CASE("Player - lifecycle ignores stale route and graph updates", "[audio][unit][player][lifecycle]")
@@ -132,9 +294,10 @@ namespace ao::audio::test
                                                            .supportedProfiles = {}},
                                             .devices = {}});
 
-    auto executor = async::ImmediateExecutor{};
+    auto executor = QueuedExecutor{};
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
+    executor.drain();
     CHECK(player.setOutputDevice(kBackendNone, DeviceId{"mock-sink"}, kProfileShared));
 
     SECTION("setOutputDevice same values exits early")
@@ -164,6 +327,7 @@ namespace ao::audio::test
       auto const gen = player.playbackGeneration();
 
       player.handleRouteChanged(engineSnap, gen);
+      executor.drain();
 
       REQUIRE(onGraphChanged);
 
@@ -172,6 +336,7 @@ namespace ao::audio::test
                                  { qualityEvents.emplace_back(quality, ready); });
 
       onGraphChanged(flow::Graph{});
+      REQUIRE(executor.drainUntil([&] { return !qualityEvents.empty(); }));
 
       auto const snap = player.status();
       CHECK(snap.quality == Quality::BitwisePerfect);
@@ -187,10 +352,18 @@ namespace ao::audio::test
     {
       auto engineSnap = createBaseEngineRoute();
       player.handleRouteChanged(engineSnap, player.playbackGeneration());
+      executor.drain();
 
       // Fire a system graph that has NO Stream node
       onGraphChanged(
         flow::Graph{.nodes = {flow::Node{.id = "sys-sink", .type = flow::NodeType::Sink}}, .connections = {}});
+      REQUIRE(executor.drainUntil(
+        [&]
+        {
+          auto const snap = player.status();
+          return std::ranges::find(snap.flow.nodes, std::string_view{"sys-sink"}, &flow::Node::id) !=
+                 snap.flow.nodes.end();
+        }));
 
       auto const snap = player.status();
       // Should still work, but no connection from engine to system
@@ -207,6 +380,7 @@ namespace ao::audio::test
     {
       auto engineSnap = createBaseEngineRoute();
       player.handleRouteChanged(engineSnap, player.playbackGeneration());
+      executor.drain();
 
       onGraphChanged(
         flow::Graph{.nodes =
@@ -217,6 +391,13 @@ namespace ao::audio::test
                     .connections = {
                       flow::Connection{.sourceId = "sys-stream", .destinationId = "sys-sink", .isActive = true},
                     }});
+      REQUIRE(executor.drainUntil(
+        [&]
+        {
+          auto const snap = player.status();
+          return std::ranges::find(snap.flow.nodes, std::string_view{"sys-stream"}, &flow::Node::id) !=
+                 snap.flow.nodes.end();
+        }));
 
       auto const snap = player.status();
       auto const streamIt = std::ranges::find(snap.flow.nodes, std::string_view{"sys-stream"}, &flow::Node::id);
@@ -244,6 +425,7 @@ namespace ao::audio::test
       auto const gen = player.playbackGeneration();
 
       player.handleRouteChanged(engineSnap, gen);
+      executor.drain();
 
       REQUIRE(onGraphChanged);
 
@@ -252,6 +434,8 @@ namespace ao::audio::test
 
       // Fire graph change, which captures the old gen
       onGraphChanged(flow::Graph{});
+      executor.checkQueued();
+      executor.drain();
 
       auto const snap = player.status();
       CHECK(snap.flow.nodes.empty());
@@ -432,6 +616,264 @@ namespace ao::audio::test
     CHECK(deviceSignals == 0);
   }
 
+  TEST_CASE("Player - immediate outward callback may destroy player", "[audio][regression][player][lifecycle]")
+  {
+    struct CallbackLifetime final
+    {
+      explicit CallbackLifetime(std::binary_semaphore& destroyedRef)
+        : destroyed{destroyedRef}
+      {
+      }
+
+      ~CallbackLifetime() { destroyed.release(); }
+
+      CallbackLifetime(CallbackLifetime const&) = delete;
+      CallbackLifetime& operator=(CallbackLifetime const&) = delete;
+      CallbackLifetime(CallbackLifetime&&) = delete;
+      CallbackLifetime& operator=(CallbackLifetime&&) = delete;
+
+      std::binary_semaphore& destroyed;
+    };
+
+    struct Probe final
+    {
+      std::mutex mutex;
+      RenderTarget* target = nullptr;
+      std::binary_semaphore backendDestroyed{0};
+    };
+
+    struct ReentrantBackend final : NullBackend
+    {
+      explicit ReentrantBackend(std::shared_ptr<Probe> probePtr)
+        : probePtr{std::move(probePtr)}
+      {
+      }
+
+      ~ReentrantBackend() override { probePtr->backendDestroyed.release(); }
+
+      ReentrantBackend(ReentrantBackend const&) = delete;
+      ReentrantBackend& operator=(ReentrantBackend const&) = delete;
+      ReentrantBackend(ReentrantBackend&&) = delete;
+      ReentrantBackend& operator=(ReentrantBackend&&) = delete;
+
+      Result<> open(Format const& /*format*/, RenderTarget* target) override
+      {
+        auto const lock = std::scoped_lock{probePtr->mutex};
+        probePtr->target = target;
+        return {};
+      }
+
+      void close() override
+      {
+        auto const lock = std::scoped_lock{probePtr->mutex};
+        probePtr->target = nullptr;
+      }
+
+      BackendId backendId() const override { return BackendId{"reentrant"}; }
+      ProfileId profileId() const override { return kProfileShared; }
+
+      std::shared_ptr<Probe> probePtr;
+    };
+
+    struct ReentrantProvider final : BackendProvider
+    {
+      explicit ReentrantProvider(std::shared_ptr<Probe> probePtr)
+        : probePtr{std::move(probePtr)}
+      {
+      }
+
+      void shutdown() noexcept override {}
+
+      Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      {
+        callback({Device{.id = DeviceId{"reentrant-device"},
+                         .displayName = "Reentrant Device",
+                         .description = "Test",
+                         .isDefault = true,
+                         .backendId = BackendId{"reentrant"}}});
+        return {};
+      }
+
+      Status status() const override
+      {
+        return {
+          .descriptor = {.id = BackendId{"reentrant"},
+                         .name = "Reentrant",
+                         .description = "Test",
+                         .iconName = "audio-card-symbolic",
+                         .supportedProfiles = {{.id = kProfileShared, .name = "Shared", .description = "Shared"}}},
+          .devices = {}};
+      }
+
+      std::unique_ptr<Backend> createBackend(Device const& /*device*/, ProfileId const& /*profile*/) override
+      {
+        return std::make_unique<ReentrantBackend>(probePtr);
+      }
+
+      Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      {
+        return {};
+      }
+
+      std::shared_ptr<Probe> probePtr;
+    };
+
+    auto const fixturePath = requireAudioFixture("basic_metadata.flac");
+    auto probePtr = std::make_shared<Probe>();
+    auto callbackStorageDestroyed = std::binary_semaphore{0};
+    auto callbackLifetimePtr = std::make_shared<CallbackLifetime>(callbackStorageDestroyed);
+    auto executor = async::ImmediateExecutor{};
+    auto playerPtr = std::make_unique<Player>(executor);
+    playerPtr->addProvider(std::make_unique<ReentrantProvider>(probePtr));
+    REQUIRE(playerPtr->setOutputDevice(BackendId{"reentrant"}, DeviceId{"reentrant-device"}, kProfileShared));
+    REQUIRE(playerPtr->play(Engine::PlaybackItem{.input = PlaybackInput{.filePath = fixturePath}}));
+
+    auto* target = static_cast<RenderTarget*>(nullptr);
+    {
+      auto const lock = std::scoped_lock{probePtr->mutex};
+      target = probePtr->target;
+    }
+    REQUIRE(target != nullptr);
+
+    playerPtr->setOnStateChanged(
+      [&playerPtr, callbackLifetimePtr]
+      {
+        if (!callbackLifetimePtr)
+        {
+          return;
+        }
+
+        playerPtr.reset();
+      });
+    callbackLifetimePtr.reset();
+    target->handlePropertyChanged(PropertySnapshot{
+      .id = PropertyId::Volume,
+      .optValue = PropertyValue{0.75F},
+      .info = {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = true},
+    });
+
+    REQUIRE(probePtr->backendDestroyed.try_acquire_for(std::chrono::seconds{1}));
+    REQUIRE(callbackStorageDestroyed.try_acquire_for(std::chrono::seconds{1}));
+    CHECK(playerPtr == nullptr);
+  }
+
+  TEST_CASE("Player - ALSA-style synchronous graph update from setVolume may destroy player",
+            "[audio][regression][player][lifecycle]")
+  {
+    auto const fixturePath = requireAudioFixture("basic_metadata.flac");
+    auto probePtr = std::make_shared<SynchronousGraphProbe>();
+    auto executor = async::ImmediateExecutor{};
+    auto playerPtr = std::make_unique<Player>(executor);
+    auto routeSettled = std::binary_semaphore{0};
+    auto routeSettledSignaled = std::atomic{false};
+    playerPtr->setOnQualityChanged(
+      [&](QualityResult const&, bool)
+      {
+        if (probePtr->subscriptionCount() >= 1 && !routeSettledSignaled.exchange(true, std::memory_order_acq_rel))
+        {
+          routeSettled.release();
+        }
+      });
+    playerPtr->addProvider(std::make_unique<SynchronousGraphProvider>(probePtr));
+    REQUIRE(playerPtr->setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-a"}, kProfileShared));
+    REQUIRE(playerPtr->play(Engine::PlaybackItem{.input = PlaybackInput{.filePath = fixturePath}}));
+    REQUIRE(probePtr->graphSubscribed.try_acquire_for(std::chrono::seconds{5}));
+    REQUIRE(routeSettled.try_acquire_for(std::chrono::seconds{5}));
+
+    auto playerDestroyed = std::binary_semaphore{0};
+    playerPtr->setOnQualityChanged(
+      [&](QualityResult const&, bool)
+      {
+        playerPtr.reset();
+        playerDestroyed.release();
+      });
+
+    auto const result = playerPtr->setVolume(0.5F);
+
+    REQUIRE(result);
+    REQUIRE(playerDestroyed.try_acquire_for(std::chrono::seconds{5}));
+    CHECK_FALSE(playerPtr);
+  }
+
+  TEST_CASE("Player - switching output while playing subscribes to the new route",
+            "[audio][regression][player][output]")
+  {
+    auto const fixturePath = requireAudioFixture("basic_metadata.flac");
+    auto probePtr = std::make_shared<SynchronousGraphProbe>();
+    auto executor = async::ImmediateExecutor{};
+    auto player = Player{executor};
+    auto firstRouteSettled = std::binary_semaphore{0};
+    auto secondRouteSettled = std::binary_semaphore{0};
+    auto firstSignaled = std::atomic{false};
+    auto secondSignaled = std::atomic{false};
+    player.setOnQualityChanged(
+      [&](QualityResult const&, bool)
+      {
+        auto const subscriptions = probePtr->subscriptionCount();
+
+        if (subscriptions >= 1 && !firstSignaled.exchange(true, std::memory_order_acq_rel))
+        {
+          firstRouteSettled.release();
+        }
+
+        if (subscriptions >= 2 && !secondSignaled.exchange(true, std::memory_order_acq_rel))
+        {
+          secondRouteSettled.release();
+        }
+      });
+    player.addProvider(std::make_unique<SynchronousGraphProvider>(probePtr));
+    REQUIRE(player.setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-a"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{.input = PlaybackInput{.filePath = fixturePath}}));
+    REQUIRE(probePtr->graphSubscribed.try_acquire_for(std::chrono::seconds{5}));
+    REQUIRE(firstRouteSettled.try_acquire_for(std::chrono::seconds{5}));
+
+    auto staleRouteCallback = BackendProvider::OnGraphChangedCallback{};
+    {
+      auto const lock = std::scoped_lock{probePtr->mutex};
+      staleRouteCallback = probePtr->graphCallback;
+    }
+    REQUIRE(staleRouteCallback);
+
+    REQUIRE(player.setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-b"}, kProfileShared));
+    REQUIRE(probePtr->graphSubscribed.try_acquire_for(std::chrono::seconds{5}));
+    REQUIRE(secondRouteSettled.try_acquire_for(std::chrono::seconds{5}));
+
+    {
+      auto const lock = std::scoped_lock{probePtr->mutex};
+      REQUIRE(probePtr->subscribedRoutes.size() == 2);
+      CHECK(probePtr->subscribedRoutes[0] == "route-a");
+      CHECK(probePtr->subscribedRoutes[1] == "route-b");
+      CHECK(probePtr->activeRoute == "route-b");
+    }
+
+    auto graphUpdated = std::binary_semaphore{0};
+    auto graphUpdateCount = std::atomic{std::size_t{0}};
+    auto currentRouteSignaled = std::atomic{false};
+    player.setOnQualityChanged(
+      [&](QualityResult const&, bool)
+      {
+        graphUpdateCount.fetch_add(1, std::memory_order_relaxed);
+
+        if (auto const status = player.status();
+            std::ranges::find(status.flow.nodes, std::string_view{"route-b-sink"}, &flow::Node::id) !=
+              status.flow.nodes.end() &&
+            !currentRouteSignaled.exchange(true, std::memory_order_acq_rel))
+        {
+          graphUpdated.release();
+        }
+      });
+    staleRouteCallback(flow::Graph{.nodes = {flow::Node{.id = "route-a-stale", .type = flow::NodeType::Sink}}});
+    probePtr->publish("route-b");
+    REQUIRE(graphUpdated.try_acquire_for(std::chrono::seconds{5}));
+    CHECK(graphUpdateCount.load(std::memory_order_relaxed) == 1);
+
+    auto const status = player.status();
+    CHECK(std::ranges::find(status.flow.nodes, std::string_view{"route-b-sink"}, &flow::Node::id) !=
+          status.flow.nodes.end());
+    CHECK(std::ranges::find(status.flow.nodes, std::string_view{"route-a-stale"}, &flow::Node::id) ==
+          status.flow.nodes.end());
+  }
+
   TEST_CASE("Player - graph callbacks are marshalled onto the executor", "[audio][unit][player][executor]")
   {
     auto mockProvider = Mock<BackendProvider>{};
@@ -491,7 +933,7 @@ namespace ao::audio::test
     CHECK(std::ranges::find(snap.flow.nodes, std::string_view{"sys-sink"}, &flow::Node::id) == snap.flow.nodes.end());
     CHECK(qualityEvents.empty());
 
-    executor.drain();
+    REQUIRE(executor.drainUntil([&] { return !qualityEvents.empty(); }));
 
     snap = player.status();
     CHECK(std::ranges::find(snap.flow.nodes, std::string_view{"sys-sink"}, &flow::Node::id) != snap.flow.nodes.end());
@@ -561,7 +1003,20 @@ namespace ao::audio::test
   {
     struct Events final
     {
-      std::vector<std::string> values;
+      void recordEvent(std::string_view eventName) noexcept
+      {
+        if (count >= values.size())
+        {
+          hasOverflow = true;
+          return;
+        }
+
+        values[count++] = eventName;
+      }
+
+      std::array<std::string_view, 3> values{};
+      std::size_t count = 0;
+      bool hasOverflow = false;
     };
 
     struct LifetimeBackend final : NullBackend
@@ -578,17 +1033,17 @@ namespace ao::audio::test
 
       ~LifetimeBackend() override { close(); }
 
-      void close() override
+      void close() noexcept override
       {
         if (!closed)
         {
-          events.values.emplace_back("backend close");
+          events.recordEvent("backend close");
           closed = true;
         }
       }
 
-      BackendId backendId() const noexcept override { return kBackendAlsa; }
-      ProfileId profileId() const noexcept override { return kProfileExclusive; }
+      BackendId backendId() const override { return kBackendAlsa; }
+      ProfileId profileId() const override { return kProfileExclusive; }
 
       Events& events;
       bool closed = false;
@@ -606,9 +1061,9 @@ namespace ao::audio::test
       LifetimeProvider(LifetimeProvider&&) = delete;
       LifetimeProvider& operator=(LifetimeProvider&&) = delete;
 
-      ~LifetimeProvider() override { events.values.emplace_back("provider destroy"); }
+      ~LifetimeProvider() override { events.recordEvent("provider destroy"); }
 
-      void shutdown() noexcept override { events.values.emplace_back("provider shutdown"); }
+      void shutdown() noexcept override { events.recordEvent("provider shutdown"); }
 
       Subscription subscribeDevices(OnDevicesChangedCallback callback) override
       {
@@ -621,11 +1076,12 @@ namespace ao::audio::test
 
       Status status() const override
       {
-        return {.descriptor = {.id = kBackendAlsa,
-                               .name = "ALSA",
-                               .description = "ALSA",
-                               .iconName = "audio-card-symbolic",
-                               .supportedProfiles = {{kProfileExclusive, "Exclusive", "Exclusive"}}},
+        return {.descriptor =
+                  {.id = kBackendAlsa,
+                   .name = "ALSA",
+                   .description = "ALSA",
+                   .iconName = "audio-card-symbolic",
+                   .supportedProfiles = {{.id = kProfileExclusive, .name = "Exclusive", .description = "Exclusive"}}},
                 .devices = {Device{.id = DeviceId{"alsa-device"},
                                    .displayName = "ALSA Device",
                                    .description = "ALSA",
@@ -658,6 +1114,10 @@ namespace ao::audio::test
     // before the engine had a chance to close the backend — backends that touch provider-owned state
     // (e.g. AlsaGraphRegistry) during close() would access a destroyed object.
     // Correct order: provider shutdown → engine destroy (backend close) → provider destroy.
-    CHECK(events.values == std::vector<std::string>{"provider shutdown", "backend close", "provider destroy"});
+    CHECK_FALSE(events.hasOverflow);
+    CHECK(events.count == events.values.size());
+    CHECK(events.values == std::array{std::string_view{"provider shutdown"},
+                                      std::string_view{"backend close"},
+                                      std::string_view{"provider destroy"}});
   }
 } // namespace ao::audio::test

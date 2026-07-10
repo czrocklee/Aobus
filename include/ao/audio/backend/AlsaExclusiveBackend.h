@@ -49,8 +49,8 @@ namespace ao::audio::backend
     void stop() override;
     void close() override;
 
-    BackendId backendId() const noexcept override;
-    ProfileId profileId() const noexcept override;
+    BackendId backendId() const override;
+    ProfileId profileId() const override;
 
     Result<> setProperty(PropertyId id, PropertyValue const& value) override;
     Result<PropertyValue> property(PropertyId id) const override;

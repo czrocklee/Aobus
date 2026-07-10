@@ -1,6 +1,7 @@
 """Tests for ao.core.dedup — diagnostic block de-duplication."""
 
 import io
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -77,6 +78,25 @@ class DedupTest(unittest.TestCase):
         logs = self._write_logs(HEADER_DIAGNOSTIC, relative)
         out = io.StringIO()
         self.assertEqual(deduplicate(logs, out, ROOT), 1)
+
+    def test_windows_drive_letter_diagnostic_is_parsed(self):
+        diagnostic = """\
+C:\\repo\\include\\ao\\Foo.h:12:7: warning: windows path [aobus-example]
+    value;
+    ^
+"""
+        logs = self._write_logs(diagnostic)
+        out = io.StringIO()
+        self.assertEqual(deduplicate(logs, out, Path("C:/repo"), include_external=False), 1)
+        self.assertIn("windows path", out.getvalue())
+
+    @unittest.skipUnless(os.name == "nt", "Windows path containment semantics")
+    def test_windows_diagnostic_on_another_drive_is_external(self):
+        diagnostic = "D:\\third-party\\Foo.h:1:1: warning: external [aobus-example]\n"
+        logs = self._write_logs(diagnostic)
+        out = io.StringIO()
+        self.assertEqual(deduplicate(logs, out, Path("C:/repo"), include_external=False), 0)
+        self.assertEqual(out.getvalue(), "")
 
 
 if __name__ == "__main__":

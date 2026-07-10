@@ -8,6 +8,7 @@
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/box.hpp>
 #include <ftxui/screen/color.hpp>
+#include <ftxui/screen/pixel.hpp>
 #include <ftxui/screen/screen.hpp>
 
 #include <algorithm>

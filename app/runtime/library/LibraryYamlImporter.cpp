@@ -23,6 +23,8 @@
 #include <ao/utility/Base64.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <c4/yml/node.hpp>
+
 #include <algorithm>
 #include <array>
 #include <chrono>

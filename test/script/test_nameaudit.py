@@ -9,7 +9,7 @@ from ao.core import nameaudit
 
 class NameAuditTest(unittest.TestCase):
     def test_accepts_role_names_in_expected_layers(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             files = {
                 "app/include/ao/uimodel/FooViewModel.h": "class FooViewModel final {};",
@@ -29,7 +29,7 @@ class NameAuditTest(unittest.TestCase):
         self.assertEqual(issues, [])
 
     def test_reports_generic_files_role_drift_and_production_test_doubles(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             files = {
                 "app/FooUtils.h": "struct Foo final {};",
@@ -67,7 +67,7 @@ class NameAuditTest(unittest.TestCase):
         )
 
     def test_ignores_lint_fixtures(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             fixture = root / "test" / "integration" / "lint" / "fixture" / "aobus" / "BadUtils.h"
             fixture.parent.mkdir(parents=True)

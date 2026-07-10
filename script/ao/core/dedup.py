@@ -5,12 +5,13 @@ collapses them to one block keyed by location and message. Used by both the tidy
 analyze commands (formerly two divergent copies embedded in the shell scripts).
 """
 
+import os
 import re
 from collections.abc import Iterable
 from pathlib import Path
 from typing import IO
 
-DIAGNOSTIC_RE = re.compile(r"^([^:]+):([0-9]+):([0-9]+):\s+(warning|error|note):\s+(.*)")
+DIAGNOSTIC_RE = re.compile(r"^(.+):([0-9]+):([0-9]+):\s+(warning|error|note):\s+(.*)")
 NOISE_RE = re.compile(
     r"^([0-9]+ warnings? generated\.|Suppressed [0-9]+ warnings?(?: \([^)]+\))?\.?|Use -header-filter=.*)$"
 )
@@ -35,18 +36,24 @@ def deduplicate(
     skip_block = False
     count = 0
 
-    def normalize(path: str) -> str:
+    def normalized_path(path: str) -> Path:
         p = Path(path)
         if not p.is_absolute():
             p = root / p
         try:
-            return str(p.resolve())
+            return p.resolve()
         except OSError:
-            return str(p)
+            return p
+
+    def normalize(path: str) -> str:
+        return os.path.normcase(str(normalized_path(path)))
 
     def is_project_path(path: str) -> bool:
-        np = normalize(path)
-        return np.startswith(f"{root}/") or np == str(root)
+        try:
+            normalized_path(path).relative_to(root)
+            return True
+        except ValueError:
+            return False
 
     def flush() -> None:
         nonlocal block, cid, count

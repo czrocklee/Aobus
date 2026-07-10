@@ -12,6 +12,9 @@ Use project commands as the public entry points:
 - `./ao test --lint` tests the Aobus `clang-tidy` plugin fixtures; it is not the
   Python lint command.
 
+On native Windows use the corresponding `ao.bat` commands. The scope and policy
+are the same; the portal selects host-specific tools and build trees.
+
 Do not call `clang-tidy`, Ruff, or mypy directly during normal repository work.
 The `./ao` commands own scope discovery, strict/relaxed check modes, plugin
 loading, include paths, fix filtering, and diagnostic de-duplication. Keep lint
@@ -33,6 +36,52 @@ drive-by lint sweep.
   suite owns fixture diagnostic and auto-fix coverage.
 - Python files in scope are checked by Ruff and mypy through `./ao tidy` using
   `pyproject.toml`.
+
+## Platform Coverage
+
+Clang-format does not depend on a compile database, so the same source can be
+formatted on either host. Linux gets clang-format from Nix; Windows resolves
+the formatter from the pinned LLVM 22.1.8 SDK used by tidy and never falls back
+to `PATH`. Clang-tidy must use compiler flags, defines, generated headers, and
+SDK headers from a real native compile command. A complete Aobus C++ lint gate
+is therefore the combination of Linux and Windows runs:
+
+- Linux owns PipeWire, ALSA, POSIX, and GTK translation units.
+- Windows owns WASAPI and other Windows-only translation units.
+- Shared translation units are intentionally checked on both hosts.
+
+Changed-file, folder, and `--all` scopes print a deferred-files summary for
+translation units absent from the current host's `compile_commands.json`, then
+continue with the files that are natively covered. Explicitly requesting an
+uncovered translation unit fails. A header uses a same-component implementation
+with the same stem (including a recognized platform suffix such as `Windows`,
+`Linux`, or `Posix`). The portal copies that implementation's exact native
+compiler flags into a temporary compilation database and checks the header
+itself as the main file. A header without a safe companion is deferred. These
+rules cover main-file-only checks and prevent clang-tidy's fallback to a nearby
+but unrelated compile command from producing a false green result.
+
+Windows tidy uses `out/build/windows-tidy` and the pinned official LLVM 22.1.8
+development archive. CMake verifies the archive SHA-256, extracts it once under
+`out/toolchains/`, and builds `tool/lint/AobusClangTidy.exe` by statically linking
+the Aobus checks with that SDK's `clangTidyMain`. The official Windows
+`clang-tidy.exe` does not export the symbols required by an out-of-tree DLL, so
+it cannot load the Linux-style plugin. Do not substitute `clang-tidy.exe` from
+Visual Studio or `PATH`; it would omit every `aobus-*` check.
+
+The Windows analysis command also defines `_USE_STD_VECTOR_ALGORITHMS=0` for
+clang-tidy only. This works around
+[microsoft/STL#6294](https://github.com/microsoft/STL/issues/6294), where the
+Visual Studio 18 STL sends three-byte element types to a vectorized helper that
+supports only one-, two-, four-, and eight-byte elements. It is an MSVC STL
+header issue, not an LLVM 22 incompatibility, and the define does not affect any
+Aobus product build. Remove the workaround after the corresponding STL fix is
+available in the required Build Tools baseline.
+
+Set `AOBUS_LLVM_SDK_ROOT` at CMake configure time to use an already extracted
+copy of the exact archive, for example on an offline machine. The root must
+contain the LLVM and Clang CMake packages, static libraries, tools, and resource
+headers; configuration fails closed when any required SDK file is missing.
 
 ## Triage
 
@@ -140,8 +189,9 @@ Add the direct include where the symbol is used.
   root, `nix-shell --run "pkg-config --cflags <lib>"` is useful for libraries
   that publish pkg-config metadata.
 - For Clang/LLVM internals, inspect the compile database under
-  `/tmp/build/debug-clang-tidy/compile_commands.json` or use
-  `llvm-config --cxxflags`.
+  `/tmp/build/debug-clang-tidy/compile_commands.json` on Linux or
+  `out/build/windows-tidy/compile_commands.json` on Windows. On Linux,
+  `llvm-config --cxxflags` is also useful.
 
 Suppress `misc-include-cleaner` only when the tool genuinely cannot model the
 provider, such as required umbrella headers or C macros from framework headers.
@@ -184,3 +234,7 @@ modified C++ files. After Python hygiene edits, re-run `./ao tidy` for the
 modified Python files and `./ao test --tooling` when tooling behavior changed.
 Run focused build or test validation when a lint fix changes behavior,
 ownership, public API shape, or test semantics.
+
+For a change that touches platform-specific C++, run the corresponding native
+tidy pass. For a cross-platform change, both native passes are required; neither
+host can validate translation units that its build does not generate.

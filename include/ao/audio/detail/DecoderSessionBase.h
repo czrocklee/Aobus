@@ -15,6 +15,9 @@ namespace ao::audio::detail
   class DecoderSessionBase : public DecoderSession
   {
   public:
+    // DecoderSession deliberately fail-fast terminates if allocation or another
+    // programming failure escapes this recoverable-error boundary.
+    // NOLINTNEXTLINE(bugprone-exception-escape): matches DecoderSession's documented noexcept contract.
     Result<> open(std::filesystem::path const& filePath) noexcept override
     {
       auto* derived = static_cast<Derived*>(this);

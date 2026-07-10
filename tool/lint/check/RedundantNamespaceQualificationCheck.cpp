@@ -7,9 +7,11 @@
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
+#include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclarationName.h>
 #include <clang/AST/Expr.h>
-#include <clang/AST/NestedNameSpecifier.h>
+#include <clang/AST/NestedNameSpecifier.h> // NOLINT(misc-include-cleaner) -- inline location accessors
+#include <clang/AST/NestedNameSpecifierBase.h>
 #include <clang/AST/TypeLoc.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
@@ -19,6 +21,7 @@
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Lexer.h>
 #include <llvm/ADT/SmallVector.h>
+#include <llvm/Config/llvm-config.h>
 
 #include <algorithm>
 
@@ -78,6 +81,17 @@ namespace clang::tidy::readability
 
     bool isNamespaceRedundant(NestedNameSpecifierLoc const& specLocItem, DeclContext const* currentContext)
     {
+#if LLVM_VERSION_MAJOR >= 22
+      auto const spec = specLocItem.getNestedNameSpecifier();
+
+      if (!spec || spec.getKind() != NestedNameSpecifier::Kind::Namespace)
+      {
+        return false;
+      }
+
+      auto const* namespaceBase = spec.getAsNamespaceAndPrefix().Namespace;
+      auto const* ns = namespaceBase != nullptr ? namespaceBase->getNamespace() : nullptr;
+#else
       NestedNameSpecifier const* spec = specLocItem.getNestedNameSpecifier();
 
       if (spec->getKind() == NestedNameSpecifier::Global)
@@ -93,6 +107,7 @@ namespace clang::tidy::readability
       NamespaceDecl const* ns = (spec->getKind() == NestedNameSpecifier::Namespace)
                                   ? spec->getAsNamespace()
                                   : spec->getAsNamespaceAlias()->getNamespace();
+#endif
 
       return ns != nullptr && isAncestor(ns, currentContext);
     }
@@ -148,7 +163,11 @@ namespace clang::tidy::readability
                                            llvm::SmallVectorImpl<NestedNameSpecifierLoc> const& chain,
                                            DeclContext const* currentContext)
     {
+#if LLVM_VERSION_MAJOR >= 22
+      auto const redundantSpec = lastRedundant.getNestedNameSpecifier();
+#else
       auto const* redundantSpec = lastRedundant.getNestedNameSpecifier();
+#endif
       bool foundRedundant = false;
 
       for (auto const& item : chain)
@@ -164,7 +183,18 @@ namespace clang::tidy::readability
           continue;
         }
 
-        NestedNameSpecifier const* nextSpec = item.getNestedNameSpecifier();
+#if LLVM_VERSION_MAJOR >= 22
+        auto const nextSpec = item.getNestedNameSpecifier();
+
+        if (!nextSpec || nextSpec.getKind() != NestedNameSpecifier::Kind::Namespace)
+        {
+          break;
+        }
+
+        auto const* targetNamespaceBase = nextSpec.getAsNamespaceAndPrefix().Namespace;
+        auto const* targetNs = targetNamespaceBase != nullptr ? targetNamespaceBase->getNamespace() : nullptr;
+#else
+        auto const* nextSpec = item.getNestedNameSpecifier();
 
         if (nextSpec->getKind() != NestedNameSpecifier::Namespace)
         {
@@ -172,6 +202,7 @@ namespace clang::tidy::readability
         }
 
         auto const* targetNs = nextSpec->getAsNamespace();
+#endif
 
         if (targetNs == nullptr)
         {
@@ -179,7 +210,13 @@ namespace clang::tidy::readability
         }
 
         auto const targetName = targetNs->getDeclName();
+#if LLVM_VERSION_MAJOR >= 22
+        auto const* redundantNamespaceBase = redundantSpec.getAsNamespaceAndPrefix().Namespace;
+        auto const* const redundantNs =
+          redundantNamespaceBase != nullptr ? redundantNamespaceBase->getNamespace() : nullptr;
+#else
         auto const* const redundantNs = redundantSpec->getAsNamespace();
+#endif
 
         for (DeclContext const* dc = currentContext; dc != nullptr && dc != redundantNs; dc = dc->getParent())
         {
@@ -217,6 +254,22 @@ namespace clang::tidy::readability
         return true;
       }
 
+#if LLVM_VERSION_MAJOR >= 22
+
+      if (auto const* typeLoc = result.Nodes.getNodeAs<TypeLoc>("typeLoc"); typeLoc != nullptr)
+      {
+        specLoc = typeLoc->getUnqualifiedLoc().getPrefix();
+
+        if (!specLoc)
+        {
+          return false;
+        }
+
+        node = DynTypedNode::create(*typeLoc);
+        return true;
+      }
+
+#else
       if (auto const* typeLoc = result.Nodes.getNodeAs<ElaboratedTypeLoc>("elaboratedTypeLoc"); typeLoc != nullptr)
       {
         auto const* contextTypeLoc = result.Nodes.getNodeAs<TypeLoc>("typeLoc");
@@ -230,6 +283,7 @@ namespace clang::tidy::readability
         node = DynTypedNode::create(*contextTypeLoc);
         return true;
       }
+#endif
 
       return false;
     }
@@ -238,11 +292,15 @@ namespace clang::tidy::readability
   void RedundantNamespaceQualificationCheck::registerMatchers(MatchFinder* finder)
   {
     finder->addMatcher(declRefExpr().bind("declRef"), this);
+#if LLVM_VERSION_MAJOR >= 22
+    finder->addMatcher(typeLoc().bind("typeLoc"), this);
+#else
     finder->addMatcher(
       typeLoc(anyOf(elaboratedTypeLoc().bind("elaboratedTypeLoc"),
                     qualifiedTypeLoc(hasUnqualifiedLoc(elaboratedTypeLoc().bind("elaboratedTypeLoc")))))
         .bind("typeLoc"),
       this);
+#endif
   }
 
   void RedundantNamespaceQualificationCheck::check(MatchFinder::MatchResult const& result)
@@ -277,9 +335,23 @@ namespace clang::tidy::readability
 
     auto chain = SmallVector<NestedNameSpecifierLoc, 4>{};
 
-    for (auto currentLoc = specLoc; currentLoc; currentLoc = currentLoc.getPrefix())
+    for (auto currentLoc = specLoc; currentLoc;)
     {
       chain.push_back(currentLoc);
+#if LLVM_VERSION_MAJOR >= 22
+
+      if (auto const typeLoc = currentLoc.getAsTypeLoc(); !typeLoc.isNull())
+      {
+        currentLoc = typeLoc.getPrefix();
+      }
+      else
+      {
+        currentLoc = currentLoc.getAsNamespaceAndPrefix().Prefix;
+      }
+
+#else
+      currentLoc = currentLoc.getPrefix();
+#endif
     }
 
     std::ranges::reverse(chain);

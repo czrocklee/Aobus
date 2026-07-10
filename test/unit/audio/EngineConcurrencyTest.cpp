@@ -48,8 +48,8 @@ namespace ao::audio::test
       void stop() override {}
       void close() override {}
 
-      BackendId backendId() const noexcept override { return BackendId{"blocking"}; }
-      ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
+      BackendId backendId() const override { return BackendId{"blocking"}; }
+      ProfileId profileId() const override { return ProfileId{"test"}; }
 
       Result<> setProperty(PropertyId /*id*/, PropertyValue const& /*value*/) override
       {
@@ -160,8 +160,8 @@ namespace ao::audio::test
 
       void close() override {}
 
-      BackendId backendId() const noexcept override { return BackendId{"rendering"}; }
-      ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
+      BackendId backendId() const override { return BackendId{"rendering"}; }
+      ProfileId profileId() const override { return ProfileId{"test"}; }
 
       Result<> setProperty(PropertyId /*id*/, PropertyValue const& /*value*/) override { return {}; }
 
@@ -251,7 +251,10 @@ namespace ao::audio::test
       auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
         .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
       auto data = std::vector(4096, std::byte{0});
-      decPtr->setReadScript({{data, false}, {data, false}, {data, false}, {{}, true}});
+      decPtr->setReadScript({{.data = data, .endOfStream = false},
+                             {.data = data, .endOfStream = false},
+                             {.data = data, .endOfStream = false},
+                             {.data = {}, .endOfStream = true}});
       return decPtr;
     };
 

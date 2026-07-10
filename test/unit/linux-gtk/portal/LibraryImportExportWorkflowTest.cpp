@@ -468,6 +468,7 @@ namespace ao::gtk::test
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path() / "music",
       .databasePath = tempDir.path() / "db",
+      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
     }};
 

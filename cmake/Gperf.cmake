@@ -23,5 +23,7 @@ function(add_gperf_header out_var input relative_output)
     VERBATIM
   )
 
+  set_property(GLOBAL APPEND PROPERTY AOBUS_GENERATED_HEADERS "${output}")
+
   set(${out_var} "${output}" PARENT_SCOPE)
 endfunction()

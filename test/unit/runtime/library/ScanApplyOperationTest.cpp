@@ -105,7 +105,7 @@ namespace ao::rt::test
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto scanner = ScanPlanBuilder{ml};
     auto plan = scanner.buildPlan().value();
@@ -143,7 +143,7 @@ namespace ao::rt::test
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto scanner = ScanPlanBuilder{ml};
     auto plan = scanner.buildPlan().value();
@@ -192,7 +192,7 @@ namespace ao::rt::test
     item.audioSignature = cachedSignature;
     plan.items.push_back(std::move(item));
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml,
                                        std::move(plan),
@@ -223,7 +223,7 @@ namespace ao::rt::test
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     std::filesystem::copy_file(sourceFile, musicRoot / "song.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto scanner = ScanPlanBuilder{ml};
     auto plan = scanner.buildPlan().value();
@@ -258,7 +258,7 @@ namespace ao::rt::test
     std::filesystem::copy_file(sourceFile, musicRoot / "first.flac");
     std::filesystem::copy_file(sourceFile, musicRoot / "second.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto scanner = ScanPlanBuilder{ml};
     auto plan = scanner.buildPlan().value();
@@ -316,7 +316,7 @@ namespace ao::rt::test
       out.write(padding.data(), static_cast<std::streamsize>(padding.size()));
     }
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto scanner = ScanPlanBuilder{ml};
     auto plan = scanner.buildPlan().value();
@@ -364,7 +364,7 @@ namespace ao::rt::test
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto plan = ScanPlan{};
     plan.items.push_back(ScanItem{.uri = "corrupted.flac",
@@ -410,7 +410,7 @@ namespace ao::rt::test
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     // First scan to populate the manifest
     {
@@ -449,7 +449,7 @@ namespace ao::rt::test
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     // First scan to populate the manifest
     {
@@ -515,7 +515,7 @@ namespace ao::rt::test
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     // First scan to populate the manifest
     {
@@ -558,7 +558,7 @@ namespace ao::rt::test
     auto const originalFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, originalFile);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto originalTrackId = kInvalidTrackId;
 
@@ -675,7 +675,7 @@ namespace ao::rt::test
     auto const originalFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, originalFile);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto originalTrackId = kInvalidTrackId;
 
@@ -750,7 +750,7 @@ namespace ao::rt::test
     auto const movedFile = musicRoot / "renamed.flac";
     std::filesystem::copy_file(sourceFile, originalFile);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto originalTrackId = kInvalidTrackId;
 
@@ -815,7 +815,7 @@ namespace ao::rt::test
       out << "NOT A FLAC FILE";
     }
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto scanner = ScanPlanBuilder{ml};
     auto plan = scanner.buildPlan().value();
@@ -837,7 +837,7 @@ namespace ao::rt::test
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
     std::filesystem::create_directories(musicRoot);
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto plan = ScanPlan{};
     plan.items.push_back(ScanItem{.uri = "bad.flac", .oldUri = {}, .fullPath = musicRoot / "bad.flac"});
@@ -864,7 +864,7 @@ namespace ao::rt::test
       out << "not a supported audio file";
     }
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto scanner = ScanPlanBuilder{ml};
     auto plan = scanner.buildPlan().value();

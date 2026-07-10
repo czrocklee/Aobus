@@ -36,6 +36,15 @@ let
       "-DENABLE_TESTING=OFF"
     ];
   };
+  stb-image-resize2 = pkgs.fetchurl {
+    url = "https://raw.githubusercontent.com/nothings/stb/f75e8d1cad7d90d72ef7a4661f1b994ef78b4e31/stb_image_resize2.h";
+    hash = "sha256-mhcl47MDOTviMkzzhFbQOo992TMX4VAH3zZUkmUDVLI=";
+  };
+  aobus-stb = pkgs.runCommand "aobus-stb" { } ''
+    mkdir -p $out/include/stb
+    cp -r ${pkgs.stb}/include/stb/. $out/include/stb/
+    cp ${stb-image-resize2} $out/include/stb/stb_image_resize2.h
+  '';
 in
 pkgs.mkShell {
   name = "cpp-dev-env";
@@ -53,15 +62,15 @@ pkgs.mkShell {
       ninja
       mold
       xvfb
-      clang
+      llvmPackages_22.clang
       gcc
       gdb
       python3 # runs the ./ao development portal (script/ao)
       python3Packages.ruff
       python3Packages.mypy
-      clang-tools
-      llvmPackages.llvm.dev
-      llvmPackages.clang-unwrapped.dev
+      llvmPackages_22.clang-tools
+      llvmPackages_22.llvm.dev
+      llvmPackages_22.clang-unwrapped.dev
       boost.dev
       lmdb
       lmdb.dev
@@ -101,13 +110,14 @@ pkgs.mkShell {
       alsa-lib
       udev
     ]
-    ++ [ lexy fakeit ];
+    ++ [ lexy fakeit aobus-stb ];
   shellHook = ''
     export PATH="$PATH:/run/current-system/sw/bin"
     # Include gtk4 schemas - need both desktop schemas and gtk4 schemas
     export GSETTINGS_SCHEMA_DIR="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.version}/glib-2.0/schemas:${pkgs.gtk4}/share/gsettings-schemas/gtk4-${pkgs.gtk4.version}/glib-2.0/schemas:$GSETTINGS_SCHEMA_DIR"
     # Set header-only dependency include paths
-    export CPLUS_INCLUDE_PATH="${lexy}/include:${pkgs.gsl-lite}/include:$CPLUS_INCLUDE_PATH"
+    export CMAKE_INCLUDE_PATH="${lexy}/include:${aobus-stb}/include:$CMAKE_INCLUDE_PATH"
+    export CPLUS_INCLUDE_PATH="${lexy}/include:${aobus-stb}/include/stb:${pkgs.gsl-lite}/include:$CPLUS_INCLUDE_PATH"
 
     # ccache configuration
     export CCACHE_DIR="$PWD/.cache/ccache"

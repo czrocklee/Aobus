@@ -83,17 +83,27 @@ namespace ao::audio::backend::detail
     };
 
     mutable std::mutex mutex;
+    mutable std::recursive_mutex callbackMutex;
     std::unordered_map<std::string, AlsaRouteState> states;
     std::vector<Subscriber> subscribers;
     std::uint64_t nextSubId = 1;
+    bool shutdown = false;
   };
 
   AlsaGraphRegistry::AlsaGraphRegistry()
-    : _implPtr{std::make_unique<Impl>()}
+    : _implPtr{std::make_shared<Impl>()}
   {
   }
 
-  AlsaGraphRegistry::~AlsaGraphRegistry() = default;
+  AlsaGraphRegistry::~AlsaGraphRegistry()
+  {
+    auto const impl = _implPtr;
+    auto const callbackLock = std::scoped_lock{impl->callbackMutex};
+    auto const lock = std::scoped_lock{impl->mutex};
+    impl->shutdown = true;
+    impl->states.clear();
+    impl->subscribers.clear();
+  }
 
   Subscription AlsaGraphRegistry::subscribe(std::string_view routeAnchor, Callback callback)
   {
@@ -102,31 +112,71 @@ namespace ao::audio::backend::detail
       return {};
     }
 
-    std::uint64_t const id = [this, routeAnchor, &callback]
-    {
-      auto const lock = std::scoped_lock{_implPtr->mutex};
-      auto const subId = _implPtr->nextSubId++;
-      _implPtr->subscribers.push_back({.id = subId, .routeAnchor = std::string{routeAnchor}, .callback = callback});
-      return subId;
-    }();
+    auto const impl = _implPtr;
+    auto const anchor = std::string{routeAnchor};
+    auto initialGraph = flow::Graph{};
+    auto id = std::uint64_t{0};
+    // Linearize registration, snapshot capture, and initial delivery with
+    // publications while keeping the state mutex out of user callbacks.
+    auto const callbackLock = std::scoped_lock{impl->callbackMutex};
 
-    // Emit immediate snapshot
     {
-      auto const lock = std::scoped_lock{_implPtr->mutex};
+      auto const lock = std::scoped_lock{impl->mutex};
 
-      if (auto const it = _implPtr->states.find(std::string{routeAnchor}); it != _implPtr->states.end())
+      if (impl->shutdown)
       {
-        callback(buildGraph(it->second));
+        return {};
+      }
+
+      id = impl->nextSubId++;
+      impl->subscribers.push_back({.id = id, .routeAnchor = anchor, .callback = callback});
+
+      if (auto const it = impl->states.find(anchor); it != impl->states.end())
+      {
+        initialGraph = buildGraph(it->second);
       }
       else
       {
-        // Neutral graph if no state yet
-        callback(buildGraph({.routeAnchor = std::string{routeAnchor}}));
+        initialGraph = buildGraph({.routeAnchor = anchor});
       }
     }
 
-    return Subscription{[impl = _implPtr.get(), id]
+    try
+    {
+      callback(initialGraph);
+    }
+    catch (...)
+    {
+      auto const lock = std::scoped_lock{impl->mutex};
+      auto const it = std::ranges::find(impl->subscribers, id, &Impl::Subscriber::id);
+
+      if (it != impl->subscribers.end())
+      {
+        impl->subscribers.erase(it);
+      }
+
+      throw;
+    }
+
+    {
+      auto const lock = std::scoped_lock{impl->mutex};
+
+      if (impl->shutdown || std::ranges::find(impl->subscribers, id, &Impl::Subscriber::id) == impl->subscribers.end())
+      {
+        return {};
+      }
+    }
+
+    return Subscription{[weakImpl = std::weak_ptr{impl}, id]
                         {
+                          auto const impl = weakImpl.lock();
+
+                          if (!impl)
+                          {
+                            return;
+                          }
+
+                          auto const callbackLock = std::scoped_lock{impl->callbackMutex};
                           auto const lock = std::scoped_lock{impl->mutex};
                           auto const it = std::ranges::find(impl->subscribers, id, &Impl::Subscriber::id);
 
@@ -139,51 +189,97 @@ namespace ao::audio::backend::detail
 
   void AlsaGraphRegistry::publish(AlsaRouteState state)
   {
+    auto const impl = _implPtr;
     auto const anchor = state.routeAnchor;
     auto const graph = buildGraph(state);
-    auto pendingCallbacks = std::vector<Callback>{};
+    auto pendingSubscribers = std::vector<Impl::Subscriber>{};
 
     {
-      auto const lock = std::scoped_lock{_implPtr->mutex};
-      _implPtr->states[anchor] = std::move(state);
+      auto const lock = std::scoped_lock{impl->mutex};
 
-      for (auto const& sub : _implPtr->subscribers)
+      if (impl->shutdown)
+      {
+        return;
+      }
+
+      impl->states[anchor] = std::move(state);
+
+      for (auto const& sub : impl->subscribers)
       {
         if (sub.routeAnchor == anchor)
         {
-          pendingCallbacks.push_back(sub.callback);
+          pendingSubscribers.push_back(sub);
         }
       }
     }
 
-    for (auto const& cb : pendingCallbacks)
+    for (auto const& subscriber : pendingSubscribers)
     {
-      cb(graph);
+      auto const callbackLock = std::scoped_lock{impl->callbackMutex};
+
+      {
+        auto const lock = std::scoped_lock{impl->mutex};
+
+        if (impl->shutdown)
+        {
+          return;
+        }
+
+        if (std::ranges::find(impl->subscribers, subscriber.id, &Impl::Subscriber::id) == impl->subscribers.end())
+        {
+          continue;
+        }
+      }
+
+      subscriber.callback(graph);
     }
   }
 
   void AlsaGraphRegistry::clear(std::string_view routeAnchor)
   {
+    auto const impl = _implPtr;
     auto const anchor = std::string{routeAnchor};
     auto const emptyGraph = flow::Graph{};
-    auto pendingCallbacks = std::vector<Callback>{};
+    auto pendingSubscribers = std::vector<Impl::Subscriber>{};
 
     {
-      auto const lock = std::scoped_lock{_implPtr->mutex};
-      _implPtr->states.erase(anchor);
+      auto const lock = std::scoped_lock{impl->mutex};
 
-      for (auto const& sub : _implPtr->subscribers)
+      if (impl->shutdown)
+      {
+        return;
+      }
+
+      impl->states.erase(anchor);
+
+      for (auto const& sub : impl->subscribers)
       {
         if (sub.routeAnchor == anchor)
         {
-          pendingCallbacks.push_back(sub.callback);
+          pendingSubscribers.push_back(sub);
         }
       }
     }
 
-    for (auto const& cb : pendingCallbacks)
+    for (auto const& subscriber : pendingSubscribers)
     {
-      cb(emptyGraph);
+      auto const callbackLock = std::scoped_lock{impl->callbackMutex};
+
+      {
+        auto const lock = std::scoped_lock{impl->mutex};
+
+        if (impl->shutdown)
+        {
+          return;
+        }
+
+        if (std::ranges::find(impl->subscribers, subscriber.id, &Impl::Subscriber::id) == impl->subscribers.end())
+        {
+          continue;
+        }
+      }
+
+      subscriber.callback(emptyGraph);
     }
   }
 } // namespace ao::audio::backend::detail

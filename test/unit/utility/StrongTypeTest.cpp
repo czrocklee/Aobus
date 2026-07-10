@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <compare>
 #include <cstdint>
 #include <format>
 #include <sstream>
@@ -40,7 +41,7 @@ namespace ao::utility::test
 
     CHECK(id2 == "test");
     CHECK(id2 != "other");
-    CHECK((id2 <=> "other") > 0);
+    CHECK((id2 <=> "other") == std::strong_ordering::greater);
 
     // hash
     auto set = std::unordered_set<StringId>{};
@@ -66,7 +67,7 @@ namespace ao::utility::test
 
     CHECK(id1 == 42);
     CHECK(id1 != 10);
-    CHECK((id1 <=> 10) > 0);
+    CHECK((id1 <=> 10) == std::strong_ordering::greater);
 
     // Increment / Decrement
     auto inc = id3;

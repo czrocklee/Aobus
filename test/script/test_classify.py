@@ -58,7 +58,7 @@ class TidyChecksTest(unittest.TestCase):
 
 class TidySplitExistingTest(unittest.TestCase):
     def test_files_outside_the_repository_keep_their_absolute_path(self):
-        with tempfile.NamedTemporaryFile(suffix=".py", dir="/tmp") as outside:
+        with tempfile.NamedTemporaryFile(suffix=".py") as outside:
             cpp_files, python_files = tidy.split_existing([outside.name])
             self.assertEqual(cpp_files, [])
             self.assertEqual(python_files, [Path(outside.name).resolve().as_posix()])

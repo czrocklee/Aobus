@@ -7,7 +7,9 @@
 #   cmake
 #   -DROOTS="<semicolon-separated list of source directories>"
 #   -DFORBIDDEN_REGEX="<regex>"
+#   -DFORBIDDEN_REGEX_FILE="<path>"
 #   -DEXCLUDE_REGEX="<regex>"
+#   -DEXCLUDE_REGEX_FILE="<path>"
 #   -DMODE="<report|enforce>"
 #   -P cmake/AssertNoForbiddenIncludes.cmake
 #
@@ -29,8 +31,17 @@ endif()
 
 set(_regex "#[ \t]*include[ \t]*[<\"]\(gtkmm|gdkmm|giomm|glibmm|gtk|gdk|gio|glib)/")
 
-if(FORBIDDEN_REGEX)
+if(FORBIDDEN_REGEX_FILE)
+  file(READ "${FORBIDDEN_REGEX_FILE}" _regex)
+elseif(FORBIDDEN_REGEX)
   set(_regex "${FORBIDDEN_REGEX}")
+endif()
+
+set(_exclude_regex "")
+if(EXCLUDE_REGEX_FILE)
+  file(READ "${EXCLUDE_REGEX_FILE}" _exclude_regex)
+elseif(EXCLUDE_REGEX)
+  set(_exclude_regex "${EXCLUDE_REGEX}")
 endif()
 
 set(_findings "")
@@ -40,7 +51,7 @@ foreach(root IN LISTS ROOTS)
   file(GLOB_RECURSE sources "${root}/*.h" "${root}/*.hpp" "${root}/*.cpp")
 
   foreach(source IN LISTS sources)
-    if(EXCLUDE_REGEX AND source MATCHES "${EXCLUDE_REGEX}")
+    if(_exclude_regex AND source MATCHES "${_exclude_regex}")
       continue()
     endif()
 

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/CoverArt.h>
@@ -61,7 +62,7 @@ namespace ao::rt::test
             "[runtime][workflow][import-export][cover]")
   {
     auto const temp1 = ao::test::TempDir{};
-    auto ml1 = MusicLibrary{temp1.path(), temp1.path()};
+    auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
 
     auto const coverData = lmdb::test::createTestData(1024);
     auto const backCoverData = lmdb::test::createTestData(257);
@@ -112,13 +113,13 @@ namespace ao::rt::test
       auto ifs = std::ifstream{yamlPath};
       auto const content = std::string((std::istreambuf_iterator{ifs}), std::istreambuf_iterator<char>{});
       // Should contain at least one anchor &cover_ and one alias *cover_
-      CHECK(content.find("&cover_") != std::string::npos);
-      CHECK(content.find("*cover_") != std::string::npos);
+      CHECK(content.contains("&cover_"));
+      CHECK(content.contains("*cover_"));
     }
 
     // 4. Import into new library
     auto const temp2 = ao::test::TempDir{};
-    auto ml2 = MusicLibrary{temp2.path(), temp2.path()};
+    auto ml2 = library::test::makeTestMusicLibrary(temp2.path(), temp2.path());
     auto importer = LibraryYamlImporter{ml2};
     REQUIRE(importer.importFromYaml(yamlPath));
 
@@ -162,7 +163,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryYaml - merge replaces and removes cover art", "[runtime][workflow][import-export][cover]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = MusicLibrary{temp.path(), temp.path()};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto const uri = std::string{"song.flac"};
 
     {

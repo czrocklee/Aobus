@@ -139,6 +139,10 @@ namespace ao::audio
     Engine(std::unique_ptr<Backend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory = nullptr);
     ~Engine();
 
+    /// Stops worker threads and closes the backend while Engine remains addressable.
+    /// Idempotent; no other methods may be called after shutdown.
+    void shutdown() noexcept;
+
     Engine(Engine const&) = delete;
     Engine& operator=(Engine const&) = delete;
     Engine(Engine&&) = delete;
@@ -152,6 +156,10 @@ namespace ao::audio
     void setOnPlaybackFailure(OnPlaybackFailure callback);
     void setOnRouteChanged(OnRouteChanged callback);
     void setOnStateChanged(std::function<void()> callback);
+
+    /// Queues work on the event worker after any in-flight control command
+    /// releases Engine's internal serialization lock.
+    void defer(std::function<void()> callback);
 
     RouteStatus routeStatus() const;
 
@@ -184,6 +192,6 @@ namespace ao::audio
 
   private:
     struct Impl;
-    std::unique_ptr<Impl> _implPtr;
+    std::shared_ptr<Impl> _implPtr;
   };
 } // namespace ao::audio

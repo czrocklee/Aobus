@@ -72,8 +72,8 @@ namespace ao::audio::test
       _target = nullptr;
     }
 
-    BackendId backendId() const noexcept override { return BackendId{"capturing"}; }
-    ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
+    BackendId backendId() const override { return BackendId{"capturing"}; }
+    ProfileId profileId() const override { return ProfileId{"test"}; }
 
     Result<> setProperty(PropertyId id, PropertyValue const& value) override
     {
@@ -280,7 +280,7 @@ namespace ao::audio::test
 
     void recordEvent(std::string_view name, Format const& format)
     {
-      _events.push_back({std::string{name}, format});
+      _events.push_back({.name = std::string{name}, .format = format});
 
       if (_eventObserver)
       {

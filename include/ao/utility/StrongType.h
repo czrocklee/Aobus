@@ -133,12 +133,14 @@ namespace ao::utility
 namespace std
 {
   template<typename T, typename Tag>
+  // NOLINTNEXTLINE(bugprone-std-namespace-modification) -- permitted user-type specialization
   struct hash<ao::utility::StrongType<T, Tag>>
   {
     size_t operator()(ao::utility::StrongType<T, Tag> const& id) const noexcept { return hash<T>{}(id.raw()); }
   };
 
   template<typename T, typename Tag>
+  // NOLINTNEXTLINE(bugprone-std-namespace-modification) -- permitted user-type specialization
   struct formatter<ao::utility::StrongType<T, Tag>> : formatter<T>
   {
     auto format(ao::utility::StrongType<T, Tag> const& id, format_context& ctx) const

@@ -390,13 +390,13 @@ namespace ao::rt
 
   TrackFieldDefinition const* trackFieldDefinition(TrackField field)
   {
-    auto const* const it = std::ranges::find(kDefinitions, field, &TrackFieldDefinition::field);
+    auto const it = std::ranges::find(kDefinitions, field, &TrackFieldDefinition::field);
     return it != kDefinitions.end() ? &*it : nullptr;
   }
 
   std::optional<TrackField> trackFieldFromId(std::string_view id)
   {
-    auto const* const it = std::ranges::find(kDefinitions, id, &TrackFieldDefinition::id);
+    auto const it = std::ranges::find(kDefinitions, id, &TrackFieldDefinition::id);
     return it != kDefinitions.end() ? std::optional{it->field} : std::nullopt;
   }
 

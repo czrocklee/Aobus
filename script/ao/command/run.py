@@ -9,7 +9,7 @@ from ..core import builddir
 from ..core.proc import die
 from . import build
 
-HELP = "Run Aobus applications (cli, tui, or gtk)"
+HELP = "Build and run an application enabled by the native profile"
 
 
 @dataclass(frozen=True)
@@ -35,12 +35,25 @@ examples:
   ./ao run tui -- --library ~/Music   # forward option flags to the application after --
 """
 
+WINDOWS_EPILOG = """\
+examples:
+  ao.bat run tui                         # build and run the TUI in debug mode
+  ao.bat run tui -n                      # run without rebuilding
+  ao.bat run tui release                 # build and run the release TUI
+  ao.bat run tui -- --library C:\\Music  # forward application options after --
+"""
+
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+    profile = builddir.platform_profile()
     parser = subparsers.add_parser(
-        "run", help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+        "run",
+        help=HELP,
+        description=HELP,
+        epilog=WINDOWS_EPILOG if builddir.platform_profile().name == "windows" else EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("app", choices=APPS.keys(), help="the application to run (cli, tui, or gtk)")
+    parser.add_argument("app", choices=profile.apps, help=f"application to run ({', '.join(profile.apps)})")
     build.add_build_arguments(parser)
     parser.add_argument("-n", "--no-build", action="store_true", help="skip building the target")
     parser.add_argument(
@@ -52,6 +65,11 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def run_command(args: argparse.Namespace) -> int:
+    profile = builddir.platform_profile()
+    if args.app not in profile.apps:
+        available = ", ".join(profile.apps)
+        raise die(f"application '{args.app}' is unavailable on {profile.name}. Available applications: {available}.")
+
     app = APPS[args.app]
 
     if not args.no_build:
@@ -62,7 +80,7 @@ def run_command(args: argparse.Namespace) -> int:
         if getattr(args, "path", None)
         else builddir.build_dir(args.flavor, clang=args.clang, asan=args.asan, tsan=args.tsan)
     )
-    executable = build_dir / app.executable
+    executable = builddir.executable(build_dir / app.executable)
 
     if not executable.exists():
         raise die(f"Executable not found at {executable}. Did you build the project? Run './ao build' first.")

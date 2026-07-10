@@ -8,7 +8,7 @@ from ..core import builddir
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 
-HELP = "Configure and build a flavor (debug, release, pgo1, pgo2, profile)"
+HELP = "Configure and build a native flavor"
 
 EPILOG = """\
 examples:
@@ -19,10 +19,17 @@ examples:
   ./ao build pgo1                # PGO step 1: instrumented build
 """
 
+WINDOWS_EPILOG = """\
+examples:
+  ao.bat build                       # incremental debug TUI build
+  ao.bat build release --clean       # clean release TUI build
+  ao.bat build --target aobus-tui    # build a single target
+"""
+
 
 def add_build_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "flavor", nargs="?", default="debug", choices=builddir.FLAVORS, help="build flavor (default: debug)"
+        "flavor", nargs="?", default="debug", choices=builddir.flavors(), help="build flavor (default: debug)"
     )
     parser.add_argument("--clean", action="store_true", help="remove the build directory first")
     parser.add_argument("--clang", action="store_true", help="build with clang in a dedicated build tree")
@@ -35,7 +42,11 @@ def add_build_arguments(parser: argparse.ArgumentParser) -> None:
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(
-        "build", help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+        "build",
+        help=HELP,
+        description=HELP,
+        epilog=WINDOWS_EPILOG if builddir.platform_profile().name == "windows" else EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     add_build_arguments(parser)
     parser.add_argument(
@@ -49,15 +60,22 @@ class BuildResult:
     build_dir: Path
     log: Path
     compiler: str
+    preset: str = ""
 
 
-def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
+def do_build(args: argparse.Namespace, targets: list[str], *, with_tests: bool = False) -> BuildResult:
     """Shared by `ao build` and `ao check`. Raises SystemExit on failure."""
-    preset = builddir.PRESETS[args.flavor]
+    preset = builddir.preset(args.flavor, with_tests=with_tests)
     build_dir = (
         Path(args.path)
         if getattr(args, "path", None)
-        else builddir.build_dir(args.flavor, clang=args.clang, asan=args.asan, tsan=args.tsan)
+        else builddir.build_dir(
+            args.flavor,
+            clang=args.clang,
+            asan=args.asan,
+            tsan=args.tsan,
+            with_tests=with_tests,
+        )
     )
 
     if args.clean and build_dir.exists():
@@ -96,13 +114,14 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
     if run(build, env=env, log=log, append=True) != 0:
         raise die("build failed.")
 
-    return BuildResult(build_dir=build_dir, log=log, compiler="clang" if args.clang else "gcc")
+    compiler = "clang" if args.clang else builddir.platform_profile().compiler
+    return BuildResult(build_dir=build_dir, log=log, compiler=compiler, preset=preset)
 
 
 def print_summary(args: argparse.Namespace, result: BuildResult, tests: str) -> None:
     print()
     print("All done!")
-    print(f"  Preset: {builddir.PRESETS[args.flavor]}")
+    print(f"  Preset: {result.preset or builddir.preset(args.flavor)}")
     print(f"  Build dir: {result.build_dir}")
     print(f"  Log file: {result.log}")
     print(f"  compiler: {result.compiler}")

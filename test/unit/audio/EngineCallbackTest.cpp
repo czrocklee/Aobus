@@ -29,9 +29,22 @@ namespace ao::audio::test
 {
   namespace
   {
+    struct BackendLifecycleCounts final
+    {
+      std::atomic<int> stop{0};
+      std::atomic<int> close{0};
+      std::atomic<int> setProperty{0};
+    };
+
     class FakeBlockingStopBackend final : public Backend
     {
     public:
+      explicit FakeBlockingStopBackend(
+        std::shared_ptr<BackendLifecycleCounts> lifecycleCountsPtr = std::make_shared<BackendLifecycleCounts>())
+        : _lifecycleCountsPtr{std::move(lifecycleCountsPtr)}
+      {
+      }
+
       Result<> open(Format const& format, RenderTarget* target) override
       {
         auto const lock = std::scoped_lock{_mutex};
@@ -48,6 +61,7 @@ namespace ao::audio::test
       void stop() override
       {
         auto lock = std::unique_lock{_mutex};
+        _lifecycleCountsPtr->stop.fetch_add(1, std::memory_order_relaxed);
 
         if (!_blockStop)
         {
@@ -62,13 +76,19 @@ namespace ao::audio::test
       void close() override
       {
         auto const lock = std::scoped_lock{_mutex};
+        _lifecycleCountsPtr->close.fetch_add(1, std::memory_order_relaxed);
         _target = nullptr;
       }
 
-      BackendId backendId() const noexcept override { return BackendId{"blocking-stop"}; }
-      ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
+      BackendId backendId() const override { return BackendId{"blocking-stop"}; }
+      ProfileId profileId() const override { return ProfileId{"test"}; }
 
-      Result<> setProperty(PropertyId /*id*/, PropertyValue const& /*value*/) override { return {}; }
+      Result<> setProperty(PropertyId /*id*/, PropertyValue const& /*value*/) override
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        _lifecycleCountsPtr->setProperty.fetch_add(1, std::memory_order_relaxed);
+        return {};
+      }
 
       Result<PropertyValue> property(PropertyId id) const override
       {
@@ -109,6 +129,12 @@ namespace ao::audio::test
         _cv.notify_all();
       }
 
+      RenderTarget* target() const
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        return _target;
+      }
+
       void emitRouteReady(std::string_view routeAnchor)
       {
         auto* target = static_cast<RenderTarget*>(nullptr);
@@ -126,6 +152,7 @@ namespace ao::audio::test
     private:
       mutable std::mutex _mutex;
       std::condition_variable _cv;
+      std::shared_ptr<BackendLifecycleCounts> _lifecycleCountsPtr;
       RenderTarget* _target = nullptr;
       Format _format{};
       bool _blockStop = false;
@@ -259,6 +286,102 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
   }
 
+  TEST_CASE("Engine - event callback may destroy engine reentrantly", "[audio][regression][engine][lifecycle]")
+  {
+    struct CallbackLifetime final
+    {
+      explicit CallbackLifetime(CallbackLatch& destroyedRef)
+        : destroyed{destroyedRef}
+      {
+      }
+
+      ~CallbackLifetime() { destroyed.notify(); }
+
+      CallbackLifetime(CallbackLifetime const&) = delete;
+      CallbackLifetime& operator=(CallbackLifetime const&) = delete;
+      CallbackLifetime(CallbackLifetime&&) = delete;
+      CallbackLifetime& operator=(CallbackLifetime&&) = delete;
+
+      CallbackLatch& destroyed;
+    };
+
+    auto const device = makeEngineTestDevice();
+    auto callbackStorageDestroyed = CallbackLatch{};
+    auto callbackLifetimePtr = std::make_shared<CallbackLifetime>(callbackStorageDestroyed);
+    auto backendPtr = std::make_unique<FakeBlockingStopBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto enginePtr = std::make_unique<Engine>(std::move(backendPtr), device, makeScriptedEngineDecoderFactory());
+
+    enginePtr->play(makePlaybackItem(PlaybackInput{.filePath = "song.flac"}));
+    auto* const target = backendRaw->target();
+    REQUIRE(target != nullptr);
+
+    auto routeChanged = std::atomic{false};
+    enginePtr->setOnStateChanged(
+      [&enginePtr, callbackLifetimePtr]
+      {
+        if (!callbackLifetimePtr)
+        {
+          return;
+        }
+
+        enginePtr.reset();
+      });
+    enginePtr->setOnRouteChanged([&routeChanged](Engine::RouteStatus const&)
+                                 { routeChanged.store(true, std::memory_order_release); });
+    callbackLifetimePtr.reset();
+
+    target->handleRouteReady("destroy-anchor");
+
+    REQUIRE(callbackStorageDestroyed.waitForCount(1));
+    CHECK(enginePtr == nullptr);
+    CHECK_FALSE(routeChanged.load(std::memory_order_acquire));
+  }
+
+  TEST_CASE("Engine - shutdown serializes controls and is idempotent", "[audio][unit][engine][lifecycle]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto lifecycleCountsPtr = std::make_shared<BackendLifecycleCounts>();
+    auto backendPtr = std::make_unique<FakeBlockingStopBackend>(lifecycleCountsPtr);
+    auto* const backendRaw = backendPtr.get();
+    auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
+
+    backendRaw->blockStop();
+    auto shutdownFuture = std::async(std::launch::async, [&engine] { engine.shutdown(); });
+    auto const stopWasEntered = backendRaw->waitForStopEntered(std::chrono::seconds{1});
+
+    if (!stopWasEntered)
+    {
+      backendRaw->releaseStop();
+    }
+
+    REQUIRE(stopWasEntered);
+
+    auto commandStarted = std::promise<void>{};
+    auto commandStartedFuture = commandStarted.get_future();
+    auto commandFuture = std::async(std::launch::async,
+                                    [&engine, &commandStarted]
+                                    {
+                                      commandStarted.set_value();
+                                      return engine.setVolume(0.5F);
+                                    });
+    auto const commandWasStarted = commandStartedFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready;
+
+    backendRaw->releaseStop();
+    REQUIRE(commandWasStarted);
+    REQUIRE(shutdownFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
+    REQUIRE(commandFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
+
+    auto const commandResult = commandFuture.get();
+    REQUIRE_FALSE(commandResult);
+    CHECK(commandResult.error().code == Error::Code::InvalidState);
+
+    engine.shutdown();
+    CHECK(lifecycleCountsPtr->stop.load(std::memory_order_relaxed) == 1);
+    CHECK(lifecycleCountsPtr->close.load(std::memory_order_relaxed) == 1);
+    CHECK(lifecycleCountsPtr->setProperty.load(std::memory_order_relaxed) == 0);
+  }
+
   TEST_CASE("Engine - queued render event from retired session is ignored", "[audio][unit][engine][callback]")
   {
     auto const device = makeEngineTestDevice();
@@ -266,7 +389,7 @@ namespace ao::audio::test
     auto* const blockingBackendRaw = blockingBackendPtr.get();
     auto blockingEngine = Engine{std::move(blockingBackendPtr), device, makeScriptedEngineDecoderFactory()};
 
-    auto routeChanged = std::atomic<bool>{false};
+    auto routeChanged = std::atomic{false};
     blockingEngine.setOnRouteChanged([&](Engine::RouteStatus const&)
                                      { routeChanged.store(true, std::memory_order_release); });
 

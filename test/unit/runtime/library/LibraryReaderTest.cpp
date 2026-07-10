@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -62,8 +63,10 @@ namespace ao::rt::test
 
     CoreRuntime makeCoreRuntime(ao::test::TempDir const& tempDir)
     {
-      return CoreRuntime{
-        std::make_unique<MockExecutor>(), tempDir.path(), std::filesystem::path{tempDir.path()} / ".aobus" / "library"};
+      return CoreRuntime{std::make_unique<MockExecutor>(),
+                         tempDir.path(),
+                         std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+                         library::test::kTestMusicLibraryMapSize};
     }
 
     SeededReadModelLibrary seedLibrary(CoreRuntime& runtime)

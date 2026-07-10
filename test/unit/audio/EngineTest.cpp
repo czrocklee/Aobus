@@ -6,6 +6,7 @@
 #include "FakeCapturingBackend.h"
 #include "ScriptedDecoderSession.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/DecodedStreamInfo.h>
@@ -174,6 +175,60 @@ namespace ao::audio::test
     engine.stop();
   }
 
+  TEST_CASE("Engine - WASAPI shared mode opens the decoder output format without device negotiation",
+            "[audio][regression][engine][wasapi]")
+  {
+    auto const nativeFormat =
+      Format{.sampleRate = 96000, .channels = 2, .bitDepth = 16, .validBits = 16, .isInterleaved = true};
+    auto const device = Device{.id = DeviceId{"wasapi-shared"},
+                               .displayName = "WASAPI",
+                               .description = "WASAPI Shared",
+                               .isDefault = false,
+                               .backendId = kBackendWasapi,
+                               .capabilities = {.sampleRates = {48000},
+                                                .sampleFormats = {{.bitDepth = 24, .validBits = 24, .isFloat = false}},
+                                                .bitDepths = {24},
+                                                .channelCounts = {1}}};
+    auto openedFormats = std::vector<Format>{};
+    auto spy = SpyBackend<>{};
+    auto& mockBackend = spy.mock();
+    When(Method(mockBackend, open))
+      .AlwaysDo(
+        [&](Format const& format, RenderTarget*)
+        {
+          openedFormats.push_back(format);
+          return Result<>{};
+        });
+    When(Method(mockBackend, backendId)).AlwaysReturn(kBackendWasapi);
+    When(Method(mockBackend, profileId)).AlwaysReturn(kProfileShared);
+
+    auto decoderFactory = [nativeFormat](std::filesystem::path const&, Format const&)
+    {
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = nativeFormat,
+        .outputFormat = nativeFormat,
+        .duration = std::chrono::milliseconds{10},
+        .isLossy = false,
+        .codec = AudioCodec::Flac,
+      });
+      decoderPtr->setReadScript(
+        {{.data = std::vector<std::byte>(400, std::byte{0}), .endOfStream = false}, {.data = {}, .endOfStream = true}});
+      return decoderPtr;
+    };
+    auto engine = Engine{spy.makeProxy(), device, std::move(decoderFactory)};
+
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "native-96k.flac"}));
+
+    REQUIRE(openedFormats.size() == 1);
+    CHECK(openedFormats.front() == nativeFormat);
+    auto const status = engine.status();
+    CHECK(status.transport == Transport::Playing);
+    CHECK(status.routeState.sourceFormat == nativeFormat);
+    CHECK(status.routeState.decoderOutputFormat == nativeFormat);
+    CHECK(status.routeState.engineOutputFormat == nativeFormat);
+    engine.stop();
+  }
+
   TEST_CASE("Engine - AAC playback supports 32-bit padded backend output", "[audio][unit][engine][aac]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
@@ -253,7 +308,7 @@ namespace ao::audio::test
 
     auto const snap = engine.status();
     CHECK(snap.transport == Transport::Error);
-    CHECK(snap.statusText.find("no resampler yet") != std::string::npos);
+    CHECK(snap.statusText.contains("no resampler yet"));
     CHECK(openedFormats.empty());
   }
 
@@ -276,7 +331,7 @@ namespace ao::audio::test
       // provide some data for preroll
       auto data = std::vector(100, std::byte{0});
 
-      decPtr->setReadScript({{data, false}, {{}, true}});
+      decPtr->setReadScript({{.data = data, .endOfStream = false}, {.data = {}, .endOfStream = true}});
       return decPtr;
     };
 
@@ -319,7 +374,9 @@ namespace ao::audio::test
         .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
       auto data = std::vector(200, std::byte{0}); // 100ms
 
-      decPtr->setReadScript({{data, false}, {data, false}, {{}, true}});
+      decPtr->setReadScript({{.data = data, .endOfStream = false},
+                             {.data = data, .endOfStream = false},
+                             {.data = {}, .endOfStream = true}});
       return decPtr;
     };
 
@@ -354,8 +411,10 @@ namespace ao::audio::test
     auto const path = std::filesystem::path{"offset.flac"};
     auto info = makeScriptedStreamInfo(fmt);
     info.duration = std::chrono::milliseconds{100};
-    auto factory = [info, data, path, registryPtr, &orderedEvents](
-                     std::filesystem::path const& requestedPath, Format const&)
+    // The decoder-factory contract is noexcept, while this test double copies scripted storage.
+    auto factory = [info, data, path, registryPtr, &orderedEvents]( // NOLINT(bugprone-exception-escape)
+                     std::filesystem::path const& requestedPath,
+                     Format const&)
     {
       if (requestedPath != path)
       {
@@ -363,7 +422,7 @@ namespace ao::audio::test
       }
 
       auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
-      decPtr->setReadScript({{data, false}, {{}, true}});
+      decPtr->setReadScript({{.data = data, .endOfStream = false}, {.data = {}, .endOfStream = true}});
       decPtr->setSeekObserver([&orderedEvents](std::chrono::milliseconds) { orderedEvents.emplace_back("seek"); });
       (*registryPtr)[path] = decPtr.get();
       return decPtr;

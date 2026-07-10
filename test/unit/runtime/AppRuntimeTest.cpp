@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
@@ -30,6 +31,7 @@ namespace ao::rt::test
       .executorPtr = std::make_unique<MockExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
     });

@@ -164,9 +164,8 @@ namespace ao::query::test
   private:
     void setup(TrackSpec const& spec, DictionaryStore* dictionary)
     {
-      auto temp = ao::test::TempDir{};
       auto envOpts = Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
-      _optEnv.emplace(openEnvironment(temp.path(), envOpts));
+      _optEnv.emplace(openEnvironment(_temp.path(), envOpts));
       auto wtxn = beginWriteTransaction(*_optEnv);
 
       if (dictionary == nullptr)
@@ -255,6 +254,9 @@ namespace ao::query::test
       }
     }
 
+    // Declared before the LMDB-backed members so their mappings are closed
+    // before the temporary directory is removed on Windows.
+    ao::test::TempDir _temp;
     std::optional<Environment> _optEnv;
     std::optional<DictionaryStore> _optDictionary;
     std::optional<ResourceStore> _optResources;

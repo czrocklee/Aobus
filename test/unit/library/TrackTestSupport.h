@@ -18,6 +18,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <span>
 #include <string>
@@ -27,6 +28,20 @@
 
 namespace ao::library::test
 {
+  inline constexpr std::size_t kTestMusicLibraryMapSize = std::size_t{64} * 1024 * 1024;
+
+  inline MusicLibrary makeTestMusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
+  {
+    return MusicLibrary{
+      std::move(musicRoot), std::move(databasePath), MusicLibrary::Options{.mapSize = kTestMusicLibraryMapSize}};
+  }
+
+  inline Result<MusicLibrary> openTestMusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
+  {
+    return MusicLibrary::open(
+      std::move(musicRoot), std::move(databasePath), MusicLibrary::Options{.mapSize = kTestMusicLibraryMapSize});
+  }
+
   struct TrackSpec final
   {
     std::string title = "Track";

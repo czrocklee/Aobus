@@ -6,10 +6,12 @@ are de-duplicated across translation units before being printed or written to a 
 
 import argparse
 import contextlib
+import json
 import re
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..core import builddir, gitfiles, pythoncheck, tidyengine
@@ -56,6 +58,7 @@ STRICT_CHECKS = ",".join(
         "-bugprone-easily-swappable-parameters",  # frequent false positives
         "-cppcoreguidelines-avoid-magic-numbers",  # handled by aobus readability check
         "-cppcoreguidelines-avoid-const-or-ref-data-members",  # common pattern for views
+        "-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access",  # .at() is not a universal hot-path policy
         "-cppcoreguidelines-pro-bounds-constant-array-index",  # table dispatch is fine
         "-cppcoreguidelines-pro-bounds-pointer-arithmetic",  # common in layout/audio code
         "-misc-no-recursion",  # recursion is idiomatic in some modules
@@ -89,8 +92,98 @@ RELAXED_CHECKS = ",".join(
     ]
 )
 
-STRICT_HEADER_FILTER = f"{PROJECT_ROOT}/(lib|app|include|tool)/.*"
-RELAXED_HEADER_FILTER = f"{PROJECT_ROOT}/(test|include)/.*"
+EXPECTED_AOBUS_CHECKS = frozenset(
+    {
+        "aobus-async-cancellation-guard",
+        "aobus-implicit-bool-conversion-in-init",
+        "aobus-include-convention",
+        "aobus-license-header",
+        "aobus-modernize-braced-initialization",
+        "aobus-modernize-concrete-final",
+        "aobus-modernize-forbid-trailing-return",
+        "aobus-modernize-lambda-params",
+        "aobus-modernize-local-initialization-style",
+        "aobus-modernize-nodiscard-usage",
+        "aobus-modernize-use-ctad",
+        "aobus-modernize-use-erase-if",
+        "aobus-modernize-use-ranges-any-of",
+        "aobus-modernize-use-ranges-contains",
+        "aobus-modernize-use-ranges-min-max",
+        "aobus-modernize-use-ranges-projection",
+        "aobus-modernize-use-starts-with",
+        "aobus-modernize-use-std-numbers",
+        "aobus-modernize-use-std-to-array",
+        "aobus-readability-c-api-global-qualification",
+        "aobus-readability-chrono-naming-convention",
+        "aobus-readability-control-block-spacing",
+        "aobus-readability-forbid-raw-throw",
+        "aobus-readability-identifier-naming-extensions",
+        "aobus-readability-member-order",
+        "aobus-readability-optional-naming-and-usage",
+        "aobus-readability-pointer-naming-convention",
+        "aobus-readability-redundant-namespace-qualification",
+        "aobus-readability-redundant-using-directive",
+        "aobus-readability-std-c-library-qualification",
+        "aobus-readability-unused-suppression-style",
+        "aobus-readability-use-if-init-statement",
+        "aobus-strict-forward-declaration",
+        "aobus-threading-policy",
+    }
+)
+
+_PATH_SEPARATOR_RE = r"[/\\]"
+
+
+def project_header_filter(folders: tuple[str, ...]) -> str:
+    """Return a project-root filter that accepts native and POSIX separators."""
+    root = re.escape(PROJECT_ROOT.resolve().as_posix()).replace("/", _PATH_SEPARATOR_RE)
+    return f"{root}{_PATH_SEPARATOR_RE}({'|'.join(folders)}){_PATH_SEPARATOR_RE}.*"
+
+
+STRICT_HEADER_FILTER = project_header_filter(("lib", "app", "include", "tool"))
+RELAXED_HEADER_FILTER = project_header_filter(("test", "include"))
+
+
+def exact_header_filter(headers: list[Path]) -> str:
+    """Return an anchored filter for mapped headers with either path separator."""
+    alternatives = [re.escape(path.resolve().as_posix()).replace("/", _PATH_SEPARATOR_RE) for path in headers]
+    return f"^({'|'.join(alternatives)})$"
+
+
+def path_line_filter(paths: list[Path]) -> str:
+    """Limit diagnostics and exported fixes to the explicitly selected paths."""
+    entries = [{"name": path.resolve().as_posix(), "lines": [[1, 2_147_483_647]]} for path in paths]
+    return json.dumps(entries, separators=(",", ":"))
+
+
+@dataclass(frozen=True)
+class TidyInvocation:
+    """One selected file and the native command supplying its compiler flags."""
+
+    selected: Path
+    compile_command_source: Path
+
+    @property
+    def is_header(self) -> bool:
+        return self.selected.suffix.lower() in {".h", ".hh", ".hpp", ".hxx"}
+
+
+def build_invocations(
+    plan: tidyengine.CompileCommandPlan,
+    buckets: dict[str, list[Path]],
+) -> dict[str, list[TidyInvocation]]:
+    """Create one native invocation for every covered selected file."""
+    mode_by_path = {path.resolve(): mode for mode, paths in buckets.items() for path in paths}
+    invocations: dict[str, list[TidyInvocation]] = {"STRICT": [], "RELAXED": []}
+    for target in plan.targets:
+        mode = mode_by_path[target.selected.resolve()]
+        invocations[mode].append(
+            TidyInvocation(
+                selected=target.selected.resolve(),
+                compile_command_source=target.translation_unit.resolve(),
+            )
+        )
+    return invocations
 
 
 def mode_disabled_checks(mode: str) -> list[str]:
@@ -154,27 +247,122 @@ def classify(path: Path, explicit: bool) -> str:
     return "STRICT"
 
 
-def prepare_plugin(build_dir: Path, *, no_build: bool) -> Path:
-    plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
+@dataclass(frozen=True)
+class TidyToolchain:
+    clang_tidy: str
+    plugin: Path | None
+    resource_dir: Path | None
+    expected_llvm_version: str | None = None
+
+
+def expected_lint_artifact_path(build_dir: Path, *, os_name: str | None = None) -> Path:
+    """Return the native artifact that carries the Aobus checks."""
+    filename = "AobusClangTidy.exe" if builddir.platform_profile(os_name).name == "windows" else "libAobusLintPlugin.so"
+    return build_dir / "tool" / "lint" / filename
+
+
+def find_lint_artifact(build_dir: Path, *, os_name: str | None = None) -> Path | None:
+    """Find the native lint artifact, including multi-config output folders."""
+    profile = builddir.platform_profile(os_name)
+    expected = expected_lint_artifact_path(build_dir, os_name=os_name)
+    if expected.is_file():
+        return expected
+    pattern = "**/AobusClangTidy.exe" if profile.name == "windows" else "**/libAobusLintPlugin.so"
+    matches = sorted((build_dir / "tool" / "lint").glob(pattern))
+    return matches[0] if len(matches) == 1 else None
+
+
+def verify_tidy_toolchain(toolchain: TidyToolchain) -> None:
+    """Fail closed unless clang-tidy has the expected ABI and complete Aobus registry."""
+    if toolchain.expected_llvm_version is not None:
+        version_command = [toolchain.clang_tidy, "--version"]
+        try:
+            version_result = subprocess.run(
+                version_command,
+                cwd=PROJECT_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+        except FileNotFoundError as error:
+            raise die(f"clang-tidy tool not found: {toolchain.clang_tidy}") from error
+        version_pattern = rf"(?<![0-9.]){re.escape(toolchain.expected_llvm_version)}(?![0-9.])"
+        if version_result.returncode != 0 or re.search(version_pattern, version_result.stdout) is None:
+            raise die(
+                f"the selected clang-tidy is not LLVM {toolchain.expected_llvm_version}; "
+                f"command exited {version_result.returncode}: {' '.join(version_command)}"
+            )
+
+    command = [toolchain.clang_tidy]
+    if toolchain.plugin is not None:
+        command.append(f"-load={toolchain.plugin}")
+    command.extend(["-checks=-*,aobus-*", "-list-checks"])
+    try:
+        result = subprocess.run(
+            command,
+            cwd=PROJECT_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+    except FileNotFoundError as error:
+        raise die(f"clang-tidy tool not found: {toolchain.clang_tidy}") from error
+    registered_checks = {line.strip() for line in result.stdout.splitlines() if line.strip().startswith("aobus-")}
+    if result.returncode != 0 or registered_checks != EXPECTED_AOBUS_CHECKS:
+        missing = sorted(EXPECTED_AOBUS_CHECKS - registered_checks)
+        unexpected = sorted(registered_checks - EXPECTED_AOBUS_CHECKS)
+        details = []
+        if missing:
+            details.append(f"missing {', '.join(missing)}")
+        if unexpected:
+            details.append(f"unexpected {', '.join(unexpected)}")
+        detail = f" ({'; '.join(details)})" if details else ""
+        raise die(
+            "the selected clang-tidy toolchain did not expose the complete Aobus check registry"
+            f"{detail}; command exited {result.returncode}: {' '.join(command)}"
+        )
+
+
+def prepare_toolchain(
+    build_dir: Path,
+    *,
+    no_build: bool,
+    reconfigure_preset: bool = False,
+) -> TidyToolchain:
+    profile = builddir.platform_profile()
+    expected = expected_lint_artifact_path(build_dir)
 
     if no_build:
         if not (build_dir / "compile_commands.json").is_file():
             raise die(f"compile_commands.json not found in {build_dir}")
-        if not plugin.is_file():
-            raise die(f"AobusLintPlugin not found at {plugin}")
-        return plugin
+    else:
+        tidyengine.ensure_compile_db(
+            build_dir,
+            ["-DAOBUS_BUILD_LINT_PLUGIN=ON"],
+            preset=builddir.tidy_preset(),
+            reconfigure_preset=reconfigure_preset,
+        )
+        target = "AobusClangTidy" if profile.name == "windows" else "AobusLintPlugin"
+        print(f"Building {target} (incremental)...")
+        tool_build = subprocess.run(
+            ["cmake", "--build", str(build_dir), "--target", target, "--parallel"],
+            cwd=PROJECT_ROOT,
+            stdout=subprocess.DEVNULL,
+        )
+        if tool_build.returncode != 0:
+            raise die(f"failed to build {target}.")
 
-    tidyengine.ensure_compile_db(build_dir, ["-DAOBUS_ENABLE_CLANG_TIDY=ON"])
-    print("Building AobusLintPlugin (incremental)...")
-    plugin_build = subprocess.run(
-        ["cmake", "--build", str(build_dir), "--target", "AobusLintPlugin", "--parallel"],
-        cwd=PROJECT_ROOT,
-        stdout=subprocess.DEVNULL,
+    artifact = find_lint_artifact(build_dir)
+    if artifact is None:
+        raise die(f"native lint artifact was not found at {expected}")
+    toolchain = TidyToolchain(
+        clang_tidy=tidyengine.clang_tool(build_dir, "clang-tidy"),
+        plugin=None if profile.name == "windows" else artifact,
+        resource_dir=tidyengine.clang_resource_dir(build_dir) if profile.name == "windows" else None,
+        expected_llvm_version=(tidyengine.llvm_sdk_version(build_dir) if profile.name == "windows" else None),
     )
-    if plugin_build.returncode != 0:
-        raise die("failed to build AobusLintPlugin.")
-
-    return plugin
+    verify_tidy_toolchain(toolchain)
+    return toolchain
 
 
 def classify_existing(files: list[str], explicit: bool) -> dict[str, list[Path]]:
@@ -220,6 +408,18 @@ def split_existing(files: list[str]) -> tuple[list[str], list[str]]:
         elif resolved.suffix in gitfiles.PYTHON_SUFFIXES:
             python_files.append(rel)
     return cpp_files, python_files
+
+
+def missing_explicit_files(files: list[str]) -> list[str]:
+    """Return explicit paths that do not name regular files."""
+    missing: list[str] = []
+    for name in files:
+        path = Path(name)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        if not path.is_file():
+            missing.append(name)
+    return missing
 
 
 def filter_fixes_yaml(text: str) -> str:
@@ -350,7 +550,7 @@ def deduplicate_fixes(tmpdir: Path) -> None:
     consolidated_file.write_text("\n".join(output) + "\n", encoding="utf-8")
 
 
-def apply_fixes(tmpdir: Path) -> bool:
+def apply_fixes(tmpdir: Path, clang_apply_replacements: str = "clang-apply-replacements") -> bool:
     deduplicate_fixes(tmpdir)
     yaml_files = sorted(tmpdir.glob("*.yaml"))
     for yaml_file in yaml_files:
@@ -374,9 +574,9 @@ def apply_fixes(tmpdir: Path) -> bool:
 
     print(f"  Applying {replacements} replacement(s) from {len(yaml_files)} fix file(s) safely...")
     try:
-        status = subprocess.call(["clang-apply-replacements", "--ignore-insert-conflict", str(tmpdir)])
+        status = subprocess.call([clang_apply_replacements, "--ignore-insert-conflict", str(tmpdir)])
     except FileNotFoundError:
-        print("ERROR: clang-apply-replacements not found in PATH.", file=sys.stderr)
+        print(f"ERROR: clang-apply-replacements not found: {clang_apply_replacements}", file=sys.stderr)
         return False
     if status != 0:
         print("ERROR: clang-apply-replacements failed.", file=sys.stderr)
@@ -387,6 +587,13 @@ def apply_fixes(tmpdir: Path) -> bool:
 def run_command(args: argparse.Namespace) -> int:
     build_dir = Path(args.path) if args.path else builddir.TIDY_DIR
     files, explicit = tidyengine.resolve_scope(args, ALL_FOLDERS, "Checking", suffixes=gitfiles.SOURCE_SUFFIXES)
+    if explicit:
+        missing_files = missing_explicit_files(files)
+        if missing_files:
+            print("ERROR: explicitly selected paths do not exist or are not files:", file=sys.stderr)
+            for missing_name in missing_files:
+                print(f"  {missing_name}", file=sys.stderr)
+            return 1
     cpp_files, python_files = split_existing(files)
 
     out = open(args.output, "w", encoding="utf-8") if args.output else sys.stdout
@@ -411,53 +618,129 @@ def run_command(args: argparse.Namespace) -> int:
                 print("No .cpp/.h/.hpp/.py files found.", file=sys.stderr)
             return 1 if overall_failed else 0
 
-        plugin = prepare_plugin(build_dir, no_build=args.no_build)
-
-        isystem = tidyengine.system_include_args()
-        if args.debug:
-            print(f"DEBUG ISYSTEM_ARGS: {isystem}", file=sys.stderr)
+        toolchain = prepare_toolchain(
+            build_dir,
+            no_build=args.no_build,
+            reconfigure_preset=args.path is None,
+        )
 
         buckets = classify_existing(cpp_files, explicit)
         if not buckets["STRICT"] and not buckets["RELAXED"]:
             return 1 if overall_failed else 0
 
-        def run_one(mode: str, file: str, log: Path) -> int:
+        selected = [*buckets["STRICT"], *buckets["RELAXED"]]
+        coverage_plan = tidyengine.compile_command_plan(build_dir, selected)
+        if coverage_plan.deferred:
+            label = "ERROR: explicitly selected files" if explicit else "Deferred files"
+            print(f"{label} without a compile command on this platform:", file=sys.stderr)
+            for path in coverage_plan.deferred:
+                print(f"  {path}", file=sys.stderr)
+            if explicit:
+                print(
+                    "Run those files on the platform that builds them, or use a build directory "
+                    "whose compile_commands.json contains them.",
+                    file=sys.stderr,
+                )
+                return 1
+            print(
+                "  These files were not checked here; the platform that builds them must cover them.",
+                file=sys.stderr,
+            )
+
+        invocations = build_invocations(coverage_plan, buckets)
+        if not invocations["STRICT"] and not invocations["RELAXED"]:
+            print(
+                "ERROR: clang-tidy coverage is incomplete: no selected C++ file has a native compile command.",
+                file=sys.stderr,
+            )
+            return 1
+
+        mapped_headers = [target for target in coverage_plan.targets if target.is_header]
+        header_database_dir: Path | None = None
+        if mapped_headers:
+            translation_units = {target.translation_unit.resolve() for target in mapped_headers}
+            print(
+                f"Header coverage: {len(mapped_headers)} header(s) mapped to "
+                f"{len(translation_units)} exact native translation unit(s).",
+                file=sys.stderr,
+            )
+            print(
+                "  Each header is checked as the main file with compiler flags copied from its native implementation.",
+                file=sys.stderr,
+            )
+            header_database_dir = tidyengine.make_tmpdir("tidy-header-db-")
+            stack.callback(shutil.rmtree, header_database_dir, ignore_errors=True)
+            tidyengine.write_header_compile_database(
+                build_dir,
+                mapped_headers,
+                header_database_dir,
+            )
+
+        clang_tidy = toolchain.clang_tidy
+        clang_apply_replacements = (
+            tidyengine.clang_tool(build_dir, "clang-apply-replacements") if args.fix else "clang-apply-replacements"
+        )
+        isystem = tidyengine.system_include_args()
+        if args.debug:
+            print(f"DEBUG ISYSTEM_ARGS: {isystem}", file=sys.stderr)
+
+        def run_one(mode: str, invocation: TidyInvocation, log: Path) -> int:
             checks = checks_for(mode, args.check)
-            header_filter = args.header_filter or (RELAXED_HEADER_FILTER if mode == "RELAXED" else STRICT_HEADER_FILTER)
+            header_filter = args.header_filter or (
+                exact_header_filter([invocation.selected])
+                if invocation.is_header
+                else (RELAXED_HEADER_FILTER if mode == "RELAXED" else STRICT_HEADER_FILTER)
+            )
             extra: list[str] = list(isystem)
-            if "linux-gtk/" in file:
+            if toolchain.resource_dir is not None:
+                extra.append(f"--extra-arg-before=-resource-dir={toolchain.resource_dir}")
+                # VS 18's STL lets Clang classify three-byte records as SIMD-find
+                # candidates, but its vectorized helper supports only 1/2/4/8-byte
+                # elements. clang-tidy does not link or execute the TU, so disabling
+                # that optional STL implementation path preserves the analyzed API.
+                extra.append("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0")
+            if invocation.is_header:
+                extra.append(f"-line-filter={path_line_filter([invocation.selected])}")
+            if "linux-gtk/" in invocation.compile_command_source.as_posix():
                 # GTK framework patterns: gtkmm widget trees own children, printf-style APIs.
                 checks += ",-cppcoreguidelines-owning-memory"
                 extra.append("--extra-arg=-Wno-format-nonliteral")
-            if plugin.is_file():
-                extra.append(f"-load={plugin}")
+            if toolchain.plugin is not None:
+                extra.append(f"-load={toolchain.plugin}")
             if args.fix:
                 extra.append(f"-export-fixes={log.with_suffix('.yaml')}")
             config = " ".join(CONFIG_BASE.replace("PLACEHOLDER", checks).split())
+            compile_database = header_database_dir if invocation.is_header else build_dir
+            if compile_database is None:
+                raise die(f"synthetic compile database was not created for {invocation.selected}")
             command = [
-                "clang-tidy",
+                clang_tidy,
+                "--quiet",
                 "-p",
-                str(build_dir),
+                str(compile_database),
                 *args.tidy_arg,
                 f"-config={config}",
                 f"-header-filter={header_filter}",
                 *extra,
-                file,
+                str(invocation.selected),
             ]
             with open(log, "w", encoding="utf-8") as sink:
                 if args.debug:
                     sink.write(f"DEBUG CONFIG: {config}\n")
-                return subprocess.call(command, cwd=PROJECT_ROOT, stdout=sink, stderr=subprocess.STDOUT)
+                status = subprocess.call(command, cwd=PROJECT_ROOT, stdout=sink, stderr=subprocess.STDOUT)
+            if tidyengine.log_has_compile_command_error(log):
+                return status or 1
+            return status
 
         for mode in ("STRICT", "RELAXED"):
-            batch = [str(path) for path in buckets[mode]]
+            batch = invocations[mode]
             if not batch:
                 continue
-            print(f"=== clang-tidy [{mode}] — {len(batch)} file(s) ===")
+            print(f"=== clang-tidy [{mode}] — {len(batch)} selected file(s), {len(batch)} native invocation(s) ===")
             tmpdir = tidyengine.make_tmpdir("tidy-")
 
-            def run_file(file: str, log: Path, current_mode: str = mode) -> int:
-                return run_one(current_mode, file, log)
+            def run_file(invocation: TidyInvocation, log: Path, current_mode: str = mode) -> int:
+                return run_one(current_mode, invocation, log)
 
             try:
                 result = tidyengine.run_parallel(batch, args.jobs, tmpdir, run_file)
@@ -481,7 +764,7 @@ def run_command(args: argparse.Namespace) -> int:
                 if args.fix:
                     if result.failed:
                         print("  Skipping automatic fixes because clang-tidy failed for at least one file.")
-                    elif not apply_fixes(tmpdir):
+                    elif not apply_fixes(tmpdir, clang_apply_replacements):
                         overall_failed = True
             finally:
                 shutil.rmtree(tmpdir, ignore_errors=True)

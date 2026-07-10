@@ -7,6 +7,7 @@
 #include <boost/lockfree/spsc_queue.hpp>
 
 #include <cstddef>
+#include <memory>
 #include <span>
 
 namespace ao::audio
@@ -30,11 +31,16 @@ namespace ao::audio
 
     // Bytes currently buffered (available to read). The queue tracks this
     // internally, so no separate accounting is kept.
-    std::size_t size() const noexcept { return _queue.read_available(); }
+    std::size_t size() const noexcept { return _queuePtr->read_available(); }
 
     std::size_t capacity() const noexcept { return kRingBufferCapacity; }
 
   private:
-    boost::lockfree::spsc_queue<std::byte, boost::lockfree::capacity<kRingBufferCapacity>> _queue;
+    using Queue = boost::lockfree::spsc_queue<std::byte, boost::lockfree::capacity<kRingBufferCapacity>>;
+
+    // The queue embeds its 2MB buffer, which is far too large for a by-value
+    // member (stack frames and enclosing objects would inherit it), so it
+    // lives on the heap.
+    std::unique_ptr<Queue> _queuePtr;
   };
 } // namespace ao::audio

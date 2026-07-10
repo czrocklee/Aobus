@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/AudioIdentity.h>
@@ -30,7 +31,6 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -131,7 +131,7 @@ namespace ao::rt::test
     std::filesystem::create_directories(musicRoot);
     copyFixture(musicRoot, "song.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew);
     CHECK_FALSE(manifestHasIdentity(ml, "song.flac"));
 
@@ -158,7 +158,7 @@ namespace ao::rt::test
       copyFixture(musicRoot, std::format("song{}.flac", index));
     }
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew, kTrackCount);
 
     auto result = runIndexPending(ml, AudioIdentityIndexer::Options{.maxConcurrency = 3});
@@ -183,42 +183,34 @@ namespace ao::rt::test
     copyFixture(musicRoot, "a.flac");
     copyFixture(musicRoot, "b.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew, 2);
 
-    // Both workers must be inside the fingerprint function at the same time;
-    // a serialized implementation would leave the first worker spinning until
-    // its deadline with sawBothInFlight still false.
-    auto inFlightCount = std::atomic<std::int32_t>{0};
-    auto sawBothInFlight = std::atomic<bool>{false};
-    auto options =
-      AudioIdentityIndexer::Options{.maxConcurrency = 2,
-                                    .fingerprint = [&inFlightCount, &sawBothInFlight](
-                                                     std::filesystem::path const&,
-                                                     library::AudioIdentityProgressCallback,
-                                                     std::stop_token) -> Result<std::optional<library::AudioIdentity>>
-                                    {
-                                      inFlightCount.fetch_add(1);
-                                      auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+    auto started = AsyncTestState<std::int32_t>::create(0);
+    auto release = AsyncBarrier{};
+    auto options = AudioIdentityIndexer::Options{
+      .maxConcurrency = 2,
+      .fingerprint = [&started, &release](std::filesystem::path const&,
+                                          library::AudioIdentityProgressCallback,
+                                          std::stop_token) -> Result<std::optional<library::AudioIdentity>>
+      {
+        started.increment();
+        release.wait();
+        return std::optional{fakeIdentity()};
+      }};
 
-                                      while (inFlightCount.load() < 2 && std::chrono::steady_clock::now() < deadline)
-                                      {
-                                        std::this_thread::sleep_for(std::chrono::milliseconds{1});
-                                      }
+    auto executor = MockExecutor{};
+    auto runtime = async::Runtime{executor, 4};
+    auto mutationMutex = std::mutex{};
+    auto indexer = AudioIdentityIndexer{runtime, ml, mutationMutex};
+    auto future = runtime.spawn(indexer.indexPending(std::move(options)));
+    auto const bothStarted = started.waitUntil(2);
+    release.release();
+    auto result = future.get();
 
-                                      if (inFlightCount.load() >= 2)
-                                      {
-                                        sawBothInFlight.store(true);
-                                      }
-
-                                      return std::optional{fakeIdentity()};
-                                    }};
-
-    auto result = runIndexPending(ml, std::move(options));
-
+    REQUIRE(bothStarted);
     REQUIRE(result);
     CHECK(result->completedCount == 2);
-    CHECK(sawBothInFlight.load());
     CHECK(manifestHasIdentity(ml, "a.flac"));
     CHECK(manifestHasIdentity(ml, "b.flac"));
   }
@@ -231,11 +223,11 @@ namespace ao::rt::test
     std::filesystem::create_directories(musicRoot);
     copyFixture(musicRoot, "song.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew);
 
     auto mutationMutex = std::mutex{};
-    auto lockWasFreeDuringFingerprint = std::atomic<bool>{false};
+    auto lockWasFreeDuringFingerprint = std::atomic{false};
     auto options =
       AudioIdentityIndexer::Options{.fingerprint = [&mutationMutex, &lockWasFreeDuringFingerprint](
                                                      std::filesystem::path const&,
@@ -268,7 +260,7 @@ namespace ao::rt::test
     copyFixture(musicRoot, "bad.flac");
     copyFixture(musicRoot, "good.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew, 2);
 
     auto failureMutex = std::mutex{};
@@ -316,7 +308,7 @@ namespace ao::rt::test
     auto const trackPath = musicRoot / "song.flac";
     copyFixture(musicRoot, "song.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew);
 
     bool mutated = false;
@@ -346,7 +338,7 @@ namespace ao::rt::test
     std::filesystem::create_directories(musicRoot);
     copyFixture(musicRoot, "song.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     importWithPolicy(ml, AudioIdentityPolicy::Eager);
     auto const originalIdentity = manifestIdentity(ml, "song.flac");
 
@@ -369,7 +361,7 @@ namespace ao::rt::test
     std::filesystem::create_directories(musicRoot);
     copyFixture(musicRoot, "song.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew);
 
     auto stopSource = std::stop_source{};
@@ -402,7 +394,7 @@ namespace ao::rt::test
     copyFixture(musicRoot, "a.flac");
     copyFixture(musicRoot, "b.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew, 2);
 
     // While the batch is being hashed, fill b's identity behind the indexer's
@@ -442,7 +434,7 @@ namespace ao::rt::test
     copyFixture(musicRoot, "a.flac");
     copyFixture(musicRoot, "b.flac");
 
-    auto ml = library::MusicLibrary{musicRoot, std::filesystem::path{temp.path()} / "db"};
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew, 2);
 
     // One worker hashes a then b in URI order, so requesting stop when b

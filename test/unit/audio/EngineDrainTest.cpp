@@ -67,8 +67,8 @@ namespace ao::audio::test
         _target = nullptr;
       }
 
-      BackendId backendId() const noexcept override { return BackendId{"drain-on-stop"}; }
-      ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
+      BackendId backendId() const override { return BackendId{"drain-on-stop"}; }
+      ProfileId profileId() const override { return ProfileId{"test"}; }
       Result<> setProperty(PropertyId /*id*/, PropertyValue const& /*value*/) override { return {}; }
 
       Result<PropertyValue> property(PropertyId /*id*/) const override
@@ -107,14 +107,14 @@ namespace ao::audio::test
         .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
       auto data = std::vector(20, std::byte{0}); // 10ms
 
-      decPtr->setReadScript({{data, false}, {{}, true}});
+      decPtr->setReadScript({{.data = data, .endOfStream = false}, {.data = {}, .endOfStream = true}});
       return decPtr;
     };
 
     auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = PlaybackInput{.filePath = "song.flac"};
 
-    auto trackEnded = std::atomic<bool>{false};
+    auto trackEnded = std::atomic{false};
     engine.setOnTrackEnded([&] { trackEnded.store(true, std::memory_order_release); });
 
     engine.play(makePlaybackItem(desc));
@@ -169,7 +169,7 @@ namespace ao::audio::test
     auto routeEntered = CallbackLatch{};
     auto secondRouteLatch = CallbackLatch{};
     auto releaseRoute = std::binary_semaphore{0};
-    auto parkOnce = std::atomic<bool>{true};
+    auto parkOnce = std::atomic{true};
 
     auto engine = Engine{std::move(backendPtr),
                          device,
@@ -235,7 +235,7 @@ namespace ao::audio::test
     auto routeEntered = CallbackLatch{};
     auto afterSeekRouteLatch = CallbackLatch{};
     auto releaseRoute = std::binary_semaphore{0};
-    auto parkOnce = std::atomic<bool>{true};
+    auto parkOnce = std::atomic{true};
 
     auto engine =
       Engine{std::move(backendPtr),
@@ -243,7 +243,9 @@ namespace ao::audio::test
              makeRegisteringDecoderFactory(
                {
                  {.track = {.path = "track.flac", .info = makeScriptedStreamInfo(format), .data = initialData},
-                  .optSeekScript = std::vector<ScriptedDecoderSession::ReadScriptEntry>{{seekData, false}, {{}, true}}},
+                  .optSeekScript =
+                    std::vector<ScriptedDecoderSession::ReadScriptEntry>{
+                      {.data = seekData, .endOfStream = false}, {.data = {}, .endOfStream = true}}},
                },
                std::make_shared<std::map<std::filesystem::path, ScriptedDecoderSession*>>())};
 
