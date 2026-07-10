@@ -100,6 +100,7 @@ class CliParseTest(unittest.TestCase):
             "test-audit",
             "name-audit",
             "coverage",
+            "deps",
             "tidy",
             "analyze",
             "format",
@@ -129,6 +130,19 @@ class CliParseTest(unittest.TestCase):
         args = self.parse(["check"])
         self.assertEqual(args.flavor, "debug")
         self.assertFalse(args.asan)
+
+    def test_dependency_report_arguments(self):
+        args = self.parse(["deps", "report", "-p", "/tmp/aobus-deps", "--json", "/tmp/aobus-deps.json"])
+
+        self.assertEqual(args.deps_action, "report")
+        self.assertEqual(args.path, "/tmp/aobus-deps")
+        self.assertEqual(args.json, Path("/tmp/aobus-deps.json"))
+
+    def test_dependency_verify_arguments(self):
+        args = self.parse(["deps", "verify", "-p", "/tmp/aobus-deps"])
+
+        self.assertEqual(args.deps_action, "verify")
+        self.assertEqual(args.path, "/tmp/aobus-deps")
 
     def test_windows_build_selects_the_shared_flavor_preset(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -320,11 +334,13 @@ class CliParseTest(unittest.TestCase):
 
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
             with mock.patch.object(check_command.build, "do_build", return_value=result) as do_build:
-                with mock.patch.object(check_command.test, "run_suites", return_value=0) as run_suites:
-                    with mock.patch.object(check_command.build, "print_summary"):
-                        self.assertEqual(check_command.run_command(args), 0)
+                with mock.patch.object(check_command.dependency_policy, "verified_report") as verify:
+                    with mock.patch.object(check_command.test, "run_suites", return_value=0) as run_suites:
+                        with mock.patch.object(check_command.build, "print_summary"):
+                            self.assertEqual(check_command.run_command(args), 0)
 
         do_build.assert_called_once_with(args, targets=[])
+        verify.assert_called_once_with(result.build_dir)
         run_suites.assert_called_once_with(
             test_command.SUITE_GROUPS["all"],
             result.build_dir,
@@ -357,11 +373,13 @@ class CliParseTest(unittest.TestCase):
 
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
             with mock.patch.object(check_command.build, "do_build", return_value=result) as do_build:
-                with mock.patch.object(check_command.test, "run_suites", return_value=0) as run_suites:
-                    with mock.patch.object(check_command.build, "print_summary"):
-                        self.assertEqual(check_command.run_command(args), 0)
+                with mock.patch.object(check_command.dependency_policy, "verified_report") as verify:
+                    with mock.patch.object(check_command.test, "run_suites", return_value=0) as run_suites:
+                        with mock.patch.object(check_command.build, "print_summary"):
+                            self.assertEqual(check_command.run_command(args), 0)
 
         do_build.assert_called_once_with(args, targets=[])
+        verify.assert_called_once_with(result.build_dir)
         run_suites.assert_called_once_with(
             ("core", "tui", "cli", "integration", "tooling"),
             result.build_dir,

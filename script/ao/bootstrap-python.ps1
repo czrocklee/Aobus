@@ -11,7 +11,10 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-$config = Get-Content -LiteralPath (Join-Path $PSScriptRoot "windows-toolchain.json") -Raw | ConvertFrom-Json
+$config = Get-Content -LiteralPath (Join-Path $PSScriptRoot "toolchain.json") -Raw | ConvertFrom-Json
+if ([int]$config.schemaVersion -ne 1) {
+    throw "Unsupported Aobus toolchain schema: $($config.schemaVersion)"
+}
 $pythonVersion = [string]$config.python
 $pythonRoot = Join-Path $StateRoot "tools\python"
 $finalRoot = Join-Path $pythonRoot $pythonVersion

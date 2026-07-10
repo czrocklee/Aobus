@@ -1,6 +1,10 @@
 """Tests for the native Windows Python tooling bootstrap."""
 
 import json
+import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +14,34 @@ from ao.core import pythonenv
 
 
 class WindowsPythonEnvironmentTest(unittest.TestCase):
+    def test_toolchain_schema_is_supported(self):
+        values = json.loads(pythonenv.TOOLCHAIN_FILE.read_text(encoding="utf-8"))
+
+        self.assertEqual(values["schemaVersion"], 1)
+
+    def test_actual_tool_versions_match_the_cross_platform_contract(self):
+        versions = pythonenv.tool_versions()
+        actual_python = ".".join(str(part) for part in sys.version_info[:3])
+
+        self.assertEqual(actual_python, versions["python"])
+        for module, prefix in (("ruff", "ruff"), ("mypy", "mypy")):
+            command = (
+                [sys.executable, "-I", "-m", module, "--version"]
+                if os.name == "nt"
+                else [shutil.which(module) or module, "--version"]
+            )
+            completed = subprocess.run(
+                command,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            self.assertTrue(
+                completed.stdout.strip().startswith(f"{prefix} {versions[module]}"),
+                completed.stdout,
+            )
+
     def test_base_python_must_match_the_pinned_patch_release(self):
         with self.assertRaisesRegex(RuntimeError, "requires Python 0.0.0"):
             pythonenv.validate_base_python({"python": "0.0.0"})
@@ -60,7 +92,7 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
             root = Path(temp_dir)
             config = root / "toolchain.json"
             requirements = root / "requirements.txt"
-            config.write_text(json.dumps(versions), encoding="utf-8")
+            config.write_text(json.dumps({"schemaVersion": 1, **versions}), encoding="utf-8")
             requirements.write_text("locked", encoding="utf-8")
             destination = root / "environment"
             expected = destination / "Scripts" / "python.exe"
@@ -82,7 +114,7 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
             root = Path(temp_dir)
             config = root / "toolchain.json"
             requirements = root / "requirements.txt"
-            config.write_text(json.dumps(versions), encoding="utf-8")
+            config.write_text(json.dumps({"schemaVersion": 1, **versions}), encoding="utf-8")
             requirements.write_text("locked", encoding="utf-8")
             destination = root / "environment"
 

@@ -49,6 +49,9 @@ Aobus uses CMake with pinned Nix dependencies on Linux and vcpkg on Windows.
 
 The portal re-enters the pinned `nix-shell` automatically. Set
 `AOBUS_BUILD_ROOT` to move build trees off the default `/tmp/build`.
+Governed dependency versions and native resolver identities can be inspected
+with `./ao deps report`. Follow the [dependency upgrade workflow](doc/dev/dependency-upgrades.md)
+when changing Nixpkgs, vcpkg, C++ dependency, Python, Ruff, or mypy pins.
 
 ### Windows
 

@@ -44,3 +44,7 @@ design docs.
   to it.
 - Keep agent-facing instructions as routing layers when possible. Human docs
   should hold the project policy; agent docs should say which human doc to read.
+
+Current cross-platform dependency policy is documented in
+`design/dependency-version-governance.md`; the contributor procedure for
+changing pins is `dev/dependency-upgrades.md`.

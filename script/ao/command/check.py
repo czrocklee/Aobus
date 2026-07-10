@@ -2,6 +2,8 @@
 
 import argparse
 
+from ..core import dependency_policy
+from ..core.proc import die
 from . import build, test
 
 HELP = "Build everything and run every suite enabled by the native profile"
@@ -33,6 +35,12 @@ def run_command(args: argparse.Namespace) -> int:
         return build.run_command(args)
 
     result = build.do_build(args, targets=[])
+
+    print("Verifying dependency resolution...")
+    try:
+        dependency_policy.verified_report(result.build_dir)
+    except dependency_policy.DependencyPolicyError as exc:
+        raise die(str(exc)) from exc
 
     print("Running tests...")
     suites = test.suites_for("all")

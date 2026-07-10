@@ -4,7 +4,7 @@ COMMAND_MODULES is the single registry: each module declares NAME and
 REQUIRES_BUILD_ENV and registers an argparse subparser under NAME.
 """
 
-from . import analyze, build, check, council, coverage, hygiene, name_audit, run, test, test_audit, tidy
+from . import analyze, build, check, council, coverage, deps, hygiene, name_audit, run, test, test_audit, tidy
 from . import format as format_command
 
 COMMAND_MODULES = (
@@ -14,6 +14,7 @@ COMMAND_MODULES = (
     test_audit,
     name_audit,
     coverage,
+    deps,
     tidy,
     analyze,
     format_command,

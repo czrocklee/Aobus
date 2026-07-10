@@ -18,7 +18,7 @@ from pathlib import Path
 from . import builddir
 
 PACKAGE_ROOT = Path(__file__).parent.parent
-TOOLCHAIN_FILE = PACKAGE_ROOT / "windows-toolchain.json"
+TOOLCHAIN_FILE = PACKAGE_ROOT / "toolchain.json"
 REQUIREMENTS_FILE = PACKAGE_ROOT / "windows-requirements.txt"
 COMPLETE_MARKER = ".aobus-tooling-complete"
 SCHEMA_VERSION = "1"
@@ -28,9 +28,11 @@ STALE_LOCK_SECONDS = 1_800
 
 def tool_versions(config_file: Path = TOOLCHAIN_FILE) -> dict[str, str]:
     values = json.loads(config_file.read_text(encoding="utf-8"))
+    if values.get("schemaVersion") != 1:
+        raise RuntimeError(f"unsupported toolchain schema in {config_file}: {values.get('schemaVersion')!r}")
     required = ("python", "ruff", "mypy")
     if any(not isinstance(values.get(name), str) or not values[name] for name in required):
-        raise RuntimeError(f"invalid Windows toolchain configuration: {config_file}")
+        raise RuntimeError(f"invalid Aobus toolchain configuration: {config_file}")
     return {name: values[name] for name in required}
 
 

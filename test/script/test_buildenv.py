@@ -26,7 +26,7 @@ class BuildEnvTest(unittest.TestCase):
     def test_native_toolchain_commands_require_the_build_environment(self):
         self.assertEqual(
             {module.NAME for module in COMMAND_MODULES if module.REQUIRES_BUILD_ENV},
-            {"analyze", "build", "check", "format", "hygiene", "run", "test", "tidy"},
+            {"analyze", "build", "check", "deps", "format", "hygiene", "run", "test", "tidy"},
         )
 
     def test_requires_build_env_answers_by_command_name(self):

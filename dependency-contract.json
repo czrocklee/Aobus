@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "leadResolver": "nix",
+  "dependencies": {
+    "boost": {
+      "policy": {
+        "kind": "exact",
+        "version": "1.89.0"
+      },
+      "nix": {
+        "attribute": "boost"
+      },
+      "vcpkg": {
+        "strategy": "scoped-registry",
+        "ports": [
+          "boost-algorithm",
+          "boost-asio",
+          "boost-container",
+          "boost-endian",
+          "boost-filesystem",
+          "boost-headers",
+          "boost-interprocess",
+          "boost-lockfree",
+          "boost-pfr",
+          "boost-process",
+          "boost-unordered"
+        ]
+      },
+      "cmake": {
+        "package": "Boost",
+        "targets": [
+          "Boost::headers",
+          "Boost::process",
+          "Boost::filesystem"
+        ]
+      }
+    },
+    "ftxui": {
+      "policy": {
+        "kind": "exact",
+        "version": "6.1.9"
+      },
+      "nix": {
+        "attribute": "ftxui"
+      },
+      "vcpkg": {
+        "strategy": "override",
+        "ports": [
+          "ftxui"
+        ]
+      },
+      "cmake": {
+        "package": "ftxui",
+        "requiredWhen": "AOBUS_BUILD_TUI",
+        "targets": [
+          "ftxui::screen",
+          "ftxui::dom",
+          "ftxui::component"
+        ]
+      }
+    },
+    "spdlog": {
+      "policy": {
+        "kind": "exact",
+        "version": "1.17.0"
+      },
+      "nix": {
+        "attribute": "spdlog"
+      },
+      "vcpkg": {
+        "strategy": "baseline",
+        "ports": [
+          "spdlog"
+        ]
+      },
+      "cmake": {
+        "package": "spdlog",
+        "targets": [
+          "spdlog::spdlog"
+        ]
+      },
+      "capabilities": [
+        "spdlog-std-format",
+        "spdlog-no-external-fmt"
+      ]
+    }
+  },
+  "exceptions": []
+}

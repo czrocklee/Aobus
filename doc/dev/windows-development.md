@@ -31,6 +31,11 @@ environment. The base Python is shared across checkouts; the virtual environment
 is not. Neither the Windows Store `python.exe` alias nor an unrelated Python
 from `PATH` is used.
 
+The exact Python, Ruff, and mypy policy is shared with Linux in
+`script/ao/toolchain.json`. `script/ao/windows-requirements.txt` separately
+locks the accepted Windows artifacts and hashes; tooling tests require the two
+files to agree.
+
 `AOBUS_PYTHON` is an advanced escape hatch for supplying an explicit Python
 executable. It must match the pinned Python 3.13.13 patch release and support
 `venv` and `ensurepip`; the portal validates it before use. It does not disable
@@ -114,6 +119,8 @@ ao.bat run tui               rem incrementally build and run the TUI
 ao.bat test                  rem core and TUI tests
 ao.bat test --all            rem all Windows suites, including tooling
 ao.bat check                 rem full Windows gate
+ao.bat deps report           rem show governed versions and vcpkg identities
+ao.bat deps verify           rem reject stale or mismatched dependency evidence
 ao.bat format --check        rem check changed C++/Python formatting
 ao.bat tidy                  rem lint changed files with the native compile database
 ao.bat hygiene               rem check formatting, audits, and lint
@@ -126,6 +133,12 @@ command is selected; each command declares that need in its module under
 `start-msbuild-env.bat <command> [args...]` remains useful when another
 development tool needs to run inside that environment; it honors a preset
 `VCPKG_ROOT` and otherwise defaults to the Visual Studio bundled vcpkg.
+
+The repository's `vcpkg-configuration.json` selects both the default registry
+snapshot and the Boost-scoped snapshot. `dependency-contract.json` owns the
+accepted upstream versions. Do not edit one resolver input in isolation; use
+the procedure in `doc/dev/dependency-upgrades.md` and validate a new local build
+tree so an old `vcpkg_installed` directory cannot mask the selection change.
 
 The default Windows test group is `core` and `tui`. The Windows `all` group and
 `ao.bat check` add CLI, integration, and the Python `tooling` suite. Catch2

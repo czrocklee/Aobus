@@ -26,7 +26,9 @@ uses a separate `windows-tidy` preset that builds the self-contained
 
 The tooling gate uses the pinned Ruff and mypy environment supplied by Nix on
 Linux and the checkout-specific managed environment supplied by `ao.bat` on
-Windows. It never depends on unrelated tools from the ambient Windows `PATH`.
+Windows. It probes the running Python, Ruff, and mypy versions against
+`script/ao/toolchain.json` and verifies the Windows hash lock agrees with that
+contract. It never depends on unrelated tools from the ambient Windows `PATH`.
 
 Each suite is registered once in `script/ao/command/test.py` through `SUITES`
 and the native groups are defined by `script/ao/core/builddir.py` platform profiles.

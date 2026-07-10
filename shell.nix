@@ -1,13 +1,15 @@
-{
-  pkgs ? import (
-    let pin = builtins.fromJSON (builtins.readFile ./nixpkgs.json);
-    in builtins.fetchTarball {
-      url = "https://github.com/${pin.owner}/${pin.repo}/archive/${pin.rev}.tar.gz";
-      sha256 = pin.sha256;
-    }
-  ) { },
-}:
 let
+  pin = builtins.fromJSON (builtins.readFile ./nixpkgs.json);
+  pkgs = import (builtins.fetchTarball {
+    url = "https://github.com/${pin.owner}/${pin.repo}/archive/${pin.rev}.tar.gz";
+    sha256 = pin.sha256;
+  }) { };
+  toolchain = builtins.fromJSON (builtins.readFile ./script/ao/toolchain.json);
+  requireToolVersion = name: expected: actual:
+    if expected == actual then true else throw (
+      "Aobus requires ${name} ${expected}, but pinned Nixpkgs resolves ${actual}. "
+      + "Follow doc/dev/dependency-upgrades.md to update the toolchain contract and both platform locks."
+    );
   lexy-src = (
     builtins.fetchTarball {
       url = "https://github.com/foonathan/lexy/archive/refs/tags/v2025.05.0.tar.gz";
@@ -15,7 +17,8 @@ let
     }
   );
   lexy = pkgs.stdenv.mkDerivation {
-    name = "lexy";
+    pname = "lexy";
+    version = "2025.05.0";
     src = lexy-src;
     installPhase = ''
       mkdir -p $out/include
@@ -29,7 +32,8 @@ let
     }
   );
   fakeit = pkgs.stdenv.mkDerivation {
-    name = "fakeit";
+    pname = "fakeit";
+    version = "2.5.0";
     src = fakeit-src;
     nativeBuildInputs = [ pkgs.cmake ];
     cmakeFlags = [
@@ -45,9 +49,39 @@ let
     cp -r ${pkgs.stb}/include/stb/. $out/include/stb/
     cp ${stb-image-resize2} $out/include/stb/stb_image_resize2.h
   '';
+  aobus-spdlog = pkgs.spdlog.overrideAttrs (oldAttrs: {
+    cmakeFlags = (oldAttrs.cmakeFlags or []) ++ [
+      "-DSPDLOG_USE_STD_FORMAT=ON"
+      "-DSPDLOG_FMT_EXTERNAL=OFF"
+    ];
+  });
+  dependencyReport = pkgs.writeText "aobus-nix-dependencies.json" (builtins.toJSON {
+    schemaVersion = 1;
+    nixpkgsRevision = pin.rev;
+    dependencies = {
+      boost = { version = pkgs.boost.version; storePath = toString pkgs.boost; };
+      ftxui = { version = pkgs.ftxui.version; storePath = toString pkgs.ftxui; };
+      spdlog = { version = aobus-spdlog.version; storePath = toString aobus-spdlog; };
+      catch2 = { version = pkgs.catch2_3.version; storePath = toString pkgs.catch2_3; };
+      cli11 = { version = pkgs.cli11.version; storePath = toString pkgs.cli11; };
+      rapidyaml = { version = pkgs.rapidyaml.version; storePath = toString pkgs.rapidyaml; };
+      gsl-lite = { version = pkgs.gsl-lite.version; storePath = toString pkgs.gsl-lite; };
+      lexy = { version = lexy.version; storePath = toString lexy; };
+      fakeit = { version = fakeit.version; storePath = toString fakeit; };
+      stb = {
+        version = "${pkgs.stb.version}+resize2-f75e8d1";
+        storePath = toString aobus-stb;
+      };
+    };
+  });
 in
+assert toolchain.schemaVersion == 1;
+assert requireToolVersion "Python" toolchain.python pkgs.python3.version;
+assert requireToolVersion "Ruff" toolchain.ruff pkgs.python3Packages.ruff.version;
+assert requireToolVersion "mypy" toolchain.mypy pkgs.python3Packages.mypy.version;
 pkgs.mkShell {
   name = "cpp-dev-env";
+  AOBUS_NIX_DEPENDENCY_REPORT = dependencyReport;
   buildInputs =
     with pkgs;
     [
@@ -75,12 +109,7 @@ pkgs.mkShell {
       lmdb
       lmdb.dev
       xxhash
-      (spdlog.overrideAttrs (oldAttrs: {
-        cmakeFlags = (oldAttrs.cmakeFlags or []) ++ [
-          "-DSPDLOG_USE_STD_FORMAT=ON"
-          "-DSPDLOG_FMT_EXTERNAL=OFF"
-        ];
-      }))
+      aobus-spdlog
       mimalloc
       cli11
       catch2_3

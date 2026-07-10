@@ -228,7 +228,10 @@ requires an API change, and avoid broad ignores.
 Linux runs Ruff and mypy from the project shell. Windows uses the locked tools
 in the checkout-specific environment bootstrapped by `ao.bat`; it does not use
 ambient `PATH` installations. The selected Python files and project
-configuration are otherwise the same on both hosts.
+configuration are otherwise the same on both hosts. Both environments must
+match the exact versions in `script/ao/toolchain.json`: Nix checks this during
+evaluation, while the Windows bootstrap and tooling tests probe the managed
+environment.
 
 - Use `./ao format` for Python formatting changes. `./ao tidy --fix` applies
   only exported `clang-tidy` replacements.
