@@ -1,13 +1,137 @@
 """Single source of truth for platform build profiles, presets, and build trees."""
 
+import hashlib
+import ntpath
 import os
-from dataclasses import dataclass
+import re
+import time
+import uuid
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .paths import PROJECT_ROOT
 
 BUILD_ROOT = Path("/tmp/build")
-WINDOWS_BUILD_ROOT = PROJECT_ROOT / "out" / "build"
+
+_CHECKOUT_ID_FILE = "aobus-checkout-id"
+_CHECKOUT_KEY_LENGTH = 12
+
+
+def windows_state_root(*, environ: Mapping[str, str] | None = None) -> Path:
+    """Return the native Windows state root shared by Aobus checkouts."""
+    environment = os.environ if environ is None else environ
+    if override := environment.get("AOBUS_STATE_ROOT"):
+        return Path(override)
+    if local_app_data := environment.get("LOCALAPPDATA"):
+        return Path(local_app_data) / "Aobus"
+    return Path.home() / "AppData" / "Local" / "Aobus"
+
+
+def _git_directory(project_root: Path) -> Path | None:
+    marker = project_root / ".git"
+    if marker.is_dir():
+        return marker
+    if not marker.is_file():
+        return None
+    try:
+        declaration = marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    prefix = "gitdir:"
+    if not declaration.lower().startswith(prefix):
+        return None
+    directory = Path(declaration[len(prefix) :].strip())
+    if not directory.is_absolute():
+        directory = project_root / directory
+    return Path(os.path.abspath(directory))
+
+
+def _read_checkout_id(path: Path) -> str | None:
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return value or None
+
+
+def _checkout_id(project_root: Path, *, environment: Mapping[str, str], create: bool) -> str:
+    if override := environment.get("AOBUS_CHECKOUT_ID"):
+        return override
+
+    git_directory = _git_directory(project_root)
+    if git_directory is None:
+        if not create:
+            return "path-only"
+        raise RuntimeError(
+            f"cannot locate the private Git directory for {project_root}; "
+            "set AOBUS_CHECKOUT_ID to a stable value for this checkout"
+        )
+    path = git_directory / _CHECKOUT_ID_FILE
+    if existing := _read_checkout_id(path):
+        return existing
+    if not create:
+        return "path-only"
+
+    candidate = uuid.uuid4().hex
+    try:
+        with path.open("x", encoding="utf-8") as stream:
+            stream.write(f"{candidate}\n")
+    except FileExistsError:
+        # Another portal may be creating the ID concurrently. Its exclusive
+        # create is followed immediately by one short write, so bounded retries
+        # avoid selecting a transient path-only key.
+        for _ in range(10):
+            if existing := _read_checkout_id(path):
+                return existing
+            time.sleep(0.01)
+        raise RuntimeError(
+            f"checkout ID remained empty at {path}; set AOBUS_CHECKOUT_ID to a stable value for this checkout"
+        ) from None
+    except OSError as exc:
+        raise RuntimeError(
+            f"cannot create the checkout ID at {path}; set AOBUS_CHECKOUT_ID to a stable value for this checkout"
+        ) from exc
+    return candidate
+
+
+def windows_checkout_key(
+    project_root: Path = PROJECT_ROOT,
+    *,
+    environ: Mapping[str, str] | None = None,
+    create_id: bool | None = None,
+    os_name: str = "nt",
+) -> str:
+    """Return a stable, path-sensitive key for a native Windows checkout."""
+    environment = os.environ if environ is None else environ
+    create = os.name == "nt" if create_id is None else create_id
+    path_module = ntpath if os_name == "nt" else os.path
+    normalized_root = path_module.normcase(path_module.abspath(str(project_root)))
+    identity = _checkout_id(project_root, environment=environment, create=create)
+    digest = hashlib.sha256(f"{normalized_root}\0{identity}".encode()).hexdigest()[:_CHECKOUT_KEY_LENGTH]
+    label = re.sub(r"[^A-Za-z0-9._-]+", "-", project_root.name).strip("-.") or "aobus"
+    return f"{label}-{digest}"
+
+
+def windows_build_root(
+    *,
+    environ: Mapping[str, str] | None = None,
+    project_root: Path = PROJECT_ROOT,
+    create_id: bool | None = None,
+) -> Path:
+    """Return the checkout-isolated Windows build root on local storage."""
+    environment = os.environ if environ is None else environ
+    base = (
+        Path(environment["AOBUS_BUILD_ROOT"])
+        if environment.get("AOBUS_BUILD_ROOT")
+        else windows_state_root(environ=environment) / "build"
+    )
+    return base / windows_checkout_key(project_root, environ=environment, create_id=create_id)
+
+
+# Compatibility snapshot for callers that only need profile metadata. Native
+# path selection goes through ``platform_profile()`` and remains dynamic.
+WINDOWS_BUILD_ROOT = windows_build_root(create_id=False)
 
 PRESETS = {
     "debug": "linux-debug",
@@ -68,10 +192,7 @@ WINDOWS_PROFILE = PlatformProfile(
     executable_suffix=".exe",
     apps=("tui",),
     default_suites=("core", "tui"),
-    # The Python tooling gate depends on the Nix-pinned Ruff and mypy tools.
-    # Keep the native Windows gate reproducible from the documented Visual
-    # Studio + vcpkg prerequisites instead of depending on ambient PATH tools.
-    all_suites=("core", "tui", "integration"),
+    all_suites=("core", "tui", "integration", "tooling"),
     compiler="msvc",
 )
 
@@ -81,7 +202,9 @@ COVERAGE_DIR = BUILD_ROOT / "coverage"
 
 def platform_profile(os_name: str | None = None) -> PlatformProfile:
     """Return the native development profile for an ``os.name`` value."""
-    return WINDOWS_PROFILE if (os.name if os_name is None else os_name) == "nt" else LINUX_PROFILE
+    if (os.name if os_name is None else os_name) == "nt":
+        return replace(WINDOWS_PROFILE, build_root=windows_build_root())
+    return LINUX_PROFILE
 
 
 def flavors(os_name: str | None = None) -> tuple[str, ...]:
@@ -95,6 +218,8 @@ def tidy_preset(os_name: str | None = None) -> str:
 
 def tidy_dir(os_name: str | None = None) -> Path:
     """Return the dedicated native clang-tidy build tree."""
+    if override := os.environ.get("BUILD_DIR"):
+        return Path(override)
     profile = platform_profile(os_name)
     name = "windows-tidy" if profile.name == "windows" else "debug-clang-tidy"
     return profile.build_root / name
@@ -102,13 +227,11 @@ def tidy_dir(os_name: str | None = None) -> Path:
 
 def analyze_dir(os_name: str | None = None) -> Path:
     """Return the dedicated native clang-analyzer build tree."""
+    if override := os.environ.get("BUILD_DIR"):
+        return Path(override)
     profile = platform_profile(os_name)
     name = "windows-analyzer" if profile.name == "windows" else "debug-clang-analyzer"
     return profile.build_root / name
-
-
-TIDY_DIR = tidy_dir()
-ANALYZE_DIR = analyze_dir()
 
 
 def preset(flavor: str, *, with_tests: bool = False, os_name: str | None = None) -> str:

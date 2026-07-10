@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import builddir, gitfiles
 from .dedup import DIAGNOSTIC_RE
-from .paths import PROJECT_ROOT
+from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
 
 PINNED_LLVM_VERSION = "22.1.8"
@@ -103,7 +103,7 @@ def ensure_compile_db(
         if selected_preset == builddir.tidy_preset("nt"):
             print(
                 "  The first Windows tidy configure downloads and verifies the pinned LLVM SDK; "
-                "later runs reuse out/toolchains/."
+                "later runs reuse the local Aobus cache."
             )
         configure = [
             "cmake",
@@ -174,7 +174,7 @@ def llvm_sdk_root(build_dir: Path, *, os_name: str | None = None) -> Path:
             f"reconfigure the {builddir.tidy_preset(os_name)} preset."
         )
     root = Path(configured)
-    return root if root.is_absolute() else (build_dir / root).resolve()
+    return root if root.is_absolute() else absolute_path(build_dir / root)
 
 
 def llvm_sdk_version(build_dir: Path, *, os_name: str | None = None) -> str:
@@ -204,7 +204,7 @@ def ensure_windows_llvm_sdk(build_dir: Path) -> None:
     preprovisioned_root = _cmake_cache_value(build_dir, "AOBUS_LLVM_SDK_ROOT")
     root = Path(root_value) if root_value else None
     if root is not None and not root.is_absolute():
-        root = (build_dir / root).resolve()
+        root = absolute_path(build_dir / root)
     if version_value == PINNED_LLVM_VERSION and root is not None:
         complete = all((root / relative).is_file() for relative in LLVM_SDK_REQUIRED_FILES)
         if complete and preprovisioned_root:
@@ -267,7 +267,7 @@ _PLATFORM_IMPLEMENTATION_SUFFIXES = ("", "Linux", "Posix", "Windows")
 
 
 def _path_key(path: Path) -> str:
-    return os.path.normcase(str(path.resolve()))
+    return os.path.normcase(str(absolute_path(path)))
 
 
 @dataclass(frozen=True)
@@ -294,14 +294,14 @@ def _compile_database_entries(build_dir: Path) -> list[_CompileDatabaseEntry]:
             directory = entry.get("directory")
             base = Path(directory) if isinstance(directory, str) else PROJECT_ROOT
             path = base / path
-        compiled.append(_CompileDatabaseEntry(path.resolve(), entry))
+        compiled.append(_CompileDatabaseEntry(absolute_path(path), entry))
     return compiled
 
 
 def _common_parent_suffix_length(left: Path, right: Path, root: Path) -> int:
     try:
-        left_parts = left.resolve().relative_to(root.resolve()).parent.parts
-        right_parts = right.resolve().relative_to(root.resolve()).parent.parts
+        left_parts = absolute_path(left).relative_to(absolute_path(root)).parent.parts
+        right_parts = absolute_path(right).relative_to(absolute_path(root)).parent.parts
     except ValueError:
         return 0
     count = 0
@@ -314,8 +314,8 @@ def _common_parent_suffix_length(left: Path, right: Path, root: Path) -> int:
 
 def _common_parent_prefix_length(left: Path, right: Path, root: Path) -> int:
     try:
-        left_parts = left.resolve().relative_to(root.resolve()).parent.parts
-        right_parts = right.resolve().relative_to(root.resolve()).parent.parts
+        left_parts = absolute_path(left).relative_to(absolute_path(root)).parent.parts
+        right_parts = absolute_path(right).relative_to(absolute_path(root)).parent.parts
     except ValueError:
         return 0
     count = 0
@@ -328,7 +328,7 @@ def _common_parent_prefix_length(left: Path, right: Path, root: Path) -> int:
 
 def _translation_unit_tier(path: Path, root: Path) -> int:
     try:
-        top = path.resolve().relative_to(root.resolve()).parts[0]
+        top = absolute_path(path).relative_to(absolute_path(root)).parts[0]
     except (IndexError, ValueError):
         return 3
     return {"lib": 0, "app": 0, "tool": 1, "test": 2}.get(top, 3)
@@ -342,7 +342,7 @@ def _component_directory(path: Path, root: Path) -> tuple[str, ...] | None:
     directories in unrelated platform or layer trees from being paired.
     """
     try:
-        parent = path.resolve().relative_to(root.resolve()).parent.parts
+        parent = absolute_path(path).relative_to(absolute_path(root)).parent.parts
     except ValueError:
         return None
     if len(parent) >= 2 and parent[:2] == ("include", "ao"):
@@ -430,7 +430,7 @@ def compile_command_plan(
     deferred: list[Path] = []
     seen: set[str] = set()
     for path in files:
-        path = path.resolve()
+        path = absolute_path(path)
         if (key := _path_key(path)) in seen:
             continue
         seen.add(key)
@@ -446,8 +446,8 @@ def compile_command_plan(
             # from the native compile database. Ordinary project files must never
             # borrow unrelated flags: without a safe companion they are deferred.
             try:
-                resolved_path = path.resolve()
-                relative_path = resolved_path.relative_to(project_root.resolve())
+                resolved_path = absolute_path(path)
+                relative_path = resolved_path.relative_to(absolute_path(project_root))
                 is_under_root = True
                 is_lint_fixture = relative_path.parts[:4] == ("test", "integration", "lint", "fixture")
             except ValueError:
@@ -481,7 +481,7 @@ def compile_command_plan(
         if translation_unit is None:
             deferred.append(path)
         else:
-            targets.append(CompileCommandTarget(path, translation_unit.resolve()))
+            targets.append(CompileCommandTarget(path, absolute_path(translation_unit)))
 
     return CompileCommandPlan(tuple(targets), tuple(deferred))
 
@@ -489,7 +489,7 @@ def compile_command_plan(
 def _replace_compile_input(entry: _CompileDatabaseEntry, selected: Path) -> dict[str, object]:
     """Clone one command while replacing its exact source token with ``selected``."""
     data = dict(entry.data)
-    selected_text = str(selected.resolve())
+    selected_text = str(absolute_path(selected))
     arguments = data.get("arguments")
     if isinstance(arguments, list) and all(isinstance(argument, str) for argument in arguments):
         directory = data.get("directory")
@@ -518,7 +518,13 @@ def _replace_compile_input(entry: _CompileDatabaseEntry, selected: Path) -> dict
             spellings.add(raw_file)
         directory = data.get("directory")
         base = Path(directory) if isinstance(directory, str) else PROJECT_ROOT
-        spellings.add(os.path.relpath(entry.path, base))
+        try:
+            spellings.add(os.path.relpath(entry.path, base))
+        except ValueError:
+            # Windows cannot express a relative path between the mapped source
+            # drive and the local build drive. Absolute and raw-file spellings
+            # remain available and still fail closed when neither is present.
+            pass
 
         rewritten_command = command
         replaced = 0
@@ -546,7 +552,7 @@ def _replace_compile_input(entry: _CompileDatabaseEntry, selected: Path) -> dict
     else:
         raise die(f"compile command for {entry.path} has neither string command nor argument list.")
 
-    data["file"] = selected.resolve().as_posix()
+    data["file"] = absolute_path(selected).as_posix()
     data.pop("output", None)
     return data
 

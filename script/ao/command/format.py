@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..core import builddir, gitfiles, tidyengine
+from ..core import builddir, gitfiles, pythoncheck, tidyengine
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die
 
@@ -69,8 +69,9 @@ def run_clang_format(files: list[str], *, check: bool) -> int:
     print(f"{action} {len(files)} file(s) with clang-format...")
     clang_format = "clang-format"
     if builddir.platform_profile().name == "windows":
-        tidyengine.ensure_windows_llvm_sdk(builddir.TIDY_DIR)
-        clang_format = tidyengine.clang_tool(builddir.TIDY_DIR, "clang-format")
+        tidy_build_dir = builddir.tidy_dir()
+        tidyengine.ensure_windows_llvm_sdk(tidy_build_dir)
+        clang_format = tidyengine.clang_tool(tidy_build_dir, "clang-format")
 
     status = 0
     for start in range(0, len(files), CHUNK):
@@ -95,9 +96,9 @@ def run_ruff_format(files: list[str], *, check: bool) -> int:
     action = "Checking" if check else "Formatting"
     print(f"{action} {len(files)} file(s) with ruff format...")
     try:
-        result = subprocess.run(["ruff", "format", *mode, *files], cwd=PROJECT_ROOT)
+        result = subprocess.run(pythoncheck.module_command("ruff", "format", *mode, *files), cwd=PROJECT_ROOT)
     except FileNotFoundError as exc:
-        raise die("ruff not found. Enter the project shell with ./ao or nix-shell.") from exc
+        raise die(f"Python environment is unavailable: {sys.executable}") from exc
     return 1 if result.returncode != 0 else 0
 
 

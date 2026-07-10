@@ -28,28 +28,40 @@ class FormatCommandTest(unittest.TestCase):
         clang.assert_called_once_with(["lib/Foo.cpp"], check=True)
         ruff.assert_called_once_with(["script/foo.py"], check=True)
 
+    def test_ruff_format_uses_the_current_python_environment(self):
+        completed = mock.Mock(returncode=0)
+        with mock.patch.object(format_command.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(format_command.run_ruff_format(["script/foo.py"], check=True), 0)
+
+        run.assert_called_once_with(
+            format_command.pythoncheck.module_command("ruff", "format", "--check", "script/foo.py"),
+            cwd=format_command.PROJECT_ROOT,
+        )
+
     def test_windows_clang_format_uses_the_pinned_llvm_sdk_tool(self):
         pinned = r"C:\llvm-22.1.8\bin\clang-format.exe"
+        tidy_build_dir = Path(r"C:\local\aobus\windows-tidy")
 
         with mock.patch.object(
             format_command.builddir,
             "platform_profile",
             return_value=format_command.builddir.WINDOWS_PROFILE,
         ):
-            with mock.patch.object(format_command.tidyengine, "ensure_windows_llvm_sdk") as ensure_sdk:
-                with mock.patch.object(
-                    format_command.tidyengine,
-                    "clang_tool",
-                    return_value=pinned,
-                ):
+            with mock.patch.object(format_command.builddir, "tidy_dir", return_value=tidy_build_dir):
+                with mock.patch.object(format_command.tidyengine, "ensure_windows_llvm_sdk") as ensure_sdk:
                     with mock.patch.object(
-                        format_command.subprocess,
-                        "run",
-                        return_value=mock.Mock(returncode=0),
-                    ) as run:
-                        self.assertEqual(format_command.run_clang_format(["lib/Foo.cpp"], check=True), 0)
+                        format_command.tidyengine,
+                        "clang_tool",
+                        return_value=pinned,
+                    ):
+                        with mock.patch.object(
+                            format_command.subprocess,
+                            "run",
+                            return_value=mock.Mock(returncode=0),
+                        ) as run:
+                            self.assertEqual(format_command.run_clang_format(["lib/Foo.cpp"], check=True), 0)
 
-        ensure_sdk.assert_called_once_with(format_command.builddir.TIDY_DIR)
+        ensure_sdk.assert_called_once_with(tidy_build_dir)
         run.assert_called_once_with(
             [pinned, "--dry-run", "-Werror", "lib/Foo.cpp"],
             cwd=format_command.PROJECT_ROOT,

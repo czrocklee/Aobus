@@ -6,6 +6,7 @@
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <ryml.hpp>
 
 #include <cstdint>
 #include <filesystem>
@@ -16,6 +17,7 @@ namespace ao::test
 {
   namespace
   {
+    // NOLINTNEXTLINE(misc-include-cleaner) -- <ryml.hpp> is RapidYaml's public Tree provider.
     ryml::Tree parseYaml(std::string_view text)
     {
       auto context = yaml::CallbackContext{};

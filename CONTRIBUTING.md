@@ -13,8 +13,16 @@ page hard to scan.
 | `doc/dev/naming-conventions.md` | Identifier, type/contract, vocabulary, file, helper, and support naming |
 | `doc/dev/commit-messages.md` | Commit message format, scopes, subject/body guidance, and examples |
 | `doc/dev/linting.md` | Lint policy: warning triage, suppression rules, cleanup playbook, Python hygiene, automatic-fix guidance |
+| `doc/dev/windows-development.md` | Native Windows portal, local state and tool bootstrap, mapped-source workflow, and migration guidance |
 | `doc/design/error-model.md` | Error contracts by layer and subsystem |
 | `doc/dev/testing.md` | Testing policy and detailed test-writing references |
+
+## Development Workflow
+
+Run repository operations through `./ao` on Linux or `ao.bat` on Windows from
+the project root. Windows source checkouts may be mapped, while build trees and
+managed Python/LLVM state default to the local `%LOCALAPPDATA%\Aobus` directory;
+see `doc/dev/windows-development.md` before overriding those locations.
 
 ## Coding Style Highlights
 

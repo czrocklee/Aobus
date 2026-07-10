@@ -49,8 +49,9 @@ Aobus uses CMake with pinned Nix dependencies on Linux and vcpkg on Windows.
 
 ### Windows TUI
 
-Install Visual Studio Build Tools with the C++ x64 toolset and Python, then use
-the Windows portal from a Command Prompt or PowerShell terminal:
+Install Visual Studio Build Tools with the C++ x64 toolset, then use the Windows
+portal from a Command Prompt or PowerShell terminal. The portal provisions its
+pinned Python environment on first use:
 
 ```bat
 ao.bat build

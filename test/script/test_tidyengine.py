@@ -22,6 +22,16 @@ class ClangToolDiscoveryTest(unittest.TestCase):
         for relative in tidyengine.LLVM_SDK_REQUIRED_FILES:
             self.assertIn(f'"{relative}"', module)
 
+    def test_cmake_sdk_cache_defaults_to_local_windows_state(self):
+        module = (tidyengine.PROJECT_ROOT / "cmake" / "LlvmSdk.cmake").read_text(encoding="utf-8")
+
+        self.assertIn("AOBUS_LLVM_SDK_CACHE_ROOT", module)
+        self.assertIn("$ENV{AOBUS_STATE_ROOT}/cache/llvm", module)
+        self.assertIn("$ENV{LOCALAPPDATA}/Aobus/cache/llvm", module)
+        self.assertIn("${_aobus_llvm_sdk_cache_root}/toolchains/", module)
+        self.assertIn("${_aobus_llvm_sdk_cache_root}/downloads/", module)
+        self.assertNotIn("${CMAKE_SOURCE_DIR}/out/toolchains/", module)
+
     def test_windows_clang_tidy_is_the_aobus_executable(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
@@ -519,6 +529,41 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
 
             entries = json.loads((root / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
             self.assertIn(f'"{header.resolve()}"', entries[0]["command"])
+
+    def test_string_command_accepts_absolute_input_when_source_and_build_are_on_different_volumes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "build"
+            source = root / "repo" / "lib" / "Player.cpp"
+            header = root / "repo" / "include" / "ao" / "Player.h"
+            source.parent.mkdir(parents=True)
+            header.parent.mkdir(parents=True)
+            source.touch()
+            header.touch()
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "directory": "C:/local/aobus-build",
+                            "file": str(source),
+                            "command": f'clang++ -c "{source}"',
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(tidyengine.os.path, "relpath", side_effect=ValueError("different drives")):
+                tidyengine.write_header_compile_database(
+                    build_dir,
+                    [tidyengine.CompileCommandTarget(header, source)],
+                    root / "synthetic",
+                )
+
+            entries = json.loads((root / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
+            self.assertIn(f'"{header.resolve()}"', entries[0]["command"])
+            self.assertNotIn(str(source), entries[0]["command"])
 
     def test_missing_source_token_fails_closed_for_argument_list(self):
         with tempfile.TemporaryDirectory() as temp_dir:

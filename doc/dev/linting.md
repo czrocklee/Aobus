@@ -62,13 +62,17 @@ itself as the main file. A header without a safe companion is deferred. These
 rules cover main-file-only checks and prevent clang-tidy's fallback to a nearby
 but unrelated compile command from producing a false green result.
 
-Windows tidy uses `out/build/windows-tidy` and the pinned official LLVM 22.1.8
-development archive. CMake verifies the archive SHA-256, extracts it once under
-`out/toolchains/`, and builds `tool/lint/AobusClangTidy.exe` by statically linking
-the Aobus checks with that SDK's `clangTidyMain`. The official Windows
-`clang-tidy.exe` does not export the symbols required by an out-of-tree DLL, so
-it cannot load the Linux-style plugin. Do not substitute `clang-tidy.exe` from
-Visual Studio or `PATH`; it would omit every `aobus-*` check.
+Windows tidy uses the checkout-specific `windows-tidy` tree below the local
+Windows build root and the pinned official LLVM 22.1.8 development archive. By
+default, build state and the shared verified SDK cache live below
+`%LOCALAPPDATA%\Aobus`, even when the source checkout is on a mapped drive. See
+`doc/dev/windows-development.md` for the state layout, overrides, and migration
+instructions. CMake verifies the archive SHA-256 and builds
+`tool/lint/AobusClangTidy.exe` by statically linking the Aobus checks with that
+SDK's `clangTidyMain`. The official Windows `clang-tidy.exe` does not export the
+symbols required by an out-of-tree DLL, so it cannot load the Linux-style
+plugin. Do not substitute `clang-tidy.exe` from Visual Studio or `PATH`; it
+would omit every `aobus-*` check.
 
 The Windows analysis command also defines `_USE_STD_VECTOR_ALGORITHMS=0` for
 clang-tidy only. This works around
@@ -79,10 +83,12 @@ header issue, not an LLVM 22 incompatibility, and the define does not affect any
 Aobus product build. Remove the workaround after the corresponding STL fix is
 available in the required Build Tools baseline.
 
-Set `AOBUS_LLVM_SDK_ROOT` at CMake configure time to use an already extracted
-copy of the exact archive, for example on an offline machine. The root must
-contain the LLVM and Clang CMake packages, static libraries, tools, and resource
-headers; configuration fails closed when any required SDK file is missing.
+Set `AOBUS_LLVM_SDK_CACHE_ROOT` to relocate the automatically managed shared
+cache. Set the distinct `AOBUS_LLVM_SDK_ROOT` CMake cache option at configure
+time to use one already extracted copy of the exact archive, for example on an
+offline machine. A pre-extracted root must contain the LLVM and Clang CMake
+packages, static libraries, tools, and resource headers; configuration fails
+closed when any required SDK file is missing.
 
 ## Triage
 
@@ -198,9 +204,9 @@ Add the direct include where the symbol is used.
   root, `nix-shell --run "pkg-config --cflags <lib>"` is useful for libraries
   that publish pkg-config metadata.
 - For Clang/LLVM internals, inspect the compile database under
-  `/tmp/build/debug-clang-tidy/compile_commands.json` on Linux or
-  `out/build/windows-tidy/compile_commands.json` on Windows. On Linux,
-  `llvm-config --cxxflags` is also useful.
+  `/tmp/build/debug-clang-tidy/compile_commands.json` on Linux or the resolved
+  checkout-specific `windows-tidy` build tree on Windows. The Windows portal
+  prints that local path. On Linux, `llvm-config --cxxflags` is also useful.
 
 Suppress `misc-include-cleaner` only when the tool genuinely cannot model the
 provider, such as required umbrella headers or C macros from framework headers.
@@ -210,6 +216,11 @@ provider, such as required umbrella headers or C macros from framework headers.
 Ruff and mypy findings should be fixed with the same bias as C++ lint: prefer a
 local code or typing improvement, keep the public shape stable unless the task
 requires an API change, and avoid broad ignores.
+
+Linux runs Ruff and mypy from the project shell. Windows uses the locked tools
+in the checkout-specific environment bootstrapped by `ao.bat`; it does not use
+ambient `PATH` installations. The selected Python files and project
+configuration are otherwise the same on both hosts.
 
 - Use `./ao format` for Python formatting changes. `./ao tidy --fix` applies
   only exported `clang-tidy` replacements.

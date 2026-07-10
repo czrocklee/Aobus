@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .paths import PROJECT_ROOT
+from .paths import PROJECT_ROOT, absolute_path
 
 LINT_FIXTURE_PARTS = ("integration", "lint", "fixture")
 
@@ -88,7 +88,7 @@ def resolve_files(paths: Iterable[str], root: Path = PROJECT_ROOT) -> list[Path]
             candidates = []
 
         for candidate in candidates:
-            resolved = candidate.resolve()
+            resolved = absolute_path(candidate)
             if resolved in seen or not _is_auditable_test_file(resolved, test_root):
                 continue
             seen.add(resolved)

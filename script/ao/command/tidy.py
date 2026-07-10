@@ -16,7 +16,7 @@ from pathlib import Path
 
 from ..core import builddir, gitfiles, pythoncheck, tidyengine
 from ..core.dedup import deduplicate
-from ..core.paths import PROJECT_ROOT
+from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
 from ..core.tidyconfig import CONFIG_BASE
 
@@ -139,7 +139,7 @@ _PATH_SEPARATOR_RE = r"[/\\]"
 
 def project_header_filter(folders: tuple[str, ...]) -> str:
     """Return a project-root filter that accepts native and POSIX separators."""
-    root = re.escape(PROJECT_ROOT.resolve().as_posix()).replace("/", _PATH_SEPARATOR_RE)
+    root = re.escape(absolute_path(PROJECT_ROOT).as_posix().rstrip("/")).replace("/", _PATH_SEPARATOR_RE)
     return f"{root}{_PATH_SEPARATOR_RE}({'|'.join(folders)}){_PATH_SEPARATOR_RE}.*"
 
 
@@ -149,13 +149,13 @@ RELAXED_HEADER_FILTER = project_header_filter(("test", "include"))
 
 def exact_header_filter(headers: list[Path]) -> str:
     """Return an anchored filter for mapped headers with either path separator."""
-    alternatives = [re.escape(path.resolve().as_posix()).replace("/", _PATH_SEPARATOR_RE) for path in headers]
+    alternatives = [re.escape(absolute_path(path).as_posix()).replace("/", _PATH_SEPARATOR_RE) for path in headers]
     return f"^({'|'.join(alternatives)})$"
 
 
 def path_line_filter(paths: list[Path]) -> str:
     """Limit diagnostics and exported fixes to the explicitly selected paths."""
-    entries = [{"name": path.resolve().as_posix(), "lines": [[1, 2_147_483_647]]} for path in paths]
+    entries = [{"name": absolute_path(path).as_posix(), "lines": [[1, 2_147_483_647]]} for path in paths]
     return json.dumps(entries, separators=(",", ":"))
 
 
@@ -176,14 +176,14 @@ def build_invocations(
     buckets: dict[str, list[Path]],
 ) -> dict[str, list[TidyInvocation]]:
     """Create one native invocation for every covered selected file."""
-    mode_by_path = {path.resolve(): mode for mode, paths in buckets.items() for path in paths}
+    mode_by_path = {absolute_path(path): mode for mode, paths in buckets.items() for path in paths}
     invocations: dict[str, list[TidyInvocation]] = {"STRICT": [], "RELAXED": []}
     for target in plan.targets:
-        mode = mode_by_path[target.selected.resolve()]
+        mode = mode_by_path[absolute_path(target.selected)]
         invocations[mode].append(
             TidyInvocation(
-                selected=target.selected.resolve(),
-                compile_command_source=target.translation_unit.resolve(),
+                selected=absolute_path(target.selected),
+                compile_command_source=absolute_path(target.translation_unit),
             )
         )
     return invocations
@@ -230,9 +230,9 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 def classify(path: Path, explicit: bool) -> str:
     """STRICT for production code, RELAXED for tests, IGNORE for lint fixtures and main."""
     try:
-        rel = path.resolve().relative_to(PROJECT_ROOT.resolve()).as_posix()
+        rel = absolute_path(path).relative_to(absolute_path(PROJECT_ROOT)).as_posix()
     except ValueError:
-        rel = path.resolve().as_posix()
+        rel = absolute_path(path).as_posix()
 
     rel_slash = "/" + rel
 
@@ -378,7 +378,7 @@ def classify_existing(files: list[str], explicit: bool) -> dict[str, list[Path]]
             path = PROJECT_ROOT / path
         if not path.is_file():
             continue
-        path = path.resolve()
+        path = absolute_path(path)
         if path in seen:
             continue
         seen.add(path)
@@ -398,12 +398,12 @@ def split_existing(files: list[str]) -> tuple[list[str], list[str]]:
             path = PROJECT_ROOT / path
         if not path.is_file():
             continue
-        resolved = path.resolve()
+        resolved = absolute_path(path)
         if resolved in seen:
             continue
         seen.add(resolved)
         try:
-            rel = resolved.relative_to(PROJECT_ROOT.resolve()).as_posix()
+            rel = resolved.relative_to(absolute_path(PROJECT_ROOT)).as_posix()
         except ValueError:
             rel = resolved.as_posix()
         if resolved.suffix in gitfiles.CPP_SUFFIXES:
@@ -482,7 +482,7 @@ def normalize_block_paths(block: str) -> str:
             indent_len = line.find("FilePath:")
             indent = line[:indent_len]
             path_str = stripped.split(":", 1)[1].strip().strip("'\"")
-            canonical_path = Path(path_str).resolve().as_posix()
+            canonical_path = absolute_path(Path(path_str)).as_posix()
             lines.append(f"{indent}FilePath:        '{canonical_path}'\n")
         else:
             lines.append(line)
@@ -588,7 +588,7 @@ def apply_fixes(tmpdir: Path, clang_apply_replacements: str = "clang-apply-repla
 
 
 def run_command(args: argparse.Namespace) -> int:
-    build_dir = Path(args.path) if args.path else builddir.TIDY_DIR
+    build_dir = Path(args.path) if args.path else builddir.tidy_dir()
     files, explicit = tidyengine.resolve_scope(args, ALL_FOLDERS, "Checking", suffixes=gitfiles.SOURCE_SUFFIXES)
     if explicit:
         missing_files = missing_explicit_files(files)
@@ -661,7 +661,7 @@ def run_command(args: argparse.Namespace) -> int:
         mapped_headers = [target for target in coverage_plan.targets if target.is_header]
         header_database_dir: Path | None = None
         if mapped_headers:
-            translation_units = {target.translation_unit.resolve() for target in mapped_headers}
+            translation_units = {absolute_path(target.translation_unit) for target in mapped_headers}
             print(
                 f"Header coverage: {len(mapped_headers)} header(s) mapped to "
                 f"{len(translation_units)} exact native translation unit(s).",

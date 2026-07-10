@@ -3,6 +3,7 @@ setlocal
 
 set "AOBUS_ROOT=%~dp0"
 if "%AOBUS_ROOT:~-1%"=="\" set "AOBUS_ROOT=%AOBUS_ROOT:~0,-1%"
+if not defined AOBUS_STATE_ROOT set "AOBUS_STATE_ROOT=%LOCALAPPDATA%\Aobus"
 
 set "CMD=%~1"
 if "%CMD%"=="" (
@@ -70,6 +71,7 @@ goto parseloop
 
 echo Starting "%CMD%" in the Visual Studio Build Tools environment...
 echo AOBUS_ROOT=%AOBUS_ROOT%
+echo AOBUS_STATE_ROOT=%AOBUS_STATE_ROOT%
 echo VCPKG_ROOT=%VCPKG_ROOT%
 
 call %CMD%%ARGS%

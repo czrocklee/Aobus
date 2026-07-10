@@ -11,6 +11,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import IO
 
+from .paths import absolute_path
+
 DIAGNOSTIC_RE = re.compile(r"^(.+):([0-9]+):([0-9]+):\s+(warning|error|note):\s+(.*)")
 NOISE_RE = re.compile(
     r"^([0-9]+ warnings? generated\.|Suppressed [0-9]+ warnings?(?: \([^)]+\))?\.?|Use -header-filter=.*)$"
@@ -29,7 +31,7 @@ def deduplicate(
     With include_external=False, blocks whose primary location resolves outside
     project_root are dropped entirely (analyzer reports on third-party headers).
     """
-    root = project_root.resolve()
+    root = absolute_path(project_root)
     seen: set[str] = set()
     block: list[str] = []
     cid: str | None = None
@@ -41,7 +43,7 @@ def deduplicate(
         if not p.is_absolute():
             p = root / p
         try:
-            return p.resolve()
+            return absolute_path(p)
         except OSError:
             return p
 

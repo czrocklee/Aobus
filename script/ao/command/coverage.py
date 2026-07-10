@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from ..core import builddir
-from ..core.paths import PROJECT_ROOT
+from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import capture, die, run
 from .test import SUITE_TARGETS, run_suite
 
@@ -195,9 +195,9 @@ def collect_coverage(build_dir: Path) -> dict[str, dict[int, tuple[int | None, s
                 continue
             source_path = Path(source)
             if not source_path.is_absolute():
-                source_path = (build_dir / source_path).resolve()
+                source_path = absolute_path(build_dir / source_path)
             try:
-                rel = source_path.resolve().relative_to(PROJECT_ROOT).as_posix()
+                rel = absolute_path(source_path).relative_to(PROJECT_ROOT).as_posix()
             except ValueError:
                 continue
             if not rel.startswith(tuple(f"{top}/" for top in REPORTED_TOP_DIRS)):

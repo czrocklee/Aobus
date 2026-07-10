@@ -10,6 +10,7 @@
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
+#include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -28,6 +28,22 @@ set(_AOBUS_LLVM_SDK_COMPLETION_CONTENT
 set(AOBUS_LLVM_SDK_ROOT "" CACHE PATH
   "Pre-provisioned clang+llvm ${AOBUS_LLVM_SDK_VERSION} root; empty downloads the official archive")
 
+if(DEFINED ENV{AOBUS_LLVM_SDK_CACHE_ROOT} AND
+   NOT "$ENV{AOBUS_LLVM_SDK_CACHE_ROOT}" STREQUAL "")
+  set(_AOBUS_LLVM_SDK_CACHE_DEFAULT "$ENV{AOBUS_LLVM_SDK_CACHE_ROOT}")
+elseif(DEFINED ENV{AOBUS_STATE_ROOT} AND NOT "$ENV{AOBUS_STATE_ROOT}" STREQUAL "")
+  set(_AOBUS_LLVM_SDK_CACHE_DEFAULT "$ENV{AOBUS_STATE_ROOT}/cache/llvm")
+elseif(DEFINED ENV{LOCALAPPDATA} AND NOT "$ENV{LOCALAPPDATA}" STREQUAL "")
+  set(_AOBUS_LLVM_SDK_CACHE_DEFAULT "$ENV{LOCALAPPDATA}/Aobus/cache/llvm")
+else()
+  # The function is Windows-only. Keep the module parseable on other hosts,
+  # then fail closed if an unusual Windows shell has no local state location.
+  set(_AOBUS_LLVM_SDK_CACHE_DEFAULT "")
+endif()
+set(AOBUS_LLVM_SDK_CACHE_ROOT "${_AOBUS_LLVM_SDK_CACHE_DEFAULT}" CACHE PATH
+  "Local cache root for the verified automatic Windows LLVM SDK")
+unset(_AOBUS_LLVM_SDK_CACHE_DEFAULT)
+
 function(_aobus_validate_llvm_sdk root require_completion_marker out_valid out_reason)
   set(_aobus_llvm_validation_issues "")
   foreach(_aobus_llvm_required_file IN LISTS _AOBUS_LLVM_SDK_REQUIRED_FILES)
@@ -80,11 +96,20 @@ function(aobus_configure_llvm_sdk)
     endif()
     message(STATUS "Using pre-provisioned LLVM SDK: ${_aobus_llvm_sdk_root}")
   else()
+    cmake_path(ABSOLUTE_PATH AOBUS_LLVM_SDK_CACHE_ROOT NORMALIZE
+      BASE_DIRECTORY "${CMAKE_SOURCE_DIR}"
+      OUTPUT_VARIABLE _aobus_llvm_sdk_cache_root)
+    if(NOT _aobus_llvm_sdk_cache_root)
+      message(FATAL_ERROR
+        "AOBUS_LLVM_SDK_CACHE_ROOT is empty; set it to a local Windows directory.")
+    endif()
     set(_aobus_llvm_sdk_cache
-      "${CMAKE_SOURCE_DIR}/out/toolchains/llvm-${AOBUS_LLVM_SDK_VERSION}-x86_64-windows-msvc")
+      "${_aobus_llvm_sdk_cache_root}/toolchains/llvm-${AOBUS_LLVM_SDK_VERSION}-x86_64-windows-msvc")
     set(_aobus_llvm_sdk_root "${_aobus_llvm_sdk_cache}")
-    file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/out/toolchains")
-    file(LOCK "${CMAKE_SOURCE_DIR}/out/toolchains/llvm-${AOBUS_LLVM_SDK_VERSION}.lock"
+    file(MAKE_DIRECTORY
+      "${_aobus_llvm_sdk_cache_root}/toolchains"
+      "${_aobus_llvm_sdk_cache_root}/downloads")
+    file(LOCK "${_aobus_llvm_sdk_cache_root}/llvm-${AOBUS_LLVM_SDK_VERSION}.lock"
       GUARD FUNCTION TIMEOUT 1800)
 
     _aobus_validate_llvm_sdk(
@@ -121,7 +146,7 @@ function(aobus_configure_llvm_sdk)
       FetchContent_Declare(aobus_llvm_sdk
         URL "${AOBUS_LLVM_SDK_URL}"
         URL_HASH "SHA256=${AOBUS_LLVM_SDK_SHA256}"
-        DOWNLOAD_DIR "${CMAKE_SOURCE_DIR}/out/downloads/llvm-${AOBUS_LLVM_SDK_VERSION}"
+        DOWNLOAD_DIR "${_aobus_llvm_sdk_cache_root}/downloads/llvm-${AOBUS_LLVM_SDK_VERSION}"
         SOURCE_DIR "${_aobus_llvm_sdk_cache}"
         DOWNLOAD_EXTRACT_TIMESTAMP FALSE
       )

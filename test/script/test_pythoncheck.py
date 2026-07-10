@@ -9,14 +9,26 @@ from ao.core import pythoncheck
 
 
 class PythonCheckRunnerTest(unittest.TestCase):
+    def test_windows_modules_ignore_ambient_python_packages(self):
+        self.assertEqual(
+            pythoncheck.module_command("ruff", "--version", os_name="nt"),
+            (pythoncheck.sys.executable, "-I", "-m", "ruff", "--version"),
+        )
+
     def test_default_checks_cover_python_tooling_targets(self):
         self.assertEqual(
             pythoncheck.checks([]),
             (
                 pythoncheck.Check(
-                    "Ruff", ("ruff", "check", "script/ao", "app/cli/generate_test_library.py", "test/script")
+                    "Ruff",
+                    pythoncheck.module_command(
+                        "ruff", "check", "script/ao", "app/cli/generate_test_library.py", "test/script"
+                    ),
                 ),
-                pythoncheck.Check("mypy", ("mypy", "script/ao", "app/cli/generate_test_library.py")),
+                pythoncheck.Check(
+                    "mypy",
+                    pythoncheck.module_command("mypy", "script/ao", "app/cli/generate_test_library.py"),
+                ),
             ),
         )
 
@@ -24,15 +36,23 @@ class PythonCheckRunnerTest(unittest.TestCase):
         self.assertEqual(
             pythoncheck.checks(["script/ao/core/pythoncheck.py"]),
             (
-                pythoncheck.Check("Ruff", ("ruff", "check", "script/ao/core/pythoncheck.py")),
-                pythoncheck.Check("mypy", ("mypy", "script/ao/core/pythoncheck.py")),
+                pythoncheck.Check(
+                    "Ruff",
+                    pythoncheck.module_command("ruff", "check", "script/ao/core/pythoncheck.py"),
+                ),
+                pythoncheck.Check("mypy", pythoncheck.module_command("mypy", "script/ao/core/pythoncheck.py")),
             ),
         )
 
     def test_mypy_skips_tooling_tests_that_are_excluded_by_project_config(self):
         self.assertEqual(
             pythoncheck.checks(["test/script/test_pythoncheck.py"]),
-            (pythoncheck.Check("Ruff", ("ruff", "check", "test/script/test_pythoncheck.py")),),
+            (
+                pythoncheck.Check(
+                    "Ruff",
+                    pythoncheck.module_command("ruff", "check", "test/script/test_pythoncheck.py"),
+                ),
+            ),
         )
 
     def test_runs_every_check_and_returns_failure_when_any_tool_fails(self):

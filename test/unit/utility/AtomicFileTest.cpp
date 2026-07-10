@@ -4,12 +4,27 @@
 #include "test/unit/TestUtils.h"
 #include <ao/utility/AtomicFile.h>
 
+#ifdef _WIN32
+#include <catch2/catch_message.hpp>
+#endif
 #include <catch2/catch_test_macros.hpp>
 
+#ifdef _WIN32
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#endif
 #include <filesystem>
 #include <fstream>
+#ifdef _WIN32
+#include <ios>
+#endif
 #include <iterator>
 #include <string>
+#ifdef _WIN32
+#include <thread>
+#include <vector>
+#endif
 
 #ifdef _WIN32
 namespace

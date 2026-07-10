@@ -19,6 +19,7 @@
 #include <ao/rt/source/TrackSource.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
+#include <boost/unordered/unordered_flat_map_fwd.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -228,7 +229,23 @@ namespace ao::rt::test
       BaselineRecorder& operator=(BaselineRecorder const&) = delete;
       BaselineRecorder(BaselineRecorder&&) = delete;
       BaselineRecorder& operator=(BaselineRecorder&&) = delete;
-      ~BaselineRecorder()
+      ~BaselineRecorder() noexcept
+      {
+        try
+        {
+          writeBaselineIfRequested();
+        }
+        catch (...)
+        {
+          // NOLINTNEXTLINE(modernize-use-std-print) -- destructor must not throw
+          std::fprintf(stderr, "Aobus performance baseline: unexpected failure while writing output\n");
+        }
+      }
+
+      void record(BaselineRecord record) { _records.push_back(std::move(record)); }
+
+    private:
+      void writeBaselineIfRequested() const
       {
         auto const* const path = std::getenv("AOBUS_PERF_BASELINE_JSON");
 
@@ -294,9 +311,6 @@ namespace ao::rt::test
         }
       }
 
-      void record(BaselineRecord record) { _records.push_back(std::move(record)); }
-
-    private:
       std::vector<BaselineRecord> _records;
     };
 

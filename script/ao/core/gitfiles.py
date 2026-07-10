@@ -1,8 +1,10 @@
 """Source file discovery: git change sets and folder scans."""
 
+import os
 import subprocess
 
 from .paths import PROJECT_ROOT
+from .proc import die
 
 CPP_SUFFIXES = (".cpp", ".h", ".hpp")
 PYTHON_SUFFIXES = (".py",)
@@ -12,21 +14,38 @@ SOURCE_SUFFIXES = (*CPP_SUFFIXES, *PYTHON_SUFFIXES)
 LINT_INTEGRATION_DIR = "test/integration/lint"
 
 
+def _git_command(*args: str, os_name: str | None = None) -> list[str]:
+    command = ["git"]
+    if (os.name if os_name is None else os_name) == "nt":
+        # Windows cannot preserve Unix executable bits on ordinary or mapped
+        # worktrees. Keep both overrides process-local; no global Git config is
+        # changed, and safe.directory is limited to this checkout.
+        command += [
+            "-c",
+            f"safe.directory={PROJECT_ROOT.as_posix()}",
+            "-c",
+            "core.filemode=false",
+        ]
+    return [*command, *args]
+
+
 def _git_lines(*args: str) -> list[str]:
     result = subprocess.run(
-        ["git", *args],
+        _git_command(*args),
         cwd=PROJECT_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        capture_output=True,
         text=True,
     )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"exit {result.returncode}"
+        raise die(f"git {' '.join(args)} failed: {detail}")
     return [line for line in result.stdout.splitlines() if line.strip()]
 
 
 def _git_ok(*args: str) -> bool:
     return (
         subprocess.run(
-            ["git", *args],
+            _git_command(*args),
             cwd=PROJECT_ROOT,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

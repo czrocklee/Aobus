@@ -600,16 +600,16 @@ namespace ao::tui::test
   TEST_CASE("Render - presentation panel handles empty and out-of-range selection", "[tui][unit][render]")
   {
     auto rowHitRegions = std::vector<PresentationRowHitRegion>{};
-    auto rendered = renderElement(presentationPanel({}, "", 99, &rowHitRegions), 48, 16);
+    auto const emptyRendered = renderElement(presentationPanel({}, "", 99, &rowHitRegions), 48, 16);
 
-    CHECK(rendered.text.contains("default"));
-    CHECK(rendered.text.contains("No views available"));
+    CHECK(emptyRendered.text.contains("default"));
+    CHECK(emptyRendered.text.contains("No views available"));
     CHECK(rowHitRegions.empty());
 
     auto const items = std::vector<TrackPresentationNavEntry>{
       {.id = "songs", .label = "Songs", .detail = "General-purpose song list."},
     };
-    rendered = renderElement(presentationPanel(items, "songs", 99, &rowHitRegions), 48, 16);
+    auto const rendered = renderElement(presentationPanel(items, "songs", 99, &rowHitRegions), 48, 16);
 
     REQUIRE(rowHitRegions.size() == 1);
     CHECK_FALSE(rendered.screen.PixelAt(rowHitRegions[0].box.x_min, rowHitRegions[0].box.y_min).inverted);

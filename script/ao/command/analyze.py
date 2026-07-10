@@ -2,6 +2,7 @@
 
 import argparse
 import contextlib
+import re
 import shutil
 import subprocess
 import sys
@@ -9,7 +10,7 @@ from pathlib import Path
 
 from ..core import builddir, tidyengine
 from ..core.dedup import deduplicate
-from ..core.paths import PROJECT_ROOT
+from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
 
 HELP = "Run the Clang Static Analyzer (report-only unless --fail-on-diagnostics)"
@@ -40,7 +41,16 @@ ANALYZER_CHECK_GROUPS = [
     "clang-analyzer-valist.*",
 ]
 
-HEADER_FILTER = f"{PROJECT_ROOT}/(lib|app|include|test|tool/lint)/.*"
+_PATH_SEPARATOR_RE = r"[/\\]"
+
+
+def project_header_filter() -> str:
+    """Return an analyzer header filter that accepts native and POSIX separators."""
+    root = re.escape(absolute_path(PROJECT_ROOT).as_posix().rstrip("/")).replace("/", _PATH_SEPARATOR_RE)
+    return f"{root}{_PATH_SEPARATOR_RE}(lib|app|include|test|tool{_PATH_SEPARATOR_RE}lint){_PATH_SEPARATOR_RE}.*"
+
+
+HEADER_FILTER = project_header_filter()
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -68,9 +78,9 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 def classify(path: Path) -> bool:
     """True when the file should be analyzed (lint fixtures and the Catch2 main are skipped)."""
     try:
-        rel = path.resolve().relative_to(PROJECT_ROOT.resolve()).as_posix()
+        rel = absolute_path(path).relative_to(absolute_path(PROJECT_ROOT)).as_posix()
     except ValueError:
-        rel = path.resolve().as_posix()
+        rel = absolute_path(path).as_posix()
 
     rel_slash = "/" + rel
     if "/test/integration/lint/" in rel_slash:
@@ -92,7 +102,7 @@ def analyzer_checks(alpha: bool, only: str | None) -> str:
 def run_command(args: argparse.Namespace) -> int:
     if args.jobs < 1:
         raise die("-j must be at least 1.")
-    build_dir = Path(args.path) if args.path else builddir.ANALYZE_DIR
+    build_dir = Path(args.path) if args.path else builddir.analyze_dir()
 
     out = open(args.output, "w", encoding="utf-8") if args.output else sys.stdout
     with contextlib.ExitStack() as stack:
@@ -113,7 +123,7 @@ def run_command(args: argparse.Namespace) -> int:
                 path = PROJECT_ROOT / path
             if not path.is_file():
                 continue
-            path = path.resolve()
+            path = absolute_path(path)
             if path not in seen and classify(path):
                 seen.add(path)
                 files.append(path)

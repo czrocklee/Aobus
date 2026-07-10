@@ -20,6 +20,15 @@ from ao.core import builddir
 
 
 class WindowsBatchPortalTest(unittest.TestCase):
+    def test_python_bootstrap_normalizes_state_arguments_and_ignores_ambient_packages(self):
+        portal = Path(__file__).resolve().parents[2] / "ao.bat"
+        content = portal.read_text(encoding="utf-8").lower()
+
+        self.assertIn('set "aobus_state_argument=%aobus_state_root%"', content)
+        self.assertIn('set "aobus_state_argument=%aobus_state_argument%."', content)
+        self.assertIn('set "pythonpath=%root%script"', content)
+        self.assertNotIn(';%pythonpath%"', content)
+
     def test_toolchain_commands_initialize_the_visual_studio_environment(self):
         portal = Path(__file__).resolve().parents[2] / "ao.bat"
         content = portal.read_text(encoding="utf-8").lower()
@@ -27,6 +36,15 @@ class WindowsBatchPortalTest(unittest.TestCase):
         for command in ("analyze", "format", "hygiene", "tidy"):
             expected = f'if /i "%~1"=="{command}" set "needs_build_env=1"'
             self.assertIn(expected, content)
+
+    def test_python_bootstrap_does_not_trust_ambient_path_aliases(self):
+        portal = Path(__file__).resolve().parents[2] / "ao.bat"
+        content = portal.read_text(encoding="utf-8").lower()
+
+        self.assertNotIn("where python.exe", content)
+        self.assertIn("aobus_python", content)
+        self.assertIn("bootstrap-python.ps1", content)
+        self.assertIn("ao.core.pythonenv", content)
 
     def test_tidy_preset_uses_release_dependencies_without_vcpkg_llvm(self):
         presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
@@ -36,6 +54,16 @@ class WindowsBatchPortalTest(unittest.TestCase):
         self.assertEqual(tidy_preset["inherits"], "windows-tui-release-tests")
         self.assertEqual(tidy_preset["cacheVariables"]["VCPKG_TARGET_TRIPLET"], "x64-windows")
         self.assertEqual(tidy_preset["cacheVariables"]["VCPKG_MANIFEST_FEATURES"], "tests")
+
+    def test_windows_presets_keep_build_trees_out_of_the_source_checkout(self):
+        presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
+        presets = json.loads(presets_file.read_text(encoding="utf-8"))["configurePresets"]
+        windows_presets = [preset for preset in presets if preset["name"].startswith("windows-")]
+
+        for preset in windows_presets:
+            if binary_dir := preset.get("binaryDir"):
+                self.assertTrue(binary_dir.startswith("$env{LOCALAPPDATA}/Aobus/build/"))
+                self.assertNotIn("out/build", binary_dir)
 
 
 class CliParseTest(unittest.TestCase):
@@ -314,7 +342,7 @@ class CliParseTest(unittest.TestCase):
 
         do_build.assert_called_once_with(args, targets=[], with_tests=True)
         run_suites.assert_called_once_with(
-            ("core", "tui", "integration"),
+            ("core", "tui", "integration", "tooling"),
             result.build_dir,
             log=result.log,
         )
