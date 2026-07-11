@@ -70,6 +70,7 @@ namespace ao::audio
     };
 
     explicit Player(async::Executor& executor);
+    Player(async::Executor& executor, DecoderFactoryFn decoderFactory);
     ~Player();
 
     /// Stops providers and quiesces Engine callbacks before an owner releases Player.
@@ -86,6 +87,9 @@ namespace ao::audio
     /// @brief Starts playback. Returns `InvalidState` when the backend is not
     /// yet ready (device discovery pending); the request is dropped in that case.
     Result<> play(Engine::PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
+    Result<Engine::PreparedPlaybackStart> stagePlayback(Engine::PlaybackItem const& item,
+                                                        std::chrono::milliseconds initialOffset = {});
+    Result<Engine::PlaybackStartReceipt> commitPlayback(Engine::PreparedPlaybackStart&& preparedStart);
     Result<Engine::PreparedNextResult> prepareNext(Engine::PlaybackItem const& item);
     std::optional<Engine::PlaybackItemId> clearPreparedNext();
     /// @brief Selects the output device. Returns `NotFound` when no provider is
@@ -94,6 +98,7 @@ namespace ao::audio
     Result<> setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
     void pause();
     void resume();
+    Engine::PreparedCancellationBarrier stopWithBarrier();
     void stop();
     void seek(std::chrono::milliseconds offset);
 
@@ -105,7 +110,7 @@ namespace ao::audio
     Transport transport() const;
     bool isReady() const;
 
-    void setOnTrackEnded(std::function<void()> callback);
+    void setOnTrackEnded(std::function<void(Engine::TrackEnded const&)> callback);
     void setOnTrackAdvanced(std::function<void(Engine::TrackAdvanced const&)> callback);
     void setOnPlaybackFailure(std::function<void(Engine::PlaybackFailure const&)> callback);
     void setOnStateChanged(std::function<void()> callback);
@@ -119,6 +124,7 @@ namespace ao::audio
     // Internal visibility for tests
     void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);
     std::uint64_t playbackGeneration() const noexcept;
+    std::uint64_t audioPlaybackGeneration() const noexcept;
 
   private:
     struct Impl;

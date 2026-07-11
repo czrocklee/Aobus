@@ -3,9 +3,11 @@
 
 #include "track/TrackQuickFilter.h"
 
+#include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -28,7 +30,7 @@ namespace ao::gtk::test
     CHECK(filter.entry().has_css_class("ao-quick-filter-entry"));
 
     // Just verify it wires up and doesn't crash
-    auto const reply = runtime.views().createView({.listId = ListId{1}});
+    auto const reply = ao::test::requireValue(runtime.views().createView({.listId = rt::kAllTracksListId}));
     runtime.workspace().setFocusedView(reply.viewId);
 
     drainGtkEvents();

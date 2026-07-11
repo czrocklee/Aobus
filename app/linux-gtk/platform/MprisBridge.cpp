@@ -7,6 +7,8 @@
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/Subscription.h>
@@ -169,6 +171,7 @@ namespace ao::gtk::platform
   struct MprisBridge::Impl final
   {
     rt::PlaybackService& playback;
+    rt::PlaybackSequenceService& sequence;
     uimodel::PlaybackCommandSurface& commands;
     Callbacks callbacks;
     MprisPlaybackEndpoint endpoint;
@@ -180,11 +183,15 @@ namespace ao::gtk::platform
     bool nameAcquired = false;
     std::vector<rt::Subscription> subscriptions{};
 
-    Impl(rt::PlaybackService& playbackRef, uimodel::PlaybackCommandSurface& commandsRef, Callbacks callbacksIn)
+    Impl(rt::PlaybackService& playbackRef,
+         rt::PlaybackSequenceService& sequenceRef,
+         uimodel::PlaybackCommandSurface& commandsRef,
+         Callbacks callbacksIn)
       : playback{playbackRef}
+      , sequence{sequenceRef}
       , commands{commandsRef}
       , callbacks{std::move(callbacksIn)}
-      , endpoint{playback, commands, callbacks}
+      , endpoint{playback, sequence, commands, callbacks}
     {
     }
 
@@ -253,9 +260,9 @@ namespace ao::gtk::platform
           emitSeeked(event.elapsed);
         }));
       subscriptions.push_back(playback.onVolumeChanged([this](float) { emitPlayerPropertiesChanged({"Volume"}); }));
-      subscriptions.push_back(playback.onShuffleModeChanged([this](rt::PlaybackService::ShuffleModeChanged const&)
-                                                            { emitPlayerPropertiesChanged({"Shuffle"}); }));
-      subscriptions.push_back(playback.onRepeatModeChanged([this](rt::PlaybackService::RepeatModeChanged const&)
+      subscriptions.push_back(sequence.onShuffleModeChanged(
+        [this](rt::PlaybackSequenceService::ShuffleModeChanged const&) { emitPlayerPropertiesChanged({"Shuffle"}); }));
+      subscriptions.push_back(sequence.onRepeatModeChanged([this](rt::PlaybackSequenceService::RepeatModeChanged const&)
                                                            { emitPlayerPropertiesChanged({"LoopStatus"}); }));
     }
 
@@ -377,7 +384,7 @@ namespace ao::gtk::platform
 
       if (propertyName == "LoopStatus")
       {
-        return Glib::Variant<Glib::ustring>::create(glibString(MprisBridge::loopStatus(state.mode.repeat)));
+        return Glib::Variant<Glib::ustring>::create(glibString(MprisBridge::loopStatus(sequence.state().repeat)));
       }
 
       if (propertyName == "Rate" || propertyName == "MinimumRate" || propertyName == "MaximumRate")
@@ -392,7 +399,7 @@ namespace ao::gtk::platform
 
       if (propertyName == "Shuffle")
       {
-        return Glib::Variant<bool>::create(state.mode.shuffle == rt::ShuffleMode::On);
+        return Glib::Variant<bool>::create(sequence.state().shuffle == rt::ShuffleMode::On);
       }
 
       if (propertyName == "CanSeek")
@@ -734,9 +741,10 @@ namespace ao::gtk::platform
   };
 
   MprisBridge::MprisBridge(rt::PlaybackService& playback,
+                           rt::PlaybackSequenceService& sequence,
                            uimodel::PlaybackCommandSurface& commands,
                            Callbacks callbacks)
-    : _implPtr{std::make_unique<Impl>(playback, commands, std::move(callbacks))}
+    : _implPtr{std::make_unique<Impl>(playback, sequence, commands, std::move(callbacks))}
   {
   }
 

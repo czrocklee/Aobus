@@ -12,6 +12,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/columnview.h>
@@ -78,7 +79,8 @@ namespace ao::gtk::test
     sourcePtr->addInitial(trackId2);
     sourcePtr->addInitial(trackId3);
     sourcePtr->addInitial(trackId4);
-    auto projectionPtr = std::make_shared<rt::LiveTrackListProjection>(rt::ViewId{1}, *sourcePtr, library);
+    auto projectionPtr =
+      std::make_shared<rt::LiveTrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, library);
     modelPtr->bindProjection(projectionPtr);
     drainGtkEvents();
 

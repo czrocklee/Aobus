@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "PlaybackLaunchContext.h"
 #include "Subscription.h"
 #include "TrackMutation.h"
 #include "TrackPresentation.h"
@@ -90,13 +91,14 @@ namespace ao::rt
     ViewService(ViewService&&) = delete;
     ViewService& operator=(ViewService&&) = delete;
 
-    CreateTrackListViewReply createView(TrackListViewConfig const& initial, bool attached = true);
+    Result<CreateTrackListViewReply> createView(TrackListViewConfig const& initial, bool attached = true);
     void destroyView(ViewId viewId);
-    void setFilter(ViewId viewId, std::string filterExpression);
+    Result<> setFilter(ViewId viewId, std::string filterExpression);
     void setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
     TrackPresentationSpec setPresentation(ViewId viewId, std::string_view presentationId);
     void setSelection(ViewId viewId, std::vector<TrackId> selection);
-    void openListInView(ViewId viewId, ListId listId);
+    Result<> openListInView(ViewId viewId, ListId listId);
+    Result<PlaybackLaunchContext> capturePlaybackLaunchContext(ViewId viewId) const;
 
     Subscription onDestroyed(std::move_only_function<void(ViewId)> handler);
     Subscription onProjectionChanged(std::move_only_function<void(TrackListProjectionChanged const&)> handler);

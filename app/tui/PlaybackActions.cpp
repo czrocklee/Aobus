@@ -7,16 +7,15 @@
 #include "TrackListEntry.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/PlaybackQueueService.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/ViewIds.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
-#include <utility>
 #include <vector>
 
 namespace ao::tui
@@ -30,10 +29,10 @@ namespace ao::tui
     }
   } // namespace
 
-  bool playSelected(rt::PlaybackQueueService& queue,
+  bool playSelected(rt::PlaybackSequenceService& sequence,
                     std::vector<TrackListEntry> const& tracks,
                     std::int32_t const selected,
-                    ListId const sourceListId)
+                    rt::ViewId const sourceViewId)
   {
     if (tracks.empty())
     {
@@ -41,17 +40,14 @@ namespace ao::tui
     }
 
     auto const index = clampSelection(static_cast<std::size_t>(std::max(0, selected)), tracks.size());
-    auto trackIds = std::vector<TrackId>{};
-    trackIds.reserve(tracks.size());
-    std::ranges::transform(tracks, std::back_inserter(trackIds), &TrackListEntry::id);
-    return static_cast<bool>(queue.playQueue(std::move(trackIds), tracks[index].id, sourceListId));
+    return static_cast<bool>(sequence.playFromView(sourceViewId, tracks[index].id));
   }
 
   bool togglePlayback(rt::PlaybackService& playback,
-                      rt::PlaybackQueueService& queue,
+                      rt::PlaybackSequenceService& sequence,
                       std::vector<TrackListEntry> const& tracks,
                       std::int32_t const selected,
-                      ListId const sourceListId)
+                      rt::ViewId const sourceViewId)
   {
     auto const transport = playback.state().transport;
 
@@ -67,7 +63,7 @@ namespace ao::tui
       return true;
     }
 
-    return playSelected(queue, tracks, selected, sourceListId);
+    return playSelected(sequence, tracks, selected, sourceViewId);
   }
 
   void seekBy(rt::PlaybackService& playback, std::chrono::milliseconds const delta)

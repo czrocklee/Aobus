@@ -14,7 +14,9 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppPrefsState.h>
-#include <ao/rt/PlaybackQueueService.h>
+#include <ao/rt/PlaybackSequenceService.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/layout/action/LayoutActionActivation.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
@@ -108,12 +110,14 @@ namespace ao::gtk::test
     auto const storePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
     auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state");
     auto themeController = ThemeCoordinator{};
-    auto commandSurface = uimodel::PlaybackCommandSurface{
-      runtime.playback(), runtime.playbackQueue(), [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto commandSurface =
+      uimodel::PlaybackCommandSurface{runtime.playback(),
+                                      runtime.playbackSequence(),
+                                      [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
     auto controller =
       ShellLayoutController{runtime, window, configStorePtr, storePtr, componentStateStorePtr, themeController};
     controller.bindServices(
-      GtkUiServices{.playbackQueue = &runtime.playbackQueue(), .playbackCommandSurface = &commandSurface});
+      GtkUiServices{.playbackSequence = &runtime.playbackSequence(), .playbackCommandSurface = &commandSurface});
 
     SECTION("attachToWindow sets child")
     {
@@ -224,7 +228,10 @@ namespace ao::gtk::test
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       auto const trackId = library::test::addTrack(
         runtime.musicLibrary(), library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
-      REQUIRE(runtime.playbackQueue().playQueue({trackId}, trackId, ListId{5}));
+      runtime.reloadAllTracks();
+      auto const view = runtime.workspace().navigateTo(rt::kAllTracksListId);
+      REQUIRE(view);
+      REQUIRE(runtime.playbackSequence().playFromView(*view, trackId));
       runtime.playback().seek(std::chrono::milliseconds{50});
       REQUIRE(runtime.savePlaybackSession());
       runtime.playback().stop();

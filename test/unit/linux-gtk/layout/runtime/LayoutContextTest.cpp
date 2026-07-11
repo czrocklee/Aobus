@@ -5,7 +5,7 @@
 
 #include "app/GtkUiServices.h"
 #include "portal/ImportExportActions.h"
-#include <ao/rt/PlaybackQueueService.h>
+#include <ao/rt/PlaybackSequenceService.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -36,7 +36,7 @@ namespace ao::gtk::layout::test
     auto const services = GtkUiServices{
       .trackRowCache = sentinelPointer<TrackRowCache>(0x1000),
       .imageCache = sentinelPointer<ImageCache>(0x2000),
-      .playbackQueue = sentinelPointer<rt::PlaybackQueueService>(0x3000),
+      .playbackSequence = sentinelPointer<rt::PlaybackSequenceService>(0x3000),
       .playbackCommandSurface = sentinelPointer<uimodel::PlaybackCommandSurface>(0x3100),
       .tagEditController = sentinelPointer<TagEditController>(0x4000),
       .importExportCoordinator = sentinelPointer<portal::ImportExportActions>(0x5000),
@@ -54,7 +54,7 @@ namespace ao::gtk::layout::test
     CHECK(track.presentationPreferences == sentinelPointer<uimodel::ListPresentationPreferenceStore>(0x7100));
     CHECK(track.trackRowCache == sentinelPointer<TrackRowCache>(0x1000));
     CHECK(list.navigationController == sentinelPointer<ListNavigationController>(0x8000));
-    CHECK(playback.queue == sentinelPointer<rt::PlaybackQueueService>(0x3000));
+    CHECK(playback.sequence == sentinelPointer<rt::PlaybackSequenceService>(0x3000));
     CHECK(playback.commandSurface == sentinelPointer<uimodel::PlaybackCommandSurface>(0x3100));
     CHECK(detail.imageCache == sentinelPointer<ImageCache>(0x2000));
     CHECK(tag.editController == sentinelPointer<TagEditController>(0x4000));

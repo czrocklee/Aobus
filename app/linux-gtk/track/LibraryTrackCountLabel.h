@@ -3,13 +3,12 @@
 
 #pragma once
 
-#include <ao/CoreIds.h>
-#include <ao/rt/source/TrackSource.h>
+#include <ao/rt/Subscription.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
-
-#include <cstddef>
 
 namespace ao::gtk
 {
@@ -17,11 +16,11 @@ namespace ao::gtk
    * LibraryTrackCountLabel displays the total number of tracks in the library.
    * It observes the AllTracksSource for changes.
    */
-  class LibraryTrackCountLabel final : public rt::TrackSourceObserver
+  class LibraryTrackCountLabel final
   {
   public:
-    explicit LibraryTrackCountLabel(rt::TrackSource& source);
-    ~LibraryTrackCountLabel() override;
+    explicit LibraryTrackCountLabel(rt::TrackSourceLease sourceLease);
+    ~LibraryTrackCountLabel();
 
     // Not copyable or movable
     LibraryTrackCountLabel(LibraryTrackCountLabel const&) = delete;
@@ -29,19 +28,14 @@ namespace ao::gtk
     LibraryTrackCountLabel(LibraryTrackCountLabel&&) = delete;
     LibraryTrackCountLabel& operator=(LibraryTrackCountLabel&&) = delete;
 
-    // TrackSourceObserver interface
-    void handleReset() override;
-    void handleInserted(TrackId id, std::size_t index) override;
-    void handleUpdated(TrackId id, std::size_t index) override;
-    void handleRemoved(TrackId id, std::size_t index) override;
-    void handleSourceDestroyed() override;
-
     Gtk::Widget& widget() { return _label; }
 
   private:
+    void handleSourceBatch(rt::TrackSourceDeltaBatch const& batch);
     void updateCount();
 
-    rt::TrackSource* _source;
+    rt::TrackSourceLease _sourceLease;
+    rt::Subscription _sourceSubscription;
     Gtk::Label _label;
   };
 } // namespace ao::gtk

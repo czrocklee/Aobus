@@ -12,7 +12,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/PlaybackQueueService.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -376,12 +376,8 @@ namespace ao::gtk
         _tagEditController.openTagEditor(sel, *relativeTo);
       });
 
-    page->signalTrackActivated().connect(
-      [this, page](TrackId id)
-      {
-        std::ignore =
-          _runtime.playbackQueue().playQueue(page->selectionController().visibleTrackIds(), id, page->listId());
-      });
+    page->signalTrackActivated().connect([this, viewId](TrackId id)
+                                         { std::ignore = _runtime.playbackSequence().playFromView(viewId, id); });
 
     page->signalCreateSmartListRequested().connect(
       [this, page](std::string const& expression)

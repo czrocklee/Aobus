@@ -408,15 +408,54 @@ namespace ao::rt
       return {};
     }
 
+    struct PreparedListPayload final
+    {
+      std::vector<std::byte> payload{};
+      std::vector<TrackId> canonicalTrackIds{};
+    };
+
+    PreparedListPayload payloadForDraft(LibraryWriter::ListDraft const& draft)
+    {
+      auto builder =
+        library::ListBuilder::makeEmpty().name(draft.name).description(draft.description).parentId(draft.parentId);
+
+      if (draft.kind == LibraryWriter::ListKind::Smart)
+      {
+        builder.filter(draft.expression);
+      }
+      else
+      {
+        for (auto const id : draft.trackIds)
+        {
+          builder.tracks().add(id);
+        }
+      }
+
+      auto canonicalTrackIds = std::vector<TrackId>{builder.tracks().ids().begin(), builder.tracks().ids().end()};
+      return PreparedListPayload{.payload = builder.serialize(), .canonicalTrackIds = std::move(canonicalTrackIds)};
+    }
+
     Result<> validateListDraft(library::MusicLibrary& library,
                                library::ListStore::Writer const& listWriter,
-                               LibraryWriter::ListDraft const& draft)
+                               library::TrackStore::Writer const& trackWriter,
+                               LibraryWriter::ListDraft const& draft,
+                               std::span<TrackId const> canonicalTrackIds)
     {
       if (draft.kind == LibraryWriter::ListKind::Smart)
       {
         if (auto result = validateSmartExpression(library, draft.expression); !result)
         {
           return result;
+        }
+      }
+      else
+      {
+        for (auto const trackId : canonicalTrackIds)
+        {
+          if (trackId == kInvalidTrackId || !trackWriter.get(trackId, library::TrackStore::Reader::LoadMode::Hot))
+          {
+            return makeError(Error::Code::InvalidInput, std::format("manual list track not found: {}", trackId));
+          }
         }
       }
 
@@ -458,11 +497,99 @@ namespace ao::rt
       return {};
     }
 
-    Result<std::vector<ListId>> removeTrackFromManualLists(library::MusicLibrary& library,
-                                                           lmdb::WriteTransaction& transaction,
-                                                           TrackId trackId)
+    std::vector<TrackId> trackIdsFrom(library::ListView::TrackProxy const& tracks)
     {
-      auto updates = std::vector<std::pair<ListId, std::vector<std::byte>>>{};
+      auto result = std::vector<TrackId>{};
+      result.reserve(tracks.size());
+      result.append_range(tracks);
+      return result;
+    }
+
+    std::vector<TrackId> canonicalTrackIdsFrom(library::ListView const& view)
+    {
+      if (view.isSmart())
+      {
+        return {};
+      }
+
+      auto builder = library::ListBuilder::fromView(view);
+      return {builder.tracks().ids().begin(), builder.tracks().ids().end()};
+    }
+
+    std::vector<std::byte> manualListPayload(library::ListView const& view, std::span<TrackId const> trackIds)
+    {
+      auto builder = library::ListBuilder::fromView(view);
+      builder.tracks().clear();
+
+      for (auto const trackId : trackIds)
+      {
+        builder.tracks().add(trackId);
+      }
+
+      return builder.serialize();
+    }
+
+    Result<library::ListView> requireManualList(library::ListStore::Writer const& listWriter, ListId listId)
+    {
+      auto optView = listWriter.get(listId);
+
+      if (!optView)
+      {
+        return makeError(Error::Code::NotFound, std::format("list not found: {}", listId));
+      }
+
+      if (optView->isSmart())
+      {
+        return makeError(Error::Code::InvalidInput, std::format("list is not manual: {}", listId));
+      }
+
+      return *optView;
+    }
+
+    std::vector<ManualStoredRemoveRange> removalRangesFor(std::span<TrackId const> storedTrackIds,
+                                                          std::unordered_set<TrackId> const& selectedTrackIds)
+    {
+      auto removals = std::vector<ManualStoredRemoveRange>{};
+
+      for (std::size_t index = 0; index < storedTrackIds.size(); ++index)
+      {
+        auto const trackId = storedTrackIds[index];
+
+        if (!selectedTrackIds.contains(trackId))
+        {
+          continue;
+        }
+
+        if (removals.empty() || removals.back().start + removals.back().trackIds.size() != index)
+        {
+          removals.push_back(ManualStoredRemoveRange{.start = index});
+        }
+
+        removals.back().trackIds.push_back(trackId);
+      }
+
+      std::ranges::reverse(removals);
+      return removals;
+    }
+
+    struct ManualListRemovalResult final
+    {
+      std::vector<ListId> changedListIds{};
+      std::vector<ManualListContentChange> contentChanges{};
+    };
+
+    struct PendingManualListRemoval final
+    {
+      ListId listId = kInvalidListId;
+      std::vector<std::byte> payload{};
+      ManualListContentChange contentChange{};
+    };
+
+    Result<ManualListRemovalResult> removeTrackFromManualLists(library::MusicLibrary& library,
+                                                               lmdb::WriteTransaction& transaction,
+                                                               TrackId trackId)
+    {
+      auto updates = std::vector<PendingManualListRemoval>{};
 
       {
         auto listReader = library.lists().reader(transaction);
@@ -474,47 +601,39 @@ namespace ao::rt
             continue;
           }
 
+          auto const storedTrackIds = trackIdsFrom(view.tracks());
+          auto const selectedTrackIds = std::unordered_set<TrackId>{trackId};
           auto builder = library::ListBuilder::fromView(view);
           builder.tracks().remove(trackId);
-          updates.emplace_back(listId, builder.serialize());
+          updates.push_back(PendingManualListRemoval{
+            .listId = listId,
+            .payload = builder.serialize(),
+            .contentChange =
+              ManualListContentChange{
+                .listId = listId,
+                .operation = ManualTracksRemove{.removals = removalRangesFor(storedTrackIds, selectedTrackIds)},
+              },
+          });
         }
       }
 
       auto listWriter = library.lists().writer(transaction);
-      auto changed = std::vector<ListId>{};
-      changed.reserve(updates.size());
+      auto result = ManualListRemovalResult{};
+      result.changedListIds.reserve(updates.size());
+      result.contentChanges.reserve(updates.size());
 
-      for (auto const& [listId, payload] : updates)
+      for (auto& update : updates)
       {
-        if (auto result = listWriter.update(listId, payload); !result)
+        if (auto updateResult = listWriter.update(update.listId, update.payload); !updateResult)
         {
-          return storageError("Failed to update list membership", result.error());
+          return storageError("Failed to update list membership", updateResult.error());
         }
 
-        changed.push_back(listId);
+        result.changedListIds.push_back(update.listId);
+        result.contentChanges.push_back(std::move(update.contentChange));
       }
 
-      return changed;
-    }
-
-    std::vector<std::byte> payloadForDraft(LibraryWriter::ListDraft const& draft)
-    {
-      auto builder =
-        library::ListBuilder::makeEmpty().name(draft.name).description(draft.description).parentId(draft.parentId);
-
-      if (draft.kind == LibraryWriter::ListKind::Smart)
-      {
-        builder.filter(draft.expression);
-      }
-      else
-      {
-        for (auto const id : draft.trackIds)
-        {
-          builder.tracks().add(id);
-        }
-      }
-
-      return builder.serialize();
+      return result;
     }
 
     std::string listKindName(bool isSmart)
@@ -536,15 +655,9 @@ namespace ao::rt
         .field = std::string{field}, .oldValue = std::string{oldValue}, .newValue = std::string{newValue}});
     }
 
-    std::vector<TrackId> trackIdsFrom(library::ListView::TrackProxy const& tracks)
-    {
-      auto result = std::vector<TrackId>{};
-      result.reserve(tracks.size());
-      result.append_range(tracks);
-      return result;
-    }
-
-    UpdateListReply diffListUpdate(library::ListView const& existing, LibraryWriter::ListDraft const& draft)
+    UpdateListReply diffListUpdate(library::ListView const& existing,
+                                   LibraryWriter::ListDraft const& draft,
+                                   std::span<TrackId const> newTrackIds)
     {
       auto reply = UpdateListReply{};
       appendListFieldChange(reply.fieldChanges, "name", existing.name(), draft.name);
@@ -562,11 +675,12 @@ namespace ao::rt
         draft.kind == LibraryWriter::ListKind::Smart ? std::string_view{draft.expression} : std::string_view{};
       appendListFieldChange(reply.fieldChanges, "filter", existing.filter(), newFilter);
 
-      auto const oldTrackIds = trackIdsFrom(existing.tracks());
+      auto const oldTrackIds = canonicalTrackIdsFrom(existing);
+      reply.trackOrderChanged = !std::ranges::equal(oldTrackIds, newTrackIds);
 
-      for (auto const trackId : draft.trackIds)
+      for (auto const trackId : newTrackIds)
       {
-        if (!std::ranges::contains(oldTrackIds, trackId) && !std::ranges::contains(reply.addedTrackIds, trackId))
+        if (!std::ranges::contains(oldTrackIds, trackId))
         {
           reply.addedTrackIds.push_back(trackId);
         }
@@ -574,7 +688,7 @@ namespace ao::rt
 
       for (auto const trackId : oldTrackIds)
       {
-        if (!std::ranges::contains(draft.trackIds, trackId) && !std::ranges::contains(reply.removedTrackIds, trackId))
+        if (!std::ranges::contains(newTrackIds, trackId))
         {
           reply.removedTrackIds.push_back(trackId);
         }
@@ -601,6 +715,17 @@ namespace ao::rt
                                              MutationMode mode);
     Result<ListId> applyCreateList(ListDraft const& draft, MutationMode mode);
     Result<UpdateListReply> applyUpdateList(ListDraft const& draft, MutationMode mode);
+    Result<InsertManualListTracksReply> applyInsertManualListTracks(ListId listId,
+                                                                    std::size_t insertionIndex,
+                                                                    std::span<TrackId const> trackIds,
+                                                                    MutationMode mode);
+    Result<RemoveManualListTracksReply> applyRemoveManualListTracks(ListId listId,
+                                                                    std::span<TrackId const> trackIds,
+                                                                    MutationMode mode);
+    Result<MoveManualListTracksReply> applyMoveManualListTracks(ListId listId,
+                                                                std::span<TrackId const> trackIds,
+                                                                std::size_t insertionIndexAfterRemoval,
+                                                                MutationMode mode);
     Result<DeleteListReply> applyDeleteList(ListId listId, MutationMode mode);
     Result<DeleteTrackReply> applyDeleteTrack(TrackId trackId, MutationMode mode);
     Result<CreateTrackReply> applyCreateTrackFromFile(std::filesystem::path const& path, MutationMode mode);
@@ -667,6 +792,46 @@ namespace ao::rt
   Result<UpdateListReply> LibraryWriter::previewUpdateList(ListDraft const& draft)
   {
     return _implPtr->applyUpdateList(draft, MutationMode::Preview);
+  }
+
+  Result<InsertManualListTracksReply> LibraryWriter::insertManualListTracks(ListId listId,
+                                                                            std::size_t insertionIndex,
+                                                                            std::span<TrackId const> trackIds)
+  {
+    return _implPtr->applyInsertManualListTracks(listId, insertionIndex, trackIds, MutationMode::Commit);
+  }
+
+  Result<InsertManualListTracksReply> LibraryWriter::previewInsertManualListTracks(ListId listId,
+                                                                                   std::size_t insertionIndex,
+                                                                                   std::span<TrackId const> trackIds)
+  {
+    return _implPtr->applyInsertManualListTracks(listId, insertionIndex, trackIds, MutationMode::Preview);
+  }
+
+  Result<RemoveManualListTracksReply> LibraryWriter::removeManualListTracks(ListId listId,
+                                                                            std::span<TrackId const> trackIds)
+  {
+    return _implPtr->applyRemoveManualListTracks(listId, trackIds, MutationMode::Commit);
+  }
+
+  Result<RemoveManualListTracksReply> LibraryWriter::previewRemoveManualListTracks(ListId listId,
+                                                                                   std::span<TrackId const> trackIds)
+  {
+    return _implPtr->applyRemoveManualListTracks(listId, trackIds, MutationMode::Preview);
+  }
+
+  Result<MoveManualListTracksReply> LibraryWriter::moveManualListTracks(ListId listId,
+                                                                        std::span<TrackId const> trackIds,
+                                                                        std::size_t insertionIndexAfterRemoval)
+  {
+    return _implPtr->applyMoveManualListTracks(listId, trackIds, insertionIndexAfterRemoval, MutationMode::Commit);
+  }
+
+  Result<MoveManualListTracksReply> LibraryWriter::previewMoveManualListTracks(ListId listId,
+                                                                               std::span<TrackId const> trackIds,
+                                                                               std::size_t insertionIndexAfterRemoval)
+  {
+    return _implPtr->applyMoveManualListTracks(listId, trackIds, insertionIndexAfterRemoval, MutationMode::Preview);
   }
 
   Result<DeleteListReply> LibraryWriter::deleteList(ListId listId)
@@ -882,15 +1047,15 @@ namespace ao::rt
   {
     auto transaction = library.writeTransaction();
     auto listWriter = library.lists().writer(transaction);
+    auto trackWriter = library.tracks().writer(transaction);
+    auto prepared = payloadForDraft(draft);
 
-    if (auto result = validateListDraft(library, listWriter, draft); !result)
+    if (auto result = validateListDraft(library, listWriter, trackWriter, draft, prepared.canonicalTrackIds); !result)
     {
       return std::unexpected{result.error()};
     }
 
-    auto const payload = payloadForDraft(draft);
-
-    auto createResult = listWriter.create(payload);
+    auto createResult = listWriter.create(prepared.payload);
 
     if (!createResult)
     {
@@ -918,6 +1083,7 @@ namespace ao::rt
   {
     auto transaction = library.writeTransaction();
     auto listWriter = library.lists().writer(transaction);
+    auto trackWriter = library.tracks().writer(transaction);
     auto optExisting = listWriter.get(draft.listId);
 
     if (!optExisting)
@@ -925,22 +1091,24 @@ namespace ao::rt
       return makeError(Error::Code::NotFound, std::format("list not found: {}", draft.listId));
     }
 
-    if (auto result = validateListDraft(library, listWriter, draft); !result)
+    auto const existingWasManual = !optExisting->isSmart();
+    auto prepared = payloadForDraft(draft);
+
+    if (auto result = validateListDraft(library, listWriter, trackWriter, draft, prepared.canonicalTrackIds); !result)
     {
       return std::unexpected{result.error()};
     }
 
-    auto const payload = payloadForDraft(draft);
-    auto reply = diffListUpdate(*optExisting, draft);
+    auto reply = diffListUpdate(*optExisting, draft, prepared.canonicalTrackIds);
 
-    if (std::ranges::equal(optExisting->rawData(), payload))
+    if (std::ranges::equal(optExisting->rawData(), prepared.payload))
     {
       return reply;
     }
 
     reply.changed = true;
 
-    if (auto result = listWriter.update(draft.listId, payload); !result)
+    if (auto result = listWriter.update(draft.listId, prepared.payload); !result)
     {
       return storageError("Failed to update list", result.error());
     }
@@ -955,7 +1123,279 @@ namespace ao::rt
       return storageError("Failed to commit list update", result.error());
     }
 
-    libraryChanges.notifyListsMutated({draft.listId}, {});
+    auto manualContentChanges = std::vector<ManualListContentChange>{};
+
+    if (existingWasManual && draft.kind == ListKind::Manual && reply.trackOrderChanged)
+    {
+      manualContentChanges.push_back(ManualListContentChange{.listId = draft.listId, .operation = ManualTracksReset{}});
+    }
+
+    libraryChanges.notifyListsMutated({draft.listId}, {}, std::move(manualContentChanges));
+    return reply;
+  }
+
+  Result<InsertManualListTracksReply> LibraryWriter::Impl::applyInsertManualListTracks(
+    ListId listId,
+    std::size_t insertionIndex,
+    std::span<TrackId const> trackIds,
+    MutationMode mode)
+  {
+    auto transaction = library.writeTransaction();
+    auto listWriter = library.lists().writer(transaction);
+    auto viewResult = requireManualList(listWriter, listId);
+
+    if (!viewResult)
+    {
+      return std::unexpected{viewResult.error()};
+    }
+
+    auto const& view = *viewResult;
+    auto storedTrackIds = canonicalTrackIdsFrom(view);
+
+    if (insertionIndex > storedTrackIds.size())
+    {
+      return makeError(
+        Error::Code::InvalidInput,
+        std::format("manual list insertion index {} exceeds stored size {}", insertionIndex, storedTrackIds.size()));
+    }
+
+    auto reply = InsertManualListTracksReply{.insertionIndex = insertionIndex};
+    auto const storedMembership = std::unordered_set<TrackId>{storedTrackIds.begin(), storedTrackIds.end()};
+    auto seenRequest = std::unordered_set<TrackId>{};
+    auto trackWriter = library.tracks().writer(transaction);
+
+    for (auto const trackId : trackIds)
+    {
+      if (!seenRequest.insert(trackId).second)
+      {
+        reply.duplicateRequest.push_back(trackId);
+      }
+      else if (trackId == kInvalidTrackId || !trackWriter.get(trackId, library::TrackStore::Reader::LoadMode::Hot))
+      {
+        reply.missingTrack.push_back(trackId);
+      }
+      else if (storedMembership.contains(trackId))
+      {
+        reply.alreadyPresent.push_back(trackId);
+      }
+      else
+      {
+        reply.insertedTrackIds.push_back(trackId);
+      }
+    }
+
+    if (reply.insertedTrackIds.empty())
+    {
+      return reply;
+    }
+
+    reply.changed = true;
+    storedTrackIds.insert(storedTrackIds.begin() + static_cast<std::ptrdiff_t>(insertionIndex),
+                          reply.insertedTrackIds.begin(),
+                          reply.insertedTrackIds.end());
+    auto const payload = manualListPayload(view, storedTrackIds);
+
+    if (auto result = listWriter.update(listId, payload); !result)
+    {
+      return storageError("Failed to insert manual list tracks", result.error());
+    }
+
+    if (mode == MutationMode::Preview)
+    {
+      return reply;
+    }
+
+    if (auto result = transaction.commit(); !result)
+    {
+      return storageError("Failed to commit manual list track insertion", result.error());
+    }
+
+    libraryChanges.notifyListsMutated(
+      {listId},
+      {},
+      {ManualListContentChange{
+        .listId = listId,
+        .operation = ManualTracksInsert{.storedIndex = insertionIndex, .trackIds = reply.insertedTrackIds},
+      }});
+    return reply;
+  }
+
+  Result<RemoveManualListTracksReply>
+  LibraryWriter::Impl::applyRemoveManualListTracks(ListId listId, std::span<TrackId const> trackIds, MutationMode mode)
+  {
+    auto transaction = library.writeTransaction();
+    auto listWriter = library.lists().writer(transaction);
+    auto viewResult = requireManualList(listWriter, listId);
+
+    if (!viewResult)
+    {
+      return std::unexpected{viewResult.error()};
+    }
+
+    auto const& view = *viewResult;
+    auto storedTrackIds = canonicalTrackIdsFrom(view);
+    auto const storedMembership = std::unordered_set<TrackId>{storedTrackIds.begin(), storedTrackIds.end()};
+    auto seenRequest = std::unordered_set<TrackId>{};
+    auto selectedTrackIds = std::unordered_set<TrackId>{};
+    auto reply = RemoveManualListTracksReply{};
+
+    for (auto const trackId : trackIds)
+    {
+      if (!seenRequest.insert(trackId).second)
+      {
+        reply.duplicateRequest.push_back(trackId);
+      }
+      else if (!storedMembership.contains(trackId))
+      {
+        reply.notPresent.push_back(trackId);
+      }
+      else
+      {
+        selectedTrackIds.insert(trackId);
+      }
+    }
+
+    for (auto const trackId : storedTrackIds)
+    {
+      if (selectedTrackIds.contains(trackId))
+      {
+        reply.removedTrackIds.push_back(trackId);
+      }
+    }
+
+    if (reply.removedTrackIds.empty())
+    {
+      return reply;
+    }
+
+    reply.changed = true;
+    auto removals = removalRangesFor(storedTrackIds, selectedTrackIds);
+    std::erase_if(storedTrackIds, [&selectedTrackIds](TrackId trackId) { return selectedTrackIds.contains(trackId); });
+    auto const payload = manualListPayload(view, storedTrackIds);
+
+    if (auto result = listWriter.update(listId, payload); !result)
+    {
+      return storageError("Failed to remove manual list tracks", result.error());
+    }
+
+    if (mode == MutationMode::Preview)
+    {
+      return reply;
+    }
+
+    if (auto result = transaction.commit(); !result)
+    {
+      return storageError("Failed to commit manual list track removal", result.error());
+    }
+
+    libraryChanges.notifyListsMutated({listId},
+                                      {},
+                                      {ManualListContentChange{
+                                        .listId = listId,
+                                        .operation = ManualTracksRemove{.removals = std::move(removals)},
+                                      }});
+    return reply;
+  }
+
+  Result<MoveManualListTracksReply> LibraryWriter::Impl::applyMoveManualListTracks(
+    ListId listId,
+    std::span<TrackId const> trackIds,
+    std::size_t insertionIndexAfterRemoval,
+    MutationMode mode)
+  {
+    auto transaction = library.writeTransaction();
+    auto listWriter = library.lists().writer(transaction);
+    auto viewResult = requireManualList(listWriter, listId);
+
+    if (!viewResult)
+    {
+      return std::unexpected{viewResult.error()};
+    }
+
+    auto const& view = *viewResult;
+    auto const storedTrackIds = canonicalTrackIdsFrom(view);
+    auto const storedMembership = std::unordered_set<TrackId>{storedTrackIds.begin(), storedTrackIds.end()};
+    auto seenRequest = std::unordered_set<TrackId>{};
+    auto selectedMembership = std::unordered_set<TrackId>{};
+    auto reply = MoveManualListTracksReply{.insertionIndexAfterRemoval = insertionIndexAfterRemoval};
+
+    for (auto const trackId : trackIds)
+    {
+      if (!seenRequest.insert(trackId).second)
+      {
+        reply.duplicateRequest.push_back(trackId);
+      }
+      else if (!storedMembership.contains(trackId))
+      {
+        reply.notPresent.push_back(trackId);
+      }
+      else
+      {
+        selectedMembership.insert(trackId);
+      }
+    }
+
+    auto remainingTrackIds = std::vector<TrackId>{};
+    remainingTrackIds.reserve(storedTrackIds.size());
+
+    for (auto const trackId : storedTrackIds)
+    {
+      if (selectedMembership.contains(trackId))
+      {
+        reply.selectedTrackIds.push_back(trackId);
+      }
+      else
+      {
+        remainingTrackIds.push_back(trackId);
+      }
+    }
+
+    if (insertionIndexAfterRemoval > remainingTrackIds.size())
+    {
+      return makeError(Error::Code::InvalidInput,
+                       std::format("manual list move insertion index {} exceeds remaining size {}",
+                                   insertionIndexAfterRemoval,
+                                   remainingTrackIds.size()));
+    }
+
+    auto nextTrackIds = remainingTrackIds;
+    nextTrackIds.insert(nextTrackIds.begin() + static_cast<std::ptrdiff_t>(insertionIndexAfterRemoval),
+                        reply.selectedTrackIds.begin(),
+                        reply.selectedTrackIds.end());
+
+    if (nextTrackIds == storedTrackIds)
+    {
+      return reply;
+    }
+
+    reply.changed = true;
+    auto removals = removalRangesFor(storedTrackIds, selectedMembership);
+    auto const payload = manualListPayload(view, nextTrackIds);
+
+    if (auto result = listWriter.update(listId, payload); !result)
+    {
+      return storageError("Failed to move manual list tracks", result.error());
+    }
+
+    if (mode == MutationMode::Preview)
+    {
+      return reply;
+    }
+
+    if (auto result = transaction.commit(); !result)
+    {
+      return storageError("Failed to commit manual list track move", result.error());
+    }
+
+    libraryChanges.notifyListsMutated(
+      {listId},
+      {},
+      {ManualListContentChange{
+        .listId = listId,
+        .operation = ManualTracksMove{.removals = std::move(removals),
+                                      .insertionIndexAfterRemoval = insertionIndexAfterRemoval,
+                                      .insertedTrackIds = reply.selectedTrackIds},
+      }});
     return reply;
   }
 
@@ -1016,7 +1456,12 @@ namespace ao::rt
     }
 
     auto changedLists = std::move(*changedListsResult);
-    auto reply = DeleteTrackReply{.trackId = trackId, .uri = uri, .title = title, .removedFromListIds = changedLists};
+    auto reply = DeleteTrackReply{
+      .trackId = trackId,
+      .uri = uri,
+      .title = title,
+      .removedFromListIds = changedLists.changedListIds,
+    };
 
     if (!uri.empty())
     {
@@ -1043,7 +1488,7 @@ namespace ao::rt
 
     if (!reply.removedFromListIds.empty())
     {
-      libraryChanges.notifyListsMutated(reply.removedFromListIds, {});
+      libraryChanges.notifyListsMutated(reply.removedFromListIds, {}, std::move(changedLists.contentChanges));
     }
 
     libraryChanges.notifyTrackCollectionChanged({}, {trackId});

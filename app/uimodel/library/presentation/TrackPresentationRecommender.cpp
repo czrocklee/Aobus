@@ -135,7 +135,7 @@ namespace ao::uimodel
     }
   } // namespace
 
-  rt::TrackPresentationSpec recommendPresentation(std::string_view filterExpression,
+  rt::TrackPresentationSpec recommendPresentation(ListPresentationContext const& context,
                                                   std::span<rt::TrackPresentationPreset const> builtinPresets,
                                                   std::span<rt::CustomTrackPresentationPreset const> customPresets)
   {
@@ -158,14 +158,19 @@ namespace ao::uimodel
       return fallbackSpec(builtinPresets);
     };
 
+    if (context.sourceKind == ListPresentationSourceKind::Manual)
+    {
+      return findPreset(rt::kListOrderTrackPresentationId);
+    }
+
     auto fallbackSpec = findPreset("albums");
 
-    if (filterExpression.empty())
+    if (context.sourceKind != ListPresentationSourceKind::Smart || context.smartListFilter.empty())
     {
       return fallbackSpec;
     }
 
-    auto const expr = query::parse(filterExpression);
+    auto const expr = query::parse(context.smartListFilter);
 
     if (!expr)
     {

@@ -9,10 +9,6 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/rt/ViewService.h>
-#include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/playback/seek/SeekViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -26,11 +22,8 @@ namespace ao::uimodel::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
-    auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
-    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
+    auto playback = PlaybackService{executor, libraryFixture.library(), notificationService};
     addReadyAudioProvider(playback);
 
     auto log = ao::test::RenderLog<SeekViewState>{};

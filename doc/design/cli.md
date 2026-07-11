@@ -60,7 +60,11 @@ before commit and skips restore metadata updates.
 Field-level changes are reported where the writer can compare old and new
 values: track metadata reports `changes[].fields[]` with `field`, `oldValue`,
 and `newValue`; tag edits report actual `addedTags`/`removedTags`; list updates
-report field diffs plus `addedTrackIds` and `removedTrackIds`.
+report field diffs plus `addedTrackIds` and `removedTrackIds`. Dedicated manual
+list additions report `insertionIndex`, `insertedTrackIds`, `duplicateRequest`,
+`alreadyPresent`, and `missingTrack`; removals report `removedTrackIds`,
+`duplicateRequest`, and `notPresent`. Preview and committed reports use the same
+exact classification.
 
 Dry-run reports do not include ids allocated by the aborted transaction. Create
 previews omit `trackId` and `listId`; track creation still reports deterministic
@@ -161,9 +165,11 @@ List mutation commands use `rt::LibraryWriter`:
 - `list delete [--dry-run] <id>`
 
 List creates and updates validate smart filters, parent existence, self-parenting,
-and parent cycles before writing. Manual membership edits read the complete
-current membership and submit a full replacement draft. Adding/removing
-membership on a smart list is a domain failure.
+and parent cycles before writing. Manual membership edits use the dedicated
+preview/commit insert and remove commands; `list add` appends at the stored-list
+end, preserves first-occurrence order, and reports every inserted, duplicate,
+already-present, missing, removed, or not-present TrackId exactly. Adding or
+removing membership on a smart list is a domain failure.
 
 `list dump [--raw]` remains an infrastructure/debug dump. `--raw` supports only
 plain output.

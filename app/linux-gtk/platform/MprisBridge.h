@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <chrono>
@@ -17,6 +18,7 @@
 
 namespace ao::rt
 {
+  class PlaybackSequenceService;
   class PlaybackService;
 }
 
@@ -50,7 +52,10 @@ namespace ao::gtk::platform
       std::int64_t lengthUs = 0;
     };
 
-    MprisBridge(rt::PlaybackService& playback, uimodel::PlaybackCommandSurface& commands, Callbacks callbacks);
+    MprisBridge(rt::PlaybackService& playback,
+                rt::PlaybackSequenceService& sequence,
+                uimodel::PlaybackCommandSurface& commands,
+                Callbacks callbacks);
     ~MprisBridge();
 
     MprisBridge(MprisBridge const&) = delete;

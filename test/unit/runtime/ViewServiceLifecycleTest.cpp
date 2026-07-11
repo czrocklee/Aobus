@@ -6,11 +6,13 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewState.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <tuple>
 #include <variant>
 #include <vector>
 
@@ -31,21 +33,21 @@ namespace ao::rt::test
 
     SECTION("creating a track list view returns ViewId")
     {
-      auto const result = service.createView({.listId = kInvalidListId}, true);
+      auto const result = env.requireView(service);
       CHECK(result.viewId != rt::kInvalidViewId);
     }
 
     SECTION("creating multiple views returns distinct ViewIds")
     {
-      auto const r1 = service.createView({}, true);
-      auto const r2 = service.createView({}, true);
+      auto const r1 = env.requireView(service);
+      auto const r2 = env.requireView(service);
 
       CHECK(r1.viewId != r2.viewId);
     }
 
     SECTION("created view appears in listViews")
     {
-      auto const result = service.createView({}, true);
+      auto const result = env.requireView(service);
       auto const views = service.listViews();
       CHECK(views.size() == 1);
       CHECK(views[0].id == result.viewId);
@@ -54,11 +56,27 @@ namespace ao::rt::test
 
     SECTION("detached view creates in Detached state")
     {
-      service.createView({}, false);
+      std::ignore = env.requireView(service, {}, false);
       auto const views = service.listViews();
       REQUIRE(views.size() == 1);
       CHECK(views[0].lifecycle == ViewLifecycleState::Detached);
     }
+  }
+
+  TEST_CASE("ViewService - failed creation returns the source error without consuming view state",
+            "[runtime][unit][view][lifecycle]")
+  {
+    auto env = ViewServiceFixture{};
+    auto service = env.makeService();
+
+    auto const failed = service.createView({.listId = kInvalidListId}, true);
+
+    REQUIRE_FALSE(failed);
+    CHECK(failed.error().code == Error::Code::InvalidInput);
+    CHECK(service.listViews().empty());
+
+    auto const created = env.requireView(service);
+    CHECK(created.viewId == ViewId{1});
   }
 
   TEST_CASE("ViewService - destroyView removes state and publishes destruction", "[runtime][unit][view][lifecycle]")
@@ -66,7 +84,7 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
-    auto const result = service.createView({}, true);
+    auto const result = env.requireView(service);
     auto const viewId = ViewId{result.viewId};
 
     SECTION("destroying a view removes it from listViews")
@@ -87,6 +105,15 @@ namespace ao::rt::test
 
       auto const snap = service.trackListState(viewId);
       CHECK(snap.lifecycle == ViewLifecycleState::Destroyed);
+    }
+
+    SECTION("destroyed views reject launch-context capture")
+    {
+      service.destroyView(viewId);
+
+      auto const captured = service.capturePlaybackLaunchContext(viewId);
+      REQUIRE_FALSE(captured);
+      CHECK(captured.error().code == Error::Code::InvalidState);
     }
 
     SECTION("destroy publishes ViewDestroyed event")
@@ -115,10 +142,11 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
-    auto const result = service.createView({.filterExpression = "$year > 2000"}, true);
+    auto const result = env.requireView(service, {.filterExpression = "$year > 2000"});
     auto const snap = service.trackListState(result.viewId);
 
     CHECK(snap.id == result.viewId);
+    CHECK(snap.listId == kAllTracksListId);
     CHECK(snap.filterExpression == "$year > 2000");
     CHECK(snap.lifecycle == ViewLifecycleState::Attached);
     CHECK(snap.groupBy == TrackGroupKey::None);
@@ -142,11 +170,28 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
-    auto const result = service.createView({}, true);
+    auto const result = env.requireView(service);
     auto const projectionPtr = service.trackListProjection(result.viewId);
     REQUIRE(projectionPtr != nullptr);
     CHECK(projectionPtr->viewId() == result.viewId);
     CHECK(projectionPtr->size() == 0);
+  }
+
+  TEST_CASE("ViewService - explicit initial order overrides the default presentation order",
+            "[runtime][unit][view][lifecycle]")
+  {
+    auto env = ViewServiceFixture{};
+    auto service = env.makeService();
+    auto const order = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = false}};
+    auto const result = env.requireView(service, {.sortBy = order});
+
+    auto const state = service.trackListState(result.viewId);
+    CHECK(state.groupBy == TrackGroupKey::None);
+    CHECK(state.sortBy == order);
+    CHECK(state.presentation.id.empty());
+    auto const context = service.capturePlaybackLaunchContext(result.viewId);
+    REQUIRE(context);
+    CHECK(context->order.sortBy == order);
   }
 
   TEST_CASE("ViewService - projection subscription replays initial reset", "[runtime][unit][view][lifecycle]")
@@ -154,7 +199,7 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
-    auto const result = service.createView({}, true);
+    auto const result = env.requireView(service);
     auto const projectionPtr = service.trackListProjection(result.viewId);
     REQUIRE(projectionPtr != nullptr);
 

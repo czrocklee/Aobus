@@ -15,6 +15,7 @@
 #include "tui/PresentationPanel.h"
 #include "tui/ShellInteractionModel.h"
 #include "tui/TrackListEntry.h"
+#include "tui/TrackPresentationNavigation.h"
 #include "tui/TrackSection.h"
 #include "tui/TrackTable.h"
 #include "tui/TuiHitRegions.h"
@@ -25,7 +26,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/PlaybackQueueService.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/completion/CompletionItem.h>
@@ -44,7 +45,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
-#include <iterator>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -71,15 +71,19 @@ namespace ao::tui::test
       LibraryController makeLibrary() { return LibraryController{runtime}; }
     };
 
+    std::int32_t presentationIndex(LibraryController const& library, std::string_view const presentationId)
+    {
+      auto const& entries = library.presentationEntries();
+      auto const it = std::ranges::find(entries, presentationId, &TrackPresentationNavEntry::id);
+      return it == entries.end() ? -1 : static_cast<std::int32_t>(it - entries.begin());
+    }
+
     void prepareSeekablePlayback(EventControllerFixture& fixture, LibraryController const& library)
     {
       REQUIRE_FALSE(library.tracks().empty());
       rt::test::addReadyAudioProvider(fixture.runtime.playback());
-      auto trackIds = std::vector<TrackId>{};
-      std::ranges::transform(library.tracks(), std::back_inserter(trackIds), &TrackListEntry::id);
       auto const startTrackId = library.tracks()[0].id;
-      auto const sourceListId = library.currentListId();
-      REQUIRE(fixture.runtime.playbackQueue().playQueue(trackIds, startTrackId, sourceListId));
+      REQUIRE(fixture.runtime.playbackSequence().playFromView(library.activeViewId(), startTrackId));
       REQUIRE(fixture.runtime.playback().state().duration > std::chrono::milliseconds{0});
     }
 
@@ -305,9 +309,15 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Character("v")));
     CHECK(fixture.shell.overlay() == Overlay::PresentationPanel);
 
-    CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
-    CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
-    CHECK(library.selectedPresentation() == 2);
+    auto const albumsIndex = presentationIndex(library, "albums");
+    REQUIRE(albumsIndex >= 0);
+
+    for (std::int32_t index = 0; index < albumsIndex; ++index)
+    {
+      CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
+    }
+
+    CHECK(library.selectedPresentation() == albumsIndex);
 
     CHECK(controller.handleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
@@ -629,9 +639,11 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto hitRegions = TuiHitRegions{};
+    auto const albumsIndex = presentationIndex(library, "albums");
+    REQUIRE(albumsIndex >= 0);
     hitRegions.presentationButtonBox = ftxui::Box{.x_min = 20, .x_max = 29, .y_min = 23, .y_max = 23};
-    hitRegions.presentationRows = {
-      PresentationRowHitRegion{.rowIndex = 2, .box = ftxui::Box{.x_min = 2, .x_max = 40, .y_min = 12, .y_max = 12}}};
+    hitRegions.presentationRows = {PresentationRowHitRegion{
+      .rowIndex = albumsIndex, .box = ftxui::Box{.x_min = 2, .x_max = 40, .y_min = 12, .y_max = 12}}};
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 

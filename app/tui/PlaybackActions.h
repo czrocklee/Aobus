@@ -4,7 +4,7 @@
 #pragma once
 
 #include "TrackListEntry.h"
-#include <ao/CoreIds.h>
+#include <ao/rt/ViewIds.h>
 
 #include <chrono>
 #include <cstdint>
@@ -12,22 +12,22 @@
 
 namespace ao::rt
 {
-  class PlaybackQueueService;
+  class PlaybackSequenceService;
   class PlaybackService;
 } // namespace ao::rt
 
 namespace ao::tui
 {
-  bool playSelected(rt::PlaybackQueueService& queue,
+  bool playSelected(rt::PlaybackSequenceService& sequence,
                     std::vector<TrackListEntry> const& tracks,
                     std::int32_t selected,
-                    ListId sourceListId);
+                    rt::ViewId sourceViewId);
 
   bool togglePlayback(rt::PlaybackService& playback,
-                      rt::PlaybackQueueService& queue,
+                      rt::PlaybackSequenceService& sequence,
                       std::vector<TrackListEntry> const& tracks,
                       std::int32_t selected,
-                      ListId sourceListId);
+                      rt::ViewId sourceViewId);
 
   void seekBy(rt::PlaybackService& playback, std::chrono::milliseconds delta);
   void changeVolume(rt::PlaybackService& playback, float delta);

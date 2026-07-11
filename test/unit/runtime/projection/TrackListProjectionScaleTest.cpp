@@ -6,21 +6,36 @@
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <memory>
 #include <variant>
 #include <vector>
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    template<typename State>
+    concept OwnsMaterializedTrackIds = requires(State const& state) { state.trackIds; };
+
+    static_assert(!OwnsMaterializedTrackIds<PlaybackSequenceState>);
+  } // namespace
+
   TEST_CASE("TrackListProjection - 10k scale operations preserve indices and deltas",
             "[runtime][unit][projection][scale]")
   {
@@ -60,14 +75,18 @@ namespace ao::rt::test
                                                            .album = std::format("Album {:03d}", index % 500)};
                          });
 
-    auto source = MutableTrackSource{};
-    source.setInitial(ids);
+    auto sourcePtr = std::make_shared<MutableTrackSource>();
+    sourcePtr->setInitial(ids);
 
-    auto proj = LiveTrackListProjection{ViewId{1}, source, lib};
-    proj.setPresentation(
-      TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}});
+    auto proj = LiveTrackListProjection{
+      kInvalidViewId,
+      TrackSourceLease{sourcePtr},
+      lib,
+      TrackOrderSpec{.sortBy = {TrackSortTerm{.field = TrackSortField::Title}}},
+    };
 
     CHECK(proj.size() == kTrackCount);
+    CHECK(proj.viewId() == kInvalidViewId);
 
     SECTION("Batch insertion performance (incremental merge)")
     {
@@ -75,7 +94,7 @@ namespace ao::rt::test
                               [](std::int32_t index)
                               { return library::test::TrackSpec{.title = std::format("New Track {:05d}", index)}; });
 
-      source.batchInsert(newIds);
+      sourcePtr->batchInsert(newIds);
 
       CHECK(proj.size() == kTrackCount + 100);
 
@@ -101,6 +120,33 @@ namespace ao::rt::test
       }
 
       CHECK_FALSE(proj.indexOf(TrackId{999999}).has_value());
+    }
+
+    SECTION("detached projection applies representative remove and update batches")
+    {
+      auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+      auto const sub = proj.subscribe([&](TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
+      batches.clear(); // Ignore the subscription's initial Reset snapshot.
+
+      auto const removedIds = std::array{ids[100], ids[5000], ids[9999]};
+      sourcePtr->batchRemove(removedIds);
+
+      REQUIRE(batches.size() == 1);
+      CHECK(proj.size() == static_cast<std::size_t>(kTrackCount) - removedIds.size());
+
+      for (auto const trackId : removedIds)
+      {
+        CHECK_FALSE(proj.indexOf(trackId));
+      }
+
+      batches.clear();
+      auto const updatedIds = std::array{ids[10], ids[9000]};
+      sourcePtr->batchUpdate(updatedIds);
+
+      REQUIRE(batches.size() == 1);
+      CHECK(std::ranges::all_of(batches.front().deltas,
+                                [](TrackListProjectionDelta const& delta)
+                                { return std::holds_alternative<ProjectionUpdateRange>(delta); }));
     }
 
     SECTION("reset delta keeps projected size stable")

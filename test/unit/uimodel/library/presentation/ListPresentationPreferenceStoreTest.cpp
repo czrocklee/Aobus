@@ -8,6 +8,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -78,11 +79,47 @@ namespace ao::uimodel::test
         rt::TrackPresentationSpec{.id = "tag-audit", .visibleFields = {rt::TrackField::Title, rt::TrackField::Tags}},
     });
 
+    auto const allTracksContext = ListPresentationContext{
+      .listId = rt::kAllTracksListId,
+      .sourceKind = ListPresentationSourceKind::AllTracks,
+    };
+
     store.setPresentationIdForList(rt::kAllTracksListId, "tag-audit");
-    CHECK(store.presentationForList(rt::kAllTracksListId).id == "tag-audit");
+    CHECK(store.presentationForList(allTracksContext).id == "tag-audit");
 
     store.setPresentationIdForList(rt::kAllTracksListId, "missing-preset");
-    CHECK(rt::builtinTrackPresentationPreset(store.presentationForList(rt::kAllTracksListId).id) != nullptr);
+    CHECK(store.presentationForList(allTracksContext).id == "albums");
+  }
+
+  TEST_CASE("ListPresentationPreferenceStore - resolves list kind defaults after saved preference lookup",
+            "[uimodel][unit][library][presentation]")
+  {
+    auto fixture = TrackPresentationFixture{};
+    auto& store = fixture.preferences;
+    auto const manualListId = ListId{42};
+    auto const manualContext = ListPresentationContext{
+      .listId = manualListId,
+      .sourceKind = ListPresentationSourceKind::Manual,
+    };
+    auto const smartContext = ListPresentationContext{
+      .listId = ListId{43},
+      .sourceKind = ListPresentationSourceKind::Smart,
+      .smartListFilter = "$composer = \"Bach\"",
+    };
+    auto const allTracksContext = ListPresentationContext{
+      .listId = rt::kAllTracksListId,
+      .sourceKind = ListPresentationSourceKind::AllTracks,
+    };
+
+    CHECK(store.presentationForList(manualContext).id == rt::kListOrderTrackPresentationId);
+    CHECK(store.presentationForList(smartContext).id == "classical-composers");
+    CHECK(store.presentationForList(allTracksContext).id == "albums");
+
+    store.setPresentationIdForList(manualListId, "albums");
+    CHECK(store.presentationForList(manualContext).id == "albums");
+
+    store.setPresentationIdForList(manualListId, "missing-preset");
+    CHECK(store.presentationForList(manualContext).id == rt::kListOrderTrackPresentationId);
   }
 
   TEST_CASE("ListPresentationPreferenceStore - bulk state emits only when changed",

@@ -4,6 +4,9 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
+
+#include <string_view>
 
 namespace ao::uimodel
 {
@@ -16,4 +19,5 @@ namespace ao::uimodel
 
   ListActionViewState describeListActions(ListId selectedListId, bool selectedListHasChildren);
   ListId parentForNewSmartList(ListId selectedListId);
+  bool canReorderListTracks(ListPresentationSourceKind sourceKind, std::string_view presentationId);
 } // namespace ao::uimodel

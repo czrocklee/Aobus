@@ -24,7 +24,7 @@ namespace ao::rt
   enum class NotificationTopic : std::uint8_t
   {
     General,
-    PlaybackQueue,
+    PlaybackSequence,
     PlaybackError,
   };
 

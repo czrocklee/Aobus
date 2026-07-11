@@ -17,6 +17,7 @@
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <boost/unordered/unordered_flat_map_fwd.hpp>
@@ -33,6 +34,7 @@
 #include <fstream>
 #include <functional>
 #include <ios>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <ranges>
@@ -1082,10 +1084,11 @@ namespace ao::rt::test
       auto& lib = bench.libraryFixture.library();
 
       // 1. Projection construction + setPresentation
-      auto source = BenchmarkTrackSource{bench.ids};
+      auto sourcePtr = std::make_shared<BenchmarkTrackSource>(bench.ids);
+      auto sourceLease = TrackSourceLease{sourcePtr};
 
       auto const t0 = std::chrono::steady_clock::now();
-      auto proj = LiveTrackListProjection{ViewId{1}, source, lib};
+      auto proj = LiveTrackListProjection{ViewId{1}, sourceLease, lib};
       auto const t1 = std::chrono::steady_clock::now();
       proj.setPresentation(TrackPresentationSpec{
         .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}});
@@ -1096,7 +1099,7 @@ namespace ao::rt::test
 
       // 2. SmartListEvaluator evaluateMembers (simulates expression filter via SmartListSource)
       auto evaluator = SmartListEvaluator{lib};
-      auto filtered = SmartListSource{source, lib, evaluator};
+      auto filtered = SmartListSource{sourceLease, lib, evaluator};
 
       auto const t3 = std::chrono::steady_clock::now();
 
@@ -1110,7 +1113,7 @@ namespace ao::rt::test
       // 2b. Filter evaluation with a comparison-heavy predicate. A dedicated
       // evaluator keeps this measurement independent of the match-all list above.
       auto filterEvaluator = SmartListEvaluator{lib};
-      auto filteredExpr = SmartListSource{source, lib, filterEvaluator};
+      auto filteredExpr = SmartListSource{sourceLease, lib, filterEvaluator};
       filteredExpr.setExpression(kHeavyFilter);
 
       auto const filterStart = std::chrono::steady_clock::now();
@@ -1121,7 +1124,7 @@ namespace ao::rt::test
 
       // 2c. Large IN-list filter.
       auto inEvaluator = SmartListEvaluator{lib};
-      auto filteredIn = SmartListSource{source, lib, inEvaluator};
+      auto filteredIn = SmartListSource{sourceLease, lib, inEvaluator};
       filteredIn.setExpression(makeLargeInFilter());
 
       auto const inStart = std::chrono::steady_clock::now();
@@ -1210,8 +1213,8 @@ namespace ao::rt::test
 
     std::chrono::milliseconds measureProjectionSortFieldDuration(ScaleBench& bench, TrackSortField field)
     {
-      auto source = BenchmarkTrackSource{bench.ids};
-      auto proj = LiveTrackListProjection{ViewId{1}, source, bench.libraryFixture.library()};
+      auto sourcePtr = std::make_shared<BenchmarkTrackSource>(bench.ids);
+      auto proj = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.libraryFixture.library()};
 
       auto const start = std::chrono::steady_clock::now();
       proj.setPresentation(TrackPresentationSpec{
@@ -1224,8 +1227,8 @@ namespace ao::rt::test
     std::chrono::milliseconds measureProjectionPresentationDuration(ScaleBench& bench,
                                                                     TrackPresentationSpec const& spec)
     {
-      auto source = BenchmarkTrackSource{bench.ids};
-      auto proj = LiveTrackListProjection{ViewId{1}, source, bench.libraryFixture.library()};
+      auto sourcePtr = std::make_shared<BenchmarkTrackSource>(bench.ids);
+      auto proj = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.libraryFixture.library()};
 
       auto const start = std::chrono::steady_clock::now();
       proj.setPresentation(spec);

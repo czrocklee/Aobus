@@ -22,13 +22,14 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
     auto const trackId = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "List Track"});
+    env.cachePtr->reloadAllTracks();
     auto const listId = ao::test::requireValue(env.writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Manual",
       .trackIds = {trackId},
     }));
 
-    auto const result = service.createView({}, true);
+    auto const result = env.requireView(service);
 
     auto listChanged = kInvalidListId;
     auto sub = service.onListChanged([&](auto const& ev) { listChanged = ev.listId; });
@@ -36,7 +37,7 @@ namespace ao::rt::test
     auto projectionChanged = TrackListProjectionChanged{};
     auto projectionSub = service.onProjectionChanged([&](auto const& ev) { projectionChanged = ev; });
 
-    service.openListInView(result.viewId, listId);
+    REQUIRE(service.openListInView(result.viewId, listId));
     auto const snap = service.trackListState(result.viewId);
     auto const projectionPtr = service.trackListProjection(result.viewId);
 
@@ -48,7 +49,37 @@ namespace ao::rt::test
     REQUIRE(projectionPtr->size() == 1);
     CHECK(projectionPtr->trackIdAt(0) == trackId);
 
-    REQUIRE_NOTHROW(service.openListInView(ViewId{999}, listId));
+    auto const missingView = service.openListInView(ViewId{999}, listId);
+    REQUIRE_FALSE(missingView);
+    CHECK(missingView.error().code == Error::Code::NotFound);
+  }
+
+  TEST_CASE("ViewService - failed list switch leaves state projection and events unchanged",
+            "[runtime][unit][view][list]")
+  {
+    auto env = ViewServiceFixture{};
+    auto service = env.makeService();
+    auto const created = env.requireView(service);
+    auto const before = service.trackListState(created.viewId);
+    auto const projectionPtr = service.trackListProjection(created.viewId);
+    std::int32_t listChangedCount = 0;
+    std::int32_t projectionChangedCount = 0;
+    auto const listSub = service.onListChanged([&](auto const&) { ++listChangedCount; });
+    auto const projectionSub = service.onProjectionChanged([&](auto const&) { ++projectionChangedCount; });
+
+    auto const result = service.openListInView(created.viewId, ListId{999999});
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotFound);
+    auto const after = service.trackListState(created.viewId);
+    CHECK(after.listId == before.listId);
+    CHECK(after.filterExpression == before.filterExpression);
+    CHECK(after.presentation == before.presentation);
+    CHECK(after.revision == before.revision);
+    CHECK(service.trackListProjection(created.viewId) == projectionPtr);
+    CHECK(listChangedCount == 0);
+    CHECK(projectionChangedCount == 0);
+    CHECK(service.listViews().size() == 1);
   }
 
   TEST_CASE("ViewService - setFilter updates filter state and projection", "[runtime][unit][view][filter]")
@@ -59,7 +90,7 @@ namespace ao::rt::test
     env.cachePtr->reloadAllTracks();
 
     auto service = env.makeService();
-    auto const result = service.createView({}, true);
+    auto const result = env.requireView(service);
 
     auto filterStr = std::string{};
     auto filterSub = service.onFilterChanged([&](auto const& ev) { filterStr = ev.filterExpression; });
@@ -84,7 +115,7 @@ namespace ao::rt::test
 
     SECTION("setting a new filter expression creates adHocSource")
     {
-      service.setFilter(result.viewId, "$year > 2000");
+      REQUIRE(service.setFilter(result.viewId, "$year > 2000"));
       auto const snap = service.trackListState(result.viewId);
       auto const filteredProjectionPtr = service.trackListProjection(result.viewId);
 
@@ -98,22 +129,22 @@ namespace ao::rt::test
       REQUIRE(filteredProjectionPtr->size() == 1);
       CHECK(filteredProjectionPtr->trackIdAt(0) == newTrackId);
 
-      service.setFilter(result.viewId, "$year > 2025");
+      REQUIRE(service.setFilter(result.viewId, "$year > 2025"));
       auto const snap2 = service.trackListState(result.viewId);
       auto const updatedFilteredProjectionPtr = service.trackListProjection(result.viewId);
       CHECK(snap2.filterExpression == "$year > 2025");
       CHECK(filterStr == "$year > 2025");
-      CHECK(projectionChangedCount == 1);
+      CHECK(projectionChangedCount == 2);
       REQUIRE(updatedFilteredProjectionPtr != nullptr);
-      CHECK(updatedFilteredProjectionPtr == filteredProjectionPtr);
+      CHECK(updatedFilteredProjectionPtr != filteredProjectionPtr);
       CHECK(updatedFilteredProjectionPtr->size() == 0);
 
-      service.setFilter(result.viewId, "");
+      REQUIRE(service.setFilter(result.viewId, ""));
       auto const snap3 = service.trackListState(result.viewId);
       auto const unfilteredProjectionPtr = service.trackListProjection(result.viewId);
       CHECK(snap3.filterExpression.empty());
       CHECK(filterStr.empty());
-      CHECK(projectionChangedCount == 2);
+      CHECK(projectionChangedCount == 3);
       REQUIRE(unfilteredProjectionPtr != nullptr);
       CHECK(unfilteredProjectionPtr != filteredProjectionPtr);
       REQUIRE(unfilteredProjectionPtr->size() == 2);
@@ -123,7 +154,9 @@ namespace ao::rt::test
 
     SECTION("invalid view ID is safe")
     {
-      REQUIRE_NOTHROW(service.setFilter(ViewId{999}, "foo"));
+      auto const missingView = service.setFilter(ViewId{999}, "foo");
+      REQUIRE_FALSE(missingView);
+      CHECK(missingView.error().code == Error::Code::NotFound);
     }
   }
 
@@ -141,14 +174,14 @@ namespace ao::rt::test
     }));
 
     auto service = env.makeService();
-    auto const result = service.createView({.filterExpression = "$year > 2000"}, true);
+    auto const result = env.requireView(service, {.filterExpression = "$year > 2000"});
     auto const initialProjectionPtr = service.trackListProjection(result.viewId);
 
     REQUIRE(initialProjectionPtr != nullptr);
     REQUIRE(initialProjectionPtr->size() == 1);
     CHECK(initialProjectionPtr->trackIdAt(0) == newTrackId);
 
-    service.openListInView(result.viewId, oldListId);
+    REQUIRE(service.openListInView(result.viewId, oldListId));
     auto const snap = service.trackListState(result.viewId);
     auto const projectionPtr = service.trackListProjection(result.viewId);
 

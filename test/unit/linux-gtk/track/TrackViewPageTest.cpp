@@ -18,6 +18,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>
+#include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -82,10 +83,11 @@ namespace ao::gtk::test
 
     SECTION("album grouped section header reserves a fixed cover slot")
     {
-      auto source = rt::test::MutableTrackSource{};
-      source.addInitial(addAlbumTrack(runtime.musicLibrary(), "Album"));
+      auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
+      sourcePtr->addInitial(addAlbumTrack(runtime.musicLibrary(), "Album"));
 
-      auto projectionPtr = std::make_shared<rt::LiveTrackListProjection>(rt::ViewId{1}, source, runtime.musicLibrary());
+      auto projectionPtr = std::make_shared<rt::LiveTrackListProjection>(
+        rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
       auto presentation = rt::TrackPresentationSpec{.groupBy = rt::TrackGroupKey::Album};
       projectionPtr->setPresentation(presentation);
       modelPtr->bindProjection(projectionPtr);

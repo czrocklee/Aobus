@@ -10,6 +10,7 @@
 #include "layout/component/track/TrackDetailUndo.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
@@ -387,7 +388,8 @@ namespace ao::gtk::layout::test
       library::test::addTrack(musicLibrary, {.title = "First", .customMetadata = {{"Mood", "Bright"}}});
     auto const secondTrackId = library::test::addTrack(musicLibrary, {.title = "Second"});
 
-    auto const reply = runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
+    auto const reply =
+      ao::test::requireValue(runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId}));
     runtime.workspace().setFocusedView(reply.viewId);
     runtime.views().setSelection(reply.viewId, {firstTrackId});
     drainGtkEvents();
@@ -425,7 +427,8 @@ namespace ao::gtk::layout::test
     auto const trackId =
       library::test::addTrack(musicLibrary, {.title = "Undo Button Target", .customMetadata = {{"Mood", "Bright"}}});
 
-    auto const reply = runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
+    auto const reply =
+      ao::test::requireValue(runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId}));
     runtime.workspace().setFocusedView(reply.viewId);
     runtime.views().setSelection(reply.viewId, {trackId});
     drainGtkEvents();
@@ -469,7 +472,8 @@ namespace ao::gtk::layout::test
     auto const trackId =
       library::test::addTrack(musicLibrary, {.title = "Add Target", .customMetadata = {{"Mood", "Bright"}}});
 
-    auto const reply = runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
+    auto const reply =
+      ao::test::requireValue(runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId}));
     runtime.workspace().setFocusedView(reply.viewId);
     runtime.views().setSelection(reply.viewId, {trackId});
     drainGtkEvents();
@@ -537,7 +541,7 @@ namespace ao::gtk::layout::test
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto pageHost = TrackPageHost{stack, runtime, tagEditController, listNavigation, layoutStore};
 
-    runtime.workspace().navigateTo(rt::kAllTracksListId);
+    REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
     drainGtkEvents();
 
     auto transaction = library.readTransaction();

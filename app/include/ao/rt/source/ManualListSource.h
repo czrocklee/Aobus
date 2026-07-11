@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
 #include "TrackSource.h"
+#include "TrackSourceLease.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/Subscription.h>
+
+#include <boost/unordered/unordered_flat_map.hpp>
 
 #include <cstddef>
+#include <functional>
 #include <optional>
 #include <span>
 #include <vector>
@@ -18,24 +23,23 @@ namespace ao::library
 
 namespace ao::rt
 {
-  class TrackSource;
-}
+  struct ManualStoredRemoveRange;
+  struct ManualTracksInsert;
+  struct ManualTracksMove;
+  struct ManualTracksRemove;
 
-namespace ao::rt
-{
   /**
-   * ManualListSource - A TrackSource that holds a manually curated set of tracks.
+   * A manually ordered source whose stored intent is filtered by a parent.
    *
-   * It also tracks a source TrackSource to ensure its members still exist
-   * and are visible in that source.
+   * The stored order is canonical and independent from parent visibility. The
+   * effective TrackSource snapshot is the stored order intersected with the
+   * current parent membership, so a temporarily hidden track returns to its
+   * original manual position when it re-enters the parent.
    */
-  class ManualListSource final
-    : public TrackSource
-    , public TrackSourceObserver
+  class ManualListSource final : public TrackSource
   {
   public:
-    explicit ManualListSource(library::ListView const& view, TrackSource* source = nullptr);
-    explicit ManualListSource();
+    ManualListSource(library::ListView const& view, TrackSourceLease parentLease);
     ~ManualListSource() override;
 
     ManualListSource(ManualListSource const&) = delete;
@@ -45,29 +49,38 @@ namespace ao::rt
 
     void reloadFromListView(library::ListView const& view);
 
-    // TrackSource interface
-    std::size_t size() const override { return _trackIds.size(); }
-    TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
+    // Internal exact-operation entry points used by TrackSourceCache.
+    void applyManualTracksInsert(ManualTracksInsert const& operation);
+    void applyManualTracksRemove(ManualTracksRemove const& operation);
+    void applyManualTracksMove(ManualTracksMove const& operation);
+
+    std::span<TrackId const> storedTrackIds() const noexcept { return _storedTrackIds; }
+
+    std::size_t size() const override { return _effectiveTrackIds.size(); }
+    TrackId trackIdAt(std::size_t index) const override { return _effectiveTrackIds.at(index); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
-
-    // TrackSourceObserver interface
-    void handleReset() override;
-    void handleInserted(TrackId id, std::size_t index) override;
-    void handleUpdated(TrackId id, std::size_t index) override;
-    void handleRemoved(TrackId id, std::size_t index) override;
-
-    void handleBulkInserted(std::span<TrackId const> ids) override;
-    void handleBulkUpdated(std::span<TrackId const> ids) override;
-    void handleBulkRemoved(std::span<TrackId const> ids) override;
 
     bool contains(TrackId id) const;
 
-    TrackSource* source() const noexcept { return _source; }
-    std::vector<TrackId>& trackIds() noexcept { return _trackIds; }
-    std::vector<TrackId> const& trackIds() const noexcept { return _trackIds; }
-
   private:
-    std::vector<TrackId> _trackIds;
-    TrackSource* _source = nullptr;
+    using TrackIndexMap = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>;
+
+    void ensureLive() const;
+    void loadStoredTracks(library::ListView const& view);
+    void rebuildStoredIndex();
+    void rebuildEffectiveTracks();
+    std::vector<TrackId> validateStoredRemovals(std::span<ManualStoredRemoveRange const> removals) const;
+    void eraseStoredRemovals(std::span<ManualStoredRemoveRange const> removals);
+    void publishVisibilityDelta(std::vector<TrackId> const& previousEffective,
+                                std::span<TrackId const> updatedTrackIds = {});
+    void publishExactMoveDelta(std::vector<TrackId> const& previousEffective, std::span<TrackId const> movedTrackIds);
+    void handleParentBatch(TrackSourceDeltaBatch const& batch);
+
+    TrackSourceLease _parentLease;
+    std::vector<TrackId> _storedTrackIds;
+    TrackIndexMap _storedIndexByTrackId;
+    std::vector<TrackId> _effectiveTrackIds;
+    TrackIndexMap _effectiveIndexByTrackId;
+    Subscription _parentSubscription;
   };
 } // namespace ao::rt

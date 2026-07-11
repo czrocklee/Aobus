@@ -4,15 +4,18 @@
 #pragma once
 
 #include "TrackSource.h"
+#include "TrackSourceLease.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/query/PlanEvaluator.h>
 
+#include <boost/unordered/unordered_flat_map.hpp>
+
 #include <cstddef>
-#include <flat_set>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ao::library
 {
@@ -37,8 +40,10 @@ namespace ao::rt
   class SmartListSource final : public TrackSource
   {
   public:
-    SmartListSource(TrackSource& source, library::MusicLibrary& ml, SmartListEvaluator& evaluator);
+    SmartListSource(TrackSourceLease sourceLease, library::MusicLibrary& ml, SmartListEvaluator& evaluator);
     ~SmartListSource() override;
+
+    using TrackSource::notifyUpdated;
 
     SmartListSource(SmartListSource const&) = delete;
     SmartListSource& operator=(SmartListSource const&) = delete;
@@ -50,19 +55,15 @@ namespace ao::rt
 
     // TrackSource interface
     std::size_t size() const override { return _members.size(); }
-    TrackId trackIdAt(std::size_t index) const override
-    {
-      return *(_members.begin() + static_cast<std::ptrdiff_t>(index));
-    }
+    TrackId trackIdAt(std::size_t index) const override { return _members.at(index); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
-    using TrackSource::notifyUpdated;
     void notifyUpdated(TrackId id) override;
 
     bool hasError() const { return _current.optError.has_value(); }
     std::optional<Error> const& error() const { return _current.optError; }
     std::string const& expression() const { return _current.expression; }
-    TrackSource& source() const { return _source; }
+    TrackSource& source() const { return _sourceLease.source(); }
 
   private:
     friend class SmartListEvaluator;
@@ -76,12 +77,15 @@ namespace ao::rt
 
     void stageExpression(std::string expr);
     void applyStagedState();
+    void replaceMembers(std::vector<TrackId> members);
+    void rebuildMemberIndex();
 
-    TrackSource& _source;
+    TrackSourceLease _sourceLease;
     library::MusicLibrary& _ml;
     SmartListEvaluator* _evaluator = nullptr;
 
-    std::flat_set<TrackId> _members;
+    std::vector<TrackId> _members;
+    boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>> _memberIndex;
     QueryState _current;
     query::PlanEvaluator _planEvaluator;
 

@@ -14,6 +14,7 @@
 #include <giomm/private/listmodel_p.h>
 #include <glib-object.h>
 #include <glib.h>
+#include <glibmm/main.h>
 #include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
 #include <gsl-lite/gsl-lite.hpp>
@@ -71,18 +72,7 @@ namespace ao::gtk
   void TrackListModel::bindProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr)
   {
     _projectionSub.reset();
-
-    auto const oldSize = static_cast<::guint>(_modelSize);
-    auto const newSize = static_cast<::guint>(projectionPtr->size());
-
     _projectionPtr = std::move(projectionPtr);
-    _modelSize = newSize;
-
-    if (oldSize != newSize || oldSize > 0)
-    {
-      notifyReset(oldSize, newSize);
-    }
-
     _projectionSub = _projectionPtr->subscribe(std::bind_front(&TrackListModel::applyDeltaBatch, this));
   }
 
@@ -188,12 +178,22 @@ namespace ao::gtk
   {
     auto const timer = rt::ScopedTimer{"TrackListModel::applyDeltas"};
 
+    gsl_Expects(_projectionPtr != nullptr);
+    gsl_Expects(rt::validateTrackListProjectionDeltaBatch(batch, _modelSize));
+
+    if (std::holds_alternative<rt::ProjectionSourceInvalidated>(batch.deltas.front()))
+    {
+      applySourceInvalidatedDelta();
+      return;
+    }
+
     for (auto const& delta : batch.deltas)
     {
       std::visit(utility::makeVisitor([this](rt::ProjectionReset const&) { applyResetDelta(); },
                                       std::bind_front(&TrackListModel::applyInsertRange, this),
                                       std::bind_front(&TrackListModel::applyRemoveRange, this),
-                                      std::bind_front(&TrackListModel::applyUpdateRange, this)),
+                                      std::bind_front(&TrackListModel::applyUpdateRange, this),
+                                      [](rt::ProjectionSourceInvalidated const&) { gsl_Expects(false); }),
                  delta);
     }
 
@@ -206,6 +206,23 @@ namespace ao::gtk
     auto const oldSize = static_cast<::guint>(_modelSize);
     _modelSize = newSize;
     notifyReset(oldSize, newSize);
+  }
+
+  void TrackListModel::applySourceInvalidatedDelta()
+  {
+    auto const oldSize = static_cast<::guint>(_modelSize);
+
+    _projectionSub.reset();
+    auto invalidatedProjectionPtr = std::move(_projectionPtr);
+
+    // The callback may hold the model's last projection owner while the
+    // projection is still emitting. Release that owner after this stack unwinds.
+    Glib::signal_idle().connect_once(
+      [invalidatedProjectionPtr = std::move(invalidatedProjectionPtr)] mutable
+      { [[maybe_unused]] auto deferredProjectionPtr = std::move(invalidatedProjectionPtr); });
+
+    _modelSize = 0;
+    notifyReset(oldSize, 0);
   }
 
   void TrackListModel::applyInsertRange(rt::ProjectionInsertRange const& delta)

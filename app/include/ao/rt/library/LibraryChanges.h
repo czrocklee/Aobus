@@ -10,10 +10,56 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
 {
+  struct ManualStoredRemoveRange final
+  {
+    std::size_t start = 0;
+    std::vector<TrackId> trackIds{};
+
+    bool operator==(ManualStoredRemoveRange const&) const = default;
+  };
+
+  struct ManualTracksInsert final
+  {
+    std::size_t storedIndex = 0;
+    std::vector<TrackId> trackIds{};
+
+    bool operator==(ManualTracksInsert const&) const = default;
+  };
+
+  struct ManualTracksRemove final
+  {
+    std::vector<ManualStoredRemoveRange> removals{};
+
+    bool operator==(ManualTracksRemove const&) const = default;
+  };
+
+  struct ManualTracksMove final
+  {
+    std::vector<ManualStoredRemoveRange> removals{};
+    std::size_t insertionIndexAfterRemoval = 0;
+    std::vector<TrackId> insertedTrackIds{};
+
+    bool operator==(ManualTracksMove const&) const = default;
+  };
+
+  struct ManualTracksReset final
+  {
+    bool operator==(ManualTracksReset const&) const = default;
+  };
+
+  struct ManualListContentChange final
+  {
+    ListId listId = kInvalidListId;
+    std::variant<ManualTracksInsert, ManualTracksRemove, ManualTracksMove, ManualTracksReset> operation{};
+
+    bool operator==(ManualListContentChange const&) const = default;
+  };
+
   class LibraryTaskService;
   class LibraryWriter;
 
@@ -24,6 +70,7 @@ namespace ao::rt
     {
       std::vector<ListId> upserted{};
       std::vector<ListId> deleted{};
+      std::vector<ManualListContentChange> manualContentChanges{};
     };
 
     struct TrackCollectionChanged final
@@ -58,7 +105,9 @@ namespace ao::rt
 
     void notifyTracksMutated(std::vector<TrackId> trackIds);
     void notifyTrackCollectionChanged(std::vector<TrackId> inserted, std::vector<TrackId> deleted);
-    void notifyListsMutated(std::vector<ListId> upserted, std::vector<ListId> deleted);
+    void notifyListsMutated(std::vector<ListId> upserted,
+                            std::vector<ListId> deleted,
+                            std::vector<ManualListContentChange> manualContentChanges = {});
     void notifyLibraryTaskCompleted(std::size_t count);
     void notifyLibraryTaskProgress(LibraryTaskProgressUpdated progress);
 

@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
 #include <variant>
@@ -54,8 +55,14 @@ namespace ao::rt
     TrackRowRange range{};
   };
 
-  using TrackListProjectionDelta =
-    std::variant<ProjectionReset, ProjectionInsertRange, ProjectionRemoveRange, ProjectionUpdateRange>;
+  struct ProjectionSourceInvalidated final
+  {};
+
+  using TrackListProjectionDelta = std::variant<ProjectionReset,
+                                                ProjectionInsertRange,
+                                                ProjectionRemoveRange,
+                                                ProjectionUpdateRange,
+                                                ProjectionSourceInvalidated>;
 
   struct TrackListProjectionDeltaBatch final
   {
@@ -66,6 +73,65 @@ namespace ao::rt
     // (rare) spill to the heap transparently.
     boost::container::small_vector<TrackListProjectionDelta, 1> deltas{};
   };
+
+  /**
+   * Validates sequential projection coordinates against an initial row count.
+   *
+   * Reset and source invalidation are valid only as singleton batches. Every
+   * regular range is interpreted after the ranges that precede it.
+   */
+  inline bool validateTrackListProjectionDeltaBatch(TrackListProjectionDeltaBatch const& batch,
+                                                    std::size_t initialSize) noexcept
+  {
+    if (batch.deltas.empty())
+    {
+      return false;
+    }
+
+    if (std::holds_alternative<ProjectionReset>(batch.deltas.front()) ||
+        std::holds_alternative<ProjectionSourceInvalidated>(batch.deltas.front()))
+    {
+      return batch.deltas.size() == 1;
+    }
+
+    auto size = initialSize;
+
+    for (auto const& delta : batch.deltas)
+    {
+      if (auto const* insertion = std::get_if<ProjectionInsertRange>(&delta); insertion != nullptr)
+      {
+        if (insertion->range.count == 0 || insertion->range.start > size ||
+            insertion->range.count > std::numeric_limits<std::size_t>::max() - size)
+        {
+          return false;
+        }
+
+        size += insertion->range.count;
+        continue;
+      }
+
+      if (auto const* removal = std::get_if<ProjectionRemoveRange>(&delta); removal != nullptr)
+      {
+        if (removal->range.count == 0 || removal->range.start > size ||
+            removal->range.count > size - removal->range.start)
+        {
+          return false;
+        }
+
+        size -= removal->range.count;
+        continue;
+      }
+
+      if (auto const* update = std::get_if<ProjectionUpdateRange>(&delta);
+          update == nullptr || update->range.count == 0 || update->range.start > size ||
+          update->range.count > size - update->range.start)
+      {
+        return false;
+      }
+    }
+
+    return true;
+  }
 
   class TrackListProjection
   {

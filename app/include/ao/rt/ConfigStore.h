@@ -38,6 +38,7 @@ namespace ao::rt
 
     Result<> flush();
     Result<bool> contains(std::string_view group);
+    Result<bool> removeGroup(std::string_view group);
 
     template<typename T>
     void save(std::string_view group, T const& obj)
@@ -104,6 +105,38 @@ namespace ao::rt
           {
             return makeError(
               Error::Code::FormatRejected, std::format("Failed to decode config key '{}': {}", group, e.what()));
+          }
+        }
+      }
+
+      return {};
+    }
+
+    /** Strict recursive aggregate/vector decoding for explicitly versioned payloads. */
+    template<typename T>
+    Result<> loadExact(std::string_view group, T& obj)
+    {
+      if (auto const result = ensureLoaded(); !result)
+      {
+        return result;
+      }
+
+      if (_root.is_map(0))
+      {
+        if (auto const child = _root.rootref()[yaml::toCsubstr(group)]; child.readable())
+        {
+          try
+          {
+            if (!yaml::readExact(child, obj))
+            {
+              return makeError(
+                Error::Code::FormatRejected, std::format("Failed to decode exact config key '{}'", group));
+            }
+          }
+          catch (std::exception const& e)
+          {
+            return makeError(
+              Error::Code::FormatRejected, std::format("Failed to decode exact config key '{}': {}", group, e.what()));
           }
         }
       }

@@ -8,6 +8,7 @@
 #include "playback/TransportButton.h"
 #include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -31,6 +32,16 @@ namespace ao::gtk::layout
       return *ctx.playback.commandSurface;
     }
 
+    rt::PlaybackSequenceService& playbackSequence(LayoutContext& ctx)
+    {
+      if (ctx.playback.sequence == nullptr)
+      {
+        throwException<Exception>("TransportButtonComponent: playback sequence is not bound");
+      }
+
+      return *ctx.playback.sequence;
+    }
+
     /**
      * @brief Generic transport button component.
      */
@@ -39,6 +50,7 @@ namespace ao::gtk::layout
     public:
       TransportButtonComponent(LayoutContext& ctx, LayoutNode const& node, TransportButton::Action action)
         : _button{ctx.runtime.playback(),
+                  playbackSequence(ctx),
                   commandSurface(ctx),
                   action,
                   node.propertyOr<bool>("showLabel", false),

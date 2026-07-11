@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/rt/TrackMutation.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -37,11 +38,45 @@ namespace ao::rt
   struct UpdateListReply final
   {
     bool changed = false;
+    bool trackOrderChanged = false;
     std::vector<ListFieldChange> fieldChanges{};
     std::vector<TrackId> addedTrackIds{};
     std::vector<TrackId> removedTrackIds{};
 
     bool operator==(UpdateListReply const&) const = default;
+  };
+
+  struct InsertManualListTracksReply final
+  {
+    bool changed = false;
+    std::size_t insertionIndex = 0;
+    std::vector<TrackId> insertedTrackIds{};
+    std::vector<TrackId> duplicateRequest{};
+    std::vector<TrackId> alreadyPresent{};
+    std::vector<TrackId> missingTrack{};
+
+    bool operator==(InsertManualListTracksReply const&) const = default;
+  };
+
+  struct RemoveManualListTracksReply final
+  {
+    bool changed = false;
+    std::vector<TrackId> removedTrackIds{};
+    std::vector<TrackId> duplicateRequest{};
+    std::vector<TrackId> notPresent{};
+
+    bool operator==(RemoveManualListTracksReply const&) const = default;
+  };
+
+  struct MoveManualListTracksReply final
+  {
+    bool changed = false;
+    std::size_t insertionIndexAfterRemoval = 0;
+    std::vector<TrackId> selectedTrackIds{};
+    std::vector<TrackId> duplicateRequest{};
+    std::vector<TrackId> notPresent{};
+
+    bool operator==(MoveManualListTracksReply const&) const = default;
   };
 
   struct DeleteListReply final
@@ -111,6 +146,20 @@ namespace ao::rt
     // another error when the draft is invalid.
     Result<UpdateListReply> updateList(ListDraft const& draft);
     Result<UpdateListReply> previewUpdateList(ListDraft const& draft);
+    Result<InsertManualListTracksReply> insertManualListTracks(ListId listId,
+                                                               std::size_t insertionIndex,
+                                                               std::span<TrackId const> trackIds);
+    Result<InsertManualListTracksReply> previewInsertManualListTracks(ListId listId,
+                                                                      std::size_t insertionIndex,
+                                                                      std::span<TrackId const> trackIds);
+    Result<RemoveManualListTracksReply> removeManualListTracks(ListId listId, std::span<TrackId const> trackIds);
+    Result<RemoveManualListTracksReply> previewRemoveManualListTracks(ListId listId, std::span<TrackId const> trackIds);
+    Result<MoveManualListTracksReply> moveManualListTracks(ListId listId,
+                                                           std::span<TrackId const> trackIds,
+                                                           std::size_t insertionIndexAfterRemoval);
+    Result<MoveManualListTracksReply> previewMoveManualListTracks(ListId listId,
+                                                                  std::span<TrackId const> trackIds,
+                                                                  std::size_t insertionIndexAfterRemoval);
     Result<DeleteListReply> deleteList(ListId listId);
     Result<DeleteListReply> previewDeleteList(ListId listId);
 

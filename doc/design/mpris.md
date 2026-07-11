@@ -138,8 +138,8 @@ No D-Bus callback may touch audio engine internals or block on decoder work.
    they do not define command semantics.
 2. External protocols talk to `PlaybackCommandSurface`, never to the layout
    action registry.
-3. Queue consistency under playback-mode changes is guaranteed by
-   `PlaybackQueueSession` subscriptions to `PlaybackService` mode events.
+3. `PlaybackSequenceService` owns repeat/shuffle modes and live succession;
+   MPRIS observes its mode events and never reconstructs playback order.
 4. Command availability has one owner and one change event:
    `PlaybackCommandSurface::onAvailabilityChanged()`.
 5. View models describe presentation. Command execution and enablement live in

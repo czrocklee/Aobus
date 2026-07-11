@@ -14,13 +14,16 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <expected>
 #include <future>
 #include <memory>
 #include <mutex>
+#include <semaphore>
 #include <string_view>
 #include <thread>
 #include <utility>
@@ -158,6 +161,38 @@ namespace ao::audio::test
       bool _blockStop = false;
       bool _stopEntered = false;
       bool _releaseStop = false;
+    };
+
+    class [[nodiscard]] SemaphoreReleaseGuard final
+    {
+    public:
+      explicit SemaphoreReleaseGuard(std::binary_semaphore& semaphore)
+        : _semaphore{semaphore}
+      {
+      }
+
+      ~SemaphoreReleaseGuard()
+      {
+        if (_armed)
+        {
+          _semaphore.release();
+        }
+      }
+
+      void release()
+      {
+        _semaphore.release();
+        _armed = false;
+      }
+
+      SemaphoreReleaseGuard(SemaphoreReleaseGuard const&) = delete;
+      SemaphoreReleaseGuard& operator=(SemaphoreReleaseGuard const&) = delete;
+      SemaphoreReleaseGuard(SemaphoreReleaseGuard&&) = delete;
+      SemaphoreReleaseGuard& operator=(SemaphoreReleaseGuard&&) = delete;
+
+    private:
+      std::binary_semaphore& _semaphore;
+      bool _armed = true;
     };
   } // namespace
 
@@ -409,5 +444,164 @@ namespace ao::audio::test
     CHECK_FALSE(routeChanged.load(std::memory_order_acquire));
     CHECK_FALSE(blockingEngine.routeStatus().optAnchor);
     CHECK(blockingEngine.status().transport == Transport::Idle);
+  }
+
+  TEST_CASE("Engine - play and stop barriers suppress a materialized old-generation route",
+            "[audio][unit][engine][barrier]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto stateEntered = std::binary_semaphore{0};
+    auto stateRelease = std::binary_semaphore{0};
+    auto workerFlushed = std::binary_semaphore{0};
+    auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
+    auto releaseGuard = SemaphoreReleaseGuard{stateRelease};
+    auto routeCount = std::atomic<std::size_t>{0};
+
+    engine.setOnStateChanged(
+      [&]
+      {
+        stateEntered.release();
+        stateRelease.acquire();
+      });
+    engine.setOnRouteChanged([&](Engine::RouteStatus const&) { routeCount.fetch_add(1, std::memory_order_relaxed); });
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "current.flac"}));
+    auto const oldGeneration = engine.playbackGeneration();
+
+    backendRaw->emitRouteReady("old-anchor");
+    REQUIRE(stateEntered.try_acquire_for(std::chrono::seconds{5}));
+
+    auto barrier = Engine::PreparedCancellationBarrier{};
+
+    SECTION("successful explicit play")
+    {
+      auto preparedStart = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "replacement.flac"}));
+      REQUIRE(preparedStart);
+      auto receipt = engine.commitPlayback(std::move(*preparedStart));
+      REQUIRE(receipt);
+      barrier = receipt->cancellationBarrier;
+    }
+
+    SECTION("completed stop")
+    {
+      barrier = engine.stopWithBarrier();
+    }
+
+    REQUIRE(barrier.covers(oldGeneration));
+    releaseGuard.release();
+    engine.defer([&] { workerFlushed.release(); });
+    REQUIRE(workerFlushed.try_acquire_for(std::chrono::seconds{5}));
+    CHECK(routeCount.load(std::memory_order_relaxed) == 0);
+  }
+
+  TEST_CASE("Engine - play and stop barriers suppress a materialized old-generation track end",
+            "[audio][unit][engine][barrier]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto stateEntered = std::binary_semaphore{0};
+    auto stateRelease = std::binary_semaphore{0};
+    auto workerFlushed = std::binary_semaphore{0};
+    auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
+    auto releaseGuard = SemaphoreReleaseGuard{stateRelease};
+    auto endedCount = std::atomic<std::size_t>{0};
+
+    engine.setOnStateChanged(
+      [&]
+      {
+        stateEntered.release();
+        stateRelease.acquire();
+      });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedCount.fetch_add(1, std::memory_order_relaxed); });
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "current.flac"}));
+    auto const oldGeneration = engine.playbackGeneration();
+    auto* const target = backendRaw->target();
+    REQUIRE(target != nullptr);
+    auto output = std::array<std::byte, 200>{};
+    std::ignore = target->renderPcm(output);
+    REQUIRE(target->renderPcm(output).drained);
+
+    backendRaw->emitDrainComplete();
+    REQUIRE(stateEntered.try_acquire_for(std::chrono::seconds{5}));
+
+    auto barrier = Engine::PreparedCancellationBarrier{};
+
+    SECTION("successful explicit play")
+    {
+      auto preparedStart = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "replacement.flac"}));
+      REQUIRE(preparedStart);
+      auto receipt = engine.commitPlayback(std::move(*preparedStart));
+      REQUIRE(receipt);
+      barrier = receipt->cancellationBarrier;
+    }
+
+    SECTION("completed stop")
+    {
+      barrier = engine.stopWithBarrier();
+    }
+
+    REQUIRE(barrier.covers(oldGeneration));
+    releaseGuard.release();
+    engine.defer([&] { workerFlushed.release(); });
+    REQUIRE(workerFlushed.try_acquire_for(std::chrono::seconds{5}));
+    CHECK(endedCount.load(std::memory_order_relaxed) == 0);
+  }
+
+  TEST_CASE("Engine - play and stop barriers suppress a materialized old-generation failure",
+            "[audio][unit][engine][barrier]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto workerEntered = std::binary_semaphore{0};
+    auto workerRelease = std::binary_semaphore{0};
+    auto workerFlushed = std::binary_semaphore{0};
+    auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
+    auto releaseGuard = SemaphoreReleaseGuard{workerRelease};
+    auto failureCount = std::atomic<std::size_t>{0};
+
+    engine.setOnPlaybackFailure([&](Engine::PlaybackFailure const&)
+                                { failureCount.fetch_add(1, std::memory_order_relaxed); });
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "current.flac"}));
+
+    engine.defer(
+      [&]
+      {
+        workerEntered.release();
+        workerRelease.acquire();
+      });
+    REQUIRE(workerEntered.try_acquire_for(std::chrono::seconds{5}));
+
+    backendRaw->setOpenResult(
+      std::unexpected{Error{.code = Error::Code::IoError, .message = "queued old route failure"}});
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "old-failure.flac"}));
+    auto const failedGeneration = engine.playbackGeneration();
+    backendRaw->setOpenResult({});
+
+    auto barrier = Engine::PreparedCancellationBarrier{};
+
+    SECTION("successful explicit play")
+    {
+      auto preparedStart = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "replacement.flac"}));
+      REQUIRE(preparedStart);
+      auto receipt = engine.commitPlayback(std::move(*preparedStart));
+      REQUIRE(receipt);
+      barrier = receipt->cancellationBarrier;
+      CHECK(receipt->generation == engine.playbackGeneration());
+    }
+
+    SECTION("completed stop")
+    {
+      barrier = engine.stopWithBarrier();
+      CHECK(engine.transport() == Transport::Idle);
+    }
+
+    REQUIRE(barrier.covers(failedGeneration));
+    releaseGuard.release();
+    engine.defer([&] { workerFlushed.release(); });
+    REQUIRE(workerFlushed.try_acquire_for(std::chrono::seconds{5}));
+    CHECK(failureCount.load(std::memory_order_relaxed) == 0);
   }
 } // namespace ao::audio::test

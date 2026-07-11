@@ -4,13 +4,13 @@
 #include "tui/PlaybackActions.h"
 
 #include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/audio/AudioFixtureSupport.h"
-#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/runtime/PlaybackSequenceUiTestSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include "tui/TrackListEntry.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/PlaybackQueueService.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/VirtualListIds.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -34,62 +34,46 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackActions - playSelected starts the bounded selected track", "[tui][unit][playback]")
   {
-    auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
-    primeOutput(fixture);
-
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto first = library::test::TrackSpec{.title = "First", .artist = "One", .uri = fixturePath};
-    auto second = library::test::TrackSpec{.title = "Second", .artist = "Two", .uri = fixturePath};
-    auto const firstId = fixture.libraryFixture.addTrack(first);
-    auto const secondId = fixture.libraryFixture.addTrack(second);
+    auto fixture = rt::test::PlaybackSequenceUiFixture{};
+    fixture.makePlaybackReady();
+    auto const firstId = fixture.addPlayableTrack("First");
+    auto const secondId = fixture.addPlayableTrack("Second");
     auto const tracks = std::vector{trackEntry(firstId), trackEntry(secondId)};
-    auto queue = rt::PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
+    auto& sequence = fixture.runtime.playbackSequence();
+    auto& playback = fixture.runtime.playback();
 
-    CHECK(playSelected(queue, tracks, -4, ListId{7}));
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == firstId);
-    CHECK(fixture.playbackService.state().nowPlaying.sourceListId == ListId{7});
-    CHECK(fixture.playbackService.state().nowPlaying.title == "First");
-    CHECK(queue.state().trackIds == std::vector{firstId, secondId});
-    REQUIRE(queue.state().optCurrentIndex);
-    CHECK(*queue.state().optCurrentIndex == 0);
+    CHECK(playSelected(sequence, tracks, -4, fixture.viewId));
+    CHECK(playback.state().nowPlaying.trackId == firstId);
+    CHECK(playback.state().nowPlaying.sourceListId == rt::kAllTracksListId);
+    CHECK(playback.state().nowPlaying.title == "First");
+    CHECK(sequence.state().currentTrackId == firstId);
 
-    CHECK(playSelected(queue, tracks, 12, ListId{8}));
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == secondId);
-    CHECK(fixture.playbackService.state().nowPlaying.sourceListId == ListId{8});
-    CHECK(fixture.playbackService.state().nowPlaying.title == "Second");
-    CHECK(queue.state().trackIds == std::vector{firstId, secondId});
-    REQUIRE(queue.state().optCurrentIndex);
-    CHECK(*queue.state().optCurrentIndex == 1);
+    CHECK(playSelected(sequence, tracks, 12, fixture.viewId));
+    CHECK(playback.state().nowPlaying.trackId == secondId);
+    CHECK(playback.state().nowPlaying.sourceListId == rt::kAllTracksListId);
+    CHECK(playback.state().nowPlaying.title == "Second");
+    CHECK(sequence.state().currentTrackId == secondId);
   }
 
   TEST_CASE("PlaybackActions - playSelected rejects an empty track list", "[tui][unit][playback]")
   {
-    auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
-    auto queue = rt::PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
+    auto fixture = rt::test::PlaybackSequenceUiFixture{};
 
-    CHECK_FALSE(playSelected(queue, {}, 0, ListId{7}));
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == kInvalidTrackId);
-    CHECK(fixture.playbackService.state().nowPlaying.sourceListId == kInvalidListId);
+    CHECK_FALSE(playSelected(fixture.runtime.playbackSequence(), {}, 0, fixture.viewId));
+    CHECK(fixture.runtime.playback().state().nowPlaying.trackId == kInvalidTrackId);
+    CHECK(fixture.runtime.playbackSequence().state().currentTrackId == kInvalidTrackId);
   }
 
   TEST_CASE("PlaybackActions - togglePlayback starts the selected track when idle", "[tui][unit][playback]")
   {
-    auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
-    primeOutput(fixture);
-
-    auto spec = library::test::TrackSpec{
-      .title = "Toggle Target",
-      .artist = "Switcher",
-      .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
-    };
-
-    auto const trackId = fixture.libraryFixture.addTrack(spec);
+    auto fixture = rt::test::PlaybackSequenceUiFixture{};
+    fixture.makePlaybackReady();
+    auto const trackId = fixture.addPlayableTrack("Toggle Target");
     auto const tracks = std::vector{trackEntry(trackId)};
-    auto queue = rt::PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
 
-    CHECK(togglePlayback(fixture.playbackService, queue, tracks, 0, ListId{9}));
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == trackId);
-    CHECK(fixture.playbackService.state().nowPlaying.title == "Toggle Target");
+    CHECK(togglePlayback(fixture.runtime.playback(), fixture.runtime.playbackSequence(), tracks, 0, fixture.viewId));
+    CHECK(fixture.runtime.playback().state().nowPlaying.trackId == trackId);
+    CHECK(fixture.runtime.playback().state().nowPlaying.title == "Toggle Target");
   }
 
   TEST_CASE("PlaybackActions - seekBy clamps negative relative seeks", "[tui][unit][playback]")

@@ -5,10 +5,6 @@
 #include "test/unit/TestUtils.h"
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/ViewService.h>
-#include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <catch2/catch_approx.hpp>
@@ -23,11 +19,8 @@ namespace ao::uimodel::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
-    auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
-    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
+    auto playback = PlaybackService{executor, libraryFixture.library(), notificationService};
 
     auto log = ao::test::RenderLog<VolumeViewState>{};
     auto viewModel = VolumeViewModel{playback, [&log](auto const& view) { log.render(view); }};

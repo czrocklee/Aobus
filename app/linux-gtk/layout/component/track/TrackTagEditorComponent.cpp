@@ -14,8 +14,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
-#include <ao/rt/source/TrackSource.h>
-#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -34,7 +32,7 @@ namespace ao::gtk::layout
     {
     public:
       TrackTagEditorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _writer{ctx.runtime.library().writer()}, _sources{ctx.runtime.sources()}
+        : _writer{ctx.runtime.library().writer()}
       {
         if (ctx.track.detailScope != nullptr)
         {
@@ -61,11 +59,6 @@ namespace ao::gtk::layout
                 APP_LOG_ERROR("Tag edit failed: {}", replyResult.error().message);
                 return;
               }
-
-              if (!replyResult->mutatedIds.empty())
-              {
-                _sources.allTracks().notifyUpdated(replyResult->mutatedIds);
-              }
             }
           });
       }
@@ -88,7 +81,6 @@ namespace ao::gtk::layout
 
       TagEditor _tagEditor;
       rt::LibraryWriter& _writer;
-      rt::TrackSourceCache& _sources;
       std::vector<TrackId> _currentTrackIds;
       sigc::scoped_connection _scopeConn;
     };

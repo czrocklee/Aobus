@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
-#include "TrackSource.h"
+#include "TrackSourceDelta.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/Subscription.h>
 
+#include <boost/container/small_vector.hpp>
 #include <boost/unordered/unordered_flat_map.hpp>
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <vector>
@@ -22,37 +25,16 @@ namespace ao::library
 namespace ao::rt
 {
   class SmartListSource;
-  class SmartListEvaluator;
-
-  // SourceObserver - handles source list events and dispatches to evaluator
-  class SourceObserver final : public TrackSourceObserver
-  {
-  public:
-    explicit SourceObserver(SmartListEvaluator& evaluator, TrackSource& source);
-
-    void handleReset() override;
-    void handleInserted(TrackId id, std::size_t index) override;
-    void handleUpdated(TrackId id, std::size_t index) override;
-    void handleRemoved(TrackId id, std::size_t index) override;
-
-    void handleBulkInserted(std::span<TrackId const> ids) override;
-    void handleBulkUpdated(std::span<TrackId const> ids) override;
-    void handleBulkRemoved(std::span<TrackId const> ids) override;
-
-    void handleSourceDestroyed() override;
-
-    void invalidate() { _valid = false; }
-
-  private:
-    SmartListEvaluator& _evaluator;
-    TrackSource& _source;
-    bool _valid = true;
-  };
+  class TrackSource;
 
   /**
-   * SmartListEvaluator - Batching expression evaluator for smart list filtering.
+   * Batches expression evaluation for every SmartListSource sharing an
+   * upstream TrackSource.
    *
-   * The evaluator coordinates batch evaluation of SmartListSources that share the same source.
+   * Each source bucket owns an ordered mirror of the upstream IDs. A complete
+   * upstream delta batch is replayed into that mirror before any dependent
+   * notification is published, so every derived list emits at most one atomic
+   * batch and remains a stable subsequence of upstream order.
    */
   class SmartListEvaluator final
   {
@@ -60,21 +42,19 @@ namespace ao::rt
     explicit SmartListEvaluator(library::MusicLibrary& ml);
     ~SmartListEvaluator();
 
-    // Disable copy/move
     SmartListEvaluator(SmartListEvaluator const&) = delete;
     SmartListEvaluator& operator=(SmartListEvaluator const&) = delete;
     SmartListEvaluator(SmartListEvaluator&&) = delete;
     SmartListEvaluator& operator=(SmartListEvaluator&&) = delete;
 
-    bool isAlive() const { return _alive; }
+    bool isAlive() const noexcept { return _alive; }
 
-    void registerList(TrackSource& source, SmartListSource& list);
-    void unregisterList(TrackSource& source, SmartListSource& list);
-
+    void registerList(SmartListSource& list);
+    void unregisterList(SmartListSource& list);
     void rebuild(SmartListSource& list);
 
-    // Notify evaluator that a track's data changed so it can re-evaluate filter membership
-    void notifyUpdated(TrackSource& source, TrackId trackId);
+    // Re-evaluates one upstream member after a metadata-only mutation.
+    void notifyUpdated(SmartListSource& list, TrackId trackId);
 
   private:
     enum class TrackLoadMode : std::uint8_t
@@ -84,37 +64,42 @@ namespace ao::rt
       Both,
     };
 
+    using TrackIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>;
+
     struct SourceBucket final
     {
       TrackSource* source = nullptr;
-      bool sourceAlive = true;
-      std::vector<SmartListSource*> lists;
-      std::unique_ptr<TrackSourceObserver> observerPtr;
+      std::vector<TrackId> upstreamTrackIds{};
+      TrackIndex upstreamIndex{};
+      std::vector<SmartListSource*> lists{};
+      Subscription subscription{};
+      bool invalidated = false;
     };
 
-    void evaluateAllLists(SourceBucket& bucket);
-    void evaluateDirtyLists(SourceBucket& bucket);
-    void evaluateLists(std::span<SmartListSource*> lists);
-    void evaluateMembers(TrackSource& source, std::span<SmartListSource*> lists, TrackLoadMode mode);
+    struct DerivedWork final
+    {
+      SmartListSource* list = nullptr;
+      std::vector<TrackId> oldMembers{};
+      std::vector<TrackId> members{};
+      TrackIndex memberIndex{};
+      boost::container::small_vector<TrackSourceDelta, 1> deltas{};
+      bool active = false;
+    };
 
+    void handleSourceBatch(TrackSource& source, TrackSourceDeltaBatch const& batch);
     void handleSourceReset(SourceBucket& bucket);
-    void handleSourceInserted(SourceBucket& bucket, TrackId id, std::size_t sourceIndex);
-    void handleSourceUpdated(SourceBucket& bucket, TrackId id, std::size_t sourceIndex);
-    void handleSourceRemoved(SourceBucket& bucket, TrackId id);
+    void handleRegularBatch(SourceBucket& bucket, TrackSourceDeltaBatch const& batch, bool verifyFinalSnapshot = true);
+    void handleSourceInvalidated(SourceBucket& bucket);
 
-    void handleSourceInserted(SourceBucket& bucket, std::span<TrackId const> ids);
-    void handleSourceUpdated(SourceBucket& bucket, std::span<TrackId const> ids);
-    void handleSourceRemoved(SourceBucket& bucket, std::span<TrackId const> ids);
+    void evaluateDirtyLists(SourceBucket& bucket);
+    void rebuildLists(SourceBucket& bucket, std::span<SmartListSource*> lists);
 
-    void handleSourceDestroyed(SourceBucket& bucket);
-
-    static TrackLoadMode unionMode(std::span<SmartListSource*> lists);
+    static TrackLoadMode unionMode(std::span<SmartListSource* const> lists);
 
     library::MusicLibrary& _ml;
     boost::unordered_flat_map<TrackSource*, std::unique_ptr<SourceBucket>> _buckets;
     bool _alive = true;
 
-    friend class SourceObserver;
     friend class SmartListSource;
   };
 } // namespace ao::rt

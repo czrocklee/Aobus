@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -20,6 +21,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 
 #include <algorithm>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -148,9 +150,9 @@ namespace ao::rt
         .canGoBack = navigationHistory.canGoBack(), .canGoForward = navigationHistory.canGoForward()});
     }
 
-    ViewId resolveOrCreateTargetView(NavigationTarget const& target,
-                                     ViewService& viewsSvc,
-                                     std::optional<TrackPresentationSpec> const& optPresentation)
+    Result<ViewId> resolveOrCreateTargetView(NavigationTarget const& target,
+                                             ViewService& viewsSvc,
+                                             std::optional<TrackPresentationSpec> const& optPresentation)
     {
       if (std::holds_alternative<ListId>(target))
       {
@@ -180,8 +182,14 @@ namespace ao::rt
           config.optPresentation = *optPresentation;
         }
 
-        auto const res = viewsSvc.createView(config, true);
-        return res.viewId;
+        auto result = viewsSvc.createView(config, true);
+
+        if (!result)
+        {
+          return std::unexpected{result.error()};
+        }
+
+        return result->viewId;
       }
 
       if (std::holds_alternative<FilteredListTarget>(target))
@@ -194,8 +202,14 @@ namespace ao::rt
           config.optPresentation = *optPresentation;
         }
 
-        auto const res = viewsSvc.createView(config, true);
-        return res.viewId;
+        auto result = viewsSvc.createView(config, true);
+
+        if (!result)
+        {
+          return std::unexpected{result.error()};
+        }
+
+        return result->viewId;
       }
 
       if (std::holds_alternative<GlobalViewKind>(target))
@@ -206,7 +220,7 @@ namespace ao::rt
         }
       }
 
-      return kInvalidViewId;
+      return makeError(Error::Code::InvalidInput, "Unsupported workspace navigation target");
     }
 
     void focusView(ViewId viewId)
@@ -239,7 +253,7 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    void restoreNavigationPoint(NavigationPoint const& point)
+    Result<ViewId> restoreNavigationPoint(NavigationPoint const& point)
     {
       // Find an existing non-destroyed view matching listId and filterExpression.
       auto matchingViewId = kInvalidViewId;
@@ -266,9 +280,23 @@ namespace ao::rt
 
       if (matchingViewId == kInvalidViewId)
       {
-        auto config = TrackListViewConfig{.listId = point.listId, .filterExpression = point.filterExpression};
-        auto const res = views.createView(config, true);
-        matchingViewId = res.viewId;
+        auto config = TrackListViewConfig{
+          .listId = point.listId,
+          .filterExpression = point.filterExpression,
+          .optPresentation = point.presentation,
+        };
+        auto result = views.createView(config, true);
+
+        if (!result)
+        {
+          return std::unexpected{result.error()};
+        }
+
+        matchingViewId = result->viewId;
+      }
+      else
+      {
+        views.setPresentation(matchingViewId, point.presentation);
       }
 
       if (!std::ranges::contains(layoutState.openViews, matchingViewId))
@@ -279,8 +307,7 @@ namespace ao::rt
       layoutState.activeViewId = matchingViewId;
       layoutState.revision++;
       focusedViewChangedSignal.emit(matchingViewId);
-
-      views.setPresentation(matchingViewId, point.presentation);
+      return matchingViewId;
     }
   };
 
@@ -326,19 +353,20 @@ namespace ao::rt
     }
   }
 
-  void WorkspaceService::navigateTo(NavigationTarget const& target, NavigationOptions const options)
+  Result<ViewId> WorkspaceService::navigateTo(NavigationTarget const& target, NavigationOptions const options)
   {
-    auto const targetViewId = _implPtr->resolveOrCreateTargetView(target, _implPtr->views, options.optPresentation);
+    auto targetResult = _implPtr->resolveOrCreateTargetView(target, _implPtr->views, options.optPresentation);
 
-    if (targetViewId == kInvalidViewId)
+    if (!targetResult)
     {
-      APP_LOG_DEBUG("WorkspaceService: Navigation failed to find or create target view");
-      return;
+      return std::unexpected{targetResult.error()};
     }
 
+    auto const targetViewId = *targetResult;
     APP_LOG_DEBUG("WorkspaceService: Navigating to viewId: {}", targetViewId.raw());
     _implPtr->focusView(targetViewId);
     _implPtr->commitActiveViewIfRequested(options);
+    return targetViewId;
   }
 
   void WorkspaceService::setActivePresentation(TrackPresentationSpec const& presentation,
@@ -387,13 +415,14 @@ namespace ao::rt
 
     // Navigate to AllTracks without recording.
     auto const allTracksTarget = NavigationTarget{ListId{kAllTracksListId}};
-    auto const targetViewId = _implPtr->resolveOrCreateTargetView(allTracksTarget, _implPtr->views, std::nullopt);
+    auto targetResult = _implPtr->resolveOrCreateTargetView(allTracksTarget, _implPtr->views, std::nullopt);
 
-    if (targetViewId == kInvalidViewId)
+    if (!targetResult)
     {
       return;
     }
 
+    auto const targetViewId = *targetResult;
     _implPtr->focusView(targetViewId);
 
     // Apply album presentation without recording.
@@ -409,34 +438,50 @@ namespace ao::rt
     _implPtr->commitActiveViewIfRequested({.recordHistory = true});
   }
 
-  bool WorkspaceService::goBack()
+  Result<ViewId> WorkspaceService::goBack()
   {
+    auto previousHistory = _implPtr->navigationHistory;
     auto optPoint = _implPtr->navigationHistory.back();
 
     if (!optPoint)
     {
-      return false;
+      return makeError(Error::Code::NotFound, "Workspace navigation history has no previous entry");
     }
 
     auto replay = ReplayScope{_implPtr->replayingNavigation};
-    _implPtr->restoreNavigationPoint(*optPoint);
+    auto result = _implPtr->restoreNavigationPoint(*optPoint);
+
+    if (!result)
+    {
+      _implPtr->navigationHistory = std::move(previousHistory);
+      return std::unexpected{result.error()};
+    }
+
     _implPtr->emitNavigationHistoryChanged();
-    return true;
+    return *result;
   }
 
-  bool WorkspaceService::goForward()
+  Result<ViewId> WorkspaceService::goForward()
   {
+    auto previousHistory = _implPtr->navigationHistory;
     auto optPoint = _implPtr->navigationHistory.forward();
 
     if (!optPoint)
     {
-      return false;
+      return makeError(Error::Code::NotFound, "Workspace navigation history has no forward entry");
     }
 
     auto replay = ReplayScope{_implPtr->replayingNavigation};
-    _implPtr->restoreNavigationPoint(*optPoint);
+    auto result = _implPtr->restoreNavigationPoint(*optPoint);
+
+    if (!result)
+    {
+      _implPtr->navigationHistory = std::move(previousHistory);
+      return std::unexpected{result.error()};
+    }
+
     _implPtr->emitNavigationHistoryChanged();
-    return true;
+    return *result;
   }
 
   bool WorkspaceService::canGoBack() const noexcept
@@ -524,7 +569,8 @@ namespace ao::rt
       state.openViews.push_back(TrackListViewConfig{.listId = viewState.listId,
                                                     .filterExpression = viewState.filterExpression,
                                                     .groupBy = viewState.groupBy,
-                                                    .sortBy = viewState.sortBy});
+                                                    .sortBy = viewState.sortBy,
+                                                    .optPresentation = viewState.presentation});
     }
 
     store.save("workspace", state);
@@ -535,31 +581,50 @@ namespace ao::rt
     }
   }
 
-  void WorkspaceService::restoreSession(ConfigStore& store)
+  Result<> WorkspaceService::restoreSession(ConfigStore& store)
   {
     auto state = WorkspaceSessionState{};
 
-    if (auto const res = store.load("workspace", state); !res)
+    if (auto const result = store.load("workspace", state); !result)
     {
-      if (res.error().code != Error::Code::NotFound)
+      if (result.error().code == Error::Code::NotFound)
       {
-        APP_LOG_WARN("WorkspaceService: Failed to restore session - {}", res.error().message);
+        return {};
       }
 
-      return;
+      return std::unexpected{result.error()};
     }
+
+    auto createdViewIds = std::vector<ViewId>{};
+    createdViewIds.reserve(state.openViews.size());
 
     for (auto const& viewConfig : state.openViews)
     {
-      auto const res = _implPtr->views.createView(viewConfig, true);
-      addView(res.viewId);
+      auto result = _implPtr->views.createView(viewConfig, true);
+
+      if (!result)
+      {
+        for (auto const viewId : createdViewIds)
+        {
+          _implPtr->views.destroyView(viewId);
+        }
+
+        return std::unexpected{result.error()};
+      }
+
+      createdViewIds.push_back(result->viewId);
+    }
+
+    for (auto const viewId : createdViewIds)
+    {
+      addView(viewId);
     }
 
     setCustomPresets(state.customPresets);
 
     auto focused = kInvalidViewId;
 
-    for (auto const viewId : _implPtr->layoutState.openViews)
+    for (auto const viewId : createdViewIds)
     {
       if (auto const& vs = _implPtr->views.trackListState(viewId); vs.listId == state.activeListId)
       {
@@ -585,5 +650,6 @@ namespace ao::rt
     // can navigate back to it after moving elsewhere.  canGoBack remains
     // false until a subsequent navigateTo commits a second point.
     _implPtr->commitActiveViewIfRequested({.recordHistory = true});
+    return {};
   }
 } // namespace ao::rt

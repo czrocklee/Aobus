@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "runtime/PlaybackSessionState.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/BackendTestSupport.h"
 #include <ao/CoreIds.h>
@@ -12,20 +13,19 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/audio/Player.h>
 #include <ao/audio/Property.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/ViewService.h>
-#include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/source/TrackSourceCache.h>
 
 #include <fakeit.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -34,6 +34,37 @@ namespace ao::audio
 {
   class RenderTarget;
 }
+
+namespace ao::rt
+{
+  struct PlaybackServiceTestAccess final
+  {
+    static PlaybackTransportSessionState sessionState(PlaybackService& service)
+    {
+      return service.playbackTransportSessionState();
+    }
+
+    static Result<> restoreSession(PlaybackService& service, PlaybackTransportSessionState const& session)
+    {
+      return service.restorePlaybackTransport(session, {});
+    }
+
+    static std::optional<std::uint64_t> preparedNextIssuedGeneration(PlaybackService const& service,
+                                                                     PreparedNextToken const token)
+    {
+      return service.preparedNextIssuedGeneration(token);
+    }
+
+    static std::unique_ptr<PlaybackService> createWithPlayer(async::Executor& executor,
+                                                             library::MusicLibrary& library,
+                                                             NotificationService& notifications,
+                                                             std::unique_ptr<audio::Player> playerPtr)
+    {
+      return std::unique_ptr<PlaybackService>{
+        new PlaybackService{executor, library, notifications, std::move(playerPtr)}};
+    }
+  };
+} // namespace ao::rt
 
 namespace ao::rt::test
 {
@@ -77,8 +108,8 @@ namespace ao::rt::test
 
   using rt::test::QueuedExecutor;
 
-  // Shared wiring for the PlaybackService tests: a music library, a view service,
-  // a spy backend, and a mocked BackendProvider that hands out that backend.
+  // Shared wiring for the PlaybackService tests: a music library, a spy backend,
+  // and a mocked BackendProvider that hands out that backend.
   // ExecutorT selects the dispatch model (MockExecutor runs inline; QueuedExecutor
   // defers until drain()). The provider's devices/graph callbacks and the render
   // target are captured into public members so a test can drive them.
@@ -157,14 +188,11 @@ namespace ao::rt::test
     PlaybackFixture& operator=(PlaybackFixture&&) = delete;
     ~PlaybackFixture() = default;
 
-    // Declaration order matters: the executor must outlive the view/playback
-    // services that hold references to it, and playbackService (destroyed first)
+    // Declaration order matters: the executor must outlive PlaybackService,
+    // and playbackService (destroyed first)
     // tears down its Player while the provider mock is still alive.
     MusicLibraryFixture libraryFixture;
     ExecutorT executor;
-    LibraryChanges changes;
-    TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
-    ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
     NotificationService notificationService;
 
     std::shared_ptr<audio::test::SpyBackend<>> spyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();
@@ -175,6 +203,6 @@ namespace ao::rt::test
     audio::BackendProvider::OnGraphChangedCallback onGraphChangedCb;
     audio::RenderTarget* renderTarget = nullptr;
 
-    PlaybackService playbackService{executor, viewService, libraryFixture.library(), notificationService};
+    PlaybackService playbackService{executor, libraryFixture.library(), notificationService};
   };
 } // namespace ao::rt::test

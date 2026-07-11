@@ -9,7 +9,7 @@ namespace ao::uimodel
 }
 namespace ao::rt
 {
-  class PlaybackQueueService;
+  class PlaybackSequenceService;
 }
 namespace ao::gtk
 {
@@ -39,7 +39,7 @@ namespace ao::gtk
   {
     TrackRowCache* trackRowCache = nullptr;
     ImageCache* imageCache = nullptr;
-    rt::PlaybackQueueService* playbackQueue = nullptr;
+    rt::PlaybackSequenceService* playbackSequence = nullptr;
     uimodel::PlaybackCommandSurface* playbackCommandSurface = nullptr;
     TagEditController* tagEditController = nullptr;
     portal::ImportExportActions* importExportCoordinator = nullptr;

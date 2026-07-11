@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "runtime/PlaybackSessionState.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/audio/Property.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
@@ -19,19 +19,6 @@
 #include <chrono>
 #include <cstdint>
 #include <limits>
-
-namespace ao::rt
-{
-  struct PlaybackServiceTestAccess final
-  {
-    static PlaybackSessionState sessionState(PlaybackService& service) { return service.playbackSessionState(); }
-
-    static Result<> restoreSession(PlaybackService& service, PlaybackSessionState const& session)
-    {
-      return service.restorePlaybackSession(session, {});
-    }
-  };
-} // namespace ao::rt
 
 namespace ao::rt::test
 {
@@ -56,40 +43,6 @@ namespace ao::rt::test
     CHECK(state.nowPlaying == NowPlayingInfo{});
     CHECK(state.duration == std::chrono::milliseconds{0});
     CHECK(state.elapsed == std::chrono::milliseconds{0});
-    CHECK(state.mode.shuffle == ShuffleMode::Off);
-    CHECK(state.mode.repeat == RepeatMode::Off);
-  }
-
-  TEST_CASE("PlaybackService control - shuffle and repeat update state and emit signals",
-            "[runtime][unit][playback][control]")
-  {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-
-    std::int32_t shuffleChangeCount = 0;
-    auto sub1 = fixture.playbackService.onShuffleModeChanged(
-      [&](auto const& ev)
-      {
-        ++shuffleChangeCount;
-        CHECK(ev.mode == ShuffleMode::On);
-      });
-
-    fixture.playbackService.setShuffleMode(ShuffleMode::On);
-    fixture.playbackService.setShuffleMode(ShuffleMode::On);
-    CHECK(shuffleChangeCount == 1);
-    CHECK(fixture.playbackService.state().mode.shuffle == ShuffleMode::On);
-
-    std::int32_t repeatChangeCount = 0;
-    auto sub2 = fixture.playbackService.onRepeatModeChanged(
-      [&](auto const& ev)
-      {
-        ++repeatChangeCount;
-        CHECK(ev.mode == RepeatMode::All);
-      });
-
-    fixture.playbackService.setRepeatMode(RepeatMode::All);
-    fixture.playbackService.setRepeatMode(RepeatMode::All);
-    CHECK(repeatChangeCount == 1);
-    CHECK(fixture.playbackService.state().mode.repeat == RepeatMode::All);
   }
 
   TEST_CASE("PlaybackService control - play pause resume and stop", "[runtime][unit][playback][control]")
@@ -265,11 +218,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
-    auto changes = LibraryChanges{};
-    auto trackSourceCache = TrackSourceCache{libraryFixture.library(), changes};
-    auto viewService = ViewService{executor, libraryFixture.library(), trackSourceCache};
     auto notificationService = NotificationService{};
-    auto playbackService = PlaybackService{executor, viewService, libraryFixture.library(), notificationService};
+    auto playbackService = PlaybackService{executor, libraryFixture.library(), notificationService};
 
     bool preparingFired = false;
     auto subPreparing = playbackService.onPreparing([&] { preparingFired = true; });
@@ -309,12 +259,10 @@ namespace ao::rt::test
     auto fixture = PlaybackFixture<MockExecutor>{};
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Restored Track", .uri = fixturePath});
-    auto const session = PlaybackSessionState{
+    auto const session = PlaybackTransportSessionState{
       .sourceListId = ListId{10},
       .trackId = trackId,
       .positionMs = 50,
-      .shuffleMode = ShuffleMode::On,
-      .repeatMode = RepeatMode::All,
       .volume = 0.5F,
       .muted = true,
     };
@@ -327,8 +275,6 @@ namespace ao::rt::test
     CHECK(restored.nowPlaying.sourceListId == ListId{10});
     CHECK(restored.nowPlaying.title == "Restored Track");
     CHECK(restored.elapsed == std::chrono::milliseconds{50});
-    CHECK(restored.mode.shuffle == ShuffleMode::On);
-    CHECK(restored.mode.repeat == RepeatMode::All);
     CHECK(restored.volume.level == 0.5F);
     CHECK(restored.volume.muted == true);
     CHECK(fixture.renderTarget == nullptr);
@@ -354,8 +300,6 @@ namespace ao::rt::test
     CHECK(snapshot.sourceListId == ListId{10});
     CHECK(snapshot.trackId == trackId);
     CHECK(snapshot.positionMs == 75);
-    CHECK(snapshot.shuffleMode == ShuffleMode::On);
-    CHECK(snapshot.repeatMode == RepeatMode::All);
     CHECK(snapshot.volume == 0.5F);
     CHECK(snapshot.muted == true);
 
@@ -378,12 +322,10 @@ namespace ao::rt::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = fixture.libraryFixture.addTrack(
       {.title = "Restored Track", .uri = fixturePath, .duration = std::chrono::seconds{3}});
-    auto const session = PlaybackSessionState{
+    auto const session = PlaybackTransportSessionState{
       .sourceListId = ListId{10},
       .trackId = trackId,
       .positionMs = std::numeric_limits<std::uint64_t>::max(),
-      .shuffleMode = static_cast<ShuffleMode>(99),
-      .repeatMode = static_cast<RepeatMode>(99),
       .volume = 5.0F,
       .muted = true,
     };
@@ -392,16 +334,12 @@ namespace ao::rt::test
 
     auto const restored = fixture.playbackService.state();
     CHECK(restored.nowPlaying.trackId == trackId);
-    CHECK(restored.elapsed == std::chrono::seconds{3});
-    CHECK(restored.mode.shuffle == ShuffleMode::Off);
-    CHECK(restored.mode.repeat == RepeatMode::Off);
+    CHECK(restored.elapsed == std::chrono::milliseconds{0});
     CHECK(restored.volume.level == 1.0F);
     CHECK(restored.volume.muted == true);
 
     auto const snapshot = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
     CHECK(snapshot.positionMs == 0);
-    CHECK(snapshot.shuffleMode == ShuffleMode::Off);
-    CHECK(snapshot.repeatMode == RepeatMode::Off);
     CHECK(snapshot.volume == 1.0F);
   }
 
@@ -411,30 +349,17 @@ namespace ao::rt::test
     auto fixture = PlaybackFixture<MockExecutor>{};
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Restored Track", .uri = fixturePath});
-    auto const storedSession = PlaybackSessionState{
+    auto const storedSession = PlaybackTransportSessionState{
       .sourceListId = ListId{10},
       .trackId = trackId,
       .positionMs = 1234,
-      .shuffleMode = ShuffleMode::On,
-      .repeatMode = RepeatMode::All,
       .volume = 0.25F,
       .muted = true,
     };
     REQUIRE(PlaybackServiceTestAccess::restoreSession(fixture.playbackService, storedSession));
 
-    auto const schemaResult =
-      PlaybackServiceTestAccess::restoreSession(fixture.playbackService,
-                                                PlaybackSessionState{
-                                                  .schemaVersion = kPlaybackSessionSchemaVersion + 1,
-                                                  .sourceListId = ListId{10},
-                                                  .trackId = trackId,
-                                                  .positionMs = 5678,
-                                                });
-    REQUIRE_FALSE(schemaResult);
-    CHECK(schemaResult.error().code == Error::Code::FormatRejected);
-
     auto const restoreResult = PlaybackServiceTestAccess::restoreSession(fixture.playbackService,
-                                                                         PlaybackSessionState{
+                                                                         PlaybackTransportSessionState{
                                                                            .sourceListId = ListId{10},
                                                                            .trackId = TrackId{9999},
                                                                            .positionMs = 5678,
@@ -445,9 +370,78 @@ namespace ao::rt::test
     CHECK(snapshot.sourceListId == storedSession.sourceListId);
     CHECK(snapshot.trackId == storedSession.trackId);
     CHECK(snapshot.positionMs == storedSession.positionMs);
-    CHECK(snapshot.shuffleMode == storedSession.shuffleMode);
-    CHECK(snapshot.repeatMode == storedSession.repeatMode);
     CHECK(snapshot.volume == storedSession.volume);
     CHECK(snapshot.muted == storedSession.muted);
+  }
+
+  TEST_CASE("PlaybackService control - property failure rolls restored volume and mute back atomically",
+            "[runtime][unit][playback-control][session]")
+  {
+    auto fixture = PlaybackFixture<MockExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Restored Track", .uri = fixturePath});
+    auto const baselineRequest = PlaybackTransportSessionState{
+      .sourceListId = ListId{10},
+      .trackId = trackId,
+      .positionMs = 250,
+      .volume = 0.25F,
+      .muted = false,
+    };
+    REQUIRE(PlaybackServiceTestAccess::restoreSession(fixture.playbackService, baselineRequest));
+    auto const baseline = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
+    auto const baselinePlayback = fixture.playbackService.state();
+
+    SECTION("volume failure leaves the baseline untouched")
+    {
+      When(Method(fixture.spyBackendPtr->mock(), setProperty))
+        .AlwaysDo(
+          [](audio::PropertyId const id, audio::PropertyValue const&) -> Result<>
+          {
+            if (id == audio::PropertyId::Volume)
+            {
+              return makeError(Error::Code::IoError, "volume property rejected");
+            }
+
+            return {};
+          });
+    }
+
+    SECTION("mute failure rolls back the staged volume")
+    {
+      When(Method(fixture.spyBackendPtr->mock(), setProperty))
+        .AlwaysDo(
+          [](audio::PropertyId const id, audio::PropertyValue const&) -> Result<>
+          {
+            if (id == audio::PropertyId::Muted)
+            {
+              return makeError(Error::Code::IoError, "mute property rejected");
+            }
+
+            return {};
+          });
+    }
+
+    auto const failed = PlaybackServiceTestAccess::restoreSession(fixture.playbackService,
+                                                                  PlaybackTransportSessionState{
+                                                                    .sourceListId = ListId{20},
+                                                                    .trackId = trackId,
+                                                                    .positionMs = 750,
+                                                                    .volume = 0.75F,
+                                                                    .muted = true,
+                                                                  });
+
+    REQUIRE_FALSE(failed);
+    auto const snapshot = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
+    CHECK(snapshot.sourceListId == baseline.sourceListId);
+    CHECK(snapshot.trackId == baseline.trackId);
+    CHECK(snapshot.positionMs == baseline.positionMs);
+    CHECK(snapshot.volume == baseline.volume);
+    CHECK(snapshot.muted == baseline.muted);
+    auto const& playback = fixture.playbackService.state();
+    CHECK(playback.nowPlaying == baselinePlayback.nowPlaying);
+    CHECK(playback.transport == baselinePlayback.transport);
+    CHECK(playback.elapsed == baselinePlayback.elapsed);
+    CHECK(playback.volume == baselinePlayback.volume);
   }
 } // namespace ao::rt::test

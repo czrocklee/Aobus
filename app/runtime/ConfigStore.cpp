@@ -46,6 +46,35 @@ namespace ao::rt
     return _root.is_map(0) && _root.rootref()[yaml::toCsubstr(group)].readable();
   }
 
+  Result<bool> ConfigStore::removeGroup(std::string_view const group)
+  {
+    if (_mode == OpenMode::ReadOnly)
+    {
+      throwException<Exception>("removeGroup() called on ReadOnly ConfigStore");
+    }
+
+    if (auto const loaded = ensureLoaded(); !loaded)
+    {
+      return std::unexpected{loaded.error()};
+    }
+
+    if (!_root.is_map(0))
+    {
+      return false;
+    }
+
+    auto const groupName = yaml::toCsubstr(group);
+    auto root = _root.rootref();
+
+    if (!root[groupName].readable())
+    {
+      return false;
+    }
+
+    root.remove_child(groupName);
+    return true;
+  }
+
   Result<> ConfigStore::ensureLoaded()
   {
     if (_loaded)

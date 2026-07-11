@@ -1,742 +1,288 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/source/ManualListSourceTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/Exception.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/ManualListSource.h>
+#include <ao/rt/source/SmartListEvaluator.h>
+#include <ao/rt/source/SmartListSource.h>
+#include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
-#include <array>
-#include <span>
+#include <memory>
+#include <variant>
+#include <vector>
 
 namespace ao::rt::test
 {
-  // =============================================================================
-  // Reset forwarding
-  // =============================================================================
-  TEST_CASE("ManualListSource - upstream reset is ignored without upstream source",
-            "[runtime][unit][manual-list][reset]")
+  namespace
   {
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
-    auto mls = ManualListSource{lv.view()};
+    std::vector<TrackId> storedTrackIdsOf(ManualListSource const& source)
+    {
+      auto const trackIds = source.storedTrackIds();
+      return {trackIds.begin(), trackIds.end()};
+    }
+  } // namespace
 
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
+  TEST_CASE("ManualListSource - parent hide and re-entry preserve manual intent and position",
+            "[runtime][unit][source][manual-list]")
+  {
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    mls.handleReset();
+    parentPtr->remove(TrackId{2});
 
-    CHECK(spy.events.empty());
-    CHECK(mls.size() == 3);
-    CHECK(mls.trackIds().size() == 3);
+    auto const hiddenEffective = std::vector{TrackId{1}, TrackId{3}};
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches[0].deltas.size() == 1);
+    auto const& removal = std::get<SourceRemoveRange>(batches[0].deltas.front());
+    CHECK(removal.start == 1);
+    CHECK(removal.trackIds == std::vector{TrackId{2}});
+    CHECK(sourceTrackIds(source) == hiddenEffective);
 
-    mls.detach(&spy);
+    parentPtr->insert(TrackId{2}, 0);
+
+    auto const expectedStored = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
+    REQUIRE(batches.size() == 2);
+    REQUIRE(batches[1].deltas.size() == 1);
+    auto const& insertion = std::get<SourceInsertRange>(batches[1].deltas.front());
+    CHECK(insertion.start == 1);
+    CHECK(insertion.trackIds == std::vector{TrackId{2}});
+    CHECK(sourceTrackIds(source) == expectedStored);
+    CHECK(storedTrackIdsOf(source) == expectedStored);
+    CHECK(source.revision() == 2);
   }
 
-  TEST_CASE("ManualListSource - upstream reset filters stale IDs and notifies observers",
-            "[runtime][unit][manual-list][reset]")
+  TEST_CASE("ManualListSource - quick filter remains a stable subsequence of stored manual order",
+            "[runtime][unit][source][manual-list]")
   {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("First", 2024));
+    auto const hidden = libraryFixture.addTrack(library::test::makeTrackSpec("Hidden", 2010));
+    auto const second = libraryFixture.addTrack(library::test::makeTrackSpec("Second", 2024));
+    auto const third = libraryFixture.addTrack(library::test::makeTrackSpec("Third", 2024));
+    auto parentPtr = makeMutableTrackSource({third, hidden, first, second});
+    auto view = ListViewOwner{{second, hidden, third, first}};
+    auto manualPtr = std::make_shared<ManualListSource>(view.view(), TrackSourceLease{parentPtr});
+    auto evaluator = SmartListEvaluator{libraryFixture.library()};
+    auto quickFilter = SmartListSource{TrackSourceLease{manualPtr}, libraryFixture.library(), evaluator};
+    quickFilter.setExpression("$year >= 2020");
+    quickFilter.reload();
 
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
-    auto mls = ManualListSource{lv.view(), &source};
+    CHECK(sourceTrackIds(*manualPtr) == std::vector{second, hidden, third, first});
+    CHECK(sourceTrackIds(quickFilter) == std::vector{second, third, first});
+    auto quickFilterSpy = TrackSourceBatchSpy{quickFilter};
 
-    mls.trackIds().emplace_back(99);
+    manualPtr->applyManualTracksMove(ManualTracksMove{
+      .removals = {{.start = 2, .trackIds = {third}}},
+      .insertionIndexAfterRemoval = 0,
+      .insertedTrackIds = {third},
+    });
 
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    source.reset({{TrackId{1}, TrackId{3}}});
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Reset);
-    REQUIRE(mls.size() == 2);
-    CHECK(mls.trackIdAt(0) == TrackId{1});
-    CHECK(mls.trackIdAt(1) == TrackId{3});
-
-    mls.detach(&spy);
+    CHECK(sourceTrackIds(*manualPtr) == std::vector{third, second, hidden, first});
+    CHECK(sourceTrackIds(quickFilter) == std::vector{third, second, first});
+    REQUIRE(quickFilterSpy.batches.size() == 1);
+    REQUIRE(quickFilterSpy.batches.front().deltas.size() == 2);
+    auto const& removal = std::get<SourceRemoveRange>(quickFilterSpy.batches.front().deltas[0]);
+    auto const& insertion = std::get<SourceInsertRange>(quickFilterSpy.batches.front().deltas[1]);
+    CHECK(removal.start == 1);
+    CHECK(removal.trackIds == std::vector{third});
+    CHECK(insertion.start == 0);
+    CHECK(insertion.trackIds == std::vector{third});
   }
 
-  TEST_CASE("ManualListSource - upstream reset clears all tracks when source becomes empty",
-            "[runtime][unit][manual-list][reset]")
+  TEST_CASE("ManualListSource - ignores parent reorder when membership is unchanged",
+            "[runtime][unit][source][manual-list]")
   {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto mls = ManualListSource{lv.view(), &source};
+    parentPtr->replaceWithBatch(std::vector{TrackId{3}, TrackId{1}, TrackId{2}},
+                                TrackSourceDeltaBatch{
+                                  .deltas = {SourceRemoveRange{.start = 2, .trackIds = {TrackId{3}}},
+                                             SourceInsertRange{.start = 0, .trackIds = {TrackId{3}}}},
+                                });
 
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    source.reset();
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Reset);
-    CHECK(mls.size() == 0);
-    CHECK(mls.trackIds().empty());
-
-    mls.detach(&spy);
+    auto const expected = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
+    CHECK(sourceTrackIds(source) == expected);
+    CHECK(source.revision() == 0);
+    CHECK(batches.empty());
   }
 
-  TEST_CASE("ManualListSource - upstream reset keeps retained tracks still present in source",
-            "[runtime][unit][manual-list][reset]")
+  TEST_CASE("ManualListSource - translates one mixed parent batch into one child batch",
+            "[runtime][unit][source][manual-list]")
   {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
-    auto mls = ManualListSource{lv.view(), &source};
+    parentPtr->replaceWithBatch(std::vector{TrackId{1}, TrackId{3}, TrackId{4}},
+                                TrackSourceDeltaBatch{
+                                  .deltas = {SourceRemoveRange{.start = 1, .trackIds = {TrackId{2}}},
+                                             SourceInsertRange{.start = 2, .trackIds = {TrackId{4}}}},
+                                });
 
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    source.reset({{TrackId{1}, TrackId{2}, TrackId{3}}});
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Reset);
-    REQUIRE(mls.size() == 3);
-    CHECK(mls.trackIdAt(0) == TrackId{1});
-    CHECK(mls.trackIdAt(1) == TrackId{2});
-    CHECK(mls.trackIdAt(2) == TrackId{3});
-
-    mls.detach(&spy);
+    auto const expected = std::vector{TrackId{1}, TrackId{3}, TrackId{4}};
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 2);
+    auto const& removal = std::get<SourceRemoveRange>(batches.front().deltas[0]);
+    auto const& insertion = std::get<SourceInsertRange>(batches.front().deltas[1]);
+    CHECK(removal.start == 1);
+    CHECK(removal.trackIds == std::vector{TrackId{2}});
+    CHECK(insertion.start == 2);
+    CHECK(insertion.trackIds == std::vector{TrackId{4}});
+    CHECK(batches.front().revision == 1);
+    CHECK(sourceTrackIds(source) == expected);
   }
 
-  // =============================================================================
-  TEST_CASE("ManualListSource - upstream insertion does not mutate manual membership",
-            "[runtime][unit][manual-list][insert]")
+  TEST_CASE("ManualListSource - coalesces parent updates in effective manual coordinates",
+            "[runtime][unit][source][manual-list]")
   {
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto mls = ManualListSource{lv.view()};
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{3}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
+    parentPtr->publishBatch(TrackSourceDeltaBatch{
+      .deltas = {SourceUpdateRange{
+        .start = 0,
+        .trackIds = {TrackId{1}, TrackId{2}, TrackId{3}},
+      }},
+    });
 
-    mls.handleInserted(TrackId{99}, 0);
-
-    CHECK(spy.events.empty());
-    CHECK(mls.size() == 2);
-    CHECK_FALSE(mls.contains(TrackId{99}));
-
-    mls.detach(&spy);
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    auto const& update = std::get<SourceUpdateRange>(batches.front().deltas.front());
+    auto const expectedUpdated = std::vector{TrackId{1}, TrackId{3}};
+    CHECK(update.start == 0);
+    CHECK(update.trackIds == expectedUpdated);
+    CHECK(source.revision() == 1);
   }
 
-  TEST_CASE("ManualListSource - upstream batch insertion does not mutate manual membership",
-            "[runtime][unit][manual-list][insert]")
+  TEST_CASE("ManualListSource - hidden parent changes do not advance child revision",
+            "[runtime][unit][source][manual-list]")
   {
-    auto lv = ListViewOwner{{TrackId{1}}};
-    auto mls = ManualListSource{lv.view()};
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{9}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
+    parentPtr->append(TrackId{8});
+    parentPtr->update(TrackId{9});
+    parentPtr->remove(TrackId{8});
 
-    auto const batch = std::array{TrackId{10}, TrackId{20}};
-    mls.handleBulkInserted(std::span{batch});
-
-    CHECK(spy.events.empty());
-    CHECK(mls.size() == 1);
-
-    mls.detach(&spy);
+    CHECK(sourceTrackIds(source) == std::vector{TrackId{1}});
+    CHECK(source.revision() == 0);
+    CHECK(batches.empty());
   }
 
-  // =============================================================================
-  // Update forwarding
-  // =============================================================================
-  TEST_CASE("ManualListSource - upstream update forwards member tracks with local index",
-            "[runtime][unit][manual-list][update]")
+  TEST_CASE("ManualListSource - parent reset rebuilds effective state without discarding stored intent",
+            "[runtime][unit][source][manual-list]")
   {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{3}}};
-    auto mls = ManualListSource{lv.view(), &source};
+    parentPtr->reset(std::vector{TrackId{3}, TrackId{1}});
 
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    source.update(TrackId{3});
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
-    CHECK(spy.events[0].id == TrackId{3});
-    CHECK(spy.events[0].index == 1);
-
-    spy.clear();
-    source.update(TrackId{1});
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
-    CHECK(spy.events[0].id == TrackId{1});
-    CHECK(spy.events[0].index == 0);
-
-    mls.detach(&spy);
+    auto const expectedStored = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
+    auto const expectedEffective = std::vector{TrackId{1}, TrackId{3}};
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<SourceReset>(batches.front().deltas.front()));
+    CHECK(sourceTrackIds(source) == expectedEffective);
+    CHECK(storedTrackIdsOf(source) == expectedStored);
   }
 
-  TEST_CASE("ManualListSource - upstream update ignores non-member tracks", "[runtime][unit][manual-list][update]")
+  TEST_CASE("ManualListSource - parent invalidation is terminal and emitted once",
+            "[runtime][unit][source][manual-list]")
   {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{99});
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    auto lv = ListViewOwner{{TrackId{1}}};
-    auto mls = ManualListSource{lv.view(), &source};
+    parentPtr->invalidate();
+    parentPtr->invalidate();
 
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    source.update(TrackId{99});
-
-    CHECK(spy.events.empty());
-    CHECK(mls.size() == 1);
-
-    mls.detach(&spy);
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<SourceInvalidated>(batches.front().deltas.front()));
+    CHECK(batches.front().revision == 1);
+    CHECK(source.state() == TrackSourceState::Invalidated);
+    CHECK(source.revision() == 1);
+    REQUIRE_THROWS_AS(
+      source.applyManualTracksInsert(ManualTracksInsert{.storedIndex = 2, .trackIds = {TrackId{3}}}), Exception);
   }
 
-  TEST_CASE("ManualListSource - upstream batch update forwards matching members only",
-            "[runtime][unit][manual-list][update]")
+  TEST_CASE("ManualListSource - invalidation propagates through a leased manual chain",
+            "[runtime][unit][source][manual-list]")
   {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
-    source.addInitial(TrackId{4});
+    auto rootPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
+    auto innerView = ListViewOwner{{TrackId{1}, TrackId{2}}};
+    auto innerPtr = std::make_shared<ManualListSource>(innerView.view(), TrackSourceLease{rootPtr});
+    auto outerView = ListViewOwner{{TrackId{2}}};
+    auto outer = ManualListSource{outerView.view(), TrackSourceLease{innerPtr}};
+    auto innerBatches = std::vector<TrackSourceDeltaBatch>{};
+    auto outerBatches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto innerSubscription =
+      innerPtr->subscribe([&innerBatches](TrackSourceDeltaBatch const& batch) { innerBatches.push_back(batch); });
+    [[maybe_unused]] auto outerSubscription =
+      outer.subscribe([&outerBatches](TrackSourceDeltaBatch const& batch) { outerBatches.push_back(batch); });
 
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
-    auto mls = ManualListSource{lv.view(), &source};
+    rootPtr->invalidate();
 
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    auto const batch = std::array{TrackId{1}, TrackId{2}, TrackId{4}, TrackId{5}};
-    source.batchUpdate(batch);
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchUpdated);
-    CHECK(spy.events[0].batchIds.size() == 2);
-    CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{1}));
-    CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
-
-    mls.detach(&spy);
+    CHECK(innerPtr->state() == TrackSourceState::Invalidated);
+    CHECK(outer.state() == TrackSourceState::Invalidated);
+    REQUIRE(innerBatches.size() == 1);
+    REQUIRE(outerBatches.size() == 1);
+    CHECK(std::holds_alternative<SourceInvalidated>(innerBatches.front().deltas.front()));
+    CHECK(std::holds_alternative<SourceInvalidated>(outerBatches.front().deltas.front()));
   }
 
-  TEST_CASE("ManualListSource - upstream batch update ignores batches without matching members",
-            "[runtime][unit][manual-list][update]")
+  TEST_CASE("ManualListSource - lease pins its parent for the subscription lifetime",
+            "[runtime][unit][source][manual-list]")
   {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-
-    auto lv = ListViewOwner{{TrackId{1}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    auto const batch = std::array{TrackId{99}, TrackId{100}};
-    source.batchUpdate(batch);
-
-    CHECK(spy.events.empty());
-
-    mls.detach(&spy);
-  }
-
-  TEST_CASE("ManualListSource - upstream batch update ignores empty batches", "[runtime][unit][manual-list][update]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-
-    auto lv = ListViewOwner{{TrackId{1}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    source.batchUpdate({});
-
-    CHECK(spy.events.empty());
-
-    mls.detach(&spy);
-  }
-
-  TEST_CASE("ManualListSource - upstream batch update forwards all matching IDs",
-            "[runtime][unit][manual-list][update]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
-
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    auto const batch = std::array{TrackId{1}, TrackId{2}, TrackId{3}};
-    source.batchUpdate(batch);
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchUpdated);
-    CHECK(spy.events[0].batchIds.size() == 3);
-    CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{1}));
-    CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
-    CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{3}));
-
-    mls.detach(&spy);
-  }
-
-  // =============================================================================
-  // Removal forwarding
-  // =============================================================================
-  TEST_CASE("ManualListSource - upstream removal deletes member and reports local index",
-            "[runtime][unit][manual-list][remove]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{10});
-    source.addInitial(TrackId{20});
-    source.addInitial(TrackId{30});
-
-    auto lv = ListViewOwner{{TrackId{10}, TrackId{20}, TrackId{30}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    source.remove(TrackId{20});
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Removed);
-    CHECK(spy.events[0].id == TrackId{20});
-    CHECK(spy.events[0].index == 1);
-    REQUIRE(mls.size() == 2);
-    CHECK(mls.trackIdAt(0) == TrackId{10});
-    CHECK(mls.trackIdAt(1) == TrackId{30});
-
-    mls.detach(&spy);
-  }
-
-  TEST_CASE("ManualListSource - upstream removal reports first element index before erasure",
-            "[runtime][unit][manual-list][remove]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    source.remove(TrackId{1});
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Removed);
-    CHECK(spy.events[0].id == TrackId{1});
-    CHECK(spy.events[0].index == 0);
-    REQUIRE(mls.size() == 1);
-    CHECK(mls.trackIdAt(0) == TrackId{2});
-
-    mls.detach(&spy);
-  }
-
-  TEST_CASE("ManualListSource - upstream removal ignores non-member tracks", "[runtime][unit][manual-list][remove]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{99});
-
-    auto lv = ListViewOwner{{TrackId{1}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    source.remove(TrackId{99});
-
-    CHECK(spy.events.empty());
-    CHECK(mls.size() == 1);
-    CHECK(mls.trackIdAt(0) == TrackId{1});
-
-    mls.detach(&spy);
-  }
-
-  TEST_CASE("ManualListSource - upstream batch removal deletes matching members and notifies observers",
-            "[runtime][unit][manual-list][remove]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
-    source.addInitial(TrackId{4});
-    source.addInitial(TrackId{5});
-
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    auto const batch = std::array{TrackId{2}, TrackId{5}, TrackId{4}};
-    source.batchRemove(batch);
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchRemoved);
-    CHECK(spy.events[0].batchIds.size() == 2);
-    CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
-    CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{4}));
-    REQUIRE(mls.size() == 2);
-    CHECK(mls.trackIdAt(0) == TrackId{1});
-    CHECK(mls.trackIdAt(1) == TrackId{3});
-
-    mls.detach(&spy);
-  }
-
-  TEST_CASE("ManualListSource - upstream batch removal ignores batches without matching members",
-            "[runtime][unit][manual-list][remove]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-
-    auto lv = ListViewOwner{{TrackId{1}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    auto const batch = std::array{TrackId{99}, TrackId{100}};
-    source.batchRemove(batch);
-
-    CHECK(spy.events.empty());
-    CHECK(mls.size() == 1);
-
-    mls.detach(&spy);
-  }
-
-  TEST_CASE("ManualListSource - upstream batch removal ignores empty batches", "[runtime][unit][manual-list][remove]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-
-    auto lv = ListViewOwner{{TrackId{1}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    source.batchRemove({});
-
-    CHECK(spy.events.empty());
-
-    mls.detach(&spy);
-  }
-
-  TEST_CASE("ManualListSource - upstream batch removal deletes all matching IDs",
-            "[runtime][unit][manual-list][remove]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
-
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    auto const batch = std::array{TrackId{1}, TrackId{2}, TrackId{3}};
-    source.batchRemove(batch);
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchRemoved);
-    CHECK(spy.events[0].batchIds.size() == 3);
-    CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{1}));
-    CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{2}));
-    CHECK(std::ranges::contains(spy.events[0].batchIds, TrackId{3}));
-    CHECK(mls.size() == 0);
-
-    mls.detach(&spy);
-  }
-
-  // =============================================================================
-  // Sequential removals
-  // =============================================================================
-  TEST_CASE("ManualListSource - sequential removals maintain correct indices", "[runtime][unit][manual-list][remove]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
-
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    // Remove middle element first.
-    source.remove(TrackId{2});
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].id == TrackId{2});
-    CHECK(spy.events[0].index == 1);
-    REQUIRE(mls.size() == 2);
-    CHECK(mls.trackIdAt(0) == TrackId{1});
-    CHECK(mls.trackIdAt(1) == TrackId{3});
-
-    // Remove first element.
-    spy.clear();
-    source.remove(TrackId{1});
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].id == TrackId{1});
-    CHECK(spy.events[0].index == 0);
-    REQUIRE(mls.size() == 1);
-    CHECK(mls.trackIdAt(0) == TrackId{3});
-
-    // Remove last element.
-    spy.clear();
-    source.remove(TrackId{3});
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].id == TrackId{3});
-    CHECK(spy.events[0].index == 0);
-    CHECK(mls.size() == 0);
-
-    mls.detach(&spy);
-  }
-
-  // =============================================================================
-  // Batch then single operations
-  // =============================================================================
-  TEST_CASE("ManualListSource - batch removal leaves later single removal indexed correctly",
-            "[runtime][unit][manual-list][batch]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
-    source.addInitial(TrackId{4});
-
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    auto const batch = std::array{TrackId{1}, TrackId{2}};
-    source.batchRemove(batch);
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchRemoved);
-    CHECK(spy.events[0].batchIds.size() == 2);
-    REQUIRE(mls.size() == 2);
-
-    spy.clear();
-    source.remove(TrackId{3});
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Removed);
-    CHECK(spy.events[0].id == TrackId{3});
-    CHECK(spy.events[0].index == 0);
-    REQUIRE(mls.size() == 1);
-    CHECK(mls.trackIdAt(0) == TrackId{4});
-
-    mls.detach(&spy);
-  }
-
-  TEST_CASE("ManualListSource - batch update leaves later single update indexed correctly",
-            "[runtime][unit][manual-list][batch]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
-
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    auto const batch = std::array{TrackId{1}, TrackId{2}};
-    source.batchUpdate(batch);
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchUpdated);
-
-    spy.clear();
-    source.update(TrackId{1});
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
-    CHECK(spy.events[0].id == TrackId{1});
-
-    mls.detach(&spy);
-  }
-
-  // =============================================================================
-  // Destruction
-  // =============================================================================
-  TEST_CASE("ManualListSource - destructor detaches from upstream source", "[runtime][unit][manual-list][lifetime]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
+    auto parentPtr = makeMutableTrackSource({TrackId{1}});
+    auto weakParentPtr = std::weak_ptr<MutableTrackSource>{parentPtr};
+    auto view = ListViewOwner{{TrackId{1}}};
 
     {
-      auto lv = ListViewOwner{{TrackId{1}}};
-      auto mls = ManualListSource{lv.view(), &source};
-      CHECK(mls.source() == &source);
+      auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+      parentPtr = nullptr;
+
+      CHECK_FALSE(weakParentPtr.expired());
+      CHECK(sourceTrackIds(source) == std::vector{TrackId{1}});
     }
 
-    // Triggering events on source after ManualListSource destruction
-    // must not crash (no dangling observer pointer).
-    source.insert(TrackId{2}, 1);
-    source.update(TrackId{1});
-    source.remove(TrackId{1});
-    source.reset({{TrackId{3}}});
-  }
-
-  // =============================================================================
-  // Multiple observers
-  // =============================================================================
-  TEST_CASE("ManualListSource - attached observers receive events until detached",
-            "[runtime][unit][manual-list][observer]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy1 = SpyTrackSourceObserver{};
-    auto spy2 = SpyTrackSourceObserver{};
-    mls.attach(&spy1);
-    mls.attach(&spy2);
-
-    source.update(TrackId{1});
-
-    REQUIRE(spy1.events.size() == 1);
-    CHECK(spy1.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
-    CHECK(spy1.events[0].id == TrackId{1});
-
-    REQUIRE(spy2.events.size() == 1);
-    CHECK(spy2.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
-    CHECK(spy2.events[0].id == TrackId{1});
-
-    mls.detach(&spy1);
-    mls.detach(&spy2);
-  }
-
-  TEST_CASE("ManualListSource - detached observers no longer receive events", "[runtime][unit][manual-list][observer]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-
-    auto lv = ListViewOwner{{TrackId{1}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto spy1 = SpyTrackSourceObserver{};
-    auto spy2 = SpyTrackSourceObserver{};
-    mls.attach(&spy1);
-    mls.attach(&spy2);
-    mls.detach(&spy2);
-
-    source.update(TrackId{1});
-
-    REQUIRE(spy1.events.size() == 1);
-    CHECK(spy2.events.empty());
-
-    mls.detach(&spy1);
-  }
-
-  // =============================================================================
-  // Chained ManualListSources
-  // =============================================================================
-  TEST_CASE("ManualListSource - chained manual lists propagate upstream removals",
-            "[runtime][unit][manual-list][chain]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
-
-    auto lv1 = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto inner = ManualListSource{lv1.view(), &source};
-
-    auto lv2 = ListViewOwner{{TrackId{2}}};
-    auto outer = ManualListSource{lv2.view(), &inner};
-
-    auto outerSpy = SpyTrackSourceObserver{};
-    outer.attach(&outerSpy);
-
-    source.remove(TrackId{2});
-
-    REQUIRE(inner.size() == 1);
-    CHECK(inner.trackIdAt(0) == TrackId{1});
-    REQUIRE(outer.size() == 0);
-
-    REQUIRE(outerSpy.events.size() == 1);
-    CHECK(outerSpy.events[0].kind == SpyTrackSourceObserver::EventKind::Removed);
-    CHECK(outerSpy.events[0].id == TrackId{2});
-    CHECK(outerSpy.events[0].index == 0);
-
-    outer.detach(&outerSpy);
-  }
-
-  TEST_CASE("ManualListSource - chained manual lists propagate upstream resets", "[runtime][unit][manual-list][chain]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-    source.addInitial(TrackId{3});
-
-    auto lv1 = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
-    auto inner = ManualListSource{lv1.view(), &source};
-
-    auto lv2 = ListViewOwner{{TrackId{1}, TrackId{3}}};
-    auto outer = ManualListSource{lv2.view(), &inner};
-
-    auto outerSpy = SpyTrackSourceObserver{};
-    outer.attach(&outerSpy);
-
-    source.reset({{TrackId{3}}});
-
-    REQUIRE(inner.size() == 1);
-    CHECK(inner.trackIdAt(0) == TrackId{3});
-    REQUIRE(outer.size() == 1);
-    CHECK(outer.trackIdAt(0) == TrackId{3});
-
-    REQUIRE(!outerSpy.events.empty());
-    CHECK(outerSpy.events.back().kind == SpyTrackSourceObserver::EventKind::Reset);
-
-    outer.detach(&outerSpy);
-  }
-
-  // =============================================================================
-  // Destructor with null source
-  // =============================================================================
-  TEST_CASE("ManualListSource - destructor is safe without an upstream source",
-            "[runtime][unit][manual-list][lifetime]")
-  {
-    {
-      auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
-      auto mls = ManualListSource{lv.view()};
-      CHECK(mls.source() == nullptr);
-    }
-
-    // mls destroyed - detach is skipped when _source is nullptr.
-    CHECK(true);
+    CHECK(weakParentPtr.expired());
   }
 } // namespace ao::rt::test

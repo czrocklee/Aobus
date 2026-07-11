@@ -2,29 +2,51 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/Exception.h>
+#include <ao/rt/Signal.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceDelta.h>
 
 #include <cstddef>
+#include <functional>
+#include <limits>
 #include <span>
+#include <tuple>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace ao::rt
 {
-  TrackSource::~TrackSource()
+  TrackSource::~TrackSource() = default;
+
+  Subscription TrackSource::subscribe(std::move_only_function<void(TrackSourceDeltaBatch const&)> handler)
   {
-    for (auto* obs : _observers)
+    if (!handler)
     {
-      obs->handleSourceDestroyed();
+      throwException<Exception>("Track source subscription handler must not be empty");
     }
+
+    if (_state == TrackSourceState::Invalidated)
+    {
+      handler(TrackSourceDeltaBatch{.revision = _revision, .deltas = {SourceInvalidated{}}});
+      return {};
+    }
+
+    return _changedSignal.connect(std::move(handler));
   }
 
-  void TrackSource::attach(TrackSourceObserver* observer)
+  void TrackSource::invalidate()
   {
-    _observers.push_back(observer);
-  }
+    if (_state == TrackSourceState::Invalidated)
+    {
+      return;
+    }
 
-  void TrackSource::detach(TrackSourceObserver* observer)
-  {
-    std::erase(_observers, observer);
+    _state = TrackSourceState::Invalidated;
+    _changedSignal.emit(TrackSourceDeltaBatch{.revision = ++_revision, .deltas = {SourceInvalidated{}}});
+    _changedSignal.disconnectAll();
   }
 
   void TrackSource::notifyUpdated(TrackId id)
@@ -37,57 +59,150 @@ namespace ao::rt
 
   void TrackSource::notifyInserted(std::span<TrackId const> const ids)
   {
-    for (auto* const obs : _observers)
+    if (ids.empty())
     {
-      obs->handleBulkInserted(ids);
+      return;
+    }
+
+    auto batch = TrackSourceDeltaBatch{};
+    auto matchedIds = std::vector<TrackId>{};
+
+    for (std::size_t index = 0; index < size(); ++index)
+    {
+      auto const trackId = trackIdAt(index);
+      bool matched = false;
+
+      for (auto const requestedId : ids)
+      {
+        if (trackId == requestedId)
+        {
+          matched = true;
+          break;
+        }
+      }
+
+      if (!matched)
+      {
+        continue;
+      }
+
+      matchedIds.push_back(trackId);
+
+      if (!batch.deltas.empty())
+      {
+        auto& range = std::get<SourceInsertRange>(batch.deltas.back());
+
+        if (range.start + range.trackIds.size() == index)
+        {
+          range.trackIds.push_back(trackId);
+          continue;
+        }
+      }
+
+      batch.deltas.push_back(SourceInsertRange{.start = index, .trackIds = {trackId}});
+    }
+
+    if (auto const currentSize = size(); !matchedIds.empty() && matchedIds.size() <= currentSize)
+    {
+      std::ignore = publishDeltaBatch(std::move(batch), currentSize - matchedIds.size());
     }
   }
 
   void TrackSource::notifyUpdated(std::span<TrackId const> const ids)
   {
-    for (auto* const obs : _observers)
+    if (ids.empty())
     {
-      obs->handleBulkUpdated(ids);
+      return;
     }
-  }
 
-  void TrackSource::notifyRemoved(std::span<TrackId const> const ids)
-  {
-    for (auto* const obs : _observers)
+    auto batch = TrackSourceDeltaBatch{};
+    auto matchedIds = std::vector<TrackId>{};
+
+    for (std::size_t index = 0; index < size(); ++index)
     {
-      obs->handleBulkRemoved(ids);
+      auto const trackId = trackIdAt(index);
+      bool matched = false;
+
+      for (auto const requestedId : ids)
+      {
+        if (trackId == requestedId)
+        {
+          matched = true;
+          break;
+        }
+      }
+
+      if (!matched)
+      {
+        continue;
+      }
+
+      matchedIds.push_back(trackId);
+
+      if (!batch.deltas.empty())
+      {
+        auto& range = std::get<SourceUpdateRange>(batch.deltas.back());
+
+        if (range.start + range.trackIds.size() == index)
+        {
+          range.trackIds.push_back(trackId);
+          continue;
+        }
+      }
+
+      batch.deltas.push_back(SourceUpdateRange{.start = index, .trackIds = {trackId}});
+    }
+
+    if (!matchedIds.empty())
+    {
+      std::ignore = publishDeltaBatch(std::move(batch), size());
     }
   }
 
   void TrackSource::notifyReset()
   {
-    for (auto* const obs : _observers)
-    {
-      obs->handleReset();
-    }
+    std::ignore = publishDeltaBatch(TrackSourceDeltaBatch{.deltas = {SourceReset{}}}, size());
   }
 
   void TrackSource::notifyInserted(TrackId id, std::size_t index)
   {
-    for (auto* const obs : _observers)
+    if (auto const currentSize = size(); currentSize != 0)
     {
-      obs->handleInserted(id, index);
+      std::ignore = publishDeltaBatch(
+        TrackSourceDeltaBatch{.deltas = {SourceInsertRange{.start = index, .trackIds = {id}}}}, currentSize - 1);
     }
   }
 
   void TrackSource::notifyUpdated(TrackId id, std::size_t index)
   {
-    for (auto* const obs : _observers)
-    {
-      obs->handleUpdated(id, index);
-    }
+    std::ignore =
+      publishDeltaBatch(TrackSourceDeltaBatch{.deltas = {SourceUpdateRange{.start = index, .trackIds = {id}}}}, size());
   }
 
   void TrackSource::notifyRemoved(TrackId id, std::size_t index)
   {
-    for (auto* const obs : _observers)
+    if (auto const currentSize = size(); currentSize != std::numeric_limits<std::size_t>::max())
     {
-      obs->handleRemoved(id, index);
+      std::ignore = publishDeltaBatch(
+        TrackSourceDeltaBatch{.deltas = {SourceRemoveRange{.start = index, .trackIds = {id}}}}, currentSize + 1);
     }
+  }
+
+  bool TrackSource::publishDeltaBatch(TrackSourceDeltaBatch batch, std::size_t const previousSize)
+  {
+    if (_state == TrackSourceState::Invalidated)
+    {
+      return false;
+    }
+
+    if (!validateTrackSourceDeltaBatch(batch, previousSize) ||
+        std::holds_alternative<SourceInvalidated>(batch.deltas.front()))
+    {
+      throwException<Exception>("Invalid track source delta batch");
+    }
+
+    batch.revision = ++_revision;
+    _changedSignal.emit(batch);
+    return true;
   }
 } // namespace ao::rt

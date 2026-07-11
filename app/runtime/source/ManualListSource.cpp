@@ -1,163 +1,415 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/source/TrackSourceDeltaBuilder.h"
+#include <ao/CoreIds.h>
+#include <ao/Exception.h>
 #include <ao/library/ListView.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/ManualListSource.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
-#include <algorithm>
 #include <cstddef>
-#include <iterator>
 #include <optional>
 #include <span>
+#include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
 {
-  ManualListSource::ManualListSource(library::ListView const& view, TrackSource* source)
-    : _source{source}
+  ManualListSource::ManualListSource(library::ListView const& view, TrackSourceLease parentLease)
+    : _parentLease{std::move(parentLease)}
   {
-    _trackIds.reserve(view.tracks().size());
-
-    for (auto const& id : view.tracks())
-    {
-      _trackIds.push_back(id);
-    }
-
-    if (_source != nullptr)
-    {
-      _source->attach(this);
-    }
+    loadStoredTracks(view);
+    rebuildEffectiveTracks();
+    _parentSubscription =
+      _parentLease->subscribe([this](TrackSourceDeltaBatch const& batch) { handleParentBatch(batch); });
   }
-
-  ManualListSource::ManualListSource() = default;
 
   ManualListSource::~ManualListSource()
   {
-    if (_source != nullptr)
-    {
-      _source->detach(this);
-    }
+    _parentSubscription.reset();
   }
 
   void ManualListSource::reloadFromListView(library::ListView const& view)
   {
-    _trackIds.clear();
-    _trackIds.reserve(view.tracks().size());
+    ensureLive();
 
-    for (auto const& id : view.tracks())
-    {
-      if (_source == nullptr || _source->indexOf(id))
-      {
-        _trackIds.push_back(id);
-      }
-    }
+    auto const previousEffective = _effectiveTrackIds;
+    loadStoredTracks(view);
+    rebuildEffectiveTracks();
 
-    TrackSource::notifyReset();
-  }
-
-  void ManualListSource::handleReset()
-  {
-    if (_source == nullptr)
+    if (previousEffective == _effectiveTrackIds)
     {
       return;
     }
 
-    // Filter existing members against new source state
-    auto next = std::vector<TrackId>{};
+    std::ignore = publishDeltaBatch(TrackSourceDeltaBatch{.deltas = {SourceReset{}}}, previousEffective.size());
+  }
 
-    for (auto const& id : _trackIds)
+  void ManualListSource::applyManualTracksInsert(ManualTracksInsert const& operation)
+  {
+    ensureLive();
+
+    if (operation.trackIds.empty())
     {
-      if (_source->indexOf(id))
+      return;
+    }
+
+    if (operation.storedIndex > _storedTrackIds.size())
+    {
+      throwException<Exception>("Manual track insertion index is outside the stored order");
+    }
+
+    auto insertedIds = TrackIndexMap{};
+    insertedIds.reserve(operation.trackIds.size());
+
+    for (auto const trackId : operation.trackIds)
+    {
+      if (_storedIndexByTrackId.contains(trackId) || !insertedIds.emplace(trackId, insertedIds.size()).second)
       {
-        next.push_back(id);
+        throwException<Exception>("Manual track insertion would duplicate a stored track");
       }
     }
 
-    _trackIds = std::move(next);
-    TrackSource::notifyReset();
+    auto const previousEffective = _effectiveTrackIds;
+    _storedTrackIds.insert(_storedTrackIds.begin() + static_cast<std::ptrdiff_t>(operation.storedIndex),
+                           operation.trackIds.begin(),
+                           operation.trackIds.end());
+    rebuildStoredIndex();
+    rebuildEffectiveTracks();
+    publishVisibilityDelta(previousEffective);
   }
 
-  void ManualListSource::handleInserted(TrackId /*id*/, std::size_t /*index*/)
+  void ManualListSource::applyManualTracksRemove(ManualTracksRemove const& operation)
   {
+    ensureLive();
+
+    if (operation.removals.empty())
+    {
+      return;
+    }
+
+    std::ignore = validateStoredRemovals(operation.removals);
+    auto const previousEffective = _effectiveTrackIds;
+    eraseStoredRemovals(operation.removals);
+    rebuildStoredIndex();
+    rebuildEffectiveTracks();
+    publishVisibilityDelta(previousEffective);
   }
 
-  void ManualListSource::handleUpdated(TrackId const id, std::size_t /*index*/)
+  void ManualListSource::applyManualTracksMove(ManualTracksMove const& operation)
   {
-    if (auto const optMyIndex = indexOf(id); optMyIndex)
+    ensureLive();
+
+    if (operation.removals.empty() && operation.insertedTrackIds.empty())
     {
-      TrackSource::notifyUpdated(id, *optMyIndex);
-    }
-  }
-
-  void ManualListSource::handleRemoved(TrackId const id, std::size_t /*index*/)
-  {
-    if (auto const it = std::ranges::find(_trackIds, id); it != _trackIds.end())
-    {
-      auto const myIndex = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
-      _trackIds.erase(it);
-      TrackSource::notifyRemoved(id, myIndex);
-    }
-  }
-
-  void ManualListSource::handleBulkInserted(std::span<TrackId const> /*ids*/)
-  {
-  }
-
-  void ManualListSource::handleBulkUpdated(std::span<TrackId const> const ids)
-  {
-    auto matched = std::vector<TrackId>{};
-    matched.reserve(ids.size());
-
-    for (auto const id : ids)
-    {
-      if (contains(id))
-      {
-        matched.push_back(id);
-      }
+      return;
     }
 
-    if (!matched.empty())
-    {
-      TrackSource::notifyUpdated(matched);
-    }
-  }
+    auto const removedInStoredOrder = validateStoredRemovals(operation.removals);
 
-  void ManualListSource::handleBulkRemoved(std::span<TrackId const> const ids)
-  {
-    auto removed = std::vector<TrackId>{};
-    removed.reserve(ids.size());
-
-    for (auto const id : ids)
+    if (removedInStoredOrder != operation.insertedTrackIds)
     {
-      if (auto const it = std::ranges::find(_trackIds, id); it != _trackIds.end())
-      {
-        _trackIds.erase(it);
-        removed.push_back(id);
-      }
+      throwException<Exception>("Manual track move identities do not match the stored removals");
     }
 
-    if (!removed.empty())
+    auto const remainingSize = _storedTrackIds.size() - removedInStoredOrder.size();
+
+    if (operation.insertionIndexAfterRemoval > remainingSize)
     {
-      TrackSource::notifyRemoved(removed);
+      throwException<Exception>("Manual track move destination is outside the post-removal order");
     }
+
+    auto const previousEffective = _effectiveTrackIds;
+    eraseStoredRemovals(operation.removals);
+    _storedTrackIds.insert(_storedTrackIds.begin() + static_cast<std::ptrdiff_t>(operation.insertionIndexAfterRemoval),
+                           operation.insertedTrackIds.begin(),
+                           operation.insertedTrackIds.end());
+    rebuildStoredIndex();
+    rebuildEffectiveTracks();
+
+    if (previousEffective == _effectiveTrackIds)
+    {
+      return;
+    }
+
+    publishExactMoveDelta(previousEffective, operation.insertedTrackIds);
   }
 
   bool ManualListSource::contains(TrackId const id) const
   {
-    return std::ranges::contains(_trackIds, id);
+    return _effectiveIndexByTrackId.contains(id);
   }
 
   std::optional<std::size_t> ManualListSource::indexOf(TrackId const id) const
   {
-    auto const it = std::ranges::find(_trackIds, id);
-
-    if (it == _trackIds.end())
+    if (auto const it = _effectiveIndexByTrackId.find(id); it != _effectiveIndexByTrackId.end())
     {
-      return std::nullopt;
+      return it->second;
     }
 
-    return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
+    return std::nullopt;
+  }
+
+  void ManualListSource::ensureLive() const
+  {
+    if (state() == TrackSourceState::Invalidated)
+    {
+      throwException<Exception>("Cannot mutate an invalidated manual list source");
+    }
+  }
+
+  void ManualListSource::loadStoredTracks(library::ListView const& view)
+  {
+    _storedTrackIds.clear();
+    _storedIndexByTrackId.clear();
+    _storedTrackIds.reserve(view.tracks().size());
+    _storedIndexByTrackId.reserve(view.tracks().size());
+
+    for (auto const trackId : view.tracks())
+    {
+      if (_storedIndexByTrackId.emplace(trackId, _storedTrackIds.size()).second)
+      {
+        _storedTrackIds.push_back(trackId);
+      }
+    }
+  }
+
+  void ManualListSource::rebuildStoredIndex()
+  {
+    _storedIndexByTrackId.clear();
+    _storedIndexByTrackId.reserve(_storedTrackIds.size());
+
+    for (std::size_t index = 0; index < _storedTrackIds.size(); ++index)
+    {
+      if (!_storedIndexByTrackId.emplace(_storedTrackIds[index], index).second)
+      {
+        throwException<Exception>("Manual stored track order contains a duplicate identity");
+      }
+    }
+  }
+
+  void ManualListSource::rebuildEffectiveTracks()
+  {
+    _effectiveTrackIds.clear();
+    _effectiveIndexByTrackId.clear();
+    _effectiveTrackIds.reserve(_storedTrackIds.size());
+    _effectiveIndexByTrackId.reserve(_storedTrackIds.size());
+
+    for (auto const trackId : _storedTrackIds)
+    {
+      if (_parentLease->indexOf(trackId))
+      {
+        _effectiveIndexByTrackId.emplace(trackId, _effectiveTrackIds.size());
+        _effectiveTrackIds.push_back(trackId);
+      }
+    }
+  }
+
+  std::vector<TrackId> ManualListSource::validateStoredRemovals(
+    std::span<ManualStoredRemoveRange const> const removals) const
+  {
+    if (removals.empty())
+    {
+      throwException<Exception>("Manual stored removal operation requires at least one range");
+    }
+
+    auto selectedIds = TrackIndexMap{};
+    auto upperBound = _storedTrackIds.size();
+    std::size_t selectedCount = 0;
+
+    for (auto const& removal : removals)
+    {
+      if (removal.trackIds.empty() || removal.start > upperBound ||
+          removal.trackIds.size() > upperBound - removal.start)
+      {
+        throwException<Exception>("Manual stored removal ranges must be non-overlapping and descending");
+      }
+
+      for (std::size_t offset = 0; offset < removal.trackIds.size(); ++offset)
+      {
+        auto const trackId = removal.trackIds[offset];
+
+        if (_storedTrackIds[removal.start + offset] != trackId)
+        {
+          throwException<Exception>("Manual stored removal identities do not match the stored order");
+        }
+
+        if (!selectedIds.emplace(trackId, selectedCount++).second)
+        {
+          throwException<Exception>("Manual stored removal identities overlap");
+        }
+      }
+
+      upperBound = removal.start;
+    }
+
+    auto removedInStoredOrder = std::vector<TrackId>{};
+    removedInStoredOrder.reserve(selectedIds.size());
+
+    for (auto const trackId : _storedTrackIds)
+    {
+      if (selectedIds.contains(trackId))
+      {
+        removedInStoredOrder.push_back(trackId);
+      }
+    }
+
+    return removedInStoredOrder;
+  }
+
+  void ManualListSource::eraseStoredRemovals(std::span<ManualStoredRemoveRange const> const removals)
+  {
+    for (auto const& removal : removals)
+    {
+      auto const first = _storedTrackIds.begin() + static_cast<std::ptrdiff_t>(removal.start);
+      _storedTrackIds.erase(first, first + static_cast<std::ptrdiff_t>(removal.trackIds.size()));
+    }
+  }
+
+  void ManualListSource::publishVisibilityDelta(std::vector<TrackId> const& previousEffective,
+                                                std::span<TrackId const> const updatedTrackIds)
+  {
+    auto previousIndexByTrackId = TrackIndexMap{};
+    previousIndexByTrackId.reserve(previousEffective.size());
+
+    for (std::size_t index = 0; index < previousEffective.size(); ++index)
+    {
+      previousIndexByTrackId.emplace(previousEffective[index], index);
+    }
+
+    auto builder = TrackSourceDeltaBuilder{previousEffective.size()};
+
+    for (std::size_t index = 0; index < previousEffective.size(); ++index)
+    {
+      if (auto const trackId = previousEffective[index]; !_effectiveIndexByTrackId.contains(trackId))
+      {
+        builder.remove(index, trackId);
+      }
+    }
+
+    for (std::size_t index = 0; index < _effectiveTrackIds.size(); ++index)
+    {
+      if (auto const trackId = _effectiveTrackIds[index]; !previousIndexByTrackId.contains(trackId))
+      {
+        builder.insert(index, trackId);
+      }
+    }
+
+    auto optBatch = builder.build();
+    auto batch = optBatch ? std::move(*optBatch) : TrackSourceDeltaBatch{};
+
+    if (!updatedTrackIds.empty())
+    {
+      auto updatedIds = TrackIndexMap{};
+      updatedIds.reserve(updatedTrackIds.size());
+
+      for (auto const trackId : updatedTrackIds)
+      {
+        updatedIds.emplace(trackId, updatedIds.size());
+      }
+
+      for (std::size_t index = 0; index < _effectiveTrackIds.size(); ++index)
+      {
+        auto const trackId = _effectiveTrackIds[index];
+
+        if (!updatedIds.contains(trackId) || !previousIndexByTrackId.contains(trackId))
+        {
+          continue;
+        }
+
+        if (!batch.deltas.empty() && std::holds_alternative<SourceUpdateRange>(batch.deltas.back()))
+        {
+          auto& previousRange = std::get<SourceUpdateRange>(batch.deltas.back());
+
+          if (previousRange.start + previousRange.trackIds.size() == index)
+          {
+            previousRange.trackIds.push_back(trackId);
+            continue;
+          }
+        }
+
+        batch.deltas.push_back(SourceUpdateRange{.start = index, .trackIds = {trackId}});
+      }
+    }
+
+    if (batch.deltas.empty())
+    {
+      return;
+    }
+
+    std::ignore = publishDeltaBatch(std::move(batch), previousEffective.size());
+  }
+
+  void ManualListSource::publishExactMoveDelta(std::vector<TrackId> const& previousEffective,
+                                               std::span<TrackId const> const movedTrackIds)
+  {
+    auto previousIndexByTrackId = TrackIndexMap{};
+    previousIndexByTrackId.reserve(previousEffective.size());
+
+    for (std::size_t index = 0; index < previousEffective.size(); ++index)
+    {
+      previousIndexByTrackId.emplace(previousEffective[index], index);
+    }
+
+    auto builder = TrackSourceDeltaBuilder{previousEffective.size()};
+
+    for (auto const trackId : movedTrackIds)
+    {
+      auto const previous = previousIndexByTrackId.find(trackId);
+
+      if (auto const current = _effectiveIndexByTrackId.find(trackId);
+          previous != previousIndexByTrackId.end() && current != _effectiveIndexByTrackId.end())
+      {
+        builder.remove(previous->second, trackId);
+        builder.insert(current->second, trackId);
+      }
+    }
+
+    if (auto optBatch = builder.build(); optBatch)
+    {
+      std::ignore = publishDeltaBatch(std::move(*optBatch), previousEffective.size());
+    }
+  }
+
+  void ManualListSource::handleParentBatch(TrackSourceDeltaBatch const& batch)
+  {
+    if (state() == TrackSourceState::Invalidated)
+    {
+      return;
+    }
+
+    if (batch.deltas.size() == 1 && std::holds_alternative<SourceInvalidated>(batch.deltas.front()))
+    {
+      _parentSubscription.reset();
+      invalidate();
+      return;
+    }
+
+    auto const previousEffective = _effectiveTrackIds;
+    rebuildEffectiveTracks();
+
+    if (batch.deltas.size() == 1 && std::holds_alternative<SourceReset>(batch.deltas.front()))
+    {
+      std::ignore = publishDeltaBatch(TrackSourceDeltaBatch{.deltas = {SourceReset{}}}, previousEffective.size());
+      return;
+    }
+
+    auto updatedTrackIds = std::vector<TrackId>{};
+
+    for (auto const& delta : batch.deltas)
+    {
+      if (auto const* update = std::get_if<SourceUpdateRange>(&delta); update != nullptr)
+      {
+        updatedTrackIds.append_range(update->trackIds);
+      }
+    }
+
+    publishVisibilityDelta(previousEffective, updatedTrackIds);
   }
 } // namespace ao::rt

@@ -5,18 +5,23 @@
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
+#include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <utility>
+#include <vector>
 
 namespace ao::library::test
 {
@@ -30,6 +35,24 @@ namespace ao::library::test
       auto result = writer.create(data);
       REQUIRE(result);
       return *result;
+    }
+
+    std::vector<std::byte> legacyListPayload(std::span<TrackId const> trackIds)
+    {
+      auto const trackIdsSize = trackIds.size_bytes();
+      auto const stringOffset = static_cast<std::uint16_t>(trackIdsSize);
+      auto const header = ListHeader{
+        .trackIdCount = static_cast<std::uint32_t>(trackIds.size()),
+        .nameOffset = stringOffset,
+        .descOffset = stringOffset,
+        .filterOffset = stringOffset,
+      };
+
+      auto result = std::vector<std::byte>{};
+      result.reserve(sizeof(header) + trackIdsSize);
+      result.insert_range(result.end(), utility::bytes::view(header));
+      result.insert_range(result.end(), utility::bytes::view(trackIds));
+      return result;
     }
   } // namespace
 
@@ -64,6 +87,51 @@ namespace ao::library::test
     CHECK(view.tracks()[0] == TrackId{100});
     CHECK(view.tracks()[1] == TrackId{200});
     CHECK(view.tracks()[2] == TrackId{300});
+  }
+
+  TEST_CASE("ListBuilder - add retains only the first occurrence in request order", "[library][unit][list]")
+  {
+    auto builder = ListBuilder::makeEmpty();
+    builder.tracks().add(TrackId{30}).add(TrackId{10}).add(TrackId{30}).add(TrackId{20}).add(TrackId{10});
+
+    auto const payload = builder.serialize();
+    auto const view = ListView{payload};
+
+    REQUIRE(view.tracks().size() == 3);
+    CHECK(view.tracks()[0] == TrackId{30});
+    CHECK(view.tracks()[1] == TrackId{10});
+    CHECK(view.tracks()[2] == TrackId{20});
+  }
+
+  TEST_CASE("ListBuilder - remove eliminates membership after repeated add requests", "[library][unit][list]")
+  {
+    auto builder = ListBuilder::makeEmpty();
+    builder.tracks().add(TrackId{10}).add(TrackId{20}).add(TrackId{10}).add(TrackId{30});
+
+    builder.tracks().remove(TrackId{10});
+
+    auto const payload = builder.serialize();
+    auto const view = ListView{payload};
+    REQUIRE(view.tracks().size() == 2);
+    CHECK(view.tracks()[0] == TrackId{20});
+    CHECK(view.tracks()[1] == TrackId{30});
+  }
+
+  TEST_CASE("ListBuilder - fromView canonicalizes legacy duplicates by first occurrence", "[library][unit][list]")
+  {
+    auto const legacyTrackIds = std::array{TrackId{30}, TrackId{10}, TrackId{30}, TrackId{20}, TrackId{10}};
+    auto const legacyPayload = legacyListPayload(legacyTrackIds);
+    auto const legacyView = ListView{legacyPayload};
+    REQUIRE(legacyView.isValid());
+    REQUIRE(legacyView.tracks().size() == 5);
+
+    auto const rebuiltPayload = ListBuilder::fromView(legacyView).serialize();
+    auto const rebuiltView = ListView{rebuiltPayload};
+
+    REQUIRE(rebuiltView.tracks().size() == 3);
+    CHECK(rebuiltView.tracks()[0] == TrackId{30});
+    CHECK(rebuiltView.tracks()[1] == TrackId{10});
+    CHECK(rebuiltView.tracks()[2] == TrackId{20});
   }
 
   TEST_CASE("ListBuilder - manual list empty trackIds", "[library][unit][list]")

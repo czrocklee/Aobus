@@ -4,15 +4,15 @@
 #include "playback/NowPlayingStatusLabel.h"
 
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/audio/PlaybackInput.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/PlaybackState.h>
+#include <ao/rt/VirtualListIds.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>
 
-#include <chrono>
 #include <optional>
 
 namespace ao::gtk::test
@@ -34,12 +34,10 @@ namespace ao::gtk::test
     CHECK(gtkLabel->has_css_class("ao-clickable"));
     CHECK(gtkLabel->get_tooltip_text() == "Click to show playing list");
 
-    auto desc = rt::PlaybackService::PlaybackRequest{
-      .item = rt::NowPlayingInfo{.trackId = TrackId{1}, .title = "Song", .artist = "Artist"},
-      .input = audio::PlaybackInput{.duration = std::chrono::seconds{1}},
-    };
-
-    REQUIRE(playback.play(desc, ListId{1}));
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const trackId = library::test::addTrack(
+      fixture.runtime().musicLibrary(), {.title = "Song", .artist = "Artist", .uri = fixturePath});
+    REQUIRE(playback.playTrack(trackId, rt::kAllTracksListId));
     drainGtkEvents();
     CHECK_FALSE(gtkLabel->get_text().empty());
 
@@ -50,7 +48,7 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     REQUIRE(optRequest);
-    CHECK(optRequest->trackId == TrackId{1});
-    CHECK(optRequest->preferredListId == ListId{1});
+    CHECK(optRequest->trackId == trackId);
+    CHECK(optRequest->preferredListId == rt::kAllTracksListId);
   }
 } // namespace ao::gtk::test

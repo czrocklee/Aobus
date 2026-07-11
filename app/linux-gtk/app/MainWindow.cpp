@@ -37,6 +37,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace ao::gtk
@@ -80,6 +81,7 @@ namespace ao::gtk
     auto mprisArtUrlCachePtr = std::make_shared<platform::MprisArtUrlCache>(_runtime.library());
     _mprisBridgePtr = std::make_unique<platform::MprisBridge>(
       _runtime.playback(),
+      _runtime.playbackSequence(),
       *_mainWindowCoordinatorPtr->playbackCommandSurface(),
       platform::MprisBridge::Callbacks{
         .raise =
@@ -135,11 +137,11 @@ namespace ao::gtk
 
         if (optNavigation == WorkspaceNavigation::Back)
         {
-          _runtime.workspace().goBack();
+          std::ignore = _runtime.workspace().goBack();
         }
         else if (optNavigation == WorkspaceNavigation::Forward)
         {
-          _runtime.workspace().goForward();
+          std::ignore = _runtime.workspace().goForward();
         }
       });
     add_controller(mouseNavGesturePtr);

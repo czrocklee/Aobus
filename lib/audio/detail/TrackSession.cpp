@@ -68,7 +68,8 @@ namespace ao::audio::detail
                                                          BackendId const& backendId,
                                                          ProfileId const& profileId,
                                                          DecoderFactoryFn const& decoderFactory,
-                                                         OnSourceErrorFn onSourceError)
+                                                         OnSourceErrorFn onSourceError,
+                                                         std::chrono::milliseconds const initialOffset)
   {
     auto const outputFormat = [] { return Format{.isInterleaved = true}; }();
 
@@ -93,6 +94,15 @@ namespace ao::audio::detail
       negotiateFormat(input.filePath, info, decoderPtr, backendFormat, device, backendId, profileId, decoderFactory);
 
       info = decoderPtr->streamInfo();
+
+      if (initialOffset > std::chrono::milliseconds{0})
+      {
+        if (auto const seekResult = decoderPtr->seek(initialOffset); !seekResult)
+        {
+          throwDecoderError(seekResult.error());
+        }
+      }
+
       auto sourcePtr = createPcmSource(std::move(decoderPtr), info, std::move(onSourceError));
 
       return OpenedTrack{.sourcePtr = std::move(sourcePtr), .backendFormat = backendFormat, .info = info};

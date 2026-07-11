@@ -3,63 +3,52 @@
 
 #include "track/LibraryTrackCountLabel.h"
 
-#include <ao/CoreIds.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
-#include <cstddef>
+#include <algorithm>
 #include <format>
+#include <utility>
+#include <variant>
 
 namespace ao::gtk
 {
-  LibraryTrackCountLabel::LibraryTrackCountLabel(rt::TrackSource& source)
-    : _source{&source}
+  LibraryTrackCountLabel::LibraryTrackCountLabel(rt::TrackSourceLease sourceLease)
+    : _sourceLease{std::move(sourceLease)}
   {
     _label.add_css_class("dim-label");
-    _source->attach(this);
+    _sourceSubscription =
+      _sourceLease->subscribe([this](rt::TrackSourceDeltaBatch const& batch) { handleSourceBatch(batch); });
 
     updateCount();
   }
 
-  LibraryTrackCountLabel::~LibraryTrackCountLabel()
+  LibraryTrackCountLabel::~LibraryTrackCountLabel() = default;
+
+  void LibraryTrackCountLabel::handleSourceBatch(rt::TrackSourceDeltaBatch const& batch)
   {
-    if (_source != nullptr)
+    if (batch.deltas.size() == 1 && std::holds_alternative<rt::SourceInvalidated>(batch.deltas.front()))
     {
-      _source->detach(this);
+      _sourceSubscription.reset();
+      return;
     }
-  }
 
-  void LibraryTrackCountLabel::handleReset()
-  {
-    updateCount();
-  }
-
-  void LibraryTrackCountLabel::handleInserted(TrackId /*id*/, std::size_t /*index*/)
-  {
-    updateCount();
-  }
-
-  void LibraryTrackCountLabel::handleUpdated(TrackId /*id*/, std::size_t /*index*/)
-  {
-  }
-
-  void LibraryTrackCountLabel::handleRemoved(TrackId /*id*/, std::size_t /*index*/)
-  {
-    updateCount();
-  }
-
-  void LibraryTrackCountLabel::handleSourceDestroyed()
-  {
-    _source = nullptr;
+    if (std::ranges::any_of(batch.deltas,
+                            [](rt::TrackSourceDelta const& delta)
+                            {
+                              return std::holds_alternative<rt::SourceReset>(delta) ||
+                                     std::holds_alternative<rt::SourceInsertRange>(delta) ||
+                                     std::holds_alternative<rt::SourceRemoveRange>(delta);
+                            }))
+    {
+      updateCount();
+    }
   }
 
   void LibraryTrackCountLabel::updateCount()
   {
-    if (_source == nullptr)
-    {
-      return;
-    }
-
-    auto const count = _source->size();
+    auto const count = _sourceLease->size();
     _label.set_text(std::format("{} tracks", count));
   }
 } // namespace ao::gtk

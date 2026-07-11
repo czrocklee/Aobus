@@ -63,6 +63,18 @@ namespace ao::rt
       ryml::ConstNodeRef node;
     };
 
+    struct ValidatedListTrackIdReference final
+    {
+      std::uint32_t yamlId = 0;
+    };
+
+    struct ValidatedListTrackUriReference final
+    {
+      std::string uri;
+    };
+
+    using ValidatedListTrackReference = std::variant<ValidatedListTrackIdReference, ValidatedListTrackUriReference>;
+
     struct ValidatedList final
     {
       std::uint32_t yamlId = 0;
@@ -70,8 +82,7 @@ namespace ao::rt
       std::string_view name;
       std::string_view description;
       std::string_view filter;
-      std::vector<std::uint32_t> yamlTrackIds;
-      std::vector<std::string> trackUris;
+      std::vector<ValidatedListTrackReference> trackReferences;
       bool isSmart = false;
     };
 
@@ -368,10 +379,8 @@ namespace ao::rt
 
     void buildStaticListTracks(library::ListBuilder& builder,
                                ValidatedList const& importedList,
-                               std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId) const;
-    void buildStaticListUris(library::ListBuilder& builder,
-                             ValidatedList const& importedList,
-                             library::FileManifestStore::Reader const& manifestReader) const;
+                               std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
+                               library::FileManifestStore::Reader const& manifestReader) const;
     Result<> updateListParent(ValidatedList const& importedList,
                               std::unordered_map<std::uint32_t, ListId> const& yamlListIdToNewListId,
                               library::ListStore::Writer& listWriter) const;
@@ -804,7 +813,7 @@ namespace ao::rt
               return std::unexpected{trackId.error()};
             }
 
-            list.yamlTrackIds.push_back(*trackId);
+            list.trackReferences.emplace_back(ValidatedListTrackIdReference{.yamlId = *trackId});
           }
           else if (trackRef.is_map())
           {
@@ -817,7 +826,7 @@ namespace ao::rt
                 return std::unexpected{trackId.error()};
               }
 
-              list.yamlTrackIds.push_back(*trackId);
+              list.trackReferences.emplace_back(ValidatedListTrackIdReference{.yamlId = *trackId});
             }
             else if (auto const uriNode = yaml::findChild(trackRef, "uri"); uriNode.readable())
             {
@@ -835,7 +844,7 @@ namespace ao::rt
                 return makeError(Error::Code::FormatRejected, "List track reference has empty 'uri'");
               }
 
-              list.trackUris.push_back(std::move(normalized));
+              list.trackReferences.emplace_back(ValidatedListTrackUriReference{.uri = std::move(normalized)});
             }
             else
             {
@@ -1510,8 +1519,7 @@ namespace ao::rt
       }
       else
       {
-        buildStaticListTracks(builder, importedList, yamlTrackIdToInternalId);
-        buildStaticListUris(builder, importedList, manifestReader);
+        buildStaticListTracks(builder, importedList, yamlTrackIdToInternalId, manifestReader);
       }
 
       auto createResult = listWriter.create(builder.serialize());
@@ -1540,24 +1548,24 @@ namespace ao::rt
   void LibraryYamlImporter::Impl::buildStaticListTracks(
     library::ListBuilder& builder,
     ValidatedList const& importedList,
-    std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId) const
+    std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
+    library::FileManifestStore::Reader const& manifestReader) const
   {
-    for (auto const yamlTrackId : importedList.yamlTrackIds)
+    for (auto const& trackReference : importedList.trackReferences)
     {
-      if (auto const it = yamlTrackIdToInternalId.find(yamlTrackId); it != yamlTrackIdToInternalId.end())
+      if (auto const* idReference = std::get_if<ValidatedListTrackIdReference>(&trackReference); idReference != nullptr)
       {
-        builder.tracks().add(it->second);
-      }
-    }
-  }
+        if (auto const it = yamlTrackIdToInternalId.find(idReference->yamlId); it != yamlTrackIdToInternalId.end())
+        {
+          builder.tracks().add(it->second);
+        }
 
-  void LibraryYamlImporter::Impl::buildStaticListUris(library::ListBuilder& builder,
-                                                      ValidatedList const& importedList,
-                                                      library::FileManifestStore::Reader const& manifestReader) const
-  {
-    for (auto const& uri : importedList.trackUris)
-    {
-      if (auto const manifestResult = manifestReader.get(uri); manifestResult)
+        continue;
+      }
+
+      auto const& uriReference = std::get<ValidatedListTrackUriReference>(trackReference);
+
+      if (auto const manifestResult = manifestReader.get(uriReference.uri); manifestResult)
       {
         builder.tracks().add(manifestResult->trackId());
       }

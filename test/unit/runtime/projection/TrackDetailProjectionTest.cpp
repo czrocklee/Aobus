@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
@@ -68,7 +69,7 @@ namespace ao::rt::test
         , sources{libraryFixture.library(), changes}
         , views{executor, libraryFixture.library(), sources}
         , config{libraryFixture.library().rootPath() / "config.json"}
-        , playback{executor, views, libraryFixture.library(), notifications}
+        , playback{executor, libraryFixture.library(), notifications}
         , workspace{views, playback, changes, libraryFixture.library()}
       {
       }
@@ -83,7 +84,7 @@ namespace ao::rt::test
     auto const id1 =
       env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Before", .artist = "ArtistA", .album = "AlbumX"});
 
-    auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
+    auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
     env.views.setSelection(reply.viewId, {id1});
 
     auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
@@ -114,7 +115,7 @@ namespace ao::rt::test
     auto const id1 = env.libraryFixture.addTrack("Selected");
     auto const id2 = env.libraryFixture.addTrack("Other");
 
-    auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
+    auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
     env.views.setSelection(reply.viewId, {id1});
 
     auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
@@ -139,7 +140,7 @@ namespace ao::rt::test
     auto const id2 =
       env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Song B", .artist = "Same", .album = "AlbumY"});
 
-    auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
+    auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
     env.views.setSelection(reply.viewId, {id1, id2});
 
     auto const projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
@@ -186,9 +187,9 @@ namespace ao::rt::test
     auto sub = projPtr->subscribe([&](TrackDetailSnapshot const&) { callCount++; });
     CHECK(callCount == 1); // Called immediately
 
-    auto const reply1 = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
+    auto const reply1 = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
     env.views.setSelection(reply1.viewId, {id1});
-    env.workspace.navigateTo(GlobalViewKind::AllTracks); // Should trigger onFocusedViewChanged
+    REQUIRE(env.workspace.navigateTo(GlobalViewKind::AllTracks)); // Should trigger onFocusedViewChanged
 
     CHECK(callCount >= 2);
     CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song A");
@@ -215,7 +216,7 @@ namespace ao::rt::test
     auto env = TrackDetailProjectionFixture{};
     auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Already Selected"});
 
-    auto const reply = env.views.createView(TrackListViewConfig{.listId = kAllTracksListId});
+    auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
     env.workspace.setFocusedView(reply.viewId);
     env.views.setSelection(reply.viewId, {id1});
 

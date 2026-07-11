@@ -2,18 +2,24 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/rt/PlaybackLaunchContext.h>
 #include <ao/rt/ScopedTimer.h>
 #include <ao/rt/Signal.h>
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/Subscription.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/projection/LiveTrackDetailProjection.h>
@@ -23,11 +29,16 @@
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <chrono>
 #include <cstdint>
+#include <expected>
+#include <format>
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -39,45 +50,152 @@ namespace ao::rt
     struct ViewEntry final
     {
       TrackListViewState state;
-      std::unique_ptr<SmartListSource> adHocSourcePtr;
-      TrackSource* activeSource = nullptr;
+      std::optional<TrackSourceLease> optBaseSourceLease;
+      std::shared_ptr<SmartListSource> adHocSourcePtr;
+      std::optional<TrackSourceLease> optActiveSourceLease;
       std::shared_ptr<LiveTrackListProjection> projectionPtr;
     };
 
-    void applyPresentation(ViewEntry& entry)
+    struct PreparedViewResources final
     {
-      // Derive sort and redundant fields from the built-in preset whose group-by
-      // matches the entry.
+      TrackSourceLease baseSourceLease;
+      std::shared_ptr<SmartListSource> adHocSourcePtr;
+      TrackSourceLease activeSourceLease;
+      std::shared_ptr<LiveTrackListProjection> projectionPtr;
+    };
+
+    TrackPresentationSpec presentationForGroup(TrackGroupKey const groupBy)
+    {
       auto const& presets = builtinTrackPresentationPresets();
       auto const* preset = builtinTrackPresentationPreset(kDefaultTrackPresentationId);
 
       for (auto const& candidate : presets)
       {
-        if (candidate.spec.groupBy == entry.state.groupBy)
+        if (candidate.spec.groupBy == groupBy)
         {
           preset = &candidate;
           break;
         }
       }
 
-      entry.state.presentation = preset->spec;
-      entry.state.sortBy = entry.state.presentation.sortBy;
+      return preset->spec;
+    }
 
-      if (entry.projectionPtr)
+    bool isManualList(library::MusicLibrary& library, ListId const listId)
+    {
+      if (listId == kAllTracksListId)
       {
-        entry.projectionPtr->setPresentation(preset->spec);
+        return false;
       }
+
+      auto const transaction = library.readTransaction();
+      auto const optView = library.lists().reader(transaction).get(listId);
+      return optView && !optView->isSmart();
+    }
+
+    TrackPresentationSpec initialPresentation(TrackListViewConfig const& initial, library::MusicLibrary& library)
+    {
+      if (initial.optPresentation)
+      {
+        return normalizeTrackPresentationSpec(*initial.optPresentation);
+      }
+
+      auto const manualList = isManualList(library, initial.listId);
+      auto const hasExplicitOrder = initial.groupBy != TrackGroupKey::None || !initial.sortBy.empty();
+
+      if (hasExplicitOrder)
+      {
+        auto result = presentationForGroup(initial.groupBy);
+
+        if (manualList && initial.groupBy == TrackGroupKey::None)
+        {
+          if (auto const* preset = builtinTrackPresentationPreset(kListOrderTrackPresentationId); preset != nullptr)
+          {
+            result = preset->spec;
+          }
+        }
+
+        result.id.clear();
+        result.groupBy = initial.groupBy;
+
+        if (!initial.sortBy.empty())
+        {
+          result.sortBy = initial.sortBy;
+        }
+
+        return result;
+      }
+
+      if (manualList)
+      {
+        auto const* preset = builtinTrackPresentationPreset(kListOrderTrackPresentationId);
+
+        if (preset != nullptr)
+        {
+          return preset->spec;
+        }
+      }
+
+      return presentationForGroup(initial.groupBy);
+    }
+
+    Result<PreparedViewResources> prepareViewResources(ViewId const viewId,
+                                                       TrackSourceLease baseSourceLease,
+                                                       std::string const& filterExpression,
+                                                       TrackPresentationSpec const& presentation,
+                                                       library::MusicLibrary& library,
+                                                       SmartListEvaluator& smartEvaluator)
+    {
+      auto adHocSourcePtr = std::shared_ptr<SmartListSource>{};
+      auto activeSourceLease = baseSourceLease;
+
+      if (!filterExpression.empty())
+      {
+        adHocSourcePtr = std::make_shared<SmartListSource>(baseSourceLease, library, smartEvaluator);
+        adHocSourcePtr->setExpression(filterExpression);
+        adHocSourcePtr->reload();
+        activeSourceLease = TrackSourceLease{std::static_pointer_cast<TrackSource>(adHocSourcePtr)};
+      }
+
+      auto projectionPtr = std::make_shared<LiveTrackListProjection>(viewId, activeSourceLease, library);
+      projectionPtr->setPresentation(presentation);
+
+      return PreparedViewResources{
+        .baseSourceLease = std::move(baseSourceLease),
+        .adHocSourcePtr = std::move(adHocSourcePtr),
+        .activeSourceLease = std::move(activeSourceLease),
+        .projectionPtr = std::move(projectionPtr),
+      };
+    }
+
+    void installResources(ViewEntry& entry, PreparedViewResources resources)
+    {
+      entry.projectionPtr = std::move(resources.projectionPtr);
+      entry.optActiveSourceLease = std::move(resources.activeSourceLease);
+      entry.adHocSourcePtr = std::move(resources.adHocSourcePtr);
+      entry.optBaseSourceLease = std::move(resources.baseSourceLease);
+    }
+
+    std::unexpected<Error> missingViewError(ViewId const viewId)
+    {
+      return makeError(Error::Code::NotFound, std::format("View {} does not exist", viewId));
+    }
+
+    std::unexpected<Error> destroyedViewError(ViewId const viewId)
+    {
+      return makeError(Error::Code::InvalidState, std::format("View {} is destroyed", viewId));
     }
 
     void applyPresentation(ViewEntry& entry, TrackPresentationSpec const& spec)
     {
-      entry.state.presentation = spec;
-      entry.state.groupBy = spec.groupBy;
-      entry.state.sortBy = spec.sortBy;
+      auto const normalized = normalizeTrackPresentationSpec(spec);
+      entry.state.presentation = normalized;
+      entry.state.groupBy = normalized.groupBy;
+      entry.state.sortBy = normalized.sortBy;
 
       if (entry.projectionPtr)
       {
-        entry.projectionPtr->setPresentation(spec);
+        entry.projectionPtr->setPresentation(normalized);
       }
     }
   } // namespace
@@ -148,48 +266,48 @@ namespace ao::rt
     return _implPtr->listChangedSignal.connect(std::move(handler));
   }
 
-  CreateTrackListViewReply ViewService::createView(TrackListViewConfig const& initial, bool attached)
+  Result<CreateTrackListViewReply> ViewService::createView(TrackListViewConfig const& initial, bool const attached)
   {
-    auto id = ViewId{_implPtr->nextViewId++};
+    auto baseSourceResult = _implPtr->sources.acquire(initial.listId);
+
+    if (!baseSourceResult)
+    {
+      return std::unexpected{baseSourceResult.error()};
+    }
+
+    auto const id = ViewId{_implPtr->nextViewId};
+    auto const presentation = initialPresentation(initial, _implPtr->library);
+    auto resourcesResult = prepareViewResources(id,
+                                                std::move(*baseSourceResult),
+                                                initial.filterExpression,
+                                                presentation,
+                                                _implPtr->library,
+                                                _implPtr->sources.smartEvaluator());
+
+    if (!resourcesResult)
+    {
+      return std::unexpected{resourcesResult.error()};
+    }
 
     auto state = TrackListViewState{
       .id = id,
       .lifecycle = attached ? ViewLifecycleState::Attached : ViewLifecycleState::Detached,
       .listId = initial.listId,
       .filterExpression = initial.filterExpression,
-      .groupBy = initial.groupBy,
-      .sortBy = initial.sortBy,
+      .groupBy = presentation.groupBy,
+      .sortBy = presentation.sortBy,
+      .presentation = presentation,
     };
-
-    auto* baseSource = &_implPtr->sources.sourceFor(initial.listId);
-    auto adHocSourcePtr = std::unique_ptr<SmartListSource>{};
-
-    if (!initial.filterExpression.empty())
-    {
-      adHocSourcePtr =
-        std::make_unique<SmartListSource>(*baseSource, _implPtr->library, _implPtr->sources.smartEvaluator());
-      adHocSourcePtr->setExpression(initial.filterExpression);
-      adHocSourcePtr->reload();
-      baseSource = adHocSourcePtr.get();
-    }
-
-    auto projectionPtr = std::make_shared<LiveTrackListProjection>(id, *baseSource, _implPtr->library);
-
-    auto& entry = _implPtr->views[id];
-    entry.state = state;
-    entry.adHocSourcePtr = std::move(adHocSourcePtr);
-    entry.activeSource = baseSource;
-    entry.projectionPtr = projectionPtr;
-
-    if (initial.optPresentation)
-    {
-      applyPresentation(entry, *initial.optPresentation);
-    }
-    else
-    {
-      applyPresentation(entry);
-    }
-
+    auto entry = ViewEntry{
+      .state = std::move(state),
+      .optBaseSourceLease = std::nullopt,
+      .adHocSourcePtr = {},
+      .optActiveSourceLease = std::nullopt,
+      .projectionPtr = {},
+    };
+    installResources(entry, std::move(*resourcesResult));
+    _implPtr->views.emplace(id, std::move(entry));
+    ++_implPtr->nextViewId;
     return CreateTrackListViewReply{.viewId = id};
   }
 
@@ -203,77 +321,75 @@ namespace ao::rt
       // Reset projection and ad-hoc source to detach from TrackSource,
       // preventing dangling references if the underlying source is deleted.
       it->second.projectionPtr.reset();
+      it->second.optActiveSourceLease.reset();
       it->second.adHocSourcePtr.reset();
-      it->second.activeSource = nullptr;
+      it->second.optBaseSourceLease.reset();
     }
   }
 
-  void ViewService::setFilter(ViewId viewId, std::string filterExpression)
+  Result<> ViewService::setFilter(ViewId const viewId, std::string filterExpression)
   {
     auto const timer = rt::ScopedTimer{"ViewService::setFilter"};
     auto it = _implPtr->views.find(viewId);
 
     if (it == _implPtr->views.end())
     {
-      return;
+      return missingViewError(viewId);
     }
 
-    it->second.state.filterExpression = std::move(filterExpression);
-    it->second.state.revision++;
+    auto& entry = it->second;
+
+    if (entry.state.lifecycle == ViewLifecycleState::Destroyed)
+    {
+      return destroyedViewError(viewId);
+    }
+
+    if (entry.state.filterExpression == filterExpression)
+    {
+      return {};
+    }
+
+    if (!entry.optBaseSourceLease)
+    {
+      return makeError(Error::Code::InvalidState, "View has no live source lease");
+    }
+
+    auto resourcesResult = prepareViewResources(viewId,
+                                                *entry.optBaseSourceLease,
+                                                filterExpression,
+                                                entry.state.presentation,
+                                                _implPtr->library,
+                                                _implPtr->sources.smartEvaluator());
+
+    if (!resourcesResult)
+    {
+      return std::unexpected{resourcesResult.error()};
+    }
+
+    installResources(entry, std::move(*resourcesResult));
+    entry.state.filterExpression = std::move(filterExpression);
+    ++entry.state.revision;
     _implPtr->filterChangedSignal.post(
       _implPtr->executor,
-      ViewService::FilterChanged{.viewId = viewId, .filterExpression = it->second.state.filterExpression});
-
-    if (it->second.adHocSourcePtr && !it->second.state.filterExpression.empty())
-    {
-      it->second.adHocSourcePtr->setExpression(it->second.state.filterExpression);
-      it->second.adHocSourcePtr->reload();
-    }
-    else if (!it->second.state.filterExpression.empty())
-    {
-      // If we didn't have an adHocSourcePtr but now we need one
-      auto* baseSource = &_implPtr->sources.sourceFor(it->second.state.listId);
-      it->second.adHocSourcePtr =
-        std::make_unique<SmartListSource>(*baseSource, _implPtr->library, _implPtr->sources.smartEvaluator());
-      it->second.adHocSourcePtr->setExpression(it->second.state.filterExpression);
-      it->second.adHocSourcePtr->reload();
-      it->second.activeSource = it->second.adHocSourcePtr.get();
-
-      // Need to attach projection to new source
-      it->second.projectionPtr =
-        std::make_shared<LiveTrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
-      applyPresentation(it->second, it->second.state.presentation);
-      auto ev = TrackListProjectionChanged{
-        .viewId = viewId, .projectionPtr = it->second.projectionPtr, .revision = it->second.state.revision};
-      _implPtr->projectionChangedSignal.post(_implPtr->executor, std::move(ev));
-    }
-    else
-    {
-      // Switching from adHocSourcePtr to no filter
-      auto* baseSource = &_implPtr->sources.sourceFor(it->second.state.listId);
-      it->second.projectionPtr.reset();
-      it->second.adHocSourcePtr.reset();
-      it->second.activeSource = baseSource;
-      it->second.projectionPtr =
-        std::make_shared<LiveTrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
-      applyPresentation(it->second, it->second.state.presentation);
-      auto ev = TrackListProjectionChanged{
-        .viewId = viewId, .projectionPtr = it->second.projectionPtr, .revision = it->second.state.revision};
-      _implPtr->projectionChangedSignal.post(_implPtr->executor, std::move(ev));
-    }
+      ViewService::FilterChanged{.viewId = viewId, .filterExpression = entry.state.filterExpression});
+    _implPtr->projectionChangedSignal.post(
+      _implPtr->executor,
+      TrackListProjectionChanged{
+        .viewId = viewId, .projectionPtr = entry.projectionPtr, .revision = entry.state.revision});
 
     auto status = FilterStatusChanged{
       .viewId = viewId,
-      .expression = it->second.state.filterExpression,
-      .revision = it->second.state.revision,
+      .expression = entry.state.filterExpression,
+      .revision = entry.state.revision,
     };
 
-    if (it->second.adHocSourcePtr != nullptr)
+    if (entry.adHocSourcePtr != nullptr)
     {
-      status.optError = it->second.adHocSourcePtr->error();
+      status.optError = entry.adHocSourcePtr->error();
     }
 
     _implPtr->filterStatusChangedSignal.emit(status);
+    return {};
   }
 
   void ViewService::setPresentation(ViewId viewId, TrackPresentationSpec const& presentation)
@@ -329,43 +445,78 @@ namespace ao::rt
       ViewService::SelectionChanged{.viewId = viewId, .selection = it->second.state.selection});
   }
 
-  void ViewService::openListInView(ViewId viewId, ListId listId)
+  Result<> ViewService::openListInView(ViewId const viewId, ListId const listId)
   {
     auto it = _implPtr->views.find(viewId);
 
     if (it == _implPtr->views.end())
     {
-      return;
+      return missingViewError(viewId);
     }
 
-    it->second.state.listId = listId;
-    it->second.state.revision++;
+    auto& entry = it->second;
 
-    it->second.projectionPtr.reset();
-
-    if (auto* baseSource = &_implPtr->sources.sourceFor(listId); it->second.adHocSourcePtr)
+    if (entry.state.lifecycle == ViewLifecycleState::Destroyed)
     {
-      // adHocSourcePtr holds a reference to the old baseSource. We must recreate it.
-      it->second.adHocSourcePtr =
-        std::make_unique<SmartListSource>(*baseSource, _implPtr->library, _implPtr->sources.smartEvaluator());
-      it->second.adHocSourcePtr->setExpression(it->second.state.filterExpression);
-      it->second.adHocSourcePtr->reload();
-      it->second.activeSource = it->second.adHocSourcePtr.get();
-    }
-    else
-    {
-      it->second.activeSource = baseSource;
+      return destroyedViewError(viewId);
     }
 
-    it->second.projectionPtr =
-      std::make_shared<LiveTrackListProjection>(viewId, *it->second.activeSource, _implPtr->library);
-    applyPresentation(it->second, it->second.state.presentation);
+    if (entry.state.listId == listId)
+    {
+      return {};
+    }
+
+    auto baseSourceResult = _implPtr->sources.acquire(listId);
+
+    if (!baseSourceResult)
+    {
+      return std::unexpected{baseSourceResult.error()};
+    }
+
+    auto resourcesResult = prepareViewResources(viewId,
+                                                std::move(*baseSourceResult),
+                                                entry.state.filterExpression,
+                                                entry.state.presentation,
+                                                _implPtr->library,
+                                                _implPtr->sources.smartEvaluator());
+
+    if (!resourcesResult)
+    {
+      return std::unexpected{resourcesResult.error()};
+    }
+
+    installResources(entry, std::move(*resourcesResult));
+    entry.state.listId = listId;
+    ++entry.state.revision;
     _implPtr->projectionChangedSignal.post(
       _implPtr->executor,
       TrackListProjectionChanged{
-        .viewId = viewId, .projectionPtr = it->second.projectionPtr, .revision = it->second.state.revision});
+        .viewId = viewId, .projectionPtr = entry.projectionPtr, .revision = entry.state.revision});
 
     _implPtr->listChangedSignal.post(_implPtr->executor, ViewService::ListChanged{.viewId = viewId, .listId = listId});
+    return {};
+  }
+
+  Result<PlaybackLaunchContext> ViewService::capturePlaybackLaunchContext(ViewId const viewId) const
+  {
+    auto const it = _implPtr->views.find(viewId);
+
+    if (it == _implPtr->views.end())
+    {
+      return missingViewError(viewId);
+    }
+
+    if (it->second.state.lifecycle == ViewLifecycleState::Destroyed)
+    {
+      return destroyedViewError(viewId);
+    }
+
+    auto const& state = it->second.state;
+    return PlaybackLaunchContext{
+      .sourceListId = state.listId,
+      .quickFilterExpression = state.filterExpression,
+      .order = TrackOrderSpec{.sortBy = state.sortBy},
+    };
   }
 
   std::vector<ViewRecord> ViewService::listViews() const

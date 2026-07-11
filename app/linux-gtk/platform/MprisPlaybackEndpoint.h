@@ -5,6 +5,7 @@
 
 #include "platform/MprisBridge.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -22,9 +23,10 @@ namespace ao::gtk::platform
   {
   public:
     MprisPlaybackEndpoint(rt::PlaybackService& playback,
+                          rt::PlaybackSequenceService& sequence,
                           uimodel::PlaybackCommandSurface& commands,
                           MprisBridge::Callbacks& callbacks)
-      : _playback{playback}, _commands{commands}, _callbacks{callbacks}
+      : _playback{playback}, _sequence{sequence}, _commands{commands}, _callbacks{callbacks}
     {
     }
 
@@ -128,7 +130,7 @@ namespace ao::gtk::platform
 
     bool dispatchSetShuffle(bool const shuffle)
     {
-      _playback.setShuffleMode(shuffle ? rt::ShuffleMode::On : rt::ShuffleMode::Off);
+      _sequence.setShuffleMode(shuffle ? rt::ShuffleMode::On : rt::ShuffleMode::Off);
       return true;
     }
 
@@ -141,7 +143,7 @@ namespace ao::gtk::platform
         return false;
       }
 
-      _playback.setRepeatMode(*optMode);
+      _sequence.setRepeatMode(*optMode);
       return true;
     }
 
@@ -239,6 +241,7 @@ namespace ao::gtk::platform
     }
 
     rt::PlaybackService& _playback;
+    rt::PlaybackSequenceService& _sequence;
     uimodel::PlaybackCommandSurface& _commands;
     MprisBridge::Callbacks& _callbacks;
   };

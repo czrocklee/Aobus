@@ -21,7 +21,7 @@ namespace ao::rt::test
       env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .duration = std::chrono::seconds{100}});
 
     auto service = env.makeService();
-    auto const result = service.createView({}, true);
+    auto const result = env.requireView(service);
 
     SECTION("an empty selection has zero duration")
     {

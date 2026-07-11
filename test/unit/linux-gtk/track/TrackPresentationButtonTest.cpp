@@ -40,7 +40,7 @@ namespace ao::gtk::test
     button.setPresentationServices(&catalog, &preferences, &themeController);
     window.set_child(button);
 
-    runtime.workspace().navigateTo(rt::kAllTracksListId);
+    REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
     drainGtkEvents();
 
     auto* const menuButton = findWidget<Gtk::MenuButton>(button);
@@ -73,7 +73,7 @@ namespace ao::gtk::test
     auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
     auto window = Gtk::Window{};
 
-    runtime.workspace().navigateTo(rt::kAllTracksListId);
+    REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
     drainGtkEvents();
     auto const activeViewId = runtime.workspace().layoutState().activeViewId;
     REQUIRE(activeViewId != rt::kInvalidViewId);

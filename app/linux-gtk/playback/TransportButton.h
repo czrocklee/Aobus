@@ -16,6 +16,11 @@ namespace ao::uimodel
   class PlaybackCommandSurface;
 }
 
+namespace ao::rt
+{
+  class PlaybackSequenceService;
+}
+
 namespace ao::gtk
 {
   class TransportButton final
@@ -24,6 +29,7 @@ namespace ao::gtk
     using Action = uimodel::TransportAction;
 
     TransportButton(rt::PlaybackService& playbackService,
+                    rt::PlaybackSequenceService& playbackSequence,
                     uimodel::PlaybackCommandSurface& commands,
                     Action action,
                     bool showLabel = false,

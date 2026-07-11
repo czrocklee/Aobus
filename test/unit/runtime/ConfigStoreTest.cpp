@@ -600,6 +600,74 @@ namespace ao::rt::test
     CHECK(loaded.name == "temporary string that will go out of scope");
   }
 
+  TEST_CASE("ConfigStore - removes groups", "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
+
+    SECTION("Removal is exact, durable, and idempotent")
+    {
+      auto configStore = ConfigStore{configPath};
+      configStore.save("removed", ComplexAggregate{.count = 1});
+      configStore.save("retained", ComplexAggregate{.count = 2});
+
+      auto removed = configStore.removeGroup("removed");
+      REQUIRE(removed);
+      CHECK(*removed);
+      auto containsRemoved = configStore.contains("removed");
+      auto containsRetained = configStore.contains("retained");
+      REQUIRE(containsRemoved);
+      REQUIRE(containsRetained);
+      CHECK_FALSE(*containsRemoved);
+      CHECK(*containsRetained);
+
+      auto removedAgain = configStore.removeGroup("removed");
+      REQUIRE(removedAgain);
+      CHECK_FALSE(*removedAgain);
+      REQUIRE(configStore.flush());
+
+      auto reloaded = ConfigStore{configPath};
+      containsRemoved = reloaded.contains("removed");
+      containsRetained = reloaded.contains("retained");
+      REQUIRE(containsRemoved);
+      REQUIRE(containsRetained);
+      CHECK_FALSE(*containsRemoved);
+      CHECK(*containsRetained);
+    }
+
+    SECTION("Removing from a missing store is a no-op")
+    {
+      auto configStore = ConfigStore{configPath};
+
+      auto removed = configStore.removeGroup("missing");
+      REQUIRE(removed);
+      CHECK_FALSE(*removed);
+    }
+
+    SECTION("Malformed input is reported without mutation")
+    {
+      {
+        auto out = std::ofstream{configPath};
+        out << "group: [unterminated";
+      }
+
+      auto configStore = ConfigStore{configPath};
+      auto removed = configStore.removeGroup("group");
+      REQUIRE_FALSE(removed);
+      CHECK(removed.error().code == Error::Code::FormatRejected);
+    }
+
+    SECTION("File read errors are propagated")
+    {
+      std::filesystem::create_directory(configPath);
+
+      auto configStore = ConfigStore{configPath};
+      auto removed = configStore.removeGroup("group");
+      REQUIRE_FALSE(removed);
+      CHECK(removed.error().code == Error::Code::IoError);
+    }
+  }
+
   TEST_CASE("ConfigStore - read-only mode rejects writes and reports missing files", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
@@ -616,6 +684,11 @@ namespace ao::rt::test
     SECTION("flush() on ReadOnly throws")
     {
       CHECK_THROWS_AS(configStore.flush(), ao::Exception);
+    }
+
+    SECTION("removeGroup() on ReadOnly throws")
+    {
+      CHECK_THROWS_AS(configStore.removeGroup("key"), ao::Exception);
     }
 
     SECTION("load() on ReadOnly with missing file returns NotFound")

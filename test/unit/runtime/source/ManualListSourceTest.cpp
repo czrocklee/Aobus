@@ -1,244 +1,294 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/runtime/source/ManualListSourceTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/Exception.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/ManualListSource.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
 #include <optional>
+#include <variant>
+#include <vector>
 
 namespace ao::rt::test
 {
-  // =============================================================================
-  // Construction
-  // =============================================================================
-  TEST_CASE("ManualListSource - empty source starts without tracks or upstream source",
-            "[runtime][unit][manual-list][construction]")
+  namespace
   {
-    auto mls = ManualListSource{};
+    std::vector<TrackId> storedTrackIdsOf(ManualListSource const& source)
+    {
+      auto const trackIds = source.storedTrackIds();
+      return {trackIds.begin(), trackIds.end()};
+    }
+  } // namespace
 
-    CHECK(mls.size() == 0);
-    CHECK(mls.trackIds().empty());
-    CHECK(mls.source() == nullptr);
+  TEST_CASE("ManualListSource - keeps stored order separate from effective parent membership",
+            "[runtime][unit][source][manual-list]")
+  {
+    auto parentPtr = makeMutableTrackSource({TrackId{3}, TrackId{1}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto const expectedStored = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
+    auto const expectedEffective = std::vector{TrackId{1}, TrackId{3}};
+
+    CHECK(storedTrackIdsOf(source) == expectedStored);
+    CHECK(sourceTrackIds(source) == expectedEffective);
+    CHECK(source.size() == 2);
+    CHECK(source.trackIdAt(1) == TrackId{3});
+    CHECK(source.indexOf(TrackId{1}) == std::optional<std::size_t>{0});
+    CHECK(source.indexOf(TrackId{3}) == std::optional<std::size_t>{1});
+    CHECK(source.indexOf(TrackId{2}) == std::nullopt);
+    CHECK(source.contains(TrackId{3}));
+    CHECK_FALSE(source.contains(TrackId{2}));
   }
 
-  TEST_CASE("ManualListSource - construction from ListView copies tracks without upstream source",
-            "[runtime][unit][manual-list][construction]")
+  TEST_CASE("ManualListSource - hidden-only reload updates stored intent without a revision",
+            "[runtime][unit][source][manual-list]")
   {
-    auto lv = ListViewOwner{{TrackId{10}, TrackId{20}, TrackId{30}}};
-    auto mls = ManualListSource{lv.view()};
+    auto parentPtr = makeMutableTrackSource({TrackId{1}});
+    auto initialView = ListViewOwner{{TrackId{1}, TrackId{2}}};
+    auto source = ManualListSource{initialView.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    REQUIRE(mls.size() == 3);
-    CHECK(mls.trackIdAt(0) == TrackId{10});
-    CHECK(mls.trackIdAt(1) == TrackId{20});
-    CHECK(mls.trackIdAt(2) == TrackId{30});
-    CHECK(mls.source() == nullptr);
+    auto replacementView = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
+    source.reloadFromListView(replacementView.view());
+
+    auto const expectedStored = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
+    auto const expectedEffective = std::vector{TrackId{1}};
+    CHECK(storedTrackIdsOf(source) == expectedStored);
+    CHECK(sourceTrackIds(source) == expectedEffective);
+    CHECK(source.revision() == 0);
+    CHECK(batches.empty());
   }
 
-  TEST_CASE("ManualListSource - construction from empty ListView creates empty list",
-            "[runtime][unit][manual-list][construction]")
+  TEST_CASE("ManualListSource - visible reload publishes one reset after installing final state",
+            "[runtime][unit][source][manual-list]")
   {
-    auto lv = ListViewOwner{{}};
-    auto mls = ManualListSource{lv.view()};
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{3}});
+    auto initialView = ListViewOwner{{TrackId{1}}};
+    auto source = ManualListSource{initialView.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto observedSnapshots = std::vector<std::vector<TrackId>>{};
+    [[maybe_unused]] auto subscription = source.subscribe(
+      [&source, &batches, &observedSnapshots](TrackSourceDeltaBatch const& batch)
+      {
+        batches.push_back(batch);
+        observedSnapshots.push_back(sourceTrackIds(source));
+      });
 
-    CHECK(mls.size() == 0);
-    CHECK(mls.trackIds().empty());
+    auto replacementView = ListViewOwner{{TrackId{3}, TrackId{2}, TrackId{1}}};
+    source.reloadFromListView(replacementView.view());
+
+    auto const expectedEffective = std::vector{TrackId{3}, TrackId{1}};
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<SourceReset>(batches.front().deltas.front()));
+    CHECK(batches.front().revision == 1);
+    CHECK(source.revision() == 1);
+    CHECK(sourceTrackIds(source) == expectedEffective);
+    REQUIRE(observedSnapshots.size() == 1);
+    CHECK(observedSnapshots.front() == expectedEffective);
   }
 
-  TEST_CASE("ManualListSource - construction with upstream source attaches as observer",
-            "[runtime][unit][manual-list][construction]")
+  TEST_CASE("ManualListSource - exact insert emits only visible identities", "[runtime][unit][source][manual-list]")
   {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{3}});
+    auto view = ListViewOwner{{TrackId{1}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    auto lv = ListViewOwner{{TrackId{1}}};
-    auto mls = ManualListSource{lv.view(), &source};
+    source.applyManualTracksInsert(ManualTracksInsert{.storedIndex = 1, .trackIds = {TrackId{2}, TrackId{3}}});
 
-    CHECK(mls.source() == &source);
-    CHECK(mls.size() == 1);
-    CHECK(mls.trackIdAt(0) == TrackId{1});
+    auto const expectedStored = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
+    auto const expectedEffective = std::vector{TrackId{1}, TrackId{3}};
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    auto const& insertion = std::get<SourceInsertRange>(batches.front().deltas.front());
+    CHECK(insertion.start == 1);
+    CHECK(insertion.trackIds == std::vector{TrackId{3}});
+    CHECK(storedTrackIdsOf(source) == expectedStored);
+    CHECK(sourceTrackIds(source) == expectedEffective);
+    CHECK(source.revision() == 1);
 
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
+    source.applyManualTracksInsert(ManualTracksInsert{.storedIndex = 2, .trackIds = {TrackId{4}}});
 
-    source.update(TrackId{1});
+    auto const expectedStoredAfterHiddenInsert = std::vector{TrackId{1}, TrackId{2}, TrackId{4}, TrackId{3}};
+    CHECK(storedTrackIdsOf(source) == expectedStoredAfterHiddenInsert);
+    CHECK(sourceTrackIds(source) == expectedEffective);
+    CHECK(source.revision() == 1);
+    CHECK(batches.size() == 1);
 
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
-    CHECK(spy.events[0].id == TrackId{1});
+    source.applyManualTracksRemove(
+      ManualTracksRemove{.removals = {{.start = 1, .trackIds = {TrackId{2}, TrackId{4}}}}});
 
-    mls.detach(&spy);
+    auto const expectedStoredAfterHiddenRemove = std::vector{TrackId{1}, TrackId{3}};
+    CHECK(storedTrackIdsOf(source) == expectedStoredAfterHiddenRemove);
+    CHECK(sourceTrackIds(source) == expectedEffective);
+    CHECK(source.revision() == 1);
+    CHECK(batches.size() == 1);
   }
 
-  // =============================================================================
-  // TrackSource queries
-  // =============================================================================
-  TEST_CASE("ManualListSource - size returns number of manual tracks", "[runtime][unit][manual-list][query]")
+  TEST_CASE("ManualListSource - exact remove applies descending stored ranges and visible delta",
+            "[runtime][unit][source][manual-list]")
   {
-    auto mls = ManualListSource{};
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{3}, TrackId{4}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}, TrackId{5}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    CHECK(mls.size() == 0);
+    source.applyManualTracksRemove(ManualTracksRemove{
+      .removals = {{.start = 4, .trackIds = {TrackId{5}}}, {.start = 1, .trackIds = {TrackId{2}, TrackId{3}}}}});
 
-    mls.trackIds().emplace_back(1);
-    CHECK(mls.size() == 1);
-
-    mls.trackIds().emplace_back(2);
-    mls.trackIds().emplace_back(3);
-    CHECK(mls.size() == 3);
+    auto const expectedStored = std::vector{TrackId{1}, TrackId{4}};
+    auto const expectedEffective = std::vector{TrackId{1}, TrackId{4}};
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    auto const& removal = std::get<SourceRemoveRange>(batches.front().deltas.front());
+    CHECK(removal.start == 1);
+    CHECK(removal.trackIds == std::vector{TrackId{3}});
+    CHECK(storedTrackIdsOf(source) == expectedStored);
+    CHECK(sourceTrackIds(source) == expectedEffective);
   }
 
-  TEST_CASE("ManualListSource - trackIdAt returns IDs in list order", "[runtime][unit][manual-list][query]")
+  TEST_CASE("ManualListSource - exact move preserves known identity through hidden selections",
+            "[runtime][unit][source][manual-list]")
   {
-    auto lv = ListViewOwner{{TrackId{100}, TrackId{200}, TrackId{300}}};
-    auto mls = ManualListSource{lv.view()};
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{3}, TrackId{4}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}, TrackId{5}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    CHECK(mls.trackIdAt(0) == TrackId{100});
-    CHECK(mls.trackIdAt(1) == TrackId{200});
-    CHECK(mls.trackIdAt(2) == TrackId{300});
+    source.applyManualTracksMove(ManualTracksMove{
+      .removals = {{.start = 4, .trackIds = {TrackId{5}}}, {.start = 2, .trackIds = {TrackId{3}}}},
+      .insertionIndexAfterRemoval = 0,
+      .insertedTrackIds = {TrackId{3}, TrackId{5}},
+    });
+
+    auto const expectedStored = std::vector{TrackId{3}, TrackId{5}, TrackId{1}, TrackId{2}, TrackId{4}};
+    auto const expectedEffective = std::vector{TrackId{3}, TrackId{1}, TrackId{4}};
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 2);
+    auto const& removal = std::get<SourceRemoveRange>(batches.front().deltas[0]);
+    auto const& insertion = std::get<SourceInsertRange>(batches.front().deltas[1]);
+    CHECK(removal.start == 1);
+    CHECK(removal.trackIds == std::vector{TrackId{3}});
+    CHECK(insertion.start == 0);
+    CHECK(insertion.trackIds == std::vector{TrackId{3}});
+    CHECK(storedTrackIdsOf(source) == expectedStored);
+    CHECK(sourceTrackIds(source) == expectedEffective);
+    CHECK(source.revision() == 1);
   }
 
-  TEST_CASE("ManualListSource - indexOf returns local index for member track", "[runtime][unit][manual-list][query]")
+  TEST_CASE("ManualListSource - preserves exact move identity for an ambiguous final permutation",
+            "[runtime][regression][source][manual-list]")
   {
-    auto lv = ListViewOwner{{TrackId{5}, TrackId{10}, TrackId{15}}};
-    auto mls = ManualListSource{lv.view()};
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
+    auto moveFirstToEnd = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto moveTailToFront = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto firstMoveBatches = std::vector<TrackSourceDeltaBatch>{};
+    auto tailMoveBatches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto firstMoveSubscription = moveFirstToEnd.subscribe(
+      [&firstMoveBatches](TrackSourceDeltaBatch const& batch) { firstMoveBatches.push_back(batch); });
+    [[maybe_unused]] auto tailMoveSubscription = moveTailToFront.subscribe(
+      [&tailMoveBatches](TrackSourceDeltaBatch const& batch) { tailMoveBatches.push_back(batch); });
 
-    CHECK(mls.indexOf(TrackId{5}) == std::optional{std::size_t{0}});
-    CHECK(mls.indexOf(TrackId{10}) == std::optional{std::size_t{1}});
-    CHECK(mls.indexOf(TrackId{15}) == std::optional{std::size_t{2}});
+    moveFirstToEnd.applyManualTracksMove(ManualTracksMove{
+      .removals = {{.start = 0, .trackIds = {TrackId{1}}}},
+      .insertionIndexAfterRemoval = 2,
+      .insertedTrackIds = {TrackId{1}},
+    });
+    moveTailToFront.applyManualTracksMove(ManualTracksMove{
+      .removals = {{.start = 1, .trackIds = {TrackId{2}, TrackId{3}}}},
+      .insertionIndexAfterRemoval = 0,
+      .insertedTrackIds = {TrackId{2}, TrackId{3}},
+    });
+
+    auto const expected = std::vector{TrackId{2}, TrackId{3}, TrackId{1}};
+    CHECK(storedTrackIdsOf(moveFirstToEnd) == expected);
+    CHECK(sourceTrackIds(moveFirstToEnd) == expected);
+    CHECK(storedTrackIdsOf(moveTailToFront) == expected);
+    CHECK(sourceTrackIds(moveTailToFront) == expected);
+    CHECK(moveFirstToEnd.revision() == 1);
+    CHECK(moveTailToFront.revision() == 1);
+
+    REQUIRE(firstMoveBatches.size() == 1);
+    CHECK(firstMoveBatches.front().revision == 1);
+    REQUIRE(firstMoveBatches.front().deltas.size() == 2);
+    REQUIRE(std::holds_alternative<SourceRemoveRange>(firstMoveBatches.front().deltas[0]));
+    REQUIRE(std::holds_alternative<SourceInsertRange>(firstMoveBatches.front().deltas[1]));
+    auto const& firstRemoval = std::get<SourceRemoveRange>(firstMoveBatches.front().deltas[0]);
+    auto const& firstInsertion = std::get<SourceInsertRange>(firstMoveBatches.front().deltas[1]);
+    CHECK(firstRemoval.start == 0);
+    CHECK(firstRemoval.trackIds == std::vector{TrackId{1}});
+    CHECK(firstInsertion.start == 2);
+    CHECK(firstInsertion.trackIds == std::vector{TrackId{1}});
+
+    REQUIRE(tailMoveBatches.size() == 1);
+    CHECK(tailMoveBatches.front().revision == 1);
+    REQUIRE(tailMoveBatches.front().deltas.size() == 2);
+    REQUIRE(std::holds_alternative<SourceRemoveRange>(tailMoveBatches.front().deltas[0]));
+    REQUIRE(std::holds_alternative<SourceInsertRange>(tailMoveBatches.front().deltas[1]));
+    auto const& tailRemoval = std::get<SourceRemoveRange>(tailMoveBatches.front().deltas[0]);
+    auto const& tailInsertion = std::get<SourceInsertRange>(tailMoveBatches.front().deltas[1]);
+    CHECK(tailRemoval.start == 1);
+    CHECK(tailRemoval.trackIds == std::vector{TrackId{2}, TrackId{3}});
+    CHECK(tailInsertion.start == 0);
+    CHECK(tailInsertion.trackIds == std::vector{TrackId{2}, TrackId{3}});
   }
 
-  TEST_CASE("ManualListSource - indexOf returns nullopt for non-members and empty lists",
-            "[runtime][unit][manual-list][query]")
+  TEST_CASE("ManualListSource - hidden-only move changes stored order without a source batch",
+            "[runtime][unit][source][manual-list]")
   {
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto mls = ManualListSource{lv.view()};
+    auto parentPtr = makeMutableTrackSource({TrackId{1}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
-    CHECK(mls.indexOf(TrackId{99}) == std::nullopt);
+    source.applyManualTracksMove(ManualTracksMove{
+      .removals = {{.start = 2, .trackIds = {TrackId{3}}}},
+      .insertionIndexAfterRemoval = 0,
+      .insertedTrackIds = {TrackId{3}},
+    });
 
-    auto emptyMls = ManualListSource{};
-    CHECK(emptyMls.indexOf(TrackId{1}) == std::nullopt);
+    auto const expectedStored = std::vector{TrackId{3}, TrackId{1}, TrackId{2}};
+    auto const expectedEffective = std::vector{TrackId{1}};
+    CHECK(storedTrackIdsOf(source) == expectedStored);
+    CHECK(sourceTrackIds(source) == expectedEffective);
+    CHECK(source.revision() == 0);
+    CHECK(batches.empty());
   }
 
-  TEST_CASE("ManualListSource - contains distinguishes members from non-members", "[runtime][unit][manual-list][query]")
+  TEST_CASE("ManualListSource - rejects mismatched detailed identities without changing state",
+            "[runtime][unit][source][manual-list]")
   {
-    auto lv = ListViewOwner{{TrackId{42}, TrackId{43}}};
-    auto mls = ManualListSource{lv.view()};
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}});
+    auto view = ListViewOwner{{TrackId{1}, TrackId{2}}};
+    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
 
-    CHECK(mls.contains(TrackId{42}));
-    CHECK(mls.contains(TrackId{43}));
-    CHECK_FALSE(mls.contains(TrackId{1}));
-    CHECK_FALSE(mls.contains(TrackId{99}));
-  }
+    REQUIRE_THROWS_AS(
+      source.applyManualTracksRemove(ManualTracksRemove{.removals = {{.start = 1, .trackIds = {TrackId{99}}}}}),
+      Exception);
 
-  // =============================================================================
-  // ListView reload
-  // =============================================================================
-  TEST_CASE("ManualListSource - reload replaces tracks when no upstream source exists",
-            "[runtime][unit][manual-list][reload]")
-  {
-    auto lv1 = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto mls = ManualListSource{lv1.view()};
-
-    auto lv2 = ListViewOwner{{TrackId{10}, TrackId{20}, TrackId{30}}};
-    mls.reloadFromListView(lv2.view());
-
-    REQUIRE(mls.size() == 3);
-    CHECK(mls.trackIdAt(0) == TrackId{10});
-    CHECK(mls.trackIdAt(1) == TrackId{20});
-    CHECK(mls.trackIdAt(2) == TrackId{30});
-  }
-
-  TEST_CASE("ManualListSource - reload filters tracks against upstream source", "[runtime][unit][manual-list][reload]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{3});
-    source.addInitial(TrackId{5});
-
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{3}, TrackId{5}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto lv2 = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
-    mls.reloadFromListView(lv2.view());
-
-    REQUIRE(mls.size() == 2);
-    CHECK(mls.trackIdAt(0) == TrackId{1});
-    CHECK(mls.trackIdAt(1) == TrackId{3});
-  }
-
-  TEST_CASE("ManualListSource - reload notifies observers with reset", "[runtime][unit][manual-list][reload]")
-  {
-    auto lv1 = ListViewOwner{{TrackId{7}, TrackId{8}}};
-    auto mls = ManualListSource{lv1.view()};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    auto lv2 = ListViewOwner{{TrackId{9}}};
-    mls.reloadFromListView(lv2.view());
-
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Reset);
-    REQUIRE(mls.size() == 1);
-    CHECK(mls.trackIdAt(0) == TrackId{9});
-
-    mls.detach(&spy);
-  }
-
-  TEST_CASE("ManualListSource - reload from empty view clears list and notifies reset",
-            "[runtime][unit][manual-list][reload]")
-  {
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto mls = ManualListSource{lv.view()};
-
-    auto spy = SpyTrackSourceObserver{};
-    mls.attach(&spy);
-
-    auto emptyLv = ListViewOwner{{}};
-    mls.reloadFromListView(emptyLv.view());
-
-    CHECK(mls.size() == 0);
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Reset);
-
-    mls.detach(&spy);
-  }
-
-  TEST_CASE("ManualListSource - reload re-filters after upstream removals", "[runtime][unit][manual-list][reload]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    source.remove(TrackId{1});
-
-    auto lv2 = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    mls.reloadFromListView(lv2.view());
-
-    REQUIRE(mls.size() == 1);
-    CHECK(mls.trackIdAt(0) == TrackId{2});
-  }
-
-  TEST_CASE("ManualListSource - reload filters all tracks absent from upstream source",
-            "[runtime][unit][manual-list][reload]")
-  {
-    auto source = MutableTrackSource{};
-    source.addInitial(TrackId{1});
-    source.addInitial(TrackId{2});
-
-    auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto mls = ManualListSource{lv.view(), &source};
-
-    auto lv2 = ListViewOwner{{TrackId{10}, TrackId{20}, TrackId{30}}};
-    mls.reloadFromListView(lv2.view());
-
-    CHECK(mls.size() == 0);
+    auto const expected = std::vector{TrackId{1}, TrackId{2}};
+    CHECK(storedTrackIdsOf(source) == expected);
+    CHECK(sourceTrackIds(source) == expected);
+    CHECK(source.revision() == 0);
   }
 } // namespace ao::rt::test

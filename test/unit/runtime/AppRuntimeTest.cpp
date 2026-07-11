@@ -4,7 +4,6 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include <ao/CoreIds.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/rt/AppRuntime.h>
@@ -50,13 +49,17 @@ namespace ao::rt::test
     CHECK_NOTHROW(appPtr->reloadAllTracks());
 
     // playSelectionInFocusedView (with no focused view)
-    CHECK(appPtr->playSelectionInFocusedView() == kInvalidTrackId);
+    auto const withoutFocus = appPtr->playSelectionInFocusedView();
+    REQUIRE_FALSE(withoutFocus);
+    CHECK(withoutFocus.error().code == Error::Code::InvalidState);
 
     // Add a view and focus it
-    appPtr->workspace().navigateTo(GlobalViewKind::AllTracks);
+    REQUIRE(appPtr->workspace().navigateTo(GlobalViewKind::AllTracks));
 
     // playSelectionInFocusedView (with focused view but no selection)
-    CHECK(appPtr->playSelectionInFocusedView() == kInvalidTrackId);
+    auto const withoutSelection = appPtr->playSelectionInFocusedView();
+    REQUIRE_FALSE(withoutSelection);
+    CHECK(withoutSelection.error().code == Error::Code::NotFound);
 
     // Cover polymorphic destruction of CoreRuntime
     auto const corePtr = std::unique_ptr<CoreRuntime>{std::move(appPtr)};

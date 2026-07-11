@@ -19,7 +19,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include <tuple>
 #include <vector>
 
 namespace ao::rt::test
@@ -77,12 +76,15 @@ namespace ao::rt::test
     auto const nextTrack = fixture.libraryFixture.addTrack({.title = "Prepared Track", .uri = fixturePath});
 
     REQUIRE(fixture.playbackService.playTrack(currentTrack, ListId{7}));
-    REQUIRE(fixture.playbackService.prepareNext(nextTrack, ListId{7}));
+    auto const preparedTokenResult = fixture.playbackService.prepareNext(nextTrack, ListId{7});
+    REQUIRE(preparedTokenResult);
+    auto const preparedToken = *preparedTokenResult;
 
     CHECK(fixture.playbackService.state().nowPlaying.trackId == currentTrack);
     CHECK(fixture.playbackService.state().nowPlaying.title == "Current Track");
     CHECK_FALSE(fixture.playbackService.prepareNext(TrackId{99999}, ListId{7}));
     CHECK(fixture.playbackService.state().nowPlaying.trackId == currentTrack);
+    CHECK(fixture.playbackService.clearPreparedNext() == preparedToken);
   }
 
   TEST_CASE("PlaybackService playback - drain emits idle when playback is actually idle",
@@ -140,7 +142,9 @@ namespace ao::rt::test
     auto idleSub = fixture.playbackService.onIdle([&] { ++idleCount; });
 
     REQUIRE(fixture.playbackService.playTrack(currentTrack, ListId{7}));
-    REQUIRE(fixture.playbackService.prepareNext(nextTrack, ListId{7}));
+    auto const preparedTokenResult = fixture.playbackService.prepareNext(nextTrack, ListId{7});
+    REQUIRE(preparedTokenResult);
+    auto const preparedToken = *preparedTokenResult;
     REQUIRE(fixture.renderTarget != nullptr);
 
     // Only observe the natural advance below, not playTrack's own emission.
@@ -161,11 +165,12 @@ namespace ao::rt::test
     REQUIRE_FALSE(nowPlaying.empty());
 
     // Item-id match: the prepared request is committed as now-playing, exactly
-    // once, without an idle in between (idle would send the queue down the
+    // once, without an idle in between (idle would send playback down the
     // explicit-restart fallback).
     REQUIRE(nowPlaying.size() == 1);
     CHECK(nowPlaying[0].trackId == nextTrack);
     CHECK(nowPlaying[0].sourceListId == ListId{7});
+    CHECK(nowPlaying[0].optPreparedNextToken == preparedToken);
     CHECK(fixture.playbackService.state().nowPlaying.trackId == nextTrack);
     CHECK(fixture.playbackService.state().nowPlaying.title == "Prepared Track");
     CHECK(idleCount == 0);
@@ -187,18 +192,24 @@ namespace ao::rt::test
                                                                      { nowPlaying.push_back(ev); });
 
     REQUIRE(fixture.playbackService.playTrack(currentTrack, ListId{7}));
-    REQUIRE(fixture.playbackService.prepareNext(nextTrack, ListId{7}));
+    auto const preparedTokenResult = fixture.playbackService.prepareNext(nextTrack, ListId{7});
+    REQUIRE(preparedTokenResult);
+    auto const preparedToken = *preparedTokenResult;
     REQUIRE(fixture.renderTarget != nullptr);
+    fixture.executor.drain();
     nowPlaying.clear();
 
     auto buffer = std::array<std::byte, 4096>{};
+    bool crossedSpliceBoundary = false;
 
-    for (std::int32_t i = 0; i < 100000 && fixture.executor.queuedCount() == 0; ++i)
+    for (std::int32_t i = 0; i < 100000 && !crossedSpliceBoundary; ++i)
     {
-      fixture.renderTarget->renderPcm(buffer);
+      crossedSpliceBoundary = fixture.renderTarget->renderPcm(buffer).positionFrameOffset > 0;
     }
 
-    REQUIRE(fixture.executor.queuedCount() > 0);
+    REQUIRE(crossedSpliceBoundary);
+    fixture.executor.checkQueued(std::chrono::seconds{5});
+    REQUIRE(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, preparedToken));
 
     fixture.playbackService.seek(std::chrono::milliseconds{0}, PlaybackService::SeekMode::Final);
     fixture.executor.drain();
@@ -206,11 +217,12 @@ namespace ao::rt::test
     REQUIRE(nowPlaying.size() == 1);
     CHECK(nowPlaying[0].trackId == nextTrack);
     CHECK(nowPlaying[0].sourceListId == ListId{7});
+    CHECK(nowPlaying[0].optPreparedNextToken == preparedToken);
     CHECK(fixture.playbackService.state().nowPlaying.trackId == nextTrack);
     CHECK(fixture.playbackService.state().nowPlaying.title == "Prepared Track");
   }
 
-  TEST_CASE("PlaybackService playback - unrelated failure observer does not suppress default notification",
+  TEST_CASE("PlaybackService playback - rejected preflight reports synchronously without an engine failure event",
             "[runtime][unit][playback][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
@@ -223,23 +235,19 @@ namespace ao::rt::test
     auto sub =
       fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
 
-    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
-    REQUIRE(fixture.executor.drainUntil([&] { return !failures.empty(); }));
+    auto const result = fixture.playbackService.playTrack(trackId, ListId{7});
 
-    REQUIRE(failures.size() == 1);
-    CHECK(failures.front().kind == PlaybackFailureKind::TrackOpen);
-    CHECK(failures.front().trackId == trackId);
-    CHECK(failures.front().sourceListId == ListId{7});
-    CHECK(failures.front().title == "Broken Track");
-    CHECK(failures.front().recoverable);
-    CHECK(failures.front().disposition == PlaybackFailureDisposition::Unhandled);
-    CHECK(failures.front().error.message.contains("Unsupported audio file extension"));
+    REQUIRE_FALSE(result);
+    CHECK(result.error().message.contains("Unsupported audio file extension"));
+    fixture.executor.drain();
+    CHECK(failures.empty());
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().message.contains("Broken Track"));
+    CHECK(feed.entries.front().sticky);
+    CHECK(feed.entries.front().message.contains("Unsupported audio file extension"));
   }
 
-  TEST_CASE("PlaybackService playback - multiple failure observers do not suppress default notification",
+  TEST_CASE("PlaybackService playback - rejected preflight bypasses asynchronous failure observers",
             "[runtime][unit][playback][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
@@ -254,17 +262,15 @@ namespace ao::rt::test
     auto secondSub = fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure)
                                                                { secondFailures.push_back(failure); });
 
-    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
-    REQUIRE(fixture.executor.drainUntil([&] { return !secondFailures.empty(); }));
+    REQUIRE_FALSE(fixture.playbackService.playTrack(trackId, ListId{7}));
+    fixture.executor.drain();
 
-    REQUIRE(firstFailures.size() == 1);
-    REQUIRE(secondFailures.size() == 1);
-    CHECK(firstFailures.front().disposition == PlaybackFailureDisposition::Unhandled);
-    CHECK(secondFailures.front().disposition == PlaybackFailureDisposition::Unhandled);
+    CHECK(firstFailures.empty());
+    CHECK(secondFailures.empty());
     REQUIRE(fixture.notificationService.feed().entries.size() == 1);
   }
 
-  TEST_CASE("PlaybackService playback - unhandled track open failure publishes default notification",
+  TEST_CASE("PlaybackService playback - rejected preflight notification dedupes and renews after dismissal",
             "[runtime][unit][playback][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
@@ -273,21 +279,19 @@ namespace ao::rt::test
 
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
 
-    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
-    REQUIRE(fixture.executor.drainUntil([&] { return !fixture.notificationService.feed().entries.empty(); }));
+    REQUIRE_FALSE(fixture.playbackService.playTrack(trackId, ListId{7}));
 
     auto feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-    CHECK_FALSE(feed.entries.front().sticky);
-    CHECK(feed.entries.front().message.contains("Broken Track"));
+    CHECK(feed.entries.front().sticky);
     CHECK(feed.entries.front().message.contains("Unsupported audio file extension"));
 
     std::int32_t updateCount = 0;
     auto updateSub = fixture.notificationService.onUpdated([&](NotificationId) { ++updateCount; });
 
-    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
-    REQUIRE(fixture.executor.drainUntil([&] { return updateCount == 1; }));
+    REQUIRE_FALSE(fixture.playbackService.playTrack(trackId, ListId{7}));
+    CHECK(updateCount == 1);
 
     feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
@@ -296,15 +300,14 @@ namespace ao::rt::test
     fixture.notificationService.dismiss(dismissedId);
     CHECK(fixture.notificationService.feed().entries.empty());
 
-    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
-    REQUIRE(fixture.executor.drainUntil([&] { return !fixture.notificationService.feed().entries.empty(); }));
+    REQUIRE_FALSE(fixture.playbackService.playTrack(trackId, ListId{7}));
 
     feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().id != dismissedId);
   }
 
-  TEST_CASE("PlaybackService playback - stale async failure is dropped after superseding playback",
+  TEST_CASE("PlaybackService playback - rejected preflight preserves accepted playback",
             "[runtime][unit][playback][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
@@ -319,14 +322,13 @@ namespace ao::rt::test
     auto sub =
       fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
 
-    REQUIRE(fixture.playbackService.playTrack(brokenTrack, ListId{7}));
     REQUIRE(fixture.playbackService.playTrack(replacementTrack, ListId{7}));
+    REQUIRE_FALSE(fixture.playbackService.playTrack(brokenTrack, ListId{7}));
 
-    std::ignore = fixture.executor.drainUntil([&] { return !failures.empty(); }, std::chrono::milliseconds{100});
     fixture.executor.drain();
 
     CHECK(failures.empty());
-    CHECK(fixture.notificationService.feed().entries.empty());
+    CHECK(fixture.notificationService.feed().entries.size() == 1);
     CHECK(fixture.playbackService.state().nowPlaying.trackId == replacementTrack);
   }
 

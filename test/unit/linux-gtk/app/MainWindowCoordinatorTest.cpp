@@ -21,9 +21,11 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/PlaybackQueueService.h>
+#include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
@@ -146,7 +148,7 @@ namespace ao::gtk::test
     CHECK(selected.profileId == audio::kProfileShared);
   }
 
-  TEST_CASE("MainWindowCoordinator - restores playback session as idle queue state",
+  TEST_CASE("MainWindowCoordinator - restores playback session as idle sequence state",
             "[gtk][unit][main-window-playback][session]")
   {
     auto const appPtr = ensureGtkApplication();
@@ -156,12 +158,17 @@ namespace ao::gtk::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId =
       library::test::addTrack(runtime.musicLibrary(), {.title = "Restored Track", .uri = fixturePath});
-    auto const sourceListId = ao::test::requireValue(
-      runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Temporary queue source"}));
-    REQUIRE(runtime.playbackQueue().playQueue({trackId}, trackId, sourceListId));
+    auto const sourceListId = ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{
+      .kind = rt::LibraryWriter::ListKind::Manual,
+      .name = "Temporary sequence source",
+      .trackIds = {trackId},
+    }));
+    runtime.reloadAllTracks();
+    auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigateTo(sourceListId));
+    REQUIRE(runtime.playbackSequence().playFromView(sourceViewId, trackId));
     runtime.playback().seek(std::chrono::milliseconds{500});
-    runtime.playback().setShuffleMode(rt::ShuffleMode::On);
-    runtime.playback().setRepeatMode(rt::RepeatMode::All);
+    runtime.playbackSequence().setShuffleMode(rt::ShuffleMode::On);
+    runtime.playbackSequence().setRepeatMode(rt::RepeatMode::All);
     REQUIRE(runtime.savePlaybackSession());
     REQUIRE(runtime.library().writer().deleteList(sourceListId));
     runtime.playback().stop();
@@ -173,16 +180,16 @@ namespace ao::gtk::test
 
     coordinator.initializeSession();
 
-    auto* const queue = coordinator.playbackQueue();
-    REQUIRE(queue != nullptr);
-    REQUIRE(queue->state().optCurrentIndex);
-    CHECK(queue->state().trackIds[*queue->state().optCurrentIndex] == trackId);
-    CHECK(queue->state().sourceListId == rt::kAllTracksListId);
+    CHECK(coordinator.playbackSequence() == &runtime.playbackSequence());
+    auto const& sequenceState = runtime.playbackSequence().state();
+    CHECK(sequenceState.currentTrackId == trackId);
+    CHECK(sequenceState.sourceListId == rt::kAllTracksListId);
+    CHECK(sequenceState.sourceState == rt::PlaybackSequenceSourceState::Live);
+    CHECK(sequenceState.shuffle == rt::ShuffleMode::On);
+    CHECK(sequenceState.repeat == rt::RepeatMode::All);
     CHECK(runtime.playback().state().transport == audio::Transport::Idle);
     CHECK(runtime.playback().state().nowPlaying.trackId == trackId);
     CHECK(runtime.playback().state().elapsed == std::chrono::milliseconds{500});
-    CHECK(runtime.playback().state().mode.shuffle == rt::ShuffleMode::On);
-    CHECK(runtime.playback().state().mode.repeat == rt::RepeatMode::All);
 
     auto const focusedViewId = runtime.workspace().layoutState().activeViewId;
     REQUIRE(focusedViewId != rt::kInvalidViewId);
@@ -207,9 +214,14 @@ namespace ao::gtk::test
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
     coordinator.initializeSession();
-    REQUIRE(runtime.playbackQueue().playQueue({track1, track2}, track1, rt::kAllTracksListId));
+    auto const viewId = runtime.workspace().layoutState().activeViewId;
+    REQUIRE(viewId != rt::kInvalidViewId);
+    auto const* const listOrder = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
+    REQUIRE(listOrder != nullptr);
+    runtime.views().setPresentation(viewId, listOrder->spec);
+    REQUIRE(runtime.playbackSequence().playFromView(viewId, track1));
     runtime.playback().seek(std::chrono::milliseconds{250});
-    runtime.playbackQueue().next();
+    runtime.playbackSequence().next();
     runtime.playback().seek(std::chrono::milliseconds{550});
     runtime.playback().stop();
 
@@ -219,6 +231,8 @@ namespace ao::gtk::test
     CHECK(restored->trackId == track2);
     CHECK(runtime.playback().state().nowPlaying.trackId == track2);
     CHECK(runtime.playback().state().elapsed == std::chrono::milliseconds{550});
-    CHECK(runtime.playbackQueue().state().trackIds == std::vector{track1, track2});
+    CHECK(runtime.playbackSequence().state().currentTrackId == track2);
+    CHECK(runtime.playbackSequence().state().sourceListId == rt::kAllTracksListId);
+    CHECK(runtime.playbackSequence().state().hasPrevious);
   }
 } // namespace ao::gtk::test

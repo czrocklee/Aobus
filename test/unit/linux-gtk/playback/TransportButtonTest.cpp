@@ -20,8 +20,11 @@ namespace ao::gtk::test
     SECTION("PlayPause action maps initial view state to button attributes")
     {
       auto commands =
-        uimodel::PlaybackCommandSurface{fixture.runtime().playback(), fixture.runtime().playbackQueue(), [] {}};
-      auto button = TransportButton{fixture.runtime().playback(), commands, TransportButton::Action::PlayPause};
+        uimodel::PlaybackCommandSurface{fixture.runtime().playback(), fixture.runtime().playbackSequence(), [] {}};
+      auto button = TransportButton{fixture.runtime().playback(),
+                                    fixture.runtime().playbackSequence(),
+                                    commands,
+                                    TransportButton::Action::PlayPause};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
       REQUIRE(gtkButton != nullptr);
 
@@ -34,9 +37,13 @@ namespace ao::gtk::test
       rt::test::addReadyAudioProvider(fixture.runtime().playback());
       bool playSelectionCalled = false;
       auto commands = uimodel::PlaybackCommandSurface{fixture.runtime().playback(),
-                                                      fixture.runtime().playbackQueue(),
+                                                      fixture.runtime().playbackSequence(),
                                                       [&playSelectionCalled] { playSelectionCalled = true; }};
-      auto button = TransportButton{fixture.runtime().playback(), commands, TransportButton::Action::Play, false};
+      auto button = TransportButton{fixture.runtime().playback(),
+                                    fixture.runtime().playbackSequence(),
+                                    commands,
+                                    TransportButton::Action::Play,
+                                    false};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
       REQUIRE(gtkButton != nullptr);
 

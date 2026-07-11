@@ -67,9 +67,13 @@ namespace ao::rt
     _implPtr->trackCollectionChangedSignal.emit({.inserted = std::move(inserted), .deleted = std::move(deleted)});
   }
 
-  void LibraryChanges::notifyListsMutated(std::vector<ListId> upserted, std::vector<ListId> deleted)
+  void LibraryChanges::notifyListsMutated(std::vector<ListId> upserted,
+                                          std::vector<ListId> deleted,
+                                          std::vector<ManualListContentChange> manualContentChanges)
   {
-    _implPtr->listsMutatedSignal.emit({.upserted = std::move(upserted), .deleted = std::move(deleted)});
+    _implPtr->listsMutatedSignal.emit({.upserted = std::move(upserted),
+                                       .deleted = std::move(deleted),
+                                       .manualContentChanges = std::move(manualContentChanges)});
   }
 
   void LibraryChanges::notifyLibraryTaskProgress(LibraryTaskProgressUpdated progress)

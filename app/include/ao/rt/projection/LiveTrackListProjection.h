@@ -3,10 +3,11 @@
 
 #pragma once
 
+#include "../PlaybackLaunchContext.h"
 #include "../Subscription.h"
 #include "../TrackPresentation.h"
 #include "../ViewIds.h"
-#include "../source/TrackSource.h"
+#include "../source/TrackSourceLease.h"
 #include "TrackListProjection.h"
 #include <ao/CoreIds.h>
 
@@ -15,7 +16,6 @@
 #include <functional>
 #include <memory>
 #include <optional>
-#include <span>
 
 namespace ao::library
 {
@@ -24,14 +24,14 @@ namespace ao::library
 
 namespace ao::rt
 {
-  class SmartListSource;
-
-  class LiveTrackListProjection final
-    : public TrackListProjection
-    , private TrackSourceObserver
+  class LiveTrackListProjection final : public TrackListProjection
   {
   public:
-    LiveTrackListProjection(ViewId viewId, TrackSource& source, library::MusicLibrary& library);
+    LiveTrackListProjection(ViewId viewId, TrackSourceLease sourceLease, library::MusicLibrary& library);
+    LiveTrackListProjection(ViewId viewId,
+                            TrackSourceLease sourceLease,
+                            library::MusicLibrary& library,
+                            TrackOrderSpec const& order);
     ~LiveTrackListProjection() override;
 
     LiveTrackListProjection(LiveTrackListProjection const&) = delete;
@@ -56,19 +56,6 @@ namespace ao::rt
     Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) override;
 
   private:
-    void handleReset() override;
-    void handleInserted(TrackId id, std::size_t index) override;
-    void handleUpdated(TrackId id, std::size_t index) override;
-    void handleRemoved(TrackId id, std::size_t index) override;
-
-    void handleBulkInserted(std::span<TrackId const> ids) override;
-    void handleBulkUpdated(std::span<TrackId const> ids) override;
-    void handleBulkRemoved(std::span<TrackId const> ids) override;
-
-    void handleSourceDestroyed() override;
-
-    void publishDelta(TrackListProjectionDeltaBatch const& batch);
-
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };

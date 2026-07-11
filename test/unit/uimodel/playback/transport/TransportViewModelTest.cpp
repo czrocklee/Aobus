@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/audio/AudioFixtureSupport.h"
-#include "test/unit/runtime/PlaybackServiceTestSupport.h"
+#include "test/unit/runtime/PlaybackSequenceUiTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/PlaybackQueueService.h>
+#include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <functional>
 #include <memory>
 
 namespace ao::uimodel::test
@@ -24,15 +22,16 @@ namespace ao::uimodel::test
 
   TEST_CASE("TransportViewModel - renders presentation for actions", "[uimodel][unit][playback]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
-    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
+    auto fixture = PlaybackSequenceUiFixture{};
+    auto& playback = fixture.runtime.playback();
+    auto& sequence = fixture.runtime.playbackSequence();
+    auto commands = PlaybackCommandSurface{playback, sequence, [] {}};
 
     SECTION("Play action uses play icon and disabled command state")
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
-        fixture.playbackService, commands, TransportAction::Play, false, [&log](auto const& v) { log.render(v); }};
+        playback, sequence, commands, TransportAction::Play, false, [&log](auto const& v) { log.render(v); }};
 
       REQUIRE(!log.empty());
       CHECK(log.last().enabled == false);
@@ -44,7 +43,7 @@ namespace ao::uimodel::test
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
-        fixture.playbackService, commands, TransportAction::PlayPause, true, [&log](auto const& v) { log.render(v); }};
+        playback, sequence, commands, TransportAction::PlayPause, true, [&log](auto const& v) { log.render(v); }};
 
       CHECK(log.last().icon == TransportIcon::Play);
       CHECK(log.last().tooltip == "Play");
@@ -53,19 +52,21 @@ namespace ao::uimodel::test
       CHECK(log.last().enabled == false);
     }
 
-    SECTION("Repeat and shuffle render engaged state from playback modes")
+    SECTION("Repeat and shuffle render engaged state from sequence modes")
     {
-      fixture.playbackService.setShuffleMode(rt::ShuffleMode::On);
-      fixture.playbackService.setRepeatMode(rt::RepeatMode::One);
+      sequence.setShuffleMode(ShuffleMode::On);
+      sequence.setRepeatMode(RepeatMode::One);
 
       auto shuffleLog = ao::test::RenderLog<TransportViewState>{};
       auto repeatLog = ao::test::RenderLog<TransportViewState>{};
-      auto shuffleVm = TransportViewModel{fixture.playbackService,
+      auto shuffleVm = TransportViewModel{playback,
+                                          sequence,
                                           commands,
                                           TransportAction::Shuffle,
                                           true,
                                           [&shuffleLog](auto const& v) { shuffleLog.render(v); }};
-      auto repeatVm = TransportViewModel{fixture.playbackService,
+      auto repeatVm = TransportViewModel{playback,
+                                         sequence,
                                          commands,
                                          TransportAction::Repeat,
                                          true,
@@ -79,25 +80,23 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TransportViewModel - renders command-surface enablement", "[uimodel][unit][playback][queue]")
+  TEST_CASE("TransportViewModel - renders command-surface enablement", "[uimodel][unit][playback][sequence]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const firstTrack = fixture.libraryFixture.addTrack({.title = "First", .uri = fixturePath});
-    auto const secondTrack = fixture.libraryFixture.addTrack({.title = "Second", .uri = fixturePath});
-    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
-    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
-    REQUIRE(queue.playQueue({firstTrack, secondTrack}, firstTrack, ListId{9}));
+    auto fixture = PlaybackSequenceUiFixture{};
+    fixture.makePlaybackReady();
+    auto const firstTrack = fixture.addPlayableTrack("First");
+    fixture.addPlayableTrack("Second");
+    auto& playback = fixture.runtime.playback();
+    auto& sequence = fixture.runtime.playbackSequence();
+    auto commands = PlaybackCommandSurface{playback, sequence, [] {}};
+    REQUIRE(fixture.playFromView(firstTrack));
 
     auto nextLog = ao::test::RenderLog<TransportViewState>{};
     auto previousLog = ao::test::RenderLog<TransportViewState>{};
-    auto nextVm = TransportViewModel{fixture.playbackService,
-                                     commands,
-                                     TransportAction::Next,
-                                     false,
-                                     [&nextLog](auto const& v) { nextLog.render(v); }};
-    auto previousVm = TransportViewModel{fixture.playbackService,
+    auto nextVm = TransportViewModel{
+      playback, sequence, commands, TransportAction::Next, false, [&nextLog](auto const& v) { nextLog.render(v); }};
+    auto previousVm = TransportViewModel{playback,
+                                         sequence,
                                          commands,
                                          TransportAction::Previous,
                                          false,
@@ -109,19 +108,18 @@ namespace ao::uimodel::test
 
   TEST_CASE("TransportViewModel - refreshes only the command it presents", "[uimodel][unit][playback]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
-    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
+    auto fixture = PlaybackSequenceUiFixture{};
+    fixture.makePlaybackReady();
+    auto& playback = fixture.runtime.playback();
+    auto& sequence = fixture.runtime.playbackSequence();
+    auto commands = PlaybackCommandSurface{playback, sequence, [] {}};
 
     auto playLog = ao::test::RenderLog<TransportViewState>{};
     auto shuffleLog = ao::test::RenderLog<TransportViewState>{};
-    auto playVm = TransportViewModel{fixture.playbackService,
-                                     commands,
-                                     TransportAction::Play,
-                                     false,
-                                     [&playLog](auto const& v) { playLog.render(v); }};
-    auto shuffleVm = TransportViewModel{fixture.playbackService,
+    auto playVm = TransportViewModel{
+      playback, sequence, commands, TransportAction::Play, false, [&playLog](auto const& v) { playLog.render(v); }};
+    auto shuffleVm = TransportViewModel{playback,
+                                        sequence,
                                         commands,
                                         TransportAction::Shuffle,
                                         false,
@@ -130,7 +128,7 @@ namespace ao::uimodel::test
     auto const playCount = playLog.states.size();
     auto const shuffleCount = shuffleLog.states.size();
 
-    fixture.playbackService.setShuffleMode(rt::ShuffleMode::On);
+    sequence.setShuffleMode(ShuffleMode::On);
 
     CHECK(playLog.states.size() == playCount);
     CHECK(shuffleLog.states.size() == shuffleCount + 1);
@@ -139,80 +137,77 @@ namespace ao::uimodel::test
 
   TEST_CASE("TransportViewModel - clicks delegate to command surface", "[uimodel][unit][playback]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const firstTrack = fixture.libraryFixture.addTrack({.title = "First", .uri = fixturePath});
-    auto const secondTrack = fixture.libraryFixture.addTrack({.title = "Second", .uri = fixturePath});
-    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
-    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
+    auto fixture = PlaybackSequenceUiFixture{};
+    fixture.makePlaybackReady();
+    auto const firstTrack = fixture.addPlayableTrack("First");
+    auto const secondTrack = fixture.addPlayableTrack("Second");
+    auto& playback = fixture.runtime.playback();
+    auto& sequence = fixture.runtime.playbackSequence();
+    auto commands = PlaybackCommandSurface{playback, sequence, [] {}};
 
     SECTION("PlayPause resumes paused playback")
     {
-      REQUIRE(queue.playQueue({firstTrack}, firstTrack, ListId{5}));
-      fixture.playbackService.pause();
+      REQUIRE(fixture.playFromView(firstTrack));
+      playback.pause();
 
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
-        fixture.playbackService, commands, TransportAction::PlayPause, false, [&log](auto const& v) { log.render(v); }};
+        playback, sequence, commands, TransportAction::PlayPause, false, [&log](auto const& v) { log.render(v); }};
 
       vm.handleClick();
 
-      CHECK(fixture.playbackService.state().transport == audio::Transport::Playing);
-      CHECK(fixture.playbackService.state().nowPlaying.trackId == firstTrack);
+      CHECK(playback.state().transport == audio::Transport::Playing);
+      CHECK(playback.state().nowPlaying.trackId == firstTrack);
     }
 
-    SECTION("Next delegates to queue command")
+    SECTION("Next delegates to sequence command")
     {
-      REQUIRE(queue.playQueue({firstTrack, secondTrack}, firstTrack, ListId{9}));
+      REQUIRE(fixture.playFromView(firstTrack));
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
-        fixture.playbackService, commands, TransportAction::Next, false, [&log](auto const& v) { log.render(v); }};
+        playback, sequence, commands, TransportAction::Next, false, [&log](auto const& v) { log.render(v); }};
 
       vm.handleClick();
 
-      REQUIRE(queue.state().optCurrentIndex);
-      CHECK(queue.state().trackIds[*queue.state().optCurrentIndex] == secondTrack);
+      CHECK(sequence.state().currentTrackId == secondTrack);
     }
 
-    SECTION("Shuffle delegates to mode command")
+    SECTION("Shuffle delegates to sequence mode command")
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
-        fixture.playbackService, commands, TransportAction::Shuffle, false, [&log](auto const& v) { log.render(v); }};
+        playback, sequence, commands, TransportAction::Shuffle, false, [&log](auto const& v) { log.render(v); }};
 
       vm.handleClick();
 
-      CHECK(fixture.playbackService.state().mode.shuffle == rt::ShuffleMode::On);
+      CHECK(sequence.state().shuffle == ShuffleMode::On);
       CHECK(log.last().engaged == true);
     }
   }
 
   TEST_CASE("TransportViewModel - stops rendering after destruction", "[uimodel][unit][playback]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto queue = PlaybackQueueService{fixture.executor, fixture.playbackService, fixture.notificationService};
-    auto commands = PlaybackCommandSurface{fixture.playbackService, queue, [] {}};
+    auto fixture = PlaybackSequenceUiFixture{};
+    fixture.makePlaybackReady();
+    auto& playback = fixture.runtime.playback();
+    auto& sequence = fixture.runtime.playbackSequence();
+    auto commands = PlaybackCommandSurface{playback, sequence, [] {}};
 
     auto log = ao::test::RenderLog<TransportViewState>{};
-    auto viewModelPtr = std::make_unique<TransportViewModel>(fixture.playbackService,
-                                                             commands,
-                                                             TransportAction::Shuffle,
-                                                             false,
-                                                             [&log](auto const& view) { log.render(view); });
+    auto viewModelPtr = std::make_unique<TransportViewModel>(
+      playback, sequence, commands, TransportAction::Shuffle, false, [&log](auto const& view) { log.render(view); });
 
     REQUIRE(!log.empty());
     log.clear();
 
-    fixture.playbackService.setShuffleMode(rt::ShuffleMode::On);
+    sequence.setShuffleMode(ShuffleMode::On);
     REQUIRE(log.states.size() == 1);
     CHECK(log.last().engaged == true);
 
     log.clear();
     viewModelPtr.reset();
 
-    fixture.playbackService.setShuffleMode(rt::ShuffleMode::Off);
+    sequence.setShuffleMode(ShuffleMode::Off);
     CHECK(log.empty());
   }
 } // namespace ao::uimodel::test

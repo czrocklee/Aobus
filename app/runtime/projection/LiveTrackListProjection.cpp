@@ -2,11 +2,14 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/Exception.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/rt/PlaybackLaunchContext.h>
 #include <ao/rt/ScopedTimer.h>
+#include <ao/rt/Signal.h>
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/Subscription.h>
 #include <ao/rt/TrackField.h>
@@ -15,6 +18,8 @@
 #include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceLease.h>
 #include <ao/utility/StringArena.h>
 
 #include <boost/container/small_vector.hpp>
@@ -26,6 +31,7 @@
 #include <cctype>
 #include <charconv>
 #include <chrono>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -37,7 +43,10 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
@@ -608,7 +617,7 @@ namespace ao::rt
   struct LiveTrackListProjection::Impl final
   {
     ViewId viewId;
-    TrackSource& source;
+    TrackSourceLease sourceLease;
     library::MusicLibrary& library;
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy;
@@ -633,8 +642,9 @@ namespace ao::rt
     boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>> rowIndexByTrackId;
     std::vector<GroupSection> sections;
     std::uint64_t rev = 0;
-    std::vector<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>> subscribers;
-    bool sourceDestroyed = false;
+    Signal<TrackListProjectionDeltaBatch const&> changedSignal;
+    bool sourceInvalidated = false;
+    Subscription sourceSubscription;
 
     struct PendingMovedEntry final
     {
@@ -736,20 +746,28 @@ namespace ao::rt
       }
     }
 
-    Impl(ViewId vid, TrackSource& trackSource, library::MusicLibrary& lib)
-      : viewId{vid}, source{trackSource}, library{lib}
+    Impl(ViewId vid,
+         TrackSourceLease trackSourceLease,
+         library::MusicLibrary& lib,
+         std::vector<TrackSortTerm> initialSort = {})
+      : viewId{vid}
+      , sourceLease{std::move(trackSourceLease)}
+      , library{lib}
+      , sortBy{std::move(initialSort)}
+      , comparator{buildComparator(sortBy)}
+      , loadMode{computeLoadMode(sortBy, groupBy)}
     {
-      rebuildOrderIndex();
+      if (sourceLease->state() == TrackSourceState::Live)
+      {
+        rebuildOrderIndex();
+      }
     }
 
     void publishDelta(TrackListProjectionDeltaBatch const& batch)
     {
-      for (auto& sub : subscribers)
+      if (!sourceInvalidated)
       {
-        if (sub)
-        {
-          sub(batch);
-        }
+        changedSignal.emit(batch);
       }
     }
 
@@ -807,6 +825,7 @@ namespace ao::rt
       normCache.clear();
       stringArena.clear();
 
+      auto& source = sourceLease.source();
       orderIndex.reserve(source.size());
 
       auto const transaction = library.readTransaction();
@@ -1651,21 +1670,464 @@ namespace ao::rt
 
       updateUngroupedEntries(ids);
     }
+
+    struct SectionDescriptor final
+    {
+      std::string groupKey;
+      std::string primaryText;
+      std::string secondaryText;
+      std::string tertiaryText;
+      ResourceId imageId{kInvalidResourceId};
+
+      bool operator==(SectionDescriptor const&) const = default;
+    };
+
+    struct IndexedTrack final
+    {
+      std::size_t index = 0;
+      TrackId trackId{};
+    };
+
+    using TrackIndexMap = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>;
+
+    std::vector<TrackId> projectionTrackIds() const
+    {
+      auto trackIds = std::vector<TrackId>{};
+      trackIds.reserve(orderIndex.size());
+
+      for (auto const& entry : orderIndex)
+      {
+        trackIds.push_back(entry.trackId);
+      }
+
+      return trackIds;
+    }
+
+    std::vector<SectionDescriptor> sectionDescriptors() const
+    {
+      auto descriptors = std::vector<SectionDescriptor>{};
+      descriptors.reserve(sections.size());
+
+      for (auto const& section : sections)
+      {
+        descriptors.push_back(SectionDescriptor{
+          .groupKey = std::string{section.groupKey},
+          .primaryText = std::string{section.primaryText},
+          .secondaryText = std::string{section.secondaryText},
+          .tertiaryText = std::string{section.tertiaryText},
+          .imageId = section.imageId,
+        });
+      }
+
+      return descriptors;
+    }
+
+    static TrackIndexMap makeTrackIndex(std::span<TrackId const> trackIds)
+    {
+      auto indexByTrackId = TrackIndexMap{};
+      indexByTrackId.reserve(trackIds.size());
+
+      for (std::size_t index = 0; index < trackIds.size(); ++index)
+      {
+        indexByTrackId.emplace(trackIds[index], index);
+      }
+
+      return indexByTrackId;
+    }
+
+    static std::size_t finalSizeOf(TrackListProjectionDeltaBatch const& batch, std::size_t initialSize)
+    {
+      auto size = initialSize;
+
+      for (auto const& delta : batch.deltas)
+      {
+        if (auto const* insertion = std::get_if<ProjectionInsertRange>(&delta); insertion != nullptr)
+        {
+          size += insertion->range.count;
+        }
+        else if (auto const* removal = std::get_if<ProjectionRemoveRange>(&delta); removal != nullptr)
+        {
+          size -= removal->range.count;
+        }
+      }
+
+      return size;
+    }
+
+    void publishBatch(TrackListProjectionDeltaBatch batch, std::size_t previousSize)
+    {
+      if (sourceInvalidated)
+      {
+        return;
+      }
+
+      if (!validateTrackListProjectionDeltaBatch(batch, previousSize) ||
+          std::holds_alternative<ProjectionSourceInvalidated>(batch.deltas.front()))
+      {
+        throwException<Exception>("Invalid live track-list projection delta batch");
+      }
+
+      batch.revision = ++rev;
+      changedSignal.emit(batch);
+    }
+
+    void publishReset(std::size_t previousSize)
+    {
+      publishBatch(TrackListProjectionDeltaBatch{.deltas = {ProjectionReset{}}}, previousSize);
+    }
+
+    void publishSourceInvalidated()
+    {
+      if (sourceInvalidated)
+      {
+        return;
+      }
+
+      sourceInvalidated = true;
+      sourceSubscription.reset();
+      auto const batch = TrackListProjectionDeltaBatch{
+        .revision = ++rev,
+        .deltas = {ProjectionSourceInvalidated{}},
+      };
+      changedSignal.emit(batch);
+      changedSignal.disconnectAll();
+    }
+
+    static bool matchesSourceRange(std::vector<TrackId> const& working,
+                                   std::size_t const start,
+                                   std::span<TrackId const> const trackIds)
+    {
+      return start <= working.size() && trackIds.size() <= working.size() - start &&
+             std::ranges::equal(trackIds, std::span{working}.subspan(start, trackIds.size()));
+    }
+
+    static bool replaySourceOrderDelta(std::vector<TrackId>& working, TrackSourceDelta const& delta)
+    {
+      if (auto const* insertion = std::get_if<SourceInsertRange>(&delta); insertion != nullptr)
+      {
+        if (insertion->start > working.size())
+        {
+          return false;
+        }
+
+        working.insert(working.begin() + static_cast<std::ptrdiff_t>(insertion->start),
+                       insertion->trackIds.begin(),
+                       insertion->trackIds.end());
+        return true;
+      }
+
+      if (auto const* removal = std::get_if<SourceRemoveRange>(&delta); removal != nullptr)
+      {
+        if (!matchesSourceRange(working, removal->start, removal->trackIds))
+        {
+          return false;
+        }
+
+        auto const first = working.begin() + static_cast<std::ptrdiff_t>(removal->start);
+        working.erase(first, first + static_cast<std::ptrdiff_t>(removal->trackIds.size()));
+        return true;
+      }
+
+      if (auto const* update = std::get_if<SourceUpdateRange>(&delta); update != nullptr)
+      {
+        return matchesSourceRange(working, update->start, update->trackIds);
+      }
+
+      return false;
+    }
+
+    static bool replaySourceOrderBatch(std::vector<TrackId> const& previousTrackIds,
+                                       TrackSourceDeltaBatch const& sourceBatch,
+                                       std::vector<TrackId> const& finalTrackIds)
+    {
+      auto working = previousTrackIds;
+
+      for (auto const& delta : sourceBatch.deltas)
+      {
+        if (!replaySourceOrderDelta(working, delta))
+        {
+          return false;
+        }
+      }
+
+      return working == finalTrackIds;
+    }
+
+    static TrackListProjectionDeltaBatch sourceOrderProjectionBatch(TrackSourceDeltaBatch const& sourceBatch)
+    {
+      auto batch = TrackListProjectionDeltaBatch{};
+      batch.deltas.reserve(sourceBatch.deltas.size());
+
+      for (auto const& delta : sourceBatch.deltas)
+      {
+        std::visit(
+          [&batch](auto const& value)
+          {
+            using Value = std::remove_cvref_t<decltype(value)>;
+
+            if constexpr (std::same_as<Value, SourceInsertRange>)
+            {
+              batch.deltas.push_back(
+                ProjectionInsertRange{TrackRowRange{.start = value.start, .count = value.trackIds.size()}});
+            }
+            else if constexpr (std::same_as<Value, SourceRemoveRange>)
+            {
+              batch.deltas.push_back(
+                ProjectionRemoveRange{TrackRowRange{.start = value.start, .count = value.trackIds.size()}});
+            }
+            else if constexpr (std::same_as<Value, SourceUpdateRange>)
+            {
+              batch.deltas.push_back(
+                ProjectionUpdateRange{TrackRowRange{.start = value.start, .count = value.trackIds.size()}});
+            }
+          },
+          delta);
+      }
+
+      return batch;
+    }
+
+    static bool sortedEditsProduceFinalOrder(std::span<TrackId const> previousTrackIds,
+                                             std::span<TrackId const> finalTrackIds,
+                                             std::vector<IndexedTrack> removals,
+                                             std::vector<IndexedTrack> insertions)
+    {
+      auto working = std::vector<TrackId>{previousTrackIds.begin(), previousTrackIds.end()};
+      std::ranges::sort(removals, std::greater{}, &IndexedTrack::index);
+
+      for (auto const& removal : removals)
+      {
+        if (removal.index >= working.size() || working[removal.index] != removal.trackId)
+        {
+          return false;
+        }
+
+        working.erase(working.begin() + static_cast<std::ptrdiff_t>(removal.index));
+      }
+
+      std::ranges::sort(insertions, {}, &IndexedTrack::index);
+
+      for (auto const& insertion : insertions)
+      {
+        if (insertion.index > working.size())
+        {
+          return false;
+        }
+
+        working.insert(working.begin() + static_cast<std::ptrdiff_t>(insertion.index), insertion.trackId);
+      }
+
+      return std::ranges::equal(working, finalTrackIds);
+    }
+
+    void publishSortedSourceBatch(std::vector<TrackId> const& previousTrackIds,
+                                  TrackSourceDeltaBatch const& sourceBatch,
+                                  std::size_t previousSize)
+    {
+      auto const finalTrackIds = projectionTrackIds();
+      auto const previousIndex = makeTrackIndex(previousTrackIds);
+      auto const finalIndex = makeTrackIndex(finalTrackIds);
+      auto previousCommonIndex = TrackIndexMap{};
+      auto finalCommonIndex = TrackIndexMap{};
+      std::size_t commonIndex = 0;
+
+      for (auto const trackId : previousTrackIds)
+      {
+        if (finalIndex.contains(trackId))
+        {
+          previousCommonIndex.emplace(trackId, commonIndex++);
+        }
+      }
+
+      commonIndex = 0;
+
+      for (auto const trackId : finalTrackIds)
+      {
+        if (previousIndex.contains(trackId))
+        {
+          finalCommonIndex.emplace(trackId, commonIndex++);
+        }
+      }
+
+      auto removals = std::vector<IndexedTrack>{};
+      auto insertions = std::vector<IndexedTrack>{};
+
+      for (auto const trackId : previousTrackIds)
+      {
+        if (!finalIndex.contains(trackId))
+        {
+          removals.push_back(IndexedTrack{.index = previousIndex.at(trackId), .trackId = trackId});
+        }
+      }
+
+      for (auto const trackId : finalTrackIds)
+      {
+        if (!previousIndex.contains(trackId))
+        {
+          insertions.push_back(IndexedTrack{.index = finalIndex.at(trackId), .trackId = trackId});
+        }
+      }
+
+      auto updatedTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
+
+      for (auto const& delta : sourceBatch.deltas)
+      {
+        if (auto const* update = std::get_if<SourceUpdateRange>(&delta); update != nullptr)
+        {
+          updatedTrackIds.insert(update->trackIds.begin(), update->trackIds.end());
+        }
+      }
+
+      auto updateRowIndices = std::vector<std::size_t>{};
+
+      for (auto const trackId : updatedTrackIds)
+      {
+        auto const oldRow = previousIndex.find(trackId);
+        auto const newRow = finalIndex.find(trackId);
+
+        if (oldRow == previousIndex.end() || newRow == finalIndex.end())
+        {
+          continue;
+        }
+
+        if (previousCommonIndex.at(trackId) != finalCommonIndex.at(trackId))
+        {
+          removals.push_back(IndexedTrack{.index = oldRow->second, .trackId = trackId});
+          insertions.push_back(IndexedTrack{.index = newRow->second, .trackId = trackId});
+        }
+        else
+        {
+          updateRowIndices.push_back(newRow->second);
+        }
+      }
+
+      if (!sortedEditsProduceFinalOrder(previousTrackIds, finalTrackIds, removals, insertions))
+      {
+        publishReset(previousSize);
+        return;
+      }
+
+      auto removalRowIndices = std::vector<std::size_t>{};
+      removalRowIndices.reserve(removals.size());
+
+      for (auto const& removal : removals)
+      {
+        removalRowIndices.push_back(removal.index);
+      }
+
+      auto insertionRowIndices = std::vector<std::size_t>{};
+      insertionRowIndices.reserve(insertions.size());
+
+      for (auto const& insertion : insertions)
+      {
+        insertionRowIndices.push_back(insertion.index);
+      }
+
+      auto batch = TrackListProjectionDeltaBatch{};
+      appendRemovalRangesDescending(batch.deltas, removalRowIndices);
+      appendAscendingRanges(batch.deltas,
+                            insertionRowIndices,
+                            [](TrackRowRange range) { return TrackListProjectionDelta{ProjectionInsertRange{range}}; });
+      appendAscendingRanges(batch.deltas,
+                            updateRowIndices,
+                            [](TrackRowRange range) { return TrackListProjectionDelta{ProjectionUpdateRange{range}}; });
+
+      if (batch.deltas.empty())
+      {
+        return;
+      }
+
+      if (!validateTrackListProjectionDeltaBatch(batch, previousSize) ||
+          finalSizeOf(batch, previousSize) != orderIndex.size())
+      {
+        publishReset(previousSize);
+        return;
+      }
+
+      publishBatch(std::move(batch), previousSize);
+    }
+
+    void handleSourceBatch(TrackSourceDeltaBatch const& sourceBatch)
+    {
+      if (sourceInvalidated)
+      {
+        return;
+      }
+
+      if (sourceBatch.deltas.size() == 1 && std::holds_alternative<SourceInvalidated>(sourceBatch.deltas.front()))
+      {
+        publishSourceInvalidated();
+        return;
+      }
+
+      auto const previousSize = orderIndex.size();
+      auto const previousTrackIds = projectionTrackIds();
+      auto const previousSections = sectionDescriptors();
+      rebuildOrderIndex();
+
+      if (sourceBatch.deltas.size() == 1 && std::holds_alternative<SourceReset>(sourceBatch.deltas.front()))
+      {
+        publishReset(previousSize);
+        return;
+      }
+
+      if (previousSections != sectionDescriptors())
+      {
+        publishReset(previousSize);
+        return;
+      }
+
+      if (comparator)
+      {
+        publishSortedSourceBatch(previousTrackIds, sourceBatch, previousSize);
+        return;
+      }
+
+      if (auto const finalTrackIds = projectionTrackIds();
+          !replaySourceOrderBatch(previousTrackIds, sourceBatch, finalTrackIds))
+      {
+        publishReset(previousSize);
+        return;
+      }
+
+      auto batch = sourceOrderProjectionBatch(sourceBatch);
+
+      if (!validateTrackListProjectionDeltaBatch(batch, previousSize) ||
+          finalSizeOf(batch, previousSize) != orderIndex.size())
+      {
+        publishReset(previousSize);
+        return;
+      }
+
+      publishBatch(std::move(batch), previousSize);
+    }
   };
 
-  LiveTrackListProjection::LiveTrackListProjection(ViewId viewId, TrackSource& source, library::MusicLibrary& library)
-    : _implPtr{std::make_unique<Impl>(viewId, source, library)}
+  LiveTrackListProjection::LiveTrackListProjection(ViewId viewId,
+                                                   TrackSourceLease sourceLease,
+                                                   library::MusicLibrary& library)
+    : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library)}
   {
-    source.attach(this);
+    _implPtr->sourceSubscription = _implPtr->sourceLease->subscribe(
+      [impl = _implPtr.get()](TrackSourceDeltaBatch const& batch) { impl->handleSourceBatch(batch); });
   }
 
-  LiveTrackListProjection::~LiveTrackListProjection()
+  LiveTrackListProjection::LiveTrackListProjection(ViewId viewId,
+                                                   TrackSourceLease sourceLease,
+                                                   library::MusicLibrary& library,
+                                                   TrackOrderSpec const& order)
+    : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library, order.sortBy)}
   {
-    if (!_implPtr->sourceDestroyed)
+    if (viewId != kInvalidViewId)
     {
-      _implPtr->source.detach(this);
+      throwException<Exception>("Detached track-list projection requires an invalid view id");
     }
+
+    _implPtr->sourceSubscription = _implPtr->sourceLease->subscribe(
+      [impl = _implPtr.get()](TrackSourceDeltaBatch const& batch) { impl->handleSourceBatch(batch); });
   }
+
+  LiveTrackListProjection::~LiveTrackListProjection() = default;
 
   ViewId LiveTrackListProjection::viewId() const noexcept
   {
@@ -1679,6 +2141,12 @@ namespace ao::rt
 
   void LiveTrackListProjection::setPresentation(TrackPresentationSpec const& presentation)
   {
+    if (_implPtr->sourceInvalidated)
+    {
+      return;
+    }
+
+    auto const previousSize = _implPtr->orderIndex.size();
     auto spec = normalizeTrackPresentationSpec(presentation);
 
     _implPtr->presentationId = spec.id;
@@ -1707,10 +2175,7 @@ namespace ao::rt
       std::ranges::reverse(_implPtr->orderIndex);
       _implPtr->rebuildRowIndex();
 
-      _implPtr->publishDelta(TrackListProjectionDeltaBatch{
-        .revision = ++_implPtr->rev,
-        .deltas = {ProjectionReset{}},
-      });
+      _implPtr->publishReset(previousSize);
       return;
     }
 
@@ -1721,10 +2186,7 @@ namespace ao::rt
 
     _implPtr->rebuildOrderIndex();
 
-    _implPtr->publishDelta(TrackListProjectionDeltaBatch{
-      .revision = ++_implPtr->rev,
-      .deltas = {ProjectionReset{}},
-    });
+    _implPtr->publishReset(previousSize);
   }
 
   std::size_t LiveTrackListProjection::size() const noexcept
@@ -1793,63 +2255,30 @@ namespace ao::rt
   Subscription LiveTrackListProjection::subscribe(
     std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler)
   {
-    handler(TrackListProjectionDeltaBatch{
+    if (!handler)
+    {
+      throwException<Exception>("Track-list projection subscription handler must not be empty");
+    }
+
+    if (_implPtr->sourceInvalidated)
+    {
+      handler(TrackListProjectionDeltaBatch{
+        .revision = _implPtr->rev,
+        .deltas = {ProjectionSourceInvalidated{}},
+      });
+      return {};
+    }
+
+    auto handlerPtr =
+      std::make_shared<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>>(std::move(handler));
+    auto subscription = _implPtr->changedSignal.connect([handlerPtr](TrackListProjectionDeltaBatch const& batch)
+                                                        { (*handlerPtr)(batch); });
+
+    (*handlerPtr)(TrackListProjectionDeltaBatch{
       .revision = _implPtr->rev,
       .deltas = {ProjectionReset{}},
     });
 
-    _implPtr->subscribers.push_back(std::move(handler));
-    std::size_t const index = _implPtr->subscribers.size() - 1;
-
-    return Subscription{[this, index] { _implPtr->subscribers[index] = {}; }};
-  }
-
-  void LiveTrackListProjection::handleReset()
-  {
-    _implPtr->rebuildOrderIndex();
-    _implPtr->publishDelta(TrackListProjectionDeltaBatch{
-      .revision = ++_implPtr->rev,
-      .deltas = {ProjectionReset{}},
-    });
-  }
-
-  void LiveTrackListProjection::handleInserted(TrackId id, std::size_t /*sourceIndex*/)
-  {
-    _implPtr->insertEntry(id);
-  }
-
-  void LiveTrackListProjection::handleUpdated(TrackId id, std::size_t /*sourceIndex*/)
-  {
-    _implPtr->updateEntry(id);
-  }
-
-  void LiveTrackListProjection::handleRemoved(TrackId id, std::size_t /*sourceIndex*/)
-  {
-    _implPtr->removeEntry(id);
-  }
-
-  void LiveTrackListProjection::handleBulkInserted(std::span<TrackId const> ids)
-  {
-    _implPtr->insertEntries(ids);
-  }
-
-  void LiveTrackListProjection::handleBulkUpdated(std::span<TrackId const> ids)
-  {
-    _implPtr->updateEntries(ids);
-  }
-
-  void LiveTrackListProjection::handleBulkRemoved(std::span<TrackId const> ids)
-  {
-    _implPtr->removeEntries(ids);
-  }
-
-  void LiveTrackListProjection::publishDelta(TrackListProjectionDeltaBatch const& batch)
-  {
-    _implPtr->publishDelta(batch);
-  }
-
-  void LiveTrackListProjection::handleSourceDestroyed()
-  {
-    _implPtr->sourceDestroyed = true;
+    return subscription;
   }
 } // namespace ao::rt

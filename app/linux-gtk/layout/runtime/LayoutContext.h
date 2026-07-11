@@ -50,7 +50,7 @@ namespace ao::uimodel
 
 namespace ao::rt
 {
-  class PlaybackQueueService;
+  class PlaybackSequenceService;
 }
 
 namespace ao::uimodel
@@ -89,7 +89,7 @@ namespace ao::gtk::layout
 
   struct PlaybackUiContext final
   {
-    rt::PlaybackQueueService* queue = nullptr;
+    rt::PlaybackSequenceService* sequence = nullptr;
     uimodel::PlaybackCommandSurface* commandSurface = nullptr;
   };
 
@@ -138,7 +138,7 @@ namespace ao::gtk::layout
     track.presentationPreferences = services.trackPresentationPreferences;
     track.trackRowCache = services.trackRowCache;
     list.navigationController = services.listNavigationController;
-    playback.queue = services.playbackQueue;
+    playback.sequence = services.playbackSequence;
     playback.commandSurface = services.playbackCommandSurface;
     detail.imageCache = services.imageCache;
     tag.editController = services.tagEditController;

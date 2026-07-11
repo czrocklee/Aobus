@@ -31,10 +31,13 @@ namespace ao::uimodel::test
     auto const builtinCount = catalog.builtinPresets().size();
 
     CHECK(catalog.labelForId(rt::kDefaultTrackPresentationId) == "Library");
+    CHECK(catalog.labelForId(rt::kListOrderTrackPresentationId) == "List Order");
     CHECK(catalog.labelForId("library-qa") == "Library QA");
     CHECK(catalog.labelForId("missing-preset") == "missing-preset");
     REQUIRE(catalog.specForId("library-qa").has_value());
     CHECK(catalog.specForId("library-qa")->id == "library-qa");
+    REQUIRE(catalog.specForId(rt::kListOrderTrackPresentationId).has_value());
+    CHECK(catalog.specForId(rt::kListOrderTrackPresentationId)->sortBy.empty());
     CHECK_FALSE(catalog.specForId("missing-preset").has_value());
 
     REQUIRE(items.size() == builtinCount + 4);

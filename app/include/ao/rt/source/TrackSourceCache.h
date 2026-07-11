@@ -7,21 +7,27 @@
 #include "AllTracksSource.h"
 #include "SmartListEvaluator.h"
 #include "TrackSource.h"
+#include "TrackSourceLease.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
+#include <cstddef>
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace ao::library
 {
+  class ListView;
   class MusicLibrary;
 }
 
 namespace ao::rt
 {
   class LibraryChanges;
+  class CachedListSource;
 
   class TrackSourceCache final
   {
@@ -35,24 +41,43 @@ namespace ao::rt
     TrackSourceCache& operator=(TrackSourceCache&&) = delete;
 
     TrackSource& allTracks();
-    TrackSource& sourceFor(ListId listId);
+    Result<TrackSourceLease> acquire(ListId listId);
 
     void reloadAllTracks();
     void refreshList(ListId listId);
+    void evict(ListId listId);
     void eraseList(ListId listId);
 
-    SmartListEvaluator& smartEvaluator() { return _smartEvaluator; }
+    SmartListEvaluator& smartEvaluator();
 
   private:
-    TrackSource& getOrBuildSource(ListId listId);
+    Result<TrackSourceLease> acquire(ListId listId, std::vector<ListId> ancestry);
+    void applyListMutation(std::move_only_function<void()> mutation);
+    void drainPendingRefreshes();
+    void refreshListNow(ListId listId);
+    std::shared_ptr<CachedListSource> liveSource(ListId listId);
+    std::unique_ptr<TrackSource> buildImplementation(library::ListView const& view,
+                                                     TrackSourceLease const& parentLease);
+    void linkGraph(ListId listId, ListId parentId);
+    void unlinkGraph(ListId listId);
+    void collectDescendantsPostorder(ListId listId, std::vector<ListId>& listIds) const;
 
     library::MusicLibrary& _library;
-    AllTracksSource _allTracks;
+    std::shared_ptr<AllTracksSource> _allTracksPtr;
     SmartListEvaluator _smartEvaluator;
 
+    std::vector<TrackId> _collectionChangedTrackIds;
     Subscription _listsMutatedSubscription;
+    Subscription _tracksMutatedSubscription;
     Subscription _trackCollectionChangedSubscription;
 
-    boost::unordered_flat_map<ListId, std::unique_ptr<TrackSource>, std::hash<ListId>> _sources;
+    std::size_t _listMutationDepth = 0;
+    bool _refreshDrainActive = false;
+    std::vector<ListId> _pendingRefreshListIds;
+
+    boost::unordered_flat_map<ListId, std::shared_ptr<CachedListSource>, std::hash<ListId>> _hotSources;
+    boost::unordered_flat_map<ListId, std::weak_ptr<CachedListSource>, std::hash<ListId>> _liveSources;
+    boost::unordered_flat_map<ListId, ListId, std::hash<ListId>> _parentIds;
+    boost::unordered_flat_map<ListId, std::vector<ListId>, std::hash<ListId>> _childIds;
   };
 } // namespace ao::rt

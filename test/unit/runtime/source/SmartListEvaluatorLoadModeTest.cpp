@@ -6,6 +6,7 @@
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -19,12 +20,13 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto source = MutableTrackSource{};
+    auto sourcePtr = makeMutableTrackSource({});
+    auto& source = *sourcePtr;
 
-    auto hotList = SmartListSource{source, libraryFixture.library(), engine};
+    auto hotList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
     hotList.setExpression("$year >= 2020"); // Hot metadata
 
-    auto coldList = SmartListSource{source, libraryFixture.library(), engine};
+    auto coldList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
     coldList.setExpression("@duration >= 3m"); // Cold property
 
     auto t1 = libraryFixture.addTrack(makeSmartListSpec("Track", 2022, std::chrono::seconds{200}));
@@ -43,9 +45,10 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto source = MutableTrackSource{};
+    auto sourcePtr = makeMutableTrackSource({});
+    auto& source = *sourcePtr;
 
-    auto list = SmartListSource{source, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
     // Requires both metadata and property reader
     list.setExpression("$year >= 2020 && @duration >= 3m");
 

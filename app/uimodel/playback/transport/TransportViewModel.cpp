@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/Transport.h>
+#include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -57,6 +59,7 @@ namespace ao::uimodel
 
     TransportViewState describeTransportButton(TransportAction action,
                                                rt::PlaybackState const& state,
+                                               rt::PlaybackSequenceState const& sequenceState,
                                                bool enabled,
                                                bool showLabel)
     {
@@ -85,16 +88,16 @@ namespace ao::uimodel
       }
       else if (action == TransportAction::Shuffle)
       {
-        view.engaged = (state.mode.shuffle == rt::ShuffleMode::On);
+        view.engaged = (sequenceState.shuffle == rt::ShuffleMode::On);
       }
       else if (action == TransportAction::Repeat)
       {
-        if (state.mode.repeat == rt::RepeatMode::All)
+        if (sequenceState.repeat == rt::RepeatMode::All)
         {
           view.icon = TransportIcon::Repeat;
           view.engaged = true;
         }
-        else if (state.mode.repeat == rt::RepeatMode::One)
+        else if (sequenceState.repeat == rt::RepeatMode::One)
         {
           view.icon = TransportIcon::RepeatOne;
           view.engaged = true;
@@ -128,11 +131,17 @@ namespace ao::uimodel
   } // namespace
 
   TransportViewModel::TransportViewModel(rt::PlaybackService& playback,
+                                         rt::PlaybackSequenceService& sequence,
                                          PlaybackCommandSurface& commands,
                                          TransportAction action,
                                          bool showLabel,
                                          std::function<void(TransportViewState const&)> onRender)
-    : _playback{playback}, _commands{commands}, _action{action}, _showLabel{showLabel}, _onRender{std::move(onRender)}
+    : _playback{playback}
+    , _sequence{sequence}
+    , _commands{commands}
+    , _action{action}
+    , _showLabel{showLabel}
+    , _onRender{std::move(onRender)}
   {
     _availabilitySub = _commands.onAvailabilityChanged(commandForAction(_action), [this] { refresh(); });
     refresh();
@@ -146,7 +155,8 @@ namespace ao::uimodel
   void TransportViewModel::refresh()
   {
     auto const command = commandForAction(_action);
-    auto const view = describeTransportButton(_action, _playback.state(), _commands.isEnabled(command), _showLabel);
+    auto const view =
+      describeTransportButton(_action, _playback.state(), _sequence.state(), _commands.isEnabled(command), _showLabel);
 
     if (_onRender)
     {

@@ -5,6 +5,7 @@
 
 #include "PlaybackFailure.h"
 #include "PlaybackState.h"
+#include "PreparedPlayback.h"
 #include "Subscription.h"
 #include "ViewIds.h"
 #include <ao/CoreIds.h>
@@ -17,6 +18,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace ao::library
 {
@@ -31,15 +33,16 @@ namespace ao::async
 namespace ao::audio
 {
   class BackendProvider;
+  class Player;
 }
 
 namespace ao::rt
 {
-  class PlaybackQueueService;
+  class PlaybackSessionPersistence;
+  class PlaybackSequenceService;
   class AppRuntime;
   class NotificationService;
-  class ViewService;
-  struct PlaybackSessionState;
+  struct PlaybackTransportSessionState;
   struct PlaybackServiceTestAccess;
 
   class PlaybackService final
@@ -49,22 +52,13 @@ namespace ao::rt
     {
       TrackId trackId = kInvalidTrackId;
       ListId sourceListId = kInvalidListId;
+      std::optional<PreparedNextToken> optPreparedNextToken{};
     };
 
     struct QualityChanged final
     {
       QualityState quality{};
       bool ready = false;
-    };
-
-    struct ShuffleModeChanged final
-    {
-      ShuffleMode mode = ShuffleMode::Off;
-    };
-
-    struct RepeatModeChanged final
-    {
-      RepeatMode mode = RepeatMode::Off;
     };
 
     enum class SeekMode : std::uint8_t
@@ -92,10 +86,7 @@ namespace ao::rt
       audio::PlaybackInput input{};
     };
 
-    PlaybackService(async::Executor& executor,
-                    ViewService& views,
-                    library::MusicLibrary& library,
-                    NotificationService& notifications);
+    PlaybackService(async::Executor& executor, library::MusicLibrary& library, NotificationService& notifications);
     ~PlaybackService();
 
     PlaybackService(PlaybackService const&) = delete;
@@ -110,6 +101,7 @@ namespace ao::rt
     // turn. Like every public method below, must be called on the executor's
     // owning thread (see the affinity note above the subscription methods).
     PlaybackState const& state() const;
+    std::chrono::milliseconds elapsed() const;
 
     // Subscription registration is part of the executor-affinity contract: these
     // onXxx() methods must be called on the executor's owning thread, and the
@@ -129,30 +121,31 @@ namespace ao::rt
     Subscription onMutedChanged(std::move_only_function<void(bool)> handler);
     Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
     Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler);
-    Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
-    Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);
     Subscription onPlaybackFailure(std::move_only_function<void(PlaybackFailure const&)> handler);
 
-    Result<> playTrack(TrackId trackId, ListId sourceListId);
-    TrackId playSelectionInView(ViewId viewId);
+    Result<PlaybackStartReceipt> playTrack(TrackId trackId, ListId sourceListId);
 
     // Lower-level playback entry point: start a fully-resolved request.
     // playTrack() resolves a TrackId via the library and forwards here.
     // Returns a failure when the track cannot be resolved or playback is
     // rejected before the engine starts.
-    Result<> play(PlaybackRequest const& request, ListId sourceListId, std::chrono::milliseconds initialOffset = {});
-    bool prepareNext(PlaybackRequest const& request, ListId sourceListId);
-    bool prepareNext(TrackId trackId, ListId sourceListId);
-    void clearPreparedNext();
+    Result<PreparedPlaybackStart> stagePlayback(PlaybackRequest const& request,
+                                                ListId sourceListId,
+                                                std::chrono::milliseconds initialOffset = {});
+    Result<PlaybackStartReceipt> commitPlayback(PreparedPlaybackStart&& preparedStart);
+    Result<PlaybackStartReceipt> play(PlaybackRequest const& request,
+                                      ListId sourceListId,
+                                      std::chrono::milliseconds initialOffset = {});
+    Result<PreparedNextToken> prepareNext(PlaybackRequest const& request, ListId sourceListId);
+    Result<PreparedNextToken> prepareNext(TrackId trackId, ListId sourceListId);
+    std::optional<PreparedNextToken> clearPreparedNext();
 
     // Register an audio backend provider. Called by the composition root
     // (via AppRuntime::addAudioProvider) during bootstrap.
     void addProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
     void pause();
     void resume();
-    void stop();
-    void setShuffleMode(ShuffleMode mode);
-    void setRepeatMode(RepeatMode mode);
+    PreparedCancellationBarrier stop();
     void seek(std::chrono::milliseconds elapsed, SeekMode mode = SeekMode::Final);
     void setOutputDevice(audio::BackendId const& backendId,
                          audio::DeviceId const& deviceId,
@@ -164,13 +157,25 @@ namespace ao::rt
 
   private:
     friend class AppRuntime;
-    friend class PlaybackQueueService;
+    friend class PlaybackSessionPersistence;
+    friend class PlaybackSequenceService;
     friend struct PlaybackServiceTestAccess;
+
+    PlaybackService(async::Executor& executor,
+                    library::MusicLibrary& library,
+                    NotificationService& notifications,
+                    std::unique_ptr<audio::Player> playerPtr);
 
     void bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler);
     void unbindPlaybackFailureRecovery();
-    PlaybackSessionState playbackSessionState();
-    Result<> restorePlaybackSession(PlaybackSessionState const& session, std::move_only_function<void()> beforePublish);
+    bool isPublishingAcceptedStart() const;
+    std::optional<std::uint64_t> preparedNextIssuedGeneration(PreparedNextToken token) const;
+    Result<PreparedNextToken> prepareSequenceNext(TrackId trackId, ListId sourceListId);
+    std::optional<PreparedNextToken> clearSequencePreparedNext();
+    PlaybackTransportSessionState playbackTransportSessionState();
+    Result<> restorePlaybackTransport(PlaybackTransportSessionState const& session,
+                                      std::move_only_function<void(std::chrono::milliseconds) noexcept> beforePublish);
+    void forgetPlaybackTransportSnapshot();
 
     struct Impl;
     std::shared_ptr<Impl> _implPtr;

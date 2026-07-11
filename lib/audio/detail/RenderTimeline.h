@@ -23,6 +23,7 @@ namespace ao::audio::detail
     Format backendFormat;
     DecodedStreamInfo info;
     std::uint64_t sourceGeneration = 0;
+    std::uint64_t playbackGeneration = 0;
   };
 
   class RenderTimeline final

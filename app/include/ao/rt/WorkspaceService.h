@@ -9,6 +9,7 @@
 #include "ViewState.h"
 #include "WorkspaceViewState.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 
 #include <functional>
 #include <memory>
@@ -69,7 +70,7 @@ namespace ao::rt
 
     void setFocusedView(ViewId viewId);
     void addView(ViewId viewId);
-    void navigateTo(NavigationTarget const& target, NavigationOptions options = {});
+    Result<ViewId> navigateTo(NavigationTarget const& target, NavigationOptions options = {});
     void closeView(ViewId viewId);
 
     void setActivePresentation(TrackPresentationSpec const& presentation, NavigationOptions options = {});
@@ -77,8 +78,8 @@ namespace ao::rt
 
     void jumpToAlbum(TrackId trackId);
 
-    bool goBack();
-    bool goForward();
+    Result<ViewId> goBack();
+    Result<ViewId> goForward();
     bool canGoBack() const noexcept;
     bool canGoForward() const noexcept;
 
@@ -93,7 +94,7 @@ namespace ao::rt
     Subscription onCustomPresetsChanged(std::move_only_function<void()> handler);
 
     void saveSession(ConfigStore& store) const;
-    void restoreSession(ConfigStore& store);
+    Result<> restoreSession(ConfigStore& store);
 
   private:
     struct Impl;

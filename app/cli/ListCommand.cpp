@@ -9,7 +9,6 @@
 #include "DumpOutput.h"
 #include "Output.h"
 #include "QueryHelp.h"
-#include "TrackSelection.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/ListStore.h>
@@ -27,7 +26,6 @@
 
 #include <CLI/App.hpp>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -226,7 +224,15 @@ namespace ao::cli
     {
       auto& sources = context.runtime().sources();
       sources.reloadAllTracks();
-      auto& source = sources.sourceFor(node.id);
+      auto sourceResult = sources.acquire(node.id);
+
+      if (!sourceResult)
+      {
+        throwCommandError(sourceResult.error());
+      }
+
+      auto sourceLease = std::move(*sourceResult);
+      auto& source = sourceLease.source();
       auto ids = std::vector<TrackId>{};
       ids.reserve(source.size());
 
@@ -336,6 +342,30 @@ namespace ao::cli
     std::vector<rt::ListFieldChange> fields{};
     std::vector<TrackId> addedTrackIds{};
     std::vector<TrackId> removedTrackIds{};
+  };
+
+  struct ListManualInsertReportDto final
+  {
+    std::string action{};
+    bool dryRun = false;
+    ListId listId{};
+    bool changed = false;
+    std::size_t insertionIndex = 0;
+    std::vector<TrackId> insertedTrackIds{};
+    std::vector<TrackId> duplicateRequest{};
+    std::vector<TrackId> alreadyPresent{};
+    std::vector<TrackId> missingTrack{};
+  };
+
+  struct ListManualRemoveReportDto final
+  {
+    std::string action{};
+    bool dryRun = false;
+    ListId listId{};
+    bool changed = false;
+    std::vector<TrackId> removedTrackIds{};
+    std::vector<TrackId> duplicateRequest{};
+    std::vector<TrackId> notPresent{};
   };
 
   struct ListDeleteReportDto final
@@ -533,6 +563,52 @@ namespace ao::cli
       std::println(context.io().out, "deleted list: {}{}", reply.listId, dryRun ? " (dry-run)" : "");
     }
 
+    void printManualListInsertMutation(CliContext& context,
+                                       ListId listId,
+                                       rt::InsertManualListTracksReply const& reply,
+                                       bool dryRun)
+    {
+      if (context.options().format != OutputFormat::Plain)
+      {
+        emitDocument(context.io().out,
+                     context.options().format,
+                     ListManualInsertReportDto{.action = "add",
+                                               .dryRun = dryRun,
+                                               .listId = listId,
+                                               .changed = reply.changed,
+                                               .insertionIndex = reply.insertionIndex,
+                                               .insertedTrackIds = reply.insertedTrackIds,
+                                               .duplicateRequest = reply.duplicateRequest,
+                                               .alreadyPresent = reply.alreadyPresent,
+                                               .missingTrack = reply.missingTrack});
+        return;
+      }
+
+      std::println(context.io().out, "added tracks to list: {}{}", listId, dryRun ? " (dry-run)" : "");
+    }
+
+    void printManualListRemoveMutation(CliContext& context,
+                                       ListId listId,
+                                       rt::RemoveManualListTracksReply const& reply,
+                                       bool dryRun)
+    {
+      if (context.options().format != OutputFormat::Plain)
+      {
+        emitDocument(context.io().out,
+                     context.options().format,
+                     ListManualRemoveReportDto{.action = "remove",
+                                               .dryRun = dryRun,
+                                               .listId = listId,
+                                               .changed = reply.changed,
+                                               .removedTrackIds = reply.removedTrackIds,
+                                               .duplicateRequest = reply.duplicateRequest,
+                                               .notPresent = reply.notPresent});
+        return;
+      }
+
+      std::println(context.io().out, "removed tracks from list: {}{}", listId, dryRun ? " (dry-run)" : "");
+    }
+
     void updateList(CliContext& context,
                     ListId listId,
                     std::optional<std::string> const& optName,
@@ -604,52 +680,44 @@ namespace ao::cli
                                 bool add,
                                 bool dryRun)
     {
-      auto reader = context.library().reader();
-      auto draft = requireListDraft(listId, reader);
+      auto trackIds = std::vector<TrackId>{};
+      trackIds.reserve(rawTrackIds.size());
 
-      if (draft.kind != rt::LibraryWriter::ListKind::Manual)
+      for (auto const rawTrackId : rawTrackIds)
       {
-        throwCommandError(Error::Code::InvalidInput, "list is not manual: {}", listId);
+        trackIds.emplace_back(rawTrackId);
       }
 
-      auto const trackIds = requireTrackIds(reader, rawTrackIds);
+      auto& writer = context.library().writer();
 
-      for (auto const trackId : trackIds)
+      if (add)
       {
-        if (add)
+        auto const insertionIndex = [&context, listId]
         {
-          if (!std::ranges::contains(draft.trackIds, trackId))
-          {
-            draft.trackIds.push_back(trackId);
-          }
-        }
-        else
-        {
-          std::erase(draft.trackIds, trackId);
-        }
-      }
+          auto reader = context.library().reader();
+          return reader.listTrackIds(listId).size();
+        }();
+        auto const insertResult = dryRun ? writer.previewInsertManualListTracks(listId, insertionIndex, trackIds)
+                                         : writer.insertManualListTracks(listId, insertionIndex, trackIds);
 
-      if (dryRun)
-      {
-        auto const updateResult = context.library().writer().previewUpdateList(draft);
-
-        if (!updateResult)
+        if (!insertResult)
         {
-          throwCommandError(updateResult.error());
+          throwCommandError(insertResult.error());
         }
 
-        printListUpdateMutation(context, add ? "add" : "remove", listId, *updateResult, true);
+        printManualListInsertMutation(context, listId, *insertResult, dryRun);
         return;
       }
 
-      auto const updateResult = context.library().writer().updateList(draft);
+      auto const removeResult = dryRun ? writer.previewRemoveManualListTracks(listId, trackIds)
+                                       : writer.removeManualListTracks(listId, trackIds);
 
-      if (!updateResult)
+      if (!removeResult)
       {
-        throwCommandError(updateResult.error());
+        throwCommandError(removeResult.error());
       }
 
-      printListUpdateMutation(context, add ? "add" : "remove", listId, *updateResult, false);
+      printManualListRemoveMutation(context, listId, *removeResult, dryRun);
     }
 
     void dumpLists(library::MusicLibrary& ml, bool raw, OutputFormat format, std::ostream& os)

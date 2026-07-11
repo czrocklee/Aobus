@@ -19,6 +19,7 @@
 #include <unistd.h>
 
 #include <cstdint>
+#include <tuple>
 
 namespace ao::gtk
 {
@@ -85,7 +86,7 @@ namespace ao::gtk
 
       case Type::Navigate:
         APP_LOG_DEBUG("[PID {}] NowPlayingFieldLabel: Navigating to query: {}", getpid(), cmd.navigateQuery);
-        _runtime.workspace().navigateTo(
+        std::ignore = _runtime.workspace().navigateTo(
           rt::FilteredListTarget{.listId = rt::kAllTracksListId, .filterExpression = cmd.navigateQuery});
         break;
 

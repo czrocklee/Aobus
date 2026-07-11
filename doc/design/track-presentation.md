@@ -41,6 +41,7 @@ grouped into tiers:
 | Tier | Id | Label | Shape |
 |---|---|---|---|
 | Daily listening | `library` | Library | Flat; album-artist → album → disc → track order. **Default.** |
+| | `list-order` | List Order | Flat; preserves source order. **Default recommendation for manual lists.** |
 | | `songs` | Songs | Flat; title → artist → album order. |
 | | `albums` | Albums | Grouped by album; track-oriented columns. |
 | | `artists` | Artists | Grouped by **album artist**; discography ordering (year before album). |
@@ -125,8 +126,14 @@ View"). The tier structure is expressed through ordering only; dedicated
 per-tier separators would need a separator concept in the TUI navigation
 model and are deferred.
 
-`uimodel::recommendPresentation()` picks a presentation for a smart list from
-the variables in its filter expression, in priority order:
+`uimodel::recommendPresentation()` first considers the source kind. Manual
+lists use `list-order`, whose empty sort preserves their stored/effective source
+order; this is also the presentation under which manual reorder controls are
+meaningful. See [Playback Cursor](playback-cursor.md#manual-lists-and-list-order)
+for that ordering contract.
+
+Smart lists pick a presentation from the variables in their filter expression,
+in priority order:
 
 | Filter mentions | Recommended preset |
 |---|---|
@@ -138,3 +145,5 @@ the variables in its filter expression, in priority order:
 | `$albumArtist` | `artists` |
 | `$artist` / `$album` | `albums` |
 | nothing / unparsable | `albums` |
+
+Non-manual sources without a smart-list expression also fall back to `albums`.

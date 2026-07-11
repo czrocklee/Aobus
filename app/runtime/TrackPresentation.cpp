@@ -44,6 +44,18 @@ namespace ao::rt
             TrackPresentationPreset{
               .spec =
                 TrackPresentationSpec{
+                  .id = std::string{kListOrderTrackPresentationId},
+                  .groupBy = TrackGroupKey::None,
+                  .sortBy = {},
+                  .visibleFields = {F::DisplayTrackNumber, F::Title, F::Artist, F::Album, F::Year, F::Duration},
+                  .redundantFields = {},
+                },
+              .label = "List Order",
+              .description = "Flat list preserving source order.",
+            },
+            TrackPresentationPreset{
+              .spec =
+                TrackPresentationSpec{
                   .id = "songs",
                   .groupBy = TrackGroupKey::None,
                   .sortBy =

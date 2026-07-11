@@ -269,7 +269,7 @@ executor callback contract, and `rt::PlaybackService` exposes it through
 
 The failure taxonomy is deliberately small and policy-oriented:
 
-| Kind | Meaning | Queue policy |
+| Kind | Meaning | Sequence policy |
 | --- | --- | --- |
 | `TrackOpen` | The input could not be opened, probed, or prepared. | Skip-eligible. |
 | `Decode` | The current track failed while decoding after playback had started. | Skip-eligible. |
@@ -282,22 +282,24 @@ generation, the original `Error`, and a recoverability flag. It never branches
 on user-facing message text. Runtime owns reporting: `PlaybackService` maps the
 item id back to the current or prepared request, attaches `TrackId`,
 `sourceListId`, and display title where available, refreshes transport state,
-and emits the service signal. If no subscriber handles a `TrackOpen`/`Decode`
-failure, the service posts or updates one default error notification keyed by
-kind and track. When a subscriber is present, recoverable track failures are left
-to that policy owner so an active queue can publish one "Skipped N unplayable
-tracks" summary instead of one toast per bad file. Output failures
+and asks the single bound recovery-control handler for a disposition before
+emitting the observational service signal. An `Unhandled` `TrackOpen`/`Decode`
+failure receives one default error notification keyed by kind and track.
+`PlaybackSequenceService` instead owns accepted cursor failures, so a recovery
+walk can publish one "Skipped N unplayable tracks" summary instead of one toast
+per bad file, and a directly terminal track failure gets one sequence error.
+Output failures
 (`RouteActivation`/`DeviceLost`) always keep the service-level sticky
-notification. The service does not decide whether a queue should advance.
+notification. `PlaybackService` does not decide whether a cursor should advance.
 
-Queue recovery belongs to `uimodel::PlaybackQueueSession`, because it already owns
-queue successor semantics. During active queue playback, `TrackOpen` and
-`Decode` failures advance to the next queue item and update a warning
+Recovery belongs to runtime `PlaybackSequenceService`, because it already owns
+live successor semantics. During an active sequence, recoverable `TrackOpen` and
+`Decode` failures advance through the live order and update a warning
 notification such as "Skipped 2 unplayable tracks". Three consecutive
 skip-eligible failures stop playback and post a sticky error so a broken folder
 cannot loop indefinitely. A successful now-playing commit or natural idle
 advance resets the consecutive-failure count. `RouteActivation` and
-`DeviceLost` stop the queue immediately; skipping tracks cannot repair an output
+`DeviceLost` stop the sequence immediately; skipping tracks cannot repair an output
 route.
 
 `linux-gtk` is an application leaf: it consumes lower-layer `Result`, value, and

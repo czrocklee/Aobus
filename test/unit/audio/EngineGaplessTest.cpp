@@ -16,7 +16,9 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <expected>
 #include <filesystem>
+#include <future>
 #include <map>
 #include <memory>
 #include <optional>
@@ -43,6 +45,38 @@ namespace ao::audio::test
 
       return count;
     }
+
+    class [[nodiscard]] WorkerReleaseGuard final
+    {
+    public:
+      explicit WorkerReleaseGuard(std::binary_semaphore& semaphore)
+        : _semaphore{semaphore}
+      {
+      }
+
+      ~WorkerReleaseGuard()
+      {
+        if (_armed)
+        {
+          _semaphore.release();
+        }
+      }
+
+      void release()
+      {
+        _semaphore.release();
+        _armed = false;
+      }
+
+      WorkerReleaseGuard(WorkerReleaseGuard const&) = delete;
+      WorkerReleaseGuard& operator=(WorkerReleaseGuard const&) = delete;
+      WorkerReleaseGuard(WorkerReleaseGuard&&) = delete;
+      WorkerReleaseGuard& operator=(WorkerReleaseGuard&&) = delete;
+
+    private:
+      std::binary_semaphore& _semaphore;
+      bool _armed = true;
+    };
   } // namespace
 
   TEST_CASE("Engine - splices prepared lossless same-format track without restarting backend",
@@ -72,7 +106,7 @@ namespace ao::audio::test
         advancedItemId = event.itemId;
         advancedLatch.notify();
       });
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
     auto const secondItem = makePlaybackItem(PlaybackInput{.filePath = "second.flac"});
@@ -183,7 +217,7 @@ namespace ao::audio::test
                            countersPtr)};
 
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
     REQUIRE(engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"})));
@@ -207,7 +241,7 @@ namespace ao::audio::test
     CHECK(countersPtr->live() == 1);
 
     // Arm the next successor only after the advance is observed, mirroring how
-    // the queue prepares N+2 in response to N+1 becoming current. This also
+    // the sequence prepares N+2 in response to N+1 becoming current. This also
     // proves the event thread refreshed the current-track format so the gate
     // sees the now-playing track.
     REQUIRE(engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "third.flac"})));
@@ -287,7 +321,7 @@ namespace ao::audio::test
                registryPtr)};
 
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     // Parks the event worker inside a notification exactly once, so the splice
     // signal produced below stays unapplied in the ring until a control command
@@ -364,7 +398,7 @@ namespace ao::audio::test
     auto advancedLatch = CallbackLatch{};
     auto endedLatch = CallbackLatch{};
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
     CHECK(engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.mp3"})));
@@ -401,7 +435,7 @@ namespace ao::audio::test
     auto advancedLatch = CallbackLatch{};
     auto endedLatch = CallbackLatch{};
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
     CHECK(engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.bin"})));
@@ -438,7 +472,7 @@ namespace ao::audio::test
     auto advancedLatch = CallbackLatch{};
     auto endedLatch = CallbackLatch{};
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
     CHECK(engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"})));
@@ -474,7 +508,7 @@ namespace ao::audio::test
     auto advancedLatch = CallbackLatch{};
     auto endedLatch = CallbackLatch{};
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
     REQUIRE(engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"})));
@@ -521,7 +555,7 @@ namespace ao::audio::test
     auto advancedLatch = CallbackLatch{};
     auto endedLatch = CallbackLatch{};
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
     auto const secondItem = makePlaybackItem(PlaybackInput{.filePath = "second.flac"});
@@ -590,7 +624,7 @@ namespace ao::audio::test
     auto advancedLatch = CallbackLatch{};
     auto endedLatch = CallbackLatch{};
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
     auto const result = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "missing.flac"}));
@@ -609,5 +643,256 @@ namespace ao::audio::test
     REQUIRE(endedLatch.waitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
+  }
+
+  TEST_CASE("Engine - rejected staged starts preserve the current generation and prepared lookahead",
+            "[audio][unit][engine][staged]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
+    auto const secondData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
+    auto const candidateData = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
+    auto const tracks = std::vector<ScriptedTrack>{
+      {.path = "first.flac", .info = makeScriptedStreamInfo(format), .data = firstData},
+      {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = secondData},
+      {.path = "candidate.flac", .info = makeScriptedStreamInfo(format), .data = candidateData},
+    };
+    auto engine = Engine{std::move(backendPtr), device, makePathScriptedDecoderFactory(tracks)};
+    auto optAdvancedItemId = std::optional<Engine::PlaybackItemId>{};
+    auto advanced = CallbackLatch{};
+    engine.setOnTrackAdvanced(
+      [&](Engine::TrackAdvanced const& event)
+      {
+        optAdvancedItemId = event.itemId;
+        advanced.notify();
+      });
+
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
+    auto const secondItem = makePlaybackItem(PlaybackInput{.filePath = "second.flac"});
+    auto const preparedNext = engine.setNext(secondItem);
+    REQUIRE(preparedNext);
+    auto const originalGeneration = engine.playbackGeneration();
+    REQUIRE(preparedNext->generation == originalGeneration);
+
+    SECTION("failed stage")
+    {
+      auto candidate = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "missing.flac"}));
+      REQUIRE_FALSE(candidate);
+      CHECK(candidate.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("foreign commit")
+    {
+      auto candidate = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "candidate.flac"}));
+      REQUIRE(candidate);
+      auto foreignEngine =
+        Engine{std::make_unique<FakeCapturingBackend>(), device, makePathScriptedDecoderFactory(tracks)};
+      auto committed = foreignEngine.commitPlayback(std::move(*candidate));
+      REQUIRE_FALSE(committed);
+      CHECK(committed.error().code == Error::Code::InvalidState);
+    }
+
+    CHECK(engine.playbackGeneration() == originalGeneration);
+    auto* const target = backendRaw->target();
+    REQUIRE(target != nullptr);
+    auto output = std::array<std::byte, 8>{};
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    REQUIRE(advanced.waitForCount(1));
+    CHECK(optAdvancedItemId == secondItem.id);
+  }
+
+  TEST_CASE("Engine - staged decode error processed before commit rejects without replacing active playback",
+            "[audio][unit][engine][staged]")
+  {
+    auto failureGate = StagedFailureGate{};
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto engine = Engine{std::move(backendPtr),
+                         makeEngineTestDevice(),
+                         makeStagedFailureDecoderFactory("candidate-failure.flac", failureGate)};
+    auto stateChanged = CallbackLatch{};
+    auto failureCount = std::atomic<std::size_t>{0};
+    auto endedCount = std::atomic<std::size_t>{0};
+    engine.setOnStateChanged([&] { stateChanged.notify(); });
+    engine.setOnPlaybackFailure([&](Engine::PlaybackFailure const&)
+                                { failureCount.fetch_add(1, std::memory_order_relaxed); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedCount.fetch_add(1, std::memory_order_relaxed); });
+
+    auto const currentItem = makePlaybackItem(PlaybackInput{.filePath = "current.flac"});
+    auto const nextItem = makePlaybackItem(PlaybackInput{.filePath = "next.flac"});
+    engine.play(currentItem);
+    auto const preparedNext = engine.setNext(nextItem);
+    REQUIRE(preparedNext);
+    auto* const activeTarget = backendRaw->target();
+    REQUIRE(activeTarget != nullptr);
+    auto const activeGeneration = engine.playbackGeneration();
+
+    auto candidate = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "candidate-failure.flac"}));
+    REQUIRE(candidate);
+    auto releaseGuard = StagedFailureReleaseGuard{failureGate};
+    REQUIRE(failureGate.waitForRead());
+
+    releaseGuard.release();
+    REQUIRE(stateChanged.waitForCount(1));
+
+    auto const committed = engine.commitPlayback(std::move(*candidate));
+    REQUIRE_FALSE(committed);
+    CHECK(committed.error().code == Error::Code::IoError);
+    CHECK(committed.error().message == "gated staged decode failure");
+    CHECK(engine.playbackGeneration() == activeGeneration);
+    CHECK(engine.transport() == Transport::Playing);
+    CHECK(backendRaw->target() == activeTarget);
+    CHECK(engine.clearNext() == nextItem.id);
+    CHECK(failureCount.load(std::memory_order_relaxed) == 0);
+    CHECK(endedCount.load(std::memory_order_relaxed) == 0);
+    CHECK(stateChanged.count() == 1);
+  }
+
+  TEST_CASE("Engine - staged commit before decode error publishes one active failure", "[audio][unit][engine][staged]")
+  {
+    auto failureGate = StagedFailureGate{};
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto engine = Engine{std::move(backendPtr),
+                         makeEngineTestDevice(),
+                         makeStagedFailureDecoderFactory("candidate-failure.flac", failureGate)};
+    auto failureLatch = CallbackLatch{};
+    auto endedLatch = CallbackLatch{};
+    auto optFailure = std::optional<Engine::PlaybackFailure>{};
+    engine.setOnPlaybackFailure(
+      [&](Engine::PlaybackFailure const& failure)
+      {
+        optFailure = failure;
+        failureLatch.notify();
+      });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "current.flac"}));
+
+    auto const candidateItem = makePlaybackItem(PlaybackInput{.filePath = "candidate-failure.flac"});
+    auto candidate = engine.stagePlayback(candidateItem);
+    REQUIRE(candidate);
+    auto releaseGuard = StagedFailureReleaseGuard{failureGate};
+    REQUIRE(failureGate.waitForRead());
+
+    auto const committed = engine.commitPlayback(std::move(*candidate));
+    REQUIRE(committed);
+    releaseGuard.release();
+    REQUIRE(failureLatch.waitForCount(1));
+    REQUIRE(endedLatch.waitForCount(1));
+
+    REQUIRE(optFailure);
+    CHECK(optFailure->kind == Engine::PlaybackFailureKind::Decode);
+    CHECK(optFailure->itemId == candidateItem.id);
+    CHECK(optFailure->generation == committed->generation);
+    CHECK(optFailure->error.code == Error::Code::IoError);
+    CHECK(optFailure->error.message == "gated staged decode failure");
+    CHECK(failureLatch.count() == 1);
+    CHECK(endedLatch.count() == 1);
+    CHECK(engine.playbackGeneration() == committed->generation);
+    CHECK(engine.transport() == Transport::Error);
+  }
+
+  TEST_CASE("Engine - explicit start barrier suppresses a queued old-generation track advance",
+            "[audio][unit][engine][barrier]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const firstData = std::vector{std::byte{0x41}, std::byte{0x42}, std::byte{0x43}, std::byte{0x44}};
+    auto const secondData = std::vector{std::byte{0x51}, std::byte{0x52}, std::byte{0x53}, std::byte{0x54}};
+    auto const explicitData = std::vector{std::byte{0x61}, std::byte{0x62}, std::byte{0x63}, std::byte{0x64}};
+    auto workerEntered = std::binary_semaphore{0};
+    auto workerRelease = std::binary_semaphore{0};
+    auto workerFlushed = std::binary_semaphore{0};
+    auto engine = Engine{std::move(backendPtr),
+                         device,
+                         makePathScriptedDecoderFactory({
+                           {.path = "first.flac", .info = makeScriptedStreamInfo(format), .data = firstData},
+                           {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = secondData},
+                           {.path = "explicit.flac", .info = makeScriptedStreamInfo(format), .data = explicitData},
+                         })};
+    auto releaseGuard = WorkerReleaseGuard{workerRelease};
+    auto advancedCount = std::atomic<std::size_t>{0};
+    engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&)
+                              { advancedCount.fetch_add(1, std::memory_order_relaxed); });
+
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
+    auto const preparedNext = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"}));
+    REQUIRE(preparedNext);
+    engine.defer(
+      [&]
+      {
+        workerEntered.release();
+        workerRelease.acquire();
+      });
+    REQUIRE(workerEntered.try_acquire_for(std::chrono::seconds{5}));
+
+    auto* const oldTarget = backendRaw->target();
+    REQUIRE(oldTarget != nullptr);
+    auto output = std::array<std::byte, 8>{};
+    REQUIRE(oldTarget->renderPcm(output).bytesWritten == output.size());
+
+    // Control entry settles the pending splice and materializes its callback
+    // behind the held worker without publishing the explicit candidate.
+    auto candidate = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "explicit.flac"}));
+    REQUIRE(candidate);
+    auto receipt = engine.commitPlayback(std::move(*candidate));
+    REQUIRE(receipt);
+    REQUIRE(receipt->cancellationBarrier.covers(preparedNext->generation));
+
+    releaseGuard.release();
+    engine.defer([&] { workerFlushed.release(); });
+    REQUIRE(workerFlushed.try_acquire_for(std::chrono::seconds{5}));
+    CHECK(advancedCount.load(std::memory_order_relaxed) == 0);
+    CHECK(engine.playbackGeneration() == receipt->generation);
+  }
+
+  TEST_CASE("Engine - prepared source failure reports its item and audio generation without stopping current",
+            "[audio][unit][engine][failure]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto const format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
+    auto const factory = [format](std::filesystem::path const& path, Format const&)
+    {
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(makeScriptedStreamInfo(format));
+
+      if (auto data = std::vector<std::byte>(100000, std::byte{0}); path == "prepared-failure.flac")
+      {
+        decoderPtr->setReadScript(
+          {{.data = data, .endOfStream = false},
+           {.data = {},
+            .endOfStream = false,
+            .result = std::unexpected{Error{.code = Error::Code::IoError, .message = "prepared decode failed"}}}});
+      }
+      else
+      {
+        decoderPtr->setReadScript({{.data = std::move(data), .endOfStream = false}, {.data = {}, .endOfStream = true}});
+      }
+
+      return decoderPtr;
+    };
+    auto engine = Engine{std::move(backendPtr), device, factory};
+    auto failurePromise = std::promise<Engine::PlaybackFailure>{};
+    auto failureFuture = failurePromise.get_future();
+    engine.setOnPlaybackFailure([&failurePromise](Engine::PlaybackFailure const& failure)
+                                { failurePromise.set_value(failure); });
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "current.flac"}));
+    auto const preparedItem = makePlaybackItem(PlaybackInput{.filePath = "prepared-failure.flac"});
+    auto const prepared = engine.setNext(preparedItem);
+    REQUIRE(prepared);
+
+    REQUIRE(failureFuture.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    auto const failure = failureFuture.get();
+    CHECK(failure.kind == Engine::PlaybackFailureKind::Decode);
+    CHECK(failure.itemId == preparedItem.id);
+    CHECK(failure.generation == prepared->generation);
+    CHECK(failure.error.message == "prepared decode failed");
+    CHECK(failure.recoverable);
+    CHECK(engine.transport() == Transport::Playing);
+    CHECK_FALSE(engine.clearNext());
   }
 } // namespace ao::audio::test

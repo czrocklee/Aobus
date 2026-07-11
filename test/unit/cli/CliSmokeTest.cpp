@@ -987,9 +987,31 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     auto const listId = parseCreatedListId(result.out);
 
-    result = fixture.run({"list", "add", std::to_string(listId), "1", "2"});
+    result = fixture.run({"list", "add", std::to_string(listId), "2"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "added tracks to list:"));
+
+    result = fixture.run({"-O", "json", "list", "add", std::to_string(listId), "1", "2", "1"});
+    REQUIRE(result.status == 0);
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["insertionIndex"]) == "1");
+    REQUIRE(tree.rootref()["insertedTrackIds"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["insertedTrackIds"][0]) == "1");
+    REQUIRE(tree.rootref()["alreadyPresent"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["alreadyPresent"][0]) == "2");
+    REQUIRE(tree.rootref()["duplicateRequest"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["duplicateRequest"][0]) == "1");
+
+    result = fixture.run({"-O", "json", "list", "dump"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    REQUIRE(tree.rootref()["lists"].is_seq());
+    REQUIRE(tree.rootref()["lists"].num_children() == 1);
+    auto const tracks = tree.rootref()["lists"][0]["tracks"];
+    REQUIRE(tracks.is_seq());
+    REQUIRE(tracks.num_children() == 2);
+    CHECK(yaml::scalarView(tracks[0]) == "2");
+    CHECK(yaml::scalarView(tracks[1]) == "1");
 
     result = fixture.run({"list", "show", std::to_string(listId)});
     REQUIRE(result.status == 0);
@@ -997,14 +1019,14 @@ namespace ao::cli::test
     CHECK(contains(result.out, "Test Title"));
     CHECK(contains(result.out, "HiRes Title"));
 
-    result = fixture.run({"list", "remove", std::to_string(listId), "1"});
+    result = fixture.run({"list", "remove", std::to_string(listId), "2"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "removed tracks from list:"));
 
     result = fixture.run({"-O", "json", "list", "show", std::to_string(listId)});
     REQUIRE(result.status == 0);
     requireJsonLineParses(result.out);
-    auto tree = parseYaml(result.out);
+    tree = parseYaml(result.out);
     REQUIRE(tree.rootref()["tracks"].is_seq());
     CHECK(tree.rootref()["tracks"].num_children() == 1);
 
@@ -1547,30 +1569,45 @@ namespace ao::cli::test
     result = fixture.run({"list", "update", std::to_string(listId), "--name", "Pinned"});
     REQUIRE(result.status == 0);
 
-    result = fixture.run({"-O", "json", "list", "add", "--dry-run", std::to_string(listId), "1"});
+    result = fixture.run({"-O", "json", "list", "add", "--dry-run", std::to_string(listId), "1", "1", "9999"});
     REQUIRE(result.status == 0);
     tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["action"]) == "add");
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
-    CHECK(yaml::scalarView(tree.rootref()["addedTrackIds"][0]) == "1");
+    CHECK(yaml::scalarView(tree.rootref()["changed"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["insertionIndex"]) == "0");
+    REQUIRE(tree.rootref()["insertedTrackIds"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["insertedTrackIds"][0]) == "1");
+    REQUIRE(tree.rootref()["duplicateRequest"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["duplicateRequest"][0]) == "1");
+    REQUIRE(tree.rootref()["missingTrack"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["missingTrack"][0]) == "9999");
 
     result = fixture.run({"list", "show", std::to_string(listId)});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Tracks: 0"));
 
-    result = fixture.run({"list", "add", std::to_string(listId), "1"});
+    result = fixture.run({"list", "add", std::to_string(listId), "1", "1", "9999"});
     REQUIRE(result.status == 0);
 
-    result = fixture.run({"-O", "json", "list", "remove", "--dry-run", std::to_string(listId), "1"});
+    result = fixture.run({"-O", "json", "list", "remove", "--dry-run", std::to_string(listId), "1", "1", "9999"});
     REQUIRE(result.status == 0);
     tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["action"]) == "remove");
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["changed"]) == "true");
+    REQUIRE(tree.rootref()["removedTrackIds"].num_children() == 1);
     CHECK(yaml::scalarView(tree.rootref()["removedTrackIds"][0]) == "1");
+    REQUIRE(tree.rootref()["duplicateRequest"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["duplicateRequest"][0]) == "1");
+    REQUIRE(tree.rootref()["notPresent"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["notPresent"][0]) == "9999");
 
     result = fixture.run({"list", "show", std::to_string(listId)});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Tracks: 1"));
 
-    result = fixture.run({"list", "remove", std::to_string(listId), "1"});
+    result = fixture.run({"list", "remove", std::to_string(listId), "1", "1", "9999"});
     REQUIRE(result.status == 0);
 
     result = fixture.run({"-O", "json", "list", "delete", "--dry-run", std::to_string(listId)});

@@ -31,7 +31,7 @@ namespace ao::rt
 {
   class AppRuntime;
   class NotificationService;
-  class PlaybackQueueService;
+  class PlaybackSequenceService;
 }
 
 namespace ao::tui
@@ -102,7 +102,7 @@ namespace ao::tui
     ShellInteractionModel& _shell;
     LibraryController& _library;
     rt::PlaybackService& _playback;
-    rt::PlaybackQueueService& _playbackQueue;
+    rt::PlaybackSequenceService& _playbackSequence;
     OutputDeviceController* _outputDevices = nullptr;
     TuiHitRegions* _hitRegions = nullptr;
     std::vector<TrackColumnWidthOverride>* _trackColumnWidthOverrides = nullptr;

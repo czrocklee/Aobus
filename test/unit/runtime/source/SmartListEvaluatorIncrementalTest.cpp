@@ -7,11 +7,16 @@
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <chrono>
+#include <memory>
+#include <variant>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -22,36 +27,30 @@ namespace ao::rt::test
     auto first = libraryFixture.addTrack(makeSmartListSpec("first", 2020, std::chrono::seconds{180}));
     auto second = libraryFixture.addTrack(makeSmartListSpec("second", 2022, std::chrono::seconds{260}));
 
-    auto source = MutableTrackSource{};
-    source.addInitial(first);
-    source.addInitial(second);
+    auto sourcePtr = makeMutableTrackSource({first, second});
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto hotList = SmartListSource{source, libraryFixture.library(), engine};
-    auto coldList = SmartListSource{source, libraryFixture.library(), engine};
+    auto hotList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto coldList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
     hotList.setExpression("$year >= 2021");
     hotList.reload();
     coldList.setExpression("@duration >= 4m");
     coldList.reload();
 
-    auto hotSpy = SpyTrackSourceObserver{};
-    auto coldSpy = SpyTrackSourceObserver{};
-    hotList.attach(&hotSpy);
-    coldList.attach(&coldSpy);
+    auto hotSpy = TrackSourceBatchSpy{hotList};
+    auto coldSpy = TrackSourceBatchSpy{coldList};
 
     hotList.setExpression("$year >= 2022");
     hotList.reload();
 
-    REQUIRE(hotSpy.events.size() == 1);
-    CHECK(hotSpy.events[0].kind == SpyTrackSourceObserver::EventKind::Reset);
-    CHECK(coldSpy.events.empty());
+    REQUIRE(hotSpy.batches.size() == 1);
+    REQUIRE(hotSpy.batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<SourceReset>(hotSpy.batches.front().deltas.front()));
+    CHECK(coldSpy.batches.empty());
     REQUIRE(hotList.size() == 1);
     CHECK(hotList.trackIdAt(0) == second);
     REQUIRE(coldList.size() == 1);
     CHECK(coldList.trackIdAt(0) == second);
-
-    hotList.detach(&hotSpy);
-    coldList.detach(&coldSpy);
   }
 
   TEST_CASE("SmartListEvaluator - source insert emits inserted notifications instead of bucket resets",
@@ -60,40 +59,37 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto original = libraryFixture.addTrack(makeSmartListSpec("old", 2020, std::chrono::seconds{180}));
 
-    auto source = MutableTrackSource{};
-    source.addInitial(original);
+    auto sourcePtr = makeMutableTrackSource({original});
+    auto& source = *sourcePtr;
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto hotList = SmartListSource{source, libraryFixture.library(), engine};
-    auto coldList = SmartListSource{source, libraryFixture.library(), engine};
+    auto hotList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto coldList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
     hotList.setExpression("$year >= 2021");
     hotList.reload();
     coldList.setExpression("@duration >= 4m");
     coldList.reload();
 
-    auto hotSpy = SpyTrackSourceObserver{};
-    auto coldSpy = SpyTrackSourceObserver{};
-    hotList.attach(&hotSpy);
-    coldList.attach(&coldSpy);
+    auto hotSpy = TrackSourceBatchSpy{hotList};
+    auto coldSpy = TrackSourceBatchSpy{coldList};
 
     auto inserted = libraryFixture.addTrack(makeSmartListSpec("new", 2023, std::chrono::seconds{250}));
     source.insert(inserted, 1);
 
-    REQUIRE(hotSpy.events.size() == 1);
-    CHECK(hotSpy.events[0].kind == SpyTrackSourceObserver::EventKind::Inserted);
-    CHECK(hotSpy.events[0].id == inserted);
-    CHECK(hotSpy.events[0].index == 0);
-    REQUIRE(coldSpy.events.size() == 1);
-    CHECK(coldSpy.events[0].kind == SpyTrackSourceObserver::EventKind::Inserted);
-    CHECK(coldSpy.events[0].id == inserted);
-    CHECK(coldSpy.events[0].index == 0);
+    REQUIRE(hotSpy.batches.size() == 1);
+    REQUIRE(hotSpy.batches.front().deltas.size() == 1);
+    auto const& hotInsert = std::get<SourceInsertRange>(hotSpy.batches.front().deltas.front());
+    CHECK(hotInsert.start == 0);
+    CHECK(hotInsert.trackIds == std::vector{inserted});
+    REQUIRE(coldSpy.batches.size() == 1);
+    REQUIRE(coldSpy.batches.front().deltas.size() == 1);
+    auto const& coldInsert = std::get<SourceInsertRange>(coldSpy.batches.front().deltas.front());
+    CHECK(coldInsert.start == 0);
+    CHECK(coldInsert.trackIds == std::vector{inserted});
     REQUIRE(hotList.size() == 1);
     CHECK(hotList.trackIdAt(0) == inserted);
     REQUIRE(coldList.size() == 1);
     CHECK(coldList.trackIdAt(0) == inserted);
-
-    hotList.detach(&hotSpy);
-    coldList.detach(&coldSpy);
   }
 
   TEST_CASE("SmartListEvaluator - source update diffs membership transitions incrementally",
@@ -102,47 +98,44 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto trackId = libraryFixture.addTrack(makeSmartListSpec("track", 2020));
 
-    auto source = MutableTrackSource{};
-    source.addInitial(trackId);
+    auto sourcePtr = makeMutableTrackSource({trackId});
+    auto& source = *sourcePtr;
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto filtered = SmartListSource{source, libraryFixture.library(), engine};
+    auto filtered = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
     filtered.setExpression("$year >= 2021");
     filtered.reload();
 
-    auto spy = SpyTrackSourceObserver{};
-    filtered.attach(&spy);
+    auto spy = TrackSourceBatchSpy{filtered};
 
     libraryFixture.updateTrack(trackId, [](library::test::TrackSpec& spec) { spec.year = 2022; });
     source.update(trackId);
 
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Inserted);
-    CHECK(spy.events[0].id == trackId);
-    CHECK(spy.events[0].index == 0);
+    REQUIRE(spy.batches.size() == 1);
+    auto const& insertion = std::get<SourceInsertRange>(spy.batches.front().deltas.front());
+    CHECK(insertion.start == 0);
+    CHECK(insertion.trackIds == std::vector{trackId});
 
     spy.clear();
 
     libraryFixture.updateTrack(trackId, [](library::test::TrackSpec& spec) { spec.title = "renamed"; });
     source.update(trackId);
 
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
-    CHECK(spy.events[0].id == trackId);
-    CHECK(spy.events[0].index == 0);
+    REQUIRE(spy.batches.size() == 1);
+    auto const& update = std::get<SourceUpdateRange>(spy.batches.front().deltas.front());
+    CHECK(update.start == 0);
+    CHECK(update.trackIds == std::vector{trackId});
 
     spy.clear();
 
     libraryFixture.updateTrack(trackId, [](library::test::TrackSpec& spec) { spec.year = 2019; });
     source.update(trackId);
 
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Removed);
-    CHECK(spy.events[0].id == trackId);
-    CHECK(spy.events[0].index == 0);
+    REQUIRE(spy.batches.size() == 1);
+    auto const& removal = std::get<SourceRemoveRange>(spy.batches.front().deltas.front());
+    CHECK(removal.start == 0);
+    CHECK(removal.trackIds == std::vector{trackId});
     CHECK(filtered.size() == 0);
-
-    filtered.detach(&spy);
   }
 
   TEST_CASE("SmartListEvaluator - child filtered lists track parent membership as their source",
@@ -152,16 +145,16 @@ namespace ao::rt::test
     auto legacy = libraryFixture.addTrack(makeSmartListSpec("legacy", 2020, std::chrono::seconds{180}));
     auto modern = libraryFixture.addTrack(makeSmartListSpec("modern", 2022, std::chrono::seconds{250}));
 
-    auto source = MutableTrackSource{};
-    source.addInitial(legacy);
-    source.addInitial(modern);
+    auto sourcePtr = makeMutableTrackSource({legacy, modern});
+    auto& source = *sourcePtr;
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto parent = SmartListSource{source, libraryFixture.library(), engine};
+    auto parentPtr = std::make_shared<SmartListSource>(TrackSourceLease{sourcePtr}, libraryFixture.library(), engine);
+    auto& parent = *parentPtr;
     parent.setExpression("$year >= 2021");
     parent.reload();
 
-    auto child = SmartListSource{parent, libraryFixture.library(), engine};
+    auto child = SmartListSource{TrackSourceLease{parentPtr}, libraryFixture.library(), engine};
     child.setExpression("@duration >= 4m");
     child.reload();
 
@@ -170,16 +163,15 @@ namespace ao::rt::test
     REQUIRE(child.size() == 1);
     CHECK(child.trackIdAt(0) == modern);
 
-    auto spy = SpyTrackSourceObserver{};
-    child.attach(&spy);
+    auto spy = TrackSourceBatchSpy{child};
 
     auto fresh = libraryFixture.addTrack(makeSmartListSpec("fresh", 2023, std::chrono::seconds{260}));
     source.insert(fresh, 2);
 
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Inserted);
-    CHECK(spy.events[0].id == fresh);
-    CHECK(spy.events[0].index == 1);
+    REQUIRE(spy.batches.size() == 1);
+    auto const& childInsert = std::get<SourceInsertRange>(spy.batches.front().deltas.front());
+    CHECK(childInsert.start == 1);
+    CHECK(childInsert.trackIds == std::vector{fresh});
     REQUIRE(child.size() == 2);
     CHECK(child.trackIdAt(1) == fresh);
 
@@ -188,14 +180,12 @@ namespace ao::rt::test
     libraryFixture.updateTrack(modern, [](library::test::TrackSpec& spec) { spec.year = 2019; });
     source.update(modern);
 
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Removed);
-    CHECK(spy.events[0].id == modern);
-    CHECK(spy.events[0].index == 0);
+    REQUIRE(spy.batches.size() == 1);
+    auto const& childRemoval = std::get<SourceRemoveRange>(spy.batches.front().deltas.front());
+    CHECK(childRemoval.start == 0);
+    CHECK(childRemoval.trackIds == std::vector{modern});
     REQUIRE(child.size() == 1);
     CHECK(child.trackIdAt(0) == fresh);
-
-    child.detach(&spy);
   }
 
   TEST_CASE("SmartListEvaluator - single mutations on base source are handled correctly",
@@ -203,9 +193,10 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto source = MutableTrackSource{};
+    auto sourcePtr = makeMutableTrackSource({});
+    auto& source = *sourcePtr;
 
-    auto list = SmartListSource{source, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
     list.setExpression("$year >= 2020");
     list.reload();
 
@@ -234,9 +225,10 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto source = MutableTrackSource{};
+    auto sourcePtr = makeMutableTrackSource({});
+    auto& source = *sourcePtr;
 
-    auto list = SmartListSource{source, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
     list.setExpression("$year >= 2020");
     list.reload();
 

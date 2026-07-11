@@ -19,6 +19,7 @@ namespace ao::rt::test
     { return std::ranges::contains(presets, id, [](TrackPresentationPreset const& p) { return p.spec.id; }); };
 
     CHECK(findPreset("library"));
+    CHECK(findPreset("list-order"));
     CHECK(findPreset("songs"));
     CHECK(findPreset("albums"));
     CHECK(findPreset("artists"));
@@ -38,6 +39,7 @@ namespace ao::rt::test
   {
     CHECK(builtinTrackPresentationPreset("songs") != nullptr);
     CHECK(builtinTrackPresentationPreset("albums") != nullptr);
+    CHECK(builtinTrackPresentationPreset(kListOrderTrackPresentationId) != nullptr);
     CHECK(builtinTrackPresentationPreset("nonexistent") == nullptr);
   }
 
@@ -77,6 +79,29 @@ namespace ao::rt::test
     CHECK_FALSE(std::ranges::contains(spec.visibleFields, TrackField::Tags));
 
     CHECK(spec.redundantFields.empty());
+  }
+
+  TEST_CASE("List Order presentation - preserves source order with useful track columns",
+            "[runtime][unit][presentation]")
+  {
+    auto const* preset = builtinTrackPresentationPreset(kListOrderTrackPresentationId);
+    REQUIRE(preset != nullptr);
+
+    auto const& spec = preset->spec;
+    CHECK(spec.id == kListOrderTrackPresentationId);
+    CHECK(spec.groupBy == TrackGroupKey::None);
+    CHECK(spec.sortBy.empty());
+
+    REQUIRE(spec.visibleFields.size() == 6);
+    CHECK(spec.visibleFields[0] == TrackField::DisplayTrackNumber);
+    CHECK(spec.visibleFields[1] == TrackField::Title);
+    CHECK(spec.visibleFields[2] == TrackField::Artist);
+    CHECK(spec.visibleFields[3] == TrackField::Album);
+    CHECK(spec.visibleFields[4] == TrackField::Year);
+    CHECK(spec.visibleFields[5] == TrackField::Duration);
+    CHECK(spec.redundantFields.empty());
+    CHECK(preset->label == "List Order");
+    CHECK(preset->description == "Flat list preserving source order.");
   }
 
   TEST_CASE("songs preset is a flat title-ordered list", "[runtime][unit][presentation]")

@@ -115,7 +115,7 @@ namespace ao::audio::test
     auto const desc = PlaybackInput{.filePath = "song.flac"};
 
     auto trackEnded = std::atomic{false};
-    engine.setOnTrackEnded([&] { trackEnded.store(true, std::memory_order_release); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { trackEnded.store(true, std::memory_order_release); });
 
     engine.play(makePlaybackItem(desc));
 
@@ -129,7 +129,7 @@ namespace ao::audio::test
     SECTION("handleDrainComplete resets to idle and fires track ended")
     {
       auto trackEndedLatch = CallbackLatch{};
-      engine.setOnTrackEnded([&] { trackEndedLatch.notify(); });
+      engine.setOnTrackEnded([&](Engine::TrackEnded const&) { trackEndedLatch.notify(); });
 
       backendRaw->emitDrainComplete();
       CHECK(trackEndedLatch.waitForCount(1));
@@ -178,7 +178,7 @@ namespace ao::audio::test
                            {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = secondData},
                          })};
 
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
     engine.setOnRouteChanged(
       [&](Engine::RouteStatus const& route)
       {
@@ -249,7 +249,7 @@ namespace ao::audio::test
                },
                std::make_shared<std::map<std::filesystem::path, ScriptedDecoderSession*>>())};
 
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
     engine.setOnRouteChanged(
       [&](Engine::RouteStatus const& route)
       {
@@ -313,7 +313,7 @@ namespace ao::audio::test
                            },
                            registryPtr)};
 
-    engine.setOnTrackEnded([&] { endedLatch.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "track.flac"}));
     auto* const target = backendRaw->target();

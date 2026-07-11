@@ -197,8 +197,8 @@ Tags follow `[uimodel][unit][feature][component]`, e.g.
 - **`playback`** — now-playing view model and action policy (`now-playing/`),
   transport (`transport/`), seek/time interpolation (`seek/`), output and volume
   (`output/`), audio quality formatting (`quality/`), and Aobus soul model
-  (`soul/`). Queue orchestration belongs to runtime; UIModel may add a queue
-  display projection only when a queue surface exists.
+  (`soul/`). Live sequence policy and session-save coordination belong to
+  runtime; UIModel only adapts commands and published state.
 - **`preferences`** — platform-neutral application preferences models that
   convert user selections into persisted deltas and platform-supplied applier
   callbacks. No GTK widgets or config-store ownership.

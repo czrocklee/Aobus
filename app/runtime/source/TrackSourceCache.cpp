@@ -1,72 +1,156 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/source/CachedListSource.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/StorageResult.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/source/AllTracksSource.h>
 #include <ao/rt/source/ManualListSource.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <algorithm>
+#include <concepts>
+#include <exception>
+#include <expected>
+#include <format>
+#include <functional>
 #include <memory>
-#include <ranges>
+#include <string>
+#include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
 {
   namespace
   {
-    TrackSource* parentSourceOf(TrackSource& source)
+    CachedListSourceDefinition definitionOf(library::ListView const& view)
     {
-      if (auto* const manual = dynamic_cast<ManualListSource*>(&source); manual != nullptr)
+      auto definition = CachedListSourceDefinition{
+        .parentId = view.parentId(),
+        .kind = view.isSmart() ? CachedListSourceKind::Smart : CachedListSourceKind::Manual,
+      };
+
+      if (view.isSmart())
       {
-        return manual->source();
+        definition.smartExpression = view.filter();
+      }
+      else
+      {
+        definition.storedTrackIds.assign(view.tracks().begin(), view.tracks().end());
       }
 
-      if (auto* const smart = dynamic_cast<SmartListSource*>(&source); smart != nullptr)
-      {
-        return &smart->source();
-      }
-
-      return nullptr;
+      return definition;
     }
   } // namespace
 
+  // Subscription lambdas form separate event reducers but share one mutation-depth gate.
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   TrackSourceCache::TrackSourceCache(library::MusicLibrary& library, LibraryChanges const& changes)
-    : _library{library}, _allTracks{_library.tracks()}, _smartEvaluator{_library}
+    : _library{library}, _allTracksPtr{std::make_shared<AllTracksSource>(_library.tracks())}, _smartEvaluator{_library}
   {
     _listsMutatedSubscription = changes.onListsMutated(
-      [this](LibraryChanges::ListsMutated const& ev)
+      [this](LibraryChanges::ListsMutated const& event)
       {
-        for (auto const id : ev.deleted)
+        applyListMutation(
+          [this, &event]
+          {
+            for (auto const id : event.deleted)
+            {
+              eraseList(id);
+            }
+
+            auto detailedListIds = std::vector<ListId>{};
+            detailedListIds.reserve(event.manualContentChanges.size());
+
+            for (auto const& contentChange : event.manualContentChanges)
+            {
+              if (std::ranges::contains(event.deleted, contentChange.listId))
+              {
+                continue;
+              }
+
+              if (!std::ranges::contains(detailedListIds, contentChange.listId))
+              {
+                detailedListIds.push_back(contentChange.listId);
+              }
+
+              auto sourcePtr = liveSource(contentChange.listId);
+
+              if (sourcePtr == nullptr)
+              {
+                continue;
+              }
+
+              std::visit(
+                [&sourcePtr, listId = contentChange.listId, this](auto const& operation)
+                {
+                  using Operation = std::remove_cvref_t<decltype(operation)>;
+
+                  if constexpr (std::same_as<Operation, ManualTracksInsert>)
+                  {
+                    sourcePtr->applyManualTracksInsert(operation);
+                  }
+                  else if constexpr (std::same_as<Operation, ManualTracksRemove>)
+                  {
+                    sourcePtr->applyManualTracksRemove(operation);
+                  }
+                  else if constexpr (std::same_as<Operation, ManualTracksMove>)
+                  {
+                    sourcePtr->applyManualTracksMove(operation);
+                  }
+                  else
+                  {
+                    refreshList(listId);
+                  }
+                },
+                contentChange.operation);
+            }
+
+            for (auto const id : event.upserted)
+            {
+              if (!std::ranges::contains(detailedListIds, id))
+              {
+                refreshList(id);
+              }
+            }
+          });
+      });
+
+    _tracksMutatedSubscription = changes.onTracksMutated(
+      [this](std::vector<TrackId> const& trackIds)
+      {
+        auto metadataTrackIds = std::vector<TrackId>{};
+        metadataTrackIds.reserve(trackIds.size());
+
+        for (auto const trackId : trackIds)
         {
-          eraseList(id);
+          if (!std::ranges::contains(_collectionChangedTrackIds, trackId))
+          {
+            metadataTrackIds.push_back(trackId);
+          }
         }
 
-        for (auto const id : ev.upserted)
-        {
-          refreshList(id);
-        }
+        _collectionChangedTrackIds.clear();
+        _allTracksPtr->notifyUpdated(metadataTrackIds);
       });
 
     _trackCollectionChangedSubscription = changes.onTrackCollectionChanged(
-      [this](LibraryChanges::TrackCollectionChanged const& ev)
+      [this](LibraryChanges::TrackCollectionChanged const& event)
       {
-        for (auto const id : ev.inserted)
-        {
-          _allTracks.notifyInserted(id);
-        }
-
-        for (auto const id : ev.deleted)
-        {
-          _allTracks.notifyRemoved(id);
-        }
+        _collectionChangedTrackIds = event.inserted;
+        _collectionChangedTrackIds.append_range(event.deleted);
+        _allTracksPtr->applyCollectionChange(event.inserted, event.deleted);
       });
   }
 
@@ -74,18 +158,18 @@ namespace ao::rt
 
   TrackSource& TrackSourceCache::allTracks()
   {
-    return _allTracks;
+    return *_allTracksPtr;
   }
 
-  TrackSource& TrackSourceCache::sourceFor(ListId const listId)
+  Result<TrackSourceLease> TrackSourceCache::acquire(ListId const listId)
   {
-    return getOrBuildSource(listId);
+    return acquire(listId, {});
   }
 
   void TrackSourceCache::reloadAllTracks()
   {
     auto const transaction = _library.readTransaction();
-    _allTracks.reloadFromStore(transaction);
+    _allTracksPtr->reloadFromStore(transaction);
   }
 
   void TrackSourceCache::refreshList(ListId const listId)
@@ -95,16 +179,25 @@ namespace ao::rt
       return;
     }
 
-    auto const it = _sources.find(listId);
+    if (!std::ranges::contains(_pendingRefreshListIds, listId))
+    {
+      _pendingRefreshListIds.push_back(listId);
+    }
 
-    if (it == _sources.end())
+    drainPendingRefreshes();
+  }
+
+  void TrackSourceCache::refreshListNow(ListId const listId)
+  {
+    auto sourcePtr = liveSource(listId);
+
+    if (sourcePtr == nullptr)
     {
       return;
     }
 
     auto const transaction = _library.readTransaction();
-    auto const optView =
-      storageValueOrNullopt(_library.lists().reader(transaction).get(listId), "Failed to refresh list source");
+    auto const optView = _library.lists().reader(transaction).get(listId);
 
     if (!optView)
     {
@@ -112,115 +205,308 @@ namespace ao::rt
       return;
     }
 
-    if (auto* const manual = dynamic_cast<ManualListSource*>(it->second.get()); manual != nullptr)
+    auto definition = definitionOf(*optView);
+
+    if (definition == sourcePtr->definition() || sourcePtr->trySynchronizeManualDefinition(definition))
     {
-      manual->reloadFromListView(*optView);
+      return;
     }
-    else if (auto* const smart = dynamic_cast<SmartListSource*>(it->second.get()); smart != nullptr)
+
+    auto parentResult =
+      definition.parentId == kInvalidListId ? acquire(kAllTracksListId) : acquire(definition.parentId);
+
+    if (!parentResult)
     {
-      smart->setExpression(std::string{optView->filter()});
-      smart->reload();
+      throwException<Exception>(
+        "Failed to resolve parent source for list {}: {}", listId, parentResult.error().message);
+    }
+
+    auto implementationPtr = buildImplementation(*optView, *parentResult);
+    auto const parentId = definition.parentId;
+    linkGraph(listId, parentId);
+
+    try
+    {
+      sourcePtr->rebind(std::move(definition), *parentResult, std::move(implementationPtr));
+    }
+    catch (...)
+    {
+      if (sourcePtr->state() == TrackSourceState::Live)
+      {
+        linkGraph(listId, sourcePtr->definition().parentId);
+      }
+      else
+      {
+        unlinkGraph(listId);
+      }
+
+      throw;
+    }
+  }
+
+  void TrackSourceCache::applyListMutation(std::move_only_function<void()> mutation)
+  {
+    ++_listMutationDepth;
+    auto optException = std::exception_ptr{};
+
+    try
+    {
+      mutation();
+    }
+    catch (...)
+    {
+      optException = std::current_exception();
+    }
+
+    --_listMutationDepth;
+
+    if (_listMutationDepth == 0)
+    {
+      try
+      {
+        drainPendingRefreshes();
+      }
+      catch (...)
+      {
+        if (optException == nullptr)
+        {
+          optException = std::current_exception();
+        }
+      }
+    }
+
+    if (optException != nullptr)
+    {
+      std::rethrow_exception(optException);
+    }
+  }
+
+  void TrackSourceCache::drainPendingRefreshes()
+  {
+    if (_listMutationDepth != 0 || _refreshDrainActive)
+    {
+      return;
+    }
+
+    _refreshDrainActive = true;
+    auto optException = std::exception_ptr{};
+
+    while (!_pendingRefreshListIds.empty())
+    {
+      auto listIds = std::exchange(_pendingRefreshListIds, {});
+
+      for (auto const listId : listIds)
+      {
+        try
+        {
+          refreshListNow(listId);
+        }
+        catch (...)
+        {
+          if (optException == nullptr)
+          {
+            optException = std::current_exception();
+          }
+        }
+      }
+    }
+
+    _refreshDrainActive = false;
+
+    if (optException != nullptr)
+    {
+      std::rethrow_exception(optException);
+    }
+  }
+
+  void TrackSourceCache::evict(ListId const listId)
+  {
+    if (listId != kAllTracksListId)
+    {
+      _hotSources.erase(listId);
     }
   }
 
   void TrackSourceCache::eraseList(ListId const listId)
   {
-    if (listId == kInvalidListId)
+    if (listId == kInvalidListId || listId == kAllTracksListId)
     {
       return;
     }
 
-    // A correct implementation needs to destroy children before parents.
-    // For now, since we only erase by ID, we simply erase it.
-    // If we need child-before-parent, we should search through `_sources`
-    // for any sources whose `_source` pointer points to this list's source.
-    // But since it's an unordered (flat) map, we'd have to walk the graph.
-    // Given that `WorkspaceService` handles closing views,
-    // this might be sufficient for now.
+    auto listIds = std::vector<ListId>{};
+    collectDescendantsPostorder(listId, listIds);
 
-    // Find all children recursively that depend on this list and erase them too
-    auto toErase = std::vector<ListId>{};
-    toErase.push_back(listId);
-
-    bool foundNew = true;
-
-    while (foundNew)
+    for (auto const id : listIds)
     {
-      foundNew = false;
-
-      for (auto const& [childId, childSourcePtr] : _sources)
+      if (auto sourcePtr = liveSource(id); sourcePtr != nullptr)
       {
-        if (std::ranges::contains(toErase, childId))
-        {
-          continue;
-        }
+        sourcePtr->semanticInvalidate();
+      }
 
-        auto* const parent = parentSourceOf(*childSourcePtr);
+      _hotSources.erase(id);
+      _liveSources.erase(id);
+      unlinkGraph(id);
+    }
+  }
 
-        for (auto const id : toErase)
-        {
-          if (auto const it = _sources.find(id); it != _sources.end())
-          {
-            if (parent == it->second.get())
-            {
-              toErase.push_back(childId);
-              foundNew = true;
-              break;
-            }
-          }
-        }
+  SmartListEvaluator& TrackSourceCache::smartEvaluator()
+  {
+    return _smartEvaluator;
+  }
 
-        if (foundNew)
+  Result<TrackSourceLease> TrackSourceCache::acquire(ListId const listId, std::vector<ListId> ancestry)
+  {
+    if (listId == kAllTracksListId)
+    {
+      return TrackSourceLease{_allTracksPtr};
+    }
+
+    if (listId == kInvalidListId)
+    {
+      return makeError(Error::Code::InvalidInput, "Invalid list id cannot be acquired as a track source");
+    }
+
+    if (std::ranges::contains(ancestry, listId))
+    {
+      return makeError(Error::Code::InvalidInput, "List source parent graph contains a cycle");
+    }
+
+    if (auto const it = _hotSources.find(listId); it != _hotSources.end())
+    {
+      return TrackSourceLease{it->second};
+    }
+
+    if (auto sourcePtr = liveSource(listId); sourcePtr != nullptr)
+    {
+      _hotSources.insert_or_assign(listId, sourcePtr);
+      return TrackSourceLease{std::move(sourcePtr)};
+    }
+
+    auto const transaction = _library.readTransaction();
+    auto const optView = _library.lists().reader(transaction).get(listId);
+
+    if (!optView)
+    {
+      return makeError(Error::Code::NotFound, std::format("List {} does not exist", listId));
+    }
+
+    ancestry.push_back(listId);
+    auto parentResult = optView->parentId() == kInvalidListId ? acquire(kAllTracksListId, std::move(ancestry))
+                                                              : acquire(optView->parentId(), std::move(ancestry));
+
+    if (!parentResult)
+    {
+      return std::unexpected{parentResult.error()};
+    }
+
+    auto definition = definitionOf(*optView);
+    auto const parentId = definition.parentId;
+    auto implementationPtr = buildImplementation(*optView, *parentResult);
+    auto sourcePtr =
+      std::make_shared<CachedListSource>(listId, std::move(definition), *parentResult, std::move(implementationPtr));
+    _hotSources.insert_or_assign(listId, sourcePtr);
+    _liveSources.insert_or_assign(listId, sourcePtr);
+    linkGraph(listId, parentId);
+    return TrackSourceLease{std::static_pointer_cast<TrackSource>(std::move(sourcePtr))};
+  }
+
+  std::shared_ptr<CachedListSource> TrackSourceCache::liveSource(ListId const listId)
+  {
+    if (auto const hot = _hotSources.find(listId); hot != _hotSources.end())
+    {
+      return hot->second;
+    }
+
+    auto const live = _liveSources.find(listId);
+
+    if (live == _liveSources.end())
+    {
+      return {};
+    }
+
+    if (auto sourcePtr = live->second.lock(); sourcePtr != nullptr)
+    {
+      return sourcePtr;
+    }
+
+    _liveSources.erase(live);
+    unlinkGraph(listId);
+    return {};
+  }
+
+  std::unique_ptr<TrackSource> TrackSourceCache::buildImplementation(library::ListView const& view,
+                                                                     TrackSourceLease const& parentLease)
+  {
+    if (view.isSmart())
+    {
+      auto sourcePtr = std::make_unique<SmartListSource>(parentLease, _library, _smartEvaluator);
+      sourcePtr->setExpression(std::string{view.filter()});
+      sourcePtr->reload();
+      return sourcePtr;
+    }
+
+    return std::make_unique<ManualListSource>(view, parentLease);
+  }
+
+  void TrackSourceCache::linkGraph(ListId const listId, ListId const parentId)
+  {
+    if (auto const oldParent = _parentIds.find(listId); oldParent != _parentIds.end())
+    {
+      if (auto children = _childIds.find(oldParent->second); children != _childIds.end())
+      {
+        std::erase(children->second, listId);
+
+        if (children->second.empty())
         {
-          break; // restart outer loop to avoid iterator invalidation issues mentally
+          _childIds.erase(children);
         }
       }
     }
 
-    // Erase in reverse order of discovery (children first)
-    for (auto& it : std::ranges::reverse_view{toErase})
+    _parentIds.insert_or_assign(listId, parentId);
+
+    if (parentId != kInvalidListId)
     {
-      _sources.erase(it);
+      if (auto& children = _childIds[parentId]; !std::ranges::contains(children, listId))
+      {
+        children.push_back(listId);
+      }
     }
   }
 
-  TrackSource& TrackSourceCache::getOrBuildSource(ListId const listId)
+  void TrackSourceCache::unlinkGraph(ListId const listId)
   {
-    if (listId == kInvalidListId)
+    if (auto const parent = _parentIds.find(listId); parent != _parentIds.end())
     {
-      return _allTracks;
+      if (auto children = _childIds.find(parent->second); children != _childIds.end())
+      {
+        std::erase(children->second, listId);
+
+        if (children->second.empty())
+        {
+          _childIds.erase(children);
+        }
+      }
+
+      _parentIds.erase(parent);
     }
 
-    if (auto const it = _sources.find(listId); it != _sources.end())
+    _childIds.erase(listId);
+  }
+
+  void TrackSourceCache::collectDescendantsPostorder(ListId const listId, std::vector<ListId>& listIds) const
+  {
+    if (auto const children = _childIds.find(listId); children != _childIds.end())
     {
-      return *it->second;
+      auto const childIds = children->second;
+
+      for (auto const childId : childIds)
+      {
+        collectDescendantsPostorder(childId, listIds);
+      }
     }
 
-    auto const transaction = _library.readTransaction();
-    auto const optView =
-      storageValueOrNullopt(_library.lists().reader(transaction).get(listId), "Failed to build list source");
-
-    if (!optView)
-    {
-      // Fallback to all tracks if missing
-      return _allTracks;
-    }
-
-    auto& parentSource = getOrBuildSource(optView->parentId());
-
-    if (optView->isSmart())
-    {
-      auto smartSourcePtr = std::make_unique<SmartListSource>(parentSource, _library, _smartEvaluator);
-      smartSourcePtr->setExpression(std::string{optView->filter()});
-      smartSourcePtr->reload();
-      auto& ref = *smartSourcePtr;
-      _sources.emplace(listId, std::move(smartSourcePtr));
-      return ref;
-    }
-
-    auto manualSourcePtr = std::make_unique<ManualListSource>(*optView, &parentSource);
-    auto& ref = *manualSourcePtr;
-    _sources.emplace(listId, std::move(manualSourcePtr));
-    return ref;
+    listIds.push_back(listId);
   }
 } // namespace ao::rt

@@ -11,9 +11,18 @@ add_library(ao_app_runtime STATIC
     runtime/completion/QueryExpressionCompleter.cpp
     runtime/completion/MetadataValueCompleter.cpp
     runtime/source/AllTracksSource.cpp
+    runtime/source/CachedListSource.cpp
     runtime/ConfigStore.cpp
     runtime/PlaybackService.cpp
-    runtime/PlaybackQueueService.cpp
+    runtime/PlaybackSequenceService.cpp
+    runtime/PlaybackSessionPersistence.cpp
+    runtime/PlaybackSessionSaveService.cpp
+    runtime/playback/PlaybackCursor.cpp
+    runtime/playback/PlaybackCursorSession.cpp
+    runtime/playback/PlaybackRestartDeadline.cpp
+    runtime/playback/PreparedNextRegistry.cpp
+    runtime/playback/ProjectionAnchor.cpp
+    runtime/playback/ShuffleHistory.cpp
     runtime/library/LibraryWriter.cpp
     runtime/library/AudioIdentityIndexer.cpp
     runtime/library/LibraryScan.cpp
@@ -33,6 +42,7 @@ add_library(ao_app_runtime STATIC
     runtime/projection/LiveTrackListProjection.cpp
     runtime/projection/LiveTrackDetailProjection.cpp
     runtime/source/TrackSource.cpp
+    runtime/source/TrackSourceDeltaBuilder.cpp
     runtime/ViewService.cpp
     runtime/Log.cpp
 )

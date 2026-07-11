@@ -8,44 +8,40 @@
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <memory>
 #include <optional>
+#include <variant>
+#include <vector>
 
 namespace ao::rt::test
 {
-  TEST_CASE("SmartListEvaluator - source destruction is handled gracefully", "[runtime][unit][source][smart-list]")
+  TEST_CASE("SmartListEvaluator - a smart-list lease pins its upstream source", "[runtime][unit][source][smart-list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
+    auto sourcePtr = makeMutableTrackSource({});
+    auto weakSourcePtr = std::weak_ptr<MutableTrackSource>{sourcePtr};
+    auto filteredPtr = std::make_unique<SmartListSource>(TrackSourceLease{sourcePtr}, libraryFixture.library(), engine);
 
-    auto sourcePtr = std::make_unique<MutableTrackSource>();
-    auto filteredPtr = std::make_unique<SmartListSource>(*sourcePtr, libraryFixture.library(), engine);
-
-    auto spy = SpyTrackSourceObserver{};
-    filteredPtr->attach(&spy);
-
-    // Destroy source while filtered list is still alive
     sourcePtr = nullptr;
+    REQUIRE_FALSE(weakSourcePtr.expired());
 
-    // Filtered list should be notified of reset (source is gone)
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Reset);
-
-    // Now destroy filtered list - this calls unregisterList
-    // This should not crash despite source being gone!
-    filteredPtr.reset();
+    filteredPtr = nullptr;
+    CHECK(weakSourcePtr.expired());
   }
 
   TEST_CASE("SmartListEvaluator - evaluator destruction detaches from sources", "[runtime][unit][source][smart-list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto source = MutableTrackSource{};
+    auto sourcePtr = makeMutableTrackSource({});
     auto enginePtr = std::make_unique<SmartListEvaluator>(libraryFixture.library());
-    auto listPtr = std::make_unique<SmartListSource>(source, libraryFixture.library(), *enginePtr);
+    auto listPtr = std::make_unique<SmartListSource>(TrackSourceLease{sourcePtr}, libraryFixture.library(), *enginePtr);
 
     // Destroy engine BEFORE source and list
     // Note: list won't be able to reload anymore but we just want to hit the destructor
@@ -53,14 +49,37 @@ namespace ao::rt::test
     listPtr.reset();
   }
 
+  TEST_CASE("SmartListEvaluator - upstream invalidation propagates terminally", "[runtime][unit][source][smart-list]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto engine = SmartListEvaluator{libraryFixture.library()};
+    auto sourcePtr = makeMutableTrackSource({});
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    list.reload();
+
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto subscription = list.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+
+    sourcePtr->invalidate();
+
+    CHECK(list.state() == TrackSourceState::Invalidated);
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<SourceInvalidated>(batches.front().deltas.front()));
+
+    sourcePtr->emitReset();
+    CHECK(batches.size() == 1);
+  }
+
   TEST_CASE("SmartListEvaluator - index lookup and source update forwarding work for filtered tracks",
             "[runtime][unit][source][smart-list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto source = MutableTrackSource{};
+    auto sourcePtr = makeMutableTrackSource({});
+    auto& source = *sourcePtr;
 
-    auto list = SmartListSource{source, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
     list.setExpression("$year >= 2020");
     list.reload();
 
@@ -72,28 +91,27 @@ namespace ao::rt::test
 
     // Test SmartListSource::indexOf
     CHECK(list.indexOf(t1) == 0);                      // Present
-    CHECK(list.indexOf(t3) == 1);                      // Present (flat_set sorted by ID)
+    CHECK(list.indexOf(t3) == 1);                      // Present in upstream-relative order
     CHECK(list.indexOf(t2) == std::nullopt);           // Filtered out
     CHECK(list.indexOf(TrackId{999}) == std::nullopt); // Non-existent
 
     // Test TrackSource::notifyUpdated(TrackId id) without index
-    auto spy = SpyTrackSourceObserver{};
-    source.attach(&spy);
+    auto spy = TrackSourceBatchSpy{source};
 
     // Call the base class method directly
     source.TrackSource::notifyUpdated(t3); // Calls TrackSource::notifyUpdated(id)
 
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::Updated);
-    CHECK(spy.events[0].id == t3);
+    REQUIRE(spy.batches.size() == 1);
+    REQUIRE(spy.batches.front().deltas.size() == 1);
+    auto const& update = std::get<SourceUpdateRange>(spy.batches.front().deltas.front());
+    CHECK(update.start == 2);
+    CHECK(update.trackIds == std::vector{t3});
 
     // t2 is not in source's indexOf (wait, it IS in source, just not in list)
     // Let's call it on a non-existent track
     spy.clear();
     source.TrackSource::notifyUpdated(TrackId{999});
-    CHECK(spy.events.empty()); // Should not notify since it's not in the source
-
-    source.detach(&spy);
+    CHECK(spy.batches.empty()); // Should not notify since it's not in the source
 
     // Destructor for TrackSource is implicitly covered when MutableTrackSource is destroyed
   }

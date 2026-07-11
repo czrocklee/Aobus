@@ -6,6 +6,7 @@
 #include "TrackField.h"
 #include "TrackPresentation.h"
 #include "ViewIds.h"
+#include "VirtualListIds.h"
 #include <ao/CoreIds.h>
 
 #include <cstdint>
@@ -42,7 +43,7 @@ namespace ao::rt
 
   struct TrackListViewConfig final
   {
-    ListId listId{};
+    ListId listId = kAllTracksListId;
     std::string filterExpression{};
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};

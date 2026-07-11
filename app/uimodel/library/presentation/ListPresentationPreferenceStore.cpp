@@ -73,10 +73,10 @@ namespace ao::uimodel
     }
   }
 
-  rt::TrackPresentationSpec ListPresentationPreferenceStore::presentationForList(ListId listId,
-                                                                                 std::string_view smartListFilter) const
+  rt::TrackPresentationSpec ListPresentationPreferenceStore::presentationForList(
+    ListPresentationContext const& context) const
   {
-    if (auto const optId = presentationIdForList(listId); optId)
+    if (auto const optId = presentationIdForList(context.listId); optId)
     {
       if (auto const optSpec = _catalog.specForId(*optId); optSpec)
       {
@@ -88,6 +88,6 @@ namespace ao::uimodel
         *optId);
     }
 
-    return recommendPresentation(smartListFilter, _catalog.builtinPresets(), _catalog.customPresentations());
+    return recommendPresentation(context, _catalog.builtinPresets(), _catalog.customPresentations());
   }
 } // namespace ao::uimodel

@@ -3,12 +3,15 @@
 
 #include "AudioFixtureSupport.h"
 #include "BackendTestSupport.h"
+#include "EngineTestSupport.h"
+#include "ScriptedDecoderSession.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/async/ImmediateExecutor.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
+#include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/NullBackend.h>
@@ -33,6 +36,8 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -60,6 +65,7 @@ namespace ao::audio::test
             .codec = AudioCodec::Flac,
           },
         .optAnchor = RouteAnchor{.backend = kBackendNone, .id = "mock-stream-id"},
+        .generation = 0,
       };
     }
 
@@ -79,7 +85,126 @@ namespace ao::audio::test
       ProfileId _profileId;
     };
 
+    inline auto const kBarrierBackend = BackendId{"barrier-test"};
+
+    struct BarrierBackendProbe final
+    {
+      RenderTarget* target() const
+      {
+        auto const lock = std::scoped_lock{mutex};
+        return renderTarget;
+      }
+
+      void publishTarget(RenderTarget* target)
+      {
+        auto const lock = std::scoped_lock{mutex};
+        renderTarget = target;
+      }
+
+      void recordRoute(std::string_view const route)
+      {
+        auto const lock = std::scoped_lock{mutex};
+        subscribedRoutes.emplace_back(route);
+      }
+
+      std::size_t routeCount() const
+      {
+        auto const lock = std::scoped_lock{mutex};
+        return subscribedRoutes.size();
+      }
+
+      mutable std::mutex mutex;
+      RenderTarget* renderTarget = nullptr;
+      std::vector<std::string> subscribedRoutes;
+    };
+
+    class BarrierBackend final : public NullBackend
+    {
+    public:
+      explicit BarrierBackend(std::shared_ptr<BarrierBackendProbe> probePtr)
+        : _probePtr{std::move(probePtr)}
+      {
+      }
+
+      Result<> open(Format const& /*format*/, RenderTarget* target) override
+      {
+        _probePtr->publishTarget(target);
+        return {};
+      }
+
+      void close() override { _probePtr->publishTarget(nullptr); }
+
+      BackendId backendId() const override { return kBarrierBackend; }
+      ProfileId profileId() const override { return kProfileShared; }
+
+    private:
+      std::shared_ptr<BarrierBackendProbe> _probePtr;
+    };
+
+    class BarrierProvider final : public BackendProvider
+    {
+    public:
+      explicit BarrierProvider(std::shared_ptr<BarrierBackendProbe> probePtr)
+        : _probePtr{std::move(probePtr)}
+      {
+      }
+
+      void shutdown() noexcept override {}
+
+      Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      {
+        callback(devices());
+        return {};
+      }
+
+      Status status() const override
+      {
+        return {.descriptor = {.id = kBarrierBackend,
+                               .name = "Barrier test",
+                               .description = "Controlled Player callback backend",
+                               .supportedProfiles = {{.id = kProfileShared, .name = "Shared"}}},
+                .devices = devices()};
+      }
+
+      std::unique_ptr<Backend> createBackend(Device const& /*device*/, ProfileId const& /*profile*/) override
+      {
+        return std::make_unique<BarrierBackend>(_probePtr);
+      }
+
+      Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback /*callback*/) override
+      {
+        _probePtr->recordRoute(routeAnchor);
+        return {};
+      }
+
+    private:
+      static std::vector<Device> devices()
+      {
+        return {{.id = DeviceId{"barrier-device"},
+                 .displayName = "Barrier Device",
+                 .description = "Controlled test output",
+                 .isDefault = true,
+                 .backendId = kBarrierBackend}};
+      }
+
+      std::shared_ptr<BarrierBackendProbe> _probePtr;
+    };
+
     using rt::test::QueuedExecutor;
+
+    bool waitForQueuedCount(QueuedExecutor const& executor,
+                            std::size_t const expected,
+                            std::chrono::milliseconds const timeout = std::chrono::seconds{5})
+    {
+      auto const deadline = std::chrono::steady_clock::now() + timeout;
+
+      while (executor.queuedCount() < expected && std::chrono::steady_clock::now() < deadline)
+      {
+        std::this_thread::yield();
+      }
+
+      return executor.queuedCount() >= expected;
+    }
 
     Device pipeWireDevice(std::string displayName = "System Default")
     {
@@ -111,6 +236,19 @@ namespace ao::audio::test
       std::uint64_t nextSubscription = 1;
       std::vector<std::string> subscribedRoutes;
       std::counting_semaphore<8> graphSubscribed{0};
+      RenderTarget* renderTarget = nullptr;
+
+      RenderTarget* target()
+      {
+        auto const lock = std::scoped_lock{mutex};
+        return renderTarget;
+      }
+
+      void publishTarget(RenderTarget* target)
+      {
+        auto const lock = std::scoped_lock{mutex};
+        renderTarget = target;
+      }
 
       void publish(std::string const& route)
       {
@@ -148,9 +286,12 @@ namespace ao::audio::test
 
       Result<> open(Format const& /*format*/, RenderTarget* target) override
       {
+        _probePtr->publishTarget(target);
         target->handleRouteReady(_route);
         return {};
       }
+
+      void close() override { _probePtr->publishTarget(nullptr); }
 
       Result<> setProperty(PropertyId id, PropertyValue const& value) override
       {
@@ -944,6 +1085,325 @@ namespace ao::audio::test
     CHECK(qualityEvents[0].first.pipelineQuality == Quality::BitwisePerfect);
     CHECK(qualityEvents[0].first.fullyVerified == false);
     CHECK(qualityEvents[0].second == true);
+  }
+
+  TEST_CASE("Player - failed stage preserves audio generation and prepared lookahead", "[audio][unit][player][staged]")
+  {
+    auto const fixturePath = requireAudioFixture("basic_metadata.flac");
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+
+    auto const currentItem =
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{.value = 1}, .input = PlaybackInput{.filePath = fixturePath}};
+    REQUIRE(player.play(currentItem));
+    executor.drain();
+
+    auto const nextItem =
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{.value = 2}, .input = PlaybackInput{.filePath = fixturePath}};
+    auto const preparedNext = player.prepareNext(nextItem);
+    REQUIRE(preparedNext);
+    auto const audioGeneration = player.audioPlaybackGeneration();
+    auto const graphGeneration = player.playbackGeneration();
+    REQUIRE(preparedNext->generation == audioGeneration);
+
+    auto candidate = player.stagePlayback(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 3}, .input = PlaybackInput{.filePath = "/missing/staged.flac"}});
+    REQUIRE_FALSE(candidate);
+    CHECK(player.audioPlaybackGeneration() == audioGeneration);
+    CHECK(player.playbackGeneration() == graphGeneration);
+    CHECK(player.clearPreparedNext() == nextItem.id);
+  }
+
+  TEST_CASE("Player - staged decode error processed before commit preserves active generations and lookahead",
+            "[audio][unit][player][staged]")
+  {
+    auto failureGate = StagedFailureGate{};
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor, makeStagedFailureDecoderFactory("candidate-failure.flac", failureGate)};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+
+    auto const currentItem = Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 4}, .input = PlaybackInput{.filePath = "current.flac"}};
+    auto const nextItem =
+      Engine::PlaybackItem{.id = Engine::PlaybackItemId{.value = 5}, .input = PlaybackInput{.filePath = "next.flac"}};
+    REQUIRE(player.play(currentItem));
+    executor.drain();
+    REQUIRE(player.prepareNext(nextItem));
+    auto const audioGeneration = player.audioPlaybackGeneration();
+    auto const graphGeneration = player.playbackGeneration();
+    auto* const activeTarget = probePtr->target();
+    REQUIRE(activeTarget != nullptr);
+
+    auto candidate = player.stagePlayback(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 6},
+      .input = PlaybackInput{.filePath = "candidate-failure.flac"},
+    });
+    REQUIRE(candidate);
+    auto releaseGuard = StagedFailureReleaseGuard{failureGate};
+    REQUIRE(failureGate.waitForRead());
+
+    std::size_t stateChangedCount = 0;
+    std::size_t failureCount = 0;
+    std::size_t endedCount = 0;
+    player.setOnStateChanged([&] { ++stateChangedCount; });
+    player.setOnPlaybackFailure([&](Engine::PlaybackFailure const&) { ++failureCount; });
+    player.setOnTrackEnded([&](Engine::TrackEnded const&) { ++endedCount; });
+    releaseGuard.release();
+    REQUIRE(executor.drainUntil([&] { return stateChangedCount == 1; }, std::chrono::seconds{5}));
+
+    auto const committed = player.commitPlayback(std::move(*candidate));
+    REQUIRE_FALSE(committed);
+    CHECK(committed.error().code == Error::Code::IoError);
+    CHECK(committed.error().message == "gated staged decode failure");
+    CHECK(player.audioPlaybackGeneration() == audioGeneration);
+    CHECK(player.playbackGeneration() == graphGeneration);
+    CHECK(player.transport() == Transport::Playing);
+    CHECK(probePtr->target() == activeTarget);
+    CHECK(player.clearPreparedNext() == nextItem.id);
+    CHECK(failureCount == 0);
+    CHECK(endedCount == 0);
+    CHECK(stateChangedCount == 1);
+  }
+
+  TEST_CASE("Player - accepted play and stop filter an old failure already queued on its executor",
+            "[audio][unit][player][barrier]")
+  {
+    auto const fixturePath = requireAudioFixture("basic_metadata.flac");
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 10}, .input = PlaybackInput{.filePath = fixturePath}}));
+    executor.drain();
+
+    std::size_t failureCount = 0;
+    player.setOnPlaybackFailure([&](Engine::PlaybackFailure const&) { ++failureCount; });
+    auto const failedGeneration = player.audioPlaybackGeneration();
+    auto* const oldTarget = probePtr->target();
+    REQUIRE(oldTarget != nullptr);
+    oldTarget->handleBackendError("queued old Player failure");
+    executor.checkQueued(std::chrono::seconds{5});
+
+    auto barrier = Engine::PreparedCancellationBarrier{};
+
+    SECTION("successful explicit play")
+    {
+      auto candidate = player.stagePlayback(Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 11}, .input = PlaybackInput{.filePath = fixturePath}});
+      REQUIRE(candidate);
+      auto receipt = player.commitPlayback(std::move(*candidate));
+      REQUIRE(receipt);
+      barrier = receipt->cancellationBarrier;
+      CHECK(receipt->generation == player.audioPlaybackGeneration());
+    }
+
+    SECTION("completed stop")
+    {
+      barrier = player.stopWithBarrier();
+      CHECK(player.transport() == Transport::Idle);
+    }
+
+    REQUIRE(barrier.covers(failedGeneration));
+    executor.drain();
+    CHECK(failureCount == 0);
+  }
+
+  TEST_CASE("Player - accepted play and stop filter an old route already queued on its executor",
+            "[audio][unit][player][barrier]")
+  {
+    auto const fixturePath = requireAudioFixture("basic_metadata.flac");
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 30}, .input = PlaybackInput{.filePath = fixturePath}}));
+    executor.drain();
+
+    auto const oldGeneration = player.audioPlaybackGeneration();
+    auto* const oldTarget = probePtr->target();
+    REQUIRE(oldTarget != nullptr);
+    oldTarget->handleRouteReady("old-route");
+    REQUIRE(waitForQueuedCount(executor, 2));
+
+    auto barrier = Engine::PreparedCancellationBarrier{};
+
+    SECTION("successful explicit play")
+    {
+      auto candidate = player.stagePlayback(Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 31}, .input = PlaybackInput{.filePath = fixturePath}});
+      REQUIRE(candidate);
+      auto receipt = player.commitPlayback(std::move(*candidate));
+      REQUIRE(receipt);
+      barrier = receipt->cancellationBarrier;
+    }
+
+    SECTION("completed stop")
+    {
+      barrier = player.stopWithBarrier();
+    }
+
+    REQUIRE(barrier.covers(oldGeneration));
+    executor.drain();
+    CHECK(probePtr->routeCount() == 0);
+  }
+
+  TEST_CASE("Player - accepted play and stop filter an old track end already queued on its executor",
+            "[audio][unit][player][barrier]")
+  {
+    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const data = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor,
+                         makePathScriptedDecoderFactory({
+                           {.path = "current.flac", .info = makeScriptedStreamInfo(format), .data = data},
+                           {.path = "replacement.flac", .info = makeScriptedStreamInfo(format), .data = data},
+                         })};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 40}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    executor.drain();
+
+    std::size_t endedCount = 0;
+    player.setOnTrackEnded([&](Engine::TrackEnded const&) { ++endedCount; });
+    auto const oldGeneration = player.audioPlaybackGeneration();
+    auto* const oldTarget = probePtr->target();
+    REQUIRE(oldTarget != nullptr);
+    auto output = std::array<std::byte, 4>{};
+    REQUIRE(oldTarget->renderPcm(output).bytesWritten == output.size());
+    REQUIRE(oldTarget->renderPcm(output).drained);
+    oldTarget->handleDrainComplete();
+    REQUIRE(waitForQueuedCount(executor, 3));
+
+    auto barrier = Engine::PreparedCancellationBarrier{};
+
+    SECTION("successful explicit play")
+    {
+      auto candidate = player.stagePlayback(Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 41}, .input = PlaybackInput{.filePath = "replacement.flac"}});
+      REQUIRE(candidate);
+      auto receipt = player.commitPlayback(std::move(*candidate));
+      REQUIRE(receipt);
+      barrier = receipt->cancellationBarrier;
+    }
+
+    SECTION("completed stop")
+    {
+      barrier = player.stopWithBarrier();
+    }
+
+    REQUIRE(barrier.covers(oldGeneration));
+    executor.drain();
+    CHECK(endedCount == 0);
+  }
+
+  TEST_CASE("Player - queued gapless route follows the graph generation advanced on the executor",
+            "[audio][unit][player][gapless]")
+  {
+    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const firstData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
+    auto const secondData = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
+    auto probePtr = std::make_shared<SynchronousGraphProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor,
+                         makePathScriptedDecoderFactory({
+                           {.path = "first.flac", .info = makeScriptedStreamInfo(format), .data = firstData},
+                           {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = secondData},
+                         })};
+    player.addProvider(std::make_unique<SynchronousGraphProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-a"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 50}, .input = PlaybackInput{.filePath = "first.flac"}}));
+    REQUIRE(executor.drainUntil([&] { return probePtr->subscriptionCount() == 1; }, std::chrono::seconds{5}));
+
+    bool advanced = false;
+    player.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advanced = true; });
+    auto const prepared = player.prepareNext(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 51}, .input = PlaybackInput{.filePath = "second.flac"}});
+    REQUIRE(prepared);
+    REQUIRE(prepared->transition == Engine::PreparedTransitionMode::Gapless);
+    auto* const target = probePtr->target();
+    REQUIRE(target != nullptr);
+    auto output = std::array<std::byte, 4>{};
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+
+    REQUIRE(
+      executor.drainUntil([&] { return advanced && probePtr->subscriptionCount() == 2; }, std::chrono::seconds{5}));
+    auto const lock = std::scoped_lock{probePtr->mutex};
+    CHECK(probePtr->activeRoute == "route-a");
+  }
+
+  TEST_CASE("Player - prepared source failure preserves item and audio generation on executor forwarding",
+            "[audio][unit][player][failure]")
+  {
+    auto const format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
+    auto const factory = [format](std::filesystem::path const& path, Format const&)
+    {
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = format,
+        .outputFormat = format,
+        .duration = std::chrono::seconds{1},
+        .isLossy = false,
+        .codec = AudioCodec::Flac,
+      });
+
+      if (auto data = std::vector<std::byte>(100000, std::byte{0}); path == "prepared-failure.flac")
+      {
+        decoderPtr->setReadScript(
+          {{.data = data, .endOfStream = false},
+           {.data = {},
+            .endOfStream = false,
+            .result = std::unexpected{Error{.code = Error::Code::IoError, .message = "prepared decode failed"}}}});
+      }
+      else
+      {
+        decoderPtr->setReadScript({{.data = std::move(data), .endOfStream = false}, {.data = {}, .endOfStream = true}});
+      }
+
+      return decoderPtr;
+    };
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor, factory};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 20}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    executor.drain();
+
+    auto failures = std::vector<Engine::PlaybackFailure>{};
+    player.setOnPlaybackFailure([&](Engine::PlaybackFailure const& failure) { failures.push_back(failure); });
+    auto const preparedItem = Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 21}, .input = PlaybackInput{.filePath = "prepared-failure.flac"}};
+    auto const prepared = player.prepareNext(preparedItem);
+    REQUIRE(prepared);
+    REQUIRE(executor.drainUntil([&] { return !failures.empty(); }, std::chrono::seconds{5}));
+
+    REQUIRE(failures.size() == 1);
+    CHECK(failures.front().kind == Engine::PlaybackFailureKind::Decode);
+    CHECK(failures.front().itemId == preparedItem.id);
+    CHECK(failures.front().generation == prepared->generation);
+    CHECK(failures.front().error.message == "prepared decode failed");
+    CHECK(failures.front().recoverable);
+    CHECK(player.transport() == Transport::Playing);
   }
 
   TEST_CASE("Player - controls update engine-backed status", "[audio][unit][player][control]")

@@ -1,66 +1,120 @@
 # Listening Session Resume
 
-Aobus persists the last listening context as workspace configuration under the
-`playback-session` group. The restored session is a deferred playback token, not
-an armed audio pipeline.
+Aobus persists the last restorable listening intent as workspace configuration
+under the `playback-session` group. Restore reconstructs a live playback cursor
+and an idle transport token; it never autoplays or arms an output route.
 
-## Persisted State
+## Schema v3
 
-The session records:
+The current payload records:
 
-- schema version,
-- source list id,
-- current track id,
-- position in milliseconds,
-- shuffle and repeat modes,
+- schema version 3;
+- source list ID, quick-filter expression, and ordered sort terms;
+- current track ID and cursor anchor index;
+- position in milliseconds;
+- shuffle and repeat modes;
 - volume and mute intent.
 
-The source list is the durable queue source. Smart lists are re-evaluated on
-restore, so membership drift is expected behavior. If the saved track is no
-longer present in the restored source, playback falls back to the source head at
-position 0. If the saved track is present in the source but no longer resolves
-in the library, restore uses the same source-head fallback. If the source list
-no longer exists, restore falls back to All Tracks.
+Prepared-next tokens, source validity, shuffle history, projection rows, and
+audio-engine generations are transient. In particular, the payload contains no
+materialized track vector or queue index. Older schema versions are rejected
+rather than migrated or guessed.
 
-Malformed persisted values are normalized at the restore boundary: unsupported
-shuffle/repeat enum values become Off, non-finite volume becomes 1.0, volume is
-clamped to 0.0-1.0, and oversized positions are clamped before duration
-handling. Unsupported schema versions are rejected instead of guessed.
+Restore validates the complete serialized context before resolving a source.
+Invalid IDs, overflowing anchor or position values, unsupported mode or volume
+values, invalid or duplicate sort fields, excessive sort terms, and a filter
+that cannot be parsed and compiled all reject the payload. This ordering is
+important: a missing source cannot turn a malformed filter or order into a
+successful All Tracks fallback.
 
-When a saved position is at or past the track duration, the next persisted
-position is 0. This avoids restarting directly at end-of-stream after a natural
-track end.
+## Restore Matrix
 
-## Deferred Restore
+For an existing source, `restoreAnchor` is the saved anchor clamped to the live
+projection size.
 
-Startup restore must not autoplay and must not open an audio route. The GTK
-coordinator reloads track sources, rebuilds the queue from the current source
-membership, and asks `PlaybackQueueSession`/`PlaybackService` to publish an idle
-now-playing state. `PlaybackService` keeps the resolved playback request and
-position as a deferred resume token.
+| Finding | Result |
+| --- | --- |
+| Current track exists and is projected | Restore it Bound at its current live index and retain position. |
+| Current track exists but is filtered out | Restore it in Gap at `restoreAnchor` and retain position. |
+| Current track is missing and `restoreAnchor` has a successor | Promote that row, enter Bound, reset position to zero, and mark the normalized session dirty. |
+| Current track is missing at the end, repeat-all is enabled, and the projection is non-empty | Promote row 0, reset position to zero, and mark dirty. |
+| Current track is missing with no deterministic successor | Discard the saved session. |
 
-Selection is not persisted as part of the playback session. It remains
-workspace/view UI state. After a playback session is restored, the GTK
-coordinator focuses the restored source view and selects the actual restored
-track so the visible workspace matches the idle now-playing state.
+Shuffle never chooses a replacement during restore. Deterministic gap recovery
+happens first; restored shuffle and repeat policy apply only after a current
+track has been established.
 
-The transport Play/PlayPause action treats an idle now-playing track as a
-resume target. That lets restored sessions consume the deferred resume token and
-start from the saved position instead of replaying the selected track from the
-beginning.
+If the source list is missing, restore substitutes All Tracks, preserves the
+sort terms, and clears the quick filter. Fallback succeeds only when the saved
+current track still exists, in which case position is retained and the
+substituted context starts dirty. A missing source plus a missing current track
+discards the session.
 
-The first explicit play/resume action consumes that token and starts playback
-with the saved initial offset. The audio engine seeks the source before starting
-the backend stream, so the first audible samples come from the restored
-position.
+Position is clamped against the resolved track duration. A position at or past
+the end becomes zero so resume cannot start directly at end-of-stream. Any
+fallback, replacement, anchor clamp, position clamp, or other normalization
+that changes the serialized intent starts dirty; an exact restore starts clean.
 
-The GTK coordinator saves the session on final seek, stop, track change, and
-shutdown, plus a periodic autosave while playback is Playing. The periodic path
-is intentionally gated by transport state so an idle restored session does not
-touch the audio route or churn the workspace file.
+## Atomic Deferred Restore
+
+`PlaybackSessionPersistence` owns validation, source fallback, cursor
+construction, transport preparation, and ConfigStore error handling. It builds
+the same lease/filter/detached-projection chain used by a view launch, but does
+not pretend that a view exists.
+
+The candidate cursor, idle current target, modes, position, volume, and mute are
+prepared before installation. Only after preparation succeeds does one executor
+transaction replace the sequence and publish the deferred transport state. A
+failure leaves the previous cursor, transport, modes, volume/mute, and revisions
+unchanged.
+
+The first later Play or PlayPause consumes the deferred transport token and
+starts the resolved track at the restored offset. Selection remains workspace
+UI state rather than playback-session state; after a successful restore the GTK
+coordinator may navigate to the restored source and reveal the actual current
+track.
+
+## Active and Last-Restorable State
+
+While a cursor is active, saves capture its live context, current track, and
+anchor. Before clear, stop, terminal exhaustion, or source invalidation can
+remove succession authority, the runtime keeps an immutable last-restorable
+cursor snapshot. The transport owns the matching last-restorable current and
+position snapshot. Saving rejects a cursor/transport current-track mismatch
+instead of writing a payload assembled from different playback generations.
+
+Ordinary stop, exhaustion, or invalidation does not forget listening intent. A
+later successful launch replaces the snapshot. `forgetPlaybackSession()` is the
+only operation that removes the config group and clears both snapshots; it does
+not stop active audio. Snapshot clearing occurs only after remove and flush
+succeed. Periodic saves remain no-ops while forgotten until a later discrete
+active-session mutation makes new intent dirty.
+
+## Dirty Lifecycle and Save Timing
+
+Persistence owns one monotonic composite revision. It advances once for each
+discrete serialized-intent change: launch context, current track or anchor,
+modes, volume/mute, and final seek. Projection churn that leaves the anchor
+unchanged, source invalidation alone, prepared-token replacement, sticky shuffle
+candidate changes, and shuffle-history operations do not dirty the payload.
+Elapsed playback progress is sampled when a save is requested; it does not
+advance the revision on every clock tick.
+
+Only clean-to-dirty publishes `onPlaybackSessionDirty()`. A successful save
+acknowledges the exact captured revision; a newer mutation remains dirty. Load,
+save, or flush failure retains dirty state. Subscribing while already dirty
+immediately replays the dirty condition, which makes late frontend startup and
+normalization during restore safe.
+
+`PlaybackSessionSaveService` owns frontend timing only. It starts dirty
+observation before restore, debounces ordinary dirty events, performs immediate
+significant-event saves, and retries failures with bounded exponential backoff
+even while paused. Significant, periodic, and shutdown attempts use the same
+runtime save operation; periodic and shutdown saves are safety nets, not the
+only way paused intent becomes durable.
 
 ## Shuffle Continuity
 
-Shuffle mode is restored, but shuffle order is not. The queue's current shuffle
-implementation is memoryless; there is no seed or history to persist. True
-shuffle continuity requires a separate shuffle-history model.
+Shuffle mode is restored, but the transient sticky candidate and bounded
+history are not. A restored cursor begins a new shuffle navigation history over
+the restored live projection.

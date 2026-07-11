@@ -127,7 +127,7 @@ namespace ao::tui
     , _shell{shell}
     , _library{library}
     , _playback{runtime.playback()}
-    , _playbackQueue{runtime.playbackQueue()}
+    , _playbackSequence{runtime.playbackSequence()}
     , _outputDevices{bindings.outputDevices}
     , _hitRegions{bindings.hitRegions}
     , _trackColumnWidthOverrides{bindings.trackColumnWidthOverrides}
@@ -285,7 +285,7 @@ namespace ao::tui
   void EventController::togglePlaybackFromSelection()
   {
     if (!togglePlayback(
-          _playback, _playbackQueue, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
+          _playback, _playbackSequence, _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
     {
       postActivityNotification(
         rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
@@ -322,7 +322,7 @@ namespace ao::tui
         break;
       case CommandAction::Reload: reloadActiveList(); break;
       case CommandAction::Play:
-        if (!playSelected(_playbackQueue, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
+        if (!playSelected(_playbackSequence, _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
         {
           postActivityNotification(
             rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
@@ -991,7 +991,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::Return)
     {
-      if (!playSelected(_playbackQueue, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
+      if (!playSelected(_playbackSequence, _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
       {
         postActivityNotification(
           rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
@@ -1002,7 +1002,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::Character("p"))
     {
-      if (!playSelected(_playbackQueue, _library.tracks(), _library.selectedTrack(), _library.currentListId()))
+      if (!playSelected(_playbackSequence, _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
       {
         postActivityNotification(
           rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");

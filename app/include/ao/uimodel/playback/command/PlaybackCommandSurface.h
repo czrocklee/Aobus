@@ -16,7 +16,7 @@
 
 namespace ao::rt
 {
-  class PlaybackQueueService;
+  class PlaybackSequenceService;
 }
 
 namespace ao::uimodel
@@ -25,7 +25,7 @@ namespace ao::uimodel
   {
   public:
     PlaybackCommandSurface(rt::PlaybackService& playback,
-                           rt::PlaybackQueueService& queue,
+                           rt::PlaybackSequenceService& sequence,
                            std::function<void()> playSelection);
     ~PlaybackCommandSurface() = default;
 
@@ -48,7 +48,7 @@ namespace ao::uimodel
     void emitAvailabilityChanged(std::initializer_list<PlaybackCommand> commands);
 
     rt::PlaybackService& _playback;
-    rt::PlaybackQueueService& _queue;
+    rt::PlaybackSequenceService& _sequence;
     std::function<void()> _playSelection;
     rt::Signal<> _availabilityChangedSignal;
     std::array<rt::Signal<>, kCommandCount> _commandAvailabilityChangedSignals;

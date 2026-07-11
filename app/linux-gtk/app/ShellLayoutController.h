@@ -100,7 +100,7 @@ namespace ao::gtk
     void registerPlaybackActions(RegisterActionFn const& registerAction);
     void registerShellActions(RegisterActionFn const& registerAction);
     void registerWorkspaceActions(RegisterActionFn const& registerAction,
-                                  layout::ActionStateProvider const& hasActiveQueue);
+                                  layout::ActionStateProvider const& hasActiveSequence);
     void registerTrackActions(RegisterActionFn const& registerAction);
 
     void applyPromotedPanelSizes(std::string const& presetId,

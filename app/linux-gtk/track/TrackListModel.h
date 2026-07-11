@@ -65,6 +65,7 @@ namespace ao::gtk
   private:
     void applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch);
     void applyResetDelta();
+    void applySourceInvalidatedDelta();
     void applyInsertRange(rt::ProjectionInsertRange const& delta);
     void applyRemoveRange(rt::ProjectionRemoveRange const& delta);
     void applyUpdateRange(rt::ProjectionUpdateRange const& delta);

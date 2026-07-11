@@ -3,53 +3,26 @@
 
 #pragma once
 
+#include "../Signal.h"
+#include "../Subscription.h"
+#include "TrackSourceDelta.h"
 #include <ao/CoreIds.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <optional>
 #include <span>
-#include <vector>
 
 namespace ao::rt
 {
   // Forward declaration
   class SmartListEvaluator;
 
-  /**
-   * TrackSourceObserver - Observer interface for TrackSource changes.
-   * All notifications are emitted AFTER internal state is updated.
-   */
-  class TrackSourceObserver
+  enum class TrackSourceState : std::uint8_t
   {
-  public:
-    virtual ~TrackSourceObserver() = default;
-
-    TrackSourceObserver(TrackSourceObserver const&) = delete;
-    TrackSourceObserver& operator=(TrackSourceObserver const&) = delete;
-    TrackSourceObserver(TrackSourceObserver&&) = delete;
-    TrackSourceObserver& operator=(TrackSourceObserver&&) = delete;
-
-    virtual void handleReset() = 0;
-
-    // Single-item notifications for fine-grained UI updates
-    virtual void handleInserted(TrackId id, std::size_t index) = 0;
-    virtual void handleUpdated(TrackId id, std::size_t index) = 0;
-    virtual void handleRemoved(TrackId id, std::size_t index) = 0;
-
-    // Multi-item notifications for performance during bulk operations.
-    // Default implementation can fallback to individual notifications if needed.
-    virtual void handleBulkInserted(std::span<TrackId const> /*ids*/) {}
-    virtual void handleBulkUpdated(std::span<TrackId const> /*ids*/) {}
-    virtual void handleBulkRemoved(std::span<TrackId const> /*ids*/) {}
-
-    /**
-     * Called when the source list is being destroyed.
-     * Observers MUST NOT call any methods on source after this call returns.
-     */
-    virtual void handleSourceDestroyed() {}
-
-  protected:
-    TrackSourceObserver() = default;
+    Live,
+    Invalidated,
   };
 
   /**
@@ -69,14 +42,16 @@ namespace ao::rt
     virtual TrackId trackIdAt(std::size_t index) const = 0;
     virtual std::optional<std::size_t> indexOf(TrackId id) const = 0;
 
-    void attach(TrackSourceObserver* observer);
-    void detach(TrackSourceObserver* observer);
+    std::uint64_t revision() const noexcept { return _revision; }
+    TrackSourceState state() const noexcept { return _state; }
+
+    Subscription subscribe(std::move_only_function<void(TrackSourceDeltaBatch const&)> handler);
+    void invalidate();
 
     // Public notification API
     virtual void notifyUpdated(TrackId id);
     virtual void notifyInserted(std::span<TrackId const> ids);
     virtual void notifyUpdated(std::span<TrackId const> ids);
-    virtual void notifyRemoved(std::span<TrackId const> ids);
 
   protected:
     TrackSource() = default;
@@ -86,8 +61,12 @@ namespace ao::rt
     void notifyUpdated(TrackId id, std::size_t index);
     void notifyRemoved(TrackId id, std::size_t index);
 
+    bool publishDeltaBatch(TrackSourceDeltaBatch batch, std::size_t previousSize);
+
   private:
-    std::vector<TrackSourceObserver*> _observers;
+    std::uint64_t _revision = 0;
+    TrackSourceState _state = TrackSourceState::Live;
+    Signal<TrackSourceDeltaBatch const&> _changedSignal;
 
     friend class SmartListEvaluator;
   };

@@ -23,6 +23,8 @@
 #include <fstream>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::rt::test
@@ -47,6 +49,40 @@ namespace ao::rt::test
       auto result = writer.create(payload);
       REQUIRE(result);
       return result->first;
+    }
+
+    std::optional<std::vector<std::string>> listTrackUris(library::MusicLibrary& ml, std::string_view listName)
+    {
+      auto transaction = ml.readTransaction();
+      auto const listReader = ml.lists().reader(transaction);
+      auto const trackReader = ml.tracks().reader(transaction);
+
+      for (auto const& [listId, view] : listReader)
+      {
+        if (view.name() != listName)
+        {
+          continue;
+        }
+
+        auto result = std::vector<std::string>{};
+        result.reserve(view.tracks().size());
+
+        for (auto const trackId : view.tracks())
+        {
+          auto const optTrack = trackReader.get(trackId);
+
+          if (!optTrack)
+          {
+            return std::nullopt;
+          }
+
+          result.emplace_back(optTrack->property().uri());
+        }
+
+        return result;
+      }
+
+      return std::nullopt;
     }
   } // namespace
 
@@ -258,5 +294,58 @@ library:
     }
 
     CHECK(listCount == 2);
+  }
+
+  TEST_CASE("LibraryYaml - mixed manual list references preserve first-occurrence order across round-trip",
+            "[runtime][workflow][import-export][list]")
+  {
+    auto const sourceTemp = ao::test::TempDir{};
+    auto sourceLibrary = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
+    auto const inputPath = std::filesystem::path{sourceTemp.path()} / "mixed-list-references.yaml";
+
+    {
+      auto yaml = std::ofstream{inputPath};
+      yaml << R"(version: 1
+library:
+  tracks:
+    - id: 10
+      uri: first.flac
+    - id: 20
+      uri: second.flac
+    - id: 30
+      uri: third.flac
+  lists:
+    - id: 1
+      name: Mixed References
+      tracks:
+        - uri: second.flac
+        - 10
+        - id: 20
+        - uri: third.flac
+        - uri: first.flac
+        - 30
+)";
+    }
+
+    auto sourceImporter = LibraryYamlImporter{sourceLibrary};
+    REQUIRE(sourceImporter.importFromYaml(inputPath));
+
+    auto const expectedUris = std::vector<std::string>{"second.flac", "first.flac", "third.flac"};
+    auto const optSourceUris = listTrackUris(sourceLibrary, "Mixed References");
+    REQUIRE(optSourceUris);
+    CHECK(*optSourceUris == expectedUris);
+
+    auto const exportedPath = std::filesystem::path{sourceTemp.path()} / "mixed-list-round-trip.yaml";
+    auto sourceExporter = LibraryYamlExporter{sourceLibrary};
+    REQUIRE(sourceExporter.exportToYaml(exportedPath, ExportMode::Full));
+
+    auto const targetTemp = ao::test::TempDir{};
+    auto targetLibrary = library::test::makeTestMusicLibrary(targetTemp.path(), targetTemp.path());
+    auto targetImporter = LibraryYamlImporter{targetLibrary};
+    REQUIRE(targetImporter.importFromYaml(exportedPath));
+
+    auto const optTargetUris = listTrackUris(targetLibrary, "Mixed References");
+    REQUIRE(optTargetUris);
+    CHECK(*optTargetUris == expectedUris);
   }
 } // namespace ao::rt::test

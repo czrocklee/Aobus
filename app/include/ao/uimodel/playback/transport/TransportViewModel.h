@@ -10,6 +10,11 @@
 #include <functional>
 #include <string>
 
+namespace ao::rt
+{
+  class PlaybackSequenceService;
+}
+
 namespace ao::uimodel
 {
   class PlaybackCommandSurface;
@@ -53,6 +58,7 @@ namespace ao::uimodel
   {
   public:
     TransportViewModel(rt::PlaybackService& playback,
+                       rt::PlaybackSequenceService& sequence,
                        PlaybackCommandSurface& commands,
                        TransportAction action,
                        bool showLabel,
@@ -70,6 +76,7 @@ namespace ao::uimodel
 
   private:
     rt::PlaybackService& _playback;
+    rt::PlaybackSequenceService& _sequence;
     PlaybackCommandSurface& _commands;
     TransportAction _action;
     bool _showLabel;

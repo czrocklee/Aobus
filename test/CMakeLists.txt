@@ -227,22 +227,35 @@ add_executable(ao_core_test
     unit/runtime/source/SmartListEvaluatorIncrementalTest.cpp
     unit/runtime/source/SmartListEvaluatorLoadModeTest.cpp
     unit/runtime/source/SmartListEvaluatorTest.cpp
+    unit/runtime/source/TrackSourceDeltaTest.cpp
+    unit/runtime/source/TrackSourceDeltaBuilderTest.cpp
+    unit/runtime/source/TrackSourceLifecycleTest.cpp
     unit/runtime/TrackPresentationTest.cpp
     unit/runtime/library/LibraryWriterTagCommandTest.cpp
     unit/runtime/library/LibraryWriterTrackCreateCommandTest.cpp
     unit/runtime/library/LibraryWriterTrackDeleteCommandTest.cpp
+    unit/runtime/library/LibraryWriterManualListTest.cpp
     unit/runtime/TrackFieldTest.cpp
     unit/runtime/library/LibraryWriterDryRunTest.cpp
     unit/runtime/projection/TrackListProjectionGroupingTest.cpp
+    unit/runtime/projection/TrackListProjectionDeltaContractTest.cpp
     unit/runtime/projection/TrackListProjectionLifecycleTest.cpp
     unit/runtime/projection/TrackListProjectionMutationTest.cpp
     unit/runtime/projection/TrackListProjectionSortingTest.cpp
     unit/runtime/projection/TrackListProjectionScaleTest.cpp
+    unit/runtime/playback/PlaybackCursorModelTest.cpp
+    unit/runtime/playback/PlaybackRestartDeadlineTest.cpp
+    unit/runtime/playback/PlaybackSessionRevisionTest.cpp
+    unit/runtime/playback/PreparedNextRegistryTest.cpp
+    unit/runtime/playback/ProjectionAnchorTest.cpp
+    unit/runtime/playback/ShuffleHistoryTest.cpp
     unit/runtime/PlaybackServiceControlTest.cpp
     unit/runtime/PlaybackServiceOutputTest.cpp
     unit/runtime/PlaybackServiceSelectionTest.cpp
     unit/runtime/PlaybackServiceTest.cpp
-    unit/runtime/PlaybackQueueServiceTest.cpp
+    unit/runtime/PlaybackServiceTokenTest.cpp
+    unit/runtime/PlaybackSequenceServiceTest.cpp
+    unit/runtime/PlaybackSessionSaveServiceTest.cpp
     unit/runtime/PlaybackSessionTest.cpp
     unit/runtime/source/AllTracksSourceTest.cpp
     unit/runtime/source/TrackSourceCacheTest.cpp

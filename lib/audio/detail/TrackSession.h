@@ -11,6 +11,7 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmSource.h>
 
+#include <chrono>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -47,7 +48,8 @@ namespace ao::audio::detail
                                       BackendId const& backendId,
                                       ProfileId const& profileId,
                                       DecoderFactoryFn const& decoderFactory,
-                                      OnSourceErrorFn onSourceError);
+                                      OnSourceErrorFn onSourceError,
+                                      std::chrono::milliseconds initialOffset = {});
 
   private:
     static void negotiateFormat(std::filesystem::path const& path,

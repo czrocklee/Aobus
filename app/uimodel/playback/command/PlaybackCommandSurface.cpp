@@ -3,7 +3,8 @@
 
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/PlaybackQueueService.h>
+#include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/Subscription.h>
@@ -74,9 +75,9 @@ namespace ao::uimodel
   } // namespace
 
   PlaybackCommandSurface::PlaybackCommandSurface(rt::PlaybackService& playback,
-                                                 rt::PlaybackQueueService& queue,
+                                                 rt::PlaybackSequenceService& sequence,
                                                  std::function<void()> playSelection)
-    : _playback{playback}, _queue{queue}, _playSelection{std::move(playSelection)}
+    : _playback{playback}, _sequence{sequence}, _playSelection{std::move(playSelection)}
   {
     subscribeAvailabilityEvents();
   }
@@ -124,16 +125,16 @@ namespace ao::uimodel
 
       case PlaybackCommand::Stop: _playback.stop(); break;
 
-      case PlaybackCommand::Next: _queue.next(); break;
+      case PlaybackCommand::Next: _sequence.next(); break;
 
-      case PlaybackCommand::Previous: _queue.previous(); break;
+      case PlaybackCommand::Previous: _sequence.previous(); break;
 
       case PlaybackCommand::ToggleShuffle:
-        _playback.setShuffleMode(state.mode.shuffle == rt::ShuffleMode::Off ? rt::ShuffleMode::On
-                                                                            : rt::ShuffleMode::Off);
+        _sequence.setShuffleMode(_sequence.state().shuffle == rt::ShuffleMode::Off ? rt::ShuffleMode::On
+                                                                                   : rt::ShuffleMode::Off);
         break;
 
-      case PlaybackCommand::CycleRepeat: _playback.setRepeatMode(nextRepeatMode(state.mode.repeat)); break;
+      case PlaybackCommand::CycleRepeat: _sequence.setRepeatMode(nextRepeatMode(_sequence.state().repeat)); break;
     }
   }
 
@@ -145,8 +146,8 @@ namespace ao::uimodel
       case PlaybackCommand::Pause: return state.ready && isActivePlayback(state.transport);
       case PlaybackCommand::PlayPause: return canPlayPause(state);
       case PlaybackCommand::Stop: return canStop(state);
-      case PlaybackCommand::Next: return state.ready && _queue.hasNext();
-      case PlaybackCommand::Previous: return state.ready && _queue.hasPrevious();
+      case PlaybackCommand::Next: return state.ready && _sequence.state().hasNext;
+      case PlaybackCommand::Previous: return state.ready && _sequence.state().hasPrevious;
       case PlaybackCommand::ToggleShuffle:
       case PlaybackCommand::CycleRepeat: return state.ready;
     }
@@ -194,6 +195,8 @@ namespace ao::uimodel
       emitAvailabilityChanged({PlaybackCommand::Play,
                                PlaybackCommand::Pause,
                                PlaybackCommand::PlayPause,
+                               PlaybackCommand::Next,
+                               PlaybackCommand::Previous,
                                PlaybackCommand::ToggleShuffle,
                                PlaybackCommand::CycleRepeat});
     };
@@ -213,12 +216,6 @@ namespace ao::uimodel
                                  PlaybackCommand::Next,
                                  PlaybackCommand::Previous});
       }));
-    _availabilitySubs.push_back(_playback.onShuffleModeChanged(
-      [this](rt::PlaybackService::ShuffleModeChanged const&)
-      { emitAvailabilityChanged({PlaybackCommand::ToggleShuffle, PlaybackCommand::Next}); }));
-    _availabilitySubs.push_back(_playback.onRepeatModeChanged(
-      [this](rt::PlaybackService::RepeatModeChanged const&)
-      { emitAvailabilityChanged({PlaybackCommand::CycleRepeat, PlaybackCommand::Next, PlaybackCommand::Previous}); }));
     _availabilitySubs.push_back(_playback.onSeekUpdate(
       [this](rt::PlaybackService::SeekUpdate const& event)
       {
@@ -233,8 +230,14 @@ namespace ao::uimodel
     _availabilitySubs.push_back(
       _playback.onQualityChanged([notifyReady](rt::PlaybackService::QualityChanged const&) { notifyReady(); }));
     _availabilitySubs.push_back(
-      _queue.onChanged([this](rt::PlaybackQueueState const&)
-                       { emitAvailabilityChanged({PlaybackCommand::Next, PlaybackCommand::Previous}); }));
+      _sequence.onChanged([this](rt::PlaybackSequenceState const&)
+                          { emitAvailabilityChanged({PlaybackCommand::Next, PlaybackCommand::Previous}); }));
+    _availabilitySubs.push_back(
+      _sequence.onShuffleModeChanged([this](rt::PlaybackSequenceService::ShuffleModeChanged const&)
+                                     { emitAvailabilityChanged({PlaybackCommand::ToggleShuffle}); }));
+    _availabilitySubs.push_back(
+      _sequence.onRepeatModeChanged([this](rt::PlaybackSequenceService::RepeatModeChanged const&)
+                                    { emitAvailabilityChanged({PlaybackCommand::CycleRepeat}); }));
   }
 
   void PlaybackCommandSurface::emitAvailabilityChanged(std::initializer_list<PlaybackCommand> const commands)

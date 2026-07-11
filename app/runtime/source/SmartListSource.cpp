@@ -11,27 +11,30 @@
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <cstddef>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace ao::rt
 {
-  SmartListSource::SmartListSource(TrackSource& source, library::MusicLibrary& ml, SmartListEvaluator& evaluator)
-    : _source{source}, _ml{ml}, _evaluator{&evaluator}
+  SmartListSource::SmartListSource(TrackSourceLease sourceLease,
+                                   library::MusicLibrary& ml,
+                                   SmartListEvaluator& evaluator)
+    : _sourceLease{std::move(sourceLease)}, _ml{ml}, _evaluator{&evaluator}
   {
-    _evaluator->registerList(_source, *this);
     stageExpression("");
+    _evaluator->registerList(*this);
   }
 
   SmartListSource::~SmartListSource()
   {
     if (_evaluator != nullptr && _evaluator->isAlive())
     {
-      _evaluator->unregisterList(_source, *this);
+      _evaluator->unregisterList(*this);
     }
   }
 
@@ -52,14 +55,14 @@ namespace ao::rt
 
   std::optional<std::size_t> SmartListSource::indexOf(TrackId id) const
   {
-    auto const it = _members.find(id);
+    auto const it = _memberIndex.find(id);
 
-    if (it == _members.end())
+    if (it == _memberIndex.end())
     {
       return std::nullopt;
     }
 
-    return static_cast<std::size_t>(std::distance(_members.begin(), it));
+    return it->second;
   }
 
   void SmartListSource::notifyUpdated(TrackId id)
@@ -69,7 +72,7 @@ namespace ao::rt
       return;
     }
 
-    _evaluator->notifyUpdated(_source, id);
+    _evaluator->notifyUpdated(*this, id);
   }
 
   void SmartListSource::stageExpression(std::string expr)
@@ -114,5 +117,22 @@ namespace ao::rt
 
     _current = std::move(_staged);
     _dirty = false;
+  }
+
+  void SmartListSource::replaceMembers(std::vector<TrackId> members)
+  {
+    _members = std::move(members);
+    rebuildMemberIndex();
+  }
+
+  void SmartListSource::rebuildMemberIndex()
+  {
+    _memberIndex.clear();
+    _memberIndex.reserve(_members.size());
+
+    for (std::size_t index = 0; index < _members.size(); ++index)
+    {
+      _memberIndex.emplace(_members[index], index);
+    }
   }
 } // namespace ao::rt

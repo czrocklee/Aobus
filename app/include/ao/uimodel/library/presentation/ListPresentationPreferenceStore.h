@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/Signal.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 
 #include <map>
 #include <optional>
@@ -33,7 +34,7 @@ namespace ao::uimodel
     void setPresentationIdForList(ListId listId, std::string_view presentationId);
     void clearPresentationForList(ListId listId);
 
-    rt::TrackPresentationSpec presentationForList(ListId listId, std::string_view smartListFilter = "") const;
+    rt::TrackPresentationSpec presentationForList(ListPresentationContext const& context) const;
 
     rt::Signal<ListId>& signalChanged() noexcept { return _changed; }
 

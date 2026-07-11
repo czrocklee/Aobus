@@ -65,19 +65,6 @@ namespace ao::rt
     return profile != audio::kProfileExclusive || !device.id.empty();
   }
 
-  enum class ShuffleMode : std::uint8_t
-  {
-    Off,
-    On,
-  };
-
-  enum class RepeatMode : std::uint8_t
-  {
-    Off,
-    One,
-    All,
-  };
-
   struct NowPlayingInfo final
   {
     TrackId trackId = kInvalidTrackId;
@@ -89,14 +76,6 @@ namespace ao::rt
     std::string album{};
 
     bool operator==(NowPlayingInfo const&) const = default;
-  };
-
-  struct PlaybackModeState final
-  {
-    ShuffleMode shuffle = ShuffleMode::Off;
-    RepeatMode repeat = RepeatMode::Off;
-
-    bool operator==(PlaybackModeState const&) const = default;
   };
 
   struct VolumeState final
@@ -136,7 +115,6 @@ namespace ao::rt
     bool ready = false;
 
     NowPlayingInfo nowPlaying{};
-    PlaybackModeState mode{};
     VolumeState volume{};
     OutputState output{};
     QualityState quality{};

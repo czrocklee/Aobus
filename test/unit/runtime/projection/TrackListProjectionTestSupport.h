@@ -10,6 +10,7 @@
 #include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <memory>
 #include <span>
@@ -19,28 +20,30 @@ namespace ao::rt::test
   struct TrackListProjectionFixture final
   {
     MusicLibraryFixture libraryFixture;
-    MutableTrackSource source;
+    std::shared_ptr<MutableTrackSource> sourcePtr;
+    MutableTrackSource& source;
     SmartListEvaluator engine;
-    std::unique_ptr<SmartListSource> filteredPtr;
+    std::shared_ptr<SmartListSource> filteredPtr;
 
     TrackListProjectionFixture()
-      : engine{libraryFixture.library()}
+      : sourcePtr{std::make_shared<MutableTrackSource>()}, source{*sourcePtr}, engine{libraryFixture.library()}
     {
     }
 
     LiveTrackListProjection createProjection(ViewId viewId)
     {
-      return LiveTrackListProjection{viewId, *filteredPtr, libraryFixture.library()};
+      return LiveTrackListProjection{viewId, TrackSourceLease{filteredPtr}, libraryFixture.library()};
+    }
+
+    LiveTrackListProjection createUnfilteredProjection(ViewId viewId)
+    {
+      return LiveTrackListProjection{viewId, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     }
 
     void setupFiltered(std::span<TrackId const> ids)
     {
-      for (auto id : ids)
-      {
-        source.addInitial(id);
-      }
-
-      filteredPtr = std::make_unique<SmartListSource>(source, libraryFixture.library(), engine);
+      source.setInitial(ids);
+      filteredPtr = std::make_shared<SmartListSource>(TrackSourceLease{sourcePtr}, libraryFixture.library(), engine);
       filteredPtr->reload();
     }
   };

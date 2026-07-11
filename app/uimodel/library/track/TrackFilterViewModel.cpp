@@ -10,6 +10,7 @@
 #include <format>
 #include <functional>
 #include <string>
+#include <tuple>
 #include <utility>
 
 namespace ao::uimodel
@@ -42,11 +43,11 @@ namespace ao::uimodel
 
     if (resolved.mode == TrackFilterMode::None)
     {
-      _viewService.setFilter(_viewId, "");
+      std::ignore = _viewService.setFilter(_viewId, "");
     }
     else
     {
-      _viewService.setFilter(_viewId, resolved.expression);
+      std::ignore = _viewService.setFilter(_viewId, resolved.expression);
     }
 
     refresh();

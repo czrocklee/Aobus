@@ -10,6 +10,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -199,9 +200,10 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(0) == id2); // C
       CHECK(proj.trackIdAt(1) == id1); // Z
       CHECK(proj.indexOf(id1) == 1);
-      REQUIRE(batches.size() == 2);
-      CHECK(std::holds_alternative<ProjectionRemoveRange>(batches[0].deltas.front()));
-      CHECK(std::holds_alternative<ProjectionInsertRange>(batches[1].deltas.front()));
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.front().deltas.size() == 2);
+      CHECK(std::holds_alternative<ProjectionRemoveRange>(batches.front().deltas[0]));
+      CHECK(std::holds_alternative<ProjectionInsertRange>(batches.front().deltas[1]));
     }
 
     SECTION("single update via batch method")
@@ -255,7 +257,7 @@ namespace ao::rt::test
       CHECK(std::holds_alternative<ProjectionInsertRange>(batches.back().deltas[1]));
     }
 
-    SECTION("batch update mixing stable and moved rows publishes reset")
+    SECTION("batch update of stable rows coalesces final update coordinates")
     {
       env.libraryFixture.updateTrack(id1, [](library::test::TrackSpec& s) { s.artist = "Updated Artist A"; });
       env.libraryFixture.updateTrack(id2, [](library::test::TrackSpec& s) { s.title = "B"; });
@@ -268,7 +270,10 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(1) == id2);
       REQUIRE(batches.size() == 1);
       REQUIRE(batches.back().deltas.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+      auto const* update = std::get_if<ProjectionUpdateRange>(&batches.back().deltas.front());
+      REQUIRE(update != nullptr);
+      CHECK(update->range.start == 0);
+      CHECK(update->range.count == 2);
     }
 
     SECTION("batch insertion with grouping")
@@ -532,7 +537,11 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(2) == id3);
       CHECK(proj.trackIdAt(3) == id4);
       REQUIRE(batches.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+      REQUIRE(batches.back().deltas.size() == 1);
+      auto const* insertion = std::get_if<ProjectionInsertRange>(&batches.back().deltas.front());
+      REQUIRE(insertion != nullptr);
+      CHECK(insertion->range.start == 2);
+      CHECK(insertion->range.count == 2);
     }
 
     SECTION("single update without comparator")
@@ -554,7 +563,8 @@ namespace ao::rt::test
 
     SECTION("Destructor coverage")
     {
-      auto proj2Ptr = std::make_unique<LiveTrackListProjection>(ViewId{2}, env.source, env.libraryFixture.library());
+      auto proj2Ptr = std::make_unique<LiveTrackListProjection>(
+        ViewId{2}, TrackSourceLease{env.filteredPtr}, env.libraryFixture.library());
       proj2Ptr.reset();
     }
   }

@@ -32,5 +32,12 @@ namespace ao::rt::test
     }
 
     ViewService makeService() { return ViewService{executor, libraryFixture.library(), *cachePtr}; }
+
+    CreateTrackListViewReply requireView(ViewService& service,
+                                         TrackListViewConfig const& config = {},
+                                         bool const attached = true)
+    {
+      return ao::test::requireValue(service.createView(config, attached));
+    }
   };
 } // namespace ao::rt::test

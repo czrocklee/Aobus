@@ -9,6 +9,7 @@
 #include "TrackPresentationNavigation.h"
 #include "TrackSection.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -28,6 +29,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -319,7 +321,7 @@ namespace ao::tui
     }
 
     auto const resolved = uimodel::resolveTrackFilterExpression(_filterDraft);
-    _runtime.views().setFilter(_activeViewId, resolved.expression);
+    std::ignore = _runtime.views().setFilter(_activeViewId, resolved.expression);
     auto snapshot = loadTrackItemsFromView(_activeViewId);
     _tracks = std::move(snapshot.tracks);
     _sections = std::move(snapshot.sections);
@@ -424,17 +426,23 @@ namespace ao::tui
   LibraryController::TrackItemsSnapshot LibraryController::loadTrackItems(ListId const listId)
   {
     _runtime.reloadAllTracks();
+    auto navigationResult = Result<rt::ViewId>{};
 
     if (listId == rt::kAllTracksListId)
     {
-      _runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks);
+      navigationResult = _runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks);
     }
     else
     {
-      _runtime.workspace().navigateTo(listId);
+      navigationResult = _runtime.workspace().navigateTo(listId);
     }
 
-    _activeViewId = _runtime.workspace().layoutState().activeViewId;
+    if (!navigationResult)
+    {
+      return {};
+    }
+
+    _activeViewId = *navigationResult;
     return loadTrackItemsFromView(_activeViewId);
   }
 } // namespace ao::tui

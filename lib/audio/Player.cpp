@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -125,6 +126,7 @@ namespace ao::audio
 
     async::Executor& executor;
     std::atomic<std::uint64_t> playbackGeneration{1};
+    std::atomic<std::uint64_t> audioCallbackGenerationFloor{1};
     std::vector<std::unique_ptr<ProviderRecord>> providers;
     std::optional<PendingOutputDeviceSelection> optPendingOutputDeviceSelection;
     BackendProvider* activeBackendProvider = nullptr;
@@ -141,13 +143,19 @@ namespace ao::audio
     flow::Graph cachedSystemGraph;
     flow::Graph mergedGraph;
     QualityResult qualityResult;
-    std::function<void()> onTrackEnded;
+    std::function<void(Engine::TrackEnded const&)> onTrackEnded;
     std::function<void(Engine::TrackAdvanced const&)> onTrackAdvanced;
     std::function<void(Engine::PlaybackFailure const&)> onPlaybackFailure;
     std::function<void()> onStateChanged;
     std::function<void(std::vector<BackendProvider::Status> const&)> onOutputDevicesChanged;
     std::function<void(QualityResult const&, bool)> onQualityChanged;
 
+    void connectEngineCallbacks();
+    void connectTrackEndedCallback();
+    void connectTrackAdvancedCallback();
+    void connectPlaybackFailureCallback();
+    void connectStateChangedCallback();
+    void connectRouteChangedCallback();
     void handleOutputDevicesChanged(BackendProvider* provider, std::vector<Device> const& devices);
     void handleSystemGraphChanged(flow::Graph const& graph, std::uint64_t generation);
     void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);
@@ -155,6 +163,35 @@ namespace ao::audio
     Player::Status snapshot() const;
     bool isReady() const;
     void updateMergedGraph();
+
+    bool acceptsAudioCallback(std::uint64_t generation) const noexcept
+    {
+      return generation >= audioCallbackGenerationFloor.load(std::memory_order_acquire);
+    }
+
+    void acceptAudioBarrier(Engine::PreparedCancellationBarrier barrier) noexcept
+    {
+      auto floor = audioCallbackGenerationFloor.load(std::memory_order_acquire);
+
+      while (floor < barrier.generation &&
+             !audioCallbackGenerationFloor.compare_exchange_weak(
+               floor, barrier.generation, std::memory_order_acq_rel, std::memory_order_acquire))
+      {
+      }
+    }
+
+    std::uint64_t resetPlaybackGraph()
+    {
+      auto const generation = playbackGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+      graphSubscription.reset();
+
+      auto const lock = std::scoped_lock{graphMutex};
+      cachedRouteStatus = {};
+      cachedSystemGraph = {};
+      mergedGraph = {};
+      qualityResult = {};
+      return generation;
+    }
 
     template<typename Task>
     void dispatchInternal(Task task)
@@ -219,6 +256,140 @@ namespace ao::audio
         });
     }
   };
+
+  void Player::Impl::connectEngineCallbacks()
+  {
+    connectTrackEndedCallback();
+    connectTrackAdvancedCallback();
+    connectPlaybackFailureCallback();
+    connectStateChangedCallback();
+    connectRouteChangedCallback();
+  }
+
+  void Player::Impl::connectTrackEndedCallback()
+  {
+    auto const weakImplPtr = weak_from_this();
+    enginePtr->setOnTrackEnded(
+      [weakImplPtr](Engine::TrackEnded const& event)
+      {
+        auto implPtr = weakImplPtr.lock();
+
+        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
+        {
+          return;
+        }
+
+        implPtr->dispatchInternal(
+          [event](Impl& self)
+          {
+            if (!self.acceptsAudioCallback(event.generation))
+            {
+              return;
+            }
+
+            if (auto callback = self.onTrackEnded; callback)
+            {
+              callback(event);
+            }
+          });
+      });
+  }
+
+  void Player::Impl::connectTrackAdvancedCallback()
+  {
+    auto const weakImplPtr = weak_from_this();
+    enginePtr->setOnTrackAdvanced(
+      [weakImplPtr](Engine::TrackAdvanced const& event)
+      {
+        auto implPtr = weakImplPtr.lock();
+
+        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
+        {
+          return;
+        }
+
+        implPtr->dispatchInternal(
+          [event = Engine::TrackAdvanced{event}](Impl& self)
+          {
+            if (!self.acceptsAudioCallback(event.generation))
+            {
+              return;
+            }
+
+            std::ignore = self.resetPlaybackGraph();
+
+            if (auto callback = self.onTrackAdvanced; callback)
+            {
+              callback(event);
+            }
+          });
+      });
+  }
+
+  void Player::Impl::connectPlaybackFailureCallback()
+  {
+    auto const weakImplPtr = weak_from_this();
+    enginePtr->setOnPlaybackFailure(
+      [weakImplPtr](Engine::PlaybackFailure const& failure)
+      {
+        if (auto implPtr = weakImplPtr.lock(); implPtr && implPtr->gatePtr->canAcceptCallbacks())
+        {
+          implPtr->dispatchInternal(
+            [failure = Engine::PlaybackFailure{failure}](Impl& self)
+            {
+              if (!self.acceptsAudioCallback(failure.generation))
+              {
+                return;
+              }
+
+              if (auto callback = self.onPlaybackFailure; callback)
+              {
+                callback(failure);
+              }
+            });
+        }
+      });
+  }
+
+  void Player::Impl::connectStateChangedCallback()
+  {
+    auto const weakImplPtr = weak_from_this();
+    enginePtr->setOnStateChanged(
+      [weakImplPtr]
+      {
+        if (auto implPtr = weakImplPtr.lock(); implPtr && implPtr->gatePtr->canAcceptCallbacks())
+        {
+          implPtr->dispatchOutward(&Impl::onStateChanged);
+        }
+      });
+  }
+
+  void Player::Impl::connectRouteChangedCallback()
+  {
+    auto const weakImplPtr = weak_from_this();
+    enginePtr->setOnRouteChanged(
+      [weakImplPtr](Engine::RouteStatus const& status)
+      {
+        auto implPtr = weakImplPtr.lock();
+
+        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
+        {
+          return;
+        }
+
+        implPtr->dispatchInternal(
+          [status = Engine::RouteStatus{status}](Impl& self)
+          {
+            if (!self.acceptsAudioCallback(status.generation))
+            {
+              return;
+            }
+
+            auto const graphGeneration = self.playbackGeneration.load(std::memory_order_acquire);
+            self.handleRouteChanged(status, graphGeneration);
+          });
+      });
+  }
 
   void Player::Impl::handleOutputDevicesChanged(BackendProvider* provider, std::vector<Device> const& devices)
   {
@@ -341,19 +512,11 @@ namespace ao::audio
 
     auto const& device = *it;
     auto newBackendPtr = (*recordIt)->providerPtr->createBackend(device, profile);
-    playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
-    graphSubscription.reset();
-
-    {
-      auto const lock = std::scoped_lock{graphMutex};
-      cachedRouteStatus = {};
-      cachedSystemGraph = {};
-      mergedGraph = {};
-      qualityResult = {};
-    }
+    std::ignore = resetPlaybackGraph();
 
     activeBackendProvider = (*recordIt)->providerPtr.get();
     enginePtr->setBackend(std::move(newBackendPtr), device);
+    acceptAudioBarrier(Engine::PreparedCancellationBarrier{.generation = enginePtr->playbackGeneration()});
     return {};
   }
 
@@ -517,6 +680,11 @@ namespace ao::audio
   }
 
   Player::Player(async::Executor& executor)
+    : Player{executor, nullptr}
+  {
+  }
+
+  Player::Player(async::Executor& executor, DecoderFactoryFn decoderFactory)
     : _implPtr{std::make_shared<Impl>(executor)}
   {
     // Start with a NullBackend until a provider provides something real
@@ -525,98 +693,13 @@ namespace ao::audio
                                                           .displayName = "None",
                                                           .description = "No audio output device selected",
                                                           .backendId = kBackendNone,
-                                                          .capabilities = {}});
+                                                          .capabilities = {}},
+                                                   std::move(decoderFactory));
 
-    auto const weakImplPtr = std::weak_ptr<Impl>{_implPtr};
-    _implPtr->enginePtr->setOnTrackEnded(
-      [weakImplPtr]
-      {
-        if (auto implPtr = weakImplPtr.lock(); implPtr && implPtr->gatePtr->canAcceptCallbacks())
-        {
-          implPtr->dispatchOutward(&Impl::onTrackEnded);
-        }
-      });
-
-    _implPtr->enginePtr->setOnTrackAdvanced(
-      [weakImplPtr](Engine::TrackAdvanced const& event)
-      {
-        auto implPtr = weakImplPtr.lock();
-
-        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
-        {
-          return;
-        }
-
-        auto const advancedGeneration = implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
-        implPtr->dispatchInternal(
-          [event = Engine::TrackAdvanced{event}, advancedGeneration](Impl& self)
-          {
-            if (advancedGeneration != self.playbackGeneration.load(std::memory_order_acquire))
-            {
-              return;
-            }
-
-            {
-              auto const lock = std::scoped_lock{self.graphMutex};
-              self.cachedRouteStatus = {};
-              self.cachedSystemGraph = {};
-              self.mergedGraph = {};
-              self.qualityResult = {};
-            }
-
-            self.graphSubscription.reset();
-
-            if (auto callback = self.onTrackAdvanced; callback)
-            {
-              callback(event);
-            }
-          });
-      });
-
-    _implPtr->enginePtr->setOnPlaybackFailure(
-      [weakImplPtr](Engine::PlaybackFailure const& failure)
-      {
-        if (auto implPtr = weakImplPtr.lock(); implPtr && implPtr->gatePtr->canAcceptCallbacks())
-        {
-          implPtr->dispatchInternal(
-            [failure = Engine::PlaybackFailure{failure}](Impl& self)
-            {
-              if (auto callback = self.onPlaybackFailure; callback)
-              {
-                callback(failure);
-              }
-            });
-        }
-      });
-
-    _implPtr->enginePtr->setOnStateChanged(
-      [weakImplPtr]
-      {
-        if (auto implPtr = weakImplPtr.lock(); implPtr && implPtr->gatePtr->canAcceptCallbacks())
-        {
-          implPtr->dispatchOutward(&Impl::onStateChanged);
-        }
-      });
-
-    _implPtr->enginePtr->setOnRouteChanged(
-      [weakImplPtr](Engine::RouteStatus const& status)
-      {
-        auto implPtr = weakImplPtr.lock();
-
-        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
-        {
-          return;
-        }
-
-        // Capture generation at the Engine event boundary so a route event
-        // queued before a later stop/play cannot be applied to the new session.
-        auto const generation = implPtr->playbackGeneration.load(std::memory_order_acquire);
-        implPtr->dispatchInternal([status = Engine::RouteStatus{status}, generation](Impl& self)
-                                  { self.handleRouteChanged(status, generation); });
-      });
+    _implPtr->connectEngineCallbacks();
   }
 
-  void Player::setOnTrackEnded(std::function<void()> callback)
+  void Player::setOnTrackEnded(std::function<void(Engine::TrackEnded const&)> callback)
   {
     auto const implPtr = _implPtr;
     implPtr->onTrackEnded = std::move(callback);
@@ -704,6 +787,24 @@ namespace ao::audio
 
   Result<> Player::play(Engine::PlaybackItem const& item, std::chrono::milliseconds const initialOffset)
   {
+    auto preparedStart = stagePlayback(item, initialOffset);
+
+    if (!preparedStart)
+    {
+      return std::unexpected{preparedStart.error()};
+    }
+
+    if (auto committed = commitPlayback(std::move(*preparedStart)); !committed)
+    {
+      return std::unexpected{committed.error()};
+    }
+
+    return {};
+  }
+
+  Result<Engine::PreparedPlaybackStart> Player::stagePlayback(Engine::PlaybackItem const& item,
+                                                              std::chrono::milliseconds const initialOffset)
+  {
     auto const implPtr = _implPtr;
 
     if (!implPtr->isReady())
@@ -714,17 +815,34 @@ namespace ao::audio
         Error::Code::InvalidState, "Playback ignored: audio backend is not ready (pending device discovery)");
     }
 
-    implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
+    return implPtr->enginePtr->stagePlayback(item, initialOffset);
+  }
+
+  Result<Engine::PlaybackStartReceipt> Player::commitPlayback(Engine::PreparedPlaybackStart&& preparedStart)
+  {
+    auto const implPtr = _implPtr;
+
+    if (!implPtr->isReady())
     {
-      auto const lock = std::scoped_lock{implPtr->graphMutex};
-      implPtr->cachedRouteStatus = {};
-      implPtr->cachedSystemGraph = {};
-      implPtr->mergedGraph = {};
-      implPtr->qualityResult = {};
+      return makeError(
+        Error::Code::InvalidState, "Playback ignored: audio backend is not ready (pending device discovery)");
     }
-    implPtr->graphSubscription.reset();
-    implPtr->enginePtr->play(item, initialOffset);
-    return {};
+
+    auto receipt = implPtr->enginePtr->commitPlayback(std::move(preparedStart));
+
+    if (!receipt)
+    {
+      return std::unexpected{receipt.error()};
+    }
+
+    implPtr->acceptAudioBarrier(receipt->cancellationBarrier);
+    auto const routeGeneration = implPtr->resetPlaybackGraph();
+
+    // A backend may synchronously publish route state during Engine commit.
+    // Refresh after Player accepts the receipt so an inline executor cannot
+    // strand that already-applied route snapshot behind the old graph epoch.
+    implPtr->handleRouteChanged(implPtr->enginePtr->routeStatus(), routeGeneration);
+    return receipt;
   }
 
   Result<Engine::PreparedNextResult> Player::prepareNext(Engine::PlaybackItem const& item)
@@ -764,19 +882,18 @@ namespace ao::audio
     implPtr->enginePtr->resume();
   }
 
-  void Player::stop()
+  Engine::PreparedCancellationBarrier Player::stopWithBarrier()
   {
     auto const implPtr = _implPtr;
-    implPtr->playbackGeneration.fetch_add(1, std::memory_order_acq_rel);
-    {
-      auto const lock = std::scoped_lock{implPtr->graphMutex};
-      implPtr->cachedRouteStatus = {};
-      implPtr->cachedSystemGraph = {};
-      implPtr->mergedGraph = {};
-      implPtr->qualityResult = {};
-    }
-    implPtr->graphSubscription.reset();
-    implPtr->enginePtr->stop();
+    auto const barrier = implPtr->enginePtr->stopWithBarrier();
+    implPtr->acceptAudioBarrier(barrier);
+    std::ignore = implPtr->resetPlaybackGraph();
+    return barrier;
+  }
+
+  void Player::stop()
+  {
+    std::ignore = stopWithBarrier();
   }
 
   void Player::seek(std::chrono::milliseconds offset)
@@ -832,5 +949,11 @@ namespace ao::audio
   {
     auto const implPtr = _implPtr;
     return implPtr->playbackGeneration.load(std::memory_order_acquire);
+  }
+
+  std::uint64_t Player::audioPlaybackGeneration() const noexcept
+  {
+    auto const implPtr = _implPtr;
+    return implPtr->enginePtr->playbackGeneration();
   }
 } // namespace ao::audio

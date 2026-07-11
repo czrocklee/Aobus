@@ -154,6 +154,21 @@ changing the current track; once a successor has been spliced, its source
 generation becomes the active generation and later source errors are handled as
 current-track failures.
 
+Explicit starts use a separate two-phase candidate. `stagePlayback` opens the
+source without publishing it in the render timeline, and `commitPlayback`
+publishes it only if the active generation and start context still match. Engine
+keeps a weak registry for these staged source generations so the event worker
+does not mistake a candidate decode error for a stale timeline event. If the
+worker applies the error first, it latches the original `Error` on the candidate
+and emits only the ordinary asynchronous state-change wake; commit then returns
+that error before raising the callback floor, clearing lookahead, or retiring the
+active source. If commit wins the control order first, it removes the staged
+registration while publishing the node, and an already-queued source error is
+then reduced exactly once as an active-track failure. A non-zero staged offset
+is applied to the decoder before `StreamingSource` starts its background thread,
+so an error from a discarded pre-seek decode epoch cannot invalidate a healthy
+candidate.
+
 The gapless gate is evaluated at **arm time on the control thread**, not on the
 render thread. The current-track format only changes on a splice (which consumes
 the lookahead cursor) or on a control command (which clears it), so the verdict
@@ -161,28 +176,40 @@ computed when the successor is armed stays valid until the render thread consume
 it. This is what keeps the render-thread splice free of any format read or
 `canSplice` call.
 
-`Player` forwards prepared-next commands to `Engine` and treats
-`onTrackAdvanced` as a new playback generation before route callbacks for the
-new track are captured. `PlaybackService` owns the runtime metadata for the
-prepared request keyed by the opaque item id it supplied to Engine; when the
-player reports a natural advance with that item id, the service commits that
-request to now-playing state and emits `NowPlayingChanged` without emitting idle.
+Engine's four identity-sensitive callback payloads — `TrackAdvanced`,
+`PlaybackFailure`, `RouteStatus`, and `TrackEnded` — carry the originating audio
+generation. A successful explicit-start or completed-stop receipt raises the
+Engine callback-generation floor and synchronizes callback delivery, so a
+materialized callback from a covered generation cannot begin after the receipt
+returns. `Player` repeats the audio-generation check when its executor task runs,
+because an Engine callback may already have queued that task before the control
+receipt was accepted. An accepted route snapshot is then bound to the Player
+graph epoch read at executor execution time. In particular, FIFO delivery lets a
+preceding `TrackAdvanced` task reset the graph first; route identity is never
+inferred from the time the Engine callback happened to reach Player.
+
+`PlaybackService` owns the runtime metadata for the prepared request keyed by the
+opaque item id it supplied to Engine; when the player reports a natural advance
+with that item id, the service commits that request to now-playing state and emits
+`NowPlayingChanged` without emitting idle.
 When a control command clears a still-armed successor, `PlaybackService` removes
 only the returned disarmed item id from its prepared metadata; metadata for an
 already-spliced item remains until the advanced callback consumes it.
 If the engine takes the drain fallback instead, the existing idle path remains
-responsible for asking the queue to start the next track explicitly.
+responsible for asking `PlaybackSequenceService` to start the resolved successor
+explicitly.
 
-`PlaybackQueueSession` owns queue policy. `peekNext()` decides and records one
-pending successor, including shuffle choices, without moving the current cursor.
-The cursor is committed only after a matching now-playing change arrives from a
-natural advance or after an explicit fallback/manual play succeeds; then the
-model prepares the following successor. If a final seek or output-device change
-invalidates Engine's prepared resource while the queue remains active, the queue
-prepares the pending successor again. The queue's fallback is additionally
-guarded by terminal track transport (`Idle` or current-track `Error`), so source
-decode/runtime errors can skip to the next track while a stale terminal
-notification cannot advance the cursor once a newer track is already playing.
+`PlaybackSequenceService` owns live-list succession policy. Its cursor resolves
+and records one prepared successor, including sticky shuffle choices, without
+moving the current anchor. The cursor adopts a new current only after a matching
+token-bearing now-playing change arrives from a natural advance or after an
+explicit fallback/manual play succeeds; the service then prepares the following
+successor. If a final seek or output-device change invalidates Engine's prepared
+resource while the sequence remains active, the service resolves and prepares
+the successor again. Drain fallback is additionally guarded by terminal track
+transport (`Idle` or current-track `Error`), so source decode/runtime errors can
+walk the live order while a stale terminal notification cannot advance the
+cursor once a newer track is already playing.
 
 At EOS, the render path attempts a splice only when both the current and
 prepared sessions are gapless-capable and their negotiated backend formats are

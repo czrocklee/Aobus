@@ -3,11 +3,13 @@
 
 #pragma once
 
+#include "PreparedPlayback.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 
 namespace ao::rt
@@ -33,6 +35,7 @@ namespace ao::rt
     TrackId trackId = kInvalidTrackId;
     ListId sourceListId = kInvalidListId;
     std::uint64_t generation = 0;
+    std::optional<PreparedNextToken> optPreparedNextToken{};
     Error error;
     bool recoverable = false;
     std::string title{};

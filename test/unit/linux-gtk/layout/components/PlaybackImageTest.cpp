@@ -5,13 +5,14 @@
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/audio/PlaybackInput.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/PlaybackState.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_approx.hpp>
@@ -152,12 +153,16 @@ namespace ao::gtk::layout::test
       auto* const picture = dynamic_cast<Gtk::Picture*>(button->get_child());
       REQUIRE(picture != nullptr);
 
-      auto const request = rt::PlaybackService::PlaybackRequest{
-        .item = rt::NowPlayingInfo{.trackId = TrackId{987}, .coverArtId = coverArtId, .title = "Virtual Track"},
-        .input = audio::PlaybackInput{.duration = std::chrono::seconds{1}},
-      };
+      auto const trackId =
+        library::test::addTrack(fixture.runtime().musicLibrary(),
+                                library::test::TrackSpec{
+                                  .title = "Cover Track",
+                                  .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
+                                  .coverArtId = coverArtId,
+                                  .duration = std::chrono::seconds{1},
+                                });
 
-      REQUIRE(fixture.runtime().playback().play(request, kInvalidListId));
+      REQUIRE(fixture.runtime().playback().playTrack(trackId, rt::kAllTracksListId));
       ao::gtk::test::drainGtkEvents();
 
       auto const paintablePtr = picture->get_paintable();

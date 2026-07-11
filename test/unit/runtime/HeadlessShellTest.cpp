@@ -14,6 +14,8 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSessionState.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -39,8 +41,9 @@ namespace ao::rt::test
     SECTION("Navigate to list ID creates a view and marks it active")
     {
       auto runtime = makeRuntime(tempDir);
-      auto const listId = ListId{42};
-      runtime.workspace().navigateTo(listId);
+      auto const listId =
+        ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Headless"}));
+      REQUIRE(runtime.workspace().navigateTo(listId));
 
       auto const layout = runtime.workspace().layoutState();
       REQUIRE(layout.openViews.size() == 1);
@@ -54,12 +57,12 @@ namespace ao::rt::test
     SECTION("Navigate to All Tracks does not reuse a filtered All Tracks view")
     {
       auto runtime = makeRuntime(tempDir);
-      auto const filteredView = runtime.views().createView(
-        TrackListViewConfig{.listId = kAllTracksListId, .filterExpression = "$artist ~ \"A\""});
+      auto const filteredView = ao::test::requireValue(runtime.views().createView(
+        TrackListViewConfig{.listId = kAllTracksListId, .filterExpression = "$artist ~ \"A\""}));
 
       runtime.workspace().addView(filteredView.viewId);
       runtime.workspace().setFocusedView(filteredView.viewId);
-      runtime.workspace().navigateTo(GlobalViewKind::AllTracks);
+      REQUIRE(runtime.workspace().navigateTo(GlobalViewKind::AllTracks));
 
       auto const layout = runtime.workspace().layoutState();
       CHECK(layout.openViews.size() == 2);
@@ -73,8 +76,12 @@ namespace ao::rt::test
     SECTION("Closing a view updates the layout")
     {
       auto runtime = makeRuntime(tempDir);
-      runtime.workspace().navigateTo(ListId{1});
-      runtime.workspace().navigateTo(ListId{2});
+      auto const firstListId =
+        ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "First"}));
+      auto const secondListId =
+        ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Second"}));
+      REQUIRE(runtime.workspace().navigateTo(firstListId));
+      REQUIRE(runtime.workspace().navigateTo(secondListId));
 
       auto layout1 = runtime.workspace().layoutState();
       REQUIRE(layout1.openViews.size() == 2);
@@ -93,8 +100,12 @@ namespace ao::rt::test
     {
       {
         auto runtime = makeRuntime(tempDir);
-        runtime.workspace().navigateTo(ListId{10});
-        runtime.workspace().navigateTo(ListId{20});
+        auto const firstListId = ao::test::requireValue(
+          runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "First saved"}));
+        auto const secondListId = ao::test::requireValue(
+          runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Second saved"}));
+        REQUIRE(runtime.workspace().navigateTo(firstListId));
+        REQUIRE(runtime.workspace().navigateTo(secondListId));
         runtime.workspace().saveSession(runtime.configStore());
 
         auto loaded = WorkspaceSessionState{};
@@ -106,7 +117,7 @@ namespace ao::rt::test
       // Create new runtime with same persistence
       auto session2 = makeRuntime(tempDir);
 
-      session2.workspace().restoreSession(session2.configStore());
+      REQUIRE(session2.workspace().restoreSession(session2.configStore()));
 
       auto const layout = session2.workspace().layoutState();
       CHECK(layout.openViews.size() == 2);
@@ -117,7 +128,9 @@ namespace ao::rt::test
     {
       {
         auto runtime = makeRuntime(tempDir);
-        runtime.workspace().navigateTo(ListId{10});
+        auto const listId = ao::test::requireValue(
+          runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Grouped saved"}));
+        REQUIRE(runtime.workspace().navigateTo(listId));
         auto const viewId = runtime.workspace().layoutState().activeViewId;
         auto const* artistPreset = builtinTrackPresentationPreset("artists");
         REQUIRE(artistPreset != nullptr);
@@ -139,7 +152,7 @@ namespace ao::rt::test
       // Restore in new runtime
       auto session2 = makeRuntime(tempDir);
 
-      session2.workspace().restoreSession(session2.configStore());
+      REQUIRE(session2.workspace().restoreSession(session2.configStore()));
 
       auto const layout2 = session2.workspace().layoutState();
       REQUIRE(layout2.openViews.size() == 1);
@@ -152,13 +165,15 @@ namespace ao::rt::test
     {
       {
         auto runtime = makeRuntime(tempDir);
-        runtime.workspace().navigateTo(ListId{10});
+        auto const listId =
+          ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Flat saved"}));
+        REQUIRE(runtime.workspace().navigateTo(listId));
         runtime.workspace().saveSession(runtime.configStore());
       }
 
       auto session2 = makeRuntime(tempDir);
 
-      session2.workspace().restoreSession(session2.configStore());
+      REQUIRE(session2.workspace().restoreSession(session2.configStore()));
 
       auto const layout2 = session2.workspace().layoutState();
       REQUIRE(layout2.openViews.size() == 1);

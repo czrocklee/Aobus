@@ -8,11 +8,13 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
 #include <array>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -20,14 +22,15 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto source = MutableTrackSource{};
+    auto sourcePtr = makeMutableTrackSource({});
+    auto& source = *sourcePtr;
 
-    auto list = SmartListSource{source, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
     list.setExpression("$year >= 2020");
     list.reload();
 
-    auto spy = SpyTrackSourceObserver{};
-    list.attach(&spy);
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto subscription = list.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
 
     auto t1 = libraryFixture.addTrack(makeSmartListSpec("Old", 2010));
     auto t2 = libraryFixture.addTrack(makeSmartListSpec("New1", 2021));
@@ -36,34 +39,33 @@ namespace ao::rt::test
     auto const batchTrackIds = std::array{t1, t2, t3};
     source.batchInsert(batchTrackIds);
 
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchInserted);
-    // t1 should be filtered out
-    CHECK(spy.events[0].batchIds.size() == 2);
-    CHECK(std::ranges::contains(spy.events[0].batchIds, t2));
-    CHECK(std::ranges::contains(spy.events[0].batchIds, t3));
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    auto const& inserted = std::get<SourceInsertRange>(batches.front().deltas.front());
+    CHECK(inserted.start == 0);
+    CHECK(inserted.trackIds == std::vector{t2, t3});
     CHECK(list.size() == 2);
 
-    spy.clear();
+    batches.clear();
     auto const removeTrackIds = std::array{t2};
     source.batchRemove(removeTrackIds);
 
-    REQUIRE(spy.events.size() == 1);
-    CHECK(spy.events[0].kind == SpyTrackSourceObserver::EventKind::BatchRemoved);
-    REQUIRE(spy.events[0].batchIds.size() == 1);
-    CHECK(spy.events[0].batchIds[0] == t2);
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    auto const& removed = std::get<SourceRemoveRange>(batches.front().deltas.front());
+    CHECK(removed.start == 0);
+    CHECK(removed.trackIds == std::vector{t2});
     CHECK(list.size() == 1);
-
-    list.detach(&spy);
   }
 
-  TEST_CASE("SmartListEvaluator - batch mutations trigger flat_set optimizations", "[runtime][unit][smart-list][batch]")
+  TEST_CASE("SmartListEvaluator - batch updates combine membership transitions", "[runtime][unit][smart-list][batch]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto source = MutableTrackSource{};
+    auto sourcePtr = makeMutableTrackSource({});
+    auto& source = *sourcePtr;
 
-    auto list = SmartListSource{source, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
     list.setExpression("$year >= 2020");
     list.reload();
 
@@ -92,5 +94,44 @@ namespace ao::rt::test
     source.batchUpdate(updateTrackIds);
 
     CHECK(list.size() == 2); // t1 and t3
+  }
+
+  TEST_CASE("SmartListEvaluator - filtered membership is an atomic stable subsequence of upstream order",
+            "[runtime][unit][smart-list][batch]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const first = libraryFixture.addTrack(makeSmartListSpec("first", 2024));
+    auto const hidden = libraryFixture.addTrack(makeSmartListSpec("hidden", 2010));
+    auto const second = libraryFixture.addTrack(makeSmartListSpec("second", 2024));
+    auto const third = libraryFixture.addTrack(makeSmartListSpec("third", 2024));
+    auto sourcePtr = makeMutableTrackSource({first, hidden, second, third});
+    auto engine = SmartListEvaluator{libraryFixture.library()};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    list.setExpression("$year >= 2020");
+    list.reload();
+
+    CHECK(sourceTrackIds(list) == std::vector{first, second, third});
+
+    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto subscription = list.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+
+    sourcePtr->replaceWithBatch(std::array{first, third, hidden, second},
+                                TrackSourceDeltaBatch{
+                                  .deltas =
+                                    {
+                                      SourceRemoveRange{.start = 1, .trackIds = {hidden, second}},
+                                      SourceInsertRange{.start = 2, .trackIds = {hidden, second}},
+                                    },
+                                });
+
+    CHECK(sourceTrackIds(list) == std::vector{first, third, second});
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 2);
+    auto const& remove = std::get<SourceRemoveRange>(batches.front().deltas[0]);
+    CHECK(remove.start == 1);
+    CHECK(remove.trackIds == std::vector{second});
+    auto const& insert = std::get<SourceInsertRange>(batches.front().deltas[1]);
+    CHECK(insert.start == 2);
+    CHECK(insert.trackIds == std::vector{second});
   }
 } // namespace ao::rt::test

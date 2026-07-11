@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/Exception.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
 #include <ao/query/detail/Bytecode.h>
 #include <ao/rt/ScopedTimer.h>
@@ -11,132 +13,188 @@
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/utility/ByteView.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+
+#include <boost/container/small_vector.hpp>
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
-#include <flat_set>
-#include <iterator>
 #include <memory>
-#include <ranges>
+#include <optional>
 #include <span>
+#include <tuple>
+#include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
 {
-  // SourceObserver implementation
-
-  SourceObserver::SourceObserver(SmartListEvaluator& evaluator, TrackSource& source)
-    : _evaluator{evaluator}, _source{source}
+  namespace
   {
-  }
-
-  void SourceObserver::handleReset()
-  {
-    if (!_valid)
+    template<typename Index>
+    void rebuildIndex(std::vector<TrackId> const& trackIds, Index& index)
     {
-      return;
+      index.clear();
+      index.reserve(trackIds.size());
+
+      for (std::size_t position = 0; position < trackIds.size(); ++position)
+      {
+        if (!index.emplace(trackIds[position], position).second)
+        {
+          throwException<Exception>("Track source contains a duplicate identity");
+        }
+      }
     }
 
-    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    std::vector<TrackId> snapshotSource(TrackSource const& source)
     {
-      _evaluator.handleSourceReset(*it->second);
-    }
-  }
+      auto result = std::vector<TrackId>{};
+      result.reserve(source.size());
 
-  void SourceObserver::handleInserted(TrackId const id, std::size_t const index)
-  {
-    if (!_valid)
-    {
-      return;
-    }
+      for (std::size_t index = 0; index < source.size(); ++index)
+      {
+        result.push_back(source.trackIdAt(index));
+      }
 
-    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
-    {
-      _evaluator.handleSourceInserted(*it->second, id, index);
-    }
-  }
-
-  void SourceObserver::handleUpdated(TrackId const id, std::size_t const index)
-  {
-    if (!_valid)
-    {
-      return;
+      return result;
     }
 
-    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    std::size_t filteredPosition(std::vector<TrackId> const& upstreamTrackIds,
+                                 std::size_t const upstreamPosition,
+                                 auto const& memberIndex)
     {
-      _evaluator.handleSourceUpdated(*it->second, id, index);
-    }
-  }
+      std::size_t result = 0;
 
-  void SourceObserver::handleRemoved(TrackId const id, std::size_t /*index*/)
-  {
-    if (!_valid)
-    {
-      return;
-    }
+      for (std::size_t index = 0; index < upstreamPosition; ++index)
+      {
+        if (memberIndex.contains(upstreamTrackIds[index]))
+        {
+          ++result;
+        }
+      }
 
-    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
-    {
-      _evaluator.handleSourceRemoved(*it->second, id);
-    }
-  }
-
-  void SourceObserver::handleBulkInserted(std::span<TrackId const> const ids)
-  {
-    if (!_valid)
-    {
-      return;
+      return result;
     }
 
-    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    void appendInsert(boost::container::small_vector<TrackSourceDelta, 1>& deltas,
+                      std::size_t const index,
+                      TrackId const trackId)
     {
-      _evaluator.handleSourceInserted(*it->second, ids);
-    }
-  }
+      if (!deltas.empty())
+      {
+        if (auto* const range = std::get_if<SourceInsertRange>(&deltas.back());
+            range != nullptr && range->start + range->trackIds.size() == index)
+        {
+          range->trackIds.push_back(trackId);
+          return;
+        }
+      }
 
-  void SourceObserver::handleBulkUpdated(std::span<TrackId const> const ids)
-  {
-    if (!_valid)
-    {
-      return;
-    }
-
-    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
-    {
-      _evaluator.handleSourceUpdated(*it->second, ids);
-    }
-  }
-
-  void SourceObserver::handleBulkRemoved(std::span<TrackId const> const ids)
-  {
-    if (!_valid)
-    {
-      return;
+      deltas.push_back(SourceInsertRange{.start = index, .trackIds = {trackId}});
     }
 
-    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    void appendRemove(boost::container::small_vector<TrackSourceDelta, 1>& deltas,
+                      std::size_t const index,
+                      TrackId const trackId)
     {
-      _evaluator.handleSourceRemoved(*it->second, ids);
-    }
-  }
+      if (!deltas.empty())
+      {
+        if (auto* const range = std::get_if<SourceRemoveRange>(&deltas.back());
+            range != nullptr && range->start == index)
+        {
+          range->trackIds.push_back(trackId);
+          return;
+        }
+      }
 
-  void SourceObserver::handleSourceDestroyed()
-  {
-    if (!_valid)
+      deltas.push_back(SourceRemoveRange{.start = index, .trackIds = {trackId}});
+    }
+
+    void appendUpdate(boost::container::small_vector<TrackSourceDelta, 1>& deltas,
+                      std::size_t const index,
+                      TrackId const trackId)
     {
-      return;
+      if (!deltas.empty())
+      {
+        if (auto* const range = std::get_if<SourceUpdateRange>(&deltas.back());
+            range != nullptr && range->start + range->trackIds.size() == index)
+        {
+          range->trackIds.push_back(trackId);
+          return;
+        }
+      }
+
+      deltas.push_back(SourceUpdateRange{.start = index, .trackIds = {trackId}});
     }
 
-    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    std::vector<TrackId> replayDerivedBatch(std::vector<TrackId> trackIds,
+                                            boost::container::small_vector<TrackSourceDelta, 1> const& deltas)
     {
-      _evaluator.handleSourceDestroyed(*it->second);
-    }
-  }
+      for (auto const& delta : deltas)
+      {
+        std::visit(
+          [&trackIds](auto const& value)
+          {
+            using Value = std::remove_cvref_t<decltype(value)>;
 
-  // SmartListEvaluator implementation
+            if constexpr (std::same_as<Value, SourceInsertRange>)
+            {
+              if (value.start > trackIds.size())
+              {
+                throwException<Exception>("Derived smart-list insertion is out of range");
+              }
+
+              trackIds.insert(trackIds.begin() + static_cast<std::ptrdiff_t>(value.start),
+                              value.trackIds.begin(),
+                              value.trackIds.end());
+            }
+            else if constexpr (std::same_as<Value, SourceRemoveRange>)
+            {
+              if (value.start > trackIds.size() || value.trackIds.size() > trackIds.size() - value.start ||
+                  !std::ranges::equal(value.trackIds, std::span{trackIds}.subspan(value.start, value.trackIds.size())))
+              {
+                throwException<Exception>("Derived smart-list removal identity does not match working state");
+              }
+
+              trackIds.erase(trackIds.begin() + static_cast<std::ptrdiff_t>(value.start),
+                             trackIds.begin() + static_cast<std::ptrdiff_t>(value.start + value.trackIds.size()));
+            }
+            else if constexpr (std::same_as<Value, SourceUpdateRange>)
+            {
+              if (value.start > trackIds.size() || value.trackIds.size() > trackIds.size() - value.start ||
+                  !std::ranges::equal(value.trackIds, std::span{trackIds}.subspan(value.start, value.trackIds.size())))
+              {
+                throwException<Exception>("Derived smart-list update identity does not match working state");
+              }
+            }
+            else
+            {
+              throwException<Exception>("Unexpected terminal delta in a regular smart-list batch");
+            }
+          },
+          delta);
+      }
+
+      return trackIds;
+    }
+
+    void retainOnlyFinalUpdates(boost::container::small_vector<TrackSourceDelta, 1>& deltas,
+                                std::vector<TrackId> const& finalMembers,
+                                std::vector<TrackId> const& updatedTrackIds)
+    {
+      deltas.clear();
+
+      for (std::size_t index = 0; index < finalMembers.size(); ++index)
+      {
+        if (std::ranges::contains(updatedTrackIds, finalMembers[index]))
+        {
+          appendUpdate(deltas, index, finalMembers[index]);
+        }
+      }
+    }
+  } // namespace
 
   SmartListEvaluator::SmartListEvaluator(library::MusicLibrary& ml)
     : _ml{ml}
@@ -149,90 +207,402 @@ namespace ao::rt
 
     for (auto& [source, bucketPtr] : _buckets)
     {
-      for (auto* list : bucketPtr->lists)
+      std::ignore = source;
+      bucketPtr->subscription.reset();
+
+      for (auto* const list : bucketPtr->lists)
       {
         list->_evaluator = nullptr;
       }
-
-      if (bucketPtr->observerPtr)
-      {
-        utility::unsafeDowncast<SourceObserver>(bucketPtr->observerPtr.get())->invalidate();
-
-        if (bucketPtr->sourceAlive)
-        {
-          source->detach(bucketPtr->observerPtr.get());
-        }
-      }
     }
   }
 
-  void SmartListEvaluator::registerList(TrackSource& source, SmartListSource& list)
+  void SmartListEvaluator::registerList(SmartListSource& list)
   {
-    auto& bucketPtr = _buckets[&source];
+    auto& source = list.source();
+    auto [it, inserted] = _buckets.try_emplace(&source);
 
-    if (!bucketPtr)
+    if (inserted)
     {
-      bucketPtr = std::make_unique<SourceBucket>();
-      bucketPtr->source = &source;
-      bucketPtr->observerPtr = std::make_unique<SourceObserver>(*this, source);
-      source.attach(bucketPtr->observerPtr.get());
+      it->second = std::make_unique<SourceBucket>();
+      it->second->source = &source;
+
+      if (source.state() == TrackSourceState::Live)
+      {
+        it->second->upstreamTrackIds = snapshotSource(source);
+        rebuildIndex(it->second->upstreamTrackIds, it->second->upstreamIndex);
+      }
+      else
+      {
+        it->second->invalidated = true;
+      }
     }
 
-    bucketPtr->lists.push_back(&list);
+    auto& bucket = *it->second;
+    bucket.lists.push_back(&list);
+
+    if (inserted && !bucket.invalidated)
+    {
+      bucket.subscription = source.subscribe([this, source = &source](TrackSourceDeltaBatch const& batch)
+                                             { handleSourceBatch(*source, batch); });
+    }
+
+    if (bucket.invalidated)
+    {
+      list.invalidate();
+    }
   }
 
-  void SmartListEvaluator::unregisterList(TrackSource& source, SmartListSource& list)
+  void SmartListEvaluator::unregisterList(SmartListSource& list)
   {
-    if (auto const it = _buckets.find(&source); it != _buckets.end())
+    auto* const source = &list.source();
+    auto const it = _buckets.find(source);
+
+    if (it == _buckets.end())
     {
-      auto& bucket = *it->second;
-      std::erase(bucket.lists, &list);
+      return;
+    }
 
-      if (bucket.lists.empty())
-      {
-        if (bucket.sourceAlive)
-        {
-          source.detach(bucket.observerPtr.get());
-        }
+    std::erase(it->second->lists, &list);
 
-        _buckets.erase(it);
-      }
+    if (it->second->lists.empty())
+    {
+      it->second->subscription.reset();
+      _buckets.erase(it);
     }
   }
 
   void SmartListEvaluator::rebuild(SmartListSource& list)
   {
-    if (auto const it = _buckets.find(&list._source); it != _buckets.end())
-    {
-      if (!list._dirty)
-      {
-        list.stageExpression(list._current.expression);
-      }
+    auto const it = _buckets.find(&list.source());
 
-      evaluateDirtyLists(*it->second);
-    }
-  }
-
-  void SmartListEvaluator::notifyUpdated(TrackSource& source, TrackId const trackId)
-  {
-    if (auto const it = _buckets.find(&source); it != _buckets.end())
-    {
-      // Re-evaluate membership for all lists in this bucket
-      if (auto const optSourceIndex = source.indexOf(trackId); optSourceIndex)
-      {
-        handleSourceUpdated(*it->second, trackId, *optSourceIndex);
-      }
-    }
-  }
-
-  void SmartListEvaluator::evaluateAllLists(SourceBucket& bucket)
-  {
-    if (bucket.lists.empty())
+    if (it == _buckets.end() || it->second->invalidated)
     {
       return;
     }
 
-    evaluateLists(bucket.lists);
+    if (!list._dirty)
+    {
+      list.stageExpression(list._current.expression);
+    }
+
+    evaluateDirtyLists(*it->second);
+  }
+
+  void SmartListEvaluator::notifyUpdated(SmartListSource& list, TrackId const trackId)
+  {
+    auto const it = _buckets.find(&list.source());
+
+    if (it == _buckets.end() || it->second->invalidated)
+    {
+      return;
+    }
+
+    auto const indexIt = it->second->upstreamIndex.find(trackId);
+
+    if (indexIt == it->second->upstreamIndex.end())
+    {
+      return;
+    }
+
+    handleRegularBatch(*it->second,
+                       TrackSourceDeltaBatch{
+                         .deltas = {SourceUpdateRange{.start = indexIt->second, .trackIds = {trackId}}},
+                       });
+  }
+
+  void SmartListEvaluator::handleSourceBatch(TrackSource& source, TrackSourceDeltaBatch const& batch)
+  {
+    auto const it = _buckets.find(&source);
+
+    if (it == _buckets.end() || it->second->invalidated)
+    {
+      return;
+    }
+
+    if (batch.deltas.size() == 1 && std::holds_alternative<SourceInvalidated>(batch.deltas.front()))
+    {
+      handleSourceInvalidated(*it->second);
+      return;
+    }
+
+    if (batch.deltas.size() == 1 && std::holds_alternative<SourceReset>(batch.deltas.front()))
+    {
+      handleSourceReset(*it->second);
+      return;
+    }
+
+    handleRegularBatch(*it->second, batch);
+  }
+
+  void SmartListEvaluator::handleSourceReset(SourceBucket& bucket)
+  {
+    bucket.upstreamTrackIds = snapshotSource(*bucket.source);
+    rebuildIndex(bucket.upstreamTrackIds, bucket.upstreamIndex);
+    rebuildLists(bucket, bucket.lists);
+  }
+
+  // One transaction-local reducer keeps every derived list aligned to the same upstream batch.
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+  void SmartListEvaluator::handleRegularBatch(SourceBucket& bucket,
+                                              TrackSourceDeltaBatch const& batch,
+                                              bool const verifyFinalSnapshot)
+  {
+    auto const timer = rt::ScopedTimer{"SmartListEvaluator::handleRegularBatch"};
+    auto upstreamTrackIds = bucket.upstreamTrackIds;
+    auto upstreamIndex = bucket.upstreamIndex;
+    auto works = std::vector<DerivedWork>{};
+    works.reserve(bucket.lists.size());
+
+    auto evaluatableLists = std::vector<SmartListSource*>{};
+    evaluatableLists.reserve(bucket.lists.size());
+
+    for (auto* const list : bucket.lists)
+    {
+      auto work = DerivedWork{
+        .list = list,
+        .oldMembers = list->_members,
+        .members = list->_members,
+        .memberIndex = list->_memberIndex,
+        .active = list->state() == TrackSourceState::Live && !list->_dirty && !list->_current.optError &&
+                  list->_current.planPtr != nullptr,
+      };
+
+      if (work.active)
+      {
+        evaluatableLists.push_back(list);
+      }
+
+      works.push_back(std::move(work));
+    }
+
+    auto const transaction = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(transaction);
+    auto const mode = unionMode(std::span<SmartListSource* const>{evaluatableLists});
+    auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
+    auto updatedTrackIds = std::vector<TrackId>{};
+
+    auto evaluateMatches = [&](TrackId const trackId)
+    {
+      auto result = std::vector<bool>(works.size(), false);
+      auto const optView =
+        storageValueOrNullopt(reader.get(trackId, storeMode), "Failed to evaluate smart-list track mutation");
+
+      if (!optView)
+      {
+        return result;
+      }
+
+      for (std::size_t index = 0; index < works.size(); ++index)
+      {
+        if (auto const& work = works[index]; work.active)
+        {
+          result[index] = work.list->_planEvaluator.matches(*work.list->_current.planPtr, *optView);
+        }
+      }
+
+      return result;
+    };
+
+    for (auto const& delta : batch.deltas)
+    {
+      std::visit(
+        // Keeping variant dispatch together preserves atomic cross-list replay invariants.
+        // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+        [&](auto const& value)
+        {
+          using Value = std::remove_cvref_t<decltype(value)>;
+
+          if constexpr (std::same_as<Value, SourceInsertRange>)
+          {
+            if (value.start > upstreamTrackIds.size())
+            {
+              throwException<Exception>("Smart-list upstream insertion is out of range");
+            }
+
+            for (std::size_t offset = 0; offset < value.trackIds.size(); ++offset)
+            {
+              auto const trackId = value.trackIds[offset];
+              auto const sourceIndex = value.start + offset;
+
+              if (upstreamIndex.contains(trackId))
+              {
+                throwException<Exception>("Smart-list upstream insertion duplicates a track identity");
+              }
+
+              upstreamTrackIds.insert(upstreamTrackIds.begin() + static_cast<std::ptrdiff_t>(sourceIndex), trackId);
+              rebuildIndex(upstreamTrackIds, upstreamIndex);
+              auto const matches = evaluateMatches(trackId);
+
+              for (std::size_t workIndex = 0; workIndex < works.size(); ++workIndex)
+              {
+                auto& work = works[workIndex];
+
+                if (!work.active || !matches[workIndex])
+                {
+                  continue;
+                }
+
+                auto const memberPosition = filteredPosition(upstreamTrackIds, sourceIndex, work.memberIndex);
+                work.members.insert(work.members.begin() + static_cast<std::ptrdiff_t>(memberPosition), trackId);
+                rebuildIndex(work.members, work.memberIndex);
+                appendInsert(work.deltas, memberPosition, trackId);
+              }
+            }
+          }
+          else if constexpr (std::same_as<Value, SourceRemoveRange>)
+          {
+            for (auto const trackId : value.trackIds)
+            {
+              if (value.start >= upstreamTrackIds.size() || upstreamTrackIds[value.start] != trackId)
+              {
+                throwException<Exception>("Smart-list upstream removal identity does not match working state");
+              }
+
+              for (auto& work : works)
+              {
+                if (!work.active)
+                {
+                  continue;
+                }
+
+                auto const memberIt = work.memberIndex.find(trackId);
+
+                if (memberIt == work.memberIndex.end())
+                {
+                  continue;
+                }
+
+                auto const memberPosition = memberIt->second;
+                work.members.erase(work.members.begin() + static_cast<std::ptrdiff_t>(memberPosition));
+                rebuildIndex(work.members, work.memberIndex);
+                appendRemove(work.deltas, memberPosition, trackId);
+              }
+
+              upstreamTrackIds.erase(upstreamTrackIds.begin() + static_cast<std::ptrdiff_t>(value.start));
+              rebuildIndex(upstreamTrackIds, upstreamIndex);
+            }
+          }
+          else if constexpr (std::same_as<Value, SourceUpdateRange>)
+          {
+            if (value.start > upstreamTrackIds.size() || value.trackIds.size() > upstreamTrackIds.size() - value.start)
+            {
+              throwException<Exception>("Smart-list upstream update is out of range");
+            }
+
+            for (std::size_t offset = 0; offset < value.trackIds.size(); ++offset)
+            {
+              auto const trackId = value.trackIds[offset];
+              auto const sourceIndex = value.start + offset;
+
+              if (upstreamTrackIds[sourceIndex] != trackId)
+              {
+                throwException<Exception>("Smart-list upstream update identity does not match working state");
+              }
+
+              updatedTrackIds.push_back(trackId);
+              auto const matches = evaluateMatches(trackId);
+
+              for (std::size_t workIndex = 0; workIndex < works.size(); ++workIndex)
+              {
+                auto& work = works[workIndex];
+
+                if (!work.active)
+                {
+                  continue;
+                }
+
+                auto const memberIt = work.memberIndex.find(trackId);
+                auto const wasPresent = memberIt != work.memberIndex.end();
+
+                if (auto const nowMatches = matches[workIndex]; wasPresent && nowMatches)
+                {
+                  appendUpdate(work.deltas, memberIt->second, trackId);
+                }
+                else if (wasPresent)
+                {
+                  auto const memberPosition = memberIt->second;
+                  work.members.erase(work.members.begin() + static_cast<std::ptrdiff_t>(memberPosition));
+                  rebuildIndex(work.members, work.memberIndex);
+                  appendRemove(work.deltas, memberPosition, trackId);
+                }
+                else if (nowMatches)
+                {
+                  auto const memberPosition = filteredPosition(upstreamTrackIds, sourceIndex, work.memberIndex);
+                  work.members.insert(work.members.begin() + static_cast<std::ptrdiff_t>(memberPosition), trackId);
+                  rebuildIndex(work.members, work.memberIndex);
+                  appendInsert(work.deltas, memberPosition, trackId);
+                }
+              }
+            }
+          }
+          else
+          {
+            throwException<Exception>("Reset or invalidation must be a singleton smart-list upstream batch");
+          }
+        },
+        delta);
+    }
+
+    if (verifyFinalSnapshot && upstreamTrackIds != snapshotSource(*bucket.source))
+    {
+      throwException<Exception>("Smart-list upstream working mirror diverged from the final source snapshot");
+    }
+
+    for (auto& work : works)
+    {
+      if (!work.active)
+      {
+        continue;
+      }
+
+      if (work.oldMembers == work.members)
+      {
+        retainOnlyFinalUpdates(work.deltas, work.members, updatedTrackIds);
+      }
+
+      if (!work.deltas.empty() && replayDerivedBatch(work.oldMembers, work.deltas) != work.members)
+      {
+        throwException<Exception>("Smart-list derived batch does not reproduce final membership");
+      }
+    }
+
+    bucket.upstreamTrackIds = std::move(upstreamTrackIds);
+    bucket.upstreamIndex = std::move(upstreamIndex);
+
+    for (auto& work : works)
+    {
+      if (work.active)
+      {
+        work.list->replaceMembers(std::move(work.members));
+      }
+    }
+
+    for (auto& work : works)
+    {
+      if (!work.active || work.deltas.empty())
+      {
+        continue;
+      }
+
+      std::ignore =
+        work.list->publishDeltaBatch(TrackSourceDeltaBatch{.deltas = std::move(work.deltas)}, work.oldMembers.size());
+    }
+  }
+
+  void SmartListEvaluator::handleSourceInvalidated(SourceBucket& bucket)
+  {
+    bucket.invalidated = true;
+
+    for (auto* const list : bucket.lists)
+    {
+      if (list->state() == TrackSourceState::Invalidated)
+      {
+        continue;
+      }
+
+      list->invalidate();
+    }
   }
 
   void SmartListEvaluator::evaluateDirtyLists(SourceBucket& bucket)
@@ -241,436 +611,88 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_dirty)
+      if (list->_dirty && list->state() == TrackSourceState::Live)
       {
         list->applyStagedState();
         dirtyLists.push_back(list);
       }
     }
 
-    if (dirtyLists.empty())
-    {
-      return;
-    }
-
-    evaluateLists(dirtyLists);
+    rebuildLists(bucket, dirtyLists);
   }
 
-  void SmartListEvaluator::evaluateLists(std::span<SmartListSource*> const lists)
+  void SmartListEvaluator::rebuildLists(SourceBucket& bucket, std::span<SmartListSource*> const lists)
   {
     if (lists.empty())
     {
       return;
     }
 
+    auto const timer = rt::ScopedTimer{"SmartListEvaluator::rebuildLists"};
     auto evaluatableLists = std::vector<SmartListSource*>{};
 
     for (auto* const list : lists)
     {
-      if (list->_current.optError || !list->_current.planPtr)
-      {
-        list->_members.clear();
-      }
-      else
+      if (list->state() == TrackSourceState::Live && !list->_current.optError && list->_current.planPtr != nullptr)
       {
         evaluatableLists.push_back(list);
       }
     }
 
+    auto nextMembers = std::vector<std::vector<TrackId>>(lists.size());
+
     if (!evaluatableLists.empty())
     {
-      auto const mode = unionMode(evaluatableLists);
-      evaluateMembers(lists.front()->_source, evaluatableLists, mode);
-    }
+      auto const transaction = _ml.readTransaction();
+      auto const reader = _ml.tracks().reader(transaction);
+      auto const mode = unionMode(std::span<SmartListSource* const>{evaluatableLists});
+      auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
 
-    // Notify Reset for only the provided lists
-    for (auto* const list : lists)
-    {
-      list->TrackSource::notifyReset();
-    }
-  }
-
-  void SmartListEvaluator::evaluateMembers(TrackSource& source,
-                                           std::span<SmartListSource*> const lists,
-                                           TrackLoadMode const mode)
-  {
-    auto const timer = rt::ScopedTimer{"SmartListEvaluator::evaluateMembers"};
-
-    if (lists.empty())
-    {
-      return;
-    }
-
-    auto const transaction = _ml.readTransaction();
-    auto const reader = _ml.tracks().reader(transaction);
-    auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
-
-    auto nextMembers = std::vector<std::vector<TrackId>>{lists.size()};
-
-    for (auto const index : std::views::iota(0UZ, source.size()))
-    {
-      auto const id = source.trackIdAt(index);
-      auto const optView = storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate smart list track");
-
-      if (!optView)
+      for (auto const trackId : bucket.upstreamTrackIds)
       {
-        continue;
-      }
+        auto const optView =
+          storageValueOrNullopt(reader.get(trackId, storeMode), "Failed to rebuild smart-list membership");
 
-      for (std::size_t i = 0; i < lists.size(); ++i)
-      {
-        if (lists[i]->_planEvaluator.matches(*lists[i]->_current.planPtr, *optView))
+        if (!optView)
         {
-          nextMembers[i].push_back(id);
+          continue;
+        }
+
+        for (std::size_t index = 0; index < lists.size(); ++index)
+        {
+          if (auto* const list = lists[index]; list->state() == TrackSourceState::Live && !list->_current.optError &&
+                                               list->_current.planPtr != nullptr &&
+                                               list->_planEvaluator.matches(*list->_current.planPtr, *optView))
+          {
+            nextMembers[index].push_back(trackId);
+          }
         }
       }
     }
 
-    for (std::size_t listIndex = 0; listIndex < lists.size(); ++listIndex)
+    auto previousSizes = std::vector<std::size_t>{};
+    previousSizes.reserve(lists.size());
+
+    for (std::size_t index = 0; index < lists.size(); ++index)
     {
-      std::ranges::sort(nextMembers[listIndex]);
-      // NOLINTNEXTLINE(misc-include-cleaner)
-      lists[listIndex]->_members = std::flat_set{std::sorted_unique, std::move(nextMembers[listIndex])};
+      previousSizes.push_back(lists[index]->_members.size());
+      lists[index]->replaceMembers(std::move(nextMembers[index]));
     }
-  }
 
-  void SmartListEvaluator::handleSourceReset(SourceBucket& bucket)
-  {
-    evaluateAllLists(bucket);
-  }
-
-  void SmartListEvaluator::handleSourceInserted(SourceBucket& bucket, TrackId const id, std::size_t /*sourceIndex*/)
-  {
-    auto evaluatableLists = std::vector<SmartListSource*>{};
-    evaluatableLists.reserve(bucket.lists.size());
-
-    for (auto* const list : bucket.lists)
+    for (std::size_t index = 0; index < lists.size(); ++index)
     {
-      if (list->_current.optError || !list->_current.planPtr || list->_dirty)
+      auto* const list = lists[index];
+
+      if (list->state() != TrackSourceState::Live)
       {
         continue;
       }
 
-      evaluatableLists.push_back(list);
-    }
-
-    if (evaluatableLists.empty())
-    {
-      return;
-    }
-
-    auto const transaction = _ml.readTransaction();
-    auto const reader = _ml.tracks().reader(transaction);
-    auto const mode = unionMode(evaluatableLists);
-    auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
-    auto const optView =
-      storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate inserted smart list track");
-
-    if (!optView)
-    {
-      return;
-    }
-
-    for (auto* const list : evaluatableLists)
-    {
-      if (list->_planEvaluator.matches(*list->_current.planPtr, *optView))
-      {
-        auto [it, inserted] = list->_members.insert(id);
-
-        if (inserted)
-        {
-          auto const index = static_cast<std::size_t>(std::ranges::distance(list->_members.begin(), it));
-          list->TrackSource::notifyInserted(id, index);
-        }
-      }
+      std::ignore = list->publishDeltaBatch(TrackSourceDeltaBatch{.deltas = {SourceReset{}}}, previousSizes[index]);
     }
   }
 
-  void SmartListEvaluator::handleSourceUpdated(SourceBucket& bucket, TrackId const id, std::size_t /*sourceIndex*/)
-  {
-    auto evaluatableLists = std::vector<SmartListSource*>{};
-
-    for (auto* const list : bucket.lists)
-    {
-      if (list->_current.optError || !list->_current.planPtr || list->_dirty)
-      {
-        continue;
-      }
-
-      evaluatableLists.push_back(list);
-    }
-
-    if (evaluatableLists.empty())
-    {
-      return;
-    }
-
-    auto const transaction = _ml.readTransaction();
-    auto const reader = _ml.tracks().reader(transaction);
-    auto const mode = unionMode(evaluatableLists);
-    auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
-    auto const optView =
-      storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate updated smart list track");
-
-    for (auto* const list : evaluatableLists)
-    {
-      bool const nowMatches = optView && list->_planEvaluator.matches(*list->_current.planPtr, *optView);
-
-      if (auto const it = list->_members.find(id); nowMatches && it == list->_members.end())
-      {
-        if (auto [it2, inserted] = list->_members.insert(id); inserted)
-        {
-          auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it2));
-          list->TrackSource::notifyInserted(id, index);
-        }
-      }
-      else if (!nowMatches && it != list->_members.end())
-      {
-        auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
-        list->_members.erase(it);
-        list->TrackSource::notifyRemoved(id, index);
-      }
-      else if (nowMatches && it != list->_members.end())
-      {
-        auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
-        list->TrackSource::notifyUpdated(id, index);
-      }
-    }
-  }
-
-  void SmartListEvaluator::handleSourceRemoved(SourceBucket& bucket, TrackId const id)
-  {
-    for (auto* const list : bucket.lists)
-    {
-      if (list->_dirty)
-      {
-        continue;
-      }
-
-      if (auto const it = list->_members.find(id); it != list->_members.end())
-      {
-        auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
-        list->_members.erase(it);
-        list->TrackSource::notifyRemoved(id, index);
-      }
-    }
-  }
-
-  void SmartListEvaluator::handleSourceInserted(SourceBucket& bucket, std::span<TrackId const> const ids)
-  {
-    if (ids.empty())
-    {
-      return;
-    }
-
-    auto evaluatableLists = std::vector<SmartListSource*>{};
-
-    for (auto* const list : bucket.lists)
-    {
-      if (list->_current.optError || !list->_current.planPtr || list->_dirty)
-      {
-        continue;
-      }
-
-      evaluatableLists.push_back(list);
-    }
-
-    if (evaluatableLists.empty())
-    {
-      return;
-    }
-
-    auto const transaction = _ml.readTransaction();
-    auto const reader = _ml.tracks().reader(transaction);
-    auto const mode = unionMode(evaluatableLists);
-    auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
-
-    auto matchedIds = std::vector<std::vector<TrackId>>{evaluatableLists.size()};
-
-    for (auto const id : ids)
-    {
-      auto const optView =
-        storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate inserted smart list tracks");
-
-      if (!optView)
-      {
-        continue;
-      }
-
-      for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
-      {
-        if (evaluatableLists[i]->_planEvaluator.matches(*evaluatableLists[i]->_current.planPtr, *optView))
-        {
-          matchedIds[i].push_back(id);
-        }
-      }
-    }
-
-    for (std::size_t index = 0; index < evaluatableLists.size(); ++index)
-    {
-      if (!matchedIds[index].empty())
-      {
-        auto& list = *evaluatableLists[index];
-        std::ranges::sort(matchedIds[index]);
-        auto const [first, last] = std::ranges::unique(matchedIds[index]);
-        matchedIds[index].erase(first, last);
-
-        list._members.insert(matchedIds[index].begin(), matchedIds[index].end());
-        list.TrackSource::notifyInserted(matchedIds[index]);
-      }
-    }
-  }
-
-  void SmartListEvaluator::handleSourceUpdated(SourceBucket& bucket, std::span<TrackId const> const ids)
-  {
-    if (ids.empty())
-    {
-      return;
-    }
-
-    auto evaluatableLists = std::vector<SmartListSource*>{};
-
-    for (auto* const list : bucket.lists)
-    {
-      if (list->_current.optError || !list->_current.planPtr || list->_dirty)
-      {
-        continue;
-      }
-
-      evaluatableLists.push_back(list);
-    }
-
-    if (evaluatableLists.empty())
-    {
-      return;
-    }
-
-    auto const transaction = _ml.readTransaction();
-    auto const reader = _ml.tracks().reader(transaction);
-    auto const mode = unionMode(evaluatableLists);
-    auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
-
-    // Track transitions for each list
-    struct Transitions final
-    {
-      std::vector<TrackId> inserted;
-      std::vector<TrackId> removed;
-      std::vector<TrackId> updated;
-    };
-
-    auto transitions = std::vector<Transitions>{evaluatableLists.size()};
-
-    for (auto const id : ids)
-    {
-      auto const optView =
-        storageValueOrNullopt(reader.get(id, storeMode), "Failed to evaluate updated smart list tracks");
-
-      for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
-      {
-        auto& list = *evaluatableLists[i];
-        bool const nowMatches = optView && list._planEvaluator.matches(*list._current.planPtr, *optView);
-
-        if (bool const wasPresent = list._members.contains(id); nowMatches && !wasPresent)
-        {
-          transitions[i].inserted.push_back(id);
-        }
-        else if (!nowMatches && wasPresent)
-        {
-          transitions[i].removed.push_back(id);
-        }
-        else if (nowMatches && wasPresent)
-        {
-          transitions[i].updated.push_back(id);
-        }
-      }
-    }
-
-    for (std::size_t index = 0; index < evaluatableLists.size(); ++index)
-    {
-      auto& list = *evaluatableLists[index];
-      auto& trans = transitions[index];
-
-      if (!trans.removed.empty())
-      {
-        // Batch removal for flat_set
-        std::ranges::sort(trans.removed);
-        auto const [first, last] = std::ranges::unique(trans.removed);
-        trans.removed.erase(first, last);
-
-        auto newMembers = std::vector<TrackId>{};
-        newMembers.reserve(list._members.size());
-        std::ranges::set_difference(list._members, trans.removed, std::back_inserter(newMembers));
-        // NOLINTNEXTLINE(misc-include-cleaner)
-        list._members = std::flat_set{std::sorted_unique, std::move(newMembers)};
-
-        list.TrackSource::notifyRemoved(trans.removed);
-      }
-
-      if (!trans.inserted.empty())
-      {
-        std::ranges::sort(trans.inserted);
-        auto const [first, last] = std::ranges::unique(trans.inserted);
-        trans.inserted.erase(first, last);
-
-        list._members.insert(trans.inserted.begin(), trans.inserted.end());
-        list.TrackSource::notifyInserted(trans.inserted);
-      }
-
-      if (!trans.updated.empty())
-      {
-        list.TrackSource::notifyUpdated(trans.updated);
-      }
-    }
-  }
-
-  void SmartListEvaluator::handleSourceRemoved(SourceBucket& bucket, std::span<TrackId const> const ids)
-  {
-    for (auto* const list : bucket.lists)
-    {
-      if (list->_dirty)
-      {
-        continue;
-      }
-
-      auto removed = std::vector<TrackId>{};
-
-      for (auto const id : ids)
-      {
-        if (list->_members.contains(id))
-        {
-          removed.push_back(id);
-        }
-      }
-
-      if (!removed.empty())
-      {
-        std::ranges::sort(removed);
-        auto const [first, last] = std::ranges::unique(removed);
-        removed.erase(first, last);
-
-        auto newMembers = std::vector<TrackId>{};
-        newMembers.reserve(list->_members.size());
-        std::ranges::set_difference(list->_members, removed, std::back_inserter(newMembers));
-        // NOLINTNEXTLINE(misc-include-cleaner)
-        list->_members = std::flat_set{std::sorted_unique, std::move(newMembers)};
-
-        list->notifyRemoved(removed);
-      }
-    }
-  }
-
-  void SmartListEvaluator::handleSourceDestroyed(SourceBucket& bucket)
-  {
-    bucket.sourceAlive = false;
-
-    for (auto* const list : bucket.lists)
-    {
-      list->_members.clear();
-      list->TrackSource::notifyReset();
-    }
-  }
-
-  SmartListEvaluator::TrackLoadMode SmartListEvaluator::unionMode(std::span<SmartListSource*> const lists)
+  SmartListEvaluator::TrackLoadMode SmartListEvaluator::unionMode(std::span<SmartListSource* const> const lists)
   {
     bool needsHot = false;
     bool needsCold = false;

@@ -5,14 +5,10 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
-#include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -29,12 +25,9 @@ namespace ao::rt::test
     {
       MusicLibraryFixture libraryFixture;
       MockExecutor executor;
-      LibraryChanges changes;
-      TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
-      ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
       NotificationService notificationService;
       std::unique_ptr<PlaybackService> playbackServicePtr =
-        std::make_unique<PlaybackService>(executor, viewService, libraryFixture.library(), notificationService);
+        std::make_unique<PlaybackService>(executor, libraryFixture.library(), notificationService);
     };
   } // namespace
 
@@ -51,80 +44,6 @@ namespace ao::rt::test
     CHECK(revealRequests[0].preferredViewId == kInvalidViewId);
   }
 
-  TEST_CASE("PlaybackService selection - playSelectionInView fails with empty selection",
-            "[runtime][unit][playback][selection]")
-  {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-
-    auto const result = fixture.viewService.createView({.listId = kInvalidListId}, true);
-    TrackId const tid = fixture.playbackService.playSelectionInView(result.viewId);
-    CHECK(tid == kInvalidTrackId);
-  }
-
-  TEST_CASE("PlaybackService selection - playSelectionInView fails when track does not exist",
-            "[runtime][unit][playback][selection]")
-  {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-
-    auto const result = fixture.viewService.createView({.listId = kInvalidListId}, true);
-    fixture.viewService.setSelection(result.viewId, {TrackId{99999}});
-
-    TrackId const tid = fixture.playbackService.playSelectionInView(result.viewId);
-    CHECK(tid == kInvalidTrackId);
-  }
-
-  TEST_CASE("PlaybackService selection - playSelectionInView fails with invalid view or selection",
-            "[runtime][unit][playback][selection]")
-  {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-
-    TrackId const tid = fixture.playbackService.playSelectionInView(ViewId{999});
-    CHECK(tid == kInvalidTrackId);
-  }
-
-  TEST_CASE("PlaybackService selection - playSelectionInView succeeds", "[runtime][unit][playback][selection]")
-  {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-
-    // Prime the device list. The first notification auto-selects the default
-    // output; the duplicate exercises the "already selected" early return, and the
-    // empty list exercises the no-devices guard.
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto emptyStatus = fixture.status;
-    emptyStatus.devices.clear();
-    fixture.onDevicesChangedCb(emptyStatus.devices);
-
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.libraryFixture.addTrack({.title = "A Track", .uri = fixturePath});
-    auto const result = fixture.viewService.createView({.listId = kInvalidListId}, true);
-    fixture.viewService.setSelection(result.viewId, {trackId});
-
-    if (fixture.onGraphChangedCb)
-    {
-      fixture.onGraphChangedCb(audio::flow::Graph{});
-    }
-
-    TrackId const tid = fixture.playbackService.playSelectionInView(result.viewId);
-    CHECK(tid == trackId);
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == trackId);
-
-    if (fixture.renderTarget != nullptr)
-    {
-      fixture.renderTarget->handleRouteReady("mock_anchor");
-      fixture.renderTarget->handleDrainComplete();
-      fixture.renderTarget->handlePropertyChanged(audio::PropertySnapshot{
-        .id = audio::PropertyId::Volume,
-        .optValue = audio::PropertyValue{1.0F},
-        .info = audio::PropertyInfo{.canRead = true,
-                                    .canWrite = true,
-                                    .isAvailable = true,
-                                    .emitsChangeNotifications = false,
-                                    .isHardwareAssisted = true},
-      });
-    }
-  }
-
   TEST_CASE("PlaybackService selection - teardown tolerates pending engine notifications",
             "[runtime][regression][playback][lifecycle]")
   {
@@ -133,10 +52,7 @@ namespace ao::rt::test
     fixturePtr->onDevicesChangedCb(fixturePtr->status.devices);
 
     auto const trackId = fixturePtr->libraryFixture.addTrack({.title = "A Track", .uri = fixturePath});
-    auto const result = fixturePtr->viewService.createView({.listId = kInvalidListId}, true);
-    fixturePtr->viewService.setSelection(result.viewId, {trackId});
-
-    REQUIRE(fixturePtr->playbackService.playSelectionInView(result.viewId) == trackId);
+    REQUIRE(fixturePtr->playbackService.playTrack(trackId, ListId{1}));
     REQUIRE(fixturePtr->renderTarget != nullptr);
 
     auto callbackEntered = AsyncTestState<bool>::create(false);
@@ -222,6 +138,56 @@ namespace ao::rt::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::InvalidState);
+    CHECK(fixture.playbackServicePtr == nullptr);
+  }
+
+  TEST_CASE("PlaybackService selection - started callback can destroy its accepted facade",
+            "[runtime][regression][playback][lifecycle]")
+  {
+    auto fixture = DestroyablePlaybackServiceFixture{};
+    fixture.playbackServicePtr->addProvider(makeReadyAudioProvider());
+    auto subscription = Subscription{};
+    subscription = fixture.playbackServicePtr->onStarted(
+      [&]
+      {
+        subscription.reset();
+        fixture.playbackServicePtr.reset();
+      });
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac");
+    auto const request =
+      playbackRequest(TrackId{1}, fixturePath.string(), "A Track", "An Artist", std::chrono::minutes{1});
+    auto* const playbackService = fixture.playbackServicePtr.get();
+
+    auto const result = playbackService->play(request, ListId{1});
+
+    REQUIRE(result);
+    CHECK(result->trackId == TrackId{1});
+    CHECK(fixture.playbackServicePtr == nullptr);
+  }
+
+  TEST_CASE("PlaybackService selection - restored now-playing callback can destroy its accepted facade",
+            "[runtime][regression][playback][lifecycle]")
+  {
+    auto fixture = DestroyablePlaybackServiceFixture{};
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac");
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Restored", .uri = fixturePath.string()});
+    auto subscription = Subscription{};
+    subscription = fixture.playbackServicePtr->onNowPlayingChanged(
+      [&](PlaybackService::NowPlayingChanged const&)
+      {
+        subscription.reset();
+        fixture.playbackServicePtr.reset();
+      });
+    auto* const playbackService = fixture.playbackServicePtr.get();
+
+    auto const result = PlaybackServiceTestAccess::restoreSession(*playbackService,
+                                                                  PlaybackTransportSessionState{
+                                                                    .sourceListId = ListId{1},
+                                                                    .trackId = trackId,
+                                                                    .positionMs = 500,
+                                                                  });
+
+    REQUIRE(result);
     CHECK(fixture.playbackServicePtr == nullptr);
   }
 

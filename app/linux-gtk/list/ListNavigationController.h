@@ -6,7 +6,6 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/Subscription.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/source/TrackSource.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>
@@ -37,7 +36,6 @@ namespace ao::gtk
     struct Callbacks final
     {
       std::function<void(ListId)> onListSelected;
-      std::function<rt::TrackSource*(ListId)> resolveListMembership;
       std::function<void(ListId, std::string)> onListPresentationSaved;
       std::function<std::optional<std::string>(ListId)> listPresentationCallback;
     };

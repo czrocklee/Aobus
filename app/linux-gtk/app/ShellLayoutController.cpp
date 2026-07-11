@@ -28,7 +28,7 @@
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/PlaybackQueueService.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -139,12 +139,12 @@ namespace ao::gtk
         std::move(stateProvider));
     };
 
-    auto const hasActiveQueue = [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
+    auto const hasActiveSequence = [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
     {
-      if (auto* const queue = _context.playback.queue; queue != nullptr)
+      if (auto* const sequence = _context.playback.sequence; sequence != nullptr)
       {
         return uimodel::LayoutActionAvailability{
-          .enabled = queue->state().optCurrentIndex.has_value(), .disabledReason = ""};
+          .enabled = sequence->state().currentTrackId != kInvalidTrackId, .disabledReason = ""};
       }
 
       return uimodel::LayoutActionAvailability{.enabled = false, .disabledReason = ""};
@@ -152,7 +152,7 @@ namespace ao::gtk
 
     registerPlaybackActions(registerAction);
     registerShellActions(registerAction);
-    registerWorkspaceActions(registerAction, hasActiveQueue);
+    registerWorkspaceActions(registerAction, hasActiveSequence);
     registerTrackActions(registerAction);
   }
 
@@ -320,7 +320,7 @@ namespace ao::gtk
   }
 
   void ShellLayoutController::registerWorkspaceActions(RegisterActionFn const& registerAction,
-                                                       layout::ActionStateProvider const& hasActiveQueue)
+                                                       layout::ActionStateProvider const& hasActiveSequence)
   {
     registerAction(
       "workspace.revealCurrentTrack",
@@ -328,7 +328,7 @@ namespace ao::gtk
       "Workspace",
       uimodel::LayoutActionCapability::None,
       [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().revealPlayingTrack(); },
-      hasActiveQueue);
+      hasActiveSequence);
   }
 
   void ShellLayoutController::registerTrackActions(RegisterActionFn const& registerAction)

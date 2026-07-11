@@ -4,30 +4,46 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/PlaybackState.h>
+#include <ao/rt/PlaybackMode.h>
+#include <ao/rt/TrackField.h>
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
 namespace ao::rt
 {
   inline constexpr auto kPlaybackSessionConfigGroup = std::string_view{"playback-session"};
-  inline constexpr std::uint32_t kPlaybackSessionSchemaVersion = 2;
+  inline constexpr std::uint32_t kPlaybackSessionSchemaVersion = 3;
+  inline constexpr std::size_t kPlaybackSessionMaxSortTerms = kTrackSortFieldCount;
 
   struct PlaybackSessionState final
   {
     std::uint32_t schemaVersion = kPlaybackSessionSchemaVersion;
-    std::vector<TrackId> queueTrackIds{};
-    std::uint64_t currentQueueIndex = 0;
     ListId sourceListId = kInvalidListId;
-    TrackId trackId = kInvalidTrackId;
+    std::string quickFilterExpression{};
+    std::vector<TrackSortTerm> sortBy{};
+    TrackId currentTrackId = kInvalidTrackId;
+    std::uint64_t anchorIndex = 0;
     std::uint64_t positionMs = 0;
     ShuffleMode shuffleMode = ShuffleMode::Off;
     RepeatMode repeatMode = RepeatMode::Off;
+    float volume = 1.0F;
+    bool muted = false;
+
+    bool operator==(PlaybackSessionState const&) const = default;
+  };
+
+  /** Internal transport half of a playback-session snapshot. */
+  struct PlaybackTransportSessionState final
+  {
+    ListId sourceListId = kInvalidListId;
+    TrackId trackId = kInvalidTrackId;
+    std::uint64_t positionMs = 0;
     float volume = 1.0F;
     bool muted = false;
   };
@@ -40,39 +56,5 @@ namespace ao::rt
     }
 
     return std::clamp(volume, 0.0F, 1.0F);
-  }
-
-  inline ShuffleMode normalizeShuffleMode(ShuffleMode mode) noexcept
-  {
-    switch (mode)
-    {
-      case ShuffleMode::Off:
-      case ShuffleMode::On: return mode;
-    }
-
-    return ShuffleMode::Off;
-  }
-
-  inline RepeatMode normalizeRepeatMode(RepeatMode mode) noexcept
-  {
-    switch (mode)
-    {
-      case RepeatMode::Off:
-      case RepeatMode::One:
-      case RepeatMode::All: return mode;
-    }
-
-    return RepeatMode::Off;
-  }
-
-  inline PlaybackSessionState normalizePlaybackSessionState(PlaybackSessionState session) noexcept
-  {
-    auto const maxPositionMs = static_cast<std::uint64_t>(std::chrono::milliseconds::max().count());
-
-    session.positionMs = std::min(session.positionMs, maxPositionMs);
-    session.shuffleMode = normalizeShuffleMode(session.shuffleMode);
-    session.repeatMode = normalizeRepeatMode(session.repeatMode);
-    session.volume = normalizePlaybackVolume(session.volume);
-    return session;
   }
 } // namespace ao::rt

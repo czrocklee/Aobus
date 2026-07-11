@@ -23,7 +23,7 @@ namespace ao::uimodel::test
     rt::TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
     rt::ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
     rt::NotificationService notifications;
-    rt::PlaybackService playbackService{executor, viewService, libraryFixture.library(), notifications};
+    rt::PlaybackService playbackService{executor, libraryFixture.library(), notifications};
     rt::WorkspaceService workspace{viewService, playbackService, changes, libraryFixture.library()};
     TrackPresentationCatalog catalog{workspace};
     ListPresentationPreferenceStore preferences{catalog};

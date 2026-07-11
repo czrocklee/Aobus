@@ -11,6 +11,8 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListNode.h>
+#include <ao/rt/Log.h>
+#include <ao/rt/PlaybackLaunchContext.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -20,8 +22,8 @@
 #include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
-#include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/list/SmartListDraft.h>
 #include <ao/uimodel/library/list/SmartListEditorViewState.h>
 #include <ao/uimodel/library/list/SmartListExpression.h>
@@ -303,13 +305,24 @@ namespace ao::gtk
         _previewFilteredListPtr.reset();
         _previewModelPtr.reset();
 
-        auto& parentSource = _runtime.sources().sourceFor(_parentListId);
+        auto parentResult = _runtime.sources().acquire(_parentListId);
+
+        if (!parentResult)
+        {
+          APP_LOG_ERROR(
+            "Cannot build smart-list preview for source {}: {}", _parentListId, parentResult.error().message);
+          updateSourceLabels();
+          updateDialogState();
+          return false;
+        }
 
         _previewFilteredListPtr =
-          std::make_unique<rt::SmartListSource>(parentSource, _runtime.musicLibrary(), *_previewEnginePtr);
+          std::make_shared<rt::SmartListSource>(*parentResult, _runtime.musicLibrary(), *_previewEnginePtr);
 
-        auto projPtr = std::make_shared<rt::LiveTrackListProjection>(
-          rt::kInvalidViewId, *_previewFilteredListPtr, _runtime.musicLibrary());
+        auto projPtr = std::make_shared<rt::LiveTrackListProjection>(rt::kInvalidViewId,
+                                                                     rt::TrackSourceLease{_previewFilteredListPtr},
+                                                                     _runtime.musicLibrary(),
+                                                                     rt::TrackOrderSpec{});
 
         _previewModelPtr = TrackListModel::create(_trackRowCache);
         _previewModelPtr->bindProjection(std::move(projPtr));

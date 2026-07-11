@@ -38,7 +38,9 @@ into `ListHeader`, `ListBuilder`, or `ListView`.
 When a list is opened, the presentation is resolved in this order:
 
 1. saved presentation id for the `ListId`
-2. smart-list recommendation from `uimodel::recommendPresentation()`
+2. source-aware recommendation from `uimodel::recommendPresentation()`:
+   `list-order` for manual lists, filter-derived presets for smart lists, and
+   `albums` for other sources
 3. catalog fallback from the available built-in/custom presentations
 
 Unknown saved presentation ids are tolerated. Resolution falls back rather than

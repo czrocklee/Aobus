@@ -14,7 +14,6 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleaction.h>
@@ -64,16 +63,14 @@ namespace ao::gtk::test
     auto selectedId = ListId{999};
     auto savedPresentationListId = kInvalidListId;
     auto savedPresentationId = std::string{};
-    auto callbacks =
-      ListNavigationController::Callbacks{.onListSelected = [&](ListId id) { selectedId = id; },
-                                          .resolveListMembership = [&](ListId) -> rt::TrackSource* { return nullptr; },
-                                          .onListPresentationSaved =
-                                            [&](ListId id, std::string presentationId)
-                                          {
-                                            savedPresentationListId = id;
-                                            savedPresentationId = std::move(presentationId);
-                                          },
-                                          .listPresentationCallback = {}};
+    auto callbacks = ListNavigationController::Callbacks{.onListSelected = [&](ListId id) { selectedId = id; },
+                                                         .onListPresentationSaved =
+                                                           [&](ListId id, std::string presentationId)
+                                                         {
+                                                           savedPresentationListId = id;
+                                                           savedPresentationId = std::move(presentationId);
+                                                         },
+                                                         .listPresentationCallback = {}};
 
     auto themeController = ThemeCoordinator{};
     auto controller = ListNavigationController{window, fixture.runtime(), std::move(callbacks), themeController};

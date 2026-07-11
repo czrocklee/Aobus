@@ -218,7 +218,7 @@ namespace ao::audio::test
 
     auto errorPromise = std::promise<void>{};
     auto errorFuture = errorPromise.get_future();
-    engine.setOnTrackEnded([&errorPromise] { errorPromise.set_value(); });
+    engine.setOnTrackEnded([&errorPromise](Engine::TrackEnded const&) { errorPromise.set_value(); });
 
     auto const item = makePlaybackItem(desc);
     engine.play(item);

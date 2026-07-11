@@ -34,7 +34,7 @@ namespace ao::uimodel::test
       TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
       ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
       NotificationService notifications;
-      PlaybackService playback{executor, viewService, libraryFixture.library(), notifications};
+      PlaybackService playback{executor, libraryFixture.library(), notifications};
       WorkspaceService workspaceService{viewService, playback, changes, libraryFixture.library()};
       ao::test::RenderLog<TrackFilterViewState> renderLog;
       TrackFilterViewModel viewModel{viewService,
@@ -43,7 +43,8 @@ namespace ao::uimodel::test
 
       rt::ViewId focusAllTracksView()
       {
-        auto reply = viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId});
+        auto reply =
+          ao::test::requireValue(viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId}));
         workspaceService.setFocusedView(reply.viewId);
         return reply.viewId;
       }
@@ -118,7 +119,7 @@ namespace ao::uimodel::test
     auto config = rt::TrackListViewConfig{
       .listId = rt::kAllTracksListId, .filterExpression = {}, .groupBy = rt::TrackGroupKey::None};
 
-    auto reply = fixture.viewService.createView(config);
+    auto reply = ao::test::requireValue(fixture.viewService.createView(config));
     fixture.workspaceService.setFocusedView(reply.viewId);
 
     REQUIRE(!fixture.renderLog.empty());
@@ -145,7 +146,7 @@ namespace ao::uimodel::test
     auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId};
     config.optPresentation = rt::defaultTrackPresentationSpec();
     config.optPresentation->id = "custom";
-    auto reply = fixture.viewService.createView(config);
+    auto reply = ao::test::requireValue(fixture.viewService.createView(config));
     fixture.workspaceService.setFocusedView(reply.viewId);
 
     fixture.viewModel.updateFilter("artist == 'Muse'");

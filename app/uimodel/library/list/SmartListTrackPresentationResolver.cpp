@@ -42,7 +42,11 @@ namespace ao::uimodel
   {
     if (!selectedIndexValid || selectedIndex == kSmartListAutoTrackPresentationIndex)
     {
-      return recommendPresentation(localExpression, builtinPresets, customPresets).id;
+      auto const context = ListPresentationContext{
+        .sourceKind = ListPresentationSourceKind::Smart,
+        .smartListFilter = localExpression,
+      };
+      return recommendPresentation(context, builtinPresets, customPresets).id;
     }
 
     if (auto const presetIndex = selectedIndex - 1; presetIndex < builtinPresets.size())

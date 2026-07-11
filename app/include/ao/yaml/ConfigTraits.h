@@ -101,6 +101,13 @@ namespace ao::yaml
   template<PfrAggregate T>
   bool read(ryml::ConstNodeRef node, T& obj);
 
+  template<typename T>
+  bool readExact(ryml::ConstNodeRef node, T& value);
+  template<typename T>
+  bool readExact(ryml::ConstNodeRef node, std::vector<T>& values);
+  template<PfrAggregate T>
+  bool readExact(ryml::ConstNodeRef node, T& obj);
+
   // ── Basic Types ─────────────────────────────────────────────────────────────
 
   inline void write(ryml::NodeRef node, std::string_view value)
@@ -438,6 +445,74 @@ namespace ao::yaml
 
                                  ++index;
                                });
+    return success;
+  }
+
+  /** Strict recursive decoding for versioned payloads. Ordinary config reads remain permissive. */
+  template<typename T>
+  inline bool readExact(ryml::ConstNodeRef node, T& value)
+  {
+    return read(node, value);
+  }
+
+  template<typename T>
+  inline bool readExact(ryml::ConstNodeRef node, std::vector<T>& values)
+  {
+    if (!node.is_seq())
+    {
+      return false;
+    }
+
+    auto decoded = std::vector<T>{};
+    decoded.reserve(node.num_children());
+
+    for (auto const& child : node.children())
+    {
+      auto value = T{};
+
+      if (!readExact(child, value))
+      {
+        return false;
+      }
+
+      decoded.push_back(std::move(value));
+    }
+
+    values = std::move(decoded);
+    return true;
+  }
+
+  template<PfrAggregate T>
+  inline bool readExact(ryml::ConstNodeRef node, T& obj)
+  {
+    constexpr auto kNames = boost::pfr::names_as_array<T>();
+
+    if (!node.is_map() || node.num_children() != kNames.size())
+    {
+      return false;
+    }
+
+    auto decoded = T{};
+    bool success = true;
+    boost::pfr::for_each_field(decoded,
+                               [&node, &success, index = std::size_t{0}](auto& field) mutable
+                               {
+                                 constexpr auto kFieldNames = boost::pfr::names_as_array<T>();
+
+                                 if (auto const child = findChild(node, kFieldNames.at(index));
+                                     !child.readable() || !readExact(child, field))
+                                 {
+                                   success = false;
+                                 }
+
+                                 ++index;
+                               });
+
+    if (success)
+    {
+      obj = std::move(decoded);
+    }
+
     return success;
   }
 } // namespace ao::yaml

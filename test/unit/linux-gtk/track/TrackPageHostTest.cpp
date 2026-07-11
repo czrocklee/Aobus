@@ -6,9 +6,15 @@
 #include "app/ThemeCoordinator.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/PlaybackSequenceService.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
@@ -48,7 +54,7 @@ namespace ao::gtk::test
 
     SECTION("rebuild creating pages")
     {
-      runtime.workspace().navigateTo(rt::kAllTracksListId);
+      REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
       drainGtkEvents();
 
       auto transaction = library.readTransaction();
@@ -57,6 +63,29 @@ namespace ao::gtk::test
 
       // Should have created a page for All Tracks
       CHECK(host.activeListId() == rt::kAllTracksListId);
+    }
+
+    SECTION("track activation starts from the owning view identity")
+    {
+      rt::test::addReadyAudioProvider(runtime.playback());
+      auto const trackId = library::test::addTrack(
+        library, {.title = "Activated", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
+      runtime.reloadAllTracks();
+      REQUIRE(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
+      auto const viewId = runtime.workspace().layoutState().activeViewId;
+      REQUIRE(viewId != rt::kInvalidViewId);
+
+      auto transaction = library.readTransaction();
+      host.rebuild(cache, transaction);
+      drainGtkEvents();
+
+      auto* const context = host.currentVisible();
+      REQUIRE(context != nullptr);
+      context->pagePtr->signalTrackActivated().emit(trackId);
+
+      CHECK(runtime.playbackSequence().state().currentTrackId == trackId);
+      CHECK(runtime.playbackSequence().state().sourceListId == rt::kAllTracksListId);
+      CHECK(runtime.playback().state().nowPlaying.trackId == trackId);
     }
   }
 } // namespace ao::gtk::test

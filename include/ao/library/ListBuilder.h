@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 namespace ao::library
@@ -44,7 +45,10 @@ namespace ao::library
     public:
       explicit TracksBuilder() = default;
 
+      /** Adds an ID only on its first occurrence, preserving request order. */
       TracksBuilder& add(TrackId id);
+
+      /** Removes every occurrence, including duplicates from legacy records. */
       TracksBuilder& remove(TrackId id);
       TracksBuilder& clear();
       TracksBuilder& smart(bool smart);
@@ -56,6 +60,7 @@ namespace ao::library
       friend class ListBuilder;
 
       std::vector<TrackId> _trackIds;
+      std::unordered_set<TrackId> _trackIdMembership;
       bool _isSmart = false;
     };
 

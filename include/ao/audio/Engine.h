@@ -79,6 +79,7 @@ namespace ao::audio
     {
       AudioRouteFormatState state;
       std::optional<RouteAnchor> optAnchor;
+      std::uint64_t generation = 0;
 
       bool operator==(RouteStatus const&) const = default;
     };
@@ -94,6 +95,59 @@ namespace ao::audio
     {
       PlaybackItemId id = {};
       PlaybackInput input;
+    };
+
+    /**
+     * @brief Monotonic proof that callbacks and prepared transitions from older
+     * playback generations can no longer be published.
+     *
+     * A barrier covers generations strictly older than `generation`. The
+     * accepted explicit start at `generation` remains live and is therefore not
+     * covered by its own receipt.
+     */
+    struct PreparedCancellationBarrier final
+    {
+      std::uint64_t generation = 0;
+
+      bool covers(std::uint64_t candidateGeneration) const noexcept { return candidateGeneration < generation; }
+
+      bool operator==(PreparedCancellationBarrier const&) const = default;
+    };
+
+    /**
+     * @brief Move-only, non-published explicit-play candidate.
+     *
+     * Staging opens and seeks the candidate source without changing the active
+     * playback generation, current item, or prepared lookahead. Only
+     * commitPlayback() may publish it.
+     */
+    class PreparedPlaybackStart final
+    {
+    public:
+      ~PreparedPlaybackStart();
+
+      PreparedPlaybackStart(PreparedPlaybackStart const&) = delete;
+      PreparedPlaybackStart& operator=(PreparedPlaybackStart const&) = delete;
+      PreparedPlaybackStart(PreparedPlaybackStart&&) noexcept;
+      PreparedPlaybackStart& operator=(PreparedPlaybackStart&&) noexcept;
+
+    private:
+      struct Impl;
+
+      explicit PreparedPlaybackStart(std::unique_ptr<Impl> implPtr);
+
+      std::unique_ptr<Impl> _implPtr;
+
+      friend class Engine;
+    };
+
+    struct PlaybackStartReceipt final
+    {
+      PlaybackItemId itemId;
+      std::uint64_t generation = 0;
+      PreparedCancellationBarrier cancellationBarrier;
+
+      bool operator==(PlaybackStartReceipt const&) const = default;
     };
 
     enum class PreparedTransitionMode : std::uint8_t
@@ -114,12 +168,19 @@ namespace ao::audio
     {
       PlaybackItemId itemId;
       PreparedTransitionMode transition = PreparedTransitionMode::DrainFallback;
+      std::uint64_t generation = 0;
     };
 
     struct TrackAdvanced final
     {
       PlaybackItemId itemId;
       PlaybackInput input;
+      std::uint64_t generation = 0;
+    };
+
+    struct TrackEnded final
+    {
+      std::uint64_t generation = 0;
     };
 
     struct PlaybackFailure final
@@ -133,6 +194,7 @@ namespace ao::audio
     };
 
     using OnRouteChanged = std::function<void(RouteStatus const&)>;
+    using OnTrackEnded = std::function<void(TrackEnded const&)>;
     using OnTrackAdvanced = std::function<void(TrackAdvanced const&)>;
     using OnPlaybackFailure = std::function<void(PlaybackFailure const&)>;
 
@@ -151,7 +213,7 @@ namespace ao::audio
     void setBackend(std::unique_ptr<Backend> backendPtr, Device const& device);
     void updateDevice(Device const& device);
 
-    void setOnTrackEnded(std::function<void()> callback);
+    void setOnTrackEnded(OnTrackEnded callback);
     void setOnTrackAdvanced(OnTrackAdvanced callback);
     void setOnPlaybackFailure(OnPlaybackFailure callback);
     void setOnRouteChanged(OnRouteChanged callback);
@@ -162,6 +224,10 @@ namespace ao::audio
     void defer(std::function<void()> callback);
 
     RouteStatus routeStatus() const;
+
+    Result<PreparedPlaybackStart> stagePlayback(PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
+    Result<PlaybackStartReceipt> commitPlayback(PreparedPlaybackStart&& preparedStart);
+    PreparedCancellationBarrier stopWithBarrier();
 
     void play(PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
     Result<PreparedNextResult> setNext(PlaybackItem const& item);
@@ -189,6 +255,8 @@ namespace ao::audio
     Transport transport() const;
     /// @brief Returns a possibly-torn live read of the backend ID.
     BackendId backendId() const;
+    /// @brief Returns the current audio callback/prepared-transition generation.
+    std::uint64_t playbackGeneration() const noexcept;
 
   private:
     struct Impl;

@@ -17,11 +17,13 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <semaphore>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -191,6 +193,134 @@ namespace ao::audio::test
 
       return std::unique_ptr<ScriptedDecoderSession>{};
     };
+  }
+
+  class StagedFailureGate final
+  {
+  public:
+    void notifyReadEntered() { _readEntered.release(); }
+
+    bool waitForRead(std::chrono::milliseconds timeout = std::chrono::seconds{5})
+    {
+      return _readEntered.try_acquire_for(timeout);
+    }
+
+    void waitForRelease() { _failureRelease.acquire(); }
+
+    void release() { _failureRelease.release(); }
+
+  private:
+    std::binary_semaphore _readEntered{0};
+    std::binary_semaphore _failureRelease{0};
+  };
+
+  class [[nodiscard]] StagedFailureReleaseGuard final
+  {
+  public:
+    explicit StagedFailureReleaseGuard(StagedFailureGate& gate)
+      : _gate{gate}
+    {
+    }
+
+    ~StagedFailureReleaseGuard()
+    {
+      if (_armed)
+      {
+        _gate.release();
+      }
+    }
+
+    void release()
+    {
+      _gate.release();
+      _armed = false;
+    }
+
+    StagedFailureReleaseGuard(StagedFailureReleaseGuard const&) = delete;
+    StagedFailureReleaseGuard& operator=(StagedFailureReleaseGuard const&) = delete;
+    StagedFailureReleaseGuard(StagedFailureReleaseGuard&&) = delete;
+    StagedFailureReleaseGuard& operator=(StagedFailureReleaseGuard&&) = delete;
+
+  private:
+    StagedFailureGate& _gate;
+    bool _armed = true;
+  };
+
+  class StagedFailureDecoderSession final : public DecoderSession
+  {
+  public:
+    explicit StagedFailureDecoderSession(StagedFailureGate* failureGate)
+      : _failureGate{failureGate}
+    {
+    }
+
+    Result<> open(std::filesystem::path const& /*path*/) noexcept override { return {}; }
+    void close() noexcept override {}
+    void flush() noexcept override {}
+    Result<> seek(std::chrono::milliseconds /*offset*/) noexcept override { return {}; }
+
+    Result<PcmBlock> readNextBlock() noexcept override
+    {
+      if (!_prerollReturned)
+      {
+        _prerollReturned = true;
+        return PcmBlock{
+          .bytes = _prerollBytes,
+          .bitDepth = 16,
+          .frames = kPrerollFrames,
+          .firstFrameIndex = 0,
+          .endOfStream = false,
+        };
+      }
+
+      if (_failureGate != nullptr && !_failureReturned)
+      {
+        _failureGate->notifyReadEntered();
+        _failureGate->waitForRelease();
+        _failureReturned = true;
+        return std::unexpected{Error{.code = Error::Code::IoError, .message = "gated staged decode failure"}};
+      }
+
+      return PcmBlock{.bytes = {}, .bitDepth = 16, .endOfStream = true};
+    }
+
+    DecodedStreamInfo streamInfo() const noexcept override
+    {
+      auto const format = Format{
+        .sampleRate = 44100,
+        .channels = 2,
+        .bitDepth = 16,
+        .isInterleaved = true,
+      };
+      return DecodedStreamInfo{
+        .sourceFormat = format,
+        .outputFormat = format,
+        .duration = std::chrono::seconds{3},
+        .isLossy = false,
+        .codec = AudioCodec::Flac,
+      };
+    }
+
+    StagedFailureDecoderSession(StagedFailureDecoderSession const&) = delete;
+    StagedFailureDecoderSession& operator=(StagedFailureDecoderSession const&) = delete;
+    StagedFailureDecoderSession(StagedFailureDecoderSession&&) = delete;
+    StagedFailureDecoderSession& operator=(StagedFailureDecoderSession&&) = delete;
+    ~StagedFailureDecoderSession() override = default;
+
+  private:
+    static constexpr std::uint32_t kPrerollFrames = 25000;
+
+    StagedFailureGate* _failureGate = nullptr;
+    std::vector<std::byte> _prerollBytes =
+      std::vector<std::byte>(static_cast<std::size_t>(kPrerollFrames) * 4U, std::byte{0});
+    bool _prerollReturned = false;
+    bool _failureReturned = false;
+  };
+
+  inline auto makeStagedFailureDecoderFactory(std::filesystem::path failingPath, StagedFailureGate& failureGate)
+  {
+    return [failingPath = std::move(failingPath), &failureGate](std::filesystem::path const& path, Format const&)
+    { return std::make_unique<StagedFailureDecoderSession>(path == failingPath ? &failureGate : nullptr); };
   }
 
   class CallbackLatch final

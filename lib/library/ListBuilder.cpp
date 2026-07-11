@@ -32,7 +32,11 @@ namespace ao::library
     builder._filter = view.filter();
     builder._tracksBuilder._isSmart = view.isSmart();
 
-    builder._tracksBuilder._trackIds.append_range(view.tracks());
+    for (auto const id : view.tracks())
+    {
+      builder._tracksBuilder.add(id);
+    }
+
     return builder;
   }
 
@@ -75,19 +79,25 @@ namespace ao::library
 
   ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::add(TrackId id)
   {
-    _trackIds.push_back(id);
+    if (_trackIdMembership.insert(id).second)
+    {
+      _trackIds.push_back(id);
+    }
+
     return *this;
   }
 
   ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::remove(TrackId id)
   {
     std::erase(_trackIds, id);
+    _trackIdMembership.erase(id);
     return *this;
   }
 
   ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::clear()
   {
     _trackIds.clear();
+    _trackIdMembership.clear();
     return *this;
   }
 

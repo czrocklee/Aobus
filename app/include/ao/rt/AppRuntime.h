@@ -4,11 +4,13 @@
 #pragma once
 
 #include "CoreRuntime.h"
+#include "Subscription.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 
 #include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <memory>
 
 namespace ao::audio
@@ -24,7 +26,7 @@ namespace ao::async
 namespace ao::rt
 {
   class ConfigStore;
-  class PlaybackQueueService;
+  class PlaybackSequenceService;
   class PlaybackService;
   class WorkspaceService;
   class ViewService;
@@ -57,17 +59,19 @@ namespace ao::rt
     AppRuntime& operator=(AppRuntime&&) = delete;
 
     PlaybackService& playback() noexcept;
-    PlaybackQueueService& playbackQueue() noexcept;
+    PlaybackSequenceService& playbackSequence() noexcept;
     WorkspaceService& workspace() noexcept;
     ViewService& views() noexcept;
     ConfigStore& configStore() noexcept;
 
     Result<> savePlaybackSession();
     Result<PlaybackSessionRestoreResult> restorePlaybackSession();
+    Result<> forgetPlaybackSession();
+    Subscription onPlaybackSessionDirty(std::move_only_function<void()> handler);
 
     void reloadAllTracks();
 
-    TrackId playSelectionInFocusedView();
+    Result<TrackId> playSelectionInFocusedView();
     void addAudioProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
 
   private:

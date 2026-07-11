@@ -3,17 +3,22 @@
 
 #pragma once
 
+#include "runtime/source/TrackSourceDeltaBuilder.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
+#include <initializer_list>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <span>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -65,12 +70,26 @@ namespace ao::rt::test
 
     void batchRemove(std::span<TrackId const> ids)
     {
+      auto const previousSize = _ids.size();
+      auto builder = TrackSourceDeltaBuilder{previousSize};
+
       for (auto id : ids)
       {
-        std::erase(_ids, id);
+        if (auto const optIndex = indexOf(id); optIndex)
+        {
+          builder.remove(*optIndex, id);
+        }
       }
 
-      notifyRemoved(ids);
+      if (auto optBatch = builder.build(); optBatch)
+      {
+        for (auto const id : ids)
+        {
+          std::erase(_ids, id);
+        }
+
+        std::ignore = publishDeltaBatch(std::move(*optBatch), previousSize);
+      }
     }
 
     void batchUpdate(std::span<TrackId const> ids) { notifyUpdated(ids); }
@@ -80,6 +99,15 @@ namespace ao::rt::test
     void singleRemove(TrackId id) { remove(id); }
 
     void singleUpdate(TrackId id) { update(id); }
+
+    void replaceWithBatch(std::span<TrackId const> ids, TrackSourceDeltaBatch batch)
+    {
+      auto const previousSize = _ids.size();
+      _ids.assign(ids.begin(), ids.end());
+      std::ignore = publishDeltaBatch(std::move(batch), previousSize);
+    }
+
+    void publishBatch(TrackSourceDeltaBatch batch) { std::ignore = publishDeltaBatch(std::move(batch), _ids.size()); }
 
     std::size_t size() const override { return _ids.size(); }
     TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
@@ -97,61 +125,55 @@ namespace ao::rt::test
     std::vector<TrackId> _ids;
   };
 
-  struct SpyTrackSourceObserver final : public TrackSourceObserver
+  inline std::shared_ptr<MutableTrackSource> makeMutableTrackSource(std::span<TrackId const> const ids)
   {
-    enum class EventKind : std::uint8_t
-    {
-      Reset,
-      Inserted,
-      Updated,
-      Removed,
-      BatchInserted,
-      BatchUpdated,
-      BatchRemoved,
-    };
+    auto sourcePtr = std::make_shared<MutableTrackSource>();
+    sourcePtr->setInitial(ids);
+    return sourcePtr;
+  }
 
-    struct Event final
-    {
-      EventKind kind;
-      TrackId id{};
-      std::size_t index = 0;
-      std::vector<TrackId> batchIds{};
-    };
+  inline std::shared_ptr<MutableTrackSource> makeMutableTrackSource(std::initializer_list<TrackId> const ids)
+  {
+    return makeMutableTrackSource(std::span{ids.begin(), ids.size()});
+  }
 
-    void handleReset() override { events.push_back({.kind = EventKind::Reset}); }
+  inline std::vector<TrackId> sourceTrackIds(TrackSource const& source)
+  {
+    auto trackIds = std::vector<TrackId>{};
+    trackIds.reserve(source.size());
 
-    void handleInserted(TrackId id, std::size_t index) override
+    for (std::size_t index = 0; index < source.size(); ++index)
     {
-      events.push_back({.kind = EventKind::Inserted, .id = id, .index = index});
+      trackIds.push_back(source.trackIdAt(index));
     }
 
-    void handleUpdated(TrackId id, std::size_t index) override
+    return trackIds;
+  }
+
+  // Recorded batches are intentionally public as the spy's assertion surface.
+  // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes)
+  class TrackSourceBatchSpy final
+  {
+  public:
+    explicit TrackSourceBatchSpy(TrackSource& source)
+      : _subscription{source.subscribe([this](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); })}
     {
-      events.push_back({.kind = EventKind::Updated, .id = id, .index = index});
     }
 
-    void handleRemoved(TrackId id, std::size_t index) override
-    {
-      events.push_back({.kind = EventKind::Removed, .id = id, .index = index});
-    }
+    ~TrackSourceBatchSpy() = default;
 
-    void handleBulkInserted(std::span<TrackId const> ids) override
-    {
-      events.push_back({.kind = EventKind::BatchInserted, .batchIds = {ids.begin(), ids.end()}});
-    }
+    TrackSourceBatchSpy(TrackSourceBatchSpy const&) = delete;
+    TrackSourceBatchSpy& operator=(TrackSourceBatchSpy const&) = delete;
+    TrackSourceBatchSpy(TrackSourceBatchSpy&&) = delete;
+    TrackSourceBatchSpy& operator=(TrackSourceBatchSpy&&) = delete;
 
-    void handleBulkUpdated(std::span<TrackId const> ids) override
-    {
-      events.push_back({.kind = EventKind::BatchUpdated, .batchIds = {ids.begin(), ids.end()}});
-    }
+    void clear() { batches.clear(); }
 
-    void handleBulkRemoved(std::span<TrackId const> ids) override
-    {
-      events.push_back({.kind = EventKind::BatchRemoved, .batchIds = {ids.begin(), ids.end()}});
-    }
+    // NOLINTNEXTLINE(aobus-readability-identifier-naming-extensions)
+    std::vector<TrackSourceDeltaBatch> batches;
 
-    void clear() { events.clear(); }
-
-    std::vector<Event> events;
+  private:
+    Subscription _subscription;
   };
+  // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 } // namespace ao::rt::test

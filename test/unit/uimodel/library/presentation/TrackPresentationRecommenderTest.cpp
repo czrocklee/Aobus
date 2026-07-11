@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -16,70 +17,100 @@ namespace ao::uimodel::test
     auto const builtins = rt::builtinTrackPresentationPresets();
     auto customs = std::vector<rt::CustomTrackPresentationPreset>{};
 
-    auto recommend = [&](std::string const& filter) { return recommendPresentation(filter, builtins, customs).id; };
+    auto recommendSmart = [&](std::string const& filter)
+    {
+      auto const context = ListPresentationContext{
+        .sourceKind = ListPresentationSourceKind::Smart,
+        .smartListFilter = filter,
+      };
+      return recommendPresentation(context, builtins, customs).id;
+    };
+
+    SECTION("manual list defaults to List Order")
+    {
+      auto const context = ListPresentationContext{
+        .listId = ListId{10},
+        .sourceKind = ListPresentationSourceKind::Manual,
+        .smartListFilter = "$composer = \"Bach\"",
+      };
+      auto const result = recommendPresentation(context, builtins, customs);
+
+      CHECK(result.id == rt::kListOrderTrackPresentationId);
+    }
+
+    SECTION("All Tracks retains the normal albums fallback")
+    {
+      auto const context = ListPresentationContext{
+        .listId = rt::kAllTracksListId,
+        .sourceKind = ListPresentationSourceKind::AllTracks,
+      };
+      auto const result = recommendPresentation(context, builtins, customs);
+
+      CHECK(result.id == "albums");
+    }
 
     SECTION("empty filter falls back to albums")
     {
-      CHECK(recommend("") == "albums");
+      CHECK(recommendSmart("") == "albums");
     }
 
     SECTION("classical composer")
     {
-      CHECK(recommend("$composer = \"Bach\"") == "classical-composers");
+      CHECK(recommendSmart("$composer = \"Bach\"") == "classical-composers");
     }
 
     SECTION("classical work")
     {
-      CHECK(recommend("$work = \"Symphony 9\"") == "classical-works");
+      CHECK(recommendSmart("$work = \"Symphony 9\"") == "classical-works");
     }
 
     SECTION("technical fields")
     {
-      CHECK(recommend("@sampleRate >= 96000") == "technical");
-      CHECK(recommend("@bitDepth = 24") == "technical");
-      CHECK(recommend("@bitrate > 320000") == "technical");
+      CHECK(recommendSmart("@sampleRate >= 96000") == "technical");
+      CHECK(recommendSmart("@bitDepth = 24") == "technical");
+      CHECK(recommendSmart("@bitrate > 320000") == "technical");
     }
 
     SECTION("tag")
     {
-      CHECK(recommend("#tag = \"favorite\"") == "tagging");
+      CHECK(recommendSmart("#tag = \"favorite\"") == "tagging");
     }
 
     SECTION("genre")
     {
-      CHECK(recommend("$genre = \"Rock\"") == "albums");
+      CHECK(recommendSmart("$genre = \"Rock\"") == "albums");
     }
 
     SECTION("year")
     {
-      CHECK(recommend("$year = 1990") == "albums");
+      CHECK(recommendSmart("$year = 1990") == "albums");
     }
 
     SECTION("album artist")
     {
-      CHECK(recommend("$albumArtist = \"Artist\"") == "artists");
+      CHECK(recommendSmart("$albumArtist = \"Artist\"") == "artists");
     }
 
     SECTION("artist")
     {
-      CHECK(recommend("$artist = \"Artist\"") == "albums");
+      CHECK(recommendSmart("$artist = \"Artist\"") == "albums");
     }
 
     SECTION("album")
     {
-      CHECK(recommend("$album = \"Album\"") == "albums");
+      CHECK(recommendSmart("$album = \"Album\"") == "albums");
     }
 
     SECTION("mixed fields defaults to highest priority")
     {
       // work > composer > technical > tag > genre...
-      CHECK(recommend("$work = \"A\" and $composer = \"B\"") == "classical-works");
-      CHECK(recommend("$genre = \"Rock\" and #tag = \"fave\"") == "tagging");
+      CHECK(recommendSmart("$work = \"A\" and $composer = \"B\"") == "classical-works");
+      CHECK(recommendSmart("$genre = \"Rock\" and #tag = \"fave\"") == "tagging");
     }
 
     SECTION("invalid expression falls back")
     {
-      CHECK(recommend("invalid syntax") == "albums");
+      CHECK(recommendSmart("invalid syntax") == "albums");
     }
   }
 } // namespace ao::uimodel::test

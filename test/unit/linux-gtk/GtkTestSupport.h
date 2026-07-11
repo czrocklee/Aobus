@@ -8,6 +8,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/Subscription.h>
@@ -692,14 +693,14 @@ namespace ao::gtk::test
     }
 
     rt::Subscription onShuffleModeChanged(
-      std::move_only_function<void(rt::PlaybackService::ShuffleModeChanged const&)> handler)
+      std::move_only_function<void(rt::PlaybackSequenceService::ShuffleModeChanged const&)> handler)
     {
       _shuffleModeChanged = std::move(handler);
       return rt::Subscription{[this] { _shuffleModeChanged = nullptr; }};
     }
 
     rt::Subscription onRepeatModeChanged(
-      std::move_only_function<void(rt::PlaybackService::RepeatModeChanged const&)> handler)
+      std::move_only_function<void(rt::PlaybackSequenceService::RepeatModeChanged const&)> handler)
     {
       _repeatModeChanged = std::move(handler);
       return rt::Subscription{[this] { _repeatModeChanged = nullptr; }};
@@ -775,7 +776,7 @@ namespace ao::gtk::test
       }
     }
 
-    void emitShuffleModeChanged(rt::PlaybackService::ShuffleModeChanged const& m)
+    void emitShuffleModeChanged(rt::PlaybackSequenceService::ShuffleModeChanged const& m)
     {
       if (_shuffleModeChanged)
       {
@@ -783,7 +784,7 @@ namespace ao::gtk::test
       }
     }
 
-    void emitRepeatModeChanged(rt::PlaybackService::RepeatModeChanged const& m)
+    void emitRepeatModeChanged(rt::PlaybackSequenceService::RepeatModeChanged const& m)
     {
       if (_repeatModeChanged)
       {
@@ -809,8 +810,8 @@ namespace ao::gtk::test
     std::move_only_function<void(rt::PlaybackService::SeekUpdate const&)> _seekUpdate;
     std::move_only_function<void(rt::OutputDeviceSelection const&)> _outputDeviceChanged;
     std::move_only_function<void(rt::PlaybackService::QualityChanged const&)> _qualityChanged;
-    std::move_only_function<void(rt::PlaybackService::ShuffleModeChanged const&)> _shuffleModeChanged;
-    std::move_only_function<void(rt::PlaybackService::RepeatModeChanged const&)> _repeatModeChanged;
+    std::move_only_function<void(rt::PlaybackSequenceService::ShuffleModeChanged const&)> _shuffleModeChanged;
+    std::move_only_function<void(rt::PlaybackSequenceService::RepeatModeChanged const&)> _repeatModeChanged;
     std::move_only_function<void(float)> _volumeChanged;
   };
 

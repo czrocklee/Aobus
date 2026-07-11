@@ -3,6 +3,7 @@
 
 #include "track/SelectionInfoLabel.h"
 
+#include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
@@ -19,7 +20,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto const reply = runtime.views().createView({.listId = rt::kAllTracksListId});
+    auto const reply = ao::test::requireValue(runtime.views().createView({.listId = rt::kAllTracksListId}));
     auto label = SelectionInfoLabel{runtime.views()};
     auto const& text = dynamic_cast<Gtk::Label const&>(label.widget());
 
