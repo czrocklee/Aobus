@@ -7,7 +7,10 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -209,5 +212,72 @@ namespace ao::rt::test
 
     REQUIRE(!result);
     CHECK(result.error().code == Error::Code::IoError);
+  }
+
+  TEST_CASE("LibraryYaml - merge publishes truthful inserted and mutated track ids",
+            "[runtime][workflow][import-export][changeset]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const existingId = library::test::addTrack(
+      ml, library::test::TrackSpec{.title = "Before", .artist = "", .album = "", .uri = "existing.flac"});
+    {
+      auto transaction = ml.writeTransaction();
+      auto builder = FileManifestBuilder::makeEmpty();
+      builder.trackId(existingId);
+      REQUIRE(ml.manifest().writer(transaction).put("existing.flac", builder.serialize()));
+      REQUIRE(transaction.commit());
+    }
+
+    auto const yamlPath = std::filesystem::path{temp.path()} / "changes.yaml";
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << R"(version: 1
+export_mode: delta
+library:
+  tracks:
+    - uri: existing.flac
+      title: After
+    - uri: inserted.flac
+      title: Inserted
+  lists: []
+)";
+    }
+
+    auto changes = LibraryChanges{};
+    auto observed = std::vector<LibraryChangeSet>{};
+    auto subscription = changes.onChanged([&observed](LibraryChangeSet const& value) { observed.push_back(value); });
+    auto importer = LibraryYamlImporter{ml, changes};
+    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
+
+    REQUIRE(observed.size() == 1);
+    REQUIRE(observed.front().tracksInserted.size() == 1);
+    CHECK(observed.front().tracksInserted.front() != existingId);
+    CHECK(observed.front().tracksMutated == std::vector{existingId});
+    CHECK_FALSE(observed.front().libraryReset);
+    auto transaction = ml.readTransaction();
+    CHECK(observed.front().libraryRevision == ml.libraryRevision(transaction));
+  }
+
+  TEST_CASE("LibraryYaml - restore publishes a library reset", "[runtime][workflow][import-export][changeset]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << "version: 1\nlibrary:\n  tracks: []\n  lists: []\n";
+    }
+
+    auto changes = LibraryChanges{};
+    auto observed = std::vector<LibraryChangeSet>{};
+    auto subscription = changes.onChanged([&observed](LibraryChangeSet const& value) { observed.push_back(value); });
+    auto importer = LibraryYamlImporter{ml, changes};
+    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Restore));
+
+    REQUIRE(observed.size() == 1);
+    CHECK(observed.front().libraryReset);
+    auto transaction = ml.readTransaction();
+    CHECK(observed.front().libraryRevision == ml.libraryRevision(transaction));
   }
 } // namespace ao::rt::test

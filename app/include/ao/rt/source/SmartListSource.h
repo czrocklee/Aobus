@@ -3,13 +3,12 @@
 
 #pragma once
 
+#include "IndexedTrackSequence.h"
 #include "TrackSource.h"
 #include "TrackSourceLease.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/query/PlanEvaluator.h>
-
-#include <boost/unordered/unordered_flat_map.hpp>
 
 #include <cstddef>
 #include <memory>
@@ -78,14 +77,12 @@ namespace ao::rt
     void stageExpression(std::string expr);
     void applyStagedState();
     void replaceMembers(std::vector<TrackId> members);
-    void rebuildMemberIndex();
 
     TrackSourceLease _sourceLease;
     library::MusicLibrary& _ml;
     SmartListEvaluator* _evaluator = nullptr;
 
-    std::vector<TrackId> _members;
-    boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>> _memberIndex;
+    IndexedTrackSequence _members;
     QueryState _current;
     query::PlanEvaluator _planEvaluator;
 

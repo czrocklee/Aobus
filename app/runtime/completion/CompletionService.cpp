@@ -147,8 +147,13 @@ namespace ao::rt
   CompletionService::CompletionService(library::MusicLibrary& library, LibraryChanges const& changes)
     : _library{library}
     , _ownerThread{std::this_thread::get_id()}
-    , _tracksMutatedSubscription{
-        changes.onTracksMutated([this](std::vector<TrackId> const& trackIds) { markDirty(trackIds); })}
+    , _tracksMutatedSubscription{changes.onChanged(
+        [this](LibraryChangeSet const& changeSet)
+        {
+          auto trackIds = changeSet.tracksInserted;
+          trackIds.append_range(changeSet.tracksMutated);
+          markDirty(trackIds);
+        })}
   {
     assertValueCompletionFieldsConsistent();
     _valueDirty.fill(true);

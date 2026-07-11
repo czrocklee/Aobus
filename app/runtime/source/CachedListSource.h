@@ -18,6 +18,7 @@
 
 namespace ao::rt
 {
+  class TrackSourceCache;
   class ManualListSource;
   struct ManualTracksInsert;
   struct ManualTracksMove;

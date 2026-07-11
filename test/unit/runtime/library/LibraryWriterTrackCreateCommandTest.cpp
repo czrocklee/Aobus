@@ -52,9 +52,9 @@ namespace ao::rt::test
     auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
     auto inserted = std::vector<TrackId>{};
-    auto collectionSub = changes.onTrackCollectionChanged([&](auto const& ev) { inserted = ev.inserted; });
+    auto collectionSub = changes.onChanged([&](LibraryChangeSet const& ev) { inserted = ev.tracksInserted; });
 
     auto const absValidFile = copyFixtureAudio(libraryFixture, "music/song.flac");
 
@@ -66,8 +66,7 @@ namespace ao::rt::test
 
     auto const trackIdResult = writer.createTrackFromFile(absValidFile);
     REQUIRE(trackIdResult);
-    REQUIRE(mutated.size() == 1);
-    CHECK(mutated[0] == trackIdResult->trackId);
+    CHECK(mutated.empty());
     REQUIRE(inserted.size() == 1);
     CHECK(inserted[0] == trackIdResult->trackId);
 
@@ -120,7 +119,7 @@ namespace ao::rt::test
     auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
 
     auto const unsupportedFile = createTextFile(libraryFixture, "unsupported.txt");
 

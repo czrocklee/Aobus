@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "CompilerBuiltins.h"
+
 #include <unistd.h>
 
 // NOLINTBEGIN(readability-identifier-naming)
@@ -35,6 +37,9 @@ namespace
 
     // NEGATIVE - Declared in the project, not system headers
     my_local_c_function();
+
+    // NEGATIVE - compiler builtins are not external C API calls
+    (void)__builtin_coro_frame();
 
     // Force instantiation so the check visits the template body above
     (void)callThroughTemplateParam<::getpid>();

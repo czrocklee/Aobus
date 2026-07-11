@@ -227,18 +227,24 @@ add_executable(ao_core_test
     unit/runtime/source/SmartListEvaluatorIncrementalTest.cpp
     unit/runtime/source/SmartListEvaluatorLoadModeTest.cpp
     unit/runtime/source/SmartListEvaluatorTest.cpp
+    unit/runtime/source/SourcePipelineOperationTest.cpp
+    unit/runtime/source/IndexedTrackSequenceTest.cpp
+    unit/runtime/source/SourcePipelineOracleTest.cpp
     unit/runtime/source/TrackSourceDeltaTest.cpp
     unit/runtime/source/TrackSourceDeltaBuilderTest.cpp
     unit/runtime/source/TrackSourceLifecycleTest.cpp
     unit/runtime/TrackPresentationTest.cpp
+    unit/runtime/TrackEditScriptTest.cpp
     unit/runtime/library/LibraryWriterTagCommandTest.cpp
     unit/runtime/library/LibraryWriterTrackCreateCommandTest.cpp
     unit/runtime/library/LibraryWriterTrackDeleteCommandTest.cpp
     unit/runtime/library/LibraryWriterManualListTest.cpp
     unit/runtime/TrackFieldTest.cpp
     unit/runtime/library/LibraryWriterDryRunTest.cpp
+    unit/runtime/library/LibraryChangesTest.cpp
     unit/runtime/projection/TrackListProjectionGroupingTest.cpp
     unit/runtime/projection/TrackListProjectionDeltaContractTest.cpp
+    unit/runtime/projection/TrackListProjectionIncrementalTest.cpp
     unit/runtime/projection/TrackListProjectionLifecycleTest.cpp
     unit/runtime/projection/TrackListProjectionMutationTest.cpp
     unit/runtime/projection/TrackListProjectionSortingTest.cpp
@@ -255,7 +261,6 @@ add_executable(ao_core_test
     unit/runtime/PlaybackServiceTest.cpp
     unit/runtime/PlaybackServiceTokenTest.cpp
     unit/runtime/PlaybackSequenceServiceTest.cpp
-    unit/runtime/PlaybackSessionSaveServiceTest.cpp
     unit/runtime/PlaybackSessionTest.cpp
     unit/runtime/source/AllTracksSourceTest.cpp
     unit/runtime/source/TrackSourceCacheTest.cpp
@@ -430,7 +435,6 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/PlaybackShortcutPolicyTest.cpp
     unit/linux-gtk/app/GtkAccelTranslatorTest.cpp
     unit/linux-gtk/app/KeymapApplicatorTest.cpp
-    unit/linux-gtk/app/LibraryWindowPolicyTest.cpp
     unit/linux-gtk/preferences/ShortcutEditorWidgetTest.cpp
     unit/linux-gtk/app/MouseNavigationPolicyTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp

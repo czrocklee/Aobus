@@ -61,20 +61,23 @@ namespace ao::rt
       {
         auto baseSourceLease = std::move(*baseSourceResult);
         auto projectionSourceLease = baseSourceLease;
-        auto quickFilterSourcePtr = std::shared_ptr<SmartListSource>{};
 
         if (!launchContext.quickFilterExpression.empty())
         {
-          quickFilterSourcePtr = std::make_shared<SmartListSource>(baseSourceLease, library, sources.smartEvaluator());
-          quickFilterSourcePtr->setExpression(launchContext.quickFilterExpression);
-          quickFilterSourcePtr->reload();
+          auto filteredResult = sources.acquire(SourceSpec{
+            .baseListId = launchContext.sourceListId, .filterExpression = launchContext.quickFilterExpression});
 
-          if (quickFilterSourcePtr->error())
+          if (!filteredResult)
           {
-            return std::unexpected{*quickFilterSourcePtr->error()};
+            return std::unexpected{filteredResult.error()};
           }
 
-          projectionSourceLease = TrackSourceLease{quickFilterSourcePtr};
+          projectionSourceLease = std::move(*filteredResult);
+
+          if (auto const optError = sources.sourceError(projectionSourceLease); optError)
+          {
+            return std::unexpected{*optError};
+          }
         }
 
         if (projectionSourceLease->state() == TrackSourceState::Invalidated)
@@ -98,7 +101,6 @@ namespace ao::rt
                 currentTrackId, std::min(fallbackAnchorIndex, projectionPtr->size()), projectionPtr->size());
         return std::make_unique<PlaybackCursorSession>(std::move(launchContext),
                                                        std::move(baseSourceLease),
-                                                       std::move(quickFilterSourcePtr),
                                                        std::move(projectionPtr),
                                                        std::move(currentAnchor),
                                                        repeatMode,
@@ -155,14 +157,12 @@ namespace ao::rt
 
   PlaybackCursorSession::PlaybackCursorSession(PlaybackLaunchContext launchContext,
                                                TrackSourceLease baseSourceLease,
-                                               std::shared_ptr<SmartListSource> quickFilterSourcePtr,
                                                std::unique_ptr<LiveTrackListProjection> projectionPtr,
                                                ProjectionAnchor currentAnchor,
                                                RepeatMode const repeatMode,
                                                ShuffleMode const shuffleMode,
                                                ShuffleHistory::CandidateChooser candidateChooser)
     : _baseSourceLease{std::move(baseSourceLease)}
-    , _quickFilterSourcePtr{std::move(quickFilterSourcePtr)}
     , _projectionPtr{std::move(projectionPtr)}
     , _shuffleHistory{std::move(candidateChooser)}
     , _cursor{std::move(launchContext), std::move(currentAnchor), repeatMode, shuffleMode, *this}

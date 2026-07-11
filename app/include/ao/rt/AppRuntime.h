@@ -38,6 +38,7 @@ namespace ao::rt
     std::filesystem::path databasePath{};
     std::size_t musicLibraryMapSize = 0;
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
+    ConfigStore* playbackSessionConfigStore = nullptr;
   };
 
   struct PlaybackSessionRestoreResult final
@@ -62,11 +63,12 @@ namespace ao::rt
     PlaybackSequenceService& playbackSequence() noexcept;
     WorkspaceService& workspace() noexcept;
     ViewService& views() noexcept;
-    ConfigStore& configStore() noexcept;
+    ConfigStore& workspaceConfigStore() noexcept;
+    ConfigStore& playbackSessionConfigStore() noexcept;
 
     Result<> savePlaybackSession();
     Result<PlaybackSessionRestoreResult> restorePlaybackSession();
-    Result<> forgetPlaybackSession();
+    Result<> discardRestorablePlaybackSession();
     Subscription onPlaybackSessionDirty(std::move_only_function<void()> handler);
 
     void reloadAllTracks();

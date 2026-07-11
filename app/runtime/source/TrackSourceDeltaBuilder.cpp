@@ -4,14 +4,17 @@
 #include "runtime/source/TrackSourceDeltaBuilder.h"
 
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceEditScript.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
 #include <optional>
 #include <ranges>
-#include <utility>
+#include <span>
 #include <vector>
 
 namespace ao::rt
@@ -43,79 +46,32 @@ namespace ao::rt
     std::ranges::sort(removals, {}, &IndexedTrack::index);
     std::ranges::sort(insertions, {}, &IndexedTrack::index);
 
-    auto removalRanges = std::vector<SourceRemoveRange>{};
-    removalRanges.reserve(removals.size());
-
-    for (auto const& removal : removals)
+    for (std::size_t index = 0; index < removals.size(); ++index)
     {
-      if (removal.index >= _initialSize)
-      {
-        throwException<Exception>("Track source removal index is outside the pre-operation source");
-      }
-
-      if (!removalRanges.empty())
-      {
-        auto& previous = removalRanges.back();
-        auto const previousEnd = previous.start + previous.trackIds.size();
-
-        if (removal.index == previous.start || removal.index < previousEnd)
-        {
-          throwException<Exception>("Track source removal indices overlap");
-        }
-
-        if (removal.index == previousEnd)
-        {
-          previous.trackIds.push_back(removal.trackId);
-          continue;
-        }
-      }
-
-      removalRanges.push_back(SourceRemoveRange{.start = removal.index, .trackIds = {removal.trackId}});
+      auto const& removal = removals[index];
+      gsl_Assert(removal.index < _initialSize);
+      gsl_Assert(index == 0 || removal.index != removals[index - 1].index);
     }
 
-    auto insertionRanges = std::vector<SourceInsertRange>{};
-    insertionRanges.reserve(insertions.size());
+    for (std::size_t index = 1; index < insertions.size(); ++index)
+    {
+      gsl_Assert(insertions[index].index > insertions[index - 1].index);
+    }
+
+    auto coalescer = delta::Coalescer{};
+
+    for (auto const& removal : removals | std::views::reverse)
+    {
+      coalescer.appendRemove(removal.index, std::span{&removal.trackId, 1});
+    }
 
     for (auto const& insertion : insertions)
     {
-      if (!insertionRanges.empty())
-      {
-        auto& previous = insertionRanges.back();
-        auto const previousEnd = previous.start + previous.trackIds.size();
-
-        if (insertion.index < previousEnd)
-        {
-          throwException<Exception>("Track source insertion indices overlap");
-        }
-
-        if (insertion.index == previousEnd)
-        {
-          previous.trackIds.push_back(insertion.trackId);
-          continue;
-        }
-      }
-
-      insertionRanges.push_back(SourceInsertRange{.start = insertion.index, .trackIds = {insertion.trackId}});
+      coalescer.appendInsert(insertion.index, std::span{&insertion.trackId, 1});
     }
 
-    auto batch = TrackSourceDeltaBatch{};
-    batch.deltas.reserve(removalRanges.size() + insertionRanges.size());
-
-    for (auto& removal : removalRanges | std::views::reverse)
-    {
-      batch.deltas.push_back(std::move(removal));
-    }
-
-    for (auto& insertion : insertionRanges)
-    {
-      batch.deltas.push_back(std::move(insertion));
-    }
-
-    if (!validateTrackSourceDeltaBatch(batch, _initialSize))
-    {
-      throwException<Exception>("Track source operation produced invalid sequential delta coordinates");
-    }
-
-    return batch;
+    auto const script = coalescer.take();
+    gsl_Assert(delta::validate(script, _initialSize));
+    return sourceBatchOf(script);
   }
 } // namespace ao::rt

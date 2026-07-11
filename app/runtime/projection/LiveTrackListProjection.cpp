@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
@@ -12,19 +12,22 @@
 #include <ao/rt/Signal.h>
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/Subscription.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/projection/TrackProjectionEditScript.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceEditScript.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/utility/StringArena.h>
 
-#include <boost/container/small_vector.hpp>
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <boost/unordered/unordered_flat_set.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
@@ -37,6 +40,7 @@
 #include <format>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -54,6 +58,9 @@ namespace ao::rt
   namespace
   {
     constexpr std::size_t kYearStrLen = 5;
+    constexpr std::size_t kMinimumArenaRebaseBytes = std::size_t{64} * 1024U;
+    constexpr std::size_t kMinimumRowsBetweenRebases = 256;
+    constexpr std::size_t kRebaseChurnDivisor = 4;
 
     struct SortKeys final
     {
@@ -98,72 +105,6 @@ namespace ao::rt
     using Comparator = std::move_only_function<bool(OrderEntry const&, OrderEntry const&)>;
 
     constexpr std::size_t kArticleAnLength = 3;
-
-    void sortUniqueRowIndices(std::vector<std::size_t>& rowIndices)
-    {
-      std::ranges::sort(rowIndices);
-      rowIndices.erase(std::ranges::unique(rowIndices).begin(), rowIndices.end());
-    }
-
-    void appendAscendingRanges(boost::container::small_vector<TrackListProjectionDelta, 1>& deltas,
-                               std::vector<std::size_t>& rowIndices,
-                               auto makeDelta)
-    {
-      if (rowIndices.empty())
-      {
-        return;
-      }
-
-      sortUniqueRowIndices(rowIndices);
-
-      auto start = rowIndices.front();
-      auto previousRowIndex = start;
-
-      for (auto const rowIndex : rowIndices | std::views::drop(1))
-      {
-        if (rowIndex == previousRowIndex + 1)
-        {
-          previousRowIndex = rowIndex;
-          continue;
-        }
-
-        deltas.push_back(makeDelta(TrackRowRange{.start = start, .count = previousRowIndex - start + 1}));
-        start = rowIndex;
-        previousRowIndex = rowIndex;
-      }
-
-      deltas.push_back(makeDelta(TrackRowRange{.start = start, .count = previousRowIndex - start + 1}));
-    }
-
-    void appendRemovalRangesDescending(boost::container::small_vector<TrackListProjectionDelta, 1>& deltas,
-                                       std::vector<std::size_t>& rowIndices)
-    {
-      if (rowIndices.empty())
-      {
-        return;
-      }
-
-      sortUniqueRowIndices(rowIndices);
-      std::ranges::reverse(rowIndices);
-
-      auto high = rowIndices.front();
-      auto low = high;
-
-      for (auto const rowIndex : rowIndices | std::views::drop(1))
-      {
-        if (rowIndex + 1 == low)
-        {
-          low = rowIndex;
-          continue;
-        }
-
-        deltas.push_back(ProjectionRemoveRange{TrackRowRange{.start = low, .count = high - low + 1}});
-        high = rowIndex;
-        low = rowIndex;
-      }
-
-      deltas.push_back(ProjectionRemoveRange{TrackRowRange{.start = low, .count = high - low + 1}});
-    }
 
     bool startsWithCaseInsensitive(std::string_view str, std::string_view prefix)
     {
@@ -634,6 +575,7 @@ namespace ao::rt
     std::string normScratch;
     NormCache normCache;
 
+    std::vector<TrackId> sourceOrder;
     std::vector<OrderEntry> orderIndex;
     // Flat (open-addressing) map: contiguous bucket array, so rebuilding the index costs
     // no per-entry node allocation. Values are plain indices that nobody aliases, so the
@@ -641,16 +583,13 @@ namespace ao::rt
     // valid only because the arena bytes never move).
     boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>> rowIndexByTrackId;
     std::vector<GroupSection> sections;
+    TrackListProjectionOperationCounts operationCounts;
+    std::size_t rowsTouchedSinceRebuild = 0;
+    std::size_t arenaRebaseThresholdBytes = kMinimumArenaRebaseBytes;
     std::uint64_t rev = 0;
     Signal<TrackListProjectionDeltaBatch const&> changedSignal;
     bool sourceInvalidated = false;
     Subscription sourceSubscription;
-
-    struct PendingMovedEntry final
-    {
-      std::size_t oldRowIndex = 0;
-      OrderEntry entry;
-    };
 
     OrderEntry buildOrderEntry(TrackId id, library::TrackView const& view, library::DictionaryStore& dictionary)
     {
@@ -664,86 +603,6 @@ namespace ao::rt
       }
 
       return entry;
-    }
-
-    void mergeEntries(std::vector<OrderEntry>& entries)
-    {
-      if (entries.empty())
-      {
-        return;
-      }
-
-      if (comparator)
-      {
-        std::ranges::sort(entries, std::ref(comparator));
-
-        auto merged = std::vector<OrderEntry>{};
-        merged.reserve(orderIndex.size() + entries.size());
-        std::ranges::merge(orderIndex, entries, std::back_inserter(merged), std::ref(comparator));
-        orderIndex = std::move(merged);
-      }
-      else
-      {
-        orderIndex.insert(
-          orderIndex.end(), std::make_move_iterator(entries.begin()), std::make_move_iterator(entries.end()));
-      }
-
-      rebuildRowIndex();
-    }
-
-    std::vector<std::size_t> mergeEntriesAndCollectRowIndices(std::vector<OrderEntry>& entries)
-    {
-      auto ids = std::vector<TrackId>{};
-      ids.reserve(entries.size());
-
-      for (auto const& entry : entries)
-      {
-        ids.push_back(entry.trackId);
-      }
-
-      mergeEntries(entries);
-
-      if (groupBy != TrackGroupKey::None)
-      {
-        buildGroupSections();
-      }
-
-      auto rowIndices = std::vector<std::size_t>{};
-      rowIndices.reserve(ids.size());
-
-      for (auto const id : ids)
-      {
-        if (auto const optRowIndex = findRowIndex(id); optRowIndex)
-        {
-          rowIndices.push_back(*optRowIndex);
-        }
-      }
-
-      return rowIndices;
-    }
-
-    void rebuildGroups()
-    {
-      if (groupBy == TrackGroupKey::None || orderIndex.empty())
-      {
-        sections.clear();
-        return;
-      }
-
-      auto transaction = library.readTransaction();
-      auto reader = library.tracks().reader(transaction);
-      auto& dictionary = library.dictionary();
-
-      for (auto& entry : orderIndex)
-      {
-        if (auto const optView =
-              storageValueOrNullopt(reader.get(entry.trackId, loadMode), "Failed to rebuild track groups");
-            optView)
-        {
-          ensureGroupSortKeys(entry.keys, *optView, dictionary, groupBy, normCache, stringArena, normScratch);
-          fillGroupMetadata(entry, *optView, dictionary, groupBy, stringArena, normScratch);
-        }
-      }
     }
 
     Impl(ViewId vid,
@@ -812,6 +671,8 @@ namespace ao::rt
     void rebuildOrderIndex()
     {
       auto const timer = rt::ScopedTimer{"LiveTrackListProjection::rebuildOrderIndex"};
+      ++operationCounts.fullProjectionRebuilds;
+      sourceOrder.clear();
       orderIndex.clear();
       rowIndexByTrackId.clear();
       sections.clear();
@@ -826,6 +687,7 @@ namespace ao::rt
       stringArena.clear();
 
       auto& source = sourceLease.source();
+      sourceOrder.reserve(source.size());
       orderIndex.reserve(source.size());
 
       auto const transaction = library.readTransaction();
@@ -835,6 +697,7 @@ namespace ao::rt
       for (std::size_t index = 0; index < source.size(); ++index)
       {
         auto const trackId = source.trackIdAt(index);
+        sourceOrder.push_back(trackId);
 
         if (auto const optView = storageValueOrNullopt(reader.get(trackId, loadMode), "Failed to rebuild track order");
             optView)
@@ -850,10 +713,16 @@ namespace ao::rt
 
       rebuildRowIndex();
       buildGroupSections();
+      rowsTouchedSinceRebuild = 0;
+      auto const allocatedBytes = stringArena.allocatedBytes();
+      arenaRebaseThresholdBytes = allocatedBytes > std::numeric_limits<std::size_t>::max() / 2U
+                                    ? std::numeric_limits<std::size_t>::max()
+                                    : std::max(kMinimumArenaRebaseBytes, allocatedBytes * 2U);
     }
 
     void rebuildRowIndex()
     {
+      ++operationCounts.rowIndexRebuilds;
       rowIndexByTrackId.clear();
       rowIndexByTrackId.reserve(orderIndex.size());
 
@@ -871,47 +740,6 @@ namespace ao::rt
       }
 
       return std::nullopt;
-    }
-
-    bool hasSameSectionDescriptors(std::vector<GroupSection> const& left, std::vector<GroupSection> const& right) const
-    {
-      if (left.size() != right.size())
-      {
-        return false;
-      }
-
-      for (std::size_t index = 0; index < left.size(); ++index)
-      {
-        if (left[index].groupKey != right[index].groupKey || left[index].primaryText != right[index].primaryText ||
-            left[index].secondaryText != right[index].secondaryText ||
-            left[index].tertiaryText != right[index].tertiaryText || left[index].imageId != right[index].imageId)
-        {
-          return false;
-        }
-      }
-
-      return true;
-    }
-
-    static void assignSectionMetadata(GroupSection& section, OrderEntry const& entry)
-    {
-      section.groupKey = entry.groupKey;
-      section.primaryText = entry.primaryText;
-      section.secondaryText = entry.secondaryText;
-      section.tertiaryText = entry.tertiaryText;
-      section.imageId = entry.imageId;
-    }
-
-    static GroupSection makeSection(std::size_t start, OrderEntry const& entry)
-    {
-      return GroupSection{
-        .rows = {.start = start, .count = 1},
-        .groupKey = entry.groupKey,
-        .primaryText = entry.primaryText,
-        .secondaryText = entry.secondaryText,
-        .tertiaryText = entry.tertiaryText,
-        .imageId = entry.imageId,
-      };
     }
 
     std::optional<std::size_t> findSectionIndexAt(std::size_t row) const
@@ -936,739 +764,228 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    std::size_t sectionInsertionIndex(std::size_t row) const
-    {
-      auto it =
-        std::ranges::upper_bound(sections, row, {}, [](GroupSection const& section) { return section.rows.start; });
-      return static_cast<std::size_t>(it - sections.begin());
-    }
+    using TrackIdSet = boost::unordered_flat_set<TrackId, std::hash<TrackId>>;
 
-    void insertGroupSectionRow(std::size_t rowIndex)
+    bool sourceMatches(std::span<TrackId const> expected) const
     {
-      if (groupBy == TrackGroupKey::None)
+      auto const& source = sourceLease.source();
+
+      if (source.size() != expected.size())
       {
-        return;
+        return false;
       }
 
-      auto const& entry = orderIndex[rowIndex];
-      auto const leftSame = rowIndex > 0 && orderIndex[rowIndex - 1].groupKey == entry.groupKey;
-      auto const rightSame = rowIndex + 1 < orderIndex.size() && orderIndex[rowIndex + 1].groupKey == entry.groupKey;
-      auto const optLeftSection = leftSame ? findSectionIndexAt(rowIndex - 1) : std::optional<std::size_t>{};
-      auto const optRightSection = rightSame ? findSectionIndexAt(rowIndex) : std::optional<std::size_t>{};
-
-      for (auto& section : sections)
+      for (std::size_t index = 0; index < expected.size(); ++index)
       {
-        if (section.rows.start >= rowIndex)
+        if (source.trackIdAt(index) != expected[index])
         {
-          ++section.rows.start;
+          return false;
         }
       }
 
-      if (optLeftSection)
-      {
-        ++sections[*optLeftSection].rows.count;
-        return;
-      }
-
-      if (optRightSection)
-      {
-        auto& section = sections[*optRightSection];
-        section.rows.start = rowIndex;
-        ++section.rows.count;
-        assignSectionMetadata(section, entry);
-        return;
-      }
-
-      auto const insertAt = sectionInsertionIndex(rowIndex);
-      sections.insert(sections.begin() + static_cast<std::ptrdiff_t>(insertAt), makeSection(rowIndex, entry));
+      return true;
     }
 
-    void removeGroupSectionRow(std::size_t rowIndex)
+    bool shouldRebase() const
     {
-      if (groupBy == TrackGroupKey::None)
+      auto const churnThreshold =
+        std::max(kMinimumRowsBetweenRebases, (orderIndex.size() + kRebaseChurnDivisor - 1U) / kRebaseChurnDivisor);
+      return rowsTouchedSinceRebuild >= churnThreshold || stringArena.allocatedBytes() >= arenaRebaseThresholdBytes;
+    }
+
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity) -- one pass keeps batch invariants visible together.
+    bool applyIncrementalBatch(TrackSourceDeltaBatch const& sourceBatch, delta::RegularTrackEditScript const& script)
+    {
+      bool const hasStructuralChanges = std::ranges::any_of(
+        sourceBatch.deltas,
+        [](TrackSourceDelta const& sourceDelta) { return !std::holds_alternative<SourceUpdateRange>(sourceDelta); });
+      auto finalSourceOrderStorage = std::vector<TrackId>{};
+      auto finalSourceOrder = std::span<TrackId const>{sourceOrder};
+
+      if (hasStructuralChanges)
       {
-        return;
-      }
+        auto result = delta::apply(sourceOrder, script);
 
-      auto const optSection = findSectionIndexAt(rowIndex);
+        if (!result)
+        {
+          return false;
+        }
 
-      if (!optSection)
-      {
-        return;
-      }
-
-      auto const sectionIndex = *optSection;
-      auto& section = sections[sectionIndex];
-      auto shiftFrom = sectionIndex + 1;
-
-      if (section.rows.count == 1)
-      {
-        sections.erase(sections.begin() + static_cast<std::ptrdiff_t>(sectionIndex));
-        shiftFrom = sectionIndex;
+        finalSourceOrderStorage = std::move(*result);
+        finalSourceOrder = finalSourceOrderStorage;
       }
       else
       {
-        if (section.rows.start == rowIndex)
+        for (auto const& sourceDelta : sourceBatch.deltas)
         {
-          assignSectionMetadata(section, orderIndex[rowIndex + 1]);
+          auto const& update = std::get<SourceUpdateRange>(sourceDelta);
+
+          if (update.start > sourceOrder.size() || update.trackIds.size() > sourceOrder.size() - update.start ||
+              !std::ranges::equal(update.trackIds, finalSourceOrder.subspan(update.start, update.trackIds.size())))
+          {
+            return false;
+          }
         }
-
-        --section.rows.count;
       }
 
-      for (std::size_t index = shiftFrom; index < sections.size(); ++index)
+      if (!sourceMatches(finalSourceOrder))
       {
-        --sections[index].rows.start;
-      }
-    }
-
-    void updateGroupSectionRow(std::size_t rowIndex, OrderEntry entry)
-    {
-      if (groupBy == TrackGroupKey::None)
-      {
-        orderIndex[rowIndex] = std::move(entry);
-        return;
+        return false;
       }
 
-      if (auto const oldGroupKey = orderIndex[rowIndex].groupKey; oldGroupKey == entry.groupKey)
-      {
-        orderIndex[rowIndex] = std::move(entry);
+      auto replacementIds = TrackIdSet{};
+      auto excludedIds = TrackIdSet{};
+      auto changedIds = TrackIdSet{};
+      bool const entriesDependOnTrackData = comparator || groupBy != TrackGroupKey::None;
 
-        if (auto const optSection = findSectionIndexAt(rowIndex);
-            optSection && sections[*optSection].rows.start == rowIndex)
+      for (auto const& sourceDelta : sourceBatch.deltas)
+      {
+        std::visit(
+          [&](auto const& range)
+          {
+            using Range = std::remove_cvref_t<decltype(range)>;
+
+            if constexpr (std::same_as<Range, SourceInsertRange>)
+            {
+              replacementIds.insert(range.trackIds.begin(), range.trackIds.end());
+              excludedIds.insert(range.trackIds.begin(), range.trackIds.end());
+              changedIds.insert(range.trackIds.begin(), range.trackIds.end());
+            }
+            else if constexpr (std::same_as<Range, SourceRemoveRange>)
+            {
+              excludedIds.insert(range.trackIds.begin(), range.trackIds.end());
+              changedIds.insert(range.trackIds.begin(), range.trackIds.end());
+            }
+            else if constexpr (std::same_as<Range, SourceUpdateRange>)
+            {
+              changedIds.insert(range.trackIds.begin(), range.trackIds.end());
+
+              if (entriesDependOnTrackData)
+              {
+                replacementIds.insert(range.trackIds.begin(), range.trackIds.end());
+                excludedIds.insert(range.trackIds.begin(), range.trackIds.end());
+              }
+            }
+          },
+          sourceDelta);
+      }
+
+      auto retainedEntries = std::vector<OrderEntry>{};
+      retainedEntries.reserve(orderIndex.size());
+
+      for (auto const& entry : orderIndex)
+      {
+        if (!excludedIds.contains(entry.trackId))
         {
-          assignSectionMetadata(sections[*optSection], orderIndex[rowIndex]);
+          retainedEntries.push_back(entry);
         }
-
-        return;
       }
 
-      removeGroupSectionRow(rowIndex);
-      orderIndex[rowIndex] = std::move(entry);
-      insertGroupSectionRow(rowIndex);
-    }
+      auto replacementEntries = std::vector<OrderEntry>{};
+      replacementEntries.reserve(replacementIds.size());
 
-    std::size_t insertBuiltEntry(OrderEntry entry)
-    {
-      std::size_t rowIndex = 0;
+      if (!replacementIds.empty())
+      {
+        auto const transaction = library.readTransaction();
+        auto const reader = library.tracks().reader(transaction);
+        auto& dictionary = library.dictionary();
+
+        for (auto const trackId : finalSourceOrder)
+        {
+          if (!replacementIds.contains(trackId))
+          {
+            continue;
+          }
+
+          auto const optView =
+            storageValueOrNullopt(reader.get(trackId, loadMode), "Failed to incrementally rebuild track order");
+
+          if (!optView)
+          {
+            return false;
+          }
+
+          replacementEntries.push_back(entriesDependOnTrackData ? buildOrderEntry(trackId, *optView, dictionary)
+                                                                : OrderEntry{.trackId = trackId});
+        }
+      }
+
+      if (retainedEntries.size() + replacementEntries.size() != finalSourceOrder.size())
+      {
+        return false;
+      }
+
+      auto updatedOrder = std::vector<OrderEntry>{};
+      updatedOrder.reserve(finalSourceOrder.size());
 
       if (comparator)
       {
-        auto it = std::ranges::lower_bound(orderIndex, entry, std::ref(comparator));
-        rowIndex = static_cast<std::size_t>(it - orderIndex.begin());
-        orderIndex.insert(it, std::move(entry));
+        std::ranges::sort(replacementEntries, std::ref(comparator));
+        std::ranges::merge(retainedEntries, replacementEntries, std::back_inserter(updatedOrder), std::ref(comparator));
       }
       else
       {
-        rowIndex = orderIndex.size();
-        orderIndex.push_back(std::move(entry));
-      }
+        auto retainedIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
+        auto replacementIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
+        retainedIndex.reserve(retainedEntries.size());
+        replacementIndex.reserve(replacementEntries.size());
 
-      insertGroupSectionRow(rowIndex);
-
-      for (std::size_t index = rowIndex; index < orderIndex.size(); ++index)
-      {
-        rowIndexByTrackId[orderIndex[index].trackId] = index;
-      }
-
-      return rowIndex;
-    }
-
-    void eraseEntryAt(std::size_t rowIndex)
-    {
-      auto const id = orderIndex[rowIndex].trackId;
-      removeGroupSectionRow(rowIndex);
-      orderIndex.erase(orderIndex.begin() + static_cast<std::ptrdiff_t>(rowIndex));
-      rowIndexByTrackId.erase(id);
-
-      for (std::size_t index = rowIndex; index < orderIndex.size(); ++index)
-      {
-        rowIndexByTrackId[orderIndex[index].trackId] = index;
-      }
-    }
-
-    void eraseEntriesAtRowIndices(std::vector<std::size_t>& rowIndices)
-    {
-      if (rowIndices.empty())
-      {
-        return;
-      }
-
-      sortUniqueRowIndices(rowIndices);
-
-      auto retained = std::vector<OrderEntry>{};
-      retained.reserve(orderIndex.size() - rowIndices.size());
-
-      std::size_t removeIndex = 0;
-
-      for (std::size_t index = 0; index < orderIndex.size(); ++index)
-      {
-        if (removeIndex < rowIndices.size() && rowIndices[removeIndex] == index)
+        for (std::size_t index = 0; index < retainedEntries.size(); ++index)
         {
-          ++removeIndex;
-          continue;
+          retainedIndex.emplace(retainedEntries[index].trackId, index);
         }
 
-        retained.push_back(std::move(orderIndex[index]));
+        for (std::size_t index = 0; index < replacementEntries.size(); ++index)
+        {
+          replacementIndex.emplace(replacementEntries[index].trackId, index);
+        }
+
+        for (auto const trackId : finalSourceOrder)
+        {
+          if (auto const it = replacementIndex.find(trackId); it != replacementIndex.end())
+          {
+            updatedOrder.push_back(replacementEntries[it->second]);
+          }
+          else if (auto const it = retainedIndex.find(trackId); it != retainedIndex.end())
+          {
+            updatedOrder.push_back(retainedEntries[it->second]);
+          }
+          else
+          {
+            return false;
+          }
+        }
       }
 
-      orderIndex = std::move(retained);
-      rebuildRowIndex();
-
-      if (groupBy != TrackGroupKey::None)
+      if (hasStructuralChanges)
       {
+        sourceOrder = std::move(finalSourceOrderStorage);
+      }
+
+      orderIndex = std::move(updatedOrder);
+      ++operationCounts.incrementalProjectionUpdates;
+
+      if (changedIds.size() > std::numeric_limits<std::size_t>::max() - rowsTouchedSinceRebuild)
+      {
+        rowsTouchedSinceRebuild = std::numeric_limits<std::size_t>::max();
+      }
+      else
+      {
+        rowsTouchedSinceRebuild += changedIds.size();
+      }
+
+      if (shouldRebase())
+      {
+        ++operationCounts.arenaRebases;
+        rebuildOrderIndex();
+      }
+      else
+      {
+        rebuildRowIndex();
         buildGroupSections();
       }
-    }
 
-    void insertEntry(TrackId trackId)
-    {
-      auto const transaction = library.readTransaction();
-      auto const reader = library.tracks().reader(transaction);
-      auto& dictionary = library.dictionary();
-
-      auto const optView = storageValueOrNullopt(reader.get(trackId, loadMode), "Failed to insert projected track");
-
-      if (!optView)
-      {
-        return;
-      }
-
-      auto entry = buildOrderEntry(trackId, *optView, dictionary);
-      auto const oldSections = sections;
-      auto const rowIndex = insertBuiltEntry(std::move(entry));
-
-      if (groupBy != TrackGroupKey::None)
-      {
-        if (!hasSameSectionDescriptors(oldSections, sections))
-        {
-          publishDelta(TrackListProjectionDeltaBatch{
-            .revision = ++rev,
-            .deltas = {ProjectionReset{}},
-          });
-          return;
-        }
-      }
-
-      publishDelta(TrackListProjectionDeltaBatch{
-        .revision = ++rev,
-        .deltas = {ProjectionInsertRange{TrackRowRange{.start = rowIndex, .count = 1}}},
-      });
-    }
-
-    void insertEntries(std::span<TrackId const> ids)
-    {
-      if (ids.empty())
-      {
-        return;
-      }
-
-      if (ids.size() == 1)
-      {
-        insertEntry(ids[0]);
-        return;
-      }
-
-      auto const transaction = library.readTransaction();
-      auto const reader = library.tracks().reader(transaction);
-      auto& dictionary = library.dictionary();
-
-      auto sortedNew = std::vector<OrderEntry>{};
-      sortedNew.reserve(ids.size());
-
-      for (auto const id : ids)
-      {
-        if (auto const optView = storageValueOrNullopt(reader.get(id, loadMode), "Failed to insert projected tracks");
-            optView)
-        {
-          sortedNew.push_back(buildOrderEntry(id, *optView, dictionary));
-        }
-      }
-
-      if (sortedNew.empty())
-      {
-        return;
-      }
-
-      if (groupBy != TrackGroupKey::None)
-      {
-        auto const oldSections = sections;
-        auto insertRowIndices = mergeEntriesAndCollectRowIndices(sortedNew);
-
-        if (hasSameSectionDescriptors(oldSections, sections))
-        {
-          auto batch = TrackListProjectionDeltaBatch{.revision = ++rev};
-          appendAscendingRanges(batch.deltas,
-                                insertRowIndices,
-                                [](TrackRowRange range)
-                                { return TrackListProjectionDelta{ProjectionInsertRange{range}}; });
-          publishDelta(batch);
-          return;
-        }
-
-        publishDelta(TrackListProjectionDeltaBatch{
-          .revision = ++rev,
-          .deltas = {ProjectionReset{}},
-        });
-        return;
-      }
-
-      mergeEntries(sortedNew);
-
-      // For now, always use ProjectionReset for multiple insertions to simplify UI sync.
-      publishDelta(TrackListProjectionDeltaBatch{
-        .revision = ++rev,
-        .deltas = {ProjectionReset{}},
-      });
-    }
-
-    void removeEntry(TrackId trackId)
-    {
-      auto const optRowIndex = findRowIndex(trackId);
-
-      if (!optRowIndex)
-      {
-        return;
-      }
-
-      std::size_t const rowIndex = *optRowIndex;
-      auto const oldSections = sections;
-      eraseEntryAt(rowIndex);
-
-      if (groupBy != TrackGroupKey::None)
-      {
-        if (!hasSameSectionDescriptors(oldSections, sections))
-        {
-          publishDelta(TrackListProjectionDeltaBatch{
-            .revision = ++rev,
-            .deltas = {ProjectionReset{}},
-          });
-          return;
-        }
-      }
-
-      publishDelta(TrackListProjectionDeltaBatch{
-        .revision = ++rev,
-        .deltas = {ProjectionRemoveRange{TrackRowRange{.start = rowIndex, .count = 1}}},
-      });
-    }
-
-    void removeEntries(std::span<TrackId const> ids)
-    {
-      if (ids.empty())
-      {
-        return;
-      }
-
-      if (ids.size() == 1)
-      {
-        removeEntry(ids[0]);
-        return;
-      }
-
-      auto rowIndices = std::vector<std::size_t>{};
-      rowIndices.reserve(ids.size());
-
-      for (auto const id : ids)
-      {
-        if (auto optRowIndex = findRowIndex(id); optRowIndex)
-        {
-          rowIndices.push_back(*optRowIndex);
-        }
-      }
-
-      if (rowIndices.empty())
-      {
-        return;
-      }
-
-      auto const oldSections = sections;
-      eraseEntriesAtRowIndices(rowIndices);
-
-      if (groupBy != TrackGroupKey::None)
-      {
-        if (hasSameSectionDescriptors(oldSections, sections))
-        {
-          auto batch = TrackListProjectionDeltaBatch{.revision = ++rev};
-          appendRemovalRangesDescending(batch.deltas, rowIndices);
-          publishDelta(batch);
-          return;
-        }
-      }
-
-      publishDelta(TrackListProjectionDeltaBatch{
-        .revision = ++rev,
-        .deltas = {ProjectionReset{}},
-      });
-    }
-
-    void updateEntry(TrackId trackId)
-    {
-      auto optRowIndex = findRowIndex(trackId);
-
-      if (!optRowIndex)
-      {
-        return;
-      }
-
-      auto oldRowIndex = *optRowIndex;
-      auto& oldEntry = orderIndex[oldRowIndex];
-
-      auto const transaction = library.readTransaction();
-      auto const reader = library.tracks().reader(transaction);
-      auto& dictionary = library.dictionary();
-
-      auto const optView = storageValueOrNullopt(reader.get(trackId, loadMode), "Failed to update projected track");
-
-      if (!optView)
-      {
-        return;
-      }
-
-      if (groupBy != TrackGroupKey::None)
-      {
-        auto newEntry = buildOrderEntry(trackId, *optView, dictionary);
-
-        if (auto const oldSections = sections;
-            comparator && comparator(oldEntry, newEntry) != comparator(newEntry, oldEntry))
-        {
-          eraseEntryAt(oldRowIndex);
-
-          if (auto const newRowIndex = insertBuiltEntry(std::move(newEntry));
-              hasSameSectionDescriptors(oldSections, sections))
-          {
-            publishDelta(TrackListProjectionDeltaBatch{
-              .revision = ++rev,
-              .deltas =
-                {
-                  ProjectionRemoveRange{TrackRowRange{.start = oldRowIndex, .count = 1}},
-                  ProjectionInsertRange{TrackRowRange{.start = newRowIndex, .count = 1}},
-                },
-            });
-            return;
-          }
-        }
-        else
-        {
-          updateGroupSectionRow(oldRowIndex, std::move(newEntry));
-
-          if (hasSameSectionDescriptors(oldSections, sections))
-          {
-            publishDelta(TrackListProjectionDeltaBatch{
-              .revision = ++rev,
-              .deltas = {ProjectionUpdateRange{TrackRowRange{.start = oldRowIndex, .count = 1}}},
-            });
-            return;
-          }
-        }
-
-        publishDelta(TrackListProjectionDeltaBatch{
-          .revision = ++rev,
-          .deltas = {ProjectionReset{}},
-        });
-        return;
-      }
-
-      auto newKeys = SortKeys{};
-      fillSortKeys(newKeys, *optView, dictionary, sortBy, normCache, stringArena, normScratch);
-
-      if (comparator)
-      {
-        auto testEntry = OrderEntry{.trackId = trackId, .keys = newKeys};
-
-        if (comparator(oldEntry, testEntry) == comparator(testEntry, oldEntry))
-        {
-          oldEntry.keys = testEntry.keys;
-          publishDelta(TrackListProjectionDeltaBatch{
-            .revision = ++rev,
-            .deltas = {ProjectionUpdateRange{TrackRowRange{.start = oldRowIndex, .count = 1}}},
-          });
-          return;
-        }
-
-        removeEntry(trackId);
-        insertEntry(trackId);
-        return;
-      }
-
-      oldEntry.keys = newKeys;
-      publishDelta(TrackListProjectionDeltaBatch{
-        .revision = ++rev,
-        .deltas = {ProjectionUpdateRange{TrackRowRange{.start = oldRowIndex, .count = 1}}},
-      });
-    }
-
-    void updateGroupedEntries(std::span<TrackId const> ids)
-    {
-      auto const transaction = library.readTransaction();
-      auto const reader = library.tracks().reader(transaction);
-      auto& dictionary = library.dictionary();
-
-      auto processed = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
-      processed.reserve(ids.size());
-
-      auto movedEntries = std::vector<PendingMovedEntry>{};
-      movedEntries.reserve(ids.size());
-      auto updateRowIndices = std::vector<std::size_t>{};
-      updateRowIndices.reserve(ids.size());
-      auto const oldSections = sections;
-
-      for (auto const id : ids)
-      {
-        if (!processed.insert(id).second)
-        {
-          continue;
-        }
-
-        auto const optRowIndex = findRowIndex(id);
-
-        if (!optRowIndex)
-        {
-          continue;
-        }
-
-        auto const optView =
-          storageValueOrNullopt(reader.get(id, loadMode), "Failed to update grouped projected tracks");
-
-        if (!optView)
-        {
-          continue;
-        }
-
-        auto newEntry = buildOrderEntry(id, *optView, dictionary);
-
-        if (auto& oldEntry = orderIndex[*optRowIndex];
-            comparator && comparator(oldEntry, newEntry) != comparator(newEntry, oldEntry))
-        {
-          movedEntries.push_back(PendingMovedEntry{.oldRowIndex = *optRowIndex, .entry = std::move(newEntry)});
-          continue;
-        }
-
-        updateGroupSectionRow(*optRowIndex, std::move(newEntry));
-        updateRowIndices.push_back(*optRowIndex);
-      }
-
-      if (updateRowIndices.empty() && movedEntries.empty())
-      {
-        return;
-      }
-
-      if (!movedEntries.empty())
-      {
-        auto removeRowIndices = std::vector<std::size_t>{};
-        removeRowIndices.reserve(movedEntries.size());
-
-        auto sortedNew = std::vector<OrderEntry>{};
-        sortedNew.reserve(movedEntries.size());
-
-        for (auto& moved : movedEntries)
-        {
-          removeRowIndices.push_back(moved.oldRowIndex);
-          sortedNew.push_back(std::move(moved.entry));
-        }
-
-        eraseEntriesAtRowIndices(removeRowIndices);
-        auto insertRowIndices = mergeEntriesAndCollectRowIndices(sortedNew);
-
-        if (updateRowIndices.empty() && hasSameSectionDescriptors(oldSections, sections))
-        {
-          auto batch = TrackListProjectionDeltaBatch{.revision = ++rev};
-          appendRemovalRangesDescending(batch.deltas, removeRowIndices);
-          appendAscendingRanges(batch.deltas,
-                                insertRowIndices,
-                                [](TrackRowRange range)
-                                { return TrackListProjectionDelta{ProjectionInsertRange{range}}; });
-          publishDelta(batch);
-          return;
-        }
-      }
-
-      if (movedEntries.empty() && hasSameSectionDescriptors(oldSections, sections))
-      {
-        auto batch = TrackListProjectionDeltaBatch{.revision = ++rev};
-        appendAscendingRanges(batch.deltas,
-                              updateRowIndices,
-                              [](TrackRowRange range)
-                              { return TrackListProjectionDelta{ProjectionUpdateRange{range}}; });
-        publishDelta(batch);
-        return;
-      }
-
-      publishDelta(TrackListProjectionDeltaBatch{
-        .revision = ++rev,
-        .deltas = {ProjectionReset{}},
-      });
-    }
-
-    void applyUngroupedMovedEntries(std::vector<PendingMovedEntry>& movedEntries,
-                                    bool publishReset,
-                                    TrackListProjectionDeltaBatch& batch)
-    {
-      auto removeRowIndices = std::vector<std::size_t>{};
-      removeRowIndices.reserve(movedEntries.size());
-
-      auto sortedNew = std::vector<OrderEntry>{};
-      sortedNew.reserve(movedEntries.size());
-
-      for (auto& moved : movedEntries)
-      {
-        removeRowIndices.push_back(moved.oldRowIndex);
-        sortedNew.push_back(std::move(moved.entry));
-      }
-
-      if (publishReset)
-      {
-        sortUniqueRowIndices(removeRowIndices);
-        std::ranges::reverse(removeRowIndices);
-      }
-      else
-      {
-        appendRemovalRangesDescending(batch.deltas, removeRowIndices);
-      }
-
-      for (auto const rowIndex : removeRowIndices)
-      {
-        orderIndex.erase(orderIndex.begin() + static_cast<std::ptrdiff_t>(rowIndex));
-      }
-
-      std::ranges::sort(sortedNew, std::ref(comparator));
-
-      auto merged = std::vector<OrderEntry>{};
-      merged.reserve(orderIndex.size() + sortedNew.size());
-      std::ranges::merge(orderIndex, sortedNew, std::back_inserter(merged), std::ref(comparator));
-
-      orderIndex = std::move(merged);
-      rebuildRowIndex();
-
-      auto insertRowIndices = std::vector<std::size_t>{};
-      insertRowIndices.reserve(sortedNew.size());
-
-      for (auto const& entry : sortedNew)
-      {
-        if (auto const optRowIndex = findRowIndex(entry.trackId); optRowIndex)
-        {
-          insertRowIndices.push_back(*optRowIndex);
-        }
-      }
-
-      if (!publishReset)
-      {
-        appendAscendingRanges(batch.deltas,
-                              insertRowIndices,
-                              [](TrackRowRange range)
-                              { return TrackListProjectionDelta{ProjectionInsertRange{range}}; });
-      }
-    }
-
-    void updateUngroupedEntries(std::span<TrackId const> ids)
-    {
-      auto const transaction = library.readTransaction();
-      auto const reader = library.tracks().reader(transaction);
-      auto& dictionary = library.dictionary();
-
-      auto processed = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
-      processed.reserve(ids.size());
-
-      auto updateRowIndices = std::vector<std::size_t>{};
-      updateRowIndices.reserve(ids.size());
-
-      auto movedEntries = std::vector<PendingMovedEntry>{};
-      movedEntries.reserve(ids.size());
-
-      for (auto const id : ids)
-      {
-        if (!processed.insert(id).second)
-        {
-          continue;
-        }
-
-        auto const optRowIndex = findRowIndex(id);
-
-        if (!optRowIndex)
-        {
-          continue;
-        }
-
-        auto const optView = storageValueOrNullopt(reader.get(id, loadMode), "Failed to update projected tracks");
-
-        if (!optView)
-        {
-          continue;
-        }
-
-        auto newKeys = SortKeys{};
-        fillSortKeys(newKeys, *optView, dictionary, sortBy, normCache, stringArena, normScratch);
-
-        auto& oldEntry = orderIndex[*optRowIndex];
-
-        if (!comparator)
-        {
-          oldEntry.keys = newKeys;
-          updateRowIndices.push_back(*optRowIndex);
-          continue;
-        }
-
-        auto testEntry = OrderEntry{.trackId = id, .keys = newKeys};
-
-        if (comparator(oldEntry, testEntry) == comparator(testEntry, oldEntry))
-        {
-          oldEntry.keys = newKeys;
-          updateRowIndices.push_back(*optRowIndex);
-          continue;
-        }
-
-        movedEntries.push_back(PendingMovedEntry{.oldRowIndex = *optRowIndex, .entry = std::move(testEntry)});
-      }
-
-      if (updateRowIndices.empty() && movedEntries.empty())
-      {
-        return;
-      }
-
-      auto const publishReset = !updateRowIndices.empty() && !movedEntries.empty();
-      auto batch = TrackListProjectionDeltaBatch{.revision = ++rev};
-
-      if (!publishReset)
-      {
-        appendAscendingRanges(batch.deltas,
-                              updateRowIndices,
-                              [](TrackRowRange range)
-                              { return TrackListProjectionDelta{ProjectionUpdateRange{range}}; });
-      }
-
-      if (!movedEntries.empty())
-      {
-        applyUngroupedMovedEntries(movedEntries, publishReset, batch);
-      }
-
-      if (publishReset)
-      {
-        batch.deltas = {ProjectionReset{}};
-      }
-
-      publishDelta(batch);
-    }
-
-    void updateEntries(std::span<TrackId const> ids)
-    {
-      if (ids.empty())
-      {
-        return;
-      }
-
-      if (ids.size() == 1)
-      {
-        updateEntry(ids[0]);
-        return;
-      }
-
-      if (groupBy != TrackGroupKey::None)
-      {
-        updateGroupedEntries(ids);
-        return;
-      }
-
-      updateUngroupedEntries(ids);
+      return true;
     }
 
     struct SectionDescriptor final
@@ -1680,12 +997,6 @@ namespace ao::rt
       ResourceId imageId{kInvalidResourceId};
 
       bool operator==(SectionDescriptor const&) const = default;
-    };
-
-    struct IndexedTrack final
-    {
-      std::size_t index = 0;
-      TrackId trackId{};
     };
 
     using TrackIndexMap = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>;
@@ -1761,11 +1072,8 @@ namespace ao::rt
         return;
       }
 
-      if (!validateTrackListProjectionDeltaBatch(batch, previousSize) ||
-          std::holds_alternative<ProjectionSourceInvalidated>(batch.deltas.front()))
-      {
-        throwException<Exception>("Invalid live track-list projection delta batch");
-      }
+      gsl_Assert(!batch.deltas.empty() && validateTrackListProjectionDeltaBatch(batch, previousSize) &&
+                 !std::holds_alternative<ProjectionSourceInvalidated>(batch.deltas.front()));
 
       batch.revision = ++rev;
       changedSignal.emit(batch);
@@ -1793,131 +1101,25 @@ namespace ao::rt
       changedSignal.disconnectAll();
     }
 
-    static bool matchesSourceRange(std::vector<TrackId> const& working,
-                                   std::size_t const start,
-                                   std::span<TrackId const> const trackIds)
+    static bool sourceOrderBatchMatches(std::vector<TrackId> const& previousTrackIds,
+                                        TrackSourceDeltaBatch const& sourceBatch,
+                                        std::vector<TrackId> const& finalTrackIds)
     {
-      return start <= working.size() && trackIds.size() <= working.size() - start &&
-             std::ranges::equal(trackIds, std::span{working}.subspan(start, trackIds.size()));
-    }
+      auto const script = regularTrackEditScriptOf(sourceBatch);
 
-    static bool replaySourceOrderDelta(std::vector<TrackId>& working, TrackSourceDelta const& delta)
-    {
-      if (auto const* insertion = std::get_if<SourceInsertRange>(&delta); insertion != nullptr)
+      if (!script)
       {
-        if (insertion->start > working.size())
-        {
-          return false;
-        }
-
-        working.insert(working.begin() + static_cast<std::ptrdiff_t>(insertion->start),
-                       insertion->trackIds.begin(),
-                       insertion->trackIds.end());
-        return true;
+        return false;
       }
 
-      if (auto const* removal = std::get_if<SourceRemoveRange>(&delta); removal != nullptr)
-      {
-        if (!matchesSourceRange(working, removal->start, removal->trackIds))
-        {
-          return false;
-        }
-
-        auto const first = working.begin() + static_cast<std::ptrdiff_t>(removal->start);
-        working.erase(first, first + static_cast<std::ptrdiff_t>(removal->trackIds.size()));
-        return true;
-      }
-
-      if (auto const* update = std::get_if<SourceUpdateRange>(&delta); update != nullptr)
-      {
-        return matchesSourceRange(working, update->start, update->trackIds);
-      }
-
-      return false;
-    }
-
-    static bool replaySourceOrderBatch(std::vector<TrackId> const& previousTrackIds,
-                                       TrackSourceDeltaBatch const& sourceBatch,
-                                       std::vector<TrackId> const& finalTrackIds)
-    {
-      auto working = previousTrackIds;
-
-      for (auto const& delta : sourceBatch.deltas)
-      {
-        if (!replaySourceOrderDelta(working, delta))
-        {
-          return false;
-        }
-      }
-
-      return working == finalTrackIds;
+      auto const result = delta::apply(previousTrackIds, *script);
+      return result && *result == finalTrackIds;
     }
 
     static TrackListProjectionDeltaBatch sourceOrderProjectionBatch(TrackSourceDeltaBatch const& sourceBatch)
     {
-      auto batch = TrackListProjectionDeltaBatch{};
-      batch.deltas.reserve(sourceBatch.deltas.size());
-
-      for (auto const& delta : sourceBatch.deltas)
-      {
-        std::visit(
-          [&batch](auto const& value)
-          {
-            using Value = std::remove_cvref_t<decltype(value)>;
-
-            if constexpr (std::same_as<Value, SourceInsertRange>)
-            {
-              batch.deltas.push_back(
-                ProjectionInsertRange{TrackRowRange{.start = value.start, .count = value.trackIds.size()}});
-            }
-            else if constexpr (std::same_as<Value, SourceRemoveRange>)
-            {
-              batch.deltas.push_back(
-                ProjectionRemoveRange{TrackRowRange{.start = value.start, .count = value.trackIds.size()}});
-            }
-            else if constexpr (std::same_as<Value, SourceUpdateRange>)
-            {
-              batch.deltas.push_back(
-                ProjectionUpdateRange{TrackRowRange{.start = value.start, .count = value.trackIds.size()}});
-            }
-          },
-          delta);
-      }
-
-      return batch;
-    }
-
-    static bool sortedEditsProduceFinalOrder(std::span<TrackId const> previousTrackIds,
-                                             std::span<TrackId const> finalTrackIds,
-                                             std::vector<IndexedTrack> removals,
-                                             std::vector<IndexedTrack> insertions)
-    {
-      auto working = std::vector<TrackId>{previousTrackIds.begin(), previousTrackIds.end()};
-      std::ranges::sort(removals, std::greater{}, &IndexedTrack::index);
-
-      for (auto const& removal : removals)
-      {
-        if (removal.index >= working.size() || working[removal.index] != removal.trackId)
-        {
-          return false;
-        }
-
-        working.erase(working.begin() + static_cast<std::ptrdiff_t>(removal.index));
-      }
-
-      std::ranges::sort(insertions, {}, &IndexedTrack::index);
-
-      for (auto const& insertion : insertions)
-      {
-        if (insertion.index > working.size())
-        {
-          return false;
-        }
-
-        working.insert(working.begin() + static_cast<std::ptrdiff_t>(insertion.index), insertion.trackId);
-      }
-
-      return std::ranges::equal(working, finalTrackIds);
+      auto const script = regularTrackEditScriptOf(sourceBatch);
+      return script ? eraseTrackIds(*script) : TrackListProjectionDeltaBatch{};
     }
 
     void publishSortedSourceBatch(std::vector<TrackId> const& previousTrackIds,
@@ -1925,112 +1127,40 @@ namespace ao::rt
                                   std::size_t previousSize)
     {
       auto const finalTrackIds = projectionTrackIds();
+      auto updatedTrackIds = std::vector<TrackId>{};
+
+      for (auto const& sourceDelta : sourceBatch.deltas)
+      {
+        if (auto const* update = std::get_if<SourceUpdateRange>(&sourceDelta); update != nullptr)
+        {
+          updatedTrackIds.append_range(update->trackIds);
+        }
+      }
+
       auto const previousIndex = makeTrackIndex(previousTrackIds);
       auto const finalIndex = makeTrackIndex(finalTrackIds);
-      auto previousCommonIndex = TrackIndexMap{};
-      auto finalCommonIndex = TrackIndexMap{};
-      std::size_t commonIndex = 0;
-
-      for (auto const trackId : previousTrackIds)
-      {
-        if (finalIndex.contains(trackId))
-        {
-          previousCommonIndex.emplace(trackId, commonIndex++);
-        }
-      }
-
-      commonIndex = 0;
-
-      for (auto const trackId : finalTrackIds)
-      {
-        if (previousIndex.contains(trackId))
-        {
-          finalCommonIndex.emplace(trackId, commonIndex++);
-        }
-      }
-
-      auto removals = std::vector<IndexedTrack>{};
-      auto insertions = std::vector<IndexedTrack>{};
-
-      for (auto const trackId : previousTrackIds)
-      {
-        if (!finalIndex.contains(trackId))
-        {
-          removals.push_back(IndexedTrack{.index = previousIndex.at(trackId), .trackId = trackId});
-        }
-      }
-
-      for (auto const trackId : finalTrackIds)
-      {
-        if (!previousIndex.contains(trackId))
-        {
-          insertions.push_back(IndexedTrack{.index = finalIndex.at(trackId), .trackId = trackId});
-        }
-      }
-
-      auto updatedTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
-
-      for (auto const& delta : sourceBatch.deltas)
-      {
-        if (auto const* update = std::get_if<SourceUpdateRange>(&delta); update != nullptr)
-        {
-          updatedTrackIds.insert(update->trackIds.begin(), update->trackIds.end());
-        }
-      }
-
-      auto updateRowIndices = std::vector<std::size_t>{};
+      auto preferredMovedIds = std::vector<TrackId>{};
 
       for (auto const trackId : updatedTrackIds)
       {
-        auto const oldRow = previousIndex.find(trackId);
-        auto const newRow = finalIndex.find(trackId);
+        auto const previous = previousIndex.find(trackId);
 
-        if (oldRow == previousIndex.end() || newRow == finalIndex.end())
+        if (auto const final = finalIndex.find(trackId);
+            previous != previousIndex.end() && final != finalIndex.end() && previous->second != final->second)
         {
-          continue;
-        }
-
-        if (previousCommonIndex.at(trackId) != finalCommonIndex.at(trackId))
-        {
-          removals.push_back(IndexedTrack{.index = oldRow->second, .trackId = trackId});
-          insertions.push_back(IndexedTrack{.index = newRow->second, .trackId = trackId});
-        }
-        else
-        {
-          updateRowIndices.push_back(newRow->second);
+          preferredMovedIds.push_back(trackId);
         }
       }
 
-      if (!sortedEditsProduceFinalOrder(previousTrackIds, finalTrackIds, removals, insertions))
+      auto const script = delta::diff(previousTrackIds, finalTrackIds, updatedTrackIds, preferredMovedIds);
+
+      if (auto const applied = delta::apply(previousTrackIds, script); !applied || *applied != finalTrackIds)
       {
         publishReset(previousSize);
         return;
       }
 
-      auto removalRowIndices = std::vector<std::size_t>{};
-      removalRowIndices.reserve(removals.size());
-
-      for (auto const& removal : removals)
-      {
-        removalRowIndices.push_back(removal.index);
-      }
-
-      auto insertionRowIndices = std::vector<std::size_t>{};
-      insertionRowIndices.reserve(insertions.size());
-
-      for (auto const& insertion : insertions)
-      {
-        insertionRowIndices.push_back(insertion.index);
-      }
-
-      auto batch = TrackListProjectionDeltaBatch{};
-      appendRemovalRangesDescending(batch.deltas, removalRowIndices);
-      appendAscendingRanges(batch.deltas,
-                            insertionRowIndices,
-                            [](TrackRowRange range) { return TrackListProjectionDelta{ProjectionInsertRange{range}}; });
-      appendAscendingRanges(batch.deltas,
-                            updateRowIndices,
-                            [](TrackRowRange range) { return TrackListProjectionDelta{ProjectionUpdateRange{range}}; });
+      auto batch = eraseTrackIds(script);
 
       if (batch.deltas.empty())
       {
@@ -2063,10 +1193,18 @@ namespace ao::rt
       auto const previousSize = orderIndex.size();
       auto const previousTrackIds = projectionTrackIds();
       auto const previousSections = sectionDescriptors();
-      rebuildOrderIndex();
 
       if (sourceBatch.deltas.size() == 1 && std::holds_alternative<SourceReset>(sourceBatch.deltas.front()))
       {
+        rebuildOrderIndex();
+        publishReset(previousSize);
+        return;
+      }
+
+      if (auto const script = regularTrackEditScriptOf(sourceBatch);
+          !script || !applyIncrementalBatch(sourceBatch, *script))
+      {
+        rebuildOrderIndex();
         publishReset(previousSize);
         return;
       }
@@ -2084,7 +1222,7 @@ namespace ao::rt
       }
 
       if (auto const finalTrackIds = projectionTrackIds();
-          !replaySourceOrderBatch(previousTrackIds, sourceBatch, finalTrackIds))
+          !sourceOrderBatchMatches(previousTrackIds, sourceBatch, finalTrackIds))
       {
         publishReset(previousSize);
         return;
@@ -2212,6 +1350,11 @@ namespace ao::rt
     }
 
     return std::nullopt;
+  }
+
+  TrackListProjectionOperationCounts LiveTrackListProjection::operationCounts() const noexcept
+  {
+    return _implPtr->operationCounts;
   }
 
   TrackPresentationSpec LiveTrackListProjection::presentation() const

@@ -23,7 +23,7 @@ namespace ao::utility::test
       auto const view = arena.intern("");
       CHECK(view.empty());
       CHECK(arena.empty());
-      CHECK(arena.empty());
+      CHECK(arena.allocatedBytes() == 0);
     }
 
     SECTION("distinct strings each get stored")
@@ -34,6 +34,7 @@ namespace ao::utility::test
       CHECK(a == "alpha");
       CHECK(b == "beta");
       CHECK(arena.size() == 2);
+      CHECK(arena.allocatedBytes() > 0);
       CHECK(a.data() != b.data());
     }
 
@@ -92,10 +93,11 @@ namespace ao::utility::test
     arena.intern("one");
     arena.intern("two");
     CHECK(arena.size() == 2);
+    CHECK(arena.allocatedBytes() > 0);
 
     arena.clear();
     CHECK(arena.empty());
-    CHECK(arena.empty());
+    CHECK(arena.allocatedBytes() == 0);
 
     // Re-interning after clear works and counts fresh.
     auto const view = arena.intern("three");

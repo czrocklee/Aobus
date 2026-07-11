@@ -97,7 +97,7 @@ namespace ao::uimodel::test
     auto const* const albums = rt::builtinTrackPresentationPreset("albums");
     REQUIRE(albums != nullptr);
 
-    fixture.viewService.setPresentation(activeViewId, albums->spec);
+    REQUIRE(fixture.viewService.setPresentation(activeViewId, albums->spec));
 
     REQUIRE(rendered.size() == 1);
     CHECK(rendered[0].activePresentationId == "albums");

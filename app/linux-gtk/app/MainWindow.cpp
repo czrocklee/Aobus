@@ -18,6 +18,7 @@
 #include "platform/MprisBridge.h"
 #include "portal/ImportExportCoordinator.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
@@ -33,6 +34,7 @@
 
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <format>
 #include <memory>
 #include <string>
@@ -165,7 +167,35 @@ namespace ao::gtk
 
   void MainWindow::saveSession()
   {
+    if (_librarySwitchPrepared)
+    {
+      return;
+    }
+
     _mainWindowCoordinatorPtr->saveSession();
+  }
+
+  Result<> MainWindow::prepareForLibrarySwitch()
+  {
+    if (_librarySwitchPrepared)
+    {
+      return {};
+    }
+
+    saveSession();
+
+    if (auto discarded = _runtime.discardRestorablePlaybackSession(); !discarded)
+    {
+      return discarded;
+    }
+
+    _librarySwitchPrepared = true;
+    return {};
+  }
+
+  std::filesystem::path const& MainWindow::musicRoot() const noexcept
+  {
+    return _runtime.musicRoot();
   }
 
   void MainWindow::on_hide()

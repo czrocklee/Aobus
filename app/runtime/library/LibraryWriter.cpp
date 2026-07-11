@@ -943,15 +943,14 @@ namespace ao::rt
       return reply;
     }
 
+    auto const revision = library.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit metadata update", result.error());
     }
 
-    if (!reply.mutatedIds.empty())
-    {
-      libraryChanges.notifyTracksMutated(reply.mutatedIds);
-    }
+    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision, .tracksMutated = reply.mutatedIds});
 
     return reply;
   }
@@ -1030,15 +1029,14 @@ namespace ao::rt
       return reply;
     }
 
+    auto const revision = library.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit tag update", result.error());
     }
 
-    if (!reply.mutatedIds.empty())
-    {
-      libraryChanges.notifyTracksMutated(reply.mutatedIds);
-    }
+    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision, .tracksMutated = reply.mutatedIds});
 
     return reply;
   }
@@ -1069,12 +1067,14 @@ namespace ao::rt
       return listId;
     }
 
+    auto const revision = library.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit list creation", result.error());
     }
 
-    libraryChanges.notifyListsMutated({listId}, {});
+    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision, .listsUpserted = {listId}});
 
     return listId;
   }
@@ -1118,6 +1118,8 @@ namespace ao::rt
       return reply;
     }
 
+    auto const revision = library.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit list update", result.error());
@@ -1130,7 +1132,9 @@ namespace ao::rt
       manualContentChanges.push_back(ManualListContentChange{.listId = draft.listId, .operation = ManualTracksReset{}});
     }
 
-    libraryChanges.notifyListsMutated({draft.listId}, {}, std::move(manualContentChanges));
+    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision,
+                                            .listsUpserted = {draft.listId},
+                                            .manualContentChanges = std::move(manualContentChanges)});
     return reply;
   }
 
@@ -1205,18 +1209,20 @@ namespace ao::rt
       return reply;
     }
 
+    auto const revision = library.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit manual list track insertion", result.error());
     }
 
-    libraryChanges.notifyListsMutated(
-      {listId},
-      {},
-      {ManualListContentChange{
+    libraryChanges.publish(LibraryChangeSet{
+      .libraryRevision = revision,
+      .listsUpserted = {listId},
+      .manualContentChanges = {ManualListContentChange{
         .listId = listId,
         .operation = ManualTracksInsert{.storedIndex = insertionIndex, .trackIds = reply.insertedTrackIds},
-      }});
+      }}});
     return reply;
   }
 
@@ -1283,17 +1289,19 @@ namespace ao::rt
       return reply;
     }
 
+    auto const revision = library.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit manual list track removal", result.error());
     }
 
-    libraryChanges.notifyListsMutated({listId},
-                                      {},
-                                      {ManualListContentChange{
-                                        .listId = listId,
-                                        .operation = ManualTracksRemove{.removals = std::move(removals)},
-                                      }});
+    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision,
+                                            .listsUpserted = {listId},
+                                            .manualContentChanges = {ManualListContentChange{
+                                              .listId = listId,
+                                              .operation = ManualTracksRemove{.removals = std::move(removals)},
+                                            }}});
     return reply;
   }
 
@@ -1382,20 +1390,22 @@ namespace ao::rt
       return reply;
     }
 
+    auto const revision = library.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit manual list track move", result.error());
     }
 
-    libraryChanges.notifyListsMutated(
-      {listId},
-      {},
-      {ManualListContentChange{
-        .listId = listId,
-        .operation = ManualTracksMove{.removals = std::move(removals),
-                                      .insertionIndexAfterRemoval = insertionIndexAfterRemoval,
-                                      .insertedTrackIds = reply.selectedTrackIds},
-      }});
+    libraryChanges.publish(
+      LibraryChangeSet{.libraryRevision = revision,
+                       .listsUpserted = {listId},
+                       .manualContentChanges = {ManualListContentChange{
+                         .listId = listId,
+                         .operation = ManualTracksMove{.removals = std::move(removals),
+                                                       .insertionIndexAfterRemoval = insertionIndexAfterRemoval,
+                                                       .insertedTrackIds = reply.selectedTrackIds},
+                       }}});
     return reply;
   }
 
@@ -1425,12 +1435,14 @@ namespace ao::rt
       return reply;
     }
 
+    auto const revision = library.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit list delete", result.error());
     }
 
-    libraryChanges.notifyListsMutated({}, {listId});
+    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision, .listsDeleted = {listId}});
     return reply;
   }
 
@@ -1481,18 +1493,17 @@ namespace ao::rt
       return reply;
     }
 
+    auto const revision = library.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit track delete", result.error());
     }
 
-    if (!reply.removedFromListIds.empty())
-    {
-      libraryChanges.notifyListsMutated(reply.removedFromListIds, {}, std::move(changedLists.contentChanges));
-    }
-
-    libraryChanges.notifyTrackCollectionChanged({}, {trackId});
-    libraryChanges.notifyTracksMutated({trackId});
+    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision,
+                                            .tracksDeleted = {trackId},
+                                            .listsUpserted = reply.removedFromListIds,
+                                            .manualContentChanges = std::move(changedLists.contentChanges)});
     return reply;
   }
 
@@ -1596,13 +1607,14 @@ namespace ao::rt
       return reply;
     }
 
+    auto const revision = library.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       return storageError("Failed to commit track creation", result.error());
     }
 
-    libraryChanges.notifyTrackCollectionChanged({id}, {});
-    libraryChanges.notifyTracksMutated({id});
+    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision, .tracksInserted = {id}});
     return reply;
   }
 } // namespace ao::rt

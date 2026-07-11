@@ -167,10 +167,12 @@ namespace ao::gtk::layout
         }
 
         _sub = _runtime.playback().onNowPlayingChanged([this](auto const&) { syncNowPlaying(); });
-        _tracksMutatedSub = _runtime.library().changes().onTracksMutated(
-          [this](auto const& trackIds)
+        _tracksMutatedSub = _runtime.library().changes().onChanged(
+          [this](rt::LibraryChangeSet const& changeSet)
           {
-            if (std::ranges::contains(trackIds, _currentTrackId))
+            if (changeSet.libraryReset || std::ranges::contains(changeSet.tracksInserted, _currentTrackId) ||
+                std::ranges::contains(changeSet.tracksDeleted, _currentTrackId) ||
+                std::ranges::contains(changeSet.tracksMutated, _currentTrackId))
             {
               syncCoverArtFromLibrary();
             }

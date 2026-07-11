@@ -17,13 +17,17 @@
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
+#include <boost/container_hash/hash.hpp>
+
 #include <algorithm>
 #include <concepts>
+#include <cstddef>
 #include <exception>
 #include <expected>
 #include <format>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -32,6 +36,14 @@
 
 namespace ao::rt
 {
+  std::size_t SourceSpecHash::operator()(SourceSpec const& spec) const noexcept
+  {
+    auto result = std::hash<ListId>{}(spec.baseListId);
+    auto const filterHash = std::hash<std::string>{}(spec.filterExpression);
+    boost::hash_combine(result, filterHash);
+    return result;
+  }
+
   namespace
   {
     CachedListSourceDefinition definitionOf(library::ListView const& view)
@@ -59,23 +71,50 @@ namespace ao::rt
   TrackSourceCache::TrackSourceCache(library::MusicLibrary& library, LibraryChanges const& changes)
     : _library{library}, _allTracksPtr{std::make_shared<AllTracksSource>(_library.tracks())}, _smartEvaluator{_library}
   {
-    _listsMutatedSubscription = changes.onListsMutated(
-      [this](LibraryChanges::ListsMutated const& event)
+    _changesSubscription = changes.onChanged(
+      // A changeset is routed to several source kinds in one ordered callback.
+      // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+      [this](LibraryChangeSet const& event)
       {
+        if (event.libraryReset)
+        {
+          reloadAllTracks();
+          auto liveListIds = std::vector<ListId>{};
+          liveListIds.reserve(_liveSources.size());
+
+          for (auto const& [listId, sourcePtr] : _liveSources)
+          {
+            std::ignore = sourcePtr;
+            liveListIds.push_back(listId);
+          }
+
+          applyListMutation(
+            [this, &liveListIds]
+            {
+              for (auto const listId : liveListIds)
+              {
+                refreshList(listId);
+              }
+            });
+          return;
+        }
+
         applyListMutation(
           [this, &event]
           {
-            for (auto const id : event.deleted)
+            for (auto const id : event.listsDeleted)
             {
               eraseList(id);
             }
+
+            _allTracksPtr->applyCollectionChange(event.tracksInserted, event.tracksDeleted);
 
             auto detailedListIds = std::vector<ListId>{};
             detailedListIds.reserve(event.manualContentChanges.size());
 
             for (auto const& contentChange : event.manualContentChanges)
             {
-              if (std::ranges::contains(event.deleted, contentChange.listId))
+              if (std::ranges::contains(event.listsDeleted, contentChange.listId))
               {
                 continue;
               }
@@ -117,44 +156,30 @@ namespace ao::rt
                 contentChange.operation);
             }
 
-            for (auto const id : event.upserted)
+            for (auto const id : event.listsUpserted)
             {
               if (!std::ranges::contains(detailedListIds, id))
               {
                 refreshList(id);
               }
             }
+
+            auto metadataTrackIds = std::vector<TrackId>{};
+            metadataTrackIds.reserve(event.tracksMutated.size());
+
+            for (auto const trackId : event.tracksMutated)
+            {
+              if (!std::ranges::contains(event.tracksInserted, trackId) &&
+                  !std::ranges::contains(event.tracksDeleted, trackId))
+              {
+                metadataTrackIds.push_back(trackId);
+              }
+            }
+
+            _allTracksPtr->notifyUpdated(metadataTrackIds);
           });
       });
-
-    _tracksMutatedSubscription = changes.onTracksMutated(
-      [this](std::vector<TrackId> const& trackIds)
-      {
-        auto metadataTrackIds = std::vector<TrackId>{};
-        metadataTrackIds.reserve(trackIds.size());
-
-        for (auto const trackId : trackIds)
-        {
-          if (!std::ranges::contains(_collectionChangedTrackIds, trackId))
-          {
-            metadataTrackIds.push_back(trackId);
-          }
-        }
-
-        _collectionChangedTrackIds.clear();
-        _allTracksPtr->notifyUpdated(metadataTrackIds);
-      });
-
-    _trackCollectionChangedSubscription = changes.onTrackCollectionChanged(
-      [this](LibraryChanges::TrackCollectionChanged const& event)
-      {
-        _collectionChangedTrackIds = event.inserted;
-        _collectionChangedTrackIds.append_range(event.deleted);
-        _allTracksPtr->applyCollectionChange(event.inserted, event.deleted);
-      });
   }
-
-  TrackSourceCache::~TrackSourceCache() = default;
 
   TrackSource& TrackSourceCache::allTracks()
   {
@@ -164,6 +189,48 @@ namespace ao::rt
   Result<TrackSourceLease> TrackSourceCache::acquire(ListId const listId)
   {
     return acquire(listId, {});
+  }
+
+  Result<TrackSourceLease> TrackSourceCache::acquire(SourceSpec const& spec)
+  {
+    if (spec.filterExpression.empty())
+    {
+      return acquire(spec.baseListId);
+    }
+
+    if (auto const cached = _adHocSources.find(spec); cached != _adHocSources.end())
+    {
+      if (auto sourcePtr = cached->second.lock(); sourcePtr != nullptr && sourcePtr->state() == TrackSourceState::Live)
+      {
+        return TrackSourceLease{std::move(sourcePtr)};
+      }
+
+      _adHocSources.erase(cached);
+    }
+
+    auto baseResult = acquire(spec.baseListId);
+
+    if (!baseResult)
+    {
+      return std::unexpected{baseResult.error()};
+    }
+
+    auto sourcePtr = std::make_shared<SmartListSource>(*baseResult, _library, _smartEvaluator);
+    sourcePtr->setExpression(spec.filterExpression);
+    sourcePtr->reload();
+    auto basePtr = std::static_pointer_cast<TrackSource>(std::move(sourcePtr));
+    _adHocSources.insert_or_assign(spec, basePtr);
+    return TrackSourceLease{std::move(basePtr)};
+  }
+
+  std::optional<Error> TrackSourceCache::sourceError(TrackSourceLease const& lease) const
+  {
+    if (auto const* source = dynamic_cast<SmartListSource const*>(&lease.source()); source != nullptr)
+    {
+      return source->error();
+    }
+
+    return std::nullopt;
   }
 
   void TrackSourceCache::reloadAllTracks()

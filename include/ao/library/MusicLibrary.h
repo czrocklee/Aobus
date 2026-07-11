@@ -7,6 +7,7 @@
 #include <ao/lmdb/Transaction.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 
@@ -48,6 +49,8 @@ namespace ao::library
 
     lmdb::ReadTransaction readTransaction() const;
     lmdb::WriteTransaction writeTransaction();
+    std::uint64_t libraryRevision(lmdb::ReadTransaction const& transaction) const;
+    std::uint64_t libraryRevision(lmdb::WriteTransaction& transaction) const;
 
     TrackStore& tracks();
     TrackStore const& tracks() const;

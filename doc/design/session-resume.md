@@ -84,7 +84,7 @@ position snapshot. Saving rejects a cursor/transport current-track mismatch
 instead of writing a payload assembled from different playback generations.
 
 Ordinary stop, exhaustion, or invalidation does not forget listening intent. A
-later successful launch replaces the snapshot. `forgetPlaybackSession()` is the
+later successful launch replaces the snapshot. `discardRestorablePlaybackSession()` is the
 only operation that removes the config group and clears both snapshots; it does
 not stop active audio. Snapshot clearing occurs only after remove and flush
 succeed. Periodic saves remain no-ops while forgotten until a later discrete
@@ -106,12 +106,22 @@ save, or flush failure retains dirty state. Subscribing while already dirty
 immediately replays the dirty condition, which makes late frontend startup and
 normalization during restore safe.
 
-`PlaybackSessionSaveService` owns frontend timing only. It starts dirty
-observation before restore, debounces ordinary dirty events, performs immediate
-significant-event saves, and retries failures with bounded exponential backoff
-even while paused. Significant, periodic, and shutdown attempts use the same
-runtime save operation; periodic and shutdown saves are safety nets, not the
-only way paused intent becomes durable.
+`PlaybackSessionPersistence` also owns save timing. It starts before restore,
+debounces ordinary dirty events, performs immediate significant-event saves,
+and retries failures with bounded exponential backoff even while paused.
+Significant, periodic, and shutdown attempts use the same persistence state
+machine; periodic and shutdown saves are safety nets, not the only way paused
+intent becomes durable. Frontends only start and shut down this application
+lifecycle.
+
+GTK treats playback as one application session paired with the globally stored
+last-open library. One process owns one active library runtime and one main
+library window. Switching libraries first saves and forgets the old playback
+session, destroys the old runtime, updates the global library path, and then
+constructs the replacement runtime. The playback-session payload therefore
+lives in the global application config, while view/layout workspace state stays
+in the library-specific workspace config. This ordering prevents database-local
+track and list IDs from crossing a library boundary.
 
 ## Shuffle Continuity
 

@@ -4,7 +4,6 @@
 #include "runtime/source/TrackSourceDeltaBuilder.h"
 
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -118,16 +117,5 @@ namespace ao::rt::test
     auto const builder = TrackSourceDeltaBuilder{4};
 
     CHECK_FALSE(builder.build());
-  }
-
-  TEST_CASE("TrackSourceDeltaBuilder - invalid known coordinates are rejected", "[runtime][unit][source]")
-  {
-    auto removalBuilder = TrackSourceDeltaBuilder{2};
-    removalBuilder.remove(2, TrackId{30});
-    REQUIRE_THROWS_AS(removalBuilder.build(), Exception);
-
-    auto insertionBuilder = TrackSourceDeltaBuilder{2};
-    insertionBuilder.insert(3, TrackId{30});
-    REQUIRE_THROWS_AS(insertionBuilder.build(), Exception);
   }
 } // namespace ao::rt::test

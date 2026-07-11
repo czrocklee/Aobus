@@ -29,8 +29,7 @@ namespace ao::rt::test
     {
       ManualListWriterFixture()
         : writer{libraryFixture.library(), changes}
-        , listSub{
-            changes.onListsMutated([this](LibraryChanges::ListsMutated const& event) { listEvents.push_back(event); })}
+        , listSub{changes.onChanged([this](LibraryChangeSet const& event) { listEvents.push_back(event); })}
       {
       }
 
@@ -100,7 +99,7 @@ namespace ao::rt::test
       MusicLibraryFixture libraryFixture;
       LibraryChanges changes;
       LibraryWriter writer;
-      std::vector<LibraryChanges::ListsMutated> listEvents;
+      std::vector<LibraryChangeSet> listEvents;
       Subscription listSub;
     };
   } // namespace
@@ -512,7 +511,7 @@ namespace ao::rt::test
     CHECK(fixture.storedTrackIds(firstList) == std::vector<TrackId>{first});
     CHECK(fixture.storedTrackIds(secondList) == std::vector<TrackId>{first, third, fourth});
     REQUIRE(fixture.listEvents.size() == 1);
-    CHECK(fixture.listEvents[0].upserted == std::vector<ListId>{firstList, secondList});
+    CHECK(fixture.listEvents[0].listsUpserted == std::vector<ListId>{firstList, secondList});
     REQUIRE(fixture.listEvents[0].manualContentChanges.size() == 2);
 
     auto const* firstRemoval =

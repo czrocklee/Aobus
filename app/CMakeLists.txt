@@ -10,13 +10,13 @@ add_library(ao_app_runtime STATIC
     runtime/completion/CompletionService.cpp
     runtime/completion/QueryExpressionCompleter.cpp
     runtime/completion/MetadataValueCompleter.cpp
-    runtime/source/AllTracksSource.cpp
+  runtime/source/AllTracksSource.cpp
+  runtime/source/IndexedTrackSequence.cpp
     runtime/source/CachedListSource.cpp
     runtime/ConfigStore.cpp
     runtime/PlaybackService.cpp
     runtime/PlaybackSequenceService.cpp
     runtime/PlaybackSessionPersistence.cpp
-    runtime/PlaybackSessionSaveService.cpp
     runtime/playback/PlaybackCursor.cpp
     runtime/playback/PlaybackCursorSession.cpp
     runtime/playback/PlaybackRestartDeadline.cpp
@@ -39,10 +39,13 @@ add_library(ao_app_runtime STATIC
     runtime/TrackPresentation.cpp
     runtime/TrackField.cpp
     runtime/TrackFieldReader.cpp
+    runtime/TrackEditScript.cpp
     runtime/projection/LiveTrackListProjection.cpp
+    runtime/projection/TrackProjectionEditScript.cpp
     runtime/projection/LiveTrackDetailProjection.cpp
     runtime/source/TrackSource.cpp
     runtime/source/TrackSourceDeltaBuilder.cpp
+    runtime/source/TrackSourceEditScript.cpp
     runtime/ViewService.cpp
     runtime/Log.cpp
 )

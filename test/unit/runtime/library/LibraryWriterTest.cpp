@@ -33,7 +33,7 @@ namespace ao::rt::test
     auto service = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
 
     auto const targetIds = std::array{trackId};
     auto const result = service.updateMetadata(targetIds, MetadataPatch{.optTitle = "New Title"});
@@ -53,9 +53,10 @@ namespace ao::rt::test
     auto service = LibraryWriter{libraryFixture.library(), changes};
 
     auto observedTitle = std::string{};
-    auto sub = changes.onTracksMutated(
-      [&](auto const& trackIds)
+    auto sub = changes.onChanged(
+      [&](LibraryChangeSet const& event)
       {
+        auto const& trackIds = event.tracksMutated;
         REQUIRE(trackIds.size() == 1);
         CHECK(trackIds[0] == trackId);
 
@@ -86,7 +87,7 @@ namespace ao::rt::test
     auto service = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
 
     auto const targetIds = std::array{trackId};
     auto const result = service.updateMetadata(targetIds, MetadataPatch{.optTitle = "Original Title"});
@@ -195,7 +196,7 @@ namespace ao::rt::test
     auto service = LibraryWriter{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
 
     auto patch = MetadataPatch{};
     patch.customUpdates["oversized"] = std::string(70'000, 'x');
@@ -280,7 +281,7 @@ namespace ao::rt::test
     auto const listId = ao::test::requireValue(service.createList(draft));
 
     auto upserted = std::vector<ListId>{};
-    auto sub = changes.onListsMutated([&](auto const& ev) { upserted = ev.upserted; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& ev) { upserted = ev.listsUpserted; });
 
     auto updateDraft = LibraryWriter::ListDraft{};
     updateDraft.listId = listId;
@@ -382,7 +383,7 @@ namespace ao::rt::test
     draft.listId = listId;
 
     auto upserted = std::vector<ListId>{};
-    auto sub = changes.onListsMutated([&](auto const& ev) { upserted = ev.upserted; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& ev) { upserted = ev.listsUpserted; });
 
     auto const updateResult = service.updateList(draft);
     REQUIRE(updateResult);
@@ -417,7 +418,7 @@ namespace ao::rt::test
     auto const listId = ao::test::requireValue(service.createList(draft));
 
     auto deleted = std::vector<ListId>{};
-    auto sub = changes.onListsMutated([&](auto const& ev) { deleted = ev.deleted; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& ev) { deleted = ev.listsDeleted; });
 
     REQUIRE(service.deleteList(listId));
 

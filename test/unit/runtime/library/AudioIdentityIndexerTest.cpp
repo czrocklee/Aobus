@@ -73,7 +73,7 @@ namespace ao::rt::test
 
       auto runResult = scanService.applyPlan(std::move(plan), ScanApplyOptions{.audioIdentityPolicy = policy});
       REQUIRE(runResult);
-      REQUIRE(runResult->processedIds.size() == expectedNewCount);
+      REQUIRE(runResult->insertedIds.size() == expectedNewCount);
       REQUIRE(runResult->failureCount == 0);
     }
 

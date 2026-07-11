@@ -80,12 +80,12 @@ namespace ao::rt
          library::MusicLibrary& library)
       : views{views}, playback{playback}, library{library}
     {
-      listsMutatedSub = changes.onListsMutated(
-        [this, self](LibraryChanges::ListsMutated const& ev)
+      listsMutatedSub = changes.onChanged(
+        [this, self](LibraryChangeSet const& ev)
         {
           auto toClose = std::vector<ViewId>{};
 
-          for (auto const id : ev.deleted)
+          for (auto const id : ev.listsDeleted)
           {
             for (auto const viewId : this->layoutState.openViews)
             {
@@ -150,6 +150,8 @@ namespace ao::rt
         .canGoBack = navigationHistory.canGoBack(), .canGoForward = navigationHistory.canGoForward()});
     }
 
+    // Variant routing plus reusable-view lookup is intentionally kept together.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     Result<ViewId> resolveOrCreateTargetView(NavigationTarget const& target,
                                              ViewService& viewsSvc,
                                              std::optional<TrackPresentationSpec> const& optPresentation)
@@ -167,7 +169,10 @@ namespace ao::rt
             {
               if (optPresentation)
               {
-                viewsSvc.setPresentation(record.id, *optPresentation);
+                if (auto result = viewsSvc.setPresentation(record.id, *optPresentation); !result)
+                {
+                  return std::unexpected{result.error()};
+                }
               }
 
               return record.id;
@@ -296,7 +301,10 @@ namespace ao::rt
       }
       else
       {
-        views.setPresentation(matchingViewId, point.presentation);
+        if (auto result = views.setPresentation(matchingViewId, point.presentation); !result)
+        {
+          return std::unexpected{result.error()};
+        }
       }
 
       if (!std::ranges::contains(layoutState.openViews, matchingViewId))
@@ -379,7 +387,12 @@ namespace ao::rt
       return;
     }
 
-    _implPtr->views.setPresentation(viewId, presentation);
+    if (auto result = _implPtr->views.setPresentation(viewId, presentation); !result)
+    {
+      APP_LOG_ERROR("Failed to set active presentation: {}", result.error().message);
+      return;
+    }
+
     _implPtr->commitActiveViewIfRequested(options);
   }
 
@@ -400,8 +413,14 @@ namespace ao::rt
       return {};
     }
 
-    auto const spec = normalizeTrackPresentationSpec(*optSpec);
-    _implPtr->views.setPresentation(viewId, spec);
+    auto spec = normalizeTrackPresentationSpec(*optSpec);
+
+    if (auto result = _implPtr->views.setPresentation(viewId, spec); !result)
+    {
+      APP_LOG_ERROR("Failed to set active presentation: {}", result.error().message);
+      return {};
+    }
+
     _implPtr->commitActiveViewIfRequested(options);
     return spec;
   }
@@ -428,7 +447,11 @@ namespace ao::rt
     // Apply album presentation without recording.
     if (auto const* preset = builtinTrackPresentationPreset("albums"); preset != nullptr)
     {
-      _implPtr->views.setPresentation(targetViewId, preset->spec);
+      if (auto result = _implPtr->views.setPresentation(targetViewId, preset->spec); !result)
+      {
+        APP_LOG_ERROR("Failed to set album presentation: {}", result.error().message);
+        return;
+      }
     }
 
     // Reveal the track.
@@ -507,7 +530,10 @@ namespace ao::rt
     _implPtr->layoutState.revision++;
     _implPtr->focusedViewChangedSignal.emit(_implPtr->layoutState.activeViewId);
 
-    _implPtr->views.destroyView(viewId);
+    if (auto result = _implPtr->views.destroyView(viewId); !result)
+    {
+      APP_LOG_ERROR("Failed to destroy view {}: {}", viewId.raw(), result.error().message);
+    }
   }
 
   std::span<CustomTrackPresentationPreset const> WorkspaceService::customPresets() const
@@ -606,7 +632,7 @@ namespace ao::rt
       {
         for (auto const viewId : createdViewIds)
         {
-          _implPtr->views.destroyView(viewId);
+          std::ignore = _implPtr->views.destroyView(viewId);
         }
 
         return std::unexpected{result.error()};

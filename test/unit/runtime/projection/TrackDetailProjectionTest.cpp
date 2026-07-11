@@ -85,7 +85,7 @@ namespace ao::rt::test
       env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Before", .artist = "ArtistA", .album = "AlbumX"});
 
     auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
-    env.views.setSelection(reply.viewId, {id1});
+    REQUIRE(env.views.setSelection(reply.viewId, {id1}));
 
     auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
 
@@ -116,7 +116,7 @@ namespace ao::rt::test
     auto const id2 = env.libraryFixture.addTrack("Other");
 
     auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
-    env.views.setSelection(reply.viewId, {id1});
+    REQUIRE(env.views.setSelection(reply.viewId, {id1}));
 
     auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
 
@@ -141,7 +141,7 @@ namespace ao::rt::test
       env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Song B", .artist = "Same", .album = "AlbumY"});
 
     auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
-    env.views.setSelection(reply.viewId, {id1, id2});
+    REQUIRE(env.views.setSelection(reply.viewId, {id1, id2}));
 
     auto const projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
@@ -188,14 +188,14 @@ namespace ao::rt::test
     CHECK(callCount == 1); // Called immediately
 
     auto const reply1 = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
-    env.views.setSelection(reply1.viewId, {id1});
+    REQUIRE(env.views.setSelection(reply1.viewId, {id1}));
     REQUIRE(env.workspace.navigateTo(GlobalViewKind::AllTracks)); // Should trigger onFocusedViewChanged
 
     CHECK(callCount >= 2);
     CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song A");
 
     // Change selection in the focused view
-    env.views.setSelection(reply1.viewId, {id2});
+    REQUIRE(env.views.setSelection(reply1.viewId, {id2}));
     CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song B");
 
     // Change focus away
@@ -206,7 +206,9 @@ namespace ao::rt::test
     sub = {};
 
     // Now trigger a selection change in the old view, should NOT update because it's no longer focused
-    env.views.setSelection(reply1.viewId, {id1});
+    auto const destroyedSelection = env.views.setSelection(reply1.viewId, {id1});
+    REQUIRE_FALSE(destroyedSelection);
+    CHECK(destroyedSelection.error().code == Error::Code::InvalidState);
     CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
   }
 
@@ -218,7 +220,7 @@ namespace ao::rt::test
 
     auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
     env.workspace.setFocusedView(reply.viewId);
-    env.views.setSelection(reply.viewId, {id1});
+    REQUIRE(env.views.setSelection(reply.viewId, {id1}));
 
     auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();

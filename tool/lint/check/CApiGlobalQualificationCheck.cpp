@@ -35,6 +35,13 @@ namespace clang::tidy::readability
       return;
     }
 
+    // Compiler intrinsics use C linkage in the AST but are not external C
+    // library APIs and have no source spelling that can be qualified.
+    if (func->getName().starts_with("__builtin_"))
+    {
+      return;
+    }
+
     if (SourceLocation const loc = call->getBeginLoc(); loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
     {
       return;

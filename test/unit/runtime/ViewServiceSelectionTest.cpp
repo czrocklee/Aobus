@@ -30,13 +30,13 @@ namespace ao::rt::test
 
     SECTION("the selection's durations are summed")
     {
-      service.setSelection(result.viewId, {trackA, trackB});
+      REQUIRE(service.setSelection(result.viewId, {trackA, trackB}));
       CHECK(service.selectionDuration(result.viewId) == std::chrono::seconds{300});
     }
 
     SECTION("ids missing from the library are skipped")
     {
-      service.setSelection(result.viewId, {trackA, TrackId{9999}});
+      REQUIRE(service.setSelection(result.viewId, {trackA, TrackId{9999}}));
       CHECK(service.selectionDuration(result.viewId) == std::chrono::seconds{200});
     }
 
@@ -44,5 +44,20 @@ namespace ao::rt::test
     {
       CHECK(service.selectionDuration(ViewId{999}) == std::chrono::milliseconds{0});
     }
+  }
+
+  TEST_CASE("ViewService - selection mutation reports missing and destroyed views", "[runtime][unit][view][selection]")
+  {
+    auto env = ViewServiceFixture{};
+    auto service = env.makeService();
+    auto const missing = service.setSelection(ViewId{999}, {});
+    REQUIRE_FALSE(missing);
+    CHECK(missing.error().code == Error::Code::NotFound);
+
+    auto const view = env.requireView(service);
+    REQUIRE(service.destroyView(view.viewId));
+    auto const destroyed = service.setSelection(view.viewId, {});
+    REQUIRE_FALSE(destroyed);
+    CHECK(destroyed.error().code == Error::Code::InvalidState);
   }
 } // namespace ao::rt::test

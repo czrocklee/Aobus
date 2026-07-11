@@ -106,7 +106,9 @@ namespace ao::rt
     // Subscription registration is part of the executor-affinity contract: these
     // onXxx() methods must be called on the executor's owning thread, and the
     // returned Subscription must likewise be reset on that thread. Handlers are
-    // invoked on the executor thread when the matching signal is emitted.
+    // invoked on the executor thread when the matching signal is emitted. A
+    // handler must not synchronously destroy this service; Debug contracts
+    // require teardown to be deferred to a later executor turn.
 
     Subscription onPreparing(std::move_only_function<void()> handler);
     Subscription onStarted(std::move_only_function<void()> handler);
@@ -166,18 +168,21 @@ namespace ao::rt
                     NotificationService& notifications,
                     std::unique_ptr<audio::Player> playerPtr);
 
+    void shutdown() noexcept;
     void bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler);
     void unbindPlaybackFailureRecovery();
     bool isPublishingAcceptedStart() const;
     std::optional<std::uint64_t> preparedNextIssuedGeneration(PreparedNextToken token) const;
+    Result<PlaybackStartReceipt> playSequenceTrack(TrackId trackId, ListId sourceListId);
     Result<PreparedNextToken> prepareSequenceNext(TrackId trackId, ListId sourceListId);
     std::optional<PreparedNextToken> clearSequencePreparedNext();
+    PreparedCancellationBarrier stopSequence();
     PlaybackTransportSessionState playbackTransportSessionState();
     Result<> restorePlaybackTransport(PlaybackTransportSessionState const& session,
                                       std::move_only_function<void(std::chrono::milliseconds) noexcept> beforePublish);
-    void forgetPlaybackTransportSnapshot();
+    void discardPlaybackTransportSnapshot();
 
     struct Impl;
-    std::shared_ptr<Impl> _implPtr;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

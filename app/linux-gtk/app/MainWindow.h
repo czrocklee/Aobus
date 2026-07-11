@@ -4,12 +4,14 @@
 #pragma once
 
 #include "app/ShellLayoutController.h"
+#include <ao/Error.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 
 #include <gtkmm/applicationwindow.h>
 
+#include <filesystem>
 #include <memory>
 
 namespace ao::rt
@@ -50,6 +52,8 @@ namespace ao::gtk
     MainWindow& operator=(MainWindow&&) = delete;
 
     void saveSession();
+    Result<> prepareForLibrarySwitch();
+    std::filesystem::path const& musicRoot() const noexcept;
 
     portal::ImportExportCoordinator& importExportCoordinator();
 
@@ -77,5 +81,6 @@ namespace ao::gtk
     std::unique_ptr<WindowActionRegistry> _windowActionRegistryPtr;
     std::unique_ptr<MenuController> _menuControllerPtr;
     std::unique_ptr<platform::MprisBridge> _mprisBridgePtr;
+    bool _librarySwitchPrepared = false;
   };
 } // namespace ao::gtk

@@ -144,7 +144,7 @@ endif()
 add_compile_definitions(SPDLOG_USE_STD_FORMAT)
 
 # GSL-lite
-# Debug throws exceptions, non-Debug disables contract checks.
+# Debug fails fast through assertions; non-Debug disables contract checks.
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_definitions(gsl_CONFIG_CONTRACT_VIOLATION_ASSERTS=1)
 else()

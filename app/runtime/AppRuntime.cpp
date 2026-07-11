@@ -34,9 +34,12 @@ namespace ao::rt
     PlaybackSequenceService playbackSequenceService;
     WorkspaceService workspaceService;
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr;
-    PlaybackSessionPersistence playbackSessionPersistence;
+    ConfigStore* playbackSessionConfigStore = nullptr;
+    std::shared_ptr<PlaybackSessionPersistence> playbackSessionPersistencePtr;
 
-    Impl(AppRuntime& runtime, std::unique_ptr<ConfigStore> workspaceConfigPtr)
+    Impl(AppRuntime& runtime,
+         std::unique_ptr<ConfigStore> workspaceConfigPtr,
+         ConfigStore* playbackSessionConfigStoreValue)
       : viewService{runtime.async().callbackExecutor(), runtime.musicLibrary(), runtime.sources()}
       , playbackService{runtime.async().callbackExecutor(), runtime.musicLibrary(), runtime.notifications()}
       , playbackSequenceService{runtime.async().callbackExecutor(),
@@ -44,14 +47,18 @@ namespace ao::rt
                                 runtime.sources(),
                                 runtime.musicLibrary(),
                                 playbackService,
-                                runtime.notifications()}
+                                runtime.notifications(),
+                                runtime.async()}
       , workspaceService{viewService, playbackService, runtime.library().changes(), runtime.musicLibrary()}
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
-      , playbackSessionPersistence{*workspaceConfigStorePtr,
-                                   runtime.library(),
-                                   runtime.musicLibrary(),
-                                   playbackSequenceService,
-                                   playbackService}
+      , playbackSessionConfigStore{playbackSessionConfigStoreValue != nullptr ? playbackSessionConfigStoreValue
+                                                                              : workspaceConfigStorePtr.get()}
+      , playbackSessionPersistencePtr{std::make_shared<PlaybackSessionPersistence>(*playbackSessionConfigStore,
+                                                                                   runtime.library(),
+                                                                                   runtime.musicLibrary(),
+                                                                                   playbackSequenceService,
+                                                                                   playbackService,
+                                                                                   runtime.async())}
     {
     }
 
@@ -60,7 +67,12 @@ namespace ao::rt
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    ~Impl() = default;
+    ~Impl()
+    {
+      std::ignore = playbackSessionPersistencePtr->shutdown();
+      // Join playback callback producers while every consumer is still alive.
+      playbackService.shutdown();
+    }
   };
 
   AppRuntime::AppRuntime(AppRuntimeDependencies dependencies)
@@ -68,7 +80,9 @@ namespace ao::rt
                   std::move(dependencies.musicRoot),
                   std::move(dependencies.databasePath),
                   dependencies.musicLibraryMapSize}
-    , _implPtr{std::make_unique<Impl>(*this, std::move(dependencies.workspaceConfigStorePtr))}
+    , _implPtr{std::make_unique<Impl>(*this,
+                                      std::move(dependencies.workspaceConfigStorePtr),
+                                      dependencies.playbackSessionConfigStore)}
   {
   }
 
@@ -94,19 +108,25 @@ namespace ao::rt
     return _implPtr->viewService;
   }
 
-  ConfigStore& AppRuntime::configStore() noexcept
+  ConfigStore& AppRuntime::workspaceConfigStore() noexcept
   {
     return *_implPtr->workspaceConfigStorePtr;
   }
 
+  ConfigStore& AppRuntime::playbackSessionConfigStore() noexcept
+  {
+    return *_implPtr->playbackSessionConfigStore;
+  }
+
   Result<> AppRuntime::savePlaybackSession()
   {
-    return _implPtr->playbackSessionPersistence.save();
+    return _implPtr->playbackSessionPersistencePtr->checkpoint();
   }
 
   Result<PlaybackSessionRestoreResult> AppRuntime::restorePlaybackSession()
   {
-    auto restored = _implPtr->playbackSessionPersistence.restore();
+    _implPtr->playbackSessionPersistencePtr->start();
+    auto restored = _implPtr->playbackSessionPersistencePtr->restore();
 
     if (!restored)
     {
@@ -120,14 +140,14 @@ namespace ao::rt
     };
   }
 
-  Result<> AppRuntime::forgetPlaybackSession()
+  Result<> AppRuntime::discardRestorablePlaybackSession()
   {
-    return _implPtr->playbackSessionPersistence.forget();
+    return _implPtr->playbackSessionPersistencePtr->discardRestorableSession();
   }
 
   Subscription AppRuntime::onPlaybackSessionDirty(std::move_only_function<void()> handler)
   {
-    return _implPtr->playbackSessionPersistence.onDirty(std::move(handler));
+    return _implPtr->playbackSessionPersistencePtr->onDirty(std::move(handler));
   }
 
   void AppRuntime::reloadAllTracks()

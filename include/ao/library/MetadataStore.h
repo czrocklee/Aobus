@@ -7,6 +7,7 @@
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
 
+#include <cstdint>
 #include <utility>
 
 namespace ao::library
@@ -24,6 +25,10 @@ namespace ao::library
     Result<MetadataHeader> load(lmdb::ReadTransaction const& transaction) const;
     void create(lmdb::WriteTransaction& transaction, MetadataHeader const& header);
     void update(lmdb::WriteTransaction& transaction, MetadataHeader const& header);
+
+    std::uint64_t revision(lmdb::ReadTransaction const& transaction) const;
+    std::uint64_t revision(lmdb::WriteTransaction& transaction) const;
+    std::uint64_t bumpRevision(lmdb::WriteTransaction& transaction) const;
 
   private:
     lmdb::Database _database;

@@ -28,6 +28,8 @@ namespace ao::library
 
 namespace ao::rt
 {
+  class LibraryChanges;
+
   struct AudioIdentityIndexProgress final
   {
     /// File currently being fingerprinted.
@@ -88,6 +90,10 @@ namespace ao::rt
     using Options = AudioIdentityIndexOptions;
 
     AudioIdentityIndexer(async::Runtime& asyncRuntime, library::MusicLibrary& library, std::mutex& mutationMutex);
+    AudioIdentityIndexer(async::Runtime& asyncRuntime,
+                         library::MusicLibrary& library,
+                         std::mutex& mutationMutex,
+                         LibraryChanges& changes);
     ~AudioIdentityIndexer() = default;
 
     /// Fill pending audio identities for available manifest rows. Rows are
@@ -110,5 +116,6 @@ namespace ao::rt
     async::Runtime& _asyncRuntime;
     library::MusicLibrary& _library;
     std::mutex& _mutationMutex;
+    LibraryChanges* _changes = nullptr;
   };
 } // namespace ao::rt

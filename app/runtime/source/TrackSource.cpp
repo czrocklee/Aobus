@@ -8,6 +8,8 @@
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <cstddef>
 #include <functional>
 #include <limits>
@@ -195,11 +197,8 @@ namespace ao::rt
       return false;
     }
 
-    if (!validateTrackSourceDeltaBatch(batch, previousSize) ||
-        std::holds_alternative<SourceInvalidated>(batch.deltas.front()))
-    {
-      throwException<Exception>("Invalid track source delta batch");
-    }
+    gsl_Assert(!batch.deltas.empty() && validateTrackSourceDeltaBatch(batch, previousSize) &&
+               !std::holds_alternative<SourceInvalidated>(batch.deltas.front()));
 
     batch.revision = ++_revision;
     _changedSignal.emit(batch);

@@ -4,12 +4,11 @@
 #include "runtime/playback/PlaybackRestartDeadline.h"
 
 #include "test/unit/RuntimeTestSupport.h"
+#include <ao/async/Runtime.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
-#include <optional>
-#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -17,69 +16,14 @@ namespace ao::rt::test
   namespace
   {
     using Elapsed = PlaybackRestartDeadline::Elapsed;
-    using TimePoint = PlaybackRestartDeadline::TimePoint;
-
-    class FakeRestartDeadlineScheduler final : public PlaybackRestartDeadline::Scheduler
-    {
-    public:
-      using DeadlineCallback = PlaybackRestartDeadline::DeadlineCallback;
-
-      struct ScheduledCall final
-      {
-        TimePoint deadline{};
-        DeadlineCallback callback;
-        bool cancelled = false;
-      };
-
-      void schedule(TimePoint const deadline, DeadlineCallback callback) override
-      {
-        _calls.push_back(ScheduledCall{.deadline = deadline, .callback = std::move(callback)});
-        _optActiveIndex = _calls.size() - 1;
-      }
-
-      void cancel() noexcept override
-      {
-        if (_optActiveIndex)
-        {
-          _calls[*_optActiveIndex].cancelled = true;
-          _optActiveIndex.reset();
-        }
-      }
-
-      void fire(std::size_t const index)
-      {
-        auto callback = std::move(_calls.at(index).callback);
-
-        if (_optActiveIndex == index)
-        {
-          _optActiveIndex.reset();
-        }
-
-        callback();
-      }
-
-      std::size_t callCount() const noexcept { return _calls.size(); }
-      ScheduledCall const& call(std::size_t const index) const { return _calls.at(index); }
-
-    private:
-      std::vector<ScheduledCall> _calls;
-      std::optional<std::size_t> _optActiveIndex;
-    };
-
-    struct ControlledClock final
-    {
-      TimePoint currentTime{};
-
-      void advance(Elapsed const duration) { currentTime += duration; }
-    };
 
     class RestartDeadlineFixture final
     {
     public:
       RestartDeadlineFixture()
-        : deadline{executor,
-                   scheduler,
-                   [this] { return clock.currentTime; },
+        : asyncRuntime{executor, 1}
+        , scheduler{ControlledSleeper::install(asyncRuntime)}
+        , deadline{asyncRuntime,
                    [this]
                    {
                      ++liveElapsedReadCount;
@@ -92,8 +36,8 @@ namespace ao::rt::test
       // These fixture values are intentionally public as the tests' assertion surface.
       // NOLINTBEGIN(aobus-readability-identifier-naming-extensions)
       ManualExecutor executor;
-      FakeRestartDeadlineScheduler scheduler;
-      ControlledClock clock;
+      async::Runtime asyncRuntime;
+      ControlledSleeper& scheduler;
       Elapsed liveElapsed{0};
       std::size_t liveElapsedReadCount = 0;
       std::vector<bool> availabilityEvents;
@@ -113,12 +57,11 @@ namespace ao::rt::test
     CHECK(fixture.deadline.isRunning());
     CHECK_FALSE(fixture.deadline.restartAvailable());
     CHECK(fixture.deadline.hasScheduledDeadline());
-    REQUIRE(fixture.scheduler.callCount() == 1);
-    CHECK(fixture.scheduler.call(0).deadline == TimePoint{} + Elapsed{2});
+    REQUIRE(fixture.scheduler.waitForCallCount(1));
+    CHECK(fixture.scheduler.call(0).delay == Elapsed{2});
 
-    fixture.clock.advance(Elapsed{2});
     fixture.liveElapsed = Elapsed{3000};
-    fixture.scheduler.fire(0);
+    REQUIRE(fixture.scheduler.fire(0));
 
     CHECK(fixture.executor.queuedCount() == 1);
     CHECK(fixture.liveElapsedReadCount == 0);
@@ -126,12 +69,11 @@ namespace ao::rt::test
     REQUIRE(fixture.executor.runOne());
     CHECK(fixture.liveElapsedReadCount == 1);
     CHECK_FALSE(fixture.deadline.restartAvailable());
-    REQUIRE(fixture.scheduler.callCount() == 2);
-    CHECK(fixture.scheduler.call(1).deadline == fixture.clock.currentTime + Elapsed{1});
+    REQUIRE(fixture.scheduler.waitForCallCount(2));
+    CHECK(fixture.scheduler.call(1).delay == Elapsed{1});
 
-    fixture.clock.advance(Elapsed{1});
     fixture.liveElapsed = Elapsed{3001};
-    fixture.scheduler.fire(1);
+    REQUIRE(fixture.scheduler.fire(1));
     CHECK_FALSE(fixture.deadline.restartAvailable());
     CHECK(fixture.executor.queuedCount() == 1);
 
@@ -146,12 +88,12 @@ namespace ao::rt::test
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});
-    REQUIRE(fixture.scheduler.callCount() == 1);
-    fixture.scheduler.fire(0);
+    REQUIRE(fixture.scheduler.waitForCallCount(1));
+    REQUIRE(fixture.scheduler.fire(0));
     REQUIRE(fixture.executor.queuedCount() == 1);
 
     fixture.deadline.seek(Elapsed{1000});
-    REQUIRE(fixture.scheduler.callCount() == 2);
+    REQUIRE(fixture.scheduler.waitForCallCount(2));
     fixture.liveElapsed = Elapsed{3001};
 
     REQUIRE(fixture.executor.runOne());
@@ -160,7 +102,7 @@ namespace ao::rt::test
     CHECK_FALSE(fixture.deadline.restartAvailable());
     CHECK(fixture.deadline.hasScheduledDeadline());
 
-    fixture.scheduler.fire(1);
+    REQUIRE(fixture.scheduler.fire(1));
     REQUIRE(fixture.executor.runOne());
     CHECK(fixture.liveElapsedReadCount == 1);
     CHECK(fixture.deadline.restartAvailable());
@@ -172,21 +114,23 @@ namespace ao::rt::test
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{500});
-    REQUIRE(fixture.scheduler.callCount() == 1);
-    CHECK(fixture.scheduler.call(0).deadline == fixture.clock.currentTime + Elapsed{2501});
+    REQUIRE(fixture.scheduler.waitForCallCount(1));
+    CHECK(fixture.scheduler.call(0).delay == Elapsed{2501});
 
     fixture.deadline.pause(Elapsed{750});
     CHECK_FALSE(fixture.deadline.isRunning());
     CHECK_FALSE(fixture.deadline.hasScheduledDeadline());
+    REQUIRE(fixture.scheduler.waitForCancellation(0));
     CHECK(fixture.scheduler.call(0).cancelled);
 
     fixture.deadline.resume(Elapsed{1000});
     CHECK(fixture.deadline.isRunning());
     CHECK(fixture.deadline.hasScheduledDeadline());
-    REQUIRE(fixture.scheduler.callCount() == 2);
-    CHECK(fixture.scheduler.call(1).deadline == fixture.clock.currentTime + Elapsed{2001});
+    REQUIRE(fixture.scheduler.waitForCallCount(2));
+    CHECK(fixture.scheduler.call(1).delay == Elapsed{2001});
 
     fixture.deadline.seek(Elapsed{3001});
+    REQUIRE(fixture.scheduler.waitForCancellation(1));
     CHECK(fixture.scheduler.call(1).cancelled);
     CHECK(fixture.deadline.restartAvailable());
     CHECK_FALSE(fixture.deadline.hasScheduledDeadline());
@@ -195,8 +139,8 @@ namespace ao::rt::test
     fixture.deadline.seek(Elapsed{3000});
     CHECK_FALSE(fixture.deadline.restartAvailable());
     CHECK(fixture.deadline.hasScheduledDeadline());
-    REQUIRE(fixture.scheduler.callCount() == 3);
-    CHECK(fixture.scheduler.call(2).deadline == fixture.clock.currentTime + Elapsed{1});
+    REQUIRE(fixture.scheduler.waitForCallCount(3));
+    CHECK(fixture.scheduler.call(2).delay == Elapsed{1});
     CHECK(fixture.availabilityEvents == std::vector{true, false});
   }
 
@@ -205,19 +149,22 @@ namespace ao::rt::test
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});
-    REQUIRE(fixture.scheduler.callCount() == 1);
+    REQUIRE(fixture.scheduler.waitForCallCount(1));
 
     fixture.deadline.currentTrackChanged(Elapsed{100}, true);
+    REQUIRE(fixture.scheduler.waitForCancellation(0));
     CHECK(fixture.scheduler.call(0).cancelled);
-    REQUIRE(fixture.scheduler.callCount() == 2);
-    CHECK(fixture.scheduler.call(1).deadline == fixture.clock.currentTime + Elapsed{2901});
+    REQUIRE(fixture.scheduler.waitForCallCount(2));
+    CHECK(fixture.scheduler.call(1).delay == Elapsed{2901});
 
     fixture.deadline.replaceSession(Elapsed{1500}, true);
+    REQUIRE(fixture.scheduler.waitForCancellation(1));
     CHECK(fixture.scheduler.call(1).cancelled);
-    REQUIRE(fixture.scheduler.callCount() == 3);
-    CHECK(fixture.scheduler.call(2).deadline == fixture.clock.currentTime + Elapsed{1501});
+    REQUIRE(fixture.scheduler.waitForCallCount(3));
+    CHECK(fixture.scheduler.call(2).delay == Elapsed{1501});
 
     fixture.deadline.replaceSession(Elapsed{500}, false);
+    REQUIRE(fixture.scheduler.waitForCancellation(2));
     CHECK(fixture.scheduler.call(2).cancelled);
     CHECK(fixture.deadline.isActive());
     CHECK_FALSE(fixture.deadline.isRunning());
@@ -234,9 +181,9 @@ namespace ao::rt::test
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});
-    REQUIRE(fixture.scheduler.callCount() == 1);
+    REQUIRE(fixture.scheduler.waitForCallCount(1));
     fixture.liveElapsed = Elapsed{3001};
-    fixture.scheduler.fire(0);
+    REQUIRE(fixture.scheduler.fire(0));
     REQUIRE(fixture.executor.queuedCount() == 1);
 
     fixture.deadline.shutdown();

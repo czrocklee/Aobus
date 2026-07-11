@@ -13,10 +13,9 @@
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/TrackMutation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_approx.hpp>
@@ -30,7 +29,6 @@
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
 
-#include <array>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -171,6 +169,12 @@ namespace ao::gtk::layout::test
                                   .coverArtId = coverArtId,
                                   .duration = std::chrono::seconds{1},
                                 });
+      {
+        auto transaction = fixture.runtime().musicLibrary().readTransaction();
+        fixture.runtime().library().changes().publish(
+          rt::LibraryChangeSet{.libraryRevision = fixture.runtime().musicLibrary().libraryRevision(transaction),
+                               .tracksInserted = {trackId}});
+      }
 
       REQUIRE(fixture.runtime().playback().playTrack(trackId, rt::kAllTracksListId));
       ao::gtk::test::drainGtkEvents();
@@ -227,9 +231,12 @@ namespace ao::gtk::layout::test
                                      trackId,
                                      [secondCoverArtId](library::test::TrackSpec& spec)
                                      { spec.coverArtId = secondCoverArtId; });
-      auto const trackIds = std::array{trackId};
-      REQUIRE(fixture.runtime().library().writer().updateMetadata(
-        trackIds, rt::MetadataPatch{.optTitle = "Mutable Cover Track Updated"}));
+      {
+        auto transaction = fixture.runtime().musicLibrary().readTransaction();
+        fixture.runtime().library().changes().publish(
+          rt::LibraryChangeSet{.libraryRevision = fixture.runtime().musicLibrary().libraryRevision(transaction),
+                               .tracksMutated = {trackId}});
+      }
       ao::gtk::test::drainGtkEvents();
 
       REQUIRE(button->get_visible());
@@ -240,8 +247,12 @@ namespace ao::gtk::layout::test
       library::test::updateTrackSpec(fixture.runtime().musicLibrary(),
                                      trackId,
                                      [](library::test::TrackSpec& spec) { spec.coverArtId = kInvalidResourceId; });
-      REQUIRE(fixture.runtime().library().writer().updateMetadata(
-        trackIds, rt::MetadataPatch{.optTitle = "Mutable Cover Track Without Art"}));
+      {
+        auto transaction = fixture.runtime().musicLibrary().readTransaction();
+        fixture.runtime().library().changes().publish(
+          rt::LibraryChangeSet{.libraryRevision = fixture.runtime().musicLibrary().libraryRevision(transaction),
+                               .tracksMutated = {trackId}});
+      }
       ao::gtk::test::drainGtkEvents();
 
       CHECK_FALSE(button->get_visible());

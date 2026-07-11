@@ -14,6 +14,8 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/source/SmartListEvaluator.h>
+#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceDelta.h>
@@ -1011,5 +1013,23 @@ namespace ao::rt::test
     CHECK(removal.trackIds == std::vector{deleted});
     CHECK(sourceTrackIds(lease.source()) == expected);
     CHECK(lease->revision() == 1);
+  }
+
+  TEST_CASE("TrackSourceCache - identical source specs share one ad-hoc source", "[runtime][unit][source][source-spec]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    libraryFixture.addTrack("First");
+    auto changes = LibraryChanges{};
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    cache.reloadAllTracks();
+    auto const spec = SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "true"};
+
+    auto first = ao::test::requireValue(cache.acquire(spec));
+    auto second = ao::test::requireValue(cache.acquire(spec));
+    auto different =
+      ao::test::requireValue(cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "false"}));
+
+    CHECK(&first.source() == &second.source());
+    CHECK(&first.source() != &different.source());
   }
 } // namespace ao::rt::test

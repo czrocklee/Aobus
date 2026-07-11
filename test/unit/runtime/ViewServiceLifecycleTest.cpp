@@ -89,27 +89,32 @@ namespace ao::rt::test
 
     SECTION("destroying a view removes it from listViews")
     {
-      service.destroyView(viewId);
+      REQUIRE(service.destroyView(viewId));
       auto const views = service.listViews();
       CHECK(views.empty());
     }
 
-    SECTION("destroying non-existent view is safe")
+    SECTION("destroying non-existent view reports not found")
     {
-      REQUIRE_NOTHROW(service.destroyView(ViewId{99999}));
+      auto const missing = service.destroyView(ViewId{99999});
+      REQUIRE_FALSE(missing);
+      CHECK(missing.error().code == Error::Code::NotFound);
     }
 
     SECTION("state after destroy shows Destroyed lifecycle")
     {
-      service.destroyView(viewId);
+      REQUIRE(service.destroyView(viewId));
 
       auto const snap = service.trackListState(viewId);
       CHECK(snap.lifecycle == ViewLifecycleState::Destroyed);
+      auto const repeated = service.destroyView(viewId);
+      REQUIRE_FALSE(repeated);
+      CHECK(repeated.error().code == Error::Code::InvalidState);
     }
 
     SECTION("destroyed views reject launch-context capture")
     {
-      service.destroyView(viewId);
+      REQUIRE(service.destroyView(viewId));
 
       auto const captured = service.capturePlaybackLaunchContext(viewId);
       REQUIRE_FALSE(captured);
@@ -121,7 +126,7 @@ namespace ao::rt::test
       auto received = kInvalidViewId;
       auto const sub = service.onDestroyed([&](auto viewId) { received = viewId; });
 
-      service.destroyView(viewId);
+      REQUIRE(service.destroyView(viewId));
       CHECK(received == viewId);
     }
 
@@ -130,7 +135,7 @@ namespace ao::rt::test
       auto projectionPtr = service.trackListProjection(viewId);
       REQUIRE(projectionPtr != nullptr);
 
-      service.destroyView(viewId);
+      REQUIRE(service.destroyView(viewId));
 
       CHECK(service.trackListProjection(viewId) == nullptr);
       CHECK(projectionPtr->viewId() == viewId);

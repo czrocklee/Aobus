@@ -16,6 +16,7 @@ namespace ao::library
 
 namespace ao::rt
 {
+  class LibraryChanges;
   /**
    * ImportMode - Controls how the library is imported from YAML.
    */
@@ -43,6 +44,7 @@ namespace ao::rt
   {
   public:
     explicit LibraryYamlImporter(library::MusicLibrary& ml);
+    LibraryYamlImporter(library::MusicLibrary& ml, LibraryChanges& changes);
     ~LibraryYamlImporter();
 
     LibraryYamlImporter(LibraryYamlImporter const&) = delete;

@@ -218,7 +218,7 @@ namespace ao::gtk::test
     REQUIRE(viewId != rt::kInvalidViewId);
     auto const* const listOrder = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
     REQUIRE(listOrder != nullptr);
-    runtime.views().setPresentation(viewId, listOrder->spec);
+    REQUIRE(runtime.views().setPresentation(viewId, listOrder->spec));
     REQUIRE(runtime.playbackSequence().playFromView(viewId, track1));
     runtime.playback().seek(std::chrono::milliseconds{250});
     runtime.playbackSequence().next();

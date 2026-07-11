@@ -41,6 +41,18 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("ViewService - presentation mutation reports a destroyed view", "[runtime][unit][view][presentation]")
+  {
+    auto env = ViewServiceFixture{};
+    auto service = env.makeService();
+    auto const view = env.requireView(service);
+    REQUIRE(service.destroyView(view.viewId));
+
+    auto const result = service.setPresentation(view.viewId, defaultTrackPresentationSpec());
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidState);
+  }
+
   TEST_CASE("ViewService - createView with Album groupBy applies album sort", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
@@ -152,7 +164,7 @@ namespace ao::rt::test
 
     auto const* preset = builtinTrackPresentationPreset("genres");
     REQUIRE(preset != nullptr);
-    service.setPresentation(viewId, preset->spec);
+    REQUIRE(service.setPresentation(viewId, preset->spec));
     auto const snap = service.trackListState(viewId);
 
     CHECK(snap.groupBy == TrackGroupKey::Genre);
@@ -167,11 +179,11 @@ namespace ao::rt::test
     auto const* preset = builtinTrackPresentationPreset("years");
     REQUIRE(preset != nullptr);
     auto const result = env.requireView(service);
-    service.setPresentation(result.viewId, preset->spec);
+    REQUIRE(service.setPresentation(result.viewId, preset->spec));
     auto const snap = service.trackListState(result.viewId);
     auto const revBefore = snap.revision;
 
-    service.setPresentation(result.viewId, preset->spec);
+    REQUIRE(service.setPresentation(result.viewId, preset->spec));
     auto const snapAfter = service.trackListState(result.viewId);
 
     CHECK(snapAfter.revision == revBefore);
@@ -190,7 +202,7 @@ namespace ao::rt::test
 
     auto const* preset = builtinTrackPresentationPreset("albums");
     REQUIRE(preset != nullptr);
-    service.setPresentation(result.viewId, preset->spec);
+    REQUIRE(service.setPresentation(result.viewId, preset->spec));
 
     CHECK(received.id == "albums");
     CHECK(received.groupBy == TrackGroupKey::Album);
@@ -208,15 +220,15 @@ namespace ao::rt::test
 
     auto const* artistPreset = builtinTrackPresentationPreset("artists");
     REQUIRE(artistPreset != nullptr);
-    service.setPresentation(result.viewId, artistPreset->spec);
+    REQUIRE(service.setPresentation(result.viewId, artistPreset->spec));
     CHECK(callCount == 1);
 
-    service.setPresentation(result.viewId, artistPreset->spec);
+    REQUIRE(service.setPresentation(result.viewId, artistPreset->spec));
     CHECK(callCount == 1);
 
     auto const* albumPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumPreset != nullptr);
-    service.setPresentation(result.viewId, albumPreset->spec);
+    REQUIRE(service.setPresentation(result.viewId, albumPreset->spec));
     CHECK(callCount == 2);
   }
 
@@ -229,10 +241,12 @@ namespace ao::rt::test
     auto const spec = service.setPresentation(result.viewId, "artists");
     auto const snap = service.trackListState(result.viewId);
 
-    CHECK(spec.id == "artists");
+    REQUIRE(spec);
+    CHECK(spec->id == "artists");
     CHECK(snap.groupBy == TrackGroupKey::AlbumArtist);
 
     auto const specInv = service.setPresentation(ViewId{999}, "artists");
-    CHECK(specInv.id.empty());
+    CHECK_FALSE(specInv);
+    CHECK(specInv.error().code == Error::Code::NotFound);
   }
 } // namespace ao::rt::test

@@ -3,7 +3,6 @@
 
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/rt/Subscription.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
@@ -139,21 +138,6 @@ namespace ao::rt::test
 
     CHECK(batchCount == 0);
     CHECK(source.revision() == 1);
-  }
-
-  TEST_CASE("TrackSource - malformed batches are rejected before publication", "[runtime][unit][source]")
-  {
-    auto source = MutableTrackSource{};
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription = source.subscribe([&](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
-
-    auto const malformed = TrackSourceDeltaBatch{
-      .deltas = {SourceReset{}, SourceInsertRange{.start = 0, .trackIds = {TrackId{10}}}},
-    };
-
-    REQUIRE_THROWS_AS(source.publishBatch(malformed), Exception);
-    CHECK(source.revision() == 0);
-    CHECK(batches.empty());
   }
 
   TEST_CASE("TrackSourceLease - shared ownership pins source identity", "[runtime][unit][source]")

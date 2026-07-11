@@ -12,12 +12,22 @@
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <utility>
 
 namespace ao::rt
 {
+  namespace
+  {
+    std::uint64_t currentLibraryRevision(library::MusicLibrary const& library)
+    {
+      auto transaction = library.readTransaction();
+      return library.libraryRevision(transaction);
+    }
+  } // namespace
+
   struct CoreRuntime::Impl final
   {
     std::unique_ptr<async::Executor> executorPtr;
@@ -42,7 +52,7 @@ namespace ao::rt
       , musicLibrary{this->musicRoot,
                      this->databasePath,
                      library::MusicLibrary::Options{.mapSize = musicLibraryMapSize}}
-      , libraryChanges{}
+      , libraryChanges{*executorPtr, currentLibraryRevision(musicLibrary)}
       , libraryFacade{asyncRuntime, musicLibrary, libraryChanges}
       , completionService{musicLibrary, libraryChanges}
       , trackSourceCache{musicLibrary, libraryChanges}

@@ -57,40 +57,63 @@ namespace ao::rt
   {
     auto const previousSize = _trackIds.size();
     auto builder = TrackSourceDeltaBuilder{previousSize};
-    auto removedIds = std::vector<TrackId>{};
+    auto insertedIds = std::vector<TrackId>{inserted.begin(), inserted.end()};
+    auto removedIds = std::vector<TrackId>{removed.begin(), removed.end()};
+    std::ranges::sort(insertedIds);
+    std::ranges::sort(removedIds);
+    insertedIds.erase(std::ranges::unique(insertedIds).begin(), insertedIds.end());
+    removedIds.erase(std::ranges::unique(removedIds).begin(), removedIds.end());
 
-    for (auto const id : removed)
+    auto retained = std::vector<TrackId>{};
+    retained.reserve(_trackIds.size());
+    std::size_t removedIndex = 0;
+
+    for (std::size_t index = 0; index < _trackIds.size(); ++index)
     {
-      if (auto const it = std::ranges::lower_bound(_trackIds, id);
-          it != _trackIds.end() && *it == id && !std::ranges::contains(removedIds, id))
+      auto const id = _trackIds[index];
+
+      while (removedIndex < removedIds.size() && removedIds[removedIndex] < id)
       {
-        builder.remove(static_cast<std::size_t>(std::distance(_trackIds.begin(), it)), id);
-        removedIds.push_back(id);
+        ++removedIndex;
+      }
+
+      if (removedIndex < removedIds.size() && removedIds[removedIndex] == id)
+      {
+        builder.remove(index, id);
+        ++removedIndex;
+      }
+      else
+      {
+        retained.push_back(id);
       }
     }
 
-    for (auto const id : removedIds)
-    {
-      std::erase(_trackIds, id);
-    }
+    auto finalIds = std::vector<TrackId>{};
+    finalIds.reserve(retained.size() + insertedIds.size());
+    std::size_t retainedIndex = 0;
+    std::size_t insertedIndex = 0;
 
-    auto insertedIds = std::vector<TrackId>{};
-
-    for (auto const id : inserted)
+    while (retainedIndex < retained.size() || insertedIndex < insertedIds.size())
     {
-      if (auto const it = std::ranges::lower_bound(_trackIds, id); it == _trackIds.end() || *it != id)
+      if (insertedIndex == insertedIds.size() ||
+          (retainedIndex < retained.size() && retained[retainedIndex] < insertedIds[insertedIndex]))
       {
-        _trackIds.insert(it, id);
-        insertedIds.push_back(id);
+        finalIds.push_back(retained[retainedIndex++]);
+      }
+      else if (retainedIndex < retained.size() && retained[retainedIndex] == insertedIds[insertedIndex])
+      {
+        finalIds.push_back(retained[retainedIndex++]);
+        ++insertedIndex;
+      }
+      else
+      {
+        auto const id = insertedIds[insertedIndex++];
+        builder.insert(finalIds.size(), id);
+        finalIds.push_back(id);
       }
     }
 
-    for (auto const id : insertedIds)
-    {
-      auto const it = std::ranges::lower_bound(_trackIds, id);
-      auto const index = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
-      builder.insert(index, id);
-    }
+    _trackIds = std::move(finalIds);
 
     auto optBatch = builder.build();
 

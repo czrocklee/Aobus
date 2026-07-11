@@ -47,6 +47,9 @@ namespace ao::gtk
     void loadAppSession(rt::AppSessionState& state) const;
     void saveAppSession(rt::AppSessionState const& state);
 
+    /** Store used by the active library's application-level playback session. */
+    rt::ConfigStore& playbackSessionStore() noexcept;
+
     /// Loads the effective keyboard map: persisted overrides merged onto @p defaults.
     uimodel::KeymapModel loadKeymap(uimodel::KeymapBindings defaults) const;
     /// Persists the keymap's delta-from-defaults into the `shortcuts` group.

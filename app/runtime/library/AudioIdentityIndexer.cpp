@@ -11,6 +11,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/tag/TagFile.h>
 
 #include <algorithm>
@@ -325,7 +326,8 @@ namespace ao::rt
     Result<> writeHashedBatch(library::MusicLibrary& ml,
                               std::vector<PendingIdentityRow> const& rows,
                               std::vector<RowSlot> const& slots,
-                              AudioIdentityIndexResult& result)
+                              AudioIdentityIndexResult& result,
+                              LibraryChanges* changes)
     {
       if (std::ranges::none_of(slots, [](RowSlot const& slot) { return slot.outcome == RowOutcome::Hashed; }))
       {
@@ -375,9 +377,16 @@ namespace ao::rt
         ++batchCompletedCount;
       }
 
+      auto const revision = ml.libraryRevision(transaction);
+
       if (auto commitResult = transaction.commit(); !commitResult)
       {
         return std::unexpected{commitResult.error()};
+      }
+
+      if (changes != nullptr)
+      {
+        changes->publish(LibraryChangeSet{.libraryRevision = revision});
       }
 
       result.completedCount += batchCompletedCount;
@@ -390,6 +399,14 @@ namespace ao::rt
                                              library::MusicLibrary& library,
                                              std::mutex& mutationMutex)
     : _asyncRuntime{asyncRuntime}, _library{library}, _mutationMutex{mutationMutex}
+  {
+  }
+
+  AudioIdentityIndexer::AudioIdentityIndexer(async::Runtime& asyncRuntime,
+                                             library::MusicLibrary& library,
+                                             std::mutex& mutationMutex,
+                                             LibraryChanges& changes)
+    : _asyncRuntime{asyncRuntime}, _library{library}, _mutationMutex{mutationMutex}, _changes{&changes}
   {
   }
 
@@ -476,7 +493,7 @@ namespace ao::rt
       {
         auto mutationLock = std::scoped_lock{_mutationMutex};
 
-        if (auto writeResult = writeHashedBatch(_library, rows, slots, result); !writeResult)
+        if (auto writeResult = writeHashedBatch(_library, rows, slots, result, _changes); !writeResult)
         {
           co_return std::unexpected{writeResult.error()};
         }

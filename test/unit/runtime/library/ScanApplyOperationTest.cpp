@@ -93,6 +93,14 @@ namespace ao::rt::test
                       .trackId = kInvalidTrackId,
                       .errorMessage = {}};
     }
+
+    std::vector<TrackId> changedTrackIds(ScanApplyResult const& result)
+    {
+      auto trackIds = result.insertedIds;
+      trackIds.append_range(result.mutatedIds);
+      trackIds.append_range(result.relinkedIds);
+      return trackIds;
+    }
   } // namespace
 
   TEST_CASE("ScanApplyOperation - initial scans process new files", "[runtime][unit][library][scan]")
@@ -118,12 +126,15 @@ namespace ao::rt::test
     REQUIRE(runResult);
 
     auto const& result = *runResult;
-    CHECK(result.processedIds.size() == 1);
+    CHECK(changedTrackIds(result).size() == 1);
+    CHECK(result.insertedIds == changedTrackIds(result));
+    CHECK(result.mutatedIds.empty());
+    CHECK(result.relinkedIds.empty());
     CHECK(result.failureCount == 0);
     CHECK(counts.failed == 0);
 
     auto transaction = ml.readTransaction();
-    auto const optView = ml.tracks().reader(transaction).get(result.processedIds[0]);
+    auto const optView = ml.tracks().reader(transaction).get(changedTrackIds(result)[0]);
     REQUIRE(optView);
     CHECK(optView->metadata().title() == "Test Title");
 
@@ -159,7 +170,7 @@ namespace ao::rt::test
     auto runResult = executor.run();
     REQUIRE(runResult);
 
-    CHECK(runResult->processedIds.size() == 1);
+    CHECK(changedTrackIds(*runResult).size() == 1);
     CHECK(runResult->failureCount == 0);
     CHECK(counts.failed == 0);
 
@@ -202,7 +213,7 @@ namespace ao::rt::test
     auto runResult = executor.run();
     REQUIRE(runResult);
 
-    CHECK(runResult->processedIds.size() == 1);
+    CHECK(changedTrackIds(*runResult).size() == 1);
     CHECK(runResult->failureCount == 0);
     CHECK(counts.failed == 0);
 
@@ -238,7 +249,7 @@ namespace ao::rt::test
     auto runResult = executor.run();
     REQUIRE(runResult);
 
-    CHECK(runResult->processedIds.size() == 1);
+    CHECK(changedTrackIds(*runResult).size() == 1);
     CHECK(runResult->failureCount == 0);
     REQUIRE(progressEvents.size() >= 3);
     CHECK(progressEvents[0].stage == ScanApplyProgressStage::Updating);
@@ -286,7 +297,7 @@ namespace ao::rt::test
     REQUIRE(runResult);
 
     CHECK(runResult->cancelled);
-    CHECK(runResult->processedIds.empty());
+    CHECK(changedTrackIds(*runResult).empty());
     CHECK(runResult->relinkedCount == 0);
     CHECK(runResult->missingCount == 0);
     CHECK(runResult->failureCount == 0);
@@ -341,7 +352,7 @@ namespace ao::rt::test
     REQUIRE(runResult);
 
     CHECK(runResult->cancelled);
-    CHECK(runResult->processedIds.empty());
+    CHECK(changedTrackIds(*runResult).empty());
     CHECK(runResult->failureCount == 0);
     CHECK(counts.failed == 0);
     CHECK(sawChunkProgress);
@@ -395,7 +406,7 @@ namespace ao::rt::test
     REQUIRE(runResult);
 
     CHECK(runResult->cancelled);
-    CHECK(runResult->processedIds.empty());
+    CHECK(changedTrackIds(*runResult).empty());
     CHECK(runResult->failureCount == 0);
     CHECK(counts.failed == 1);
   }
@@ -434,7 +445,7 @@ namespace ao::rt::test
 
     auto const& result = *runResult;
     // An unchanged file is skipped silently: nothing processed, nothing reported.
-    CHECK(result.processedIds.empty());
+    CHECK(changedTrackIds(result).empty());
     CHECK(result.failureCount == 0);
     CHECK(counts.failed == 0);
   }
@@ -489,7 +500,10 @@ namespace ao::rt::test
     REQUIRE(runResult);
 
     auto const& result = *runResult;
-    CHECK(result.processedIds.size() == 1);
+    CHECK(changedTrackIds(result).size() == 1);
+    CHECK(result.insertedIds.empty());
+    CHECK(result.mutatedIds == changedTrackIds(result));
+    CHECK(result.relinkedIds.empty());
     CHECK(result.failureCount == 0);
     CHECK(counts.failed == 0);
 
@@ -542,7 +556,7 @@ namespace ao::rt::test
     auto const manifestResult = ml.manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
     CHECK(manifestResult->status() == library::FileStatus::Missing);
-    CHECK(runResult->processedIds.empty());
+    CHECK(changedTrackIds(*runResult).empty());
     CHECK(runResult->missingCount == 1);
     CHECK(runResult->failureCount == 0);
   }
@@ -568,8 +582,8 @@ namespace ao::rt::test
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
       auto runResult = executor.run();
       REQUIRE(runResult);
-      REQUIRE(runResult->processedIds.size() == 1);
-      originalTrackId = runResult->processedIds.front();
+      REQUIRE(changedTrackIds(*runResult).size() == 1);
+      originalTrackId = changedTrackIds(*runResult).front();
     }
 
     std::uint64_t originalPayloadLength = 0;
@@ -628,8 +642,11 @@ namespace ao::rt::test
     auto runResult = executor.run();
     REQUIRE(runResult);
 
-    REQUIRE(runResult->processedIds.size() == 1);
-    CHECK(runResult->processedIds.front() == originalTrackId);
+    REQUIRE(changedTrackIds(*runResult).size() == 1);
+    CHECK(changedTrackIds(*runResult).front() == originalTrackId);
+    CHECK(runResult->insertedIds.empty());
+    CHECK(runResult->mutatedIds.empty());
+    CHECK(runResult->relinkedIds == std::vector{originalTrackId});
     CHECK(runResult->relinkedCount == 1);
     CHECK(runResult->failureCount == 0);
     CHECK(counts.failed == 0);
@@ -685,8 +702,8 @@ namespace ao::rt::test
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
       auto runResult = executor.run();
       REQUIRE(runResult);
-      REQUIRE(runResult->processedIds.size() == 1);
-      originalTrackId = runResult->processedIds.front();
+      REQUIRE(changedTrackIds(*runResult).size() == 1);
+      originalTrackId = changedTrackIds(*runResult).front();
     }
 
     auto const movedFile = musicRoot / "renamed.flac";
@@ -719,7 +736,7 @@ namespace ao::rt::test
     auto runResult = executor.run();
     REQUIRE(runResult);
 
-    CHECK(runResult->processedIds.empty());
+    CHECK(changedTrackIds(*runResult).empty());
     CHECK(runResult->relinkedCount == 0);
     CHECK(runResult->failureCount == 1);
     CHECK(counts.failed == 1);
@@ -760,8 +777,8 @@ namespace ao::rt::test
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
       auto runResult = executor.run();
       REQUIRE(runResult);
-      REQUIRE(runResult->processedIds.size() == 1);
-      originalTrackId = runResult->processedIds.front();
+      REQUIRE(changedTrackIds(*runResult).size() == 1);
+      originalTrackId = changedTrackIds(*runResult).front();
     }
 
     std::filesystem::copy_file(sourceFile, movedFile);
@@ -785,7 +802,7 @@ namespace ao::rt::test
     auto runResult = executor.run();
     REQUIRE(runResult);
 
-    CHECK(runResult->processedIds.empty());
+    CHECK(changedTrackIds(*runResult).empty());
     CHECK(runResult->relinkedCount == 0);
     CHECK(runResult->failureCount == 1);
     CHECK(counts.failed == 1);
@@ -828,7 +845,7 @@ namespace ao::rt::test
     auto const& result = *runResult;
     CHECK(counts.failed == 1);
     CHECK(result.failureCount == 1);
-    CHECK(result.processedIds.empty());
+    CHECK(changedTrackIds(result).empty());
   }
 
   TEST_CASE("ScanApplyOperation - propagates unexpected process exceptions", "[runtime][unit][library][scan]")
@@ -875,7 +892,7 @@ namespace ao::rt::test
     auto runResult = executor.run();
     REQUIRE(runResult);
 
-    CHECK(runResult->processedIds.empty());
+    CHECK(changedTrackIds(*runResult).empty());
     CHECK(runResult->failureCount == 0);
     CHECK(counts.failed == 0);
   }

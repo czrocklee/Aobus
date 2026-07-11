@@ -9,7 +9,7 @@
 
 namespace ao::async
 {
-  class Executor;
+  class Runtime;
 }
 
 namespace ao::rt
@@ -25,36 +25,13 @@ namespace ao::rt
   {
   public:
     using Elapsed = std::chrono::milliseconds;
-    using Clock = std::chrono::steady_clock;
-    using TimePoint = Clock::time_point;
-    using DeadlineCallback = std::move_only_function<void()>;
-    using MonotonicClock = std::move_only_function<TimePoint()>;
     using LiveElapsedReader = std::move_only_function<Elapsed()>;
     using AvailabilityChangedHandler = std::move_only_function<void(bool)>;
 
     static constexpr Elapsed kRestartThreshold{3000};
     static constexpr Elapsed kFirstRestartAvailableElapsed{3001};
 
-    class Scheduler
-    {
-    public:
-      virtual ~Scheduler() = default;
-
-      Scheduler(Scheduler const&) = delete;
-      Scheduler& operator=(Scheduler const&) = delete;
-      Scheduler(Scheduler&&) = delete;
-      Scheduler& operator=(Scheduler&&) = delete;
-
-      virtual void schedule(TimePoint deadline, DeadlineCallback callback) = 0;
-      virtual void cancel() noexcept = 0;
-
-    protected:
-      Scheduler() = default;
-    };
-
-    PlaybackRestartDeadline(async::Executor& executor,
-                            Scheduler& scheduler,
-                            MonotonicClock monotonicClock,
+    PlaybackRestartDeadline(async::Runtime& asyncRuntime,
                             LiveElapsedReader liveElapsedReader,
                             AvailabilityChangedHandler availabilityChangedHandler);
     ~PlaybackRestartDeadline();
@@ -79,7 +56,9 @@ namespace ao::rt
     bool hasScheduledDeadline() const noexcept;
 
   private:
-    struct Impl;
-    std::shared_ptr<Impl> _implPtr;
+    struct SharedState;
+
+    // The suspended deadline coroutine keeps only a weak reference to this state.
+    std::shared_ptr<SharedState> _sharedStatePtr;
   };
 } // namespace ao::rt

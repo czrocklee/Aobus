@@ -221,10 +221,13 @@ namespace clang::tidy::readability
           hasCanonicalType(recordType(hasDeclaration(classTemplateSpecializationDecl(hasName(qualifiedName))))))))));
     };
 
-    finder->addMatcher(declaratorDecl(hasType(chronoQualType("::std::chrono::duration"))).bind("durationDecl"), this);
+    finder->addMatcher(
+      declaratorDecl(unless(isImplicit()), hasType(chronoQualType("::std::chrono::duration"))).bind("durationDecl"),
+      this);
     finder->addMatcher(functionDecl(returns(chronoQualType("::std::chrono::duration"))).bind("durationFunc"), this);
     finder->addMatcher(
-      declaratorDecl(hasType(chronoQualType("::std::chrono::time_point"))).bind("timePointDecl"), this);
+      declaratorDecl(unless(isImplicit()), hasType(chronoQualType("::std::chrono::time_point"))).bind("timePointDecl"),
+      this);
     finder->addMatcher(functionDecl(returns(chronoQualType("::std::chrono::time_point"))).bind("timePointFunc"), this);
   }
 

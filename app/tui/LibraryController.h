@@ -102,5 +102,6 @@ namespace ao::tui
     std::int32_t _selectedTrack = 0;
     std::string _filterDraft{};
     rt::Subscription _customPresetsSub;
+    rt::Subscription _libraryChangesSub;
   };
 } // namespace ao::tui

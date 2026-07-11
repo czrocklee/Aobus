@@ -4,34 +4,25 @@
 #include "runtime/playback/PlaybackRestartDeadline.h"
 
 #include <ao/Exception.h>
-#include <ao/async/Executor.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 
 #include <algorithm>
-#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <utility>
 
 namespace ao::rt
 {
-  struct PlaybackRestartDeadline::Impl final : std::enable_shared_from_this<Impl>
+  struct PlaybackRestartDeadline::SharedState final : std::enable_shared_from_this<SharedState>
   {
-    Impl(ao::async::Executor& executor,
-         Scheduler& scheduler,
-         MonotonicClock monotonicClock,
-         LiveElapsedReader liveElapsedReader,
-         AvailabilityChangedHandler availabilityChangedHandler)
-      : executor{executor}
-      , scheduler{scheduler}
-      , monotonicClock{std::move(monotonicClock)}
+    SharedState(async::Runtime& asyncRuntime,
+                LiveElapsedReader liveElapsedReader,
+                AvailabilityChangedHandler availabilityChangedHandler)
+      : asyncRuntime{asyncRuntime}
       , liveElapsedReader{std::move(liveElapsedReader)}
       , availabilityChangedHandler{std::move(availabilityChangedHandler)}
     {
-      if (!this->monotonicClock)
-      {
-        throwException<Exception>("Playback restart deadline requires a monotonic clock");
-      }
-
       if (!this->liveElapsedReader)
       {
         throwException<Exception>("Playback restart deadline requires a live elapsed reader");
@@ -145,32 +136,32 @@ namespace ao::rt
     void scheduleDeadline(Elapsed const elapsed, std::uint64_t const scheduleGeneration)
     {
       auto const delay = kFirstRestartAvailableElapsed - elapsed;
-      auto const deadline = monotonicClock() + std::chrono::duration_cast<Clock::duration>(delay);
-      auto const weakSelfPtr = weak_from_this();
+      auto const weakStatePtr = weak_from_this();
       deadlineScheduled = true;
 
       try
       {
-        scheduler.schedule(deadline,
-                           [weakSelfPtr, scheduleGeneration]
-                           {
-                             if (auto const selfPtr = weakSelfPtr.lock(); selfPtr != nullptr)
-                             {
-                               selfPtr->executor.dispatch(
-                                 [weakSelfPtr, scheduleGeneration]
-                                 {
-                                   if (auto const executorSelfPtr = weakSelfPtr.lock(); executorSelfPtr != nullptr)
-                                   {
-                                     executorSelfPtr->handleDeadline(scheduleGeneration);
-                                   }
-                                 });
-                             }
-                           });
+        deadlineTask =
+          asyncRuntime.spawnCancellable(waitForDeadline(&asyncRuntime, weakStatePtr, delay, scheduleGeneration));
       }
       catch (...)
       {
         deadlineScheduled = false;
         throw;
+      }
+    }
+
+    static async::Task<void> waitForDeadline(async::Runtime* asyncRuntime,
+                                             std::weak_ptr<SharedState> weakStatePtr,
+                                             Elapsed const delay,
+                                             std::uint64_t const scheduleGeneration)
+    {
+      co_await asyncRuntime->sleepFor(delay);
+      co_await asyncRuntime->resumeOnCallbackExecutor();
+
+      if (auto const statePtr = weakStatePtr.lock(); statePtr != nullptr)
+      {
+        statePtr->handleDeadline(scheduleGeneration);
       }
     }
 
@@ -199,7 +190,7 @@ namespace ao::rt
 
       if (deadlineScheduled)
       {
-        scheduler.cancel();
+        deadlineTask.reset();
         deadlineScheduled = false;
       }
     }
@@ -215,9 +206,8 @@ namespace ao::rt
       availabilityChangedHandler(available);
     }
 
-    ao::async::Executor& executor;
-    Scheduler& scheduler;
-    MonotonicClock monotonicClock;
+    async::Runtime& asyncRuntime;
+    async::TaskHandle deadlineTask;
     LiveElapsedReader liveElapsedReader;
     AvailabilityChangedHandler availabilityChangedHandler;
     std::uint64_t generation = 0;
@@ -228,16 +218,12 @@ namespace ao::rt
     bool shuttingDown = false;
   };
 
-  PlaybackRestartDeadline::PlaybackRestartDeadline(ao::async::Executor& executor,
-                                                   Scheduler& scheduler,
-                                                   MonotonicClock monotonicClock,
+  PlaybackRestartDeadline::PlaybackRestartDeadline(async::Runtime& asyncRuntime,
                                                    LiveElapsedReader liveElapsedReader,
                                                    AvailabilityChangedHandler availabilityChangedHandler)
-    : _implPtr{std::make_shared<Impl>(executor,
-                                      scheduler,
-                                      std::move(monotonicClock),
-                                      std::move(liveElapsedReader),
-                                      std::move(availabilityChangedHandler))}
+    : _sharedStatePtr{std::make_shared<SharedState>(asyncRuntime,
+                                                    std::move(liveElapsedReader),
+                                                    std::move(availabilityChangedHandler))}
   {
   }
 
@@ -248,69 +234,61 @@ namespace ao::rt
 
   void PlaybackRestartDeadline::start(Elapsed const elapsed)
   {
-    auto const implPtr = _implPtr;
-    implPtr->start(elapsed);
+    _sharedStatePtr->start(elapsed);
   }
 
   void PlaybackRestartDeadline::resume(Elapsed const elapsed)
   {
-    auto const implPtr = _implPtr;
-    implPtr->resume(elapsed);
+    _sharedStatePtr->resume(elapsed);
   }
 
   void PlaybackRestartDeadline::pause(Elapsed const elapsed)
   {
-    auto const implPtr = _implPtr;
-    implPtr->pause(elapsed);
+    _sharedStatePtr->pause(elapsed);
   }
 
   void PlaybackRestartDeadline::seek(Elapsed const elapsed)
   {
-    auto const implPtr = _implPtr;
-    implPtr->seek(elapsed);
+    _sharedStatePtr->seek(elapsed);
   }
 
   void PlaybackRestartDeadline::currentTrackChanged(Elapsed const elapsed, bool const playing)
   {
-    auto const implPtr = _implPtr;
-    implPtr->resetCurrent(elapsed, playing);
+    _sharedStatePtr->resetCurrent(elapsed, playing);
   }
 
   void PlaybackRestartDeadline::replaceSession(Elapsed const elapsed, bool const playing)
   {
-    auto const implPtr = _implPtr;
-    implPtr->resetCurrent(elapsed, playing);
+    _sharedStatePtr->resetCurrent(elapsed, playing);
   }
 
   void PlaybackRestartDeadline::clearSession() noexcept
   {
-    auto const implPtr = _implPtr;
-    implPtr->clearSession();
+    _sharedStatePtr->clearSession();
   }
 
   void PlaybackRestartDeadline::shutdown() noexcept
   {
-    auto const implPtr = _implPtr;
-    implPtr->shutdown();
+    _sharedStatePtr->shutdown();
   }
 
   bool PlaybackRestartDeadline::isActive() const noexcept
   {
-    return _implPtr->active;
+    return _sharedStatePtr->active;
   }
 
   bool PlaybackRestartDeadline::isRunning() const noexcept
   {
-    return _implPtr->running;
+    return _sharedStatePtr->running;
   }
 
   bool PlaybackRestartDeadline::restartAvailable() const noexcept
   {
-    return _implPtr->restartAvailable;
+    return _sharedStatePtr->restartAvailable;
   }
 
   bool PlaybackRestartDeadline::hasScheduledDeadline() const noexcept
   {
-    return _implPtr->deadlineScheduled;
+    return _sharedStatePtr->deadlineScheduled;
   }
 } // namespace ao::rt

@@ -88,12 +88,18 @@ error path.
 - dirty revision and successful-save acknowledgement;
 - config load, save, and flush error classification.
 
-Frontends own only lifecycle timing: startup restore, significant-event save,
-dirty-event debounce and bounded retry through
-`PlaybackSessionSaveService`, periodic save where appropriate, and
-shutdown save. They do not parse the persisted payload, query storage to
-reconstruct membership, or call low-level sequence/transport restoration
-separately.
+`PlaybackSessionPersistence` owns payload semantics and the complete save
+policy: dirty debounce, significant-event checkpoints, periodic checkpoints,
+bounded retry, and the final shutdown attempt. Frontends only start the
+persistence lifecycle, request restore, and shut it down. They do not parse the
+persisted payload, query storage to reconstruct membership, or call low-level
+sequence/transport restoration separately.
+
+The GTK application owns one active library runtime at a time. Its global
+application session pairs the last-open library with the frontend-neutral
+playback-session payload; library-specific workspace configuration remains
+separate. Opening another library replaces the active runtime instead of
+creating a second independently playing library window.
 
 ## UIModel rules
 

@@ -75,7 +75,7 @@ namespace ao::rt::test
 
     void storeSession(AppRuntime& runtime, PlaybackSessionState const& session)
     {
-      REQUIRE(runtime.configStore().saveResult(kPlaybackSessionConfigGroup, session));
+      REQUIRE(runtime.playbackSessionConfigStore().saveResult(kPlaybackSessionConfigGroup, session));
     }
 
     struct ManualView final
@@ -136,7 +136,8 @@ namespace ao::rt::test
   TEST_CASE("PlaybackSession - cursor payload round-trips without autoplay", "[runtime][unit][playback-session]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
+    auto runtime = makeRuntime(tempDir, &playbackSessionStore);
     addReadyAudioProvider(runtime.playback());
     auto const alpha = addPlayableTrack(runtime, "Alpha", 2022);
     std::ignore = addPlayableTrack(runtime, "Filtered", 1990);
@@ -152,7 +153,10 @@ namespace ao::rt::test
     runtime.playback().setMuted(true);
     REQUIRE(runtime.savePlaybackSession());
 
-    auto const saved = storedSession(runtime.configStore());
+    CHECK_FALSE(*runtime.workspaceConfigStore().contains(kPlaybackSessionConfigGroup));
+    CHECK(*runtime.playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
+
+    auto const saved = storedSession(runtime.playbackSessionConfigStore());
     CHECK(saved.schemaVersion == 3);
     CHECK(saved.sourceListId == kAllTracksListId);
     CHECK(saved.quickFilterExpression == "$year > 2000");
@@ -179,6 +183,71 @@ namespace ao::rt::test
     CHECK(runtime.playback().state().elapsed == std::chrono::milliseconds{500});
     CHECK(runtime.playbackSequence().state().shuffle == ShuffleMode::On);
     CHECK(runtime.playbackSequence().state().repeat == RepeatMode::All);
+  }
+
+  TEST_CASE("PlaybackSession - persistence lifecycle debounces ordinary dirty state",
+            "[runtime][unit][playback-session][timing]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
+    auto runtime = makeRuntime(tempDir, &playbackSessionStore);
+    auto& sleeper = ControlledSleeper::install(runtime.async());
+    auto const restored = runtime.restorePlaybackSession();
+    REQUIRE(restored);
+    CHECK_FALSE(restored->restored);
+    REQUIRE(sleeper.waitForPendingDelay(std::chrono::seconds{10}));
+
+    addReadyAudioProvider(runtime.playback());
+    auto const trackId = addPlayableTrack(runtime, "Debounced Track");
+    auto const viewId = createView(runtime);
+    REQUIRE(runtime.playbackSequence().playFromView(viewId, trackId));
+    REQUIRE(runtime.savePlaybackSession());
+
+    runtime.playback().setVolume(0.4F);
+    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+
+    CHECK(storedSession(runtime.playbackSessionConfigStore()).volume == 0.4F);
+
+    runtime.playback().setVolume(0.6F);
+    REQUIRE(sleeper.fireNext(std::chrono::seconds{10}));
+    CHECK(storedSession(runtime.playbackSessionConfigStore()).volume == 0.6F);
+  }
+
+  TEST_CASE("PlaybackSession - persistence lifecycle retries a failed debounced save",
+            "[runtime][unit][playback-session][timing]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "application.yaml";
+    auto playbackSessionStore = ConfigStore{configPath};
+    auto runtime = makeRuntime(tempDir, &playbackSessionStore);
+    auto& sleeper = ControlledSleeper::install(runtime.async());
+    auto const restored = runtime.restorePlaybackSession();
+    REQUIRE(restored);
+    CHECK_FALSE(restored->restored);
+
+    addReadyAudioProvider(runtime.playback());
+    auto const trackId = addPlayableTrack(runtime, "Retry Track");
+    auto const viewId = createView(runtime);
+    REQUIRE(runtime.playbackSequence().playFromView(viewId, trackId));
+    REQUIRE(runtime.savePlaybackSession());
+    REQUIRE(std::filesystem::remove(configPath));
+    REQUIRE(std::filesystem::create_directory(configPath));
+    runtime.playback().setVolume(0.4F);
+
+    for (auto const retryDelay : {std::chrono::seconds{1},
+                                  std::chrono::seconds{1},
+                                  std::chrono::seconds{2},
+                                  std::chrono::seconds{4},
+                                  std::chrono::seconds{8},
+                                  std::chrono::seconds{16},
+                                  std::chrono::seconds{32},
+                                  std::chrono::seconds{60}})
+    {
+      REQUIRE(sleeper.fireNext(retryDelay));
+    }
+
+    REQUIRE(sleeper.waitForPendingDelay(std::chrono::seconds{60}));
+    REQUIRE(sleeper.waitForPendingDelay(std::chrono::seconds{10}));
   }
 
   TEST_CASE("PlaybackSession - launch contains preparing reentry and publishes final live intent once",
@@ -287,7 +356,7 @@ namespace ao::rt::test
     auto const viewId = createView(runtime, {}, {{.field = TrackSortField::Title, .ascending = true}});
     REQUIRE(runtime.playbackSequence().playFromView(viewId, firstTrackId));
     REQUIRE(runtime.savePlaybackSession());
-    auto normalizedPayload = storedSession(runtime.configStore());
+    auto normalizedPayload = storedSession(runtime.playbackSessionConfigStore());
     normalizedPayload.anchorIndex = 999;
     normalizedPayload.positionMs = 4000;
     storeSession(runtime, normalizedPayload);
@@ -620,7 +689,7 @@ namespace ao::rt::test
     auto sub = runtime.onPlaybackSessionDirty([&] { ++replayCount; });
     CHECK(replayCount == 1);
     REQUIRE(runtime.savePlaybackSession());
-    auto const corrected = storedSession(runtime.configStore());
+    auto const corrected = storedSession(runtime.playbackSessionConfigStore());
     CHECK(corrected.sourceListId == kAllTracksListId);
     CHECK(corrected.quickFilterExpression.empty());
     CHECK(corrected.sortBy == sortBy);
@@ -659,7 +728,7 @@ namespace ao::rt::test
     auto sub = runtime.onPlaybackSessionDirty([&] { ++replayCount; });
     CHECK(replayCount == 1);
     REQUIRE(runtime.savePlaybackSession());
-    CHECK(storedSession(runtime.configStore()).positionMs == 0);
+    CHECK(storedSession(runtime.playbackSessionConfigStore()).positionMs == 0);
   }
 
   TEST_CASE("PlaybackSession - freezes invalidated and exhausted cursors as last-restorable intent",
@@ -696,12 +765,12 @@ namespace ao::rt::test
       CHECK(runtime.playback().state().transport == audio::Transport::Paused);
       runtime.playback().resume();
       REQUIRE(runtime.savePlaybackSession());
-      CHECK(storedSession(runtime.configStore()).sourceListId == listId);
+      CHECK(storedSession(runtime.playbackSessionConfigStore()).sourceListId == listId);
 
       runtime.playback().stop();
       CHECK(runtime.playbackSequence().state().sourceState == PlaybackSequenceSourceState::Inactive);
       REQUIRE(runtime.savePlaybackSession());
-      auto const frozen = storedSession(runtime.configStore());
+      auto const frozen = storedSession(runtime.playbackSessionConfigStore());
       CHECK(frozen.sourceListId == listId);
       CHECK(frozen.currentTrackId == first);
     }
@@ -722,7 +791,7 @@ namespace ao::rt::test
       CHECK(runtime.playbackSequence().state().sourceState == PlaybackSequenceSourceState::Inactive);
       CHECK(runtime.playback().state().transport == audio::Transport::Idle);
       REQUIRE(runtime.savePlaybackSession());
-      auto const frozen = storedSession(runtime.configStore());
+      auto const frozen = storedSession(runtime.playbackSessionConfigStore());
       CHECK(frozen.currentTrackId == only);
       CHECK(frozen.positionMs == 350);
       auto const restored = runtime.restorePlaybackSession();
@@ -752,13 +821,13 @@ namespace ao::rt::test
     runtime.playback().seek(std::chrono::milliseconds{450});
     CHECK(dirtyCount == 1);
     REQUIRE(runtime.savePlaybackSession());
-    CHECK(storedSession(runtime.configStore()).positionMs == 450);
+    CHECK(storedSession(runtime.playbackSessionConfigStore()).positionMs == 450);
 
     dirtyCount = 0;
     REQUIRE(runtime.library().writer().deleteTrack(first));
     CHECK(dirtyCount == 1);
     REQUIRE(runtime.savePlaybackSession());
-    auto const moved = storedSession(runtime.configStore());
+    auto const moved = storedSession(runtime.playbackSessionConfigStore());
     CHECK(moved.currentTrackId == current);
     CHECK(moved.anchorIndex == 0);
     CHECK(runtime.playback().state().transport == audio::Transport::Paused);
@@ -783,7 +852,7 @@ namespace ao::rt::test
     REQUIRE(runtime.savePlaybackSession());
 
     CHECK(dirtyCount == 0);
-    CHECK(storedSession(runtime.configStore()).positionMs == 600);
+    CHECK(storedSession(runtime.playbackSessionConfigStore()).positionMs == 600);
   }
 
   TEST_CASE("PlaybackSession - sorted manual Gap ignores stored reorders with identical projected order",
@@ -809,7 +878,7 @@ namespace ao::rt::test
     auto const beforeState = runtime.playbackSequence().state();
     REQUIRE(beforeState.optResolvedSuccessor == charlie);
     CHECK(beforeState.hasPrevious);
-    auto const beforePayload = storedSession(runtime.configStore());
+    auto const beforePayload = storedSession(runtime.playbackSessionConfigStore());
     CHECK(beforePayload.currentTrackId == current);
     CHECK(beforePayload.anchorIndex == 1);
     CHECK(beforePayload.sortBy == titleSort);
@@ -839,7 +908,7 @@ namespace ao::rt::test
     CHECK(runtime.playback().state().transport == audio::Transport::Paused);
     CHECK(dirtyCount == 0);
     REQUIRE(runtime.savePlaybackSession());
-    CHECK(storedSession(runtime.configStore()) == beforePayload);
+    CHECK(storedSession(runtime.playbackSessionConfigStore()) == beforePayload);
   }
 
   TEST_CASE("PlaybackSession - prepared replacement and retirement remain transient",
@@ -858,7 +927,7 @@ namespace ao::rt::test
 
     auto const beforeState = runtime.playbackSequence().state();
     REQUIRE(beforeState.optResolvedSuccessor == originalSuccessor);
-    auto const beforePayload = storedSession(runtime.configStore());
+    auto const beforePayload = storedSession(runtime.playbackSessionConfigStore());
     std::uint32_t dirtyCount = 0;
     auto const dirtySubscription = runtime.onPlaybackSessionDirty([&] { ++dirtyCount; });
     auto const optOldToken = runtime.playback().clearPreparedNext();
@@ -879,7 +948,7 @@ namespace ao::rt::test
     CHECK(runtime.playback().state().transport == audio::Transport::Paused);
     CHECK(dirtyCount == 0);
     REQUIRE(runtime.savePlaybackSession());
-    CHECK(storedSession(runtime.configStore()) == beforePayload);
+    CHECK(storedSession(runtime.playbackSessionConfigStore()) == beforePayload);
   }
 
   TEST_CASE("PlaybackSession - sticky shuffle reroll remains transient",
@@ -902,7 +971,7 @@ namespace ao::rt::test
     REQUIRE(beforeState.optResolvedSuccessor);
     auto const oldCandidate = *beforeState.optResolvedSuccessor;
     CHECK(oldCandidate != current);
-    auto const beforePayload = storedSession(runtime.configStore());
+    auto const beforePayload = storedSession(runtime.playbackSessionConfigStore());
     std::uint32_t dirtyCount = 0;
     auto const dirtySubscription = runtime.onPlaybackSessionDirty([&] { ++dirtyCount; });
 
@@ -920,7 +989,7 @@ namespace ao::rt::test
     CHECK(runtime.playback().state().transport == audio::Transport::Paused);
     CHECK(dirtyCount == 0);
     REQUIRE(runtime.savePlaybackSession());
-    CHECK(storedSession(runtime.configStore()) == beforePayload);
+    CHECK(storedSession(runtime.playbackSessionConfigStore()) == beforePayload);
   }
 
   TEST_CASE("PlaybackSession - stale shuffle-history pop remains transient",
@@ -949,7 +1018,7 @@ namespace ao::rt::test
     REQUIRE(runtime.savePlaybackSession());
 
     auto const beforeState = runtime.playbackSequence().state();
-    auto const beforePayload = storedSession(runtime.configStore());
+    auto const beforePayload = storedSession(runtime.playbackSessionConfigStore());
     std::uint32_t dirtyCount = 0;
     auto dirtySubscription = runtime.onPlaybackSessionDirty([&] { ++dirtyCount; });
 
@@ -960,7 +1029,7 @@ namespace ao::rt::test
     CHECK(runtime.playback().state().transport == audio::Transport::Paused);
     CHECK(dirtyCount == 0);
     REQUIRE(runtime.savePlaybackSession());
-    CHECK(storedSession(runtime.configStore()) == beforePayload);
+    CHECK(storedSession(runtime.playbackSessionConfigStore()) == beforePayload);
 
     dirtySubscription.reset();
     auto const reinsertedIds = std::vector{historyTrack};
@@ -1011,14 +1080,14 @@ namespace ao::rt::test
     auto const viewId = createView(runtime);
     REQUIRE(runtime.playbackSequence().playFromView(viewId, track));
     REQUIRE(runtime.savePlaybackSession());
-    REQUIRE(runtime.forgetPlaybackSession());
-    CHECK_FALSE(*runtime.configStore().contains(kPlaybackSessionConfigGroup));
+    REQUIRE(runtime.discardRestorablePlaybackSession());
+    CHECK_FALSE(*runtime.playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
 
     REQUIRE(runtime.savePlaybackSession());
-    CHECK_FALSE(*runtime.configStore().contains(kPlaybackSessionConfigGroup));
+    CHECK_FALSE(*runtime.playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
     runtime.playbackSequence().setRepeatMode(RepeatMode::All);
     REQUIRE(runtime.savePlaybackSession());
-    CHECK(*runtime.configStore().contains(kPlaybackSessionConfigGroup));
+    CHECK(*runtime.playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
   }
 
   TEST_CASE("PlaybackSession - failures preserve live state and dirty intent",

@@ -92,11 +92,11 @@ namespace ao::rt
     ViewService& operator=(ViewService&&) = delete;
 
     Result<CreateTrackListViewReply> createView(TrackListViewConfig const& initial, bool attached = true);
-    void destroyView(ViewId viewId);
+    Result<> destroyView(ViewId viewId);
     Result<> setFilter(ViewId viewId, std::string filterExpression);
-    void setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
-    TrackPresentationSpec setPresentation(ViewId viewId, std::string_view presentationId);
-    void setSelection(ViewId viewId, std::vector<TrackId> selection);
+    Result<> setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
+    Result<TrackPresentationSpec> setPresentation(ViewId viewId, std::string_view presentationId);
+    Result<> setSelection(ViewId viewId, std::vector<TrackId> selection);
     Result<> openListInView(ViewId viewId, ListId listId);
     Result<PlaybackLaunchContext> capturePlaybackLaunchContext(ViewId viewId) const;
 

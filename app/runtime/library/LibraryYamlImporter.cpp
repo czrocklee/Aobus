@@ -17,12 +17,14 @@
 #include <ao/library/TrackWrite.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Base64.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <boost/unordered/unordered_flat_set.hpp>
 #include <c4/yml/node.hpp>
 
 #include <algorithm>
@@ -34,6 +36,7 @@
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -324,8 +327,8 @@ namespace ao::rt
 
   struct LibraryYamlImporter::Impl final
   {
-    explicit Impl(library::MusicLibrary& ml)
-      : ml{ml}
+    explicit Impl(library::MusicLibrary& ml, LibraryChanges* changes = nullptr)
+      : ml{ml}, changes{changes}
     {
     }
 
@@ -395,10 +398,16 @@ namespace ao::rt
                               std::unique_ptr<tag::TagFile>& keepAliveTagFilePtr) const;
 
     library::MusicLibrary& ml;
+    LibraryChanges* changes = nullptr;
   };
 
   LibraryYamlImporter::LibraryYamlImporter(library::MusicLibrary& ml)
     : _implPtr{std::make_unique<Impl>(ml)}
+  {
+  }
+
+  LibraryYamlImporter::LibraryYamlImporter(library::MusicLibrary& ml, LibraryChanges& changes)
+    : _implPtr{std::make_unique<Impl>(ml, &changes)}
   {
   }
 
@@ -414,6 +423,8 @@ namespace ao::rt
     return _implPtr->applyImportFromYaml(path, mode, ImportRunMode::Preview);
   }
 
+  // Import reconciliation is one transaction with explicit validation branches.
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   Result<ImportReport> LibraryYamlImporter::Impl::applyImportFromYaml(std::filesystem::path const& path,
                                                                       ImportMode mode,
                                                                       ImportRunMode runMode)
@@ -458,6 +469,26 @@ namespace ao::rt
       populateDeletionStats(validated, report);
     }
 
+    auto beforeTrackIds = std::vector<TrackId>{};
+    auto beforeListIds = std::vector<ListId>{};
+
+    if (changes != nullptr && mode == ImportMode::Merge)
+    {
+      auto readTransaction = ml.readTransaction();
+
+      for (auto const [trackId, view] : ml.tracks().reader(readTransaction).hot())
+      {
+        std::ignore = view;
+        beforeTrackIds.push_back(trackId);
+      }
+
+      for (auto const [listId, view] : ml.lists().reader(readTransaction))
+      {
+        std::ignore = view;
+        beforeListIds.push_back(listId);
+      }
+    }
+
     auto transaction = ml.writeTransaction();
 
     if (mode == ImportMode::Restore)
@@ -493,6 +524,8 @@ namespace ao::rt
       return report;
     }
 
+    auto const revision = ml.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       return std::unexpected{result.error()};
@@ -503,6 +536,60 @@ namespace ao::rt
       auto header = ml.metadataHeader();
       header.libraryId = parseUuid(*validated.optLibraryId);
       ml.updateMetadataHeader(header);
+    }
+
+    if (changes != nullptr)
+    {
+      auto changeSet = LibraryChangeSet{.libraryRevision = revision, .libraryReset = mode == ImportMode::Restore};
+
+      if (mode == ImportMode::Merge)
+      {
+        auto readTransaction = ml.readTransaction();
+        auto const beforeTracks =
+          boost::unordered_flat_set<TrackId, std::hash<TrackId>>{beforeTrackIds.begin(), beforeTrackIds.end()};
+        auto const beforeLists =
+          boost::unordered_flat_set<ListId, std::hash<ListId>>{beforeListIds.begin(), beforeListIds.end()};
+
+        for (auto const [trackId, view] : ml.tracks().reader(readTransaction).hot())
+        {
+          std::ignore = view;
+
+          if (!beforeTracks.contains(trackId))
+          {
+            changeSet.tracksInserted.push_back(trackId);
+          }
+        }
+
+        auto const manifestReader = ml.manifest().reader(readTransaction);
+
+        for (auto const& importedTrack : validated.tracks)
+        {
+          auto const manifestResult = manifestReader.get(importedTrack.uri);
+
+          if (manifestResult && beforeTracks.contains(manifestResult->trackId()))
+          {
+            changeSet.tracksMutated.push_back(manifestResult->trackId());
+          }
+        }
+
+        for (auto const [listId, view] : ml.lists().reader(readTransaction))
+        {
+          std::ignore = view;
+
+          if (!beforeLists.contains(listId))
+          {
+            changeSet.listsUpserted.push_back(listId);
+          }
+        }
+      }
+
+      changes->publish(std::move(changeSet));
+
+      if (mode == ImportMode::Restore && validated.optLibraryId)
+      {
+        auto readTransaction = ml.readTransaction();
+        changes->publish(LibraryChangeSet{.libraryRevision = ml.libraryRevision(readTransaction)});
+      }
     }
 
     return report;

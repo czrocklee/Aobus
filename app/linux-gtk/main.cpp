@@ -6,7 +6,6 @@
 #include "app/GtkMainContextExecutor.h"
 #include "app/GtkStyleRuntime.h"
 #include "app/KeymapApplicator.h"
-#include "app/LibraryWindowPolicy.h"
 #include "app/MainWindow.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
@@ -28,6 +27,7 @@
 #include <giomm/simpleaction.h>
 #include <glib-unix.h>
 #include <glibmm/exceptionhandler.h>
+#include <glibmm/main.h>
 #include <glibmm/miscutils.h>
 #include <glibmm/refptr.h>
 #include <glibmm/variant.h>
@@ -36,7 +36,6 @@
 #include <gtkmm/dialog.h>
 #include <gtkmm/window.h>
 
-#include <algorithm>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
@@ -59,7 +58,6 @@ namespace
   {
     std::filesystem::path musicRoot;
     std::filesystem::path databasePath;
-    LibraryWindowKind windowKind = LibraryWindowKind::Library;
     bool scanAfterOpen = false;
   };
 
@@ -76,16 +74,13 @@ namespace
       {
         return {.musicRoot = musicRoot,
                 .databasePath = portal::defaultLibraryDatabasePath(musicRoot),
-                .windowKind = LibraryWindowKind::Library,
                 .scanAfterOpen = portal::shouldScanAfterOpen(musicRoot)};
       }
     }
 
     auto const emptyPath = std::filesystem::temp_directory_path() / "aobus-empty";
     std::filesystem::create_directories(emptyPath);
-    return {.musicRoot = emptyPath,
-            .databasePath = portal::defaultLibraryDatabasePath(emptyPath),
-            .windowKind = LibraryWindowKind::FallbackEmptyLibrary};
+    return {.musicRoot = emptyPath, .databasePath = portal::defaultLibraryDatabasePath(emptyPath)};
   }
 
   Glib::RefPtr<MainWindow> createWindow(Gtk::Application& app,
@@ -103,7 +98,8 @@ namespace
       rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
                                  .musicRoot = paths.musicRoot,
                                  .databasePath = paths.databasePath,
-                                 .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr)});
+                                 .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr),
+                                 .playbackSessionConfigStore = &appConfigStorePtr->playbackSessionStore()});
 
     registerPlatformAudioBackends(*appRuntimePtr);
 
@@ -189,44 +185,18 @@ namespace
   }
 
   void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
-                                    LibraryWindowKind sourceKind,
                                     Glib::RefPtr<Gtk::Application> const& appPtr,
-                                    std::vector<Glib::RefPtr<MainWindow>>& windows,
+                                    Glib::RefPtr<MainWindow>& mainWindowPtr,
                                     std::shared_ptr<AppConfigStore> appConfigStorePtr,
                                     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                                     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr);
 
-  void closeAndRemoveWindow(Glib::RefPtr<Gtk::Application> const& appPtr,
-                            std::vector<Glib::RefPtr<MainWindow>>& windows,
-                            MainWindow* const windowObj)
-  {
-    if (windowObj == nullptr)
-    {
-      return;
-    }
-
-    if (auto const it = std::ranges::find_if(
-          windows, [windowObj](auto const& candidatePtr) { return candidatePtr.get() == windowObj; });
-        it != windows.end())
-    {
-      (*it)->close();
-      appPtr->remove_window(**it);
-      windows.erase(it);
-      return;
-    }
-
-    windowObj->close();
-    appPtr->remove_window(*windowObj);
-  }
-
   void handleOpenNewLibrary(std::filesystem::path const& path,
                             Glib::RefPtr<Gtk::Application> const& appPtr,
-                            std::vector<Glib::RefPtr<MainWindow>>& windows,
+                            Glib::RefPtr<MainWindow>& mainWindowPtr,
                             std::shared_ptr<AppConfigStore> appConfigStorePtr,
                             std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                             std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-                            MainWindow* const sourceWindowObj,
-                            OpenLibraryWindowMode const mode,
                             bool const scanAfterOpen)
   {
     if (!std::filesystem::is_directory(path))
@@ -234,89 +204,94 @@ namespace
       return;
     }
 
-    auto newWindowPtr = createWindow(*appPtr,
-                                     {.musicRoot = path,
-                                      .databasePath = portal::defaultLibraryDatabasePath(path),
-                                      .windowKind = LibraryWindowKind::Library,
-                                      .scanAfterOpen = scanAfterOpen},
-                                     appConfigStorePtr,
-                                     shellLayoutStorePtr,
-                                     componentStateStorePtr);
-    configureOpenLibraryCallback(newWindowPtr,
-                                 LibraryWindowKind::Library,
-                                 appPtr,
-                                 windows,
+    auto const requestedPath = std::filesystem::absolute(path).lexically_normal();
+
+    if (mainWindowPtr && mainWindowPtr->musicRoot() == requestedPath)
+    {
+      if (scanAfterOpen)
+      {
+        mainWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
+      }
+
+      mainWindowPtr->present();
+      return;
+    }
+
+    if (mainWindowPtr)
+    {
+      if (auto const prepared = mainWindowPtr->prepareForLibrarySwitch(); !prepared)
+      {
+        APP_LOG_ERROR("Failed to prepare active library for replacement: {}", prepared.error().message);
+        return;
+      }
+
+      appPtr->remove_window(*mainWindowPtr);
+      mainWindowPtr.reset();
+    }
+
+    auto appSession = rt::AppSessionState{};
+    appConfigStorePtr->loadAppSession(appSession);
+    appSession.lastLibraryPath = requestedPath.string();
+    appConfigStorePtr->saveAppSession(appSession);
+
+    mainWindowPtr = createWindow(*appPtr,
+                                 {.musicRoot = requestedPath,
+                                  .databasePath = portal::defaultLibraryDatabasePath(requestedPath),
+                                  .scanAfterOpen = scanAfterOpen},
                                  appConfigStorePtr,
                                  shellLayoutStorePtr,
                                  componentStateStorePtr);
+    configureOpenLibraryCallback(
+      mainWindowPtr, appPtr, mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr);
 
-    windows.push_back(std::move(newWindowPtr));
-
-    if (auto& openedWindowPtr = windows.back(); scanAfterOpen)
+    if (scanAfterOpen)
     {
-      openedWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
-    }
-
-    if (mode == OpenLibraryWindowMode::ReplaceSourceWindow)
-    {
-      closeAndRemoveWindow(appPtr, windows, sourceWindowObj);
+      mainWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
     }
   }
 
   void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
-                                    LibraryWindowKind const sourceKind,
                                     Glib::RefPtr<Gtk::Application> const& appPtr,
-                                    std::vector<Glib::RefPtr<MainWindow>>& windows,
+                                    Glib::RefPtr<MainWindow>& mainWindowPtr,
                                     std::shared_ptr<AppConfigStore> appConfigStorePtr,
                                     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                                     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
   {
     windowPtr->importExportCoordinator().callbacks().onOpenNewLibrary =
-      [appPtr,
-       &windows,
-       appConfigStorePtr,
-       shellLayoutStorePtr,
-       componentStateStorePtr,
-       sourceWindowObj = windowPtr.get(),
-       mode = openLibraryWindowModeFor(sourceKind)](std::filesystem::path const& path, bool const scanAfterOpen)
+      [appPtr, &mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr](
+        std::filesystem::path const& path, bool const scanAfterOpen)
     {
-      handleOpenNewLibrary(path,
-                           appPtr,
-                           windows,
-                           appConfigStorePtr,
-                           shellLayoutStorePtr,
-                           componentStateStorePtr,
-                           sourceWindowObj,
-                           mode,
-                           scanAfterOpen);
+      Glib::signal_idle().connect_once(
+        [path, scanAfterOpen, appPtr, &mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr]
+        {
+          handleOpenNewLibrary(
+            path, appPtr, mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr, scanAfterOpen);
+        });
     };
   }
 
-  void releaseWindows(Gtk::Application& app, std::vector<Glib::RefPtr<MainWindow>>& windows)
+  void releaseMainWindow(Gtk::Application& app, Glib::RefPtr<MainWindow>& mainWindowPtr)
   {
-    for (auto& windowPtr : windows)
+    if (!mainWindowPtr)
     {
-      if (windowPtr)
-      {
-        try
-        {
-          windowPtr->saveSession();
-        }
-        catch (std::exception const& e)
-        {
-          APP_LOG_ERROR("Failed to save runtime during shutdown: {}", e.what());
-        }
-        catch (...)
-        {
-          APP_LOG_ERROR("Failed to save runtime during shutdown: unknown exception");
-        }
-
-        app.remove_window(*windowPtr);
-        windowPtr.reset();
-      }
+      return;
     }
 
-    windows.clear();
+    try
+    {
+      mainWindowPtr->saveSession();
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("Failed to save runtime during shutdown: {}", e.what());
+    }
+    catch (...)
+    {
+      APP_LOG_ERROR("Failed to save runtime during shutdown: unknown exception");
+    }
+
+    app.remove_window(*mainWindowPtr);
+    mainWindowPtr.reset();
   }
 
   void installUnixSignalHandlers(Glib::RefPtr<Gtk::Application>& appPtr)
@@ -490,7 +465,7 @@ namespace
   }
 
   void handleAppActivate(Glib::RefPtr<Gtk::Application>& appPtr,
-                         std::vector<Glib::RefPtr<MainWindow>>& windows,
+                         Glib::RefPtr<MainWindow>& mainWindowPtr,
                          std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
                          std::shared_ptr<ShellLayoutStore> const& shellLayoutStorePtr,
                          std::shared_ptr<ShellLayoutComponentStateStore> const& componentStateStorePtr)
@@ -499,20 +474,23 @@ namespace
 
     applyKeymapAccelerators(*appPtr, appConfigStorePtr->loadKeymap(uimodel::defaultKeymap()));
 
+    if (mainWindowPtr)
+    {
+      mainWindowPtr->present();
+      return;
+    }
+
     auto paths = resolveLibraryPaths(*appConfigStorePtr);
 
-    auto const windowKind = paths.windowKind;
     auto const scanAfterOpen = paths.scanAfterOpen;
-    auto windowPtr =
+    mainWindowPtr =
       createWindow(*appPtr, std::move(paths), appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr);
     configureOpenLibraryCallback(
-      windowPtr, windowKind, appPtr, windows, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr);
-
-    windows.push_back(std::move(windowPtr));
+      mainWindowPtr, appPtr, mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr);
 
     if (scanAfterOpen)
     {
-      windows.back()->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
+      mainWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
     }
   }
 
@@ -608,7 +586,7 @@ namespace
 
     installUnixSignalHandlers(appPtr);
 
-    auto windows = std::vector<Glib::RefPtr<MainWindow>>{};
+    auto mainWindowPtr = Glib::RefPtr<MainWindow>{};
     auto preferencesWindowPtr = std::unique_ptr<PreferencesWindow>{};
 
     auto const globalConfigPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
@@ -620,8 +598,8 @@ namespace
     addAppActions(appPtr, preferencesWindowPtr, appConfigStorePtr);
 
     appPtr->signal_activate().connect(
-      [&appPtr, &windows, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr]
-      { handleAppActivate(appPtr, windows, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr); });
+      [&appPtr, &mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr]
+      { handleAppActivate(appPtr, mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr); });
 
     auto gtkArgv = buildGtkArgv(static_cast<std::int32_t>(args.size()), args.data());
     std::int32_t const gtkArgc = static_cast<std::int32_t>(gtkArgv.size());
@@ -639,7 +617,7 @@ namespace
       preferencesWindowPtr.reset();
     }
 
-    releaseWindows(*appPtr, windows);
+    releaseMainWindow(*appPtr, mainWindowPtr);
     return exitCode;
   }
 } // namespace

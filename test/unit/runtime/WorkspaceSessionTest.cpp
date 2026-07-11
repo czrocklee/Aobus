@@ -27,7 +27,7 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
 
-    auto const result = runtime.workspace().restoreSession(runtime.configStore());
+    auto const result = runtime.workspace().restoreSession(runtime.workspaceConfigStore());
 
     REQUIRE(result);
     CHECK(runtime.workspace().layoutState().openViews.empty());
@@ -45,12 +45,12 @@ namespace ao::rt::test
       listId =
         ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Restored"}));
       REQUIRE(runtime.workspace().navigateTo(listId));
-      runtime.workspace().saveSession(runtime.configStore());
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
 
     {
       auto runtime = makeRuntime(tempDir);
-      REQUIRE(runtime.workspace().restoreSession(runtime.configStore()));
+      REQUIRE(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
 
       auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
       CHECK(state.listId == listId);
@@ -73,11 +73,11 @@ namespace ao::rt::test
       secondListId = ao::test::requireValue(
         runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "After restore"}));
       REQUIRE(runtime.workspace().navigateTo(firstListId));
-      runtime.workspace().saveSession(runtime.configStore());
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
 
     auto runtime = makeRuntime(tempDir);
-    REQUIRE(runtime.workspace().restoreSession(runtime.configStore()));
+    REQUIRE(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
     REQUIRE(runtime.workspace().navigateTo(secondListId));
 
     CHECK(runtime.workspace().canGoBack() == true);

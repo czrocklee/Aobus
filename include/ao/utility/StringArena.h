@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -71,11 +71,40 @@ namespace ao::utility
     }
 
     std::size_t size() const noexcept { return _index.size(); }
+    std::size_t allocatedBytes() const noexcept { return _upstream.allocatedBytes(); }
     bool empty() const noexcept { return _index.empty(); }
 
   private:
-    // Declared before the index so it outlives it on destruction (the index only holds views).
-    std::pmr::monotonic_buffer_resource _resource;
+    class CountingMemoryResource final : public std::pmr::memory_resource
+    {
+    public:
+      std::size_t allocatedBytes() const noexcept { return _allocatedBytes; }
+
+    private:
+      void* do_allocate(std::size_t bytes, std::size_t alignment) override
+      {
+        auto* const result = _resource->allocate(bytes, alignment);
+        _allocatedBytes += bytes;
+        return result;
+      }
+
+      void do_deallocate(void* ptr, std::size_t bytes, std::size_t alignment) override
+      {
+        _resource->deallocate(ptr, bytes, alignment);
+        _allocatedBytes -= bytes;
+      }
+
+      bool do_is_equal(std::pmr::memory_resource const& other) const noexcept override { return this == &other; }
+
+      std::pmr::memory_resource* _resource = std::pmr::get_default_resource();
+      std::size_t _allocatedBytes = 0;
+    };
+
+    // Declared before the arena and index so it outlives both. The index only holds views
+    // into arena-owned blocks, while the counting upstream tracks those blocks for rebase
+    // decisions without approximating from string lengths.
+    CountingMemoryResource _upstream;
+    std::pmr::monotonic_buffer_resource _resource{&_upstream};
     boost::unordered_flat_set<std::string_view> _index;
   };
 } // namespace ao::utility

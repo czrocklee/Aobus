@@ -3,15 +3,13 @@
 
 #pragma once
 
+#include "IndexedTrackSequence.h"
 #include "TrackSource.h"
 #include "TrackSourceLease.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/Subscription.h>
 
-#include <boost/unordered/unordered_flat_map.hpp>
-
 #include <cstddef>
-#include <functional>
 #include <optional>
 #include <span>
 #include <vector>
@@ -54,20 +52,17 @@ namespace ao::rt
     void applyManualTracksRemove(ManualTracksRemove const& operation);
     void applyManualTracksMove(ManualTracksMove const& operation);
 
-    std::span<TrackId const> storedTrackIds() const noexcept { return _storedTrackIds; }
+    std::span<TrackId const> storedTrackIds() const noexcept { return _storedTracks.ids(); }
 
-    std::size_t size() const override { return _effectiveTrackIds.size(); }
-    TrackId trackIdAt(std::size_t index) const override { return _effectiveTrackIds.at(index); }
+    std::size_t size() const override { return _effectiveTracks.size(); }
+    TrackId trackIdAt(std::size_t index) const override { return _effectiveTracks.at(index); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
     bool contains(TrackId id) const;
 
   private:
-    using TrackIndexMap = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>;
-
     void ensureLive() const;
     void loadStoredTracks(library::ListView const& view);
-    void rebuildStoredIndex();
     void rebuildEffectiveTracks();
     std::vector<TrackId> validateStoredRemovals(std::span<ManualStoredRemoveRange const> removals) const;
     void eraseStoredRemovals(std::span<ManualStoredRemoveRange const> removals);
@@ -77,10 +72,8 @@ namespace ao::rt
     void handleParentBatch(TrackSourceDeltaBatch const& batch);
 
     TrackSourceLease _parentLease;
-    std::vector<TrackId> _storedTrackIds;
-    TrackIndexMap _storedIndexByTrackId;
-    std::vector<TrackId> _effectiveTrackIds;
-    TrackIndexMap _effectiveIndexByTrackId;
+    IndexedTrackSequence _storedTracks;
+    IndexedTrackSequence _effectiveTracks;
     Subscription _parentSubscription;
   };
 } // namespace ao::rt

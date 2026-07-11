@@ -323,7 +323,18 @@ namespace ao::library
       throwException<Exception>("Failed to begin write transaction: {}", transaction.error().message);
     }
 
+    _implPtr->metadataStore.bumpRevision(*transaction);
     return std::move(*transaction);
+  }
+
+  std::uint64_t MusicLibrary::libraryRevision(lmdb::ReadTransaction const& transaction) const
+  {
+    return _implPtr->metadataStore.revision(transaction);
+  }
+
+  std::uint64_t MusicLibrary::libraryRevision(lmdb::WriteTransaction& transaction) const
+  {
+    return _implPtr->metadataStore.revision(transaction);
   }
 
   TrackStore& MusicLibrary::tracks()

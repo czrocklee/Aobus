@@ -6,11 +6,15 @@
 #include "runtime/playback/PlaybackSessionRevision.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/rt/Signal.h>
 #include <ao/rt/Subscription.h>
 
 #include <chrono>
+#include <cstdint>
 #include <functional>
+#include <memory>
 
 namespace ao::library
 {
@@ -31,15 +35,16 @@ namespace ao::rt
     ListId sourceListId = kInvalidListId;
   };
 
-  /** Executor-affine owner of serialized playback intent and dirty acknowledgement. */
-  class PlaybackSessionPersistence final
+  /** Executor-affine owner of playback-session serialization, restore, and save policy. */
+  class PlaybackSessionPersistence final : public std::enable_shared_from_this<PlaybackSessionPersistence>
   {
   public:
     PlaybackSessionPersistence(ConfigStore& config,
                                Library& library,
                                library::MusicLibrary& storage,
                                PlaybackSequenceService& sequence,
-                               PlaybackService& playback);
+                               PlaybackService& playback,
+                               async::Runtime& asyncRuntime);
     ~PlaybackSessionPersistence();
 
     PlaybackSessionPersistence(PlaybackSessionPersistence const&) = delete;
@@ -47,29 +52,70 @@ namespace ao::rt
     PlaybackSessionPersistence(PlaybackSessionPersistence&&) = delete;
     PlaybackSessionPersistence& operator=(PlaybackSessionPersistence&&) = delete;
 
-    Result<> save();
+    void start();
+    Result<> checkpoint();
+    Result<> shutdown();
     Result<PlaybackSessionRestoreOutcome> restore();
-    Result<> forget();
+    Result<> discardRestorableSession();
     Subscription onDirty(std::move_only_function<void()> handler);
 
   private:
+    using Delay = std::chrono::milliseconds;
+
+    enum class ScheduledSave : std::uint8_t
+    {
+      None,
+      DirtyDebounce,
+      Retry,
+    };
+
+    static constexpr Delay kDirtyDebounceDelay = std::chrono::seconds{1};
+    static constexpr Delay kInitialRetryDelay = std::chrono::seconds{1};
+    static constexpr Delay kMaximumRetryDelay = std::chrono::minutes{1};
+    static constexpr Delay kPeriodicSaveInterval = std::chrono::seconds{10};
+
+    Result<> save();
     void markDirty();
     bool hasActiveSession() const;
     bool hasRestorableSession() const;
+    void handleSaveSucceeded();
+    void scheduleRetry();
+    void scheduleSave(ScheduledSave kind, Delay delay);
+    void handleScheduledSave(std::uint64_t scheduleGeneration, ScheduledSave kind);
+    void cancelScheduledSave() noexcept;
+    void startPeriodicSave();
+    static async::Task<void> waitForScheduledSave(async::Runtime* asyncRuntime,
+                                                  std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
+                                                  Delay delay,
+                                                  std::uint64_t scheduleGeneration,
+                                                  ScheduledSave kind);
+    static async::Task<void> runPeriodicSave(async::Runtime* asyncRuntime,
+                                             std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr);
 
     ConfigStore& _config;
     Library& _library;
     library::MusicLibrary& _storage;
     PlaybackSequenceService& _sequence;
     PlaybackService& _playback;
+    async::Runtime& _asyncRuntime;
     Signal<> _dirtySignal;
     Subscription _sequenceIntentSubscription;
     Subscription _volumeSubscription;
     Subscription _mutedSubscription;
     Subscription _seekSubscription;
+    Subscription _pausedSubscription;
+    Subscription _stoppedSubscription;
+    Subscription _nowPlayingSubscription;
     PlaybackSessionRevision _sessionRevision;
-    bool _forgotten = false;
+    async::TaskHandle _scheduledTask;
+    async::TaskHandle _periodicTask;
+    Delay _nextRetryDelay{kInitialRetryDelay};
+    std::uint64_t _scheduleGeneration = 0;
+    ScheduledSave _scheduledSave = ScheduledSave::None;
+    bool _sessionDiscarded = false;
     bool _restoring = false;
+    bool _started = false;
+    bool _shuttingDown = false;
     std::chrono::milliseconds _intentPosition{0};
     float _volumeIntent = 1.0F;
     bool _mutedIntent = false;

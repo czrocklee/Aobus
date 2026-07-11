@@ -4,11 +4,13 @@
 #pragma once
 
 #include "Task.h"
+#include <ao/utility/ScopedRegistration.h>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <exception>
 #include <functional>
@@ -18,6 +20,9 @@ namespace ao::async
 {
   class Executor;
   class LifetimeScope;
+  class RuntimeTestAccess;
+
+  using TaskHandle = utility::ScopedRegistration;
 
   class Runtime final
   {
@@ -40,9 +45,11 @@ namespace ao::async
 
     Task<void> resumeOnCallbackExecutor();
     Task<void> resumeOnWorker();
+    Task<void> sleepFor(std::chrono::milliseconds delay);
 
     void spawnLogged(Task<void> task);
     void spawn(Task<void> task, CancellationSlot slot, std::function<void(std::exception_ptr)> callback);
+    TaskHandle spawnCancellable(Task<void> task);
 
     template<typename T>
     std::future<T> spawn(Task<T> task)
@@ -53,7 +60,10 @@ namespace ao::async
     void spawnWithLifetime(LifetimeScope* scope, Task<void> task);
 
   private:
+    friend class RuntimeTestAccess;
+
     Executor& _callbackExecutor;
     boost::asio::thread_pool _workerPool;
+    std::function<Task<void>(std::chrono::milliseconds)> _sleepForOverride;
   };
 } // namespace ao::async

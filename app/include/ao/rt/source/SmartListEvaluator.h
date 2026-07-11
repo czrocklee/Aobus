@@ -3,16 +3,15 @@
 
 #pragma once
 
+#include "IndexedTrackSequence.h"
 #include "TrackSourceDelta.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/Subscription.h>
 
 #include <boost/container/small_vector.hpp>
-#include <boost/unordered/unordered_flat_map.hpp>
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <span>
 #include <vector>
@@ -24,6 +23,12 @@ namespace ao::library
 
 namespace ao::rt
 {
+  struct SmartListEvaluatorOperationCounts final
+  {
+    std::size_t upstreamIndexRebuilds = 0;
+    std::size_t membershipIndexRebuilds = 0;
+  };
+
   class SmartListSource;
   class TrackSource;
 
@@ -48,6 +53,7 @@ namespace ao::rt
     SmartListEvaluator& operator=(SmartListEvaluator&&) = delete;
 
     bool isAlive() const noexcept { return _alive; }
+    SmartListEvaluatorOperationCounts operationCounts() const noexcept { return _operationCounts; }
 
     void registerList(SmartListSource& list);
     void unregisterList(SmartListSource& list);
@@ -64,13 +70,10 @@ namespace ao::rt
       Both,
     };
 
-    using TrackIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>;
-
     struct SourceBucket final
     {
       TrackSource* source = nullptr;
-      std::vector<TrackId> upstreamTrackIds{};
-      TrackIndex upstreamIndex{};
+      IndexedTrackSequence upstreamTracks{};
       std::vector<SmartListSource*> lists{};
       Subscription subscription{};
       bool invalidated = false;
@@ -81,7 +84,6 @@ namespace ao::rt
       SmartListSource* list = nullptr;
       std::vector<TrackId> oldMembers{};
       std::vector<TrackId> members{};
-      TrackIndex memberIndex{};
       boost::container::small_vector<TrackSourceDelta, 1> deltas{};
       bool active = false;
     };
@@ -99,6 +101,7 @@ namespace ao::rt
     library::MusicLibrary& _ml;
     boost::unordered_flat_map<TrackSource*, std::unique_ptr<SourceBucket>> _buckets;
     bool _alive = true;
+    SmartListEvaluatorOperationCounts _operationCounts;
 
     friend class SmartListSource;
   };

@@ -7,6 +7,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Executor.h>
+#include <ao/async/Runtime.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
@@ -18,6 +19,9 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackService.h>
 
+#include <boost/asio/associated_cancellation_slot.hpp>
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -35,8 +39,289 @@
 #include <thread>
 #include <utility>
 
+namespace ao::async
+{
+  class RuntimeTestAccess final
+  {
+  public:
+    template<typename SleepFor>
+    static void setSleepFor(Runtime& runtime, SleepFor&& sleepFor)
+    {
+      runtime._sleepForOverride = std::forward<SleepFor>(sleepFor);
+    }
+  };
+} // namespace ao::async
+
 namespace ao::rt::test
 {
+  class ControlledSleeper final
+  {
+  public:
+    using Delay = std::chrono::milliseconds;
+
+    struct Call final
+    {
+      std::uint64_t id = 0;
+      Delay delay{};
+      bool cancelled = false;
+      std::thread::id startedOn;
+      std::thread::id cancelledOn;
+    };
+
+    static ControlledSleeper& install(async::Runtime& runtime)
+    {
+      auto sleeperPtr = std::shared_ptr<ControlledSleeper>{new ControlledSleeper{}};
+      async::RuntimeTestAccess::setSleepFor(
+        runtime, [sleeperPtr](Delay const delay) { return sleeperPtr->sleepFor(delay); });
+      return *sleeperPtr;
+    }
+
+    ~ControlledSleeper() = default;
+
+    ControlledSleeper(ControlledSleeper const&) = delete;
+    ControlledSleeper& operator=(ControlledSleeper const&) = delete;
+    ControlledSleeper(ControlledSleeper&&) = delete;
+    ControlledSleeper& operator=(ControlledSleeper&&) = delete;
+
+    async::Task<void> sleepFor(Delay const delay)
+    {
+      co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(
+        [this, delay](auto handler)
+        {
+          auto const id = _nextId.fetch_add(1);
+          auto cancellationSlot = boost::asio::get_associated_cancellation_slot(handler);
+
+          if (cancellationSlot.is_connected())
+          {
+            cancellationSlot.assign(
+              [this, id](async::CancellationType)
+              {
+                auto const lock = std::scoped_lock{_mutex};
+
+                if (auto const it = entry(id); it != _entries.end())
+                {
+                  it->cancelled = true;
+                  it->cancelledOn = std::this_thread::get_id();
+                  it->active = false;
+                }
+
+                _cv.notify_all();
+              });
+          }
+
+          {
+            auto const lock = std::scoped_lock{_mutex};
+            _entries.push_back(Entry{.id = id,
+                                     .delay = delay,
+                                     .resume = [handler = std::move(handler)] mutable { handler(); },
+                                     .active = true,
+                                     .startedOn = std::this_thread::get_id(),
+                                     .cancelledOn = {}});
+          }
+
+          _cv.notify_all();
+        },
+        boost::asio::use_awaitable);
+    }
+
+    bool waitForCallCount(std::size_t const count,
+                          std::chrono::milliseconds const timeout = std::chrono::seconds{2}) const
+    {
+      auto lock = std::unique_lock{_mutex};
+      return _cv.wait_for(lock, timeout, [this, count] { return _entries.size() >= count; });
+    }
+
+    std::size_t callCount() const
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      return _entries.size();
+    }
+
+    Call call(std::size_t const index) const
+    {
+      auto lock = std::unique_lock{_mutex};
+      _cv.wait(lock, [this, index] { return _entries.size() > index; });
+      auto const& entryValue = _entries[index];
+      return {.id = entryValue.id,
+              .delay = entryValue.delay,
+              .cancelled = entryValue.cancelled,
+              .startedOn = entryValue.startedOn,
+              .cancelledOn = entryValue.cancelledOn};
+    }
+
+    bool waitForCancellation(std::size_t const index,
+                             std::chrono::milliseconds const timeout = std::chrono::seconds{2}) const
+    {
+      auto lock = std::unique_lock{_mutex};
+      return _cv.wait_for(
+        lock, timeout, [this, index] { return _entries.size() > index && _entries[index].cancelled; });
+    }
+
+    bool fire(std::size_t const index, bool const ignoreCancellation = false)
+    {
+      auto resume = std::move_only_function<void()>{};
+
+      {
+        auto const lock = std::scoped_lock{_mutex};
+
+        if (index >= _entries.size() || (!_entries[index].active && !ignoreCancellation) || !_entries[index].resume)
+        {
+          return false;
+        }
+
+        _entries[index].active = false;
+        resume = std::move(_entries[index].resume);
+      }
+
+      resume();
+      return true;
+    }
+
+    bool fireNext()
+    {
+      std::size_t index = 0;
+
+      {
+        auto lock = std::unique_lock{_mutex};
+
+        if (!_cv.wait_for(
+              lock, std::chrono::seconds{2}, [this] { return std::ranges::any_of(_entries, &Entry::active); }))
+        {
+          return false;
+        }
+
+        index = static_cast<std::size_t>(std::ranges::find(_entries, true, &Entry::active) - _entries.begin());
+      }
+
+      return fire(index);
+    }
+
+    bool fireNext(Delay const delay)
+    {
+      std::size_t index = 0;
+
+      {
+        auto lock = std::unique_lock{_mutex};
+
+        if (!_cv.wait_for(lock,
+                          std::chrono::seconds{2},
+                          [this, delay]
+                          {
+                            return std::ranges::any_of(_entries,
+                                                       [delay](Entry const& candidate)
+                                                       { return candidate.active && candidate.delay == delay; });
+                          }))
+        {
+          return false;
+        }
+
+        auto const it = std::ranges::find_if(
+          _entries, [delay](Entry const& candidate) { return candidate.active && candidate.delay == delay; });
+        index = static_cast<std::size_t>(it - _entries.begin());
+      }
+
+      return fire(index);
+    }
+
+    bool forceFire(std::uint64_t const id)
+    {
+      std::size_t index = 0;
+
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        auto const it = entry(id);
+
+        if (it == _entries.end())
+        {
+          return false;
+        }
+
+        index = static_cast<std::size_t>(it - _entries.begin());
+      }
+
+      return fire(index, true);
+    }
+
+    std::uint64_t lastScheduledId() const
+    {
+      auto lock = std::unique_lock{_mutex};
+      _cv.wait(lock, [this] { return !_entries.empty(); });
+      return _entries.back().id;
+    }
+
+    std::vector<Delay> pendingDelays() const
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      auto delays = std::vector<Delay>{};
+
+      for (auto const& candidate : _entries)
+      {
+        if (candidate.active)
+        {
+          delays.push_back(candidate.delay);
+        }
+      }
+
+      return delays;
+    }
+
+    bool waitForPendingDelays(std::vector<Delay> const& expected,
+                              std::chrono::milliseconds const timeout = std::chrono::seconds{2}) const
+    {
+      auto lock = std::unique_lock{_mutex};
+      return _cv.wait_for(lock, timeout, [this, &expected] { return pendingDelaysLocked() == expected; });
+    }
+
+    bool waitForPendingDelay(Delay const delay, std::chrono::milliseconds const timeout = std::chrono::seconds{2}) const
+    {
+      auto lock = std::unique_lock{_mutex};
+      return _cv.wait_for(lock,
+                          timeout,
+                          [this, delay]
+                          {
+                            return std::ranges::any_of(_entries,
+                                                       [delay](Entry const& candidate)
+                                                       { return candidate.active && candidate.delay == delay; });
+                          });
+    }
+
+  private:
+    ControlledSleeper() = default;
+
+    struct Entry final
+    {
+      std::uint64_t id = 0;
+      Delay delay{};
+      std::move_only_function<void()> resume;
+      bool active = false;
+      bool cancelled = false;
+      std::thread::id startedOn;
+      std::thread::id cancelledOn;
+    };
+
+    std::vector<Entry>::iterator entry(std::uint64_t const id) { return std::ranges::find(_entries, id, &Entry::id); }
+
+    std::vector<Delay> pendingDelaysLocked() const
+    {
+      auto delays = std::vector<Delay>{};
+
+      for (auto const& candidate : _entries)
+      {
+        if (candidate.active)
+        {
+          delays.push_back(candidate.delay);
+        }
+      }
+
+      return delays;
+    }
+
+    mutable std::mutex _mutex;
+    mutable std::condition_variable _cv;
+    std::vector<Entry> _entries;
+    std::atomic_uint64_t _nextId{1};
+  };
+
   inline audio::BackendProvider::Status makeReadyAudioStatus()
   {
     return {.descriptor =
@@ -401,7 +686,7 @@ namespace ao::rt::test
   /**
    * @brief Creates an AppRuntime backed by a temporary directory with a MockExecutor.
    */
-  inline auto makeRuntime(ao::test::TempDir const& tempDir)
+  inline auto makeRuntime(ao::test::TempDir const& tempDir, ConfigStore* playbackSessionConfigStore = nullptr)
   {
     return AppRuntime{AppRuntimeDependencies{
       .executorPtr = std::make_unique<MockExecutor>(),
@@ -410,6 +695,7 @@ namespace ao::rt::test
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
+      .playbackSessionConfigStore = playbackSessionConfigStore,
     }};
   }
 } // namespace ao::rt::test

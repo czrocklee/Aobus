@@ -30,7 +30,6 @@ namespace ao::library
 namespace ao::rt
 {
   class LiveTrackListProjection;
-  class SmartListSource;
   class TrackSourceCache;
   struct TrackListProjectionDeltaBatch;
 
@@ -105,7 +104,6 @@ namespace ao::rt
     // Construction is exposed only in this runtime-internal header so shared launch/restore factories can build it.
     PlaybackCursorSession(PlaybackLaunchContext launchContext,
                           TrackSourceLease baseSourceLease,
-                          std::shared_ptr<SmartListSource> quickFilterSourcePtr,
                           std::unique_ptr<LiveTrackListProjection> projectionPtr,
                           ProjectionAnchor currentAnchor,
                           RepeatMode repeatMode,
@@ -125,7 +123,6 @@ namespace ao::rt
     void clearShuffleState() noexcept override;
 
     TrackSourceLease _baseSourceLease;
-    std::shared_ptr<SmartListSource> _quickFilterSourcePtr;
     std::unique_ptr<LiveTrackListProjection> _projectionPtr;
     ShuffleHistory _shuffleHistory;
     PlaybackCursor _cursor;

@@ -55,14 +55,7 @@ namespace ao::rt
 
   std::optional<std::size_t> SmartListSource::indexOf(TrackId id) const
   {
-    auto const it = _memberIndex.find(id);
-
-    if (it == _memberIndex.end())
-    {
-      return std::nullopt;
-    }
-
-    return it->second;
+    return _members.indexOf(id);
   }
 
   void SmartListSource::notifyUpdated(TrackId id)
@@ -121,18 +114,6 @@ namespace ao::rt
 
   void SmartListSource::replaceMembers(std::vector<TrackId> members)
   {
-    _members = std::move(members);
-    rebuildMemberIndex();
-  }
-
-  void SmartListSource::rebuildMemberIndex()
-  {
-    _memberIndex.clear();
-    _memberIndex.reserve(_members.size());
-
-    for (std::size_t index = 0; index < _members.size(); ++index)
-    {
-      _memberIndex.emplace(_members[index], index);
-    }
+    _members.assign(members);
   }
 } // namespace ao::rt

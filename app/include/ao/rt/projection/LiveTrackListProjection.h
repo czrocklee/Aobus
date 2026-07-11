@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -24,6 +24,16 @@ namespace ao::library
 
 namespace ao::rt
 {
+  struct TrackListProjectionOperationCounts final
+  {
+    std::uint64_t fullProjectionRebuilds = 0;
+    std::uint64_t incrementalProjectionUpdates = 0;
+    std::uint64_t arenaRebases = 0;
+    std::uint64_t rowIndexRebuilds = 0;
+
+    bool operator==(TrackListProjectionOperationCounts const&) const = default;
+  };
+
   class LiveTrackListProjection final : public TrackListProjection
   {
   public:
@@ -50,6 +60,8 @@ namespace ao::rt
     std::size_t size() const noexcept override;
     TrackId trackIdAt(std::size_t index) const override;
     std::optional<std::size_t> indexOf(TrackId trackId) const noexcept override;
+
+    TrackListProjectionOperationCounts operationCounts() const noexcept;
 
     void setPresentation(TrackPresentationSpec const& presentation);
 

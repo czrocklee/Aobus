@@ -11,6 +11,8 @@
 #include <ao/audio/Device.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppPrefsState.h>
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ConfigStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/actionmap.h>
@@ -96,6 +98,32 @@ namespace ao::gtk::test
     auto after = rt::AppSessionState{};
     configStorePtr->loadAppSession(after);
     CHECK(after.lastLibraryPath == fixture.runtime().musicLibrary().rootPath().string());
+  }
+
+  TEST_CASE("MainWindow - library switch forgets playback and prevents stale path writes",
+            "[gtk][unit][main-window][session]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+
+    auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    REQUIRE(runtime.playbackSessionConfigStore().saveResult("playback-session", rt::AppSessionState{}));
+    REQUIRE(runtime.playbackSessionConfigStore().flush());
+
+    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    REQUIRE(window.prepareForLibrarySwitch());
+    CHECK_FALSE(*runtime.playbackSessionConfigStore().contains("playback-session"));
+
+    auto switchedSession = rt::AppSessionState{};
+    switchedSession.lastLibraryPath = "/tmp/new-library";
+    configStorePtr->saveAppSession(switchedSession);
+    window.saveSession();
+
+    auto persistedSession = rt::AppSessionState{};
+    configStorePtr->loadAppSession(persistedSession);
+    CHECK(persistedSession.lastLibraryPath == "/tmp/new-library");
   }
 
   TEST_CASE("MainWindow - restores saved output when audio provider is bootstrapped before session load",

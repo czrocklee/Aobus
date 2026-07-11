@@ -106,7 +106,7 @@ namespace ao::rt::test
           runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Second saved"}));
         REQUIRE(runtime.workspace().navigateTo(firstListId));
         REQUIRE(runtime.workspace().navigateTo(secondListId));
-        runtime.workspace().saveSession(runtime.configStore());
+        runtime.workspace().saveSession(runtime.workspaceConfigStore());
 
         auto loaded = WorkspaceSessionState{};
         auto verifyStore = ConfigStore{workspaceConfigPath};
@@ -117,7 +117,7 @@ namespace ao::rt::test
       // Create new runtime with same persistence
       auto session2 = makeRuntime(tempDir);
 
-      REQUIRE(session2.workspace().restoreSession(session2.configStore()));
+      REQUIRE(session2.workspace().restoreSession(session2.workspaceConfigStore()));
 
       auto const layout = session2.workspace().layoutState();
       CHECK(layout.openViews.size() == 2);
@@ -134,13 +134,13 @@ namespace ao::rt::test
         auto const viewId = runtime.workspace().layoutState().activeViewId;
         auto const* artistPreset = builtinTrackPresentationPreset("artists");
         REQUIRE(artistPreset != nullptr);
-        runtime.views().setPresentation(viewId, artistPreset->spec);
+        REQUIRE(runtime.views().setPresentation(viewId, artistPreset->spec));
 
         auto const savedState = runtime.views().trackListState(viewId);
         CHECK(savedState.groupBy == TrackGroupKey::AlbumArtist);
         CHECK_FALSE(savedState.sortBy.empty());
 
-        runtime.workspace().saveSession(runtime.configStore());
+        runtime.workspace().saveSession(runtime.workspaceConfigStore());
 
         auto loaded = WorkspaceSessionState{};
         auto verifyStore = ConfigStore{workspaceConfigPath};
@@ -152,7 +152,7 @@ namespace ao::rt::test
       // Restore in new runtime
       auto session2 = makeRuntime(tempDir);
 
-      REQUIRE(session2.workspace().restoreSession(session2.configStore()));
+      REQUIRE(session2.workspace().restoreSession(session2.workspaceConfigStore()));
 
       auto const layout2 = session2.workspace().layoutState();
       REQUIRE(layout2.openViews.size() == 1);
@@ -168,12 +168,12 @@ namespace ao::rt::test
         auto const listId =
           ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Flat saved"}));
         REQUIRE(runtime.workspace().navigateTo(listId));
-        runtime.workspace().saveSession(runtime.configStore());
+        runtime.workspace().saveSession(runtime.workspaceConfigStore());
       }
 
       auto session2 = makeRuntime(tempDir);
 
-      REQUIRE(session2.workspace().restoreSession(session2.configStore()));
+      REQUIRE(session2.workspace().restoreSession(session2.workspaceConfigStore()));
 
       auto const layout2 = session2.workspace().layoutState();
       REQUIRE(layout2.openViews.size() == 1);

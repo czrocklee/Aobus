@@ -351,7 +351,11 @@ namespace ao::gtk
 
         if (route.shouldUpdateRuntimeSelection)
         {
-          _runtime.views().setSelection(route.focusedViewId, route.selectedIds);
+          if (auto result = _runtime.views().setSelection(route.focusedViewId, route.selectedIds); !result)
+          {
+            APP_LOG_ERROR("Failed to publish track selection: {}", result.error().message);
+          }
+
           _runtime.workspace().setFocusedView(route.focusedViewId);
         }
       });

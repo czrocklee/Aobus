@@ -391,7 +391,7 @@ namespace ao::gtk::layout::test
     auto const reply =
       ao::test::requireValue(runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId}));
     runtime.workspace().setFocusedView(reply.viewId);
-    runtime.views().setSelection(reply.viewId, {firstTrackId});
+    REQUIRE(runtime.views().setSelection(reply.viewId, {firstTrackId}));
     drainGtkEvents();
 
     auto const node =
@@ -412,7 +412,7 @@ namespace ao::gtk::layout::test
 
     CHECK(undoBar->get_visible());
 
-    runtime.views().setSelection(reply.viewId, {secondTrackId});
+    REQUIRE(runtime.views().setSelection(reply.viewId, {secondTrackId}));
     drainGtkEvents();
 
     CHECK_FALSE(undoBar->get_visible());
@@ -430,7 +430,7 @@ namespace ao::gtk::layout::test
     auto const reply =
       ao::test::requireValue(runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId}));
     runtime.workspace().setFocusedView(reply.viewId);
-    runtime.views().setSelection(reply.viewId, {trackId});
+    REQUIRE(runtime.views().setSelection(reply.viewId, {trackId}));
     drainGtkEvents();
 
     auto const node =
@@ -475,7 +475,7 @@ namespace ao::gtk::layout::test
     auto const reply =
       ao::test::requireValue(runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId}));
     runtime.workspace().setFocusedView(reply.viewId);
-    runtime.views().setSelection(reply.viewId, {trackId});
+    REQUIRE(runtime.views().setSelection(reply.viewId, {trackId}));
     drainGtkEvents();
 
     auto const node =

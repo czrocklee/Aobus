@@ -6,17 +6,23 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/PlaybackLaunchContext.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -38,6 +44,7 @@
 #include <numeric>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -1236,7 +1243,389 @@ namespace ao::rt::test
 
       return std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     }
+
+    class PipelineBenchmarkSource final : public TrackSource
+    {
+    public:
+      explicit PipelineBenchmarkSource(std::vector<TrackId> trackIds)
+        : _trackIds{std::move(trackIds)}
+      {
+      }
+
+      std::size_t size() const override { return _trackIds.size(); }
+      TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
+      std::optional<std::size_t> indexOf(TrackId id) const override
+      {
+        if (auto const it = std::ranges::find(_trackIds, id); it != _trackIds.end())
+        {
+          return static_cast<std::size_t>(it - _trackIds.begin());
+        }
+
+        return std::nullopt;
+      }
+
+      void appendBatch(std::span<TrackId const> trackIds)
+      {
+        auto const previousSize = _trackIds.size();
+        _trackIds.append_range(trackIds);
+        REQUIRE(publishDeltaBatch(
+          TrackSourceDeltaBatch{
+            .deltas = {SourceInsertRange{.start = previousSize, .trackIds = {trackIds.begin(), trackIds.end()}}}},
+          previousSize));
+      }
+
+      std::vector<TrackId> removeTail(std::size_t count)
+      {
+        REQUIRE(count <= _trackIds.size());
+        auto const previousSize = _trackIds.size();
+        auto const start = previousSize - count;
+        auto removed = std::vector<TrackId>{_trackIds.begin() + static_cast<std::ptrdiff_t>(start), _trackIds.end()};
+        _trackIds.erase(_trackIds.begin() + static_cast<std::ptrdiff_t>(start), _trackIds.end());
+        REQUIRE(publishDeltaBatch(
+          TrackSourceDeltaBatch{.deltas = {SourceRemoveRange{.start = start, .trackIds = removed}}}, previousSize));
+        return removed;
+      }
+
+      void updateRange(std::size_t start, std::size_t count)
+      {
+        REQUIRE(start <= _trackIds.size());
+        REQUIRE(count <= _trackIds.size() - start);
+        auto ids = std::vector<TrackId>{_trackIds.begin() + static_cast<std::ptrdiff_t>(start),
+                                        _trackIds.begin() + static_cast<std::ptrdiff_t>(start + count)};
+        auto const previousSize = _trackIds.size();
+        auto batch = TrackSourceDeltaBatch{.deltas = {SourceUpdateRange{.start = start, .trackIds = std::move(ids)}}};
+        auto const published = publishDeltaBatch(std::move(batch), previousSize);
+        REQUIRE(published);
+      }
+
+      void moveRangeToEnd(std::size_t start, std::size_t count)
+      {
+        REQUIRE(start <= _trackIds.size());
+        REQUIRE(count <= _trackIds.size() - start);
+        auto const previousSize = _trackIds.size();
+        auto moved = std::vector<TrackId>{_trackIds.begin() + static_cast<std::ptrdiff_t>(start),
+                                          _trackIds.begin() + static_cast<std::ptrdiff_t>(start + count)};
+        _trackIds.erase(_trackIds.begin() + static_cast<std::ptrdiff_t>(start),
+                        _trackIds.begin() + static_cast<std::ptrdiff_t>(start + count));
+        auto const insertionIndex = _trackIds.size();
+        _trackIds.append_range(moved);
+        auto batch = TrackSourceDeltaBatch{.deltas = {
+                                             SourceRemoveRange{.start = start, .trackIds = moved},
+                                             SourceInsertRange{.start = insertionIndex, .trackIds = std::move(moved)},
+                                           }};
+        auto const published = publishDeltaBatch(std::move(batch), previousSize);
+        REQUIRE(published);
+      }
+
+      std::span<TrackId const> trackIds() const noexcept { return _trackIds; }
+
+    private:
+      std::vector<TrackId> _trackIds;
+    };
+
+    struct PipelineOperationTiming final
+    {
+      std::chrono::microseconds commitDuration{};
+      std::chrono::microseconds callbackDuration{};
+    };
+
+    struct PipelineRunTiming final
+    {
+      PipelineOperationTiming insert;
+      PipelineOperationTiming remove;
+      PipelineOperationTiming singleUpdate;
+      PipelineOperationTiming singleProjectionUpdate;
+      PipelineOperationTiming update;
+      PipelineOperationTiming manualMove;
+    };
+
+    library::test::TrackSpec pipelineTrackSpec(std::size_t index, bool updated = false)
+    {
+      return library::test::TrackSpec{
+        .title = std::format("{}Track {:06}", updated ? "Updated " : "", index),
+        .artist = std::format("Artist {:03}", index % 200),
+        .album = std::format("Album {:04}", index % 1000),
+        .genre = std::format("Genre {:02}", index % 20),
+        .year = static_cast<std::uint16_t>(1990 + (index % 35)),
+      };
+    }
+
+    std::vector<TrackId> createPipelineTracks(library::MusicLibrary& library,
+                                              std::size_t firstIndex,
+                                              std::size_t count,
+                                              std::chrono::microseconds* commitDuration = nullptr)
+    {
+      auto transaction = library.writeTransaction();
+      auto writer = library.tracks().writer(transaction);
+      auto ids = std::vector<TrackId>{};
+      ids.reserve(count);
+
+      for (std::size_t offset = 0; offset < count; ++offset)
+      {
+        auto builder = library::TrackBuilder::makeEmpty();
+        library::test::applyTrackSpec(builder, pipelineTrackSpec(firstIndex + offset));
+        auto data = builder.serialize(transaction, library.dictionary(), library.resources());
+        REQUIRE(data);
+        auto created = writer.createHotCold(data->first, data->second);
+        REQUIRE(created);
+        ids.push_back(created->first);
+      }
+
+      auto const start = std::chrono::steady_clock::now();
+      REQUIRE(transaction.commit());
+
+      if (auto const end = std::chrono::steady_clock::now(); commitDuration != nullptr)
+      {
+        *commitDuration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      }
+
+      return ids;
+    }
+
+    class SourcePipelineBench final
+    {
+    public:
+      static constexpr std::size_t kInitialTrackCount = 50000;
+      static constexpr std::size_t kBulkCount = 5000;
+      static constexpr std::size_t kManualMoveCount = 500;
+      static constexpr std::size_t kSmartListCount = 3;
+
+      SourcePipelineBench()
+        : _ids{createPipelineTracks(_libraryFixture.library(), 0, kInitialTrackCount)}
+        , _rootPtr{std::make_shared<PipelineBenchmarkSource>(_ids)}
+        , _evaluator{_libraryFixture.library()}
+        , _manualPtr{std::make_shared<PipelineBenchmarkSource>(_ids)}
+      {
+        _smartSources.reserve(kSmartListCount);
+        _projections.reserve(kSmartListCount + 1);
+
+        for (std::size_t index = 0; index < kSmartListCount; ++index)
+        {
+          auto sourcePtr =
+            std::make_shared<SmartListSource>(TrackSourceLease{_rootPtr}, _libraryFixture.library(), _evaluator);
+          sourcePtr->setExpression(std::format("$year >= {}", 1990 + (index * 5)));
+          sourcePtr->reload();
+          _projections.push_back(std::make_unique<LiveTrackListProjection>(
+            kInvalidViewId,
+            TrackSourceLease{sourcePtr},
+            _libraryFixture.library(),
+            TrackOrderSpec{.sortBy = {TrackSortTerm{.field = TrackSortField::Title}}}));
+          _smartSources.push_back(std::move(sourcePtr));
+        }
+
+        _projections.push_back(std::make_unique<LiveTrackListProjection>(
+          kInvalidViewId,
+          TrackSourceLease{_manualPtr},
+          _libraryFixture.library(),
+          TrackOrderSpec{.sortBy = {TrackSortTerm{.field = TrackSortField::Title}}}));
+
+        auto transaction = _libraryFixture.library().writeTransaction();
+        auto builder = library::ListBuilder::makeEmpty().name("Performance manual list");
+
+        for (auto const trackId : _ids)
+        {
+          builder.tracks().add(trackId);
+        }
+
+        auto result = _libraryFixture.library().lists().writer(transaction).create(builder.serialize());
+        REQUIRE(result);
+        _manualListId = result->first;
+        REQUIRE(transaction.commit());
+      }
+
+      PipelineRunTiming run()
+      {
+        auto timing = PipelineRunTiming{};
+        auto newIds = createPipelineTracks(
+          _libraryFixture.library(), kInitialTrackCount, kBulkCount, &timing.insert.commitDuration);
+        timing.insert.callbackDuration = measureCallbackDuration([&] { _rootPtr->appendBatch(newIds); });
+
+        timing.remove.commitDuration = removeTracksDuration(newIds);
+        timing.remove.callbackDuration =
+          measureCallbackDuration([&] { CHECK(_rootPtr->removeTail(kBulkCount) == newIds); });
+
+        timing.singleUpdate.commitDuration = updateTracksDuration(kBulkCount, 1);
+        timing.singleUpdate.callbackDuration = measureCallbackDuration([&] { _rootPtr->updateRange(kBulkCount, 1); });
+        timing.singleProjectionUpdate.callbackDuration =
+          measureCallbackDuration([&] { _manualPtr->updateRange(kBulkCount, 1); });
+
+        timing.update.commitDuration = updateTracksDuration(0, kBulkCount);
+        timing.update.callbackDuration = measureCallbackDuration([&] { _rootPtr->updateRange(0, kBulkCount); });
+
+        timing.manualMove.commitDuration = persistManualMoveDuration();
+        timing.manualMove.callbackDuration =
+          measureCallbackDuration([&] { _manualPtr->moveRangeToEnd(0, kManualMoveCount); });
+
+        CHECK(_rootPtr->size() == kInitialTrackCount);
+        CHECK(_manualPtr->size() == kInitialTrackCount);
+
+        for (auto const& projectionPtr : _projections)
+        {
+          CHECK(projectionPtr->size() > 0);
+        }
+
+        return timing;
+      }
+
+    private:
+      template<typename Callback>
+      static std::chrono::microseconds measureCallbackDuration(Callback&& callback)
+      {
+        auto const start = std::chrono::steady_clock::now();
+        std::invoke(std::forward<Callback>(callback));
+        auto const end = std::chrono::steady_clock::now();
+        return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      }
+
+      std::chrono::microseconds removeTracksDuration(std::span<TrackId const> trackIds)
+      {
+        auto transaction = _libraryFixture.library().writeTransaction();
+        auto writer = _libraryFixture.library().tracks().writer(transaction);
+
+        for (auto const trackId : trackIds)
+        {
+          REQUIRE(writer.remove(trackId));
+        }
+
+        auto const start = std::chrono::steady_clock::now();
+        REQUIRE(transaction.commit());
+        return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+      }
+
+      std::chrono::microseconds updateTracksDuration(std::size_t const startIndex, std::size_t const count)
+      {
+        REQUIRE(startIndex <= _ids.size());
+        REQUIRE(count <= _ids.size() - startIndex);
+        auto transaction = _libraryFixture.library().writeTransaction();
+        auto writer = _libraryFixture.library().tracks().writer(transaction);
+
+        for (std::size_t offset = 0; offset < count; ++offset)
+        {
+          auto const index = startIndex + offset;
+          auto builder = library::TrackBuilder::makeEmpty();
+          library::test::applyTrackSpec(builder, pipelineTrackSpec(index, true));
+          auto data = builder.serializeHot(transaction, _libraryFixture.library().dictionary());
+          REQUIRE(data);
+          REQUIRE(writer.updateHot(_ids[index], *data));
+        }
+
+        auto const start = std::chrono::steady_clock::now();
+        REQUIRE(transaction.commit());
+        return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+      }
+
+      std::chrono::microseconds persistManualMoveDuration()
+      {
+        auto movedIds =
+          std::vector<TrackId>{_ids.begin(), _ids.begin() + static_cast<std::ptrdiff_t>(kManualMoveCount)};
+        _ids.erase(_ids.begin(), _ids.begin() + static_cast<std::ptrdiff_t>(kManualMoveCount));
+        _ids.append_range(movedIds);
+
+        auto transaction = _libraryFixture.library().writeTransaction();
+        auto builder = library::ListBuilder::makeEmpty().name("Performance manual list");
+
+        for (auto const trackId : _ids)
+        {
+          builder.tracks().add(trackId);
+        }
+
+        REQUIRE(_libraryFixture.library().lists().writer(transaction).update(_manualListId, builder.serialize()));
+        auto const start = std::chrono::steady_clock::now();
+        REQUIRE(transaction.commit());
+        return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+      }
+
+      MusicLibraryFixture _libraryFixture;
+      std::vector<TrackId> _ids;
+      std::shared_ptr<PipelineBenchmarkSource> _rootPtr;
+      SmartListEvaluator _evaluator;
+      std::vector<std::shared_ptr<SmartListSource>> _smartSources;
+      std::shared_ptr<PipelineBenchmarkSource> _manualPtr;
+      std::vector<std::unique_ptr<LiveTrackListProjection>> _projections;
+      ListId _manualListId = kInvalidListId;
+    };
+
+    void reportPipelineOperation(std::string_view name, std::vector<PipelineOperationTiming> const& samples)
+    {
+      auto commits = std::vector<std::int64_t>{};
+      auto callbacks = std::vector<std::int64_t>{};
+      commits.reserve(samples.size());
+      callbacks.reserve(samples.size());
+
+      for (auto const& sample : samples)
+      {
+        commits.push_back(sample.commitDuration.count());
+        callbacks.push_back(sample.callbackDuration.count());
+      }
+
+      std::ranges::sort(commits);
+      std::ranges::sort(callbacks);
+      auto const medianIndex = commits.size() / 2U;
+      auto const percentile95Index = (((commits.size() * 95U) + 99U) / 100U) - 1U;
+      auto const commitMedian = commits[medianIndex];
+      auto const commitP95 = commits[percentile95Index];
+      auto const callbackMedian = callbacks[medianIndex];
+      auto const callbackP95 = callbacks[percentile95Index];
+      APP_LOG_INFO("  {}: commit median/p95 {} / {} us; callbacks median/p95 {} / {} us",
+                   name,
+                   commitMedian,
+                   commitP95,
+                   callbackMedian,
+                   callbackP95);
+      recordBaseline(std::format("source-pipeline-{}", name),
+                     {
+                       metric("track_count", SourcePipelineBench::kInitialTrackCount, "count"),
+                       metric("smart_list_count", SourcePipelineBench::kSmartListCount, "count"),
+                       metric("commit_median", commitMedian, "us"),
+                       metric("commit_p95", commitP95, "us"),
+                       metric("callbacks_median", callbackMedian, "us"),
+                       metric("callbacks_p95", callbackP95, "us"),
+                     });
+    }
   } // namespace
+
+  TEST_CASE("PerformanceBaseline - source pipeline 50k batch operations", "[perf][unit][baseline][source-pipeline]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr std::size_t kMeasuredRuns = 5;
+    auto samples = std::vector<PipelineRunTiming>{};
+    samples.reserve(kMeasuredRuns);
+
+    for (std::size_t run = 0; run <= kMeasuredRuns; ++run)
+    {
+      auto bench = SourcePipelineBench{};
+
+      if (auto timing = bench.run(); run != 0)
+      {
+        samples.push_back(timing);
+      }
+    }
+
+    auto insertSamples = std::vector<PipelineOperationTiming>{};
+    auto removeSamples = std::vector<PipelineOperationTiming>{};
+    auto singleUpdateSamples = std::vector<PipelineOperationTiming>{};
+    auto singleProjectionUpdateSamples = std::vector<PipelineOperationTiming>{};
+    auto updateSamples = std::vector<PipelineOperationTiming>{};
+    auto moveSamples = std::vector<PipelineOperationTiming>{};
+
+    for (auto const& sample : samples)
+    {
+      insertSamples.push_back(sample.insert);
+      removeSamples.push_back(sample.remove);
+      singleUpdateSamples.push_back(sample.singleUpdate);
+      singleProjectionUpdateSamples.push_back(sample.singleProjectionUpdate);
+      updateSamples.push_back(sample.update);
+      moveSamples.push_back(sample.manualMove);
+    }
+
+    APP_LOG_INFO("=== Phase 0 source pipeline: 50k tracks, 3 smart lists, 1 manual list ===");
+    reportPipelineOperation("bulk-insert-5k", insertSamples);
+    reportPipelineOperation("bulk-delete-5k", removeSamples);
+    reportPipelineOperation("metadata-update-1", singleUpdateSamples);
+    reportPipelineOperation("projection-update-1", singleProjectionUpdateSamples);
+    reportPipelineOperation("metadata-update-5k", updateSamples);
+    reportPipelineOperation("manual-move-500", moveSamples);
+  }
 
   TEST_CASE("PerformanceBaseline - phase 0 10k baseline", "[perf][unit][baseline]")
   {

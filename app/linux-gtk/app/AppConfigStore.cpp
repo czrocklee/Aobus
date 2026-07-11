@@ -80,6 +80,11 @@ namespace ao::gtk
     }
   }
 
+  rt::ConfigStore& AppConfigStore::playbackSessionStore() noexcept
+  {
+    return *_storePtr;
+  }
+
   uimodel::KeymapModel AppConfigStore::loadKeymap(uimodel::KeymapBindings defaults) const
   {
     return uimodel::loadKeymap(*_storePtr, std::move(defaults));

@@ -1,4 +1,5 @@
 #include <chrono>
+#include <initializer_list>
 
 struct NonChronoType
 {
@@ -158,4 +159,10 @@ void testLocalVariables()
   // The 't<n>' form must be all digits after 't', so this is still rejected.
   // POSITIVE
   std::chrono::steady_clock::time_point t1a = std::chrono::steady_clock::now();
+
+  // NEGATIVE - compiler-generated range variables are not project identifiers.
+  for (auto const retryDelay : {std::chrono::seconds{1}, std::chrono::seconds{2}})
+  {
+    (void)retryDelay;
+  }
 }

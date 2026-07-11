@@ -80,8 +80,8 @@ namespace ao::rt
    * ScanFailure - A single failure surfaced while applying a scan plan.
    *
    * Only failures are reported; the happy path (inserted/updated/unchanged/
-   * missing) is not, and processed TrackIds are returned in bulk via
-   * ScanApplyResult::processedIds. Every field is a view valid only for the
+   * missing) is not, and changed TrackIds are returned in bulk via the
+   * categorized ScanApplyResult vectors. Every field is a view valid only for the
    * duration of the callback invocation; copy out anything that must outlive it.
    */
   struct ScanFailure final
@@ -114,7 +114,10 @@ namespace ao::rt
    */
   struct ScanApplyResult final
   {
-    std::vector<TrackId> processedIds;
+    std::uint64_t libraryRevision = 0;
+    std::vector<TrackId> insertedIds;
+    std::vector<TrackId> mutatedIds;
+    std::vector<TrackId> relinkedIds;
     std::int32_t relinkedCount = 0;
     std::int32_t missingCount = 0;
     std::int32_t failureCount = 0;

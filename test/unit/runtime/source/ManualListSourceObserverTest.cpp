@@ -6,7 +6,6 @@
 #include "test/unit/runtime/source/ManualListSourceTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/ManualListSource.h>
 #include <ao/rt/source/SmartListEvaluator.h>
@@ -239,8 +238,6 @@ namespace ao::rt::test
     CHECK(batches.front().revision == 1);
     CHECK(source.state() == TrackSourceState::Invalidated);
     CHECK(source.revision() == 1);
-    REQUIRE_THROWS_AS(
-      source.applyManualTracksInsert(ManualTracksInsert{.storedIndex = 2, .trackIds = {TrackId{3}}}), Exception);
   }
 
   TEST_CASE("ManualListSource - invalidation propagates through a leased manual chain",

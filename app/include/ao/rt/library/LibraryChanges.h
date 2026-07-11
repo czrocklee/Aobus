@@ -13,6 +13,11 @@
 #include <variant>
 #include <vector>
 
+namespace ao::async
+{
+  class Executor;
+}
+
 namespace ao::rt
 {
   struct ManualStoredRemoveRange final
@@ -60,25 +65,26 @@ namespace ao::rt
     bool operator==(ManualListContentChange const&) const = default;
   };
 
+  struct LibraryChangeSet final
+  {
+    std::uint64_t libraryRevision = 0;
+    bool libraryReset = false;
+    std::vector<TrackId> tracksInserted{};
+    std::vector<TrackId> tracksDeleted{};
+    std::vector<TrackId> tracksMutated{};
+    std::vector<ListId> listsUpserted{};
+    std::vector<ListId> listsDeleted{};
+    std::vector<ManualListContentChange> manualContentChanges{};
+
+    bool operator==(LibraryChangeSet const&) const = default;
+  };
+
   class LibraryTaskService;
   class LibraryWriter;
 
   class [[nodiscard]] LibraryChanges final
   {
   public:
-    struct ListsMutated final
-    {
-      std::vector<ListId> upserted{};
-      std::vector<ListId> deleted{};
-      std::vector<ManualListContentChange> manualContentChanges{};
-    };
-
-    struct TrackCollectionChanged final
-    {
-      std::vector<TrackId> inserted{};
-      std::vector<TrackId> deleted{};
-    };
-
     struct LibraryTaskProgressUpdated final
     {
       double fraction = 0.0;
@@ -86,6 +92,7 @@ namespace ao::rt
     };
 
     LibraryChanges();
+    LibraryChanges(async::Executor& callbackExecutor, std::uint64_t lastPublishedRevision);
     ~LibraryChanges();
 
     LibraryChanges(LibraryChanges const&) = delete;
@@ -93,21 +100,16 @@ namespace ao::rt
     LibraryChanges(LibraryChanges&&) = delete;
     LibraryChanges& operator=(LibraryChanges&&) = delete;
 
-    Subscription onTracksMutated(std::move_only_function<void(std::vector<TrackId> const&)> handler) const;
-    Subscription onTrackCollectionChanged(std::move_only_function<void(TrackCollectionChanged const&)> handler) const;
-    Subscription onListsMutated(std::move_only_function<void(ListsMutated const&)> handler) const;
+    Subscription onChanged(std::move_only_function<void(LibraryChangeSet const&)> handler) const;
     Subscription onLibraryTaskCompleted(std::move_only_function<void(std::size_t)> handler) const;
     Subscription onLibraryTaskProgress(std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const;
+
+    void publish(LibraryChangeSet changeSet);
 
   private:
     friend class LibraryTaskService;
     friend class LibraryWriter;
 
-    void notifyTracksMutated(std::vector<TrackId> trackIds);
-    void notifyTrackCollectionChanged(std::vector<TrackId> inserted, std::vector<TrackId> deleted);
-    void notifyListsMutated(std::vector<ListId> upserted,
-                            std::vector<ListId> deleted,
-                            std::vector<ManualListContentChange> manualContentChanges = {});
     void notifyLibraryTaskCompleted(std::size_t count);
     void notifyLibraryTaskProgress(LibraryTaskProgressUpdated progress);
 

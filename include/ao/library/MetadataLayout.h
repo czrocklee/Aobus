@@ -15,6 +15,7 @@ namespace ao::library
   constexpr std::uint32_t kLibraryVersion = 4;
   constexpr std::size_t kMetadataHeaderSize = 40;
   constexpr std::uint32_t kMetadataHeaderRecordId = 1;
+  constexpr std::uint32_t kLibraryRevisionRecordId = 2;
 
   struct MetadataHeader final
   {

@@ -26,6 +26,11 @@ namespace ao::library
   class MusicLibrary;
 }
 
+namespace ao::async
+{
+  class Runtime;
+}
+
 namespace ao::rt
 {
   class NotificationService;
@@ -77,7 +82,8 @@ namespace ao::rt
                             TrackSourceCache& sources,
                             library::MusicLibrary& library,
                             PlaybackService& playback,
-                            NotificationService& notifications);
+                            NotificationService& notifications,
+                            async::Runtime& asyncRuntime);
     ~PlaybackSequenceService();
 
     PlaybackSequenceService(PlaybackSequenceService const&) = delete;
@@ -96,6 +102,9 @@ namespace ao::rt
 
     PlaybackSequenceState const& state() const;
 
+    // Handlers run synchronously on the executor thread. They must defer owner
+    // teardown to a later executor turn; Debug contracts reject destruction
+    // while a sequence transition or observer publication is still on the stack.
     Subscription onChanged(std::move_only_function<void(PlaybackSequenceState const&)> handler);
     Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
     Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);
@@ -116,10 +125,10 @@ namespace ao::rt
                                       ShuffleMode shuffleMode,
                                       RepeatMode repeatMode,
                                       std::chrono::milliseconds elapsed) noexcept;
-    void forgetPlaybackSessionSnapshot();
+    void discardPlaybackSessionSnapshot();
     Subscription onPersistenceIntentChanged(std::move_only_function<void()> handler);
 
     struct Impl;
-    std::shared_ptr<Impl> _implPtr;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

@@ -28,11 +28,11 @@ namespace ao::gtk::test
 
     auto const emptyText = text.get_text();
 
-    runtime.views().setSelection(reply.viewId, {TrackId{1}, TrackId{2}});
+    REQUIRE(runtime.views().setSelection(reply.viewId, {TrackId{1}, TrackId{2}}));
     auto const selectedText = text.get_text();
     CHECK(selectedText != emptyText);
 
-    runtime.views().setSelection(reply.viewId, {});
+    REQUIRE(runtime.views().setSelection(reply.viewId, {}));
     CHECK(text.get_text() == emptyText);
   }
 } // namespace ao::gtk::test

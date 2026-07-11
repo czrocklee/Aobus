@@ -18,7 +18,6 @@
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/audio/Transport.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
@@ -30,7 +29,6 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/PlaybackSessionSaveService.h>
 #include <ao/rt/Subscription.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -46,13 +44,8 @@
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
-#include <glibmm/main.h>
 #include <gtkmm/stack.h>
-#include <sigc++/connection.h>
-#include <sigc++/scoped_connection.h>
 
-#include <chrono>
-#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -64,43 +57,12 @@
 
 namespace ao::gtk
 {
-  namespace
-  {
-    constexpr auto kPlaybackSessionAutosaveInterval = std::chrono::seconds{10};
-
-    class GlibPlaybackSessionSaveScheduler final : public rt::PlaybackSessionSaveService::Scheduler
-    {
-    public:
-      rt::Subscription schedule(rt::PlaybackSessionSaveService::Delay const delay,
-                                rt::PlaybackSessionSaveService::Callback callback) override
-      {
-        auto callbackPtr = std::make_shared<rt::PlaybackSessionSaveService::Callback>(std::move(callback));
-        auto connectionPtr = std::make_shared<sigc::connection>();
-        *connectionPtr = Glib::signal_timeout().connect(
-          [callbackPtr]
-          {
-            auto callback = std::move(*callbackPtr);
-            callback();
-            return false;
-          },
-          static_cast<std::uint32_t>(delay.count()));
-        return rt::Subscription{[connectionPtr] { connectionPtr->disconnect(); }};
-      }
-    };
-  } // namespace
-
   struct MainWindowCoordinator::Impl final
   {
     Impl(MainWindowCoordinator* coordinator, MainWindow& window, rt::AppRuntime& runtime)
       : layoutConfig{runtime.musicLibrary().rootPath() / ".aobus"}
       , trackRowCache{runtime.library()}
       , imageCache{100}
-      , playbackSessionSaveService{rt::PlaybackSessionSaveService::Port{
-                                     .subscribeDirty = [&runtime](rt::PlaybackSessionSaveService::Callback callback)
-                                     { return runtime.onPlaybackSessionDirty(std::move(callback)); },
-                                     .save = [&runtime] { return runtime.savePlaybackSession(); },
-                                   },
-                                   playbackSessionSaveScheduler}
       , playbackCommandSurface{runtime.playback(),
                                runtime.playbackSequence(),
                                [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
@@ -189,7 +151,10 @@ namespace ao::gtk
           continue;
         }
 
-        runtime.views().setPresentation(viewId, presentationForList(state.listId, runtime));
+        if (auto result = runtime.views().setPresentation(viewId, presentationForList(state.listId, runtime)); !result)
+        {
+          APP_LOG_ERROR("Failed to apply presentation preference: {}", result.error().message);
+        }
       }
     }
 
@@ -213,56 +178,10 @@ namespace ao::gtk
       runtime.playback().revealTrack(restored->trackId, rt::kInvalidViewId, restored->sourceListId);
     }
 
-    void bindPlaybackSessionSaveTriggers(rt::AppRuntime& runtime)
-    {
-      playbackPausedSub.reset();
-      playbackStoppedSub.reset();
-      playbackNowPlayingSub.reset();
-      playbackSeekSub.reset();
-      playbackSessionAutosaveConn.disconnect();
-
-      playbackPausedSub = runtime.playback().onPaused([this] { playbackSessionSaveService.saveSignificantEvent(); });
-      playbackStoppedSub = runtime.playback().onStopped([this] { playbackSessionSaveService.saveSignificantEvent(); });
-      playbackNowPlayingSub = runtime.playback().onNowPlayingChanged(
-        [this](rt::PlaybackService::NowPlayingChanged const&) { playbackSessionSaveService.saveSignificantEvent(); });
-      playbackSeekSub = runtime.playback().onSeekUpdate(
-        [this](rt::PlaybackService::SeekUpdate const& event)
-        {
-          if (event.mode == rt::PlaybackService::SeekMode::Final)
-          {
-            playbackSessionSaveService.saveSignificantEvent();
-          }
-        });
-
-      playbackSessionAutosaveConn = Glib::signal_timeout().connect(
-        [this, &runtime]
-        {
-          if (runtime.playback().state().transport == audio::Transport::Playing)
-          {
-            playbackSessionSaveService.savePeriodic();
-          }
-
-          return true;
-        },
-        std::chrono::duration_cast<std::chrono::milliseconds>(kPlaybackSessionAutosaveInterval).count());
-    }
-
-    Result<> shutdownPlaybackSessionPersistence()
-    {
-      playbackPausedSub.reset();
-      playbackStoppedSub.reset();
-      playbackNowPlayingSub.reset();
-      playbackSeekSub.reset();
-      playbackSessionAutosaveConn.disconnect();
-      return playbackSessionSaveService.shutdown();
-    }
-
     GtkLayoutConfig layoutConfig;
     ThemeCoordinator themeController;
     TrackRowCache trackRowCache;
     ImageCache imageCache;
-    GlibPlaybackSessionSaveScheduler playbackSessionSaveScheduler;
-    rt::PlaybackSessionSaveService playbackSessionSaveService;
     uimodel::PlaybackCommandSurface playbackCommandSurface;
     ao::uimodel::TrackPresentationCatalog trackPresentationCatalog;
     ao::uimodel::ListPresentationPreferenceStore trackPresentationPreferences;
@@ -272,11 +191,6 @@ namespace ao::gtk
     Gtk::Stack stack;
     TrackPageHost trackPageHost;
     portal::ImportExportCoordinator importExportCoordinator;
-    rt::Subscription playbackPausedSub;
-    rt::Subscription playbackStoppedSub;
-    rt::Subscription playbackNowPlayingSub;
-    rt::Subscription playbackSeekSub;
-    sigc::scoped_connection playbackSessionAutosaveConn;
   };
 
   MainWindowCoordinator::MainWindowCoordinator(MainWindow& window,
@@ -294,18 +208,6 @@ namespace ao::gtk
 
   MainWindowCoordinator::~MainWindowCoordinator()
   {
-    try
-    {
-      if (auto const saved = _implPtr->shutdownPlaybackSessionPersistence(); !saved)
-      {
-        APP_LOG_WARN(
-          "MainWindowCoordinator: Failed to save playback session during shutdown - {}", saved.error().message);
-      }
-    }
-    catch (...) // NOLINT(bugprone-empty-catch) -- destruction must contain save and logging failures
-    {
-    }
-
     _tracksMutatedSubscription.reset();
     _libraryTaskCompletedSubscription.reset();
     _listsMutatedSubscription.reset();
@@ -324,19 +226,35 @@ namespace ao::gtk
         _runtime.reloadAllTracks();
       });
 
-    _tracksMutatedSubscription = _runtime.library().changes().onTracksMutated(
-      [this](auto const& trackIds)
+    _tracksMutatedSubscription = _runtime.library().changes().onChanged(
+      [this](rt::LibraryChangeSet const& changeSet)
       {
+        if (changeSet.libraryReset)
+        {
+          _implPtr->trackRowCache.clearCache();
+          return;
+        }
+
+        auto trackIds = changeSet.tracksInserted;
+        trackIds.append_range(changeSet.tracksDeleted);
+        trackIds.append_range(changeSet.tracksMutated);
+
         for (auto const trackId : trackIds)
         {
           _implPtr->trackRowCache.invalidate(trackId);
         }
       });
 
-    _listsMutatedSubscription = _runtime.library().changes().onListsMutated(
-      [this](auto const& mutation)
+    _listsMutatedSubscription = _runtime.library().changes().onChanged(
+      [this](rt::LibraryChangeSet const& mutation)
       {
-        for (auto const deletedId : mutation.deleted)
+        if (!mutation.libraryReset && mutation.listsUpserted.empty() && mutation.listsDeleted.empty() &&
+            mutation.manualContentChanges.empty())
+        {
+          return;
+        }
+
+        for (auto const deletedId : mutation.listsDeleted)
         {
           _implPtr->trackPresentationPreferences.clearPresentationForList(deletedId);
         }
@@ -354,7 +272,7 @@ namespace ao::gtk
     auto const transaction = _runtime.musicLibrary().readTransaction();
     rebuildListPages(transaction);
 
-    if (auto const restored = _runtime.workspace().restoreSession(_runtime.configStore()); !restored)
+    if (auto const restored = _runtime.workspace().restoreSession(_runtime.workspaceConfigStore()); !restored)
     {
       APP_LOG_WARN("MainWindowCoordinator: Failed to restore workspace session - {}", restored.error().message);
     }
@@ -365,12 +283,10 @@ namespace ao::gtk
     {
       auto const spec = _implPtr->presentationForList(rt::kAllTracksListId, _runtime);
       std::ignore = _runtime.workspace().navigateTo(rt::kAllTracksListId, {.optPresentation = spec});
-      _runtime.workspace().saveSession(_runtime.configStore());
+      _runtime.workspace().saveSession(_runtime.workspaceConfigStore());
     }
 
-    _implPtr->playbackSessionSaveService.start();
     _implPtr->restorePlaybackSession(_runtime);
-    _implPtr->bindPlaybackSessionSaveTriggers(_runtime);
   }
 
   void MainWindowCoordinator::saveSession()
@@ -405,8 +321,12 @@ namespace ao::gtk
 
     _configStorePtr->saveAppSession(session);
 
-    _implPtr->playbackSessionSaveService.saveSignificantEvent();
-    _runtime.workspace().saveSession(_runtime.configStore());
+    if (auto const saved = _runtime.savePlaybackSession(); !saved)
+    {
+      APP_LOG_WARN("MainWindowCoordinator: Failed to checkpoint playback session - {}", saved.error().message);
+    }
+
+    _runtime.workspace().saveSession(_runtime.workspaceConfigStore());
   }
 
   void MainWindowCoordinator::loadSession()

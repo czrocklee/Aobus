@@ -31,9 +31,13 @@ namespace ao::rt::test
     struct ChangeRecorder final
     {
       explicit ChangeRecorder(LibraryChanges& changes)
-        : tracksSub{changes.onTracksMutated([this](auto const&) { ++tracksMutated; })}
-        , collectionSub{changes.onTrackCollectionChanged([this](auto const&) { ++collectionChanged; })}
-        , listsSub{changes.onListsMutated([this](auto const&) { ++listsMutated; })}
+        : tracksSub{
+            changes.onChanged([this](LibraryChangeSet const& event) { tracksMutated += !event.tracksMutated.empty(); })}
+        , collectionSub{changes.onChanged(
+            [this](LibraryChangeSet const& event)
+            { collectionChanged += !event.tracksInserted.empty() || !event.tracksDeleted.empty(); })}
+        , listsSub{changes.onChanged([this](LibraryChangeSet const& event)
+                                     { listsMutated += !event.listsUpserted.empty() || !event.listsDeleted.empty(); })}
       {
       }
 
@@ -307,7 +311,7 @@ namespace ao::rt::test
     CHECK(*commit == *dryRun);
     CHECK_FALSE(trackExists(libraryFixture, trackId));
     CHECK_FALSE(listContainsTrack(libraryFixture, listId, trackId));
-    CHECK(recorder.tracksMutated == 1);
+    CHECK(recorder.tracksMutated == 0);
     CHECK(recorder.collectionChanged == 1);
     CHECK(recorder.listsMutated == 1);
   }
@@ -344,7 +348,7 @@ namespace ao::rt::test
     CHECK(trackExists(libraryFixture, commit->trackId));
     CHECK(
       libraryFixture.library().manifest().reader(libraryFixture.library().readTransaction()).get("music/song.flac"));
-    CHECK(recorder.tracksMutated == 1);
+    CHECK(recorder.tracksMutated == 0);
     CHECK(recorder.collectionChanged == 1);
   }
 } // namespace ao::rt::test

@@ -83,7 +83,7 @@ namespace ao::rt::test
         config.listId = listId;
         viewId = ao::test::requireValue(views.createView(config, true)).viewId;
         sequencePtr = std::make_unique<PlaybackSequenceService>(
-          executor, views, sources, libraryFixture.library(), playback, notifications);
+          executor, views, sources, libraryFixture.library(), playback, notifications, asyncRuntime);
       }
 
       void buildThreeTrackManualView(TrackListViewConfig config = {})
@@ -147,7 +147,8 @@ namespace ao::rt::test
                                                                 sources,
                                                                 transport.libraryFixture.library(),
                                                                 transport.playbackService,
-                                                                transport.notificationService);
+                                                                transport.notificationService,
+                                                                asyncRuntime);
       }
 
       void queueNaturalAdvance()
@@ -243,7 +244,7 @@ namespace ao::rt::test
         }));
         viewId = ao::test::requireValue(views.createView({.listId = listId}, true)).viewId;
         sequencePtr = std::make_unique<PlaybackSequenceService>(
-          executor, views, sources, libraryFixture.library(), *playbackPtr, notifications);
+          executor, views, sources, libraryFixture.library(), *playbackPtr, notifications, asyncRuntime);
       }
 
       void buildSingleTrackManualView()
@@ -258,7 +259,7 @@ namespace ao::rt::test
         }));
         viewId = ao::test::requireValue(views.createView({.listId = listId}, true)).viewId;
         sequencePtr = std::make_unique<PlaybackSequenceService>(
-          executor, views, sources, libraryFixture.library(), *playbackPtr, notifications);
+          executor, views, sources, libraryFixture.library(), *playbackPtr, notifications, asyncRuntime);
       }
 
       MusicLibraryFixture libraryFixture;
@@ -433,61 +434,6 @@ namespace ao::rt::test
     CHECK(playback.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSequenceService - accepted launch stops installing state after its facade is destroyed",
-            "[runtime][regression][playback-sequence][lifecycle]")
-  {
-    auto fixture = PlaybackSequenceFixture{};
-    fixture.buildThreeTrackManualView();
-    REQUIRE(fixture.sequencePtr->playFromView(fixture.viewId, fixture.firstTrackId));
-    bool callbackEntered = false;
-    auto const startedSubscription = fixture.playback.onStarted(
-      [&]
-      {
-        callbackEntered = true;
-        fixture.sequencePtr.reset();
-      });
-    auto* const sequence = fixture.sequencePtr.get();
-
-    auto const launched = sequence->playFromView(fixture.viewId, fixture.thirdTrackId);
-
-    REQUIRE(launched);
-    CHECK(callbackEntered);
-    CHECK(fixture.sequencePtr == nullptr);
-    CHECK(fixture.playback.state().transport == audio::Transport::Playing);
-    CHECK(fixture.playback.state().nowPlaying.trackId == fixture.thirdTrackId);
-    CHECK_FALSE(fixture.playback.clearPreparedNext());
-  }
-
-  TEST_CASE("PlaybackSequenceService - preparing destruction rejects launch before transport commit",
-            "[runtime][regression][playback-sequence][lifecycle]")
-  {
-    auto fixture = PlaybackSequenceFixture{};
-    fixture.buildThreeTrackManualView();
-    auto const transportBeforeLaunch = fixture.playback.state();
-    std::uint32_t preparingCount = 0;
-    std::uint32_t startedCount = 0;
-    auto const preparingSubscription = fixture.playback.onPreparing(
-      [&]
-      {
-        ++preparingCount;
-        fixture.sequencePtr.reset();
-      });
-    auto const startedSubscription = fixture.playback.onStarted([&] { ++startedCount; });
-    auto* const sequence = fixture.sequencePtr.get();
-
-    auto const launched = sequence->playFromView(fixture.viewId, fixture.firstTrackId);
-
-    REQUIRE_FALSE(launched);
-    CHECK(launched.error().code == Error::Code::InvalidState);
-    CHECK(preparingCount == 1);
-    CHECK(startedCount == 0);
-    CHECK(fixture.sequencePtr == nullptr);
-    CHECK(fixture.playback.state().transport == transportBeforeLaunch.transport);
-    CHECK(fixture.playback.state().nowPlaying == transportBeforeLaunch.nowPlaying);
-    CHECK(fixture.playback.state().revision == transportBeforeLaunch.revision);
-    CHECK_FALSE(fixture.playback.clearPreparedNext());
-  }
-
   TEST_CASE("PlaybackSequenceService - live membership governs succession without interrupting current audio",
             "[runtime][unit][playback-sequence][projection]")
   {
@@ -545,10 +491,10 @@ namespace ao::rt::test
     REQUIRE(captured.optResolvedSuccessor == fixture.thirdTrackId);
 
     REQUIRE(fixture.views.setFilter(fixture.viewId, "$year < 2000"));
-    fixture.views.setPresentation(
+    REQUIRE(fixture.views.setPresentation(
       fixture.viewId,
-      TrackPresentationSpec{.id = "reverse-title", .sortBy = {{.field = TrackSortField::Title, .ascending = false}}});
-    fixture.views.destroyView(fixture.viewId);
+      TrackPresentationSpec{.id = "reverse-title", .sortBy = {{.field = TrackSortField::Title, .ascending = false}}}));
+    REQUIRE(fixture.views.destroyView(fixture.viewId));
 
     CHECK(sequence.state() == captured);
     CHECK(fixture.playback.state().nowPlaying.trackId == fixture.secondTrackId);
@@ -646,7 +592,8 @@ namespace ao::rt::test
                                                                     fixture.sources,
                                                                     fixture.libraryFixture.library(),
                                                                     fixture.playback,
-                                                                    fixture.notifications);
+                                                                    fixture.notifications,
+                                                                    fixture.asyncRuntime);
     auto& sequence = *fixture.sequencePtr;
     REQUIRE(sequence.playFromView(fixture.viewId, fixture.secondTrackId));
     auto const beforeAddition = sequence.state();
@@ -743,6 +690,36 @@ namespace ao::rt::test
     CHECK(feed.entries.front().severity == NotificationSeverity::Info);
     CHECK_FALSE(feed.entries.front().sticky);
     CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
+  }
+
+  TEST_CASE("PlaybackSequenceService - idle fallback advances without a prepared successor",
+            "[runtime][regression][playback-sequence]")
+  {
+    auto fixture = PlaybackSequenceTransportFixture{};
+    fixture.buildThreeTrackManualView();
+    auto& playback = fixture.transport.playbackService;
+    REQUIRE(fixture.sequencePtr->playFromView(fixture.viewId, fixture.firstTrackId));
+    fixture.transport.executor.drain();
+    REQUIRE(playback.clearPreparedNext());
+    REQUIRE(fixture.transport.renderTarget != nullptr);
+
+    auto output = std::array<std::byte, 4096>{};
+    bool drained = false;
+
+    for (std::int32_t attempt = 0; attempt < 100000 && !drained; ++attempt)
+    {
+      drained = fixture.transport.renderTarget->renderPcm(output).drained;
+    }
+
+    REQUIRE(drained);
+    fixture.transport.renderTarget->handleDrainComplete();
+    fixture.transport.executor.checkQueued(std::chrono::seconds{5});
+    fixture.transport.executor.drain();
+
+    CHECK(fixture.sequencePtr->state().currentTrackId == fixture.secondTrackId);
+    CHECK(playback.state().nowPlaying.trackId == fixture.secondTrackId);
+    CHECK(playback.state().transport == audio::Transport::Playing);
+    CHECK(fixture.transport.notificationService.feed().entries.empty());
   }
 
   TEST_CASE("PlaybackSequenceService - output and final seek replace the disarmed lookahead token",

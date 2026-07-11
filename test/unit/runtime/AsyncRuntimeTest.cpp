@@ -18,6 +18,7 @@
 #include <unistd.h>
 #endif
 
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -49,6 +50,16 @@ namespace ao::rt::test
     {
       co_await runtime->resumeOnWorker();
       throwException<Exception>("Test failure");
+    }
+
+    Task<void> sleepAndRecord(Runtime* runtime,
+                              std::chrono::milliseconds const delay,
+                              AsyncTestState<std::uint32_t> callbackCount,
+                              AsyncTestState<bool> ranOnWorker)
+    {
+      co_await runtime->sleepFor(delay);
+      ranOnWorker.set(!runtime->callbackExecutor().isCurrent());
+      callbackCount.increment();
     }
 
 #ifdef _WIN32
@@ -197,6 +208,49 @@ namespace ao::rt::test
 
     executor.dispatch([&] { order.push_back(6); });
     CHECK(order.back() == 6);
+  }
+
+  TEST_CASE("AsyncRuntime - sleep resumes its coroutine on the worker executor", "[runtime][unit][async]")
+  {
+    auto executor = QueuedExecutor{};
+    auto runtime = Runtime{executor, 1};
+    auto callbackCount = AsyncTestState<std::uint32_t>::create(0);
+    auto ranOnWorker = AsyncTestState<bool>::create(false);
+
+    auto task =
+      runtime.spawnCancellable(sleepAndRecord(&runtime, std::chrono::milliseconds{1}, callbackCount, ranOnWorker));
+
+    REQUIRE(callbackCount.waitUntil(1));
+    CHECK(ranOnWorker.load());
+    CHECK(executor.queuedCount() == 0);
+  }
+
+  TEST_CASE("AsyncRuntime - sleeping coroutine cancellation is serialized on its worker executor",
+            "[runtime][regression][async]")
+  {
+    auto executor = ManualExecutor{};
+    auto runtime = Runtime{executor, 1};
+    auto& sleeper = ControlledSleeper::install(runtime);
+    auto callbackCount = AsyncTestState<std::uint32_t>::create(0);
+    auto ranOnWorker = AsyncTestState<bool>::create(false);
+
+    auto task =
+      runtime.spawnCancellable(sleepAndRecord(&runtime, std::chrono::seconds{30}, callbackCount, ranOnWorker));
+    REQUIRE(sleeper.waitForCallCount(1));
+    auto const sleepingCall = sleeper.call(0);
+    auto const cancellingThread = std::this_thread::get_id();
+
+    task.reset();
+    REQUIRE(sleeper.waitForCancellation(0));
+    auto const cancelledCall = sleeper.call(0);
+    CHECK(cancelledCall.cancelled);
+    CHECK(cancelledCall.startedOn != cancellingThread);
+    CHECK(cancelledCall.cancelledOn == cancelledCall.startedOn);
+    REQUIRE(sleeper.forceFire(sleepingCall.id));
+    runtime.requestStop();
+    runtime.join();
+
+    CHECK(callbackCount.load() == 0);
   }
 
   TEST_CASE("ImmediateExecutor - a throwing task does not wedge the queue", "[runtime][unit][async]")

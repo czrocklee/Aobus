@@ -580,8 +580,9 @@ namespace ao::gtk::test
 
       auto configStorePtr = std::make_unique<rt::ConfigStore>(configPath);
 
+      auto executorPtr = std::make_unique<GtkMainContextExecutor>();
       _runtimePtr = std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{
-        .executorPtr = std::make_unique<GtkMainContextExecutor>(),
+        .executorPtr = std::move(executorPtr),
         .musicRoot = musicRoot,
         .databasePath = databasePath,
         .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
@@ -602,8 +603,9 @@ namespace ao::gtk::test
    */
   inline auto makeRuntime(ao::test::TempDir const& tempDir)
   {
+    auto executorPtr = std::make_unique<GtkMainContextExecutor>();
     return rt::AppRuntime{rt::AppRuntimeDependencies{
-      .executorPtr = std::make_unique<GtkMainContextExecutor>(),
+      .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = tempDir.path() / ".aobus" / "library",
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,

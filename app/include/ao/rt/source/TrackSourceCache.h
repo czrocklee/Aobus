@@ -16,6 +16,8 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::library
@@ -26,6 +28,19 @@ namespace ao::library
 
 namespace ao::rt
 {
+  struct SourceSpec final
+  {
+    ListId baseListId = kInvalidListId;
+    std::string filterExpression{};
+
+    bool operator==(SourceSpec const&) const = default;
+  };
+
+  struct SourceSpecHash final
+  {
+    std::size_t operator()(SourceSpec const& spec) const noexcept;
+  };
+
   class LibraryChanges;
   class CachedListSource;
 
@@ -33,7 +48,7 @@ namespace ao::rt
   {
   public:
     TrackSourceCache(library::MusicLibrary& library, LibraryChanges const& changes);
-    ~TrackSourceCache();
+    ~TrackSourceCache() = default;
 
     TrackSourceCache(TrackSourceCache const&) = delete;
     TrackSourceCache& operator=(TrackSourceCache const&) = delete;
@@ -42,6 +57,8 @@ namespace ao::rt
 
     TrackSource& allTracks();
     Result<TrackSourceLease> acquire(ListId listId);
+    Result<TrackSourceLease> acquire(SourceSpec const& spec);
+    std::optional<Error> sourceError(TrackSourceLease const& lease) const;
 
     void reloadAllTracks();
     void refreshList(ListId listId);
@@ -66,10 +83,7 @@ namespace ao::rt
     std::shared_ptr<AllTracksSource> _allTracksPtr;
     SmartListEvaluator _smartEvaluator;
 
-    std::vector<TrackId> _collectionChangedTrackIds;
-    Subscription _listsMutatedSubscription;
-    Subscription _tracksMutatedSubscription;
-    Subscription _trackCollectionChangedSubscription;
+    Subscription _changesSubscription;
 
     std::size_t _listMutationDepth = 0;
     bool _refreshDrainActive = false;
@@ -79,5 +93,6 @@ namespace ao::rt
     boost::unordered_flat_map<ListId, std::weak_ptr<CachedListSource>, std::hash<ListId>> _liveSources;
     boost::unordered_flat_map<ListId, ListId, std::hash<ListId>> _parentIds;
     boost::unordered_flat_map<ListId, std::vector<ListId>, std::hash<ListId>> _childIds;
+    boost::unordered_flat_map<SourceSpec, std::weak_ptr<TrackSource>, SourceSpecHash> _adHocSources;
   };
 } // namespace ao::rt

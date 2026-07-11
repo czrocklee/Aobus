@@ -88,7 +88,9 @@ namespace ao::rt::test
     auto const result = future.get();
 
     REQUIRE(result);
-    CHECK(result->processedIds.empty());
+    CHECK(result->insertedIds.empty());
+    CHECK(result->mutatedIds.empty());
+    CHECK(result->relinkedIds.empty());
     CHECK(result->failureCount == 0);
   }
 
@@ -112,7 +114,7 @@ namespace ao::rt::test
     auto const result = future.get();
 
     REQUIRE(result);
-    REQUIRE(result->processedIds.size() == 1);
+    REQUIRE(result->insertedIds.size() == 1);
     auto transaction = libraryFixture.library().readTransaction();
     auto manifestResult = libraryFixture.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(manifestResult);
@@ -184,7 +186,9 @@ namespace ao::rt::test
     auto const result = future.get();
 
     REQUIRE(result);
-    CHECK(result->processedIds.empty());
+    CHECK(result->insertedIds.empty());
+    CHECK(result->mutatedIds.empty());
+    CHECK(result->relinkedIds.empty());
     CHECK(result->failureCount == 2);
 
     REQUIRE(progressEvents.size() == 2);

@@ -80,7 +80,9 @@ namespace ao::rt
     if (_result.cancelled || stopToken.stop_requested())
     {
       _result.cancelled = true;
-      _result.processedIds.clear();
+      _result.insertedIds.clear();
+      _result.mutatedIds.clear();
+      _result.relinkedIds.clear();
       _result.relinkedCount = 0;
       _result.missingCount = 0;
       _result.failureCount = 0;
@@ -89,16 +91,23 @@ namespace ao::rt
 
     if (_abortTransaction)
     {
-      _result.processedIds.clear();
+      _result.insertedIds.clear();
+      _result.mutatedIds.clear();
+      _result.relinkedIds.clear();
       _result.relinkedCount = 0;
       _result.missingCount = 0;
       return _result;
     }
 
+    _result.libraryRevision = _ml.libraryRevision(transaction);
+
     if (auto result = transaction.commit(); !result)
     {
       // The transaction did not persist, so nothing was actually processed.
-      _result.processedIds.clear();
+      _result.libraryRevision = 0;
+      _result.insertedIds.clear();
+      _result.mutatedIds.clear();
+      _result.relinkedIds.clear();
       _result.relinkedCount = 0;
       _result.missingCount = 0;
       return std::unexpected{result.error()};
@@ -376,7 +385,7 @@ namespace ao::rt
       return true;
     }
 
-    _result.processedIds.push_back(item.trackId);
+    _result.mutatedIds.push_back(item.trackId);
     return true;
   }
 
@@ -451,7 +460,7 @@ namespace ao::rt
       return false;
     }
 
-    _result.processedIds.push_back(item.trackId);
+    _result.relinkedIds.push_back(item.trackId);
     ++_result.relinkedCount;
     return true;
   }
@@ -487,7 +496,7 @@ namespace ao::rt
       return;
     }
 
-    _result.processedIds.push_back(*optNewTrackId);
+    _result.insertedIds.push_back(*optNewTrackId);
   }
 
   std::optional<std::pair<library::TrackBuilder::PreparedHot, library::TrackBuilder::PreparedCold>>

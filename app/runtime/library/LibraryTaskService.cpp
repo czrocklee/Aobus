@@ -113,7 +113,7 @@ namespace ao::rt
 
     {
       auto mutationLock = std::scoped_lock{_implPtr->mutationMutex};
-      auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
+      auto importer = ao::rt::LibraryYamlImporter{_implPtr->library, _implPtr->changes};
 
       if (auto importResult = importer.importFromYaml(path); !importResult)
       {
@@ -266,11 +266,16 @@ namespace ao::rt
     }
 
     auto const& result = *applyResult;
-    _implPtr->changes.notifyLibraryTaskCompleted(result.processedIds.size());
+    auto const processedCount = result.insertedIds.size() + result.mutatedIds.size() + result.relinkedIds.size();
+    _implPtr->changes.notifyLibraryTaskCompleted(processedCount);
 
-    if (!result.cancelled && !result.processedIds.empty())
+    if (!result.cancelled && result.libraryRevision != 0)
     {
-      _implPtr->changes.notifyTracksMutated(result.processedIds);
+      auto mutatedIds = result.mutatedIds;
+      mutatedIds.append_range(result.relinkedIds);
+      _implPtr->changes.publish(LibraryChangeSet{.libraryRevision = result.libraryRevision,
+                                                 .tracksInserted = result.insertedIds,
+                                                 .tracksMutated = std::move(mutatedIds)});
     }
 
     co_return applyResult;
@@ -297,7 +302,8 @@ namespace ao::rt
       // No mutation lock here: fingerprinting runs unlocked and the indexer
       // acquires the lock itself, only around each batch write-back, so scans
       // and imports are not blocked while files are being hashed.
-      auto indexer = AudioIdentityIndexer{_implPtr->asyncRuntime, _implPtr->library, _implPtr->mutationMutex};
+      auto indexer =
+        AudioIdentityIndexer{_implPtr->asyncRuntime, _implPtr->library, _implPtr->mutationMutex, _implPtr->changes};
 
       try
       {

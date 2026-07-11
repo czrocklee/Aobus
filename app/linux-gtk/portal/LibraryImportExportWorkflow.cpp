@@ -275,7 +275,9 @@ namespace ao::gtk::portal
       }
       else
       {
-        if (!result->cancelled && !result->processedIds.empty() && _callbacks.onLibraryDataMutated)
+        if (!result->cancelled &&
+            (!result->insertedIds.empty() || !result->mutatedIds.empty() || !result->relinkedIds.empty()) &&
+            _callbacks.onLibraryDataMutated)
         {
           _callbacks.onLibraryDataMutated();
         }

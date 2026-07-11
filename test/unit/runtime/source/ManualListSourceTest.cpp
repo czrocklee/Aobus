@@ -4,7 +4,6 @@
 #include "test/unit/runtime/source/ManualListSourceTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/ManualListSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
@@ -273,22 +272,5 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(source) == expectedEffective);
     CHECK(source.revision() == 0);
     CHECK(batches.empty());
-  }
-
-  TEST_CASE("ManualListSource - rejects mismatched detailed identities without changing state",
-            "[runtime][unit][source][manual-list]")
-  {
-    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}});
-    auto view = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
-
-    REQUIRE_THROWS_AS(
-      source.applyManualTracksRemove(ManualTracksRemove{.removals = {{.start = 1, .trackIds = {TrackId{99}}}}}),
-      Exception);
-
-    auto const expected = std::vector{TrackId{1}, TrackId{2}};
-    CHECK(storedTrackIdsOf(source) == expected);
-    CHECK(sourceTrackIds(source) == expected);
-    CHECK(source.revision() == 0);
   }
 } // namespace ao::rt::test

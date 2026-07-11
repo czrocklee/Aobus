@@ -217,15 +217,18 @@ namespace ao::rt
         publishSnapshot();
       });
 
-    _implPtr->tracksMutatedSub = _implPtr->changes.onTracksMutated(
-      [this](std::vector<TrackId> const& trackIds)
+    _implPtr->tracksMutatedSub = _implPtr->changes.onChanged(
+      [this](LibraryChangeSet const& changeSet)
       {
         if (_implPtr->cachedSnapshot.trackIds.empty())
         {
           return;
         }
 
-        bool intersect = false;
+        auto trackIds = changeSet.tracksInserted;
+        trackIds.append_range(changeSet.tracksDeleted);
+        trackIds.append_range(changeSet.tracksMutated);
+        bool intersect = changeSet.libraryReset;
 
         for (auto const id : trackIds)
         {

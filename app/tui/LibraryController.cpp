@@ -11,6 +11,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -18,6 +19,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/track/TrackFilterResolver.h>
 
@@ -46,6 +48,17 @@ namespace ao::tui
     _sections = std::move(snapshot.sections);
     syncSelectedPresentation(activePresentationId());
     _customPresetsSub = _runtime.workspace().onCustomPresetsChanged([this] { refreshPresentationNavigation(); });
+    _libraryChangesSub = _runtime.library().changes().onChanged(
+      [this](rt::LibraryChangeSet const& changeSet)
+      {
+        if (changeSet.libraryReset || !changeSet.listsUpserted.empty() || !changeSet.listsDeleted.empty())
+        {
+          _libraryEntries = loadLibraryNavigation();
+          _libraryLabels = libraryNavigationLabels(_libraryEntries);
+        }
+
+        std::ignore = reloadActiveList();
+      });
     publishSelection();
   }
 
@@ -93,7 +106,12 @@ namespace ao::tui
     }
 
     auto const index = clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size());
-    _runtime.views().setSelection(_activeViewId, {_tracks[index].id});
+
+    if (auto result = _runtime.views().setSelection(_activeViewId, {_tracks[index].id}); !result)
+    {
+      APP_LOG_ERROR("Failed to publish TUI selection: {}", result.error().message);
+    }
+
     _runtime.workspace().setFocusedView(_activeViewId);
   }
 
