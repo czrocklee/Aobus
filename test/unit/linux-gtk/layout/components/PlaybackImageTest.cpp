@@ -11,8 +11,12 @@
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Exception.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_approx.hpp>
@@ -26,10 +30,12 @@
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace ao::gtk::layout::test
 {
@@ -144,6 +150,10 @@ namespace ao::gtk::layout::test
       auto const coverArtId = ResourceId{42};
       imageCachePtr->put(ImageCacheKey::full(coverArtId), ao::gtk::test::makePixbuf(80, 80));
 
+      auto const throwingSubscription = fixture.runtime().playback().onNowPlayingChanged(
+        [](rt::PlaybackService::NowPlayingChanged const&)
+        { throwException<Exception>("scripted observer failure before cover art"); });
+
       auto const node = LayoutNode{.type = "playback.image"};
       auto const compPtr = fixture.components().create(ctx, node);
 
@@ -169,6 +179,73 @@ namespace ao::gtk::layout::test
       REQUIRE(paintablePtr);
       CHECK(paintablePtr->get_intrinsic_width() == 64 * picture->get_scale_factor());
       CHECK(paintablePtr->get_intrinsic_height() == 64 * picture->get_scale_factor());
+
+      std::ignore = fixture.runtime().playback().stop();
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK_FALSE(button->get_visible());
+      CHECK_FALSE(picture->get_paintable());
+    }
+
+    SECTION("current track cover art follows library mutations")
+    {
+      rt::test::addReadyAudioProvider(fixture.runtime().playback());
+      ao::gtk::test::drainGtkEvents();
+
+      auto const firstCoverArtId = ResourceId{42};
+      auto const secondCoverArtId = ResourceId{43};
+      imageCachePtr->put(ImageCacheKey::full(firstCoverArtId), ao::gtk::test::makePixbuf(80, 80));
+      imageCachePtr->put(ImageCacheKey::full(secondCoverArtId), ao::gtk::test::makePixbuf(96, 96));
+
+      auto const node = LayoutNode{.type = "playback.image"};
+      auto const compPtr = fixture.components().create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+      auto* const picture = dynamic_cast<Gtk::Picture*>(button->get_child());
+      REQUIRE(picture != nullptr);
+      CHECK_FALSE(button->get_visible());
+
+      auto const trackId =
+        library::test::addTrack(fixture.runtime().musicLibrary(),
+                                library::test::TrackSpec{
+                                  .title = "Mutable Cover Track",
+                                  .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
+                                  .coverArtId = firstCoverArtId,
+                                  .duration = std::chrono::seconds{1},
+                                });
+
+      REQUIRE(fixture.runtime().playback().playTrack(trackId, rt::kAllTracksListId));
+      ao::gtk::test::drainGtkEvents();
+
+      REQUIRE(button->get_visible());
+      auto const firstPaintablePtr = picture->get_paintable();
+      REQUIRE(firstPaintablePtr);
+
+      library::test::updateTrackSpec(fixture.runtime().musicLibrary(),
+                                     trackId,
+                                     [secondCoverArtId](library::test::TrackSpec& spec)
+                                     { spec.coverArtId = secondCoverArtId; });
+      auto const trackIds = std::array{trackId};
+      REQUIRE(fixture.runtime().library().writer().updateMetadata(
+        trackIds, rt::MetadataPatch{.optTitle = "Mutable Cover Track Updated"}));
+      ao::gtk::test::drainGtkEvents();
+
+      REQUIRE(button->get_visible());
+      auto const secondPaintablePtr = picture->get_paintable();
+      REQUIRE(secondPaintablePtr);
+      CHECK(secondPaintablePtr != firstPaintablePtr);
+
+      library::test::updateTrackSpec(fixture.runtime().musicLibrary(),
+                                     trackId,
+                                     [](library::test::TrackSpec& spec) { spec.coverArtId = kInvalidResourceId; });
+      REQUIRE(fixture.runtime().library().writer().updateMetadata(
+        trackIds, rt::MetadataPatch{.optTitle = "Mutable Cover Track Without Art"}));
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK_FALSE(button->get_visible());
+      CHECK_FALSE(picture->get_paintable());
     }
   }
 

@@ -3,6 +3,7 @@
 
 #include "track/TrackColumnController.h"
 
+#include "common/UStringConvert.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutPolicy.h>
@@ -93,10 +94,10 @@ namespace ao::gtk
         continue;
       }
 
-      auto const title = Glib::ustring{rtDef.label.data(), rtDef.label.size()};
+      auto const title = toUString(rtDef.label);
       auto const columnPtr = Gtk::ColumnViewColumn::create(title, factoryProvider(rtDef.field));
 
-      columnPtr->set_id(Glib::ustring{rtDef.id.data(), rtDef.id.size()});
+      columnPtr->set_id(toUString(rtDef.id));
 
       columnPtr->set_resizable(true);
 

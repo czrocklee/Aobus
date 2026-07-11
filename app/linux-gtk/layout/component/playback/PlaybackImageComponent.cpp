@@ -13,6 +13,9 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -154,6 +157,7 @@ namespace ao::gtk::layout
         _button.set_has_frame(false); // Make it flat
         _button.set_overflow(Gtk::Overflow::HIDDEN);
         _button.add_css_class("ao-image-button");
+        _button.set_visible(false);
 
         if (_action != Action::None)
         {
@@ -163,6 +167,14 @@ namespace ao::gtk::layout
         }
 
         _sub = _runtime.playback().onNowPlayingChanged([this](auto const&) { syncNowPlaying(); });
+        _tracksMutatedSub = _runtime.library().changes().onTracksMutated(
+          [this](auto const& trackIds)
+          {
+            if (std::ranges::contains(trackIds, _currentTrackId))
+            {
+              syncCoverArtFromLibrary();
+            }
+          });
 
         _stoppedSub = _runtime.playback().onStopped(
           [this]
@@ -222,11 +234,31 @@ namespace ao::gtk::layout
         updateImage();
       }
 
+      void syncCoverArtFromLibrary()
+      {
+        if (_currentTrackId == kInvalidTrackId)
+        {
+          return;
+        }
+
+        auto scope = _runtime.library().reader();
+        auto const coverArtId = scope.trackCoverArtId(_currentTrackId);
+
+        if (coverArtId == _currentCoverArtId)
+        {
+          return;
+        }
+
+        _currentCoverArtId = coverArtId;
+        updateImage();
+      }
+
       void updateImage()
       {
         if (_currentTrackId == kInvalidTrackId)
         {
           _imageControllerPtr->clear();
+          _button.set_visible(false);
           return;
         }
 
@@ -251,6 +283,7 @@ namespace ao::gtk::layout
       TrackId _currentTrackId = kInvalidTrackId;
       ResourceId _currentCoverArtId = kInvalidResourceId;
       rt::Subscription _sub;
+      rt::Subscription _tracksMutatedSub;
       rt::Subscription _stoppedSub;
       rt::Subscription _idleSub;
     };

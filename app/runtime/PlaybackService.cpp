@@ -1097,7 +1097,8 @@ namespace ao::rt
       discardPreparedRequests();
       publishCurrentRequest(optPrepared->request, optPrepared->sourceListId, optPrepared->itemId, event.generation);
       refreshState();
-      announceNowPlaying(optPrepared->request, optPrepared->sourceListId, winningToken);
+      publishObserverSafely(
+        "now-playing", [&] { announceNowPlaying(optPrepared->request, optPrepared->sourceListId, winningToken); });
     }
 
     void handleTrackEnded()
@@ -1820,10 +1821,14 @@ namespace ao::rt
       return barrier;
     }
 
-    implPtr->nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
-      .trackId = kInvalidTrackId,
-      .sourceListId = kInvalidListId,
-    });
+    implPtr->publishObserverSafely("now-playing",
+                                   [&]
+                                   {
+                                     implPtr->nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
+                                       .trackId = kInvalidTrackId,
+                                       .sourceListId = kInvalidListId,
+                                     });
+                                   });
     return barrier;
   }
 

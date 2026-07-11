@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <deque>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <type_traits>
@@ -70,13 +71,32 @@ namespace ao::rt
         // returns.
         auto const guard = EmitGuard{*this};
         auto const count = _handlers.size();
+        auto firstExceptionPtr = std::exception_ptr{};
 
         for (std::size_t index = 0; index < count && _active; ++index)
         {
           if (auto& slot = _handlers[index]; slot.connected && slot.handler)
           {
-            slot.handler(args...);
+            try
+            {
+              slot.handler(args...);
+            }
+            catch (...)
+            {
+              // One faulty observer must not starve later observers. Preserve
+              // the first failure for the signal owner's existing logging or
+              // error handling after every still-connected slot has run.
+              if (!firstExceptionPtr)
+              {
+                firstExceptionPtr = std::current_exception();
+              }
+            }
           }
+        }
+
+        if (firstExceptionPtr)
+        {
+          std::rethrow_exception(firstExceptionPtr);
         }
       }
 

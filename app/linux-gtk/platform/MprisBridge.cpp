@@ -4,6 +4,7 @@
 #include "MprisBridge.h"
 
 #include "MprisPlaybackEndpoint.h"
+#include "common/UStringConvert.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/Log.h>
@@ -106,11 +107,6 @@ namespace ao::gtk::platform
     using PropertiesChangedPayload = std::tuple<Glib::ustring, MetadataVariantMap, std::vector<Glib::ustring>>;
     using SeekedPayload = std::tuple<std::int64_t>;
 
-    Glib::ustring glibString(std::string_view const value)
-    {
-      return Glib::ustring{value.data(), value.size()};
-    }
-
     [[noreturn]] void throwGioError(Gio::Error::Code const code, char const* const message)
     {
       throw Gio::Error{code, message};
@@ -123,7 +119,7 @@ namespace ao::gtk::platform
 
     Glib::Variant<std::vector<Glib::ustring>> stringArray(std::string_view const value)
     {
-      return Glib::Variant<std::vector<Glib::ustring>>::create(std::vector{glibString(value)});
+      return Glib::Variant<std::vector<Glib::ustring>>::create(std::vector{toUString(value)});
     }
 
     Glib::Variant<MetadataVariantMap> metadataVariant(MprisBridge::MetadataSnapshot const& snapshot)
@@ -141,7 +137,7 @@ namespace ao::gtk::platform
 
       if (!snapshot.title.empty())
       {
-        metadata.emplace("xesam:title", Glib::Variant<Glib::ustring>::create(glibString(snapshot.title)));
+        metadata.emplace("xesam:title", Glib::Variant<Glib::ustring>::create(toUString(snapshot.title)));
       }
 
       if (!snapshot.artist.empty())
@@ -151,12 +147,12 @@ namespace ao::gtk::platform
 
       if (!snapshot.album.empty())
       {
-        metadata.emplace("xesam:album", Glib::Variant<Glib::ustring>::create(glibString(snapshot.album)));
+        metadata.emplace("xesam:album", Glib::Variant<Glib::ustring>::create(toUString(snapshot.album)));
       }
 
       if (!snapshot.artUrl.empty())
       {
-        metadata.emplace("mpris:artUrl", Glib::Variant<Glib::ustring>::create(glibString(snapshot.artUrl)));
+        metadata.emplace("mpris:artUrl", Glib::Variant<Glib::ustring>::create(toUString(snapshot.artUrl)));
       }
 
       if (snapshot.lengthUs > 0)
@@ -330,7 +326,7 @@ namespace ao::gtk::platform
       {
         if (auto const property = playerProperty(propertyName); property)
         {
-          changed.emplace(glibString(propertyName), property);
+          changed.emplace(toUString(propertyName), property);
         }
       }
 
@@ -379,12 +375,12 @@ namespace ao::gtk::platform
 
       if (propertyName == "PlaybackStatus")
       {
-        return Glib::Variant<Glib::ustring>::create(glibString(MprisBridge::playbackStatus(state.transport)));
+        return Glib::Variant<Glib::ustring>::create(toUString(MprisBridge::playbackStatus(state.transport)));
       }
 
       if (propertyName == "LoopStatus")
       {
-        return Glib::Variant<Glib::ustring>::create(glibString(MprisBridge::loopStatus(sequence.state().repeat)));
+        return Glib::Variant<Glib::ustring>::create(toUString(MprisBridge::loopStatus(sequence.state().repeat)));
       }
 
       if (propertyName == "Rate" || propertyName == "MinimumRate" || propertyName == "MaximumRate")

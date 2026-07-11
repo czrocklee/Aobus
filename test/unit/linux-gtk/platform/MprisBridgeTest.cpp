@@ -3,6 +3,7 @@
 
 #include "platform/MprisBridge.h"
 
+#include "common/UStringConvert.h"
 #include "platform/MprisArtUrlCache.h"
 #include "platform/MprisPlaybackEndpoint.h"
 #include "test/unit/RuntimeTestSupport.h"
@@ -132,6 +133,15 @@ namespace ao::gtk::platform::test
     CHECK(metadata.artUrl == "file:///tmp/aobus-cover.png");
     CHECK(metadata.lengthUs == 125'000'000);
     CHECK(MprisBridge::metadataForState(rt::PlaybackState{}).trackObjectPath.empty());
+  }
+
+  TEST_CASE("toUString - UTF-8 conversion preserves multibyte metadata", "[gtk][regression][mpris]")
+  {
+    constexpr auto kTitle = std::string_view{"龙卷风"};
+
+    auto const converted = toUString(kTitle);
+
+    CHECK(converted.raw() == kTitle);
   }
 
   TEST_CASE("MprisArtUrlCache - exports library cover art resources as file URLs", "[gtk][unit][mpris]")

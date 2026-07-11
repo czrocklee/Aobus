@@ -10,6 +10,7 @@
 #include <ao/rt/Subscription.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 #include <fcntl.h>
 #ifdef _WIN32
 #include <io.h>
@@ -318,6 +319,19 @@ namespace ao::rt::test
     signal.emit(2);
 
     CHECK(calls == 1);
+  }
+
+  TEST_CASE("Signal - throwing handler does not starve later observers", "[runtime][regression][async][signal]")
+  {
+    auto signal = Signal<std::int32_t>{};
+    auto observed = std::vector<std::int32_t>{};
+    auto firstSubscription = signal.connect([&](std::int32_t value) { observed.push_back(value); });
+    auto throwingSubscription =
+      signal.connect([&](std::int32_t) { throwException<Exception>("first observer failure"); });
+    auto laterSubscription = signal.connect([&](std::int32_t value) { observed.push_back(value * 10); });
+
+    CHECK_THROWS_WITH(signal.emit(2), "first observer failure");
+    CHECK(observed == std::vector<std::int32_t>{2, 20});
   }
 
   TEST_CASE("Signal - handler can destroy owner and subscriptions can outlive it",
