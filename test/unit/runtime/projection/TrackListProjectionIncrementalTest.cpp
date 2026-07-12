@@ -19,8 +19,10 @@
 #include <array>
 #include <cstddef>
 #include <format>
+#include <iterator>
 #include <memory>
 #include <random>
+#include <span>
 #include <vector>
 
 namespace ao::rt::test
@@ -133,8 +135,10 @@ namespace ao::rt::test
             currentIds[static_cast<std::size_t>(random() % currentIds.size())],
           };
           std::ranges::sort(updatedIds);
-          auto* const uniqueEnd = std::ranges::unique(updatedIds).begin();
-          auto const uniqueIds = std::span{updatedIds.begin(), uniqueEnd};
+          auto const duplicateRange = std::ranges::unique(updatedIds);
+          auto const uniqueCount =
+            static_cast<std::size_t>(std::ranges::distance(updatedIds.begin(), duplicateRange.begin()));
+          auto const uniqueIds = std::span{updatedIds}.first(uniqueCount);
 
           for (auto const trackId : uniqueIds)
           {

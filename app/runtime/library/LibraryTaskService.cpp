@@ -157,12 +157,13 @@ namespace ao::rt
       planResult = scanService.buildPlan(
         [this](std::filesystem::path const& path)
         {
+          auto message = "Scanning: " + path.filename().string();
           _implPtr->asyncRuntime.callbackExecutor().dispatch(
-            [this, path]
+            [this, message = std::move(message)]
             {
               _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
                 .fraction = 0.0,
-                .message = "Scanning: " + path.filename().string(),
+                .message = std::move(message),
               });
             });
         });
@@ -217,15 +218,16 @@ namespace ao::rt
           options,
           [this, totalItems](ScanApplyProgress const& progress)
           {
+            auto const itemBase = static_cast<double>(progress.itemIndex);
+            auto const fraction =
+              totalItems > 0 ? (itemBase + progress.itemFraction) / static_cast<double>(totalItems) : 0.0;
+            auto message = scanApplyProgressMessage(progress);
             _implPtr->asyncRuntime.callbackExecutor().dispatch(
-              [this, progress, totalItems]
+              [this, fraction, message = std::move(message)]
               {
-                auto const itemBase = static_cast<double>(progress.itemIndex);
-                auto const fraction =
-                  totalItems > 0 ? (itemBase + progress.itemFraction) / static_cast<double>(totalItems) : 0.0;
                 _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
                   .fraction = fraction,
-                  .message = scanApplyProgressMessage(progress),
+                  .message = std::move(message),
                 });
               });
           },
@@ -317,13 +319,13 @@ namespace ao::rt
             }
 
             auto const fraction = backfillProgressFraction(progress);
-            auto const filename = progress.path.filename().string();
+            auto message = "Indexing audio identity: " + progress.path.filename().string();
             _implPtr->asyncRuntime.callbackExecutor().dispatch(
-              [this, fraction, filename]
+              [this, fraction, message = std::move(message)]
               {
                 _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
                   .fraction = fraction,
-                  .message = "Indexing audio identity: " + filename,
+                  .message = std::move(message),
                 });
               });
           },

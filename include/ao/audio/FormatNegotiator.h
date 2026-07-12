@@ -24,6 +24,6 @@ namespace ao::audio
   class FormatNegotiator final
   {
   public:
-    static RenderPlan buildPlan(Format sourceFormat, DeviceCapabilities const& caps);
+    static RenderPlan buildPlan(Format sourceFormat, DeviceFormatCapabilities const& caps);
   };
 } // namespace ao::audio

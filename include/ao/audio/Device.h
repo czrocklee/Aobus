@@ -23,14 +23,14 @@ namespace ao::audio
     bool operator==(SampleFormatCapability const&) const = default;
   };
 
-  struct DeviceCapabilities final
+  struct DeviceFormatCapabilities final
   {
     std::vector<std::uint32_t> sampleRates{};
     std::vector<SampleFormatCapability> sampleFormats{};
     std::vector<std::uint8_t> bitDepths{};
     std::vector<std::uint8_t> channelCounts{};
 
-    bool operator==(DeviceCapabilities const&) const = default;
+    bool operator==(DeviceFormatCapabilities const&) const = default;
   };
 
   struct Device final
@@ -40,7 +40,7 @@ namespace ao::audio
     std::string description{};
     bool isDefault = false;
     BackendId backendId{};
-    DeviceCapabilities capabilities = {};
+    DeviceFormatCapabilities capabilities = {};
 
     bool operator==(Device const&) const = default;
   };

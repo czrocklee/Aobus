@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <iosfwd>
 #include <string>
@@ -10,6 +11,18 @@
 
 namespace ao::cli
 {
-  std::int32_t run(std::int32_t argc, char const* const* argv, std::ostream& out, std::ostream& err);
-  std::int32_t run(std::vector<std::string> const& args, std::ostream& out, std::ostream& err);
+  struct CliRunOptions final
+  {
+    std::size_t musicLibraryMapSize = 0;
+  };
+
+  std::int32_t run(std::int32_t argc,
+                   char const* const* argv,
+                   std::ostream& out,
+                   std::ostream& err,
+                   CliRunOptions options = {});
+  std::int32_t run(std::vector<std::string> const& args,
+                   std::ostream& out,
+                   std::ostream& err,
+                   CliRunOptions options = {});
 } // namespace ao::cli

@@ -55,9 +55,13 @@ namespace ao::cli
     }
   } // namespace
 
-  std::int32_t run(std::int32_t argc, char const* const* argv, std::ostream& out, std::ostream& err)
+  std::int32_t run(std::int32_t argc,
+                   char const* const* argv,
+                   std::ostream& out,
+                   std::ostream& err,
+                   CliRunOptions const options)
   {
-    auto context = CliContext{out, err};
+    auto context = CliContext{out, err, options.musicLibraryMapSize};
     auto app = CLI::App{"Aobus CLI - aobus"};
     app.require_subcommand(1);
     app.fallthrough();
@@ -117,7 +121,10 @@ namespace ao::cli
     }
   }
 
-  std::int32_t run(std::vector<std::string> const& args, std::ostream& out, std::ostream& err)
+  std::int32_t run(std::vector<std::string> const& args,
+                   std::ostream& out,
+                   std::ostream& err,
+                   CliRunOptions const options)
   {
     auto argv = std::vector<char const*>{};
     argv.reserve(args.size());
@@ -127,6 +134,6 @@ namespace ao::cli
       argv.push_back(argument.c_str());
     }
 
-    return run(static_cast<std::int32_t>(argv.size()), argv.data(), out, err);
+    return run(static_cast<std::int32_t>(argv.size()), argv.data(), out, err, options);
   }
 } // namespace ao::cli

@@ -683,13 +683,12 @@ namespace ao::rt::test
     std::thread::id _ownerThreadId = std::this_thread::get_id();
   };
 
-  /**
-   * @brief Creates an AppRuntime backed by a temporary directory with a MockExecutor.
-   */
-  inline auto makeRuntime(ao::test::TempDir const& tempDir, ConfigStore* playbackSessionConfigStore = nullptr)
+  inline auto makeRuntime(ao::test::TempDir const& tempDir,
+                          std::unique_ptr<async::Executor> executorPtr,
+                          ConfigStore* playbackSessionConfigStore = nullptr)
   {
     return AppRuntime{AppRuntimeDependencies{
-      .executorPtr = std::make_unique<MockExecutor>(),
+      .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
@@ -697,5 +696,13 @@ namespace ao::rt::test
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
       .playbackSessionConfigStore = playbackSessionConfigStore,
     }};
+  }
+
+  /**
+   * @brief Creates an AppRuntime backed by a temporary directory with a MockExecutor.
+   */
+  inline auto makeRuntime(ao::test::TempDir const& tempDir, ConfigStore* playbackSessionConfigStore = nullptr)
+  {
+    return makeRuntime(tempDir, std::make_unique<MockExecutor>(), playbackSessionConfigStore);
   }
 } // namespace ao::rt::test

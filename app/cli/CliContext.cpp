@@ -7,14 +7,15 @@
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/Library.h>
 
+#include <cstddef>
 #include <memory>
 #include <ostream>
 #include <utility>
 
 namespace ao::cli
 {
-  CliContext::CliContext(std::ostream& out, std::ostream& err)
-    : _io{.out = out, .err = err}
+  CliContext::CliContext(std::ostream& out, std::ostream& err, std::size_t const musicLibraryMapSize)
+    : _io{.out = out, .err = err}, _musicLibraryMapSize{musicLibraryMapSize}
   {
   }
 
@@ -25,8 +26,8 @@ namespace ao::cli
     if (!_runtimePtr)
     {
       auto executorPtr = std::make_unique<async::ImmediateExecutor>();
-      _runtimePtr =
-        std::make_unique<rt::CoreRuntime>(std::move(executorPtr), _options.root, _options.root / ".aobus/library");
+      _runtimePtr = std::make_unique<rt::CoreRuntime>(
+        std::move(executorPtr), _options.root, _options.root / ".aobus/library", _musicLibraryMapSize);
     }
 
     return *_runtimePtr;

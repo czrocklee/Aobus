@@ -45,18 +45,28 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::tui::test
 {
   namespace
   {
+    std::unique_ptr<async::Executor> makeQueuedExecutor(rt::test::QueuedExecutor*& executor)
+    {
+      auto ownerPtr = std::make_unique<rt::test::QueuedExecutor>();
+      executor = ownerPtr.get();
+      return ownerPtr;
+    }
+
     struct EventControllerFixture final
     {
       ao::test::TempDir tempDir{};
-      rt::AppRuntime runtime{rt::test::makeRuntime(tempDir)};
+      rt::test::QueuedExecutor* executor = nullptr;
+      rt::AppRuntime runtime{rt::test::makeRuntime(tempDir, makeQueuedExecutor(executor))};
       ftxui::ScreenInteractive screen{ftxui::ScreenInteractive::FixedSize(80, 24)};
       ShellInteractionModel shell{};
 
@@ -69,6 +79,18 @@ namespace ao::tui::test
       }
 
       LibraryController makeLibrary() { return LibraryController{runtime}; }
+
+      void addReadyAudioProvider()
+      {
+        rt::test::addReadyAudioProvider(runtime.playback());
+        executor->drain();
+      }
+
+      void addReadyAudioProvider(audio::BackendProvider::Status status)
+      {
+        rt::test::addReadyAudioProvider(runtime.playback(), std::move(status));
+        executor->drain();
+      }
     };
 
     std::int32_t presentationIndex(LibraryController const& library, std::string_view const presentationId)
@@ -81,7 +103,7 @@ namespace ao::tui::test
     void prepareSeekablePlayback(EventControllerFixture& fixture, LibraryController const& library)
     {
       REQUIRE_FALSE(library.tracks().empty());
-      rt::test::addReadyAudioProvider(fixture.runtime.playback());
+      fixture.addReadyAudioProvider();
       auto const startTrackId = library.tracks()[0].id;
       REQUIRE(fixture.runtime.playbackSequence().playFromView(library.activeViewId(), startTrackId));
       REQUIRE(fixture.runtime.playback().state().duration > std::chrono::milliseconds{0});
@@ -211,7 +233,7 @@ namespace ao::tui::test
   TEST_CASE("EventController - output shortcut toggles the output overlay", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
+    fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
     auto outputDevices = OutputDeviceController{fixture.runtime.playback()};
     auto controller = EventController{fixture.screen,
@@ -396,7 +418,7 @@ namespace ao::tui::test
   TEST_CASE("EventController - named commands route to shell playback and library actions", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
+    fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
     auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime};
 
@@ -445,7 +467,7 @@ namespace ao::tui::test
   TEST_CASE("EventController - output commands and mouse clicks select devices", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
+    fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
     auto outputDevices = OutputDeviceController{fixture.runtime.playback()};
     outputDevices.refresh();
@@ -490,7 +512,7 @@ namespace ao::tui::test
   TEST_CASE("EventController - stale output row clicks keep the picker open", "[tui][regression][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
+    fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
     auto outputDevices = OutputDeviceController{fixture.runtime.playback()};
     outputDevices.refresh();
@@ -520,7 +542,7 @@ namespace ao::tui::test
   TEST_CASE("EventController - output selector handles page and boundary navigation keys", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback(), rt::test::makePipeWireOutputStatus());
+    fixture.addReadyAudioProvider(rt::test::makePipeWireOutputStatus());
     auto library = fixture.makeLibrary();
     auto outputDevices = OutputDeviceController{fixture.runtime.playback()};
     auto controller = EventController{fixture.screen,
@@ -609,7 +631,7 @@ namespace ao::tui::test
   TEST_CASE("EventController - clicking the soul button toggles playback", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
+    fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
     auto hitRegions = TuiHitRegions{};
     auto renderScreen = ftxui::Screen::Create(ftxui::Dimension::Fixed(80), ftxui::Dimension::Fixed(1));
@@ -1172,7 +1194,7 @@ namespace ao::tui::test
   TEST_CASE("EventController - command mode blocks workspace mouse controls", "[tui][regression][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
+    fixture.addReadyAudioProvider();
     library::test::addTrack(
       fixture.runtime.musicLibrary(),
       library::test::TrackSpec{
@@ -1261,7 +1283,7 @@ namespace ao::tui::test
   TEST_CASE("EventController - current track shortcut reveals playback selection", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime.playback());
+    fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
     auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime};
 

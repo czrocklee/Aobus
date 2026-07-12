@@ -164,7 +164,7 @@ namespace ao::audio::backend::detail::test
 
       auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-      auto caps = DeviceCapabilities{};
+      auto caps = DeviceFormatCapabilities{};
       parseEnumFormat(pod, caps);
 
       CHECK_FALSE(caps.sampleRates.empty());
@@ -275,7 +275,7 @@ namespace ao::audio::backend::detail::test
 
       auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-      auto caps = DeviceCapabilities{};
+      auto caps = DeviceFormatCapabilities{};
       parseEnumFormat(pod, caps);
 
       CHECK(caps.sampleRates.size() == 2);

@@ -106,9 +106,9 @@ namespace ao::audio::backend::detail
   std::optional<SampleFormatCapability> sampleFormatCapabilityFromSpaFormat(std::uint32_t spaFmt) noexcept;
 
   /**
-   * @brief Parses an EnumFormat SPA pod into DeviceCapabilities.
+   * @brief Parses an EnumFormat SPA pod into DeviceFormatCapabilities.
    */
-  void parseEnumFormat(::spa_pod const* param, DeviceCapabilities& caps);
+  void parseEnumFormat(::spa_pod const* param, DeviceFormatCapabilities& caps);
 
   /**
    * @brief Returns the current node format only for active Format params.

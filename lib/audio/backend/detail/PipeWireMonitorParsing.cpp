@@ -232,7 +232,7 @@ namespace ao::audio::backend::detail
     }
   } // namespace
 
-  void parseEnumFormat(::spa_pod const* param, DeviceCapabilities& caps)
+  void parseEnumFormat(::spa_pod const* param, DeviceFormatCapabilities& caps)
   {
     if (param == nullptr || ::spa_pod_is_object(param) == 0)
     {

@@ -453,7 +453,7 @@ namespace ao::rt
       // transaction. The coordinator is suspended while workers run, so it
       // holds no worker-pool thread.
       auto slots = std::vector<RowSlot>(rows.size());
-      auto cursor = std::atomic<std::size_t>{0};
+      auto cursor = std::atomic{std::size_t{0}};
       auto batch = FingerprintBatch{.rows = rows,
                                     .slots = slots,
                                     .fingerprint = fingerprint,

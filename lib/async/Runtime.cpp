@@ -10,7 +10,7 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_type.hpp>
-#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/co_spawn.hpp> // NOLINT(misc-include-cleaner) -- public Boost.Asio API header
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/post.hpp>
@@ -185,21 +185,25 @@ namespace ao::async
 
   void Runtime::spawnLogged(Task<void> task)
   {
-    boost::asio::co_spawn(
-      workerPool(), std::move(task), [](std::exception_ptr exPtr) { reportUnhandledException(exPtr, "root"); });
+    boost::asio::co_spawn( // NOLINT(misc-include-cleaner) -- declared by the public co_spawn header
+      workerPool(),
+      std::move(task),
+      [](std::exception_ptr exPtr) { reportUnhandledException(exPtr, "root"); });
   }
 
   void Runtime::spawn(Task<void> task, CancellationSlot slot, std::function<void(std::exception_ptr)> callback)
   {
-    boost::asio::co_spawn(
-      workerPool(), std::move(task), boost::asio::bind_cancellation_slot(slot, std::move(callback)));
+    boost::asio::co_spawn( // NOLINT(misc-include-cleaner) -- declared by the public co_spawn header
+      workerPool(),
+      std::move(task),
+      boost::asio::bind_cancellation_slot(slot, std::move(callback)));
   }
 
   TaskHandle Runtime::spawnCancellable(Task<void> task)
   {
     auto signalPtr = std::make_shared<CancellationSignal>();
     auto executor = boost::asio::make_strand(workerPool());
-    boost::asio::co_spawn(
+    boost::asio::co_spawn( // NOLINT(misc-include-cleaner) -- declared by the public co_spawn header
       executor,
       std::move(task),
       boost::asio::bind_cancellation_slot(

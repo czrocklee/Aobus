@@ -10,7 +10,7 @@
 
 namespace ao::audio::backend::detail
 {
-  inline void addSampleFormatCapability(DeviceCapabilities& caps, SampleFormatCapability const& capability)
+  inline void addSampleFormatCapability(DeviceFormatCapabilities& caps, SampleFormatCapability const& capability)
   {
     if (!std::ranges::contains(caps.sampleFormats, capability))
     {

@@ -5,6 +5,7 @@
 
 #include "Output.h"
 
+#include <cstddef>
 #include <filesystem>
 #include <iosfwd>
 #include <memory>
@@ -37,7 +38,7 @@ namespace ao::cli
   class CliContext final
   {
   public:
-    explicit CliContext(std::ostream& out, std::ostream& err);
+    explicit CliContext(std::ostream& out, std::ostream& err, std::size_t musicLibraryMapSize = 0);
     ~CliContext();
 
     CliContext(CliContext const&) = delete;
@@ -57,6 +58,7 @@ namespace ao::cli
   private:
     CliOptions _options;
     CliIo _io;
+    std::size_t _musicLibraryMapSize = 0;
     std::unique_ptr<rt::CoreRuntime> _runtimePtr;
   };
 } // namespace ao::cli

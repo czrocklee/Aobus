@@ -62,7 +62,7 @@ namespace ao::audio
       format.isInterleaved = true;
     }
 
-    bool supportsSampleFormat(DeviceCapabilities const& caps,
+    bool supportsSampleFormat(DeviceFormatCapabilities const& caps,
                               std::uint8_t bitDepth,
                               std::uint8_t validBits,
                               bool isFloat = false)
@@ -75,7 +75,7 @@ namespace ao::audio
                                    });
     }
 
-    void applyLegacyDecoderNegotiation(RenderPlan& plan, DeviceCapabilities const& caps)
+    void applyLegacyDecoderNegotiation(RenderPlan& plan, DeviceFormatCapabilities const& caps)
     {
       std::uint8_t bitDepth = 16;
       std::uint8_t validBits = 16;
@@ -129,14 +129,14 @@ namespace ao::audio
       plan.decoderOutputFormat.validBits = validBits;
     }
 
-    bool supportsNativeSampleFormat(Format const& sourceFormat, DeviceCapabilities const& caps)
+    bool supportsNativeSampleFormat(Format const& sourceFormat, DeviceFormatCapabilities const& caps)
     {
       auto const validBits = sourceFormat.validBits != 0 ? sourceFormat.validBits : sourceFormat.bitDepth;
       return !caps.sampleFormats.empty() &&
              supportsSampleFormat(caps, sourceFormat.bitDepth, validBits, sourceFormat.isFloat);
     }
 
-    void applyFloatSampleFormatNegotiation(RenderPlan& plan, DeviceCapabilities const& caps)
+    void applyFloatSampleFormatNegotiation(RenderPlan& plan, DeviceFormatCapabilities const& caps)
     {
       if (caps.sampleFormats.empty() || supportsSampleFormat(caps, 32, 32, true))
       {
@@ -158,7 +158,7 @@ namespace ao::audio
       setSampleFormat(plan.deviceFormat, 16, 16);
     }
 
-    void apply24BitSampleFormatNegotiation(RenderPlan& plan, DeviceCapabilities const& caps)
+    void apply24BitSampleFormatNegotiation(RenderPlan& plan, DeviceFormatCapabilities const& caps)
     {
       if (supportsSampleFormat(caps, 24, 24))
       {
@@ -186,7 +186,7 @@ namespace ao::audio
       }
     }
 
-    void apply32BitSampleFormatNegotiation(RenderPlan& plan, DeviceCapabilities const& caps)
+    void apply32BitSampleFormatNegotiation(RenderPlan& plan, DeviceFormatCapabilities const& caps)
     {
       auto const sourceValidBits =
         plan.sourceFormat.validBits != 0 ? plan.sourceFormat.validBits : plan.sourceFormat.bitDepth;
@@ -221,7 +221,7 @@ namespace ao::audio
     }
   } // namespace
 
-  RenderPlan FormatNegotiator::buildPlan(Format sourceFormat, DeviceCapabilities const& caps)
+  RenderPlan FormatNegotiator::buildPlan(Format sourceFormat, DeviceFormatCapabilities const& caps)
   {
     auto plan = RenderPlan{
       .sourceFormat = sourceFormat,

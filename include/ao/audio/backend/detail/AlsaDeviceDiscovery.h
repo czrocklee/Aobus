@@ -13,7 +13,7 @@ namespace ao::audio::backend::detail
   /**
    * @brief Queries hardware capabilities for a specific ALSA device name (e.g., "hw:0,0").
    */
-  DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName);
+  DeviceFormatCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName);
 
   /**
 

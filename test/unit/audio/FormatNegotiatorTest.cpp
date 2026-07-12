@@ -16,7 +16,7 @@ namespace ao::audio::test
   {
     auto sourceFormat =
       Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
-    auto caps = DeviceCapabilities{};
+    auto caps = DeviceFormatCapabilities{};
     caps.sampleRates = {44100, 48000, 96000};
     caps.sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false},
                           {.bitDepth = 24, .validBits = 24, .isFloat = false},

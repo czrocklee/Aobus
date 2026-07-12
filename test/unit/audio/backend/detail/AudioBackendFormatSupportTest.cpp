@@ -15,7 +15,7 @@ namespace ao::audio::backend::detail::test
   TEST_CASE("AudioBackendFormatSupport - addSampleFormatCapability keeps unique formats",
             "[audio][unit][backend][format]")
   {
-    auto caps = DeviceCapabilities{};
+    auto caps = DeviceFormatCapabilities{};
     auto const cap = SampleFormatCapability{.bitDepth = 16, .validBits = 16, .isFloat = false};
 
     addSampleFormatCapability(caps, cap);
@@ -32,7 +32,7 @@ namespace ao::audio::backend::detail::test
   TEST_CASE("AudioBackendFormatSupport - sample format capabilities update integer bit depths",
             "[audio][unit][backend][format]")
   {
-    auto caps = DeviceCapabilities{};
+    auto caps = DeviceFormatCapabilities{};
     auto const packedCap = SampleFormatCapability{.bitDepth = 32, .validBits = 24, .isFloat = false};
 
     addSampleFormatCapability(caps, packedCap);

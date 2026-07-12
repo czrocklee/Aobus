@@ -13,6 +13,7 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -56,7 +57,8 @@ namespace ao::cli::test
     {
       auto out = std::ostringstream{};
       auto err = std::ostringstream{};
-      auto const status = run(args, out, err);
+      auto const status =
+        run(args, out, err, CliRunOptions{.musicLibraryMapSize = library::test::kTestMusicLibraryMapSize});
       return {.status = status, .out = out.str(), .err = err.str()};
     }
 
@@ -267,7 +269,14 @@ namespace ao::cli::test
           argv.emplace_back(argument);
         }
 
-        return runArgs(argv);
+        auto result = runArgs(argv);
+
+        if (result.status != 0)
+        {
+          UNSCOPED_INFO("CLI stderr: " << result.err);
+        }
+
+        return result;
       }
 
     private:

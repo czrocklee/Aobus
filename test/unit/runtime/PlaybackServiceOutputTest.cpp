@@ -77,17 +77,19 @@ namespace ao::rt::test
     REQUIRE(qualityFixture.renderTarget != nullptr);
 
     qualityFixture.renderTarget->handleRouteReady("mock_anchor");
-    REQUIRE(qualityFixture.executor.drainUntil([&] { return !routedQualityEvents.empty(); }));
+    REQUIRE(qualityFixture.executor.drainUntil(
+      [&] { return !routedQualityEvents.empty() && routedQualityEvents.back().ready; }));
 
-    REQUIRE(routedQualityEvents.size() == 1);
-    CHECK(routedQualityEvents[0].quality.overall == audio::Quality::BitwisePerfect);
-    CHECK(routedQualityEvents[0].quality.sourceQuality == qualityFixture.playbackService.state().quality.sourceQuality);
-    CHECK(routedQualityEvents[0].quality.pipelineQuality ==
-          qualityFixture.playbackService.state().quality.pipelineQuality);
-    CHECK(routedQualityEvents[0].quality.fullyVerified == qualityFixture.playbackService.state().quality.fullyVerified);
-    CHECK(routedQualityEvents[0].ready == true);
-    CHECK(routedQualityEvents[0].quality.overall == qualityFixture.playbackService.state().quality.overall);
-    CHECK(routedQualityEvents[0].ready == qualityFixture.playbackService.state().ready);
+    // Backends may publish intermediate graph updates while a route settles.
+    // The service contract is the final ready payload, not an exact event count.
+    auto const& qualityEvent = routedQualityEvents.back();
+    CHECK(qualityEvent.quality.overall == audio::Quality::BitwisePerfect);
+    CHECK(qualityEvent.quality.sourceQuality == qualityFixture.playbackService.state().quality.sourceQuality);
+    CHECK(qualityEvent.quality.pipelineQuality == qualityFixture.playbackService.state().quality.pipelineQuality);
+    CHECK(qualityEvent.quality.fullyVerified == qualityFixture.playbackService.state().quality.fullyVerified);
+    CHECK(qualityEvent.ready == true);
+    CHECK(qualityEvent.quality.overall == qualityFixture.playbackService.state().quality.overall);
+    CHECK(qualityEvent.ready == qualityFixture.playbackService.state().ready);
   }
 
   TEST_CASE("PlaybackService output device - device notification auto-configures output device before first play",

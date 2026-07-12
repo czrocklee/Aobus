@@ -24,9 +24,9 @@ extern "C"
 
 namespace ao::audio::backend::detail
 {
-  DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
+  DeviceFormatCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
   {
-    auto caps = DeviceCapabilities{};
+    auto caps = DeviceFormatCapabilities{};
 
     ::snd_pcm_t* rawPcm = nullptr;
 

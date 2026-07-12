@@ -34,7 +34,7 @@ namespace ao::rt
     std::string description{};
     bool isDefault = false;
     audio::BackendId backendId{};
-    audio::DeviceCapabilities capabilities{};
+    audio::DeviceFormatCapabilities capabilities{};
 
     bool operator==(OutputDeviceSnapshot const&) const = default;
   };

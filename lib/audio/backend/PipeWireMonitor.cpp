@@ -224,7 +224,7 @@ namespace ao::audio::backend
     std::unordered_map<std::uint32_t, std::unique_ptr<NodeBinding>> streamNodeBindings;
     std::unordered_map<std::uint32_t, std::unique_ptr<NodeBinding>> sinkNodeBindings;
     std::unordered_map<std::uint32_t, Format> nodeFormatMap;
-    std::unordered_map<std::uint32_t, DeviceCapabilities> sinkCapabilitiesMap;
+    std::unordered_map<std::uint32_t, DeviceFormatCapabilities> sinkCapabilitiesMap;
     std::unordered_map<std::uint32_t, SinkProps> sinkPropsMap;
 
     std::atomic<bool> stopping{false};
@@ -820,7 +820,7 @@ namespace ao::audio::backend
         }
 
         auto const description = (node.nodeNick.empty() ? "" : node.nodeName);
-        auto caps = DeviceCapabilities{};
+        auto caps = DeviceFormatCapabilities{};
 
         if (auto const it = sinkCapabilitiesMap.find(id); it != sinkCapabilitiesMap.end())
         {

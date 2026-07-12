@@ -28,12 +28,6 @@
 #include <functiondiscoverykeys_devpkey.h>
 #include <wrl/client.h>
 
-// winspool.h (dragged in via windows.h) defines DeviceCapabilities as a macro,
-// clobbering ao::audio::DeviceCapabilities.
-#ifdef DeviceCapabilities
-#undef DeviceCapabilities
-#endif
-
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -92,9 +86,9 @@ namespace ao::audio::backend
       bool _active = false;
     };
 
-    DeviceCapabilities sharedModeCapabilities()
+    DeviceFormatCapabilities sharedModeCapabilities()
     {
-      auto caps = DeviceCapabilities{};
+      auto caps = DeviceFormatCapabilities{};
 
       // Shared mode with AUTOCONVERTPCM accepts any sample rate and channel
       // count (the audio engine converts), so those lists stay empty, which
