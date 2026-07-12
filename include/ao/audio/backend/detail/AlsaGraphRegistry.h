@@ -63,6 +63,10 @@ namespace ao::audio::backend::detail
      * @param routeAnchor The unique identifier for the route (e.g. device name).
      * @param callback The function to invoke whenever the graph changes.
      * @return A Subscription that removes the callback on destruction.
+     *
+     * The returned subscription must be reset before this registry is
+     * destroyed. A callback must not synchronously destroy the registry; defer
+     * owner teardown until after publication returns.
      */
     Subscription subscribe(std::string_view routeAnchor, Callback callback);
 
@@ -82,6 +86,6 @@ namespace ao::audio::backend::detail
 
   private:
     struct Impl;
-    std::shared_ptr<Impl> _implPtr;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::audio::backend::detail

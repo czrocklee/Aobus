@@ -6,8 +6,11 @@
 #include <ao/audio/backend/detail/WasapiGraphRegistry.h>
 #include <ao/audio/flow/Graph.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -69,27 +72,49 @@ namespace ao::audio::backend::detail
       Callback callback;
     };
 
+    struct [[nodiscard]] CallbackPublicationScope final
+    {
+      explicit CallbackPublicationScope(Impl& owner)
+        : owner{owner}
+      {
+        ++owner.callbackDepth;
+      }
+
+      ~CallbackPublicationScope() { --owner.callbackDepth; }
+
+      CallbackPublicationScope(CallbackPublicationScope const&) = delete;
+      CallbackPublicationScope& operator=(CallbackPublicationScope const&) = delete;
+      CallbackPublicationScope(CallbackPublicationScope&&) = delete;
+      CallbackPublicationScope& operator=(CallbackPublicationScope&&) = delete;
+
+      Impl& owner;
+    };
+
     mutable std::mutex mutex;
     mutable std::recursive_mutex callbackMutex;
     std::unordered_map<std::string, WasapiRouteState> states;
     std::vector<Subscriber> subscribers;
     std::uint64_t nextSubId = 1;
+    std::size_t activeSubscriptionCount = 0;
+    std::size_t callbackDepth = 0;
     bool shutdown = false;
   };
 
   WasapiGraphRegistry::WasapiGraphRegistry()
-    : _implPtr{std::make_shared<Impl>()}
+    : _implPtr{std::make_unique<Impl>()}
   {
   }
 
   WasapiGraphRegistry::~WasapiGraphRegistry()
   {
-    auto const implPtr = _implPtr;
-    auto const callbackLock = std::scoped_lock{implPtr->callbackMutex};
-    auto const lock = std::scoped_lock{implPtr->mutex};
-    implPtr->shutdown = true;
-    implPtr->states.clear();
-    implPtr->subscribers.clear();
+    gsl_Expects(_implPtr != nullptr);
+    auto const callbackLock = std::scoped_lock{_implPtr->callbackMutex};
+    gsl_Expects(_implPtr->callbackDepth == 0);
+    gsl_Expects(_implPtr->activeSubscriptionCount == 0);
+    auto const lock = std::scoped_lock{_implPtr->mutex};
+    _implPtr->shutdown = true;
+    _implPtr->states.clear();
+    _implPtr->subscribers.clear();
   }
 
   Subscription WasapiGraphRegistry::subscribe(std::string_view routeAnchor, Callback callback)
@@ -99,27 +124,27 @@ namespace ao::audio::backend::detail
       return {};
     }
 
-    auto const implPtr = _implPtr;
+    auto* const impl = _implPtr.get();
     auto const anchor = std::string{routeAnchor};
     auto initialGraph = flow::Graph{};
     std::uint64_t id = 0;
     // The callback gate covers registration, snapshot capture, and initial
     // delivery as one publication-order point. State locks are still released
     // before user code runs.
-    auto const callbackLock = std::scoped_lock{implPtr->callbackMutex};
+    auto const callbackLock = std::scoped_lock{impl->callbackMutex};
 
     {
-      auto const lock = std::scoped_lock{implPtr->mutex};
+      auto const lock = std::scoped_lock{impl->mutex};
 
-      if (implPtr->shutdown)
+      if (impl->shutdown)
       {
         return {};
       }
 
-      id = implPtr->nextSubId++;
-      implPtr->subscribers.push_back({.id = id, .routeAnchor = anchor, .callback = callback});
+      id = impl->nextSubId++;
+      impl->subscribers.push_back({.id = id, .routeAnchor = anchor, .callback = callback});
 
-      if (auto const it = implPtr->states.find(anchor); it != implPtr->states.end())
+      if (auto const it = impl->states.find(anchor); it != impl->states.end())
       {
         initialGraph = buildGraph(it->second);
       }
@@ -130,10 +155,9 @@ namespace ao::audio::backend::detail
     }
 
     {
-      auto const lock = std::scoped_lock{implPtr->mutex};
+      auto const lock = std::scoped_lock{impl->mutex};
 
-      if (implPtr->shutdown ||
-          std::ranges::find(implPtr->subscribers, id, &Impl::Subscriber::id) == implPtr->subscribers.end())
+      if (impl->shutdown || std::ranges::find(impl->subscribers, id, &Impl::Subscriber::id) == impl->subscribers.end())
       {
         return {};
       }
@@ -141,69 +165,66 @@ namespace ao::audio::backend::detail
 
     try
     {
+      auto publication = Impl::CallbackPublicationScope{*impl};
       callback(initialGraph);
     }
     catch (...)
     {
-      auto const lock = std::scoped_lock{implPtr->mutex};
-      auto const it = std::ranges::find(implPtr->subscribers, id, &Impl::Subscriber::id);
+      auto const lock = std::scoped_lock{impl->mutex};
+      auto const it = std::ranges::find(impl->subscribers, id, &Impl::Subscriber::id);
 
-      if (it != implPtr->subscribers.end())
+      if (it != impl->subscribers.end())
       {
-        implPtr->subscribers.erase(it);
+        impl->subscribers.erase(it);
       }
 
       throw;
     }
 
     {
-      auto const lock = std::scoped_lock{implPtr->mutex};
+      auto const lock = std::scoped_lock{impl->mutex};
 
-      if (implPtr->shutdown ||
-          std::ranges::find(implPtr->subscribers, id, &Impl::Subscriber::id) == implPtr->subscribers.end())
+      if (impl->shutdown || std::ranges::find(impl->subscribers, id, &Impl::Subscriber::id) == impl->subscribers.end())
       {
         return {};
       }
     }
 
-    return Subscription{[weakImplPtr = std::weak_ptr{implPtr}, id]
+    ++impl->activeSubscriptionCount;
+    return Subscription{[impl, id]
                         {
-                          auto const implPtr = weakImplPtr.lock();
+                          auto const callbackLock = std::scoped_lock{impl->callbackMutex};
+                          auto const lock = std::scoped_lock{impl->mutex};
+                          auto const it = std::ranges::find(impl->subscribers, id, &Impl::Subscriber::id);
 
-                          if (!implPtr)
+                          if (it != impl->subscribers.end())
                           {
-                            return;
+                            impl->subscribers.erase(it);
                           }
 
-                          auto const callbackLock = std::scoped_lock{implPtr->callbackMutex};
-                          auto const lock = std::scoped_lock{implPtr->mutex};
-                          auto const it = std::ranges::find(implPtr->subscribers, id, &Impl::Subscriber::id);
-
-                          if (it != implPtr->subscribers.end())
-                          {
-                            implPtr->subscribers.erase(it);
-                          }
+                          gsl_Expects(impl->activeSubscriptionCount != 0);
+                          --impl->activeSubscriptionCount;
                         }};
   }
 
   void WasapiGraphRegistry::publish(WasapiRouteState state)
   {
-    auto const implPtr = _implPtr;
+    auto* const impl = _implPtr.get();
     auto const anchor = state.routeAnchor;
     auto const graph = buildGraph(state);
     auto pendingSubscribers = std::vector<Impl::Subscriber>{};
 
     {
-      auto const lock = std::scoped_lock{implPtr->mutex};
+      auto const lock = std::scoped_lock{impl->mutex};
 
-      if (implPtr->shutdown)
+      if (impl->shutdown)
       {
         return;
       }
 
-      implPtr->states[anchor] = std::move(state);
+      impl->states[anchor] = std::move(state);
 
-      for (auto const& sub : implPtr->subscribers)
+      for (auto const& sub : impl->subscribers)
       {
         if (sub.routeAnchor == anchor)
         {
@@ -214,44 +235,45 @@ namespace ao::audio::backend::detail
 
     for (auto const& subscriber : pendingSubscribers)
     {
-      auto const callbackLock = std::scoped_lock{implPtr->callbackMutex};
+      auto const callbackLock = std::scoped_lock{impl->callbackMutex};
 
       {
-        auto const lock = std::scoped_lock{implPtr->mutex};
+        auto const lock = std::scoped_lock{impl->mutex};
 
-        if (implPtr->shutdown)
+        if (impl->shutdown)
         {
           return;
         }
 
-        if (std::ranges::find(implPtr->subscribers, subscriber.id, &Impl::Subscriber::id) == implPtr->subscribers.end())
+        if (std::ranges::find(impl->subscribers, subscriber.id, &Impl::Subscriber::id) == impl->subscribers.end())
         {
           continue;
         }
       }
 
+      auto publication = Impl::CallbackPublicationScope{*impl};
       subscriber.callback(graph);
     }
   }
 
   void WasapiGraphRegistry::clear(std::string_view routeAnchor)
   {
-    auto const implPtr = _implPtr;
+    auto* const impl = _implPtr.get();
     auto const anchor = std::string{routeAnchor};
     auto const emptyGraph = flow::Graph{};
     auto pendingSubscribers = std::vector<Impl::Subscriber>{};
 
     {
-      auto const lock = std::scoped_lock{implPtr->mutex};
+      auto const lock = std::scoped_lock{impl->mutex};
 
-      if (implPtr->shutdown)
+      if (impl->shutdown)
       {
         return;
       }
 
-      implPtr->states.erase(anchor);
+      impl->states.erase(anchor);
 
-      for (auto const& sub : implPtr->subscribers)
+      for (auto const& sub : impl->subscribers)
       {
         if (sub.routeAnchor == anchor)
         {
@@ -262,41 +284,42 @@ namespace ao::audio::backend::detail
 
     for (auto const& subscriber : pendingSubscribers)
     {
-      auto const callbackLock = std::scoped_lock{implPtr->callbackMutex};
+      auto const callbackLock = std::scoped_lock{impl->callbackMutex};
 
       {
-        auto const lock = std::scoped_lock{implPtr->mutex};
+        auto const lock = std::scoped_lock{impl->mutex};
 
-        if (implPtr->shutdown)
+        if (impl->shutdown)
         {
           return;
         }
 
-        if (std::ranges::find(implPtr->subscribers, subscriber.id, &Impl::Subscriber::id) == implPtr->subscribers.end())
+        if (std::ranges::find(impl->subscribers, subscriber.id, &Impl::Subscriber::id) == impl->subscribers.end())
         {
           continue;
         }
       }
 
+      auto publication = Impl::CallbackPublicationScope{*impl};
       subscriber.callback(emptyGraph);
     }
   }
 
   void WasapiGraphRegistry::shutdown() noexcept
   {
-    auto const implPtr = _implPtr;
-    auto const callbackLock = std::scoped_lock{implPtr->callbackMutex};
+    auto* const impl = _implPtr.get();
+    auto const callbackLock = std::scoped_lock{impl->callbackMutex};
 
     {
-      auto const lock = std::scoped_lock{implPtr->mutex};
+      auto const lock = std::scoped_lock{impl->mutex};
 
-      if (implPtr->shutdown)
+      if (impl->shutdown)
       {
         return;
       }
 
-      implPtr->shutdown = true;
-      implPtr->states.clear();
+      impl->shutdown = true;
+      impl->states.clear();
     }
 
     auto const emptyGraph = flow::Graph{};
@@ -306,19 +329,20 @@ namespace ao::audio::backend::detail
       auto subscriber = Impl::Subscriber{};
 
       {
-        auto const lock = std::scoped_lock{implPtr->mutex};
+        auto const lock = std::scoped_lock{impl->mutex};
 
-        if (implPtr->subscribers.empty())
+        if (impl->subscribers.empty())
         {
           return;
         }
 
-        subscriber = std::move(implPtr->subscribers.front());
-        implPtr->subscribers.erase(implPtr->subscribers.begin());
+        subscriber = std::move(impl->subscribers.front());
+        impl->subscribers.erase(impl->subscribers.begin());
       }
 
       try
       {
+        auto publication = Impl::CallbackPublicationScope{*impl};
         subscriber.callback(emptyGraph);
       }
       catch (...) // NOLINT(bugprone-empty-catch) -- shutdown is noexcept and listeners cannot retain the registry

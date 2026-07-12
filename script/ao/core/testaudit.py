@@ -30,6 +30,8 @@ KNOWN_LAYERS = frozenset(
 )
 
 KNOWN_TYPES = frozenset({"integration", "regression", "smoke", "unit", "workflow"})
+CONCURRENCY_TAG = "concurrency"
+STRESS_TAG = "stress"
 
 TAG_RE = re.compile(r"\[([^\[\]]+)\]")
 TEST_CASE_RE = re.compile(r"\bTEST_CASE\s*\(")
@@ -168,8 +170,28 @@ def _audit_case(case: TestCase) -> list[Issue]:
             )
         )
 
-    if len(case.tags) > 4:
-        issues.append(Issue(case.path, case.line, "tag-count", "prefer three or four tags"))
+    has_concurrency_stress_suffix = case.tags[-2:] == (CONCURRENCY_TAG, STRESS_TAG)
+    if len(case.tags) > 4 and not (len(case.tags) == 5 and has_concurrency_stress_suffix):
+        issues.append(
+            Issue(
+                case.path,
+                case.line,
+                "tag-count",
+                "prefer three or four tags; five are reserved for a final [concurrency][stress] pair",
+            )
+        )
+
+    if STRESS_TAG in case.tags and not has_concurrency_stress_suffix:
+        issues.append(
+            Issue(
+                case.path,
+                case.line,
+                "tag-order",
+                "[stress] must be the final tag and immediately follow [concurrency]",
+            )
+        )
+    elif CONCURRENCY_TAG in case.tags and case.tags[-1] != CONCURRENCY_TAG and not has_concurrency_stress_suffix:
+        issues.append(Issue(case.path, case.line, "tag-order", "[concurrency] must be the final behavior tag"))
 
     for tag in case.tags:
         if TAG_STYLE_RE.fullmatch(tag) is None:

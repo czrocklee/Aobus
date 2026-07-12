@@ -1,6 +1,7 @@
 """ao test — incrementally build and run registered development test suites."""
 
 import argparse
+import os
 import subprocess
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -30,6 +31,8 @@ examples:
   ./ao test --tui "[layout]"
   ./ao test --tooling                # test the ao development tooling
   ./ao test --core --list "[audio]"  # list matching core tests
+  ./ao test --concurrency             # run concurrency contracts across Catch2 suites
+  ./ao test --tsan --repeat 20        # repeat the TSan-safe suite group
 """
 
 
@@ -58,18 +61,30 @@ SUITE_TARGETS = {
 SUITE_GROUPS = {
     "default": builddir.LINUX_PROFILE.default_suites,
     "all": builddir.LINUX_PROFILE.all_suites,
+    "tsan": builddir.LINUX_PROFILE.tsan_suites,
+    "concurrency": tuple(name for name, spec in SUITES.items() if spec.kind == "catch2"),
 }
 
 
 def suite_groups() -> dict[str, tuple[str, ...]]:
     """Return suite groups containing only targets enabled by the native profile."""
     profile = builddir.platform_profile()
-    return {"default": profile.default_suites, "all": profile.all_suites}
+    catch2_suites = tuple(name for name in profile.all_suites if SUITES[name].kind == "catch2")
+    return {
+        "default": profile.default_suites,
+        "all": profile.all_suites,
+        "tsan": profile.tsan_suites,
+        "concurrency": catch2_suites,
+    }
 
 
-def suites_for(selection: str) -> tuple[str, ...]:
+def suites_for(selection: str, *, tsan: bool = False) -> tuple[str, ...]:
+    if tsan and selection in ("default", "all", "concurrency"):
+        selection = "tsan"
     groups = suite_groups()
     suites = groups.get(selection, (selection,))
+    if not suites:
+        raise die("ThreadSanitizer suites are unavailable on this platform.")
     unavailable = [suite for suite in suites if suite not in builddir.platform_profile().all_suites]
     if unavailable:
         available = ", ".join(builddir.platform_profile().all_suites)
@@ -139,6 +154,13 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         help=f"run {', '.join(profile.default_suites)} suites",
     )
     suite.add_argument("--all", dest="suite", action="store_const", const="all", help="run every native suite")
+    suite.add_argument(
+        "--concurrency",
+        dest="suite",
+        action="store_const",
+        const="concurrency",
+        help="run [concurrency] tests across every native Catch2 suite",
+    )
     parser.add_argument("-p", "--path", metavar="<dir>", help="override the native test build directory")
     parser.add_argument("--clang", action="store_true", help="test the clang build tree")
     sanitizers = parser.add_mutually_exclusive_group()
@@ -146,7 +168,21 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     sanitizers.add_argument("--tsan", action="store_true", help="test the TSan build tree")
     parser.add_argument("-l", "--list", action="store_true", help="list matching tests instead of running them")
     parser.add_argument("-n", "--no-build", action="store_true", help="skip the incremental build")
+    parser.add_argument(
+        "--repeat",
+        type=_positive_int,
+        default=1,
+        metavar="N",
+        help="repeat selected tests N times and stop on the first failure",
+    )
     parser.set_defaults(func=run_command)
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("repeat count must be at least 1")
+    return parsed
 
 
 _LSAN_SUPPRESSIONS = """\
@@ -186,12 +222,24 @@ def _lsan_env(build_dir: Path) -> dict[str, str]:
     return {"LSAN_OPTIONS": f"suppressions={_LSAN_SUPP_PATH}"}
 
 
+def _tsan_env(build_dir: Path, *, enabled: bool) -> dict[str, str]:
+    """Fail on the first TSan report so dependency noise cannot hide later races."""
+    if not enabled and "tsan" not in build_dir.name:
+        return {}
+
+    required = "halt_on_error=1:second_deadlock_stack=1"
+    existing = os.environ.get("TSAN_OPTIONS", "").strip(":")
+    return {"TSAN_OPTIONS": f"{existing}:{required}" if existing else required}
+
+
 def run_suite(
     name: str,
     build_dir: Path,
     *,
     test_filter: str = "",
     list_only: bool = False,
+    allow_no_tests: bool = False,
+    tsan: bool = False,
     log: Path | None = None,
 ) -> int:
     spec = SUITES[name]
@@ -205,6 +253,8 @@ def run_suite(
     command = [str(binary)]
     if list_only:
         command += ["--list-tests", "--verbosity", "high"]
+    if allow_no_tests:
+        command.append("--allow-running-no-tests")
     if test_filter:
         command.append(test_filter)
 
@@ -213,7 +263,7 @@ def run_suite(
     print(f"CMD: {' '.join(command)}")
     print("=====================================")
 
-    sanitizer_env = _lsan_env(build_dir)
+    sanitizer_env = {**_lsan_env(build_dir), **_tsan_env(build_dir, enabled=tsan)}
 
     if name == "gtk" and not list_only:
         with virtual_gtk_display() as env:
@@ -247,20 +297,36 @@ def run_suites(
     *,
     test_filter: str = "",
     list_only: bool = False,
+    allow_no_tests: bool = False,
+    repeat: int = 1,
+    tsan: bool = False,
     log: Path | None = None,
 ) -> int:
-    for index, name in enumerate(suites):
-        if index:
-            print()
+    iterations = 1 if list_only else repeat
+    for iteration in range(iterations):
+        if iterations > 1:
+            print(f"Concurrency/stress repetition {iteration + 1}/{iterations}")
 
-        spec = SUITES[name]
-        status = (
-            run_suite(name, build_dir, test_filter=test_filter, list_only=list_only, log=log)
-            if spec.kind == "catch2"
-            else run_non_catch2_suite(name, build_dir, list_only=list_only, log=log)
-        )
-        if status != 0:
-            return status
+        for index, name in enumerate(suites):
+            if index:
+                print()
+
+            spec = SUITES[name]
+            status = (
+                run_suite(
+                    name,
+                    build_dir,
+                    test_filter=test_filter,
+                    list_only=list_only,
+                    allow_no_tests=allow_no_tests,
+                    tsan=tsan,
+                    log=log,
+                )
+                if spec.kind == "catch2"
+                else run_non_catch2_suite(name, build_dir, list_only=list_only, log=log)
+            )
+            if status != 0:
+                return status
 
     return 0
 
@@ -270,7 +336,11 @@ def run_command(args: argparse.Namespace) -> int:
         Path(args.path) if args.path else builddir.build_dir("debug", clang=args.clang, asan=args.asan, tsan=args.tsan)
     )
 
-    suites = suites_for(args.suite)
+    if args.suite == "concurrency" and args.filter:
+        raise die("--concurrency supplies the [concurrency] filter; do not also pass a positional filter.")
+
+    suites = suites_for(args.suite, tsan=args.tsan)
+    test_filter = "[concurrency]" if args.suite == "concurrency" else args.filter
 
     if not args.no_build:
         targets = [target for suite in suites if (target := SUITES[suite].target) is not None]
@@ -283,4 +353,12 @@ def run_command(args: argparse.Namespace) -> int:
             if run(["cmake", "--build", str(build_dir), "--parallel", "--target", *targets]) != 0:
                 raise die("test build failed.")
 
-    return run_suites(suites, build_dir, test_filter=args.filter, list_only=args.list)
+    options = {
+        "test_filter": test_filter,
+        "list_only": args.list,
+        "repeat": args.repeat,
+        "tsan": args.tsan,
+    }
+    if args.suite == "concurrency":
+        options["allow_no_tests"] = True
+    return run_suites(suites, build_dir, **options)

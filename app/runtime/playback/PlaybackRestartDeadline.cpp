@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <stop_token>
 #include <utility>
 
 namespace ao::rt
@@ -141,8 +142,9 @@ namespace ao::rt
 
       try
       {
-        deadlineTask =
-          asyncRuntime.spawnCancellable(waitForDeadline(&asyncRuntime, weakStatePtr, delay, scheduleGeneration));
+        deadlineTask = asyncRuntime.spawnCancellable(
+          [asyncRuntime = &asyncRuntime, weakStatePtr, delay, scheduleGeneration](std::stop_token const stopToken)
+          { return waitForDeadline(asyncRuntime, weakStatePtr, delay, scheduleGeneration, stopToken); });
       }
       catch (...)
       {
@@ -154,10 +156,11 @@ namespace ao::rt
     static async::Task<void> waitForDeadline(async::Runtime* asyncRuntime,
                                              std::weak_ptr<SharedState> weakStatePtr,
                                              Elapsed const delay,
-                                             std::uint64_t const scheduleGeneration)
+                                             std::uint64_t const scheduleGeneration,
+                                             std::stop_token const stopToken)
     {
-      co_await asyncRuntime->sleepFor(delay);
-      co_await asyncRuntime->resumeOnCallbackExecutor();
+      co_await asyncRuntime->sleepFor(delay, stopToken);
+      co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
 
       if (auto const statePtr = weakStatePtr.lock(); statePtr != nullptr)
       {

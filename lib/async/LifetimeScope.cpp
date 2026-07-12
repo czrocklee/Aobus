@@ -8,13 +8,21 @@
 
 #include <cstdio> // NOLINT(misc-include-cleaner) -- directly provides stderr on MSVC
 #include <exception>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <print>
 #include <utility>
+#include <vector>
 
 namespace ao::async
 {
+  struct LifetimeScopeTask final
+  {
+    std::move_only_function<void()> cancel;
+    bool completed{false};
+  };
+
   LifetimeScope::LifetimeScope()
     : _statePtr{std::make_shared<LifetimeScopeState>()}
   {
@@ -27,12 +35,17 @@ namespace ao::async
 
   void LifetimeScope::cancelAll()
   {
-    auto lock = std::scoped_lock{_statePtr->mutex};
-    _statePtr->isAlive = false;
+    auto tasks = std::vector<std::shared_ptr<LifetimeScopeTask>>{};
 
-    for (auto const& signalPtr : _statePtr->signals)
     {
-      signalPtr->emit(CancellationType::all);
+      auto lock = std::scoped_lock{_statePtr->mutex};
+      _statePtr->isAlive = false;
+      tasks = std::move(_statePtr->tasks);
+    }
+
+    for (auto const& taskPtr : tasks)
+    {
+      taskPtr->cancel();
     }
   }
 
@@ -44,16 +57,13 @@ namespace ao::async
   namespace
   {
     void handleCoroutineCompletion(std::shared_ptr<LifetimeScopeState> statePtr,
-                                   std::shared_ptr<CancellationSignal> signalPtr,
+                                   std::shared_ptr<LifetimeScopeTask> taskPtr,
                                    std::exception_ptr exPtr)
     {
       {
         auto lock = std::scoped_lock{statePtr->mutex};
-
-        if (statePtr->isAlive)
-        {
-          std::erase(statePtr->signals, signalPtr);
-        }
+        taskPtr->completed = true;
+        std::erase(statePtr->tasks, taskPtr);
       }
 
       if (!exPtr)
@@ -81,24 +91,36 @@ namespace ao::async
     }
   } // namespace
 
-  void Runtime::spawnWithLifetime(LifetimeScope* scope, Task<void> task)
+  void Runtime::spawnWithLifetime(LifetimeScope* scope, CancellableTask task)
   {
-    auto signalPtr = std::make_shared<CancellationSignal>();
     auto statePtr = scope->state();
+    auto taskPtr = std::make_shared<LifetimeScopeTask>();
+    taskPtr->cancel = startCancellable(
+      std::move(task), [statePtr, taskPtr](auto exPtr) { handleCoroutineCompletion(statePtr, taskPtr, exPtr); });
+
+    bool cancelImmediately = false;
 
     {
       auto lock = std::scoped_lock{statePtr->mutex};
 
-      if (!statePtr->isAlive)
+      if (taskPtr->completed)
       {
         return;
       }
 
-      statePtr->signals.push_back(signalPtr);
+      if (statePtr->isAlive)
+      {
+        statePtr->tasks.push_back(taskPtr);
+      }
+      else
+      {
+        cancelImmediately = true;
+      }
     }
 
-    spawn(std::move(task),
-          signalPtr->slot(),
-          [statePtr, signalPtr](auto exPtr) { handleCoroutineCompletion(statePtr, signalPtr, exPtr); });
+    if (cancelImmediately)
+    {
+      taskPtr->cancel();
+    }
   }
 } // namespace ao::async

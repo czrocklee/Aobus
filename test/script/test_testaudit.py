@@ -62,6 +62,31 @@ class TestAuditTest(unittest.TestCase):
 
         self.assertEqual(testaudit._audit_case(case), [])
 
+    def test_audit_accepts_five_tags_only_for_concurrency_stress(self):
+        case = testaudit.TestCase(
+            path=Path("/repo/test/unit/runtime/AsyncRuntimeTest.cpp"),
+            line=12,
+            name="AsyncRuntime - cancellation races safely with timer expiry",
+            tags=("runtime", "regression", "async", "concurrency", "stress"),
+        )
+
+        self.assertEqual(testaudit._audit_case(case), [])
+
+    def test_audit_requires_stress_to_follow_concurrency(self):
+        case = testaudit.TestCase(
+            path=Path("/repo/test/unit/runtime/AsyncRuntimeTest.cpp"),
+            line=12,
+            name="AsyncRuntime - cancellation races safely with timer expiry",
+            tags=("runtime", "regression", "async", "stress"),
+        )
+
+        issues = testaudit._audit_case(case)
+
+        self.assertEqual(
+            [(issue.kind, issue.message) for issue in issues],
+            [("tag-order", "[stress] must be the final tag and immediately follow [concurrency]")],
+        )
+
     def test_audit_reports_legacy_name_and_tag_drift(self):
         case = testaudit.TestCase(
             path=Path("/repo/test/unit/audio/EngineTest.cpp"),
@@ -81,7 +106,10 @@ class TestAuditTest(unittest.TestCase):
                 ),
                 ("tag-order", "first tag should be a known layer tag, got [playback]"),
                 ("tag-order", "second tag should be a known test type tag, got [audio]"),
-                ("tag-count", "prefer three or four tags"),
+                (
+                    "tag-count",
+                    "prefer three or four tags; five are reserved for a final [concurrency][stress] pair",
+                ),
             ],
         )
 

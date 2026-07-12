@@ -19,8 +19,9 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackService.h>
 
-#include <boost/asio/associated_cancellation_slot.hpp>
+#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -32,8 +33,10 @@
 #include <cstddef>
 #include <deque>
 #include <functional>
+#include <latch>
 #include <memory>
 #include <mutex>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -71,8 +74,9 @@ namespace ao::rt::test
     static ControlledSleeper& install(async::Runtime& runtime)
     {
       auto sleeperPtr = std::shared_ptr<ControlledSleeper>{new ControlledSleeper{}};
-      async::RuntimeTestAccess::setSleepFor(
-        runtime, [sleeperPtr](Delay const delay) { return sleeperPtr->sleepFor(delay); });
+      async::RuntimeTestAccess::setSleepFor(runtime,
+                                            [sleeperPtr](Delay const delay, std::stop_token const stopToken)
+                                            { return sleeperPtr->sleepFor(delay, stopToken); });
       return *sleeperPtr;
     }
 
@@ -83,40 +87,59 @@ namespace ao::rt::test
     ControlledSleeper(ControlledSleeper&&) = delete;
     ControlledSleeper& operator=(ControlledSleeper&&) = delete;
 
-    async::Task<void> sleepFor(Delay const delay)
+    async::Task<void> sleepFor(Delay const delay, std::stop_token const stopToken)
     {
       co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(
-        [this, delay](auto handler)
+        [this, delay, stopToken](auto handler)
         {
           auto const id = _nextId.fetch_add(1);
-          auto cancellationSlot = boost::asio::get_associated_cancellation_slot(handler);
-
-          if (cancellationSlot.is_connected())
-          {
-            cancellationSlot.assign(
-              [this, id](async::CancellationType)
-              {
-                auto const lock = std::scoped_lock{_mutex};
-
-                if (auto const it = entry(id); it != _entries.end())
-                {
-                  it->cancelled = true;
-                  it->cancelledOn = std::this_thread::get_id();
-                  it->active = false;
-                }
-
-                _cv.notify_all();
-              });
-          }
+          auto executor = boost::asio::get_associated_executor(handler);
 
           {
             auto const lock = std::scoped_lock{_mutex};
             _entries.push_back(Entry{.id = id,
                                      .delay = delay,
-                                     .resume = [handler = std::move(handler)] mutable { handler(); },
+                                     .resume =
+                                       [executor, handler = std::move(handler)] mutable
+                                     {
+                                       auto dispatched = std::latch{1};
+                                       boost::asio::dispatch(
+                                         executor,
+                                         [handler = std::move(handler), dispatched = &dispatched] mutable
+                                         {
+                                           handler();
+                                           dispatched->count_down();
+                                         });
+                                       dispatched.wait();
+                                     },
                                      .active = true,
                                      .startedOn = std::this_thread::get_id(),
-                                     .cancelledOn = {}});
+                                     .cancelledOn = {},
+                                     .stopCallbackPtr = {}});
+          }
+
+          auto stopCallbackPtr = std::make_shared<StopCallback>(stopToken,
+                                                                [this, id]
+                                                                {
+                                                                  auto const lock = std::scoped_lock{_mutex};
+
+                                                                  if (auto const it = entry(id); it != _entries.end())
+                                                                  {
+                                                                    it->cancelled = true;
+                                                                    it->cancelledOn = std::this_thread::get_id();
+                                                                    it->active = false;
+                                                                  }
+
+                                                                  _cv.notify_all();
+                                                                });
+
+          {
+            auto const lock = std::scoped_lock{_mutex};
+
+            if (auto const it = entry(id); it != _entries.end())
+            {
+              it->stopCallbackPtr = std::move(stopCallbackPtr);
+            }
           }
 
           _cv.notify_all();
@@ -288,6 +311,8 @@ namespace ao::rt::test
   private:
     ControlledSleeper() = default;
 
+    using StopCallback = std::stop_callback<std::function<void()>>;
+
     struct Entry final
     {
       std::uint64_t id = 0;
@@ -297,6 +322,7 @@ namespace ao::rt::test
       bool cancelled = false;
       std::thread::id startedOn;
       std::thread::id cancelledOn;
+      std::shared_ptr<StopCallback> stopCallbackPtr;
     };
 
     std::vector<Entry>::iterator entry(std::uint64_t const id) { return std::ranges::find(_entries, id, &Entry::id); }
@@ -484,11 +510,11 @@ namespace ao::rt::test
 
     void set(T value) const
     {
-      {
-        auto const lock = std::scoped_lock{_dataPtr->mutex};
-        _dataPtr->value.store(value);
-      }
-
+      // A waiter may destroy the object containing this AsyncTestState as soon
+      // as it observes the value. Keep notify under the lock so wait_for cannot
+      // return until this method has made its final access through `this`.
+      auto const lock = std::scoped_lock{_dataPtr->mutex};
+      _dataPtr->value.store(value);
       _dataPtr->cv.notify_all();
     }
 
@@ -496,11 +522,9 @@ namespace ao::rt::test
     {
       T result = {};
 
-      {
-        auto const lock = std::scoped_lock{_dataPtr->mutex};
-        result = _dataPtr->value.fetch_add(1) + 1;
-      }
-
+      // See set() for the lifetime synchronization provided by the lock.
+      auto const lock = std::scoped_lock{_dataPtr->mutex};
+      result = _dataPtr->value.fetch_add(1) + 1;
       _dataPtr->cv.notify_all();
       return result;
     }
@@ -659,6 +683,11 @@ namespace ao::rt::test
 
       while (!predicate())
       {
+        if (runOne())
+        {
+          continue;
+        }
+
         auto const now = std::chrono::steady_clock::now();
 
         if (now >= deadline)
@@ -672,8 +701,6 @@ namespace ao::rt::test
         {
           return predicate();
         }
-
-        drain();
       }
 
       return true;

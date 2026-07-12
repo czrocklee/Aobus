@@ -16,7 +16,14 @@ This script will automatically:
 4. Process all `.gcda` files and print out any files that have missing coverage (`#####:`).
 5. Output the exact missing lines with 6 lines of surrounding context.
 
+The command may still print a partial report after a test failure, but it
+returns the first failing suite's non-zero status. A partial report is never a
+green coverage result.
+
 The project goal is `> 95%` line coverage.
+
+Line coverage is not evidence of thread safety; use
+`concurrency-and-sanitizers.md` for that validation.
 
 ## Core philosophy
 

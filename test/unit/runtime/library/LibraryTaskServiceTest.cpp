@@ -18,8 +18,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <exception>
 #include <filesystem>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -27,6 +27,25 @@
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    async::Task<void> applyScanPlanAndRecordCancellation(LibraryTaskService* service,
+                                                         ScanPlan plan,
+                                                         AsyncTestState<bool> sawCancellation,
+                                                         std::stop_token const stopToken)
+    {
+      try
+      {
+        [[maybe_unused]] auto result = co_await service->applyScanPlanAsync(std::move(plan), {}, stopToken);
+      }
+      catch (async::OperationCancelled const&)
+      {
+        sawCancellation.set(true);
+        throw;
+      }
+    }
+  } // namespace
+
   TEST_CASE("LibraryTaskService - importLibraryAsync returns failure for invalid path",
             "[runtime][unit][library][task]")
   {
@@ -221,7 +240,6 @@ namespace ao::rt::test
     auto plan = scanService.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
-    auto signal = async::CancellationSignal{};
     auto sawFingerprinting = AsyncTestState<bool>::create(false);
     auto sawCancellation = AsyncTestState<bool>::create(false);
     auto sub = changes.onLibraryTaskProgress(
@@ -230,37 +248,15 @@ namespace ao::rt::test
         if (event.message == "Fingerprinting: song.flac" && !sawFingerprinting.load())
         {
           sawFingerprinting.set(true);
-          signal.emit(async::CancellationType::all);
         }
       });
 
-    auto task = [](LibraryTaskService* service, ScanPlan scanPlan) -> async::Task<void>
-    { [[maybe_unused]] auto result = co_await service->applyScanPlanAsync(std::move(scanPlan)); };
+    auto taskHandle = runtime.spawnCancellable(
+      [service = &service, plan = std::move(plan), sawCancellation](std::stop_token const stopToken) mutable
+      { return applyScanPlanAndRecordCancellation(service, std::move(plan), sawCancellation, stopToken); });
 
-    runtime.spawn(task(&service, std::move(plan)),
-                  signal.slot(),
-                  [sawCancellation](std::exception_ptr exPtr) mutable
-                  {
-                    try
-                    {
-                      if (exPtr)
-                      {
-                        std::rethrow_exception(exPtr);
-                      }
-                    }
-                    catch (async::OperationCancelled const&)
-                    {
-                      sawCancellation.set(true);
-                    }
-                    catch (std::exception const& e)
-                    {
-                      if (async::isOperationCancelled(e))
-                      {
-                        sawCancellation.set(true);
-                      }
-                    }
-                  });
-
+    REQUIRE(sawFingerprinting.waitUntil(true));
+    taskHandle.reset();
     REQUIRE(sawCancellation.waitUntil(true));
     CHECK(sawFingerprinting.load());
 

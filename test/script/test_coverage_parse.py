@@ -1,6 +1,8 @@
 """Tests for ao.command.coverage gcov parsing and union-merge."""
 
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from ao.command import coverage
 
@@ -123,6 +125,20 @@ class ScopedStatsTest(unittest.TestCase):
         }
 
         self.assertEqual(len(coverage.scoped_stats(merged, ["app/linux-gtk/"])), 1)
+
+
+class CoverageSuiteStatusTest(unittest.TestCase):
+    def test_failed_suite_status_survives_partial_coverage_collection(self):
+        with mock.patch.object(coverage, "run_suite", side_effect=[0, 7, 5]) as run_suite:
+            status = coverage.run_coverage_tests(
+                ("core", "tui", "gtk"),
+                Path("/tmp/build/coverage"),
+                "[concurrency]",
+            )
+
+        self.assertEqual(status, 7)
+        self.assertEqual(run_suite.call_count, 3)
+        run_suite.assert_any_call("gtk", Path("/tmp/build/coverage"), test_filter="[concurrency]")
 
 
 if __name__ == "__main__":

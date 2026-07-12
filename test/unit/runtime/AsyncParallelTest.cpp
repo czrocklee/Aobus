@@ -87,7 +87,7 @@ namespace ao::rt::test
     CHECK(counter.load() == 1);
   }
 
-  TEST_CASE("whenAll - tasks run concurrently on the worker pool", "[runtime][unit][async]")
+  TEST_CASE("whenAll - tasks run concurrently on the worker pool", "[runtime][unit][async][concurrency]")
   {
     auto executor = MockExecutor{};
     auto runtime = Runtime{executor, 2};
@@ -106,7 +106,7 @@ namespace ao::rt::test
     CHECK(bothStarted);
   }
 
-  TEST_CASE("whenAll - awaiting coroutine holds no pool thread", "[runtime][unit][async]")
+  TEST_CASE("whenAll - awaiting coroutine holds no pool thread", "[runtime][unit][async][concurrency]")
   {
     // With a single-thread pool the coordinator must release its thread while
     // suspended in whenAll; a blocking wait would deadlock here instead of

@@ -17,6 +17,7 @@ samples), see the focused documents under `doc/dev/testing/`.
 | `doc/dev/testing/naming-and-assertions.md` | Test names, tags, structure, and assertion quality |
 | `doc/dev/testing/fixtures-and-helpers.md` | Fixtures, helpers, FakeIt, test data, and filesystem setup |
 | `doc/dev/testing/runtime-and-async.md` | Deterministic async, runtime service, callback, and lifetime tests |
+| `doc/dev/testing/concurrency-and-sanitizers.md` | Concurrency tags, race matrices, TSan gates, and review checklist |
 | `doc/dev/testing/uimodel-and-gtk.md` | UI model policy tests, GTK adapter tests, geometry, lifecycle, and testability |
 | `doc/dev/testing/coverage-workflow.md` | Coverage reports and the measure-analyze-test-verify loop |
 | `doc/dev/testing/validation-and-review.md` | New files, regression tests, validation, smells, and review checklist |

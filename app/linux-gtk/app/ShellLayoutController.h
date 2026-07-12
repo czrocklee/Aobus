@@ -11,6 +11,7 @@
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/LayoutHost.h"
 #include <ao/async/LifetimeScope.h>
+#include <ao/async/Task.h>
 #include <ao/rt/Subscription.h>
 #include <ao/uimodel/layout/action/LayoutActionActivation.h>
 #include <ao/uimodel/layout/action/LayoutActionAvailability.h>
@@ -26,6 +27,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -110,6 +112,10 @@ namespace ao::gtk
     void applyLoadedLayout(std::string presetId,
                            uimodel::LayoutDocument document,
                            uimodel::LayoutComponentStateDocument componentState);
+    async::Task<void> loadLayoutWorkflow(std::shared_ptr<ShellLayoutStore> layoutStorePtr,
+                                         std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
+                                         std::shared_ptr<AppConfigStore> configStorePtr,
+                                         std::stop_token stopToken);
     void logLayoutLoadFailure(std::exception_ptr exceptionPtr);
     void applyLoadedLayoutWithFailureLogging(std::string presetId,
                                              uimodel::LayoutDocument document,

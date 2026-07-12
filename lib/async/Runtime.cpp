@@ -8,8 +8,6 @@
 
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/bind_cancellation_slot.hpp>
-#include <boost/asio/cancellation_type.hpp>
 #include <boost/asio/co_spawn.hpp> // NOLINT(misc-include-cleaner) -- public Boost.Asio API header
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/error.hpp>
@@ -29,6 +27,7 @@
 #include <functional>
 #include <memory>
 #include <print>
+#include <stop_token>
 #include <thread>
 #include <utility>
 
@@ -69,6 +68,44 @@ namespace ao::async
 
       throw;
     }
+
+    Task<void> runCancellable(CancellableTask task, std::stop_token const stopToken)
+    {
+      throwIfStopRequested(stopToken);
+      co_await task(stopToken);
+    }
+
+    Task<void> waitForTimer(std::chrono::milliseconds const delay, std::stop_token const stopToken)
+    {
+      throwIfStopRequested(stopToken);
+
+      auto executor = co_await boost::asio::this_coro::executor;
+      auto timerPtr = std::make_shared<boost::asio::steady_timer>(executor, delay);
+      auto cancelTimer = std::stop_callback{
+        stopToken,
+        [executor, timerPtr] { boost::asio::dispatch(executor, [timerPtr] { std::ignore = timerPtr->cancel(); }); }};
+
+      // A stop request can arrive between the first checkpoint and callback
+      // registration. In that case cancel() precedes async_wait(), so do not
+      // start a wait that would otherwise run until its original expiry.
+      throwIfStopRequested(stopToken);
+
+      try
+      {
+        co_await timerPtr->async_wait(boost::asio::use_awaitable);
+      }
+      catch (boost::system::system_error const& error)
+      {
+        if (stopToken.stop_requested() && error.code() == boost::asio::error::operation_aborted)
+        {
+          throwOperationCancelled();
+        }
+
+        translateBoostCancellation(error);
+      }
+
+      throwIfStopRequested(stopToken);
+    }
   } // namespace
 
   Runtime::Runtime(Executor& callbackExecutor)
@@ -107,8 +144,10 @@ namespace ao::async
     return _workerPool;
   }
 
-  Task<void> Runtime::resumeOnCallbackExecutor()
+  Task<void> Runtime::resumeOnCallbackExecutor(std::stop_token const stopToken)
   {
+    throwIfStopRequested(stopToken);
+
     try
     {
       co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(
@@ -120,20 +159,13 @@ namespace ao::async
       translateBoostCancellation(e);
     }
 
-    // Single cancellation checkpoint, after the executor hop. cancellation_state
-    // is monotonic (a latched terminal signal never clears), so this post-resume
-    // check subsumes a pre-resume one and additionally catches cancellation that
-    // was signalled while the coroutine was in flight to the callback executor.
-    auto const state = co_await boost::asio::this_coro::cancellation_state;
-
-    if (state.cancelled() != boost::asio::cancellation_type::none)
-    {
-      throwOperationCancelled();
-    }
+    throwIfStopRequested(stopToken);
   }
 
-  Task<void> Runtime::resumeOnWorker()
+  Task<void> Runtime::resumeOnWorker(std::stop_token const stopToken)
   {
+    throwIfStopRequested(stopToken);
+
     try
     {
       co_await boost::asio::post(workerPool(), boost::asio::use_awaitable);
@@ -143,44 +175,26 @@ namespace ao::async
       translateBoostCancellation(e);
     }
 
-    // See resumeOnCallbackExecutor: one checkpoint after the hop is sufficient.
-    auto const state = co_await boost::asio::this_coro::cancellation_state;
-
-    if (state.cancelled() != boost::asio::cancellation_type::none)
-    {
-      throwOperationCancelled();
-    }
+    throwIfStopRequested(stopToken);
   }
 
-  Task<void> Runtime::sleepFor(std::chrono::milliseconds const delay)
+  Task<void> Runtime::sleepFor(std::chrono::milliseconds const delay, std::stop_token const stopToken)
   {
     gsl_Expects(delay > std::chrono::milliseconds::zero());
+    throwIfStopRequested(stopToken);
 
     if (_sleepForOverride)
     {
-      co_await _sleepForOverride(delay);
+      co_await _sleepForOverride(delay, stopToken);
     }
     else
     {
       auto executor = co_await boost::asio::this_coro::executor;
-      auto timer = boost::asio::steady_timer{executor, delay};
-
-      try
-      {
-        co_await timer.async_wait(boost::asio::use_awaitable);
-      }
-      catch (boost::system::system_error const& error)
-      {
-        translateBoostCancellation(error);
-      }
+      auto timerExecutor = boost::asio::make_strand(executor);
+      co_await boost::asio::co_spawn(timerExecutor, waitForTimer(delay, stopToken), boost::asio::use_awaitable);
     }
 
-    auto const state = co_await boost::asio::this_coro::cancellation_state;
-
-    if (state.cancelled() != boost::asio::cancellation_type::none)
-    {
-      throwOperationCancelled();
-    }
+    throwIfStopRequested(stopToken);
   }
 
   void Runtime::spawnLogged(Task<void> task)
@@ -191,24 +205,20 @@ namespace ao::async
       [](std::exception_ptr exPtr) { reportUnhandledException(exPtr, "root"); });
   }
 
-  void Runtime::spawn(Task<void> task, CancellationSlot slot, std::function<void(std::exception_ptr)> callback)
+  std::move_only_function<void()> Runtime::startCancellable(CancellableTask task,
+                                                            std::function<void(std::exception_ptr)> completion)
   {
+    auto stopSourcePtr = std::make_shared<std::stop_source>();
     boost::asio::co_spawn( // NOLINT(misc-include-cleaner) -- declared by the public co_spawn header
       workerPool(),
-      std::move(task),
-      boost::asio::bind_cancellation_slot(slot, std::move(callback)));
+      runCancellable(std::move(task), stopSourcePtr->get_token()),
+      [completion = std::move(completion)](std::exception_ptr exPtr) { completion(exPtr); });
+    return [stopSourcePtr] { std::ignore = stopSourcePtr->request_stop(); };
   }
 
-  TaskHandle Runtime::spawnCancellable(Task<void> task)
+  TaskHandle Runtime::spawnCancellable(CancellableTask task)
   {
-    auto signalPtr = std::make_shared<CancellationSignal>();
-    auto executor = boost::asio::make_strand(workerPool());
-    boost::asio::co_spawn( // NOLINT(misc-include-cleaner) -- declared by the public co_spawn header
-      executor,
-      std::move(task),
-      boost::asio::bind_cancellation_slot(
-        signalPtr->slot(), [signalPtr](std::exception_ptr exPtr) { reportUnhandledException(exPtr, "cancellable"); }));
-    return TaskHandle{[executor, signalPtr]
-                      { boost::asio::dispatch(executor, [signalPtr] { signalPtr->emit(CancellationType::all); }); }};
+    return TaskHandle{startCancellable(
+      std::move(task), [](std::exception_ptr exPtr) { reportUnhandledException(exPtr, "cancellable"); })};
   }
 } // namespace ao::async

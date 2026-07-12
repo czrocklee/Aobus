@@ -273,7 +273,8 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ResourceImageController - async thumbnail mode updates the widget image", "[gtk][unit][image]")
+  TEST_CASE("ResourceImageController - async thumbnail mode updates the widget image",
+            "[gtk][unit][image][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

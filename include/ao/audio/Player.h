@@ -40,12 +40,13 @@ namespace ao::audio
    * executor-owned Player state, so user callbacks always run on the
    * executor's owning thread.
    *
-   * Threading contract: public methods and the destructor are expected to run on
+   * Threading contract: public methods and the destructor must run on
    * the executor's owning thread, mirroring the layers that aggregate Player
    * (e.g. ao::rt::PlaybackService). The executor must outlive Player. Teardown
    * neutralizes marshalled callbacks that are still queued when destruction
-   * starts; callbacks already running are on the executor thread and must return
-   * promptly.
+   * starts; callbacks already running are on the executor thread, must return
+   * promptly, and must defer synchronous owner destruction. Any prepared
+   * playback handle must be consumed or destroyed before Player.
    */
   class Player final
   {
@@ -128,6 +129,6 @@ namespace ao::audio
 
   private:
     struct Impl;
-    std::shared_ptr<Impl> _implPtr;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::audio

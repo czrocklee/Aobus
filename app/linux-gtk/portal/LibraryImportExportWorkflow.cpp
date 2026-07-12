@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <format>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -94,7 +95,8 @@ namespace ao::gtk::portal
       _runtime.async(),
       _tasks,
       *this,
-      [mode](LibraryImportExportWorkflow* self) { return self->scanWorkflow(mode); },
+      [mode](LibraryImportExportWorkflow* self, std::stop_token const stopToken)
+      { return self->scanWorkflow(mode, stopToken); },
       [](LibraryImportExportWorkflow* self, std::exception_ptr exceptionPtr)
       { self->reportInternalFailure("Scan failed", "Scan failed: Internal error", exceptionPtr); });
   }
@@ -106,8 +108,9 @@ namespace ao::gtk::portal
       _runtime.async(),
       _tasks,
       *this,
-      [callbacks = std::move(callbacks), importPath = std::move(path)](LibraryImportExportWorkflow* self) mutable
-      { return self->importWorkflow(std::move(callbacks), std::move(importPath)); },
+      [callbacks = std::move(callbacks), importPath = std::move(path)](
+        LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
+      { return self->importWorkflow(std::move(callbacks), std::move(importPath), stopToken); },
       [](LibraryImportExportWorkflow* self, std::exception_ptr exceptionPtr)
       { self->reportInternalFailure("Import failed", "Import failed: Internal error", exceptionPtr); });
   }
@@ -118,15 +121,15 @@ namespace ao::gtk::portal
       _runtime.async(),
       _tasks,
       *this,
-      [exportPath = std::move(path), mode](LibraryImportExportWorkflow* self) mutable
-      { return self->exportWorkflow(std::move(exportPath), mode); },
+      [exportPath = std::move(path), mode](LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
+      { return self->exportWorkflow(std::move(exportPath), mode, stopToken); },
       [](LibraryImportExportWorkflow* self, std::exception_ptr exceptionPtr)
       { self->reportInternalFailure("Export failed", "Export failed: Internal error", exceptionPtr); });
   }
 
-  async::Task<void> LibraryImportExportWorkflow::scanWorkflow(ScanRequestMode mode)
+  async::Task<void> LibraryImportExportWorkflow::scanWorkflow(ScanRequestMode mode, std::stop_token const stopToken)
   {
-    auto optPlan = co_await buildScanPlanOrReportFailure();
+    auto optPlan = co_await buildScanPlanOrReportFailure(stopToken);
 
     if (!optPlan)
     {
@@ -145,14 +148,14 @@ namespace ao::gtk::portal
                  optPlan->count(rt::ScanClassification::Missing),
                  optPlan->count(rt::ScanClassification::Error));
 
-    co_await applyScanPlanWithProgress(std::move(*optPlan), mode);
+    co_await applyScanPlanWithProgress(std::move(*optPlan), mode, stopToken);
   }
 
-  async::Task<void> LibraryImportExportWorkflow::backfillAudioIdentityWorkflow()
+  async::Task<void> LibraryImportExportWorkflow::backfillAudioIdentityWorkflow(std::stop_token const stopToken)
   {
     try
     {
-      auto result = co_await _runtime.library().taskService().backfillAudioIdentityAsync();
+      auto result = co_await _runtime.library().taskService().backfillAudioIdentityAsync(stopToken);
 
       if (!result)
       {
@@ -185,9 +188,11 @@ namespace ao::gtk::portal
     }
   }
 
-  async::Task<void> LibraryImportExportWorkflow::exportWorkflow(std::filesystem::path exportPath, rt::ExportMode mode)
+  async::Task<void> LibraryImportExportWorkflow::exportWorkflow(std::filesystem::path exportPath,
+                                                                rt::ExportMode mode,
+                                                                std::stop_token const stopToken)
   {
-    auto result = co_await _runtime.library().taskService().exportLibraryAsync(std::move(exportPath), mode);
+    auto result = co_await _runtime.library().taskService().exportLibraryAsync(std::move(exportPath), mode, stopToken);
 
     if (!result)
     {
@@ -199,9 +204,10 @@ namespace ao::gtk::portal
   }
 
   async::Task<void> LibraryImportExportWorkflow::importWorkflow(ImportExportCallbacks callbacks,
-                                                                std::filesystem::path importPath)
+                                                                std::filesystem::path importPath,
+                                                                std::stop_token const stopToken)
   {
-    auto result = co_await _runtime.library().taskService().importLibraryAsync(std::move(importPath));
+    auto result = co_await _runtime.library().taskService().importLibraryAsync(std::move(importPath), stopToken);
 
     if (!result)
     {
@@ -217,9 +223,10 @@ namespace ao::gtk::portal
     _runtime.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
   }
 
-  async::Task<std::optional<rt::ScanPlan>> LibraryImportExportWorkflow::buildScanPlanOrReportFailure()
+  async::Task<std::optional<rt::ScanPlan>> LibraryImportExportWorkflow::buildScanPlanOrReportFailure(
+    std::stop_token const stopToken)
   {
-    auto result = co_await _runtime.library().taskService().buildScanPlanAsync();
+    auto result = co_await _runtime.library().taskService().buildScanPlanAsync(stopToken);
 
     if (!result)
     {
@@ -256,7 +263,9 @@ namespace ao::gtk::portal
     return true;
   }
 
-  async::Task<void> LibraryImportExportWorkflow::applyScanPlanWithProgress(rt::ScanPlan plan, ScanRequestMode mode)
+  async::Task<void> LibraryImportExportWorkflow::applyScanPlanWithProgress(rt::ScanPlan plan,
+                                                                           ScanRequestMode mode,
+                                                                           std::stop_token const stopToken)
   {
     try
     {
@@ -267,7 +276,7 @@ namespace ao::gtk::portal
         options.audioIdentityPolicy = rt::AudioIdentityPolicy::DeferNew;
       }
 
-      auto result = co_await _runtime.library().taskService().applyScanPlanAsync(std::move(plan), options);
+      auto result = co_await _runtime.library().taskService().applyScanPlanAsync(std::move(plan), options, stopToken);
 
       if (!result)
       {
@@ -329,7 +338,8 @@ namespace ao::gtk::portal
       _runtime.async(),
       _tasks,
       *this,
-      [](LibraryImportExportWorkflow* self) { return self->backfillAudioIdentityWorkflow(); },
+      [](LibraryImportExportWorkflow* self, std::stop_token const stopToken)
+      { return self->backfillAudioIdentityWorkflow(stopToken); },
       [](LibraryImportExportWorkflow* self, std::exception_ptr exceptionPtr)
       {
         self->reportInternalFailure(

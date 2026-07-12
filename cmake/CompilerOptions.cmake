@@ -144,9 +144,12 @@ endif()
 add_compile_definitions(SPDLOG_USE_STD_FORMAT)
 
 # GSL-lite
-# Debug fails fast through assertions; non-Debug disables contract checks.
+# Contracts are part of the runtime safety model in every configuration. Debug
+# keeps assertion diagnostics; optimized builds terminate on violations rather
+# than compiling the checks out and continuing into undefined behavior.
+add_compile_definitions(gsl_CONFIG_CONTRACT_CHECKING_ON)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  add_compile_definitions(gsl_CONFIG_CONTRACT_VIOLATION_ASSERTS=1)
+  add_compile_definitions(gsl_CONFIG_CONTRACT_VIOLATION_ASSERTS)
 else()
-  add_compile_definitions(gsl_CONFIG_CONTRACT_CHECKING_OFF=1)
+  add_compile_definitions(gsl_CONFIG_CONTRACT_VIOLATION_TERMINATES)
 endif()

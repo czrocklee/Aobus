@@ -12,8 +12,12 @@
 #include <boost/system/system_error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <barrier>
+#include <cstddef>
 #include <exception>
 #include <stdexcept>
+#include <stop_token>
+#include <thread>
 #include <utility>
 
 namespace ao::rt::test
@@ -27,12 +31,12 @@ namespace ao::rt::test
       MemberTaskOwner(Runtime& runtime, LifetimeScope& scope, AsyncTestState<int> completed)
         : runtime{runtime}, completed{std::move(completed)}
       {
-        runtime.spawnWithLifetime(&scope, run());
+        runtime.spawnWithLifetime(&scope, [this](std::stop_token const stopToken) { return run(stopToken); });
       }
 
-      Task<void> run()
+      Task<void> run(std::stop_token const stopToken)
       {
-        co_await runtime.resumeOnWorker();
+        co_await runtime.resumeOnWorker(stopToken);
         completed.increment();
       }
 
@@ -62,25 +66,34 @@ namespace ao::rt::test
                                AsyncTestState<bool> reachedBarrierWait,
                                AsyncTestState<bool> reachedCallbackHop,
                                AsyncTestState<bool> completed,
-                               AsyncTestState<bool> taskExited)
+                               AsyncTestState<bool> taskExited,
+                               std::stop_token const stopToken)
     {
       auto exitObserver = TaskExitObserver{taskExited};
 
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorker(stopToken);
       reachedBarrierWait.set(true);
       barrier->wait(); // deterministic wait point (blocks worker thread)
 
       reachedCallbackHop.set(true);
-      co_await runtime->resumeOnCallbackExecutor();
+      co_await runtime->resumeOnCallbackExecutor(stopToken);
       // If cancelled, this line should never be reached.
       completed.set(true);
     }
 
-    Task<void> pendingControlResumeTask(Runtime* runtime, AsyncTestState<bool> completed)
+    Task<void> pendingControlResumeTask(Runtime* runtime,
+                                        AsyncTestState<bool> completed,
+                                        std::stop_token const stopToken = {})
     {
-      co_await runtime->resumeOnWorker();
-      co_await runtime->resumeOnCallbackExecutor();
+      co_await runtime->resumeOnWorker(stopToken);
+      co_await runtime->resumeOnCallbackExecutor(stopToken);
       completed.set(true);
+    }
+
+    Task<void> racingSleep(Runtime* runtime, AsyncTestState<bool> taskExited, std::stop_token const stopToken)
+    {
+      auto exitObserver = TaskExitObserver{taskExited};
+      co_await runtime->sleepFor(std::chrono::hours{1}, stopToken);
     }
   } // namespace
 
@@ -97,7 +110,12 @@ namespace ao::rt::test
     {
       auto scope = LifetimeScope{};
       runtime.spawnWithLifetime(
-        &scope, longRunningTask(&runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited));
+        &scope,
+        [&](std::stop_token const stopToken)
+        {
+          return longRunningTask(
+            &runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited, stopToken);
+        });
 
       REQUIRE(reachedBarrierWait.waitUntil(true));
       barrier.release();
@@ -117,7 +135,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LifetimeScope - destruction cancels blocked task before callback resume",
-            "[runtime][unit][async][lifetime]")
+            "[runtime][unit][lifetime][concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
@@ -130,7 +148,12 @@ namespace ao::rt::test
     {
       auto scope = LifetimeScope{};
       runtime.spawnWithLifetime(
-        &scope, longRunningTask(&runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited));
+        &scope,
+        [&](std::stop_token const stopToken)
+        {
+          return longRunningTask(
+            &runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited, stopToken);
+        });
 
       REQUIRE(reachedBarrierWait.waitUntil(true));
       // Destroy scope while task is blocked at the barrier.
@@ -146,7 +169,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LifetimeScope - cancellation before queued callback resume prevents completion",
-            "[runtime][unit][async][lifetime]")
+            "[runtime][unit][lifetime][concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
@@ -154,49 +177,15 @@ namespace ao::rt::test
 
     {
       auto scope = LifetimeScope{};
-      runtime.spawnWithLifetime(&scope, pendingControlResumeTask(&runtime, completed));
+      runtime.spawnWithLifetime(&scope,
+                                [&runtime, completed](std::stop_token const stopToken)
+                                { return pendingControlResumeTask(&runtime, completed, stopToken); });
       executor.checkQueued();
     }
 
     executor.runUntilIdle();
 
     CHECK_FALSE(completed.load());
-    runtime.requestStop();
-    runtime.join();
-  }
-
-  TEST_CASE("Runtime - cancellation checkpoint reports OperationCancelled", "[runtime][unit][async][cancellation]")
-  {
-    auto executor = ManualExecutor{};
-    auto runtime = Runtime{executor};
-    auto completed = AsyncTestState<bool>::create(false);
-    auto sawCancellation = AsyncTestState<bool>::create(false);
-    auto signal = CancellationSignal{};
-
-    runtime.spawn(pendingControlResumeTask(&runtime, completed),
-                  signal.slot(),
-                  [sawCancellation](std::exception_ptr exPtr) mutable
-                  {
-                    try
-                    {
-                      if (exPtr)
-                      {
-                        std::rethrow_exception(exPtr);
-                      }
-                    }
-                    catch (OperationCancelled const&)
-                    {
-                      sawCancellation.set(true);
-                    }
-                  });
-
-    executor.checkQueued();
-    signal.emit(CancellationType::all);
-    executor.runUntilIdle();
-
-    REQUIRE(sawCancellation.waitUntil(true));
-    CHECK_FALSE(completed.load());
-
     runtime.requestStop();
     runtime.join();
   }
@@ -262,6 +251,44 @@ namespace ao::rt::test
     }
 
     CHECK(completed.load() == 1);
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("LifetimeScope - cancellation races safely with concurrent completion",
+            "[runtime][regression][lifetime][concurrency]")
+  {
+    constexpr std::size_t kIterations = 64;
+    auto executor = ManualExecutor{};
+    auto runtime = Runtime{executor, 4};
+    auto& sleeper = ControlledSleeper::install(runtime);
+
+    for (std::size_t iteration = 0; iteration < kIterations; ++iteration)
+    {
+      auto taskExited = AsyncTestState<bool>::create(false);
+      auto scope = LifetimeScope{};
+      runtime.spawnWithLifetime(&scope,
+                                [&runtime, taskExited](std::stop_token const stopToken)
+                                { return racingSleep(&runtime, taskExited, stopToken); });
+      REQUIRE(sleeper.waitForCallCount(iteration + 1));
+      auto const sleepId = sleeper.call(iteration).id;
+      auto start = std::barrier{2};
+      bool completionDispatched = false;
+
+      {
+        auto completionThread = std::jthread{[&]
+                                             {
+                                               start.arrive_and_wait();
+                                               completionDispatched = sleeper.forceFire(sleepId);
+                                             }};
+        start.arrive_and_wait();
+        scope.cancelAll();
+      }
+
+      REQUIRE(completionDispatched);
+      REQUIRE(taskExited.waitUntil(true));
+    }
+
     runtime.requestStop();
     runtime.join();
   }

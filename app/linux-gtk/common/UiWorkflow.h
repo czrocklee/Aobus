@@ -9,6 +9,7 @@
 #include <ao/async/Task.h>
 
 #include <exception>
+#include <stop_token>
 #include <utility>
 
 namespace ao::gtk
@@ -23,15 +24,16 @@ namespace ao::gtk
   async::Task<void> runUiWorkflow(async::Runtime* runtime,
                                   Owner* owner,
                                   Workflow workflow,
-                                  ExceptionHandler exceptionHandler)
+                                  ExceptionHandler exceptionHandler,
+                                  std::stop_token const stopToken)
   {
-    co_await runtime->resumeOnCallbackExecutor();
+    co_await runtime->resumeOnCallbackExecutor(stopToken);
 
     auto exceptionPtr = std::exception_ptr{};
 
     try
     {
-      co_await workflow(owner);
+      co_await workflow(owner, stopToken);
     }
     catch (std::exception const& e)
     {
@@ -49,7 +51,7 @@ namespace ao::gtk
       co_return;
     }
 
-    co_await runtime->resumeOnCallbackExecutor();
+    co_await runtime->resumeOnCallbackExecutor(stopToken);
     exceptionHandler(owner, exceptionPtr);
   }
 
@@ -61,6 +63,13 @@ namespace ao::gtk
                        ExceptionHandler exceptionHandler)
   {
     runtime.spawnWithLifetime(
-      &scope, runUiWorkflow(&runtime, &owner, std::move(workflow), std::move(exceptionHandler)));
+      &scope,
+      [runtimeHandle = &runtime,
+       ownerHandle = &owner,
+       workflow = std::move(workflow),
+       exceptionHandler = std::move(exceptionHandler)](std::stop_token const stopToken) mutable
+      {
+        return runUiWorkflow(runtimeHandle, ownerHandle, std::move(workflow), std::move(exceptionHandler), stopToken);
+      });
   }
 } // namespace ao::gtk

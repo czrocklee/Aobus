@@ -17,8 +17,6 @@
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/ThreadName.h>
 
-#include <boost/asio/this_coro.hpp>
-
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -63,29 +61,6 @@ namespace ao::rt
 
       return std::min(1.0, static_cast<double>(progress.processedCount) / static_cast<double>(progress.totalCount));
     }
-
-    struct [[nodiscard]] CancellationSlotGuard final
-    {
-      async::CancellationSlot slot;
-
-      explicit CancellationSlotGuard(async::CancellationSlot slotValue)
-        : slot{slotValue}
-      {
-      }
-
-      ~CancellationSlotGuard()
-      {
-        if (slot.has_handler())
-        {
-          slot.clear();
-        }
-      }
-
-      CancellationSlotGuard(CancellationSlotGuard const&) = delete;
-      CancellationSlotGuard& operator=(CancellationSlotGuard const&) = delete;
-      CancellationSlotGuard(CancellationSlotGuard&&) = delete;
-      CancellationSlotGuard& operator=(CancellationSlotGuard&&) = delete;
-    };
   } // namespace
 
   struct LibraryTaskService::Impl final
@@ -105,9 +80,10 @@ namespace ao::rt
 
   LibraryTaskService::~LibraryTaskService() = default;
 
-  async::Task<Result<>> LibraryTaskService::importLibraryAsync(std::filesystem::path path)
+  async::Task<Result<>> LibraryTaskService::importLibraryAsync(std::filesystem::path path,
+                                                               std::stop_token const stopToken)
   {
-    co_await _implPtr->asyncRuntime.resumeOnWorker();
+    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
     setCurrentThreadName("LibraryImport");
     auto result = Result<>{};
 
@@ -121,13 +97,15 @@ namespace ao::rt
       }
     }
 
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
     co_return result;
   }
 
-  async::Task<Result<>> LibraryTaskService::exportLibraryAsync(std::filesystem::path path, rt::ExportMode mode)
+  async::Task<Result<>> LibraryTaskService::exportLibraryAsync(std::filesystem::path path,
+                                                               rt::ExportMode mode,
+                                                               std::stop_token const stopToken)
   {
-    co_await _implPtr->asyncRuntime.resumeOnWorker();
+    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
     setCurrentThreadName("LibraryExport");
     auto result = Result<>{};
 
@@ -138,13 +116,13 @@ namespace ao::rt
       result = exporter.exportToYaml(path, mode);
     }
 
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
     co_return result;
   }
 
-  async::Task<Result<ScanPlan>> LibraryTaskService::buildScanPlanAsync()
+  async::Task<Result<ScanPlan>> LibraryTaskService::buildScanPlanAsync(std::stop_token const stopToken)
   {
-    co_await _implPtr->asyncRuntime.resumeOnWorker();
+    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
     setCurrentThreadName("LibraryScan");
 
     auto planResult = Result<ScanPlan>{};
@@ -169,7 +147,7 @@ namespace ao::rt
         });
     }
 
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
 
     if (!planResult)
     {
@@ -188,9 +166,11 @@ namespace ao::rt
     co_return std::move(planResult);
   }
 
-  async::Task<Result<ScanApplyResult>> LibraryTaskService::applyScanPlanAsync(ScanPlan plan, ScanApplyOptions options)
+  async::Task<Result<ScanApplyResult>> LibraryTaskService::applyScanPlanAsync(ScanPlan plan,
+                                                                              ScanApplyOptions options,
+                                                                              std::stop_token const stopToken)
   {
-    co_await _implPtr->asyncRuntime.resumeOnWorker();
+    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
     setCurrentThreadName("ApplyScanPlan");
 
     auto applyResult = Result<ScanApplyResult>{};
@@ -198,15 +178,6 @@ namespace ao::rt
     auto exceptionPtr = std::exception_ptr{};
 
     {
-      auto stopSource = std::stop_source{};
-      auto const cancellationState = co_await boost::asio::this_coro::cancellation_state;
-      auto slotGuard = CancellationSlotGuard{cancellationState.slot()};
-
-      if (slotGuard.slot.is_connected())
-      {
-        slotGuard.slot.assign([&stopSource](async::CancellationType) { stopSource.request_stop(); });
-      }
-
       auto mutationLock = std::scoped_lock{_implPtr->mutationMutex};
 
       auto scanService = LibraryScan{_implPtr->library};
@@ -244,7 +215,7 @@ namespace ao::rt
               APP_LOG_ERROR("Failed to {} {}: {}", failure.stage, failure.uri, failure.message);
             }
           },
-          stopSource.get_token());
+          stopToken);
       }
       catch (...)
       {
@@ -253,7 +224,7 @@ namespace ao::rt
       }
     }
 
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
 
     if (exceptionPtr)
     {
@@ -283,24 +254,16 @@ namespace ao::rt
     co_return applyResult;
   }
 
-  async::Task<Result<AudioIdentityIndexResult>> LibraryTaskService::backfillAudioIdentityAsync()
+  async::Task<Result<AudioIdentityIndexResult>> LibraryTaskService::backfillAudioIdentityAsync(
+    std::stop_token const stopToken)
   {
-    co_await _implPtr->asyncRuntime.resumeOnWorker();
+    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
     setCurrentThreadName("AudioBackfill");
 
     auto backfillResult = Result<AudioIdentityIndexResult>{};
     auto exceptionPtr = std::exception_ptr{};
 
     {
-      auto stopSource = std::stop_source{};
-      auto const cancellationState = co_await boost::asio::this_coro::cancellation_state;
-      auto slotGuard = CancellationSlotGuard{cancellationState.slot()};
-
-      if (slotGuard.slot.is_connected())
-      {
-        slotGuard.slot.assign([&stopSource](async::CancellationType) { stopSource.request_stop(); });
-      }
-
       // No mutation lock here: fingerprinting runs unlocked and the indexer
       // acquires the lock itself, only around each batch write-back, so scans
       // and imports are not blocked while files are being hashed.
@@ -340,7 +303,7 @@ namespace ao::rt
               APP_LOG_ERROR("Failed to {} {}: {}", failure.stage, failure.uri, failure.message);
             }
           },
-          stopSource.get_token());
+          stopToken);
       }
       catch (...)
       {
@@ -349,7 +312,7 @@ namespace ao::rt
       }
     }
 
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
 
     if (exceptionPtr)
     {

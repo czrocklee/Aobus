@@ -20,6 +20,7 @@
 
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/spsc_queue.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <atomic>
 #include <cassert>
@@ -290,21 +291,10 @@ namespace ao::audio
       {
         if (_eventThread.joinable())
         {
+          gsl_Expects(!isCurrentThread());
           _eventThread.request_stop();
           _eventSignal.release();
-
-          if (isCurrentThread())
-          {
-            // The worker's callbacks keep Engine::Impl alive until run()
-            // returns. Detaching here avoids joining the current thread; the
-            // stop checks below prevent another callback from observing an
-            // owner that reentrantly destroyed Engine/Player.
-            _eventThread.detach();
-          }
-          else
-          {
-            _eventThread.join();
-          }
+          _eventThread.join();
         }
 
         {
@@ -520,6 +510,7 @@ namespace ao::audio
     std::uint64_t nextSourceGeneration = 1;
     std::uint64_t nextPlaybackGeneration = 2;
     std::uint64_t startContextRevision = 1;
+    std::atomic_size_t outstandingPreparedStartCount{0};
     std::unordered_map<std::uint64_t, std::weak_ptr<StagedPlaybackState>> stagedPlaybacks;
     std::optional<PlaybackItem> optCurrentItem;
     Status status;
@@ -545,44 +536,49 @@ namespace ao::audio
       syncBackendIdentity();
     }
 
-    void startEventWorker(std::shared_ptr<Impl> const& selfPtr)
+    void startEventWorker()
     {
       eventQueue.start(
-        [selfPtr] -> std::optional<Notifications>
+        [this] -> std::optional<Notifications>
         {
-          auto const lock = std::scoped_lock{selfPtr->controlMutex};
+          auto const lock = std::scoped_lock{controlMutex};
 
-          if (selfPtr->lifecycleState != LifecycleState::Running)
+          if (lifecycleState != LifecycleState::Running)
           {
             return std::nullopt;
           }
 
           auto signal = RtSignal{};
 
-          if (!selfPtr->eventQueue.tryPopRtSignal(signal))
+          if (!eventQueue.tryPopRtSignal(signal))
           {
             return std::nullopt;
           }
 
-          return selfPtr->processRtSignal(signal);
+          return processRtSignal(signal);
         },
-        [selfPtr](PlaybackEvent& event)
+        [this](PlaybackEvent& event)
         {
-          auto const lock = std::scoped_lock{selfPtr->controlMutex};
+          auto const lock = std::scoped_lock{controlMutex};
 
-          if (selfPtr->lifecycleState != LifecycleState::Running)
+          if (lifecycleState != LifecycleState::Running)
           {
             return Notifications{};
           }
 
-          return selfPtr->processPlaybackEvent(event);
+          return processPlaybackEvent(event);
         });
     }
 
-    ~Impl() { shutdown(); }
+    ~Impl()
+    {
+      shutdown();
+      gsl_Expects(outstandingPreparedStartCount.load(std::memory_order_acquire) == 0);
+    }
 
     void shutdown() noexcept
     {
+      gsl_Expects(!eventQueue.isCurrentThread());
       terminateOnException(
         [this]
         {
@@ -598,13 +594,6 @@ namespace ao::audio
 
             if (lifecycleState == LifecycleState::ShuttingDown)
             {
-              // An external shutdown joins this worker. It must be allowed to
-              // return from its callback before that join can complete.
-              if (eventQueue.isCurrentThread())
-              {
-                return;
-              }
-
               shutdownCv.wait(lock, [this] { return lifecycleState == LifecycleState::Shutdown; });
               lock.unlock();
               eventQueue.waitForExit();
@@ -1606,6 +1595,7 @@ namespace ao::audio
     {
       assert(stagedStatePtr != nullptr);
       stagedPlaybacks.insert_or_assign(stagedStatePtr->sourceGeneration, stagedStatePtr);
+      outstandingPreparedStartCount.fetch_add(1, std::memory_order_acq_rel);
     }
 
     void unregisterStagedPlaybackUnlocked(std::shared_ptr<StagedPlaybackState> const& stagedStatePtr)
@@ -1632,7 +1622,14 @@ namespace ao::audio
     void unregisterStagedPlayback(std::shared_ptr<StagedPlaybackState> const& stagedStatePtr)
     {
       auto const lock = std::scoped_lock{controlMutex};
+      releaseStagedPlaybackRegistrationUnlocked(stagedStatePtr);
+    }
+
+    void releaseStagedPlaybackRegistrationUnlocked(std::shared_ptr<StagedPlaybackState> const& stagedStatePtr)
+    {
       unregisterStagedPlaybackUnlocked(stagedStatePtr);
+      gsl_Expects(outstandingPreparedStartCount.load(std::memory_order_acquire) != 0);
+      outstandingPreparedStartCount.fetch_sub(1, std::memory_order_acq_rel);
     }
 
     void publishCurrentTrackState(TrackNode const& session)
@@ -1701,13 +1698,13 @@ namespace ao::audio
 
     ~Impl()
     {
-      if (stagedRegistrationActive && ownerPtr)
+      if (stagedRegistrationActive && owner != nullptr)
       {
-        ownerPtr->unregisterStagedPlayback(stagedStatePtr);
+        owner->unregisterStagedPlayback(stagedStatePtr);
       }
     }
 
-    std::shared_ptr<Engine::Impl> ownerPtr;
+    Engine::Impl* owner = nullptr;
     std::unique_ptr<Engine::Impl::TrackNode> nodePtr;
     std::shared_ptr<Engine::Impl::StagedPlaybackState> stagedStatePtr;
     std::chrono::milliseconds initialOffset{0};
@@ -2343,14 +2340,16 @@ namespace ao::audio
   // ── Engine ──────────────────────────────────────────────────────
 
   Engine::Engine(std::unique_ptr<Backend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory)
-    : _implPtr{std::make_shared<Impl>(std::move(backendPtr), device, std::move(decoderFactory))}
+    : _implPtr{std::make_unique<Impl>(std::move(backendPtr), device, std::move(decoderFactory))}
   {
     _implPtr->syncBackendStatus();
-    _implPtr->startEventWorker(_implPtr);
+    _implPtr->startEventWorker();
   }
 
   Engine::~Engine()
   {
+    gsl_Expects(_implPtr != nullptr);
+    gsl_Expects(_implPtr->outstandingPreparedStartCount.load(std::memory_order_acquire) == 0);
     shutdown();
   }
 
@@ -2471,7 +2470,7 @@ namespace ao::audio
       .playbackGeneration = candidateGeneration,
       .optError = {},
     });
-    preparedImplPtr->ownerPtr = _implPtr;
+    preparedImplPtr->owner = _implPtr.get();
     preparedImplPtr->nodePtr = std::make_unique<Impl::TrackNode>(std::move(*openedTrack));
     preparedImplPtr->stagedStatePtr = stagedStatePtr;
     preparedImplPtr->initialOffset = initialOffset;
@@ -2497,7 +2496,7 @@ namespace ao::audio
 
       auto* const preparedImpl = stagedStart._implPtr.get();
 
-      if (preparedImpl == nullptr || preparedImpl->ownerPtr.get() != _implPtr.get() || !preparedImpl->nodePtr)
+      if (preparedImpl == nullptr || preparedImpl->owner != _implPtr.get() || !preparedImpl->nodePtr)
       {
         return makeError(Error::Code::InvalidState, "Prepared playback belongs to a different engine");
       }
@@ -2518,7 +2517,7 @@ namespace ao::audio
       auto const itemId = preparedImpl->nodePtr->item.id;
       auto const candidateGeneration = preparedImpl->candidateGeneration;
       auto const initialOffset = preparedImpl->initialOffset;
-      _implPtr->unregisterStagedPlaybackUnlocked(preparedImpl->stagedStatePtr);
+      _implPtr->releaseStagedPlaybackRegistrationUnlocked(preparedImpl->stagedStatePtr);
       preparedImpl->stagedRegistrationActive = false;
       _implPtr->acceptPlaybackGeneration(candidateGeneration);
       _implPtr->commitPreparedPlaybackUnlocked(std::move(preparedImpl->nodePtr), initialOffset, candidateGeneration);

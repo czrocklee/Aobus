@@ -29,10 +29,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <future>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -149,13 +147,15 @@ namespace ao::rt::test
     auto const corePtr = std::unique_ptr<CoreRuntime>{std::move(appPtr)};
   }
 
-  TEST_CASE("AppRuntime - teardown quiesces playback callbacks before sequence destruction",
-            "[runtime][regression][app-runtime][lifecycle]")
+  TEST_CASE("AppRuntime - teardown is deferred until playback callbacks quiesce",
+            "[runtime][regression][app-runtime][concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
     auto audioStatePtr = std::make_shared<AppRuntimeAudioState>();
+    auto executorPtr = std::make_unique<QueuedExecutor>();
+    auto* const executor = executorPtr.get();
     auto appPtr = std::make_unique<AppRuntime>(AppRuntimeDependencies{
-      .executorPtr = std::make_unique<MockExecutor>(),
+      .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
@@ -166,6 +166,7 @@ namespace ao::rt::test
     appPtr->addAudioProvider(std::make_unique<AppRuntimeProvider>(audioStatePtr));
     REQUIRE(audioStatePtr->onDevicesChanged);
     audioStatePtr->onDevicesChanged(makeReadyAudioStatus().devices);
+    executor->drain();
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const firstTrackId = library::test::addTrack(
@@ -184,15 +185,13 @@ namespace ao::rt::test
     REQUIRE(appPtr->playbackSequence().playFromView(viewId, firstTrackId));
     REQUIRE(audioStatePtr->renderTarget != nullptr);
 
-    auto callbackEntered = AsyncTestState<bool>::create(false);
-    auto callbackCompleted = AsyncTestState<bool>::create(false);
-    auto callbackRelease = AsyncBarrier{};
+    bool callbackEntered = false;
+    bool callbackCompleted = false;
     auto const sequenceSubscription = appPtr->playbackSequence().onChanged(
       [&](PlaybackSequenceState const& state)
       {
-        callbackEntered.set(state.currentTrackId == secondTrackId);
-        callbackRelease.wait();
-        callbackCompleted.set(true);
+        callbackEntered = state.currentTrackId == secondTrackId;
+        callbackCompleted = true;
       });
 
     auto output = std::array<std::byte, 4096>{};
@@ -204,29 +203,11 @@ namespace ao::rt::test
     }
 
     REQUIRE(crossedSpliceBoundary);
-    auto const callbackWasEntered = callbackEntered.waitUntil(true);
+    REQUIRE(executor->drainUntil([&] { return callbackEntered; }));
+    CHECK(callbackCompleted);
+    REQUIRE(appPtr);
 
-    if (!callbackWasEntered)
-    {
-      callbackRelease.release();
-    }
-
-    REQUIRE(callbackWasEntered);
-
-    auto teardownFuture = std::async(std::launch::async, [&appPtr] { appPtr.reset(); });
-    auto const shutdownWasStarted = audioStatePtr->providerShutdownStarted.waitUntil(true);
-
-    if (!shutdownWasStarted)
-    {
-      callbackRelease.release();
-    }
-
-    REQUIRE(shutdownWasStarted);
-    CHECK(teardownFuture.wait_for(std::chrono::milliseconds{0}) == std::future_status::timeout);
-
-    callbackRelease.release();
-    REQUIRE(callbackCompleted.waitUntil(true));
-    REQUIRE(teardownFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
-    CHECK(callbackCompleted.load());
+    appPtr.reset();
+    CHECK_FALSE(appPtr);
   }
 } // namespace ao::rt::test

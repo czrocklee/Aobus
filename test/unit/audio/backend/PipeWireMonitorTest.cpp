@@ -65,13 +65,13 @@ namespace ao::audio::backend::test
     graphSub.reset();
   }
 
-  TEST_CASE("PipeWireMonitor - graph callback may destroy the monitor off the native loop",
-            "[audio][regression][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitor - graph callback defers monitor teardown off the native loop",
+            "[audio][regression][pipewire][concurrency]")
   {
     auto monitorPtr = std::make_unique<PipeWireMonitor>();
     auto callbackStarted = std::binary_semaphore{0};
-    auto allowDestroy = std::binary_semaphore{0};
-    auto monitorDestroyed = std::binary_semaphore{0};
+    auto allowReturn = std::binary_semaphore{0};
+    auto callbackReturned = std::binary_semaphore{0};
     auto callbackThreadId = std::thread::id{};
     auto const subscribeThreadId = std::this_thread::get_id();
 
@@ -80,19 +80,19 @@ namespace ao::audio::backend::test
                                                {
                                                  callbackThreadId = std::this_thread::get_id();
                                                  callbackStarted.release();
-                                                 allowDestroy.acquire();
-                                                 monitorPtr.reset();
-                                                 monitorDestroyed.release();
+                                                 allowReturn.acquire();
+                                                 callbackReturned.release();
                                                });
 
     REQUIRE(callbackStarted.try_acquire_for(std::chrono::seconds{5}));
-    allowDestroy.release();
-    REQUIRE(monitorDestroyed.try_acquire_for(std::chrono::seconds{5}));
-    CHECK_FALSE(monitorPtr);
+    allowReturn.release();
+    REQUIRE(callbackReturned.try_acquire_for(std::chrono::seconds{5}));
     CHECK(callbackThreadId != subscribeThreadId);
 
-    // The monitor is already gone; the handle must use weak state and remain safe.
+    // Owner teardown is deliberately deferred until publication has unwound.
     graphSub.reset();
+    monitorPtr.reset();
+    CHECK_FALSE(monitorPtr);
   }
 
   TEST_CASE("PipeWireMonitor - cancellation suppresses a callback copied by refresh",

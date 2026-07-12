@@ -96,6 +96,20 @@ Third-party libraries may still throw at their own boundaries. Catch those
 exceptions at the narrow wrapper boundary and translate them to `Result` unless
 the exception represents a true invariant failure in our code.
 
+## Contracts
+
+Use `gsl_Expects`, `gsl_Ensures`, and `gsl_Assert` for cheap preconditions and
+invariants whose violation cannot be recovered safely. Contract checking stays
+enabled in every build configuration: Debug uses assertion diagnostics and
+optimized builds terminate. Never rely on a contract check as synchronization;
+workers and callback producers must still be stopped and joined or drained
+before their borrowed owner is destroyed.
+
+Lifetime contracts should make ownership explicit. Facades uniquely own their
+implementation, callbacks must defer synchronous owner destruction, and
+borrowed subscription or prepared-operation handles must be returned before the
+owner unless their API deliberately carries a narrow shared lifetime state.
+
 ## Persisted Binary Layouts
 
 The LMDB-backed binary layouts (`TrackView`, `ListView`, `FileManifestView`
@@ -247,14 +261,17 @@ Lifetime-bound coroutine cancellation is neither a recoverable failure nor an
 internal fault. `ao::async::OperationCancelled` is the async layer's control-flow
 exception for cancelled work; it exists to unwind the coroutine frame so code
 after a cancellation checkpoint cannot touch captured objects whose lifetime is
-no longer guaranteed. The async layer also recognizes Boost.Asio's bare
-`operation_aborted` exception as cancellation, but application code must not
-branch on Boost error codes directly. Business code must let cancellation
-propagate. A broad `catch (std::exception)` or `catch (...)` inside a coroutine
-must first call `ao::async::rethrowIfOperationCancelled(...)`; only the
-`LifetimeScope` completion boundary may silently consume cancellation. Cleanup
-for a cancelled UI operation belongs to the cancellation initiator or owner
-teardown path, not to the cancelled coroutine.
+no longer guaranteed. Cancellable task factories receive a `std::stop_token`,
+which must be passed through runtime executor hops, timers, and stop-aware worker
+operations. The async layer translates both a requested stop and Boost.Asio's
+bare `operation_aborted` exception into `OperationCancelled`; application code
+must not branch on Boost error codes directly. Business code must let
+cancellation propagate. A broad `catch (std::exception)` or `catch (...)`
+inside a coroutine must first call
+`ao::async::rethrowIfOperationCancelled(...)`; only the `LifetimeScope`
+completion boundary may silently consume cancellation. Cleanup for a cancelled
+UI operation belongs to the cancellation initiator or owner teardown path, not
+to the cancelled coroutine.
 
 ### Playback Failure Events
 

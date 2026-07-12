@@ -16,6 +16,7 @@
 #include <condition_variable>
 #include <exception>
 #include <mutex>
+#include <stop_token>
 #include <thread>
 
 namespace ao::gtk::test
@@ -49,18 +50,22 @@ namespace ao::gtk::test
 
     // Worker-side bodies live as free coroutines (taking the runtime by pointer) so the spawn-site lambdas stay
     // plain, non-coroutine adapters, matching the production workflow pattern and avoiding capturing-coroutine UB.
-    async::Task<void> failingWorkflowBody(async::Runtime* runtime, WorkflowOwner* owner)
+    async::Task<void> failingWorkflowBody(async::Runtime* runtime,
+                                          WorkflowOwner* owner,
+                                          std::stop_token const stopToken)
     {
       owner->bodyEntered = true;
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorker(stopToken);
       // Throw from worker code: the boundary must marshal back before presenting it.
       throwException<Exception>("boom");
     }
 
-    async::Task<void> succeedingWorkflowBody(async::Runtime* runtime, WorkflowOwner* owner)
+    async::Task<void> succeedingWorkflowBody(async::Runtime* runtime,
+                                             WorkflowOwner* owner,
+                                             std::stop_token const stopToken)
     {
       owner->bodyEntered = true;
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorker(stopToken);
       owner->markBodyFinished();
     }
 
@@ -79,7 +84,7 @@ namespace ao::gtk::test
   } // namespace
 
   TEST_CASE("UiWorkflow - internal failure invokes the handler on the callback executor",
-            "[gtk][unit][common][uiworkflow]")
+            "[gtk][unit][uiworkflow][concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = async::Runtime{executor};
@@ -90,7 +95,8 @@ namespace ao::gtk::test
       runtime,
       scope,
       owner,
-      [&runtime](WorkflowOwner* self) { return failingWorkflowBody(&runtime, self); },
+      [&runtime](WorkflowOwner* self, std::stop_token const stopToken)
+      { return failingWorkflowBody(&runtime, self, stopToken); },
       [](WorkflowOwner* self, std::exception_ptr exceptionPtr)
       {
         self->handlerThread = std::this_thread::get_id();
@@ -120,7 +126,8 @@ namespace ao::gtk::test
     runtime.join();
   }
 
-  TEST_CASE("UiWorkflow - successful body does not invoke the exception handler", "[gtk][unit][common][uiworkflow]")
+  TEST_CASE("UiWorkflow - successful body does not invoke the exception handler",
+            "[gtk][unit][uiworkflow][concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = async::Runtime{executor};
@@ -131,7 +138,8 @@ namespace ao::gtk::test
       runtime,
       scope,
       owner,
-      [&runtime](WorkflowOwner* self) { return succeedingWorkflowBody(&runtime, self); },
+      [&runtime](WorkflowOwner* self, std::stop_token const stopToken)
+      { return succeedingWorkflowBody(&runtime, self, stopToken); },
       [](WorkflowOwner* self, std::exception_ptr /*exceptionPtr*/) { ++self->handlerCalls; });
 
     REQUIRE(executor.waitUntilQueued());

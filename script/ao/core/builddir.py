@@ -173,6 +173,7 @@ class PlatformProfile:
     apps: tuple[str, ...]
     default_suites: tuple[str, ...]
     all_suites: tuple[str, ...]
+    tsan_suites: tuple[str, ...]
     compiler: str
 
 
@@ -184,6 +185,7 @@ LINUX_PROFILE = PlatformProfile(
     apps=("cli", "tui", "gtk"),
     default_suites=("core", "gtk"),
     all_suites=("core", "tui", "cli", "gtk", "integration", "council", "tooling", "lint"),
+    tsan_suites=("core",),
     compiler="gcc",
 )
 
@@ -195,6 +197,7 @@ WINDOWS_PROFILE = PlatformProfile(
     apps=("cli", "tui"),
     default_suites=("core", "tui"),
     all_suites=("core", "tui", "cli", "integration", "tooling"),
+    tsan_suites=(),
     compiler="msvc",
 )
 

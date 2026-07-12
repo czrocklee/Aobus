@@ -13,6 +13,12 @@
 
 namespace ao::audio::backend
 {
+  /**
+   * PipeWire graph monitor with structured worker teardown. Subscription
+   * handles must be reset before destruction. Callbacks must not call stop() or
+   * synchronously destroy the monitor; owner teardown is deferred until after
+   * publication returns.
+   */
   class PipeWireMonitor final
   {
   public:
@@ -37,6 +43,6 @@ namespace ao::audio::backend
 
   private:
     struct Impl;
-    std::shared_ptr<Impl> _implPtr;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::audio::backend

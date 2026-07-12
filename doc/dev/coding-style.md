@@ -132,10 +132,14 @@ Detailed naming policy lives in `doc/dev/naming-conventions.md`.
     - 4.2.2. Minimize type exposure
       - If a type is used only in one `.cpp`, keep it in that file's anonymous namespace
       - If a type must appear in a header, prefer a nested type with the narrowest possible visibility, ideally `private`
-    - 4.2.3. Use the Pimpl idiom for complex implementation details
+  - 4.2.3. Use the Pimpl idiom for complex implementation details
       - Forward-declare an `Impl` struct in the header: `struct Impl;`
       - Define it as `struct ClassName::Impl final { ... };` in the `.cpp` file
       - Hold via `std::unique_ptr<Impl> _impl;`
+      - Do not use `shared_ptr<Impl>` to make callback-stack destruction safe or
+        to pin a facade around individual method calls. Forbid synchronous owner
+        destruction with a contract and share only a narrow control block when
+        callbacks or tokens have a genuinely independent lifetime.
   - 4.3. Const Correctness
     - 4.3.1. Use `const` wherever possible
       - locals: `auto const result = compute();`
@@ -148,6 +152,13 @@ Detailed naming policy lives in `doc/dev/naming-conventions.md`.
     - 4.4.2. Use `std::jthread` with `std::stop_token` for cooperative cancellation — do not roll manual stop flags
     - 4.4.3. Access shared state through `std::mutex` + `std::scoped_lock`; prefer `std::unique_lock` only when needed for conditional unlocking
     - 4.4.4. Use `std::atomic` for simple flags and counters shared between threads; avoid `volatile`
+    - 4.4.5. Do not invoke user or external callbacks while holding a state mutex; copy publication state, unlock, then call outward
+    - 4.4.6. Document callback executor affinity and marshal every off-executor call before accessing confined state
+    - 4.4.7. Treat cooperative cancellation as a stop request, not a join or lifetime guarantee; teardown must quiesce work before destroying its owners
+    - 4.4.8. Owner-bound workers capture a borrowed owner only when teardown
+      stops and joins them before releasing that owner. A callback must defer
+      synchronous owner destruction unless the API explicitly documents a
+      stronger reentrant lifetime model.
 - 5\. Error Handling
   - 5.1. Three-Layer Policy
     - 5.1.1. **`ao::Result<T>`** (alias for `std::expected<T, ao::Error>`) — Recoverable fallible operations

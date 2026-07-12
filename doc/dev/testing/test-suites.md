@@ -15,6 +15,8 @@ The `./ao test` command exposes individual suites and two suite groups:
 - `lint`: integration tests for the Aobus clang-tidy plugin.
 - `default`: the native fast-loop group. Linux runs core and GTK; Windows runs core and TUI.
 - `all`: every suite enabled by the native build profile.
+- `tsan`: suites with a clean ThreadSanitizer baseline.
+- `concurrency`: every native Catch2 suite, filtered to `[concurrency]` tests.
 
 `default` is intentionally the normal development loop. On Linux, the TUI, CLI,
 integration, council, tooling, and lint suites take longer, so they are included
@@ -35,6 +37,16 @@ and the native groups are defined by `script/ao/core/builddir.py` platform profi
 The registry defines the display name, runner kind, and optional CMake target.
 Both `ao test --all` and `ao check` resolve the same native `all` group, so the
 interactive test command and the full gate cannot drift apart.
+
+ThreadSanitizer is intentionally different. `ao test --tsan` and
+`ao check --tsan` resolve `default`/`all` to the native `tsan` group. Explicit
+suite selection, such as `ao test --gtk --tsan`, remains available for diagnosis
+but does not claim a clean platform baseline. See
+`concurrency-and-sanitizers.md` for the current GTK limitation.
+
+`--repeat N` repeats the selected tests and stops on the first failure. It is a
+stress aid; deterministic synchronization remains mandatory for regression
+tests.
 
 `--no-build` applies uniformly. Catch2 executables and the native lint artifact
 must already exist in the selected build tree; tooling tests never need a CMake

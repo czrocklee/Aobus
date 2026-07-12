@@ -25,6 +25,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <utility>
 #include <vector>
 
@@ -156,77 +157,78 @@ namespace ao::gtk
     // State the coroutine needs is passed by value into the frame; the loader
     // destruction cancels its decode scope, and the post-dispatch cancellation
     // check prevents this loader from being touched after destruction.
-    _runtime.spawnWithLifetime(
-      _scopePtr.get(),
-      [](ThumbnailLoader* self, async::Runtime* runtime, rt::Library const* reads, RequestKey requestKey)
-        -> async::Task<void>
+    _runtime.spawnWithLifetime(_scopePtr.get(),
+                               [self = this, requestKey = key](std::stop_token const stopToken)
+                               { return self->decode(requestKey, stopToken); });
+  }
+
+  async::Task<void> ThumbnailLoader::decode(RequestKey const requestKey, std::stop_token const stopToken)
+  {
+    auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+    auto exceptionPtr = std::exception_ptr{};
+
+    co_await _runtime.resumeOnWorker(stopToken);
+
+    try
+    {
+      auto optData = std::optional<std::vector<std::byte>>{};
+
       {
-        auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
-        auto exceptionPtr = std::exception_ptr{};
+        auto scope = _reads.reader();
+        optData = scope.loadResource(requestKey.id);
+      }
 
-        co_await runtime->resumeOnWorker();
-
+      if (optData)
+      {
         try
         {
-          auto optData = std::optional<std::vector<std::byte>>{};
-
-          {
-            auto scope = reads->reader();
-            optData = scope.loadResource(requestKey.id);
-          }
-
-          if (optData)
-          {
-            try
-            {
-              auto const memStreamPtr = Gio::MemoryInputStream::create();
-              memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
-              decodedPtr = Gdk::Pixbuf::create_from_stream_at_scale(
-                memStreamPtr, requestKey.physicalPixelSize, requestKey.physicalPixelSize, true);
-            }
-            catch (Glib::Error const&)
-            {
-              decodedPtr.reset();
-            }
-          }
+          auto const memStreamPtr = Gio::MemoryInputStream::create();
+          memStreamPtr->add_data(optData->data(), std::ssize(*optData), nullptr);
+          decodedPtr = Gdk::Pixbuf::create_from_stream_at_scale(
+            memStreamPtr, requestKey.physicalPixelSize, requestKey.physicalPixelSize, true);
         }
-        catch (...)
+        catch (Glib::Error const&)
         {
-          async::rethrowIfOperationCancelled();
-          exceptionPtr = std::current_exception();
+          decodedPtr.reset();
         }
+      }
+    }
+    catch (...)
+    {
+      async::rethrowIfOperationCancelled();
+      exceptionPtr = std::current_exception();
+    }
 
-        // Throws OperationCancelled (unwinding the frame) if the loader's scope was
-        // cancelled, so `self` is safe to touch past this point.
-        co_await runtime->resumeOnCallbackExecutor();
+    // Throws OperationCancelled (unwinding the frame) if the loader's scope was
+    // cancelled, so this loader is safe to touch past this point.
+    co_await _runtime.resumeOnCallbackExecutor(stopToken);
 
-        // Salvage: a successful decode populates the shared cache even if every
-        // requester has since moved on.
-        if (decodedPtr && !self->get(requestKey.id, requestKey.physicalPixelSize))
-        {
-          self->_cache.put(ImageCacheKey::thumbnail(requestKey.id, requestKey.physicalPixelSize), decodedPtr);
-        }
+    // Salvage: a successful decode populates the shared cache even if every
+    // requester has since moved on.
+    if (decodedPtr && !get(requestKey.id, requestKey.physicalPixelSize))
+    {
+      _cache.put(ImageCacheKey::thumbnail(requestKey.id, requestKey.physicalPixelSize), decodedPtr);
+    }
 
-        auto waiters = std::vector<RequestWaiter>{};
+    auto waiters = std::vector<RequestWaiter>{};
 
-        if (auto const it = self->_inFlight.find(requestKey); it != self->_inFlight.end())
-        {
-          waiters = std::move(it->second);
-          self->_inFlight.erase(it);
-        }
+    if (auto const it = _inFlight.find(requestKey); it != _inFlight.end())
+    {
+      waiters = std::move(it->second);
+      _inFlight.erase(it);
+    }
 
-        for (auto const& waiter : waiters)
-        {
-          if (waiter.statePtr->active.load(std::memory_order_relaxed))
-          {
-            waiter.onReady(decodedPtr);
-          }
-        }
+    for (auto const& waiter : waiters)
+    {
+      if (waiter.statePtr->active.load(std::memory_order_relaxed))
+      {
+        waiter.onReady(decodedPtr);
+      }
+    }
 
-        if (exceptionPtr)
-        {
-          std::rethrow_exception(exceptionPtr);
-        }
-      }(this, &_runtime, &_reads, key));
+    if (exceptionPtr)
+    {
+      std::rethrow_exception(exceptionPtr);
+    }
   }
 } // namespace ao::gtk

@@ -71,8 +71,19 @@ Recommended component/domain tags:
 - `[plan-evaluator]`
 - `[import-export]`
 
+Cross-cutting behavior tags:
+
+- `[concurrency]` for cross-thread access, synchronization, executor affinity,
+  cancellation races, or teardown while work is in flight.
+- `[stress]` only for deliberate repetition or schedule exploration. Pair it
+  with `[concurrency]`; stress is an execution strategy, not a behavior domain.
+
 Tag ordering: `[layer][type][subsystem]`. The layer tag is always first, the type
-tag second, and optional subsystem tags follow. Keep the total at 3–4 tags.
+tag second, and optional subsystem tags follow. Keep the total at 3–4 tags. The
+only five-tag form is `[layer][type][component][concurrency][stress]`, which
+preserves the component while identifying a repeated race window. Put
+`[concurrency]` last, or immediately before `[stress]`, when present. See
+`concurrency-and-sanitizers.md` for the required contract matrix.
 
 Use singular form for all tags: `[component]` not `[components]`, `[shortcut]`
 not `[shortcuts]`.

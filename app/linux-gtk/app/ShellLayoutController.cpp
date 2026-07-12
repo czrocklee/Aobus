@@ -54,6 +54,7 @@
 #include <exception>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -419,50 +420,60 @@ namespace ao::gtk
     auto& runtime = _context.runtime.async();
     runtime.spawnWithLifetime(
       &_tasks,
-      [](ShellLayoutController* self,
-         std::shared_ptr<ShellLayoutStore> storePtr,
-         std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-         std::shared_ptr<AppConfigStore> configStorePtr) -> async::Task<void>
+      [self = this,
+       storePtr = _layoutStorePtr,
+       componentStateStorePtr = _componentStateStorePtr,
+       configStorePtr = _configStorePtr](std::stop_token const stopToken) mutable
       {
-        APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
+        return self->loadLayoutWorkflow(
+          std::move(storePtr), std::move(componentStateStorePtr), std::move(configStorePtr), stopToken);
+      });
+  }
 
-        auto* const asyncRuntime = &self->_context.runtime.async();
-        auto optResult = std::optional<LayoutLoadResult>{};
-        auto exceptionPtr = std::exception_ptr{};
+  async::Task<void> ShellLayoutController::loadLayoutWorkflow(
+    std::shared_ptr<ShellLayoutStore> layoutStorePtr,
+    std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
+    std::shared_ptr<AppConfigStore> configStorePtr,
+    std::stop_token const stopToken)
+  {
+    APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
 
-        try
-        {
-          co_await asyncRuntime->resumeOnWorker();
-          APP_LOG_DEBUG("ShellLayoutController: loading layout config on background worker thread");
+    auto& asyncRuntime = _context.runtime.async();
+    auto optResult = std::optional<LayoutLoadResult>{};
+    auto exceptionPtr = std::exception_ptr{};
 
-          if (storePtr && configStorePtr)
-          {
-            optResult = loadLayoutOnWorker(*storePtr, componentStateStorePtr.get(), *configStorePtr);
-          }
-        }
-        catch (std::exception const& e)
-        {
-          async::rethrowIfOperationCancelled(e);
-          exceptionPtr = std::current_exception();
-        }
+    try
+    {
+      co_await asyncRuntime.resumeOnWorker(stopToken);
+      APP_LOG_DEBUG("ShellLayoutController: loading layout config on background worker thread");
 
-        co_await asyncRuntime->resumeOnCallbackExecutor();
+      if (layoutStorePtr && configStorePtr)
+      {
+        optResult = loadLayoutOnWorker(*layoutStorePtr, componentStateStorePtr.get(), *configStorePtr);
+      }
+    }
+    catch (std::exception const& e)
+    {
+      async::rethrowIfOperationCancelled(e);
+      exceptionPtr = std::current_exception();
+    }
 
-        if (exceptionPtr)
-        {
-          self->logLayoutLoadFailure(exceptionPtr);
-          co_return;
-        }
+    co_await asyncRuntime.resumeOnCallbackExecutor(stopToken);
 
-        if (!optResult)
-        {
-          co_return;
-        }
+    if (exceptionPtr)
+    {
+      logLayoutLoadFailure(exceptionPtr);
+      co_return;
+    }
 
-        APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
-        self->applyLoadedLayoutWithFailureLogging(
-          std::move(optResult->presetId), std::move(optResult->document), std::move(optResult->componentState));
-      }(this, _layoutStorePtr, _componentStateStorePtr, _configStorePtr));
+    if (!optResult)
+    {
+      co_return;
+    }
+
+    APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
+    applyLoadedLayoutWithFailureLogging(
+      std::move(optResult->presetId), std::move(optResult->document), std::move(optResult->componentState));
   }
 
   void ShellLayoutController::logLayoutLoadFailure(std::exception_ptr exceptionPtr)

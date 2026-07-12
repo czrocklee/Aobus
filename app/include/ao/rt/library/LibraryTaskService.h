@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <stop_token>
 
 namespace ao::library
 {
@@ -36,11 +37,15 @@ namespace ao::rt
     // Returning a Result, including an error Result, resumes the caller on the callback executor.
     // Unexpected exceptions may still propagate from the executor where they occur; UI callers should
     // present them through a boundary that returns to the callback executor first.
-    async::Task<Result<>> importLibraryAsync(std::filesystem::path path);
-    async::Task<Result<>> exportLibraryAsync(std::filesystem::path path, ExportMode mode);
-    async::Task<Result<ScanPlan>> buildScanPlanAsync();
-    async::Task<Result<ScanApplyResult>> applyScanPlanAsync(ScanPlan plan, ScanApplyOptions options = {});
-    async::Task<Result<AudioIdentityIndexResult>> backfillAudioIdentityAsync();
+    async::Task<Result<>> importLibraryAsync(std::filesystem::path path, std::stop_token stopToken = {});
+    async::Task<Result<>> exportLibraryAsync(std::filesystem::path path,
+                                             ExportMode mode,
+                                             std::stop_token stopToken = {});
+    async::Task<Result<ScanPlan>> buildScanPlanAsync(std::stop_token stopToken = {});
+    async::Task<Result<ScanApplyResult>> applyScanPlanAsync(ScanPlan plan,
+                                                            ScanApplyOptions options = {},
+                                                            std::stop_token stopToken = {});
+    async::Task<Result<AudioIdentityIndexResult>> backfillAudioIdentityAsync(std::stop_token stopToken = {});
 
     LibraryTaskService(LibraryTaskService const&) = delete;
     LibraryTaskService& operator=(LibraryTaskService const&) = delete;

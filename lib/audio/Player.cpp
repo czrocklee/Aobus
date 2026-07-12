@@ -15,6 +15,8 @@
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -26,7 +28,6 @@
 #include <optional>
 #include <string>
 #include <tuple>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -44,7 +45,7 @@ namespace ao::audio
     }
   } // namespace
 
-  struct Player::Impl final : std::enable_shared_from_this<Player::Impl>
+  struct Player::Impl final
   {
     struct ProviderRecord
     {
@@ -63,16 +64,75 @@ namespace ao::audio
     // Teardown gate shared by executor-marshalled callbacks. Foreign threads
     // may enqueue work after teardown begins, but queued work checks this gate
     // before touching Impl and becomes a no-op once shutdown() has run.
-    struct CallbackGate final
+    struct CallbackGate final : std::enable_shared_from_this<CallbackGate>
     {
+      CallbackGate(async::Executor& executor, Impl& owner)
+        : executor{executor}, owner{&owner}
+      {
+      }
+
       std::atomic<bool> shuttingDown{false};
+      async::Executor& executor;
+      Impl* owner;
 
       bool canAcceptCallbacks() const noexcept { return !shuttingDown.load(std::memory_order_acquire); }
-      bool shutdown() noexcept { return !shuttingDown.exchange(true, std::memory_order_acq_rel); }
+
+      template<typename Task>
+      void dispatch(Task task)
+      {
+        if (!canAcceptCallbacks())
+        {
+          return;
+        }
+
+        auto selfPtr = shared_from_this();
+        executor.dispatch(
+          [selfPtr = std::move(selfPtr), task = std::move(task)] mutable
+          {
+            if (!selfPtr->canAcceptCallbacks())
+            {
+              return;
+            }
+
+            gsl_Expects(selfPtr->owner != nullptr);
+            task(*selfPtr->owner);
+          });
+      }
+
+      bool shutdown() noexcept
+      {
+        gsl_Expects(executor.isCurrent());
+
+        if (shuttingDown.exchange(true, std::memory_order_acq_rel))
+        {
+          return false;
+        }
+
+        owner = nullptr;
+        return true;
+      }
+    };
+
+    struct [[nodiscard]] OutwardPublicationScope final
+    {
+      explicit OutwardPublicationScope(Impl& owner)
+        : owner{owner}
+      {
+        owner.outwardPublicationDepth.fetch_add(1, std::memory_order_acq_rel);
+      }
+
+      ~OutwardPublicationScope() { owner.outwardPublicationDepth.fetch_sub(1, std::memory_order_acq_rel); }
+
+      OutwardPublicationScope(OutwardPublicationScope const&) = delete;
+      OutwardPublicationScope& operator=(OutwardPublicationScope const&) = delete;
+      OutwardPublicationScope(OutwardPublicationScope&&) = delete;
+      OutwardPublicationScope& operator=(OutwardPublicationScope&&) = delete;
+
+      Impl& owner;
     };
 
     explicit Impl(async::Executor& exec)
-      : executor{exec}
+      : executor{exec}, gatePtr{std::make_shared<CallbackGate>(exec, *this)}
     {
     }
 
@@ -81,10 +141,17 @@ namespace ao::audio
     Impl& operator=(Impl const&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    ~Impl() { shutdown(); }
+    ~Impl()
+    {
+      shutdown();
+      gsl_Expects(outwardPublicationDepth.load(std::memory_order_acquire) == 0);
+    }
 
     void shutdown() noexcept
     {
+      gsl_Expects(executor.isCurrent());
+      gsl_Expects(outwardPublicationDepth.load(std::memory_order_acquire) == 0);
+
       if (!gatePtr->shutdown())
       {
         return;
@@ -96,8 +163,8 @@ namespace ao::audio
       //      in-flight callbacks can race with engine/backend destruction.
       //   3. Stop the engine, which closes/destroys the active backend while
       //      provider-owned state (e.g. AlsaGraphRegistry) is still alive.
-      //   4. Retain the stopped Engine wrapper and providers until Impl itself
-      //      is reclaimed, so a reentrant callback can finish unwinding safely.
+      //   4. Release the unique Engine and providers only after their producers
+      //      have stopped and all subscription callbacks have quiesced.
       graphSubscription.reset();
 
       for (auto& recordPtr : providers)
@@ -117,22 +184,18 @@ namespace ao::audio
       {
         enginePtr->shutdown();
       }
-
-      // Retain the stopped Engine wrapper until Impl is reclaimed. A provider
-      // callback that passed the atomic gate immediately before shutdown may
-      // still be unwinding through deferInternal(); Engine::defer safely drops
-      // work after its event queue has stopped.
     }
 
     async::Executor& executor;
     std::atomic<std::uint64_t> playbackGeneration{1};
     std::atomic<std::uint64_t> audioCallbackGenerationFloor{1};
+    std::atomic_size_t outwardPublicationDepth{0};
     std::vector<std::unique_ptr<ProviderRecord>> providers;
     std::optional<PendingOutputDeviceSelection> optPendingOutputDeviceSelection;
     BackendProvider* activeBackendProvider = nullptr;
     Subscription graphSubscription;
     std::unique_ptr<Engine> enginePtr;
-    std::shared_ptr<CallbackGate> gatePtr = std::make_shared<CallbackGate>();
+    std::shared_ptr<CallbackGate> gatePtr;
 
     mutable std::mutex backendsMutex;
     mutable std::vector<BackendProvider::Status> cachedBackends;
@@ -143,6 +206,7 @@ namespace ao::audio
     flow::Graph cachedSystemGraph;
     flow::Graph mergedGraph;
     QualityResult qualityResult;
+    mutable std::mutex callbacksMutex;
     std::function<void(Engine::TrackEnded const&)> onTrackEnded;
     std::function<void(Engine::TrackAdvanced const&)> onTrackAdvanced;
     std::function<void(Engine::PlaybackFailure const&)> onPlaybackFailure;
@@ -150,12 +214,12 @@ namespace ao::audio
     std::function<void(std::vector<BackendProvider::Status> const&)> onOutputDevicesChanged;
     std::function<void(QualityResult const&, bool)> onQualityChanged;
 
-    void connectEngineCallbacks();
-    void connectTrackEndedCallback();
-    void connectTrackAdvancedCallback();
-    void connectPlaybackFailureCallback();
-    void connectStateChangedCallback();
-    void connectRouteChangedCallback();
+    void connectEngineCallbacks() const;
+    void connectTrackEndedCallback() const;
+    void connectTrackAdvancedCallback() const;
+    void connectPlaybackFailureCallback() const;
+    void connectStateChangedCallback() const;
+    void connectRouteChangedCallback() const;
     void handleOutputDevicesChanged(BackendProvider* provider, std::vector<Device> const& devices);
     void handleSystemGraphChanged(flow::Graph const& graph, std::uint64_t generation);
     void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);
@@ -163,6 +227,40 @@ namespace ao::audio
     Player::Status snapshot() const;
     bool isReady() const;
     void updateMergedGraph();
+
+    void ensureOnExecutor() const noexcept { gsl_Expects(executor.isCurrent()); }
+
+    template<typename Slot>
+    Slot copyOutwardCallback(Slot Impl::* slot) const
+    {
+      auto const lock = std::scoped_lock{callbacksMutex};
+      return this->*slot;
+    }
+
+    template<typename Slot, typename... Args>
+    void invokeOutward(Slot Impl::* slot, Args&&... args)
+    {
+      auto callback = copyOutwardCallback(slot);
+
+      if (!callback)
+      {
+        return;
+      }
+
+      auto publication = OutwardPublicationScope{*this};
+      std::invoke(callback, std::forward<Args>(args)...);
+    }
+
+    template<typename Slot>
+    void setOutwardCallback(Slot Impl::* slot, Slot callback)
+    {
+      {
+        auto const lock = std::scoped_lock{callbacksMutex};
+        std::swap(this->*slot, callback);
+      }
+      // Destroy the replaced callback after unlocking; captured objects may
+      // have teardown behavior that must not re-enter while the mutex is held.
+    }
 
     bool acceptsAudioCallback(std::uint64_t generation) const noexcept
     {
@@ -193,71 +291,35 @@ namespace ao::audio
       return generation;
     }
 
-    template<typename Task>
-    void dispatchInternal(Task task)
-    {
-      auto weakSelfPtr = weak_from_this();
-      executor.dispatch(
-        [weakSelfPtr = std::move(weakSelfPtr), task = std::move(task)] mutable
-        {
-          auto selfPtr = weakSelfPtr.lock();
-
-          if (!selfPtr || !selfPtr->gatePtr->canAcceptCallbacks())
-          {
-            return;
-          }
-
-          task(*selfPtr);
-        });
-    }
-
     // Provider callbacks can be synchronous backend-control callbacks. Hand
     // graph work through Engine's event queue first so even an inline executor
     // cannot run Player/user callbacks while Engine holds its control lock.
     template<typename Task>
     void deferInternal(Task task)
     {
-      auto weakSelfPtr = weak_from_this();
-      enginePtr->defer(
-        [weakSelfPtr = std::move(weakSelfPtr), task = std::move(task)] mutable
-        {
-          if (auto selfPtr = weakSelfPtr.lock(); selfPtr && selfPtr->gatePtr->canAcceptCallbacks())
-          {
-            selfPtr->dispatchInternal(std::move(task));
-          }
-        });
+      auto callbackGatePtr = gatePtr;
+      enginePtr->defer([callbackGatePtr = std::move(callbackGatePtr), task = std::move(task)] mutable
+                       { callbackGatePtr->dispatch(std::move(task)); });
     }
 
     // Marshal one of the outward on* callback slots onto the executor thread.
     // The task copies the user callback while the gate is open, then invokes the
-    // copy without holding any teardown wait state. This keeps queued tasks safe
-    // after teardown and avoids self-deadlock if a user callback destroys Player.
+    // copy without holding any teardown wait state. Queued tasks become no-ops
+    // after teardown; synchronous owner destruction is rejected by contract.
     template<typename Slot, typename... Args>
     void dispatchOutward(Slot Impl::* slot, Args... args)
     {
-      auto weakSelfPtr = weak_from_this();
-      executor.dispatch(
-        [weakSelfPtr = std::move(weakSelfPtr), slot, args = std::make_tuple(std::move(args)...)] mutable
+      gatePtr->dispatch(
+        [slot, args = std::make_tuple(std::move(args)...)](Impl& self) mutable
         {
-          auto selfPtr = weakSelfPtr.lock();
-
-          if (!selfPtr || !selfPtr->gatePtr->canAcceptCallbacks())
-          {
-            return;
-          }
-
-          auto callback = std::decay_t<decltype(selfPtr.get()->*slot)>{};
-          callback = selfPtr.get()->*slot;
-
-          if (callback)
-          {
-            std::apply(callback, std::move(args));
-          }
+          std::apply([&self, slot](auto&&... unpacked)
+                     { self.invokeOutward(slot, std::forward<decltype(unpacked)>(unpacked)...); },
+                     std::move(args));
         });
     }
   };
 
-  void Player::Impl::connectEngineCallbacks()
+  void Player::Impl::connectEngineCallbacks() const
   {
     connectTrackEndedCallback();
     connectTrackAdvancedCallback();
@@ -266,20 +328,13 @@ namespace ao::audio
     connectRouteChangedCallback();
   }
 
-  void Player::Impl::connectTrackEndedCallback()
+  void Player::Impl::connectTrackEndedCallback() const
   {
-    auto const weakImplPtr = weak_from_this();
+    auto const callbackGatePtr = gatePtr;
     enginePtr->setOnTrackEnded(
-      [weakImplPtr](Engine::TrackEnded const& event)
+      [callbackGatePtr](Engine::TrackEnded const& event)
       {
-        auto implPtr = weakImplPtr.lock();
-
-        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
-        {
-          return;
-        }
-
-        implPtr->dispatchInternal(
+        callbackGatePtr->dispatch(
           [event](Impl& self)
           {
             if (!self.acceptsAudioCallback(event.generation))
@@ -287,28 +342,18 @@ namespace ao::audio
               return;
             }
 
-            if (auto callback = self.onTrackEnded; callback)
-            {
-              callback(event);
-            }
+            self.invokeOutward(&Impl::onTrackEnded, event);
           });
       });
   }
 
-  void Player::Impl::connectTrackAdvancedCallback()
+  void Player::Impl::connectTrackAdvancedCallback() const
   {
-    auto const weakImplPtr = weak_from_this();
+    auto const callbackGatePtr = gatePtr;
     enginePtr->setOnTrackAdvanced(
-      [weakImplPtr](Engine::TrackAdvanced const& event)
+      [callbackGatePtr](Engine::TrackAdvanced const& event)
       {
-        auto implPtr = weakImplPtr.lock();
-
-        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
-        {
-          return;
-        }
-
-        implPtr->dispatchInternal(
+        callbackGatePtr->dispatch(
           [event = Engine::TrackAdvanced{event}](Impl& self)
           {
             if (!self.acceptsAudioCallback(event.generation))
@@ -318,66 +363,44 @@ namespace ao::audio
 
             std::ignore = self.resetPlaybackGraph();
 
-            if (auto callback = self.onTrackAdvanced; callback)
-            {
-              callback(event);
-            }
+            self.invokeOutward(&Impl::onTrackAdvanced, event);
           });
       });
   }
 
-  void Player::Impl::connectPlaybackFailureCallback()
+  void Player::Impl::connectPlaybackFailureCallback() const
   {
-    auto const weakImplPtr = weak_from_this();
+    auto const callbackGatePtr = gatePtr;
     enginePtr->setOnPlaybackFailure(
-      [weakImplPtr](Engine::PlaybackFailure const& failure)
+      [callbackGatePtr](Engine::PlaybackFailure const& failure)
       {
-        if (auto implPtr = weakImplPtr.lock(); implPtr && implPtr->gatePtr->canAcceptCallbacks())
-        {
-          implPtr->dispatchInternal(
-            [failure = Engine::PlaybackFailure{failure}](Impl& self)
+        callbackGatePtr->dispatch(
+          [failure = Engine::PlaybackFailure{failure}](Impl& self)
+          {
+            if (!self.acceptsAudioCallback(failure.generation))
             {
-              if (!self.acceptsAudioCallback(failure.generation))
-              {
-                return;
-              }
+              return;
+            }
 
-              if (auto callback = self.onPlaybackFailure; callback)
-              {
-                callback(failure);
-              }
-            });
-        }
+            self.invokeOutward(&Impl::onPlaybackFailure, failure);
+          });
       });
   }
 
-  void Player::Impl::connectStateChangedCallback()
+  void Player::Impl::connectStateChangedCallback() const
   {
-    auto const weakImplPtr = weak_from_this();
+    auto const callbackGatePtr = gatePtr;
     enginePtr->setOnStateChanged(
-      [weakImplPtr]
-      {
-        if (auto implPtr = weakImplPtr.lock(); implPtr && implPtr->gatePtr->canAcceptCallbacks())
-        {
-          implPtr->dispatchOutward(&Impl::onStateChanged);
-        }
-      });
+      [callbackGatePtr] { callbackGatePtr->dispatch([](Impl& self) { self.invokeOutward(&Impl::onStateChanged); }); });
   }
 
-  void Player::Impl::connectRouteChangedCallback()
+  void Player::Impl::connectRouteChangedCallback() const
   {
-    auto const weakImplPtr = weak_from_this();
+    auto const callbackGatePtr = gatePtr;
     enginePtr->setOnRouteChanged(
-      [weakImplPtr](Engine::RouteStatus const& status)
+      [callbackGatePtr](Engine::RouteStatus const& status)
       {
-        auto implPtr = weakImplPtr.lock();
-
-        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
-        {
-          return;
-        }
-
-        implPtr->dispatchInternal(
+        callbackGatePtr->dispatch(
           [status = Engine::RouteStatus{status}](Impl& self)
           {
             if (!self.acceptsAudioCallback(status.generation))
@@ -574,16 +597,17 @@ namespace ao::audio
     {
       if (!graphSubscription)
       {
-        auto const weakSelfPtr = weak_from_this();
+        auto const callbackGatePtr = gatePtr;
         auto subscription = activeBackendProvider->subscribeGraph(
           status.optAnchor->id,
-          [weakSelfPtr, generation](flow::Graph const& graph)
+          [callbackGatePtr, generation](flow::Graph const& graph)
           {
-            if (auto selfPtr = weakSelfPtr.lock(); selfPtr && selfPtr->gatePtr->canAcceptCallbacks())
-            {
-              selfPtr->deferInternal([graph = flow::Graph{graph}, generation](Impl& impl)
-                                     { impl.handleSystemGraphChanged(graph, generation); });
-            }
+            callbackGatePtr->dispatch(
+              [graph = flow::Graph{graph}, generation](Impl& self) mutable
+              {
+                self.deferInternal([graph = std::move(graph), generation](Impl& owner)
+                                   { owner.handleSystemGraphChanged(graph, generation); });
+              });
           });
 
         if (!gatePtr->canAcceptCallbacks())
@@ -685,8 +709,9 @@ namespace ao::audio
   }
 
   Player::Player(async::Executor& executor, DecoderFactoryFn decoderFactory)
-    : _implPtr{std::make_shared<Impl>(executor)}
+    : _implPtr{std::make_unique<Impl>(executor)}
   {
+    _implPtr->ensureOnExecutor();
     // Start with a NullBackend until a provider provides something real
     _implPtr->enginePtr = std::make_unique<Engine>(std::make_unique<NullBackend>(),
                                                    Device{.id = DeviceId{"null"},
@@ -701,85 +726,85 @@ namespace ao::audio
 
   void Player::setOnTrackEnded(std::function<void(Engine::TrackEnded const&)> callback)
   {
-    auto const implPtr = _implPtr;
-    implPtr->onTrackEnded = std::move(callback);
+    _implPtr->ensureOnExecutor();
+    _implPtr->setOutwardCallback(&Impl::onTrackEnded, std::move(callback));
   }
 
   void Player::setOnTrackAdvanced(std::function<void(Engine::TrackAdvanced const&)> callback)
   {
-    auto const implPtr = _implPtr;
-    implPtr->onTrackAdvanced = std::move(callback);
+    _implPtr->ensureOnExecutor();
+    _implPtr->setOutwardCallback(&Impl::onTrackAdvanced, std::move(callback));
   }
 
   void Player::setOnPlaybackFailure(std::function<void(Engine::PlaybackFailure const&)> callback)
   {
-    auto const implPtr = _implPtr;
-    implPtr->onPlaybackFailure = std::move(callback);
+    _implPtr->ensureOnExecutor();
+    _implPtr->setOutwardCallback(&Impl::onPlaybackFailure, std::move(callback));
   }
 
   void Player::setOnStateChanged(std::function<void()> callback)
   {
-    auto const implPtr = _implPtr;
-    implPtr->onStateChanged = std::move(callback);
+    _implPtr->ensureOnExecutor();
+    _implPtr->setOutwardCallback(&Impl::onStateChanged, std::move(callback));
   }
 
   void Player::setOnOutputDevicesChanged(std::function<void(std::vector<BackendProvider::Status> const&)> callback)
   {
-    auto const implPtr = _implPtr;
-    implPtr->onOutputDevicesChanged = std::move(callback);
+    _implPtr->ensureOnExecutor();
+    _implPtr->setOutwardCallback(&Impl::onOutputDevicesChanged, std::move(callback));
   }
 
   void Player::setOnQualityChanged(std::function<void(QualityResult const& quality, bool ready)> callback)
   {
-    auto const implPtr = _implPtr;
-    implPtr->onQualityChanged = std::move(callback);
+    _implPtr->ensureOnExecutor();
+    _implPtr->setOutwardCallback(&Impl::onQualityChanged, std::move(callback));
   }
 
   Player::~Player()
   {
+    gsl_Expects(_implPtr != nullptr);
+    _implPtr->ensureOnExecutor();
+    gsl_Expects(_implPtr->outwardPublicationDepth.load(std::memory_order_acquire) == 0);
     shutdown();
   }
 
   void Player::shutdown() noexcept
   {
-    if (auto const implPtr = _implPtr; implPtr)
-    {
-      implPtr->shutdown();
-    }
+    _implPtr->ensureOnExecutor();
+    _implPtr->shutdown();
   }
 
   void Player::addProvider(std::unique_ptr<BackendProvider> providerPtr)
   {
+    _implPtr->ensureOnExecutor();
+
     if (!providerPtr)
     {
       return;
     }
 
-    auto const implPtr = _implPtr;
     auto recordPtr = std::make_unique<Impl::ProviderRecord>();
     recordPtr->providerPtr = std::move(providerPtr);
 
     auto* const provider = recordPtr->providerPtr.get();
     auto* const recordRaw = recordPtr.get();
-    implPtr->providers.push_back(std::move(recordPtr));
+    _implPtr->providers.push_back(std::move(recordPtr));
 
-    auto const weakImplPtr = std::weak_ptr<Impl>{implPtr};
+    auto const callbackGatePtr = _implPtr->gatePtr;
     auto subscription = provider->subscribeDevices(
-      [weakImplPtr, provider](std::vector<Device> const& devices)
+      [callbackGatePtr, provider](std::vector<Device> const& devices)
       {
-        auto implPtr = weakImplPtr.lock();
-
-        if (!implPtr || !implPtr->gatePtr->canAcceptCallbacks())
+        if (!callbackGatePtr->canAcceptCallbacks())
         {
           return false;
         }
 
-        implPtr->dispatchInternal([provider, devices = std::vector<Device>{devices}](Impl& self)
+        callbackGatePtr->dispatch([provider, devices = std::vector<Device>{devices}](Impl& self)
                                   { self.handleOutputDevicesChanged(provider, devices); });
         return true;
       });
 
-    if (implPtr->gatePtr->canAcceptCallbacks())
+    if (_implPtr->gatePtr->canAcceptCallbacks())
     {
       recordRaw->subscription = std::move(subscription);
     }
@@ -805,9 +830,9 @@ namespace ao::audio
   Result<Engine::PreparedPlaybackStart> Player::stagePlayback(Engine::PlaybackItem const& item,
                                                               std::chrono::milliseconds const initialOffset)
   {
-    auto const implPtr = _implPtr;
+    _implPtr->ensureOnExecutor();
 
-    if (!implPtr->isReady())
+    if (!_implPtr->isReady())
     {
       // Not an internal fault: device discovery simply has not finished. Hand
       // the condition back so the caller can decide whether to report or retry.
@@ -815,79 +840,79 @@ namespace ao::audio
         Error::Code::InvalidState, "Playback ignored: audio backend is not ready (pending device discovery)");
     }
 
-    return implPtr->enginePtr->stagePlayback(item, initialOffset);
+    return _implPtr->enginePtr->stagePlayback(item, initialOffset);
   }
 
   Result<Engine::PlaybackStartReceipt> Player::commitPlayback(Engine::PreparedPlaybackStart&& preparedStart)
   {
-    auto const implPtr = _implPtr;
+    _implPtr->ensureOnExecutor();
 
-    if (!implPtr->isReady())
+    if (!_implPtr->isReady())
     {
       return makeError(
         Error::Code::InvalidState, "Playback ignored: audio backend is not ready (pending device discovery)");
     }
 
-    auto receipt = implPtr->enginePtr->commitPlayback(std::move(preparedStart));
+    auto receipt = _implPtr->enginePtr->commitPlayback(std::move(preparedStart));
 
     if (!receipt)
     {
       return std::unexpected{receipt.error()};
     }
 
-    implPtr->acceptAudioBarrier(receipt->cancellationBarrier);
-    auto const routeGeneration = implPtr->resetPlaybackGraph();
+    _implPtr->acceptAudioBarrier(receipt->cancellationBarrier);
+    auto const routeGeneration = _implPtr->resetPlaybackGraph();
 
     // A backend may synchronously publish route state during Engine commit.
     // Refresh after Player accepts the receipt so an inline executor cannot
     // strand that already-applied route snapshot behind the old graph epoch.
-    implPtr->handleRouteChanged(implPtr->enginePtr->routeStatus(), routeGeneration);
+    _implPtr->handleRouteChanged(_implPtr->enginePtr->routeStatus(), routeGeneration);
     return receipt;
   }
 
   Result<Engine::PreparedNextResult> Player::prepareNext(Engine::PlaybackItem const& item)
   {
-    auto const implPtr = _implPtr;
+    _implPtr->ensureOnExecutor();
 
-    if (!implPtr->isReady())
+    if (!_implPtr->isReady())
     {
       return makeError(
         Error::Code::InvalidState, "Prepared playback ignored: audio backend is not ready (pending device discovery)");
     }
 
-    return implPtr->enginePtr->setNext(item);
+    return _implPtr->enginePtr->setNext(item);
   }
 
   std::optional<Engine::PlaybackItemId> Player::clearPreparedNext()
   {
-    auto const implPtr = _implPtr;
-    return implPtr->enginePtr->clearNext();
+    _implPtr->ensureOnExecutor();
+    return _implPtr->enginePtr->clearNext();
   }
 
   Result<> Player::setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
   {
-    auto const implPtr = _implPtr;
-    return implPtr->setOutputDevice(backend, deviceId, profile);
+    _implPtr->ensureOnExecutor();
+    return _implPtr->setOutputDevice(backend, deviceId, profile);
   }
 
   void Player::pause()
   {
-    auto const implPtr = _implPtr;
-    implPtr->enginePtr->pause();
+    _implPtr->ensureOnExecutor();
+    _implPtr->enginePtr->pause();
   }
 
   void Player::resume()
   {
-    auto const implPtr = _implPtr;
-    implPtr->enginePtr->resume();
+    _implPtr->ensureOnExecutor();
+    _implPtr->enginePtr->resume();
   }
 
   Engine::PreparedCancellationBarrier Player::stopWithBarrier()
   {
-    auto const implPtr = _implPtr;
-    auto const barrier = implPtr->enginePtr->stopWithBarrier();
-    implPtr->acceptAudioBarrier(barrier);
-    std::ignore = implPtr->resetPlaybackGraph();
+    _implPtr->ensureOnExecutor();
+    auto const barrier = _implPtr->enginePtr->stopWithBarrier();
+    _implPtr->acceptAudioBarrier(barrier);
+    std::ignore = _implPtr->resetPlaybackGraph();
     return barrier;
   }
 
@@ -898,62 +923,62 @@ namespace ao::audio
 
   void Player::seek(std::chrono::milliseconds offset)
   {
-    auto const implPtr = _implPtr;
-    implPtr->enginePtr->seek(offset);
+    _implPtr->ensureOnExecutor();
+    _implPtr->enginePtr->seek(offset);
   }
 
   Result<> Player::setVolume(float vol)
   {
-    auto const implPtr = _implPtr;
-    return implPtr->enginePtr->setVolume(vol);
+    _implPtr->ensureOnExecutor();
+    return _implPtr->enginePtr->setVolume(vol);
   }
 
   Result<> Player::setMuted(bool muted)
   {
-    auto const implPtr = _implPtr;
-    return implPtr->enginePtr->setMuted(muted);
+    _implPtr->ensureOnExecutor();
+    return _implPtr->enginePtr->setMuted(muted);
   }
 
   Result<> Player::toggleMute()
   {
-    auto const implPtr = _implPtr;
-    auto const engineStatus = implPtr->enginePtr->status();
-    return implPtr->enginePtr->setMuted(!engineStatus.muted);
+    _implPtr->ensureOnExecutor();
+    auto const engineStatus = _implPtr->enginePtr->status();
+    return _implPtr->enginePtr->setMuted(!engineStatus.muted);
   }
 
   Player::Status Player::status() const
   {
-    auto const implPtr = _implPtr;
-    return implPtr->snapshot();
+    _implPtr->ensureOnExecutor();
+    return _implPtr->snapshot();
   }
 
   Transport Player::transport() const
   {
-    auto const implPtr = _implPtr;
-    return implPtr->enginePtr->transport();
+    _implPtr->ensureOnExecutor();
+    return _implPtr->enginePtr->transport();
   }
 
   bool Player::isReady() const
   {
-    auto const implPtr = _implPtr;
-    return implPtr->isReady();
+    _implPtr->ensureOnExecutor();
+    return _implPtr->isReady();
   }
 
   void Player::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)
   {
-    auto const implPtr = _implPtr;
-    implPtr->handleRouteChanged(status, generation);
+    _implPtr->ensureOnExecutor();
+    _implPtr->handleRouteChanged(status, generation);
   }
 
   std::uint64_t Player::playbackGeneration() const noexcept
   {
-    auto const implPtr = _implPtr;
-    return implPtr->playbackGeneration.load(std::memory_order_acquire);
+    _implPtr->ensureOnExecutor();
+    return _implPtr->playbackGeneration.load(std::memory_order_acquire);
   }
 
   std::uint64_t Player::audioPlaybackGeneration() const noexcept
   {
-    auto const implPtr = _implPtr;
-    return implPtr->enginePtr->playbackGeneration();
+    _implPtr->ensureOnExecutor();
+    return _implPtr->enginePtr->playbackGeneration();
   }
 } // namespace ao::audio

@@ -4,15 +4,14 @@
 #pragma once
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/cancellation_signal.hpp>
-#include <boost/asio/cancellation_type.hpp>
+
+#include <functional>
+#include <stop_token>
 
 namespace ao::async
 {
   template<typename T = void>
   using Task = boost::asio::awaitable<T>;
 
-  using CancellationSignal = boost::asio::cancellation_signal;
-  using CancellationSlot = boost::asio::cancellation_slot;
-  using CancellationType = boost::asio::cancellation_type;
+  using CancellableTask = std::move_only_function<Task<void>(std::stop_token)>;
 } // namespace ao::async

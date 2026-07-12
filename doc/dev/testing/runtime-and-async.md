@@ -23,14 +23,30 @@ If a timeout helper is necessary, keep it centralized and make failure diagnosti
 Example shape:
 
 ```cpp
-runtime.spawnWithLifetime(&scope, task());
+runtime.spawnWithLifetime(
+  &scope,
+  [&runtime](std::stop_token stopToken)
+  { return task(&runtime, stopToken); });
 REQUIRE(executor.waitUntilQueued());
 
-scope.cancel();
+scope.cancelAll();
 executor.runOne();
 
 CHECK_FALSE(completed.get());
 ```
+
+`spawnCancellable()` and `spawnWithLifetime()` share the same cooperative
+cancellation mechanism but expose different ownership:
+
+- `spawnCancellable()` returns a `TaskHandle`; destroying or resetting that
+  handle requests stop.
+- `spawnWithLifetime()` registers the task with a `LifetimeScope`; destroying
+  or cancelling the scope requests stop for every registered task.
+
+Both accept a task factory rather than an already-created coroutine. Pass its
+`std::stop_token` through executor hops, timers, and stop-aware worker
+operations. This lets cancellation be observed before the factory body starts
+and after every suspension point that can outlive the owner.
 
 A better common executor API should expose operations like:
 
@@ -92,3 +108,6 @@ For cancellation/lifetime tests, assert both sides:
 - The cancelled work does not complete.
 - No user-visible error is emitted unless cancellation is meant to surface.
 - Queued callbacks after scope destruction are ignored safely.
+
+For cross-thread and cancellation-race coverage, use
+`concurrency-and-sanitizers.md`.

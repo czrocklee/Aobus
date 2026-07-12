@@ -48,7 +48,7 @@ namespace ao::async::test
     CHECK(executor.wakeCount() == 0);
   }
 
-  TEST_CASE("QueuedExecutorBase - dispatch from another thread queues and wakes", "[runtime][unit][async]")
+  TEST_CASE("QueuedExecutorBase - dispatch from another thread queues and wakes", "[runtime][unit][async][concurrency]")
   {
     auto executor = ManualQueuedExecutor{};
     auto ran = std::atomic_bool{false};

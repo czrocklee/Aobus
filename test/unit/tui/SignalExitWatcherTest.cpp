@@ -13,7 +13,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("SignalExitWatcher - exit requests reach the registered callback", "[tui][unit][signal-exit]")
+  TEST_CASE("SignalExitWatcher - exit requests reach the registered callback", "[tui][unit][signal-exit][concurrency]")
   {
     auto mutex = std::mutex{};
     auto cv = std::condition_variable{};
@@ -35,7 +35,7 @@ namespace ao::tui::test
     REQUIRE(cv.wait_for(lock, std::chrono::seconds{2}, [&] { return exitCount == 2; }));
   }
 
-  TEST_CASE("SignalExitWatcher - callback can destroy its watcher", "[tui][regression][signal-exit][lifecycle]")
+  TEST_CASE("SignalExitWatcher - callback can destroy its watcher", "[tui][regression][signal-exit][concurrency]")
   {
     auto mutex = std::mutex{};
     auto cv = std::condition_variable{};
@@ -46,11 +46,10 @@ namespace ao::tui::test
       {
         watcherPtr.reset();
 
-        {
-          auto const lock = std::scoped_lock{mutex};
-          resetCompleted = true;
-        }
-
+        // The waiter destroys mutex/cv after observing resetCompleted. Keeping
+        // notify under the lock ensures this callback has stopped touching both.
+        auto const lock = std::scoped_lock{mutex};
+        resetCompleted = true;
         cv.notify_all();
       });
 

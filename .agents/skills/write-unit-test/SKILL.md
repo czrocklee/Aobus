@@ -34,6 +34,7 @@ Read only the development doc that matches the task. Do not load every reference
 - `doc/dev/testing/naming-and-assertions.md` — test names, tags, Arrange/Act/Assert style, and assertion quality.
 - `doc/dev/testing/fixtures-and-helpers.md` — when to introduce fixtures, helpers, FakeIt mocks, hand-written fakes, test data, and filesystem setup.
 - `doc/dev/testing/runtime-and-async.md` — deterministic executors, coroutine/lifetime tests, runtime service patterns, and subscription/callback checks.
+- `doc/dev/testing/concurrency-and-sanitizers.md` — concurrency tags, race scenario matrices, and sanitizer validation.
 - `doc/dev/testing/uimodel-and-gtk.md` — UI model policy tests, GTK adapter tests, widget harnesses, event emission, CSS, popovers, and geometry regression boundaries.
 - `doc/dev/testing/validation-and-review.md` — adding test files to CMake, regression-test style, validation commands, review checklist, and common smells.
 - `doc/dev/testing/coverage-workflow.md` — generating coverage reports, common Aobus coverage gaps, and the measure-analyze-test-verify loop.

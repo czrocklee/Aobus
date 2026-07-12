@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/async/Task.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <gdkmm/pixbuf.h>
@@ -14,6 +15,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <stop_token>
 #include <unordered_map>
 #include <vector>
 
@@ -116,6 +118,7 @@ namespace ao::gtk
     };
 
     void spawnDecode(RequestKey key);
+    async::Task<void> decode(RequestKey key, std::stop_token stopToken);
 
     rt::Library const& _reads;
     ImageCache& _cache;

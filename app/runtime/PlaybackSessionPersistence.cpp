@@ -35,6 +35,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <utility>
 #include <vector>
 
@@ -411,7 +412,9 @@ namespace ao::rt
     _scheduledSave = kind;
     auto const callbackGeneration = _scheduleGeneration;
     _scheduledTask = _asyncRuntime.spawnCancellable(
-      waitForScheduledSave(&_asyncRuntime, weak_from_this(), delay, callbackGeneration, kind));
+      [asyncRuntime = &_asyncRuntime, weakSelfPtr = weak_from_this(), delay, callbackGeneration, kind](
+        std::stop_token const stopToken)
+      { return waitForScheduledSave(asyncRuntime, weakSelfPtr, delay, callbackGeneration, kind, stopToken); });
   }
 
   async::Task<void> PlaybackSessionPersistence::waitForScheduledSave(
@@ -419,10 +422,11 @@ namespace ao::rt
     std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
     Delay const delay,
     std::uint64_t const scheduleGeneration,
-    ScheduledSave const kind)
+    ScheduledSave const kind,
+    std::stop_token const stopToken)
   {
-    co_await asyncRuntime->sleepFor(delay);
-    co_await asyncRuntime->resumeOnCallbackExecutor();
+    co_await asyncRuntime->sleepFor(delay, stopToken);
+    co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
 
     if (auto const selfPtr = weakSelfPtr.lock(); selfPtr)
     {
@@ -449,16 +453,19 @@ namespace ao::rt
 
   void PlaybackSessionPersistence::startPeriodicSave()
   {
-    _periodicTask = _asyncRuntime.spawnCancellable(runPeriodicSave(&_asyncRuntime, weak_from_this()));
+    _periodicTask = _asyncRuntime.spawnCancellable(
+      [asyncRuntime = &_asyncRuntime, weakSelfPtr = weak_from_this()](std::stop_token const stopToken)
+      { return runPeriodicSave(asyncRuntime, weakSelfPtr, stopToken); });
   }
 
   async::Task<void> PlaybackSessionPersistence::runPeriodicSave(async::Runtime* asyncRuntime,
-                                                                std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr)
+                                                                std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
+                                                                std::stop_token const stopToken)
   {
     while (true)
     {
-      co_await asyncRuntime->sleepFor(kPeriodicSaveInterval);
-      co_await asyncRuntime->resumeOnCallbackExecutor();
+      co_await asyncRuntime->sleepFor(kPeriodicSaveInterval, stopToken);
+      co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
 
       {
         auto const selfPtr = weakSelfPtr.lock();
@@ -474,7 +481,7 @@ namespace ao::rt
         }
       }
 
-      co_await asyncRuntime->resumeOnWorker();
+      co_await asyncRuntime->resumeOnWorker(stopToken);
     }
   }
 

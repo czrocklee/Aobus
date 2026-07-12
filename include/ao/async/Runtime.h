@@ -15,6 +15,7 @@
 #include <exception>
 #include <functional>
 #include <future>
+#include <stop_token>
 
 namespace ao::async
 {
@@ -43,13 +44,12 @@ namespace ao::async
 
     boost::asio::thread_pool& workerPool() noexcept;
 
-    Task<void> resumeOnCallbackExecutor();
-    Task<void> resumeOnWorker();
-    Task<void> sleepFor(std::chrono::milliseconds delay);
+    Task<void> resumeOnCallbackExecutor(std::stop_token stopToken = {});
+    Task<void> resumeOnWorker(std::stop_token stopToken = {});
+    Task<void> sleepFor(std::chrono::milliseconds delay, std::stop_token stopToken = {});
 
     void spawnLogged(Task<void> task);
-    void spawn(Task<void> task, CancellationSlot slot, std::function<void(std::exception_ptr)> callback);
-    TaskHandle spawnCancellable(Task<void> task);
+    TaskHandle spawnCancellable(CancellableTask task);
 
     template<typename T>
     std::future<T> spawn(Task<T> task)
@@ -57,13 +57,16 @@ namespace ao::async
       return boost::asio::co_spawn(workerPool(), std::move(task), boost::asio::use_future);
     }
 
-    void spawnWithLifetime(LifetimeScope* scope, Task<void> task);
+    void spawnWithLifetime(LifetimeScope* scope, CancellableTask task);
 
   private:
     friend class RuntimeTestAccess;
 
+    std::move_only_function<void()> startCancellable(CancellableTask task,
+                                                     std::function<void(std::exception_ptr)> completion);
+
     Executor& _callbackExecutor;
     boost::asio::thread_pool _workerPool;
-    std::function<Task<void>(std::chrono::milliseconds)> _sleepForOverride;
+    std::function<Task<void>(std::chrono::milliseconds, std::stop_token)> _sleepForOverride;
   };
 } // namespace ao::async

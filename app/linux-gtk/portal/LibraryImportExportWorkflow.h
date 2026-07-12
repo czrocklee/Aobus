@@ -14,6 +14,7 @@
 #include <exception>
 #include <filesystem>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 
@@ -54,14 +55,16 @@ namespace ao::gtk::portal
     void exportTo(std::filesystem::path path, rt::ExportMode mode);
 
   private:
-    async::Task<void> scanWorkflow(ScanRequestMode mode);
-    async::Task<void> backfillAudioIdentityWorkflow();
-    async::Task<void> importWorkflow(ImportExportCallbacks callbacks, std::filesystem::path importPath);
-    async::Task<void> exportWorkflow(std::filesystem::path exportPath, rt::ExportMode mode);
+    async::Task<void> scanWorkflow(ScanRequestMode mode, std::stop_token stopToken);
+    async::Task<void> backfillAudioIdentityWorkflow(std::stop_token stopToken);
+    async::Task<void> importWorkflow(ImportExportCallbacks callbacks,
+                                     std::filesystem::path importPath,
+                                     std::stop_token stopToken);
+    async::Task<void> exportWorkflow(std::filesystem::path exportPath, rt::ExportMode mode, std::stop_token stopToken);
 
     // Scan-library pipeline split into coroutine + sync helpers so that scanWorkflow() stays a flat orchestrator.
-    async::Task<std::optional<rt::ScanPlan>> buildScanPlanOrReportFailure();
-    async::Task<void> applyScanPlanWithProgress(rt::ScanPlan plan, ScanRequestMode mode);
+    async::Task<std::optional<rt::ScanPlan>> buildScanPlanOrReportFailure(std::stop_token stopToken);
+    async::Task<void> applyScanPlanWithProgress(rt::ScanPlan plan, ScanRequestMode mode, std::stop_token stopToken);
     void startAudioIdentityIndexing();
     // Returns true when the plan has no New/Changed/Missing items; in that case the appropriate
     // notification is posted and the caller should return.

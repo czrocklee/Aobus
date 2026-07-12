@@ -245,6 +245,8 @@ class CliParseTest(unittest.TestCase):
             Path("/tmp/aobus-test-build"),
             test_filter="",
             list_only=False,
+            repeat=1,
+            tsan=False,
         )
 
     def test_suite_group_dispatches_registered_runner_kinds_in_order(self):
@@ -313,6 +315,8 @@ class CliParseTest(unittest.TestCase):
             Path("/tmp/nonexistent-aobus-build"),
             test_filter="",
             list_only=False,
+            repeat=1,
+            tsan=False,
         )
 
     def test_test_list_describes_non_catch2_suite_without_running_it(self):
@@ -344,6 +348,30 @@ class CliParseTest(unittest.TestCase):
         run_suites.assert_called_once_with(
             test_command.SUITE_GROUPS["all"],
             result.build_dir,
+            tsan=False,
+            log=result.log,
+        )
+
+    def test_tsan_check_builds_and_runs_only_baselined_suites(self):
+        args = self.parse(["check", "--tsan"])
+        result = BuildResult(
+            build_dir=Path("/tmp/aobus-test-tsan-build"),
+            log=Path("/tmp/aobus-test-tsan-build/build.log"),
+            compiler="gcc",
+        )
+
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            with mock.patch.object(check_command.build, "do_build", return_value=result) as do_build:
+                with mock.patch.object(check_command.dependency_policy, "verified_report"):
+                    with mock.patch.object(check_command.test, "run_suites", return_value=0) as run_suites:
+                        with mock.patch.object(check_command.build, "print_summary"):
+                            self.assertEqual(check_command.run_command(args), 0)
+
+        do_build.assert_called_once_with(args, targets=["ao_core_test"])
+        run_suites.assert_called_once_with(
+            ("core",),
+            result.build_dir,
+            tsan=True,
             log=result.log,
         )
 
@@ -360,7 +388,14 @@ class CliParseTest(unittest.TestCase):
         run.assert_called_once_with(
             ["cmake", "--build", str(build_dir), "--parallel", "--target", "ao_core_test", "ao_tui_test"]
         )
-        run_suites.assert_called_once_with(("core", "tui"), build_dir, test_filter="", list_only=False)
+        run_suites.assert_called_once_with(
+            ("core", "tui"),
+            build_dir,
+            test_filter="",
+            list_only=False,
+            repeat=1,
+            tsan=False,
+        )
 
     def test_windows_check_runs_only_native_suites(self):
         args = self.parse(["check"])
@@ -383,7 +418,101 @@ class CliParseTest(unittest.TestCase):
         run_suites.assert_called_once_with(
             ("core", "tui", "cli", "integration", "tooling"),
             result.build_dir,
+            tsan=False,
             log=result.log,
+        )
+
+    def test_tsan_defaults_to_the_baselined_suite_group(self):
+        args = self.parse(["test", "--tsan", "-n", "-p", "/tmp/aobus-test-build"])
+
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
+                self.assertEqual(test_command.run_command(args), 0)
+
+        run_suites.assert_called_once_with(
+            ("core",),
+            Path("/tmp/aobus-test-build"),
+            test_filter="",
+            list_only=False,
+            repeat=1,
+            tsan=True,
+        )
+
+    def test_concurrency_group_runs_tagged_tests_across_native_catch2_suites(self):
+        args = self.parse(["test", "--concurrency", "--repeat", "3", "-n", "-p", "/tmp/aobus-test-build"])
+
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
+                self.assertEqual(test_command.run_command(args), 0)
+
+        run_suites.assert_called_once_with(
+            ("core", "tui", "cli", "gtk", "integration", "council"),
+            Path("/tmp/aobus-test-build"),
+            test_filter="[concurrency]",
+            list_only=False,
+            allow_no_tests=True,
+            repeat=3,
+            tsan=False,
+        )
+
+    def test_tsan_concurrency_group_intersects_with_baselined_suites(self):
+        args = self.parse(["test", "--concurrency", "--tsan", "-n", "-p", "/tmp/aobus-test-build"])
+
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
+                self.assertEqual(test_command.run_command(args), 0)
+
+        run_suites.assert_called_once_with(
+            ("core",),
+            Path("/tmp/aobus-test-build"),
+            test_filter="[concurrency]",
+            list_only=False,
+            allow_no_tests=True,
+            repeat=1,
+            tsan=True,
+        )
+
+    def test_cross_suite_filter_allows_suites_without_matching_cases(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            binary = build_dir / "test" / "ao_cli_test"
+            binary.parent.mkdir()
+            binary.touch()
+
+            with mock.patch.object(test_command, "run", return_value=0) as run:
+                self.assertEqual(
+                    test_command.run_suite(
+                        "cli",
+                        build_dir,
+                        test_filter="[concurrency]",
+                        allow_no_tests=True,
+                    ),
+                    0,
+                )
+
+        run.assert_called_once_with(
+            [str(binary), "--allow-running-no-tests", "[concurrency]"],
+            env=None,
+            log=None,
+            append=False,
+        )
+
+    def test_tsan_suite_enforces_fail_fast_runtime_options(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            binary = build_dir / "test" / "ao_core_test"
+            binary.parent.mkdir()
+            binary.touch()
+
+            with mock.patch.dict("os.environ", {"TSAN_OPTIONS": "history_size=7"}, clear=False):
+                with mock.patch.object(test_command, "run", return_value=0) as run:
+                    self.assertEqual(test_command.run_suite("core", build_dir, tsan=True), 0)
+
+        run.assert_called_once_with(
+            [str(binary)],
+            env={"TSAN_OPTIONS": "history_size=7:halt_on_error=1:second_deadlock_stack=1"},
+            log=None,
+            append=False,
         )
 
     def test_windows_suite_binary_uses_exe_suffix(self):

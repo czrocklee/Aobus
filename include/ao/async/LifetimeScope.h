@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "Task.h"
-
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -12,11 +10,12 @@
 namespace ao::async
 {
   class Runtime;
+  struct LifetimeScopeTask;
 
   struct LifetimeScopeState final
   {
     std::mutex mutex;
-    std::vector<std::shared_ptr<CancellationSignal>> signals;
+    std::vector<std::shared_ptr<LifetimeScopeTask>> tasks;
     bool isAlive{true};
   };
 

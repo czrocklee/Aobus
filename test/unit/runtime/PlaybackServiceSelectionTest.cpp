@@ -11,8 +11,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <chrono>
-#include <future>
 #include <memory>
 #include <vector>
 
@@ -31,55 +29,35 @@ namespace ao::rt::test
     CHECK(revealRequests[0].preferredViewId == kInvalidViewId);
   }
 
-  TEST_CASE("PlaybackService selection - teardown tolerates pending engine notifications",
-            "[runtime][regression][playback][lifecycle]")
+  TEST_CASE("PlaybackService selection - teardown is deferred after pending engine notification",
+            "[runtime][regression][playback][concurrency]")
   {
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto fixturePtr = std::make_unique<PlaybackFixture<MockExecutor>>();
+    auto fixturePtr = std::make_unique<PlaybackFixture<QueuedExecutor>>();
     fixturePtr->onDevicesChangedCb(fixturePtr->status.devices);
+    fixturePtr->executor.drain();
 
     auto const trackId = fixturePtr->libraryFixture.addTrack({.title = "A Track", .uri = fixturePath});
     REQUIRE(fixturePtr->playbackService.playTrack(trackId, ListId{1}));
     REQUIRE(fixturePtr->renderTarget != nullptr);
 
-    auto callbackEntered = AsyncTestState<bool>::create(false);
-    auto callbackRelease = AsyncBarrier{};
+    bool callbackEntered = false;
     auto subscription = Subscription{};
     subscription = fixturePtr->playbackService.onQualityChanged(
-      [&subscription, callbackEntered, &callbackRelease](PlaybackService::QualityChanged const&)
+      [&subscription, &callbackEntered](PlaybackService::QualityChanged const&)
       {
         subscription.reset();
-        callbackEntered.set(true);
-        callbackRelease.wait();
+        callbackEntered = true;
       });
 
     fixturePtr->renderTarget->handleRouteReady("teardown-anchor");
-    auto const callbackWasEntered = callbackEntered.waitUntil(true);
+    REQUIRE(fixturePtr->executor.drainUntil([&] { return callbackEntered; }));
+    REQUIRE(fixturePtr);
 
-    if (!callbackWasEntered)
-    {
-      callbackRelease.release();
-    }
-
-    REQUIRE(callbackWasEntered);
-
-    auto teardownStarted = AsyncTestState<bool>::create(false);
-    auto teardownFuture = std::async(std::launch::async,
-                                     [&fixturePtr, teardownStarted]
-                                     {
-                                       teardownStarted.set(true);
-                                       fixturePtr.reset();
-                                     });
-    auto const teardownWasStarted = teardownStarted.waitUntil(true);
-    CHECK(teardownWasStarted);
-
-    if (teardownWasStarted)
-    {
-      CHECK(teardownFuture.wait_for(std::chrono::milliseconds{0}) == std::future_status::timeout);
-    }
-
-    callbackRelease.release();
-    REQUIRE(teardownFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
+    // Teardown happens on the owner thread only after callback publication has
+    // unwound; queued Player work is invalidated by its lifetime gate.
+    fixturePtr.reset();
+    CHECK_FALSE(fixturePtr);
   }
 
   TEST_CASE("PlaybackService selection - revealPlayingTrack works", "[runtime][unit][playback][selection]")

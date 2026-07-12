@@ -59,6 +59,20 @@ namespace ao::rt
       , notificationService{}
     {
     }
+
+    Impl(Impl const&) = delete;
+    Impl& operator=(Impl const&) = delete;
+    Impl(Impl&&) = delete;
+    Impl& operator=(Impl&&) = delete;
+
+    ~Impl()
+    {
+      // Stop worker coroutines before library-backed members are destroyed.
+      // Runtime is declared before them, so its destructor would otherwise run
+      // after the LMDB environment and its consumers have already torn down.
+      asyncRuntime.requestStop();
+      asyncRuntime.join();
+    }
   };
 
   CoreRuntime::CoreRuntime(std::unique_ptr<async::Executor> executorPtr,

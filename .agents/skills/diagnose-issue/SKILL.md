@@ -77,6 +77,8 @@ Use `rg` for code search. Search narrowly by symbol, error text, test name, or a
 
 ## Hangs And Threading Bugs
 
+Use `review-concurrency`; it owns the repository-specific concurrency workflow.
+
 - First distinguish CPU spin, blocked wait, deadlock, starvation, missed callback, and test waiting on a condition that never becomes true.
 - Capture where threads are blocked with a debugger backtrace or targeted logging before changing synchronization.
 - Inspect lock ordering, callback reentrancy, executor affinity, subscription lifetime, condition-variable predicates, atomics, and shutdown paths.

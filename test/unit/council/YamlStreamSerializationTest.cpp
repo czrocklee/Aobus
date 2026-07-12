@@ -72,7 +72,7 @@ namespace ao::council::test
     CHECK(stream->documents.front().at("value") == hostile);
   }
 
-  TEST_CASE("YAML stream - concurrent appends never interleave documents", "[council][unit][yaml]")
+  TEST_CASE("YAML stream - concurrent appends never interleave documents", "[council][unit][yaml][concurrency]")
   {
     auto temp = ao::test::TempDir{};
     auto const path = tempPath(temp) / "trace.yaml";

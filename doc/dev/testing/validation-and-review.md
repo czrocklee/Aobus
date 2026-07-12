@@ -59,6 +59,14 @@ Recommended broad check from the project root:
 ./ao check
 ```
 
+Concurrency-sensitive changes additionally follow
+`concurrency-and-sanitizers.md` and run:
+
+```bash
+./ao test --concurrency
+./ao check --tsan
+```
+
 Focused filters are debugging tools, not routine validation. Use them only when
 a concrete failure or hypothesis needs a tighter feedback loop:
 
@@ -106,6 +114,8 @@ Before finishing, confirm:
 - The test asserts observable outcomes, not implementation details.
 - Mutations have postconditions.
 - Async/GTK behavior is deterministic.
+- Concurrent cancellation and teardown cover the applicable race matrix.
+- Threading changes pass the baselined TSan gate.
 - Fixtures reduce noise without hiding the behavior under test.
 - GTK tests do not duplicate policy better tested in `uimodel`.
 - Testability seams follow `fixtures-and-helpers.md`.

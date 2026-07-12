@@ -4,6 +4,7 @@
 #pragma once
 
 #include <exception>
+#include <stop_token>
 
 namespace ao::async
 {
@@ -15,6 +16,7 @@ namespace ao::async
 
   bool isOperationCancelled(std::exception const& exception);
   [[noreturn]] void throwOperationCancelled();
+  void throwIfStopRequested(std::stop_token stopToken);
   void rethrowIfOperationCancelled(std::exception const& exception);
   void rethrowIfOperationCancelled();
 } // namespace ao::async

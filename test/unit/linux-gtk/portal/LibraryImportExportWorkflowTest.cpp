@@ -458,7 +458,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("LibraryImportExportWorkflow - destruction cancels pending import without internal error",
-            "[gtk][unit][workflow]")
+            "[gtk][regression][workflow][concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();

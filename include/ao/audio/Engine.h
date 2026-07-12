@@ -53,6 +53,8 @@ namespace ao::audio
      * synchronous control commands publish their result by returning. Callbacks
      * may call back into Engine control methods. They must return promptly;
      * blocking a user callback blocks subsequent Engine event delivery.
+     * Callbacks must not call shutdown() or synchronously destroy Engine; owner
+     * teardown must be deferred until after callback delivery returns.
      */
     struct Status final
     {
@@ -260,6 +262,6 @@ namespace ao::audio
 
   private:
     struct Impl;
-    std::shared_ptr<Impl> _implPtr;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::audio

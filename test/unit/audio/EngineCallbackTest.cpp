@@ -321,7 +321,7 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - event callback may destroy engine reentrantly", "[audio][regression][engine][lifecycle]")
+  TEST_CASE("Engine - event callback defers engine teardown", "[audio][regression][engine][concurrency]")
   {
     struct CallbackLifetime final
     {
@@ -352,28 +352,38 @@ namespace ao::audio::test
     REQUIRE(target != nullptr);
 
     auto routeChanged = std::atomic{false};
+    auto routeDelivered = CallbackLatch{};
+    auto teardownRequested = std::atomic{false};
     enginePtr->setOnStateChanged(
-      [&enginePtr, callbackLifetimePtr]
+      [&teardownRequested, callbackLifetimePtr]
       {
         if (!callbackLifetimePtr)
         {
           return;
         }
 
-        enginePtr.reset();
+        teardownRequested.store(true, std::memory_order_release);
       });
-    enginePtr->setOnRouteChanged([&routeChanged](Engine::RouteStatus const&)
-                                 { routeChanged.store(true, std::memory_order_release); });
+    enginePtr->setOnRouteChanged(
+      [&routeChanged, &routeDelivered](Engine::RouteStatus const&)
+      {
+        routeChanged.store(true, std::memory_order_release);
+        routeDelivered.notify();
+      });
     callbackLifetimePtr.reset();
 
     target->handleRouteReady("destroy-anchor");
 
+    REQUIRE(routeDelivered.waitForCount(1));
+    CHECK(teardownRequested.load(std::memory_order_acquire));
+    REQUIRE(enginePtr);
+    enginePtr.reset();
     REQUIRE(callbackStorageDestroyed.waitForCount(1));
     CHECK(enginePtr == nullptr);
-    CHECK_FALSE(routeChanged.load(std::memory_order_acquire));
+    CHECK(routeChanged.load(std::memory_order_acquire));
   }
 
-  TEST_CASE("Engine - shutdown serializes controls and is idempotent", "[audio][unit][engine][lifecycle]")
+  TEST_CASE("Engine - shutdown serializes controls and is idempotent", "[audio][unit][engine][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto lifecycleCountsPtr = std::make_shared<BackendLifecycleCounts>();

@@ -34,6 +34,8 @@ Read the human docs for project policy instead of duplicating them here:
    explicitly asks for linting.
 9. **Validation:** Follow `doc/dev/testing/validation-and-review.md`; completed
    work normally uses one full `./ao check`.
+10. **Concurrency:** Follow `doc/dev/testing/concurrency-and-sanitizers.md` for
+    concurrency-sensitive changes.
 
 > [!TIP]
 > Heavy development, no compatibility/migration constraints. Propose the best approach without historical baggage.
@@ -53,6 +55,7 @@ Everything goes through the `./ao` portal (Python package in `script/ao/`; re-en
 ./ao build [release] [--clean] [--target <t>]    # incremental build, no tests
 ./ao test [--core|--gtk|--all|...] "[tag]"       # default: core+gtk; "[a],[b]"=OR, "[a][b]"=AND
 ./ao test --tooling           # ao tooling itself: Ruff + mypy + unit tests (test/script/)
+./ao test --concurrency       # all native Catch2 [concurrency] contracts
 ./ao hygiene                  # check-only commit gate: format --check + tidy on changed files
 ./ao tidy [paths|--folder <d>|--all]             # C++ clang-tidy + Python Ruff/mypy (opt-in, rule 8)
 ./ao analyze                  # Clang Static Analyzer, report-only

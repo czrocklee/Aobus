@@ -188,41 +188,32 @@ TEST_CASE("AlsaGraphRegistry - subscription reset stops updates", "[audio][unit]
   CHECK(callCount == 1);
 }
 
-TEST_CASE("AlsaGraphRegistry - initial callback may destroy registry", "[audio][regression][alsa][lifecycle]")
+TEST_CASE("AlsaGraphRegistry - initial callback defers registry teardown", "[audio][regression][alsa][concurrency]")
 {
   auto registryPtr = std::make_unique<AlsaGraphRegistry>();
   std::int32_t callbackCount = 0;
+  bool teardownRequested = false;
 
   auto sub = registryPtr->subscribe("hw:0,0",
                                     [&](Graph const&)
                                     {
                                       ++callbackCount;
-                                      registryPtr.reset();
+                                      teardownRequested = true;
                                     });
 
   CHECK(callbackCount == 1);
+  CHECK(teardownRequested);
+  REQUIRE(registryPtr);
+  sub.reset();
+  registryPtr.reset();
   CHECK_FALSE(registryPtr);
-  CHECK_FALSE(sub);
-  sub.reset();
 }
 
-TEST_CASE("AlsaGraphRegistry - subscription may outlive registry", "[audio][regression][alsa][lifecycle]")
-{
-  auto sub = ao::audio::Subscription{};
-
-  {
-    auto registry = AlsaGraphRegistry{};
-    sub = registry.subscribe("hw:0,0", [](Graph const&) {});
-  }
-
-  sub.reset();
-  CHECK_FALSE(sub);
-}
-
-TEST_CASE("AlsaGraphRegistry - volume callback may destroy registry", "[audio][regression][alsa][lifecycle]")
+TEST_CASE("AlsaGraphRegistry - publication callback defers registry teardown", "[audio][regression][alsa][concurrency]")
 {
   auto registryPtr = std::make_unique<AlsaGraphRegistry>();
   std::int32_t callbackCount = 0;
+  bool teardownRequested = false;
   auto sub = registryPtr->subscribe("hw:0,0",
                                     [&](Graph const&)
                                     {
@@ -230,15 +221,18 @@ TEST_CASE("AlsaGraphRegistry - volume callback may destroy registry", "[audio][r
 
                                       if (callbackCount == 2)
                                       {
-                                        registryPtr.reset();
+                                        teardownRequested = true;
                                       }
                                     });
 
   registryPtr->publish({.routeAnchor = "hw:0,0", .volume = 0.5F, .volumeMode = AlsaVolumeControlMode::HardwareMixer});
 
   CHECK(callbackCount == 2);
-  CHECK_FALSE(registryPtr);
+  CHECK(teardownRequested);
+  REQUIRE(registryPtr);
   sub.reset();
+  registryPtr.reset();
+  CHECK_FALSE(registryPtr);
 }
 
 TEST_CASE("AlsaGraphRegistry - volume callback may publish reentrantly", "[audio][regression][alsa]")

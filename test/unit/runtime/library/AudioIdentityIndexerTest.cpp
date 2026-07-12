@@ -146,7 +146,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("AudioIdentityIndexer - concurrent backfill fills many pending rows",
-            "[runtime][unit][library][audio-identity]")
+            "[runtime][unit][audio-identity][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -175,7 +175,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("AudioIdentityIndexer - fingerprints run concurrently", "[runtime][unit][library][audio-identity]")
+  TEST_CASE("AudioIdentityIndexer - fingerprints run concurrently", "[runtime][unit][audio-identity][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -216,7 +216,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("AudioIdentityIndexer - mutation lock is free while fingerprinting",
-            "[runtime][unit][library][audio-identity]")
+            "[runtime][unit][audio-identity][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";

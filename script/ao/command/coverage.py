@@ -257,6 +257,18 @@ def report(
             print(f"{GREEN}{rel}: {percent:.2f}% ({total} lines) -> OK{RESET}")
 
 
+def run_coverage_tests(suites: tuple[str, ...], build_dir: Path, test_filter: str) -> int:
+    """Run every selected suite so the report is useful, while preserving failure."""
+    first_failure = 0
+    for suite in suites:
+        status = run_suite(suite, build_dir, test_filter=test_filter)
+        if status != 0:
+            if first_failure == 0:
+                first_failure = status
+            print(f"Error: {suite} tests exited with status {status}; coverage is partial.", file=sys.stderr)
+    return first_failure
+
+
 def run_command(args: argparse.Namespace) -> int:
     if builddir.platform_profile().name != "linux":
         raise die("coverage is supported on Linux only because it requires GCC and gcov.")
@@ -291,9 +303,7 @@ def run_command(args: argparse.Namespace) -> int:
         gcda.unlink()
 
     print(f"Running tests (suite: {args.suite})...")
-    for suite in suites:
-        if (status := run_suite(suite, build_dir, test_filter=args.filter)) != 0:
-            print(f"Warning: {suite} tests exited with status {status}; coverage may be partial.", file=sys.stderr)
+    test_status = run_coverage_tests(suites, build_dir, args.filter)
 
     print()
     print("=== Coverage Summary ===")
@@ -306,5 +316,5 @@ def run_command(args: argparse.Namespace) -> int:
         summary_limit=args.summary_limit,
     )
     print()
-    print("Coverage check completed.")
-    return 0
+    print("Coverage report completed.")
+    return test_status

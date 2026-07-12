@@ -17,6 +17,7 @@ examples:
   ./ao check                # debug build + every registered test suite
   ./ao check release        # same against the release tree
   ./ao check --asan         # debug + address/undefined sanitizers
+  ./ao check --tsan         # debug + ThreadSanitizer-safe suites
   ./ao check --clang        # clang build tree
 """
 
@@ -34,7 +35,9 @@ def run_command(args: argparse.Namespace) -> int:
         print(f"Note: tests only run for debug/release; use ./ao build for {args.flavor}.")
         return build.run_command(args)
 
-    result = build.do_build(args, targets=[])
+    suites = test.suites_for("all", tsan=args.tsan)
+    targets = [target for suite in suites if (target := test.SUITES[suite].target) is not None] if args.tsan else []
+    result = build.do_build(args, targets=targets)
 
     print("Verifying dependency resolution...")
     try:
@@ -43,8 +46,7 @@ def run_command(args: argparse.Namespace) -> int:
         raise die(str(exc)) from exc
 
     print("Running tests...")
-    suites = test.suites_for("all")
-    if (status := test.run_suites(suites, result.build_dir, log=result.log)) != 0:
+    if (status := test.run_suites(suites, result.build_dir, tsan=args.tsan, log=result.log)) != 0:
         return status
 
     build.print_summary(args, result, tests=f"all native suites ({', '.join(suites)})")

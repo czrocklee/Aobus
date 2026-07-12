@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <stop_token>
 
 namespace ao::library
 {
@@ -88,9 +89,11 @@ namespace ao::rt
                                                   std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
                                                   Delay delay,
                                                   std::uint64_t scheduleGeneration,
-                                                  ScheduledSave kind);
+                                                  ScheduledSave kind,
+                                                  std::stop_token stopToken);
     static async::Task<void> runPeriodicSave(async::Runtime* asyncRuntime,
-                                             std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr);
+                                             std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
+                                             std::stop_token stopToken);
 
     ConfigStore& _config;
     Library& _library;

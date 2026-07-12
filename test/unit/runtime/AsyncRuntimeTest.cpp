@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <stop_token>
 #include <thread>
 #include <tuple>
 #include <utility>
@@ -55,11 +56,41 @@ namespace ao::rt::test
     Task<void> sleepAndRecord(Runtime* runtime,
                               std::chrono::milliseconds const delay,
                               AsyncTestState<std::uint32_t> callbackCount,
-                              AsyncTestState<bool> ranOnWorker)
+                              AsyncTestState<bool> ranOnWorker,
+                              std::stop_token const stopToken)
     {
-      co_await runtime->sleepFor(delay);
+      co_await runtime->sleepFor(delay, stopToken);
       ranOnWorker.set(!runtime->callbackExecutor().isCurrent());
       callbackCount.increment();
+    }
+
+    class TaskExitRecorder final
+    {
+    public:
+      explicit TaskExitRecorder(AsyncTestState<std::uint32_t> exitCount)
+        : _exitCount{std::move(exitCount)}
+      {
+      }
+
+      ~TaskExitRecorder() { _exitCount.increment(); }
+
+      TaskExitRecorder(TaskExitRecorder const&) = delete;
+      TaskExitRecorder& operator=(TaskExitRecorder const&) = delete;
+      TaskExitRecorder(TaskExitRecorder&&) = delete;
+      TaskExitRecorder& operator=(TaskExitRecorder&&) = delete;
+
+    private:
+      AsyncTestState<std::uint32_t> _exitCount;
+    };
+
+    Task<void> timedCancellationRace(Runtime* runtime,
+                                     AsyncTestState<std::uint32_t> startedCount,
+                                     AsyncTestState<std::uint32_t> exitCount,
+                                     std::stop_token const stopToken)
+    {
+      auto const exitRecorder = TaskExitRecorder{exitCount};
+      startedCount.increment();
+      co_await runtime->sleepFor(std::chrono::milliseconds{1}, stopToken);
     }
 
 #ifdef _WIN32
@@ -217,16 +248,17 @@ namespace ao::rt::test
     auto callbackCount = AsyncTestState<std::uint32_t>::create(0);
     auto ranOnWorker = AsyncTestState<bool>::create(false);
 
-    auto task =
-      runtime.spawnCancellable(sleepAndRecord(&runtime, std::chrono::milliseconds{1}, callbackCount, ranOnWorker));
+    auto task = runtime.spawnCancellable(
+      [&runtime, callbackCount, ranOnWorker](std::stop_token const stopToken)
+      { return sleepAndRecord(&runtime, std::chrono::milliseconds{1}, callbackCount, ranOnWorker, stopToken); });
 
     REQUIRE(callbackCount.waitUntil(1));
     CHECK(ranOnWorker.load());
     CHECK(executor.queuedCount() == 0);
   }
 
-  TEST_CASE("AsyncRuntime - sleeping coroutine cancellation is serialized on its worker executor",
-            "[runtime][regression][async]")
+  TEST_CASE("AsyncRuntime - sleeping coroutine observes a thread-safe stop request",
+            "[runtime][regression][async][concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor, 1};
@@ -234,8 +266,9 @@ namespace ao::rt::test
     auto callbackCount = AsyncTestState<std::uint32_t>::create(0);
     auto ranOnWorker = AsyncTestState<bool>::create(false);
 
-    auto task =
-      runtime.spawnCancellable(sleepAndRecord(&runtime, std::chrono::seconds{30}, callbackCount, ranOnWorker));
+    auto task = runtime.spawnCancellable(
+      [&runtime, callbackCount, ranOnWorker](std::stop_token const stopToken)
+      { return sleepAndRecord(&runtime, std::chrono::seconds{30}, callbackCount, ranOnWorker, stopToken); });
     REQUIRE(sleeper.waitForCallCount(1));
     auto const sleepingCall = sleeper.call(0);
     auto const cancellingThread = std::this_thread::get_id();
@@ -245,12 +278,42 @@ namespace ao::rt::test
     auto const cancelledCall = sleeper.call(0);
     CHECK(cancelledCall.cancelled);
     CHECK(cancelledCall.startedOn != cancellingThread);
-    CHECK(cancelledCall.cancelledOn == cancelledCall.startedOn);
+    CHECK(cancelledCall.cancelledOn == cancellingThread);
     REQUIRE(sleeper.forceFire(sleepingCall.id));
     runtime.requestStop();
     runtime.join();
 
     CHECK(callbackCount.load() == 0);
+  }
+
+  TEST_CASE("AsyncRuntime - timer expiry races safely with cancellation",
+            "[runtime][regression][async][concurrency][stress]")
+  {
+    constexpr std::uint32_t kIterationCount = 64;
+    auto executor = ManualExecutor{};
+    auto runtime = Runtime{executor, 4};
+    auto startedCount = AsyncTestState<std::uint32_t>::create(0);
+    auto exitCount = AsyncTestState<std::uint32_t>::create(0);
+
+    for (std::uint32_t iteration = 0; iteration < kIterationCount; ++iteration)
+    {
+      auto task =
+        runtime.spawnCancellable([&runtime, startedCount, exitCount](std::stop_token const stopToken)
+                                 { return timedCancellationRace(&runtime, startedCount, exitCount, stopToken); });
+      REQUIRE(startedCount.waitUntil(iteration + 1));
+
+      auto cancellingThread = std::jthread{[task = std::move(task)] mutable
+                                           {
+                                             std::this_thread::sleep_for(std::chrono::milliseconds{1});
+                                             task.reset();
+                                           }};
+      cancellingThread.join();
+      REQUIRE(exitCount.waitUntil(iteration + 1));
+    }
+
+    runtime.requestStop();
+    runtime.join();
+    CHECK(exitCount.load() == kIterationCount);
   }
 
   TEST_CASE("ImmediateExecutor - a throwing task does not wedge the queue", "[runtime][unit][async]")

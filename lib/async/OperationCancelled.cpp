@@ -7,6 +7,7 @@
 #include <boost/system/system_error.hpp>
 
 #include <exception>
+#include <stop_token>
 
 namespace ao::async
 {
@@ -24,6 +25,14 @@ namespace ao::async
   [[noreturn]] void throwOperationCancelled()
   {
     throw OperationCancelled{};
+  }
+
+  void throwIfStopRequested(std::stop_token const stopToken)
+  {
+    if (stopToken.stop_requested())
+    {
+      throwOperationCancelled();
+    }
   }
 
   void rethrowIfOperationCancelled(std::exception const& exception)

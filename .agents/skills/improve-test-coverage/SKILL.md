@@ -14,3 +14,6 @@ For coverage workflow, common Aobus coverage gaps, and execution steps, read:
 For how to write each test, use the `write-unit-test` skill.
 
 Deciding what to test and which boundaries to cover remains chair judgment. Implement the coverage plan directly and review the resulting tests before landing.
+
+Use `review-concurrency` when the requested coverage is about thread safety;
+line coverage and concurrency validation are separate workflows.

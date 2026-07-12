@@ -669,7 +669,7 @@ namespace ao::audio::test
     CHECK(player.status().engine.currentDeviceId == "null");
   }
 
-  TEST_CASE("Player - provider callbacks are marshalled onto the executor", "[audio][unit][player][executor]")
+  TEST_CASE("Player - provider callbacks are marshalled onto the executor", "[audio][unit][player][concurrency]")
   {
     auto mockProvider = Mock<BackendProvider>{};
     Fake(Method(mockProvider, shutdown));
@@ -721,7 +721,7 @@ namespace ao::audio::test
     CHECK(observedStatuses.front().devices.front().id == DeviceId{"system-default"});
   }
 
-  TEST_CASE("Player - queued provider callback is ignored after teardown", "[audio][unit][player][executor]")
+  TEST_CASE("Player - queued provider callback is ignored after teardown", "[audio][unit][player][concurrency]")
   {
     auto mockProvider = Mock<BackendProvider>{};
     Fake(Method(mockProvider, shutdown));
@@ -757,7 +757,7 @@ namespace ao::audio::test
     CHECK(deviceSignals == 0);
   }
 
-  TEST_CASE("Player - immediate outward callback may destroy player", "[audio][regression][player][lifecycle]")
+  TEST_CASE("Player - outward callback defers player teardown", "[audio][regression][player][concurrency]")
   {
     struct CallbackLifetime final
     {
@@ -863,9 +863,10 @@ namespace ao::audio::test
     auto probePtr = std::make_shared<Probe>();
     auto callbackStorageDestroyed = std::binary_semaphore{0};
     auto callbackLifetimePtr = std::make_shared<CallbackLifetime>(callbackStorageDestroyed);
-    auto executor = async::ImmediateExecutor{};
+    auto executor = QueuedExecutor{};
     auto playerPtr = std::make_unique<Player>(executor);
     playerPtr->addProvider(std::make_unique<ReentrantProvider>(probePtr));
+    executor.drain();
     REQUIRE(playerPtr->setOutputDevice(BackendId{"reentrant"}, DeviceId{"reentrant-device"}, kProfileShared));
     REQUIRE(playerPtr->play(Engine::PlaybackItem{.input = PlaybackInput{.filePath = fixturePath}}));
 
@@ -876,15 +877,16 @@ namespace ao::audio::test
     }
     REQUIRE(target != nullptr);
 
+    auto teardownRequested = std::atomic{false};
     playerPtr->setOnStateChanged(
-      [&playerPtr, callbackLifetimePtr]
+      [&teardownRequested, callbackLifetimePtr]
       {
         if (!callbackLifetimePtr)
         {
           return;
         }
 
-        playerPtr.reset();
+        teardownRequested.store(true, std::memory_order_release);
       });
     callbackLifetimePtr.reset();
     target->handlePropertyChanged(PropertySnapshot{
@@ -893,46 +895,49 @@ namespace ao::audio::test
       .info = {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = true},
     });
 
+    REQUIRE(executor.drainUntil([&] { return teardownRequested.load(std::memory_order_acquire); }));
+    REQUIRE(playerPtr);
+    playerPtr.reset();
     REQUIRE(probePtr->backendDestroyed.try_acquire_for(std::chrono::seconds{1}));
     REQUIRE(callbackStorageDestroyed.try_acquire_for(std::chrono::seconds{1}));
     CHECK(playerPtr == nullptr);
   }
 
-  TEST_CASE("Player - ALSA-style synchronous graph update from setVolume may destroy player",
-            "[audio][regression][player][lifecycle]")
+  TEST_CASE("Player - ALSA-style synchronous graph update defers player teardown",
+            "[audio][regression][player][concurrency]")
   {
     auto const fixturePath = requireAudioFixture("basic_metadata.flac");
     auto probePtr = std::make_shared<SynchronousGraphProbe>();
-    auto executor = async::ImmediateExecutor{};
+    auto executor = QueuedExecutor{};
     auto playerPtr = std::make_unique<Player>(executor);
-    auto routeSettled = std::binary_semaphore{0};
     auto routeSettledSignaled = std::atomic{false};
     playerPtr->setOnQualityChanged(
       [&](QualityResult const&, bool)
       {
-        if (probePtr->subscriptionCount() >= 1 && !routeSettledSignaled.exchange(true, std::memory_order_acq_rel))
+        if (probePtr->subscriptionCount() >= 1)
         {
-          routeSettled.release();
+          routeSettledSignaled.store(true, std::memory_order_release);
         }
       });
     playerPtr->addProvider(std::make_unique<SynchronousGraphProvider>(probePtr));
+    executor.drain();
     REQUIRE(playerPtr->setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-a"}, kProfileShared));
     REQUIRE(playerPtr->play(Engine::PlaybackItem{.input = PlaybackInput{.filePath = fixturePath}}));
-    REQUIRE(probePtr->graphSubscribed.try_acquire_for(std::chrono::seconds{5}));
-    REQUIRE(routeSettled.try_acquire_for(std::chrono::seconds{5}));
+    REQUIRE(executor.drainUntil(
+      [&] { return probePtr->subscriptionCount() >= 1 && routeSettledSignaled.load(std::memory_order_acquire); },
+      std::chrono::seconds{5}));
 
-    auto playerDestroyed = std::binary_semaphore{0};
-    playerPtr->setOnQualityChanged(
-      [&](QualityResult const&, bool)
-      {
-        playerPtr.reset();
-        playerDestroyed.release();
-      });
+    auto teardownRequested = std::atomic{false};
+    playerPtr->setOnQualityChanged([&](QualityResult const&, bool)
+                                   { teardownRequested.store(true, std::memory_order_release); });
 
     auto const result = playerPtr->setVolume(0.5F);
 
     REQUIRE(result);
-    REQUIRE(playerDestroyed.try_acquire_for(std::chrono::seconds{5}));
+    REQUIRE(
+      executor.drainUntil([&] { return teardownRequested.load(std::memory_order_acquire); }, std::chrono::seconds{5}));
+    REQUIRE(playerPtr);
+    playerPtr.reset();
     CHECK_FALSE(playerPtr);
   }
 
@@ -1015,7 +1020,7 @@ namespace ao::audio::test
           status.flow.nodes.end());
   }
 
-  TEST_CASE("Player - graph callbacks are marshalled onto the executor", "[audio][unit][player][executor]")
+  TEST_CASE("Player - graph callbacks are marshalled onto the executor", "[audio][unit][player][concurrency]")
   {
     auto mockProvider = Mock<BackendProvider>{};
     Fake(Method(mockProvider, shutdown));
