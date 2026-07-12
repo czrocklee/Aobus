@@ -39,6 +39,7 @@ namespace ao::rt
     std::size_t musicLibraryMapSize = 0;
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
     ConfigStore* playbackSessionConfigStore = nullptr;
+    async::Sleeper* sleeper = nullptr;
   };
 
   struct PlaybackSessionRestoreResult final

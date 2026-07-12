@@ -21,16 +21,16 @@ namespace ao::gtk
    *
    * This class exclusively owns the `gtk_layout.yaml` file within a library.
    */
-  class GtkLayoutConfig final
+  class GtkLayoutStateStore final
   {
   public:
-    explicit GtkLayoutConfig(std::filesystem::path const& libraryPath);
-    ~GtkLayoutConfig();
+    explicit GtkLayoutStateStore(std::filesystem::path const& libraryPath);
+    ~GtkLayoutStateStore();
 
-    GtkLayoutConfig(GtkLayoutConfig const&) = delete;
-    GtkLayoutConfig& operator=(GtkLayoutConfig const&) = delete;
-    GtkLayoutConfig(GtkLayoutConfig&&) noexcept;
-    GtkLayoutConfig& operator=(GtkLayoutConfig&&) noexcept;
+    GtkLayoutStateStore(GtkLayoutStateStore const&) = delete;
+    GtkLayoutStateStore& operator=(GtkLayoutStateStore const&) = delete;
+    GtkLayoutStateStore(GtkLayoutStateStore&&) noexcept;
+    GtkLayoutStateStore& operator=(GtkLayoutStateStore&&) noexcept;
 
     /**
      * @brief Load the layout state from disk.

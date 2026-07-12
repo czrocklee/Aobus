@@ -80,14 +80,14 @@ namespace ao::gtk::layout
     return uimodel::LayoutActionAvailability{.enabled = true, .disabledReason = ""};
   }
 
-  uimodel::LayoutActionActivationOutcome ActionRegistry::activate(std::string_view id,
-                                                                  ActionActivationContext& ctx) const
+  uimodel::LayoutActionActivationResult ActionRegistry::activate(std::string_view id,
+                                                                 ActionActivationContext& ctx) const
   {
     auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.id == id; });
 
     if (it == _entries.end())
     {
-      return uimodel::LayoutActionActivationOutcome{.result = uimodel::LayoutActionActivationResult::UnknownAction};
+      return uimodel::LayoutActionActivationResult{.outcome = uimodel::LayoutActionActivationOutcome::UnknownAction};
     }
 
     auto actionState = uimodel::LayoutActionAvailability{.enabled = true, .disabledReason = ""};
@@ -98,8 +98,8 @@ namespace ao::gtk::layout
 
       if (!actionState.enabled)
       {
-        return uimodel::LayoutActionActivationOutcome{
-          .result = uimodel::LayoutActionActivationResult::Disabled, .state = std::move(actionState)};
+        return uimodel::LayoutActionActivationResult{
+          .outcome = uimodel::LayoutActionActivationOutcome::Disabled, .state = std::move(actionState)};
       }
     }
 
@@ -108,32 +108,32 @@ namespace ao::gtk::layout
       it->handler(ctx);
     }
 
-    return uimodel::LayoutActionActivationOutcome{
-      .result = uimodel::LayoutActionActivationResult::Activated, .state = std::move(actionState)};
+    return uimodel::LayoutActionActivationResult{
+      .outcome = uimodel::LayoutActionActivationOutcome::Activated, .state = std::move(actionState)};
   }
 
-  uimodel::LayoutActionActivationOutcome ActionRegistry::tryActivate(std::string_view id,
-                                                                     ActionActivationContext& ctx) const
+  uimodel::LayoutActionActivationResult ActionRegistry::tryActivate(std::string_view id,
+                                                                    ActionActivationContext& ctx) const
   {
-    auto outcome = activate(id, ctx);
+    auto result = activate(id, ctx);
 
-    switch (outcome.result)
+    switch (result.outcome)
     {
-      case uimodel::LayoutActionActivationResult::UnknownAction:
+      case uimodel::LayoutActionActivationOutcome::UnknownAction:
         APP_LOG_WARN("ActionRegistry: Attempt to activate unknown action id '{}'", id);
         break;
-      case uimodel::LayoutActionActivationResult::Disabled:
-        APP_LOG_DEBUG("ActionRegistry: Action '{}' is disabled: {}", id, outcome.state.disabledReason);
+      case uimodel::LayoutActionActivationOutcome::Disabled:
+        APP_LOG_DEBUG("ActionRegistry: Action '{}' is disabled: {}", id, result.state.disabledReason);
         break;
-      case uimodel::LayoutActionActivationResult::Activated:
+      case uimodel::LayoutActionActivationOutcome::Activated:
         APP_LOG_DEBUG("ActionRegistry: Activated action '{}' for component '{}'", id, ctx.componentId);
         break;
-      case uimodel::LayoutActionActivationResult::InvalidBinding:
+      case uimodel::LayoutActionActivationOutcome::InvalidBinding:
         APP_LOG_ERROR("ActionRegistry: Action '{}' has invalid binding for component '{}'", id, ctx.componentId);
         break;
     }
 
-    return outcome;
+    return result;
   }
 
   uimodel::LayoutActionCatalog const& ActionRegistry::catalog() const noexcept

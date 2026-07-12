@@ -3,10 +3,12 @@
 
 #include "../../GtkTestSupport.h"
 #include "../components/ContainerTestHelpers.h"
+#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
-#include "app/linux-gtk/layout/runtime/LayoutContext.h"
+#include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -37,8 +39,14 @@ namespace ao::gtk::layout::editor::test
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
-    auto ctx =
-      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    auto runtimeState = LayoutRuntimeState{};
+    auto dependencies = GtkUiDependencies{};
+    auto ctx = LayoutBuildContext{.registry = registry,
+                                  .actionRegistry = actionRegistry,
+                                  .runtime = runtime,
+                                  .parentWindow = window,
+                                  .runtimeState = runtimeState,
+                                  .dependencies = dependencies};
 
     SECTION("absoluteCanvas descriptor is registered as container")
     {
@@ -95,8 +103,14 @@ namespace ao::gtk::layout::editor::test
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
-    auto ctx =
-      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    auto runtimeState = LayoutRuntimeState{};
+    auto dependencies = GtkUiDependencies{};
+    auto ctx = LayoutBuildContext{.registry = registry,
+                                  .actionRegistry = actionRegistry,
+                                  .runtime = runtime,
+                                  .parentWindow = window,
+                                  .runtimeState = runtimeState,
+                                  .dependencies = dependencies};
 
     auto doc = LayoutDocument{};
     doc.root.type = "absoluteCanvas";

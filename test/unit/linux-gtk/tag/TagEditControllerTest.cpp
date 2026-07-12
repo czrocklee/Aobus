@@ -39,11 +39,11 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
 
-    auto themeController = ThemeCoordinator{};
+    auto themeCoordinator = ThemeCoordinator{};
     std::int32_t mutationCallbacks = 0;
     auto callbacks = TagEditController::Callbacks{.onTagsMutated = [&mutationCallbacks] { ++mutationCallbacks; }};
 
-    auto controller = TagEditController{window, fixture.runtime(), std::move(callbacks), themeController};
+    auto controller = TagEditController{window, fixture.runtime(), std::move(callbacks), themeCoordinator};
 
     SECTION("registers tag actions")
     {
@@ -64,7 +64,7 @@ namespace ao::gtk::test
       auto const firstTrackId = createTrack(library, "Controller Target 1");
       auto const secondTrackId = createTrack(library, "Controller Target 2");
       auto const selection =
-        TrackSelectionContext{.listId = rt::kAllTracksListId, .selectedIds = {firstTrackId, secondTrackId}};
+        TrackSelection{.listId = rt::kAllTracksListId, .selectedIds = {firstTrackId, secondTrackId}};
       auto const tagsToAdd = std::array<std::string, 1>{"ControllerTag"};
 
       controller.submitTagChanges(selection, tagsToAdd, std::span<std::string const>{});

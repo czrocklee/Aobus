@@ -20,9 +20,9 @@ namespace ao::test
     // NOLINTNEXTLINE(misc-include-cleaner) -- <ryml.hpp> is RapidYaml's public Tree provider.
     ryml::Tree parseYaml(std::string_view text)
     {
-      auto context = yaml::CallbackContext{};
-      auto tree = ryml::Tree{yaml::callbacks(context)};
-      yaml::parseInArena(tree, text, context);
+      auto state = yaml::ErrorCallbackState{};
+      auto tree = ryml::Tree{yaml::callbacks(state)};
+      yaml::parseInArena(tree, text, state);
       tree.callbacks(yaml::callbacks());
       return tree;
     }
@@ -100,14 +100,14 @@ namespace ao::test
     }
   }
 
-  TEST_CASE("RymlAdapter - callback context owns diagnostic filename", "[core][unit][yaml]")
+  TEST_CASE("RymlAdapter - error callback state owns diagnostic filename", "[core][unit][yaml]")
   {
-    auto context = yaml::CallbackContext{"fixture.yaml"};
-    auto tree = ryml::Tree{yaml::callbacks(context)};
+    auto state = yaml::ErrorCallbackState{"fixture.yaml"};
+    auto tree = ryml::Tree{yaml::callbacks(state)};
 
     try
     {
-      yaml::parseInArena(tree, "root: [unterminated", context);
+      yaml::parseInArena(tree, "root: [unterminated", state);
       FAIL("invalid YAML should throw through the ryml callback");
     }
     catch (Exception const& e)

@@ -6,8 +6,8 @@
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
@@ -99,10 +99,10 @@ namespace ao::gtk::layout
         JumpToAlbum
       };
 
-      PlaybackImageComponent(LayoutContext& ctx, LayoutNode const& node)
+      PlaybackImageComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _runtime{ctx.runtime}
       {
-        if (ctx.detail.imageCache == nullptr)
+        if (ctx.dependencies.imageCache == nullptr)
         {
           APP_LOG_ERROR("[PID {}] PlaybackImage: FAILED to create - imageCache is NULL in context!", getpid());
           _error = Gtk::make_managed<Gtk::Label>("Error: imageCache missing");
@@ -110,8 +110,8 @@ namespace ao::gtk::layout
         }
 
         _imageWidgetPtr = std::make_unique<ImageWidget>();
-        _imageControllerPtr =
-          std::make_unique<ResourceImageController>(*_imageWidgetPtr, ctx.runtime.library(), *ctx.detail.imageCache);
+        _imageControllerPtr = std::make_unique<ResourceImageController>(
+          *_imageWidgetPtr, ctx.runtime.library(), *ctx.dependencies.imageCache);
         _imageWidgetPtr->set_overflow(Gtk::Overflow::HIDDEN);
 
         auto const targetSize = node.propertyOr<std::int64_t>("targetSize", kThumbnailSize);
@@ -290,7 +290,7 @@ namespace ao::gtk::layout
       rt::Subscription _idleSub;
     };
 
-    std::unique_ptr<LayoutComponent> createPlaybackImage(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createPlaybackImage(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<PlaybackImageComponent>(ctx, node);
     }

@@ -14,7 +14,7 @@
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>

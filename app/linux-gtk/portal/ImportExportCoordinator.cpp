@@ -38,10 +38,10 @@ namespace ao::gtk::portal
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
                                                    rt::AppRuntime& runtime,
                                                    ImportExportCallbacks callbacks,
-                                                   ThemeCoordinator& themeController)
+                                                   ThemeCoordinator& themeCoordinator)
     : _parent{parent}
     , _callbacks{std::move(callbacks)}
-    , _themeController{themeController}
+    , _themeCoordinator{themeCoordinator}
     , _workflow{runtime, _callbacks}
   {
   }
@@ -116,7 +116,7 @@ namespace ao::gtk::portal
     dialog->addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
     dialog->addPrimaryAction("Next", Gtk::ResponseType::OK);
 
-    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
 
     dialog->signal_response().connect([this, modeCombo, dialog, tokenPtr](std::int32_t responseId)
                                       { handleExportModeConfirmed(responseId, modeCombo, dialog); });

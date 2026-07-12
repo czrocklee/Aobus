@@ -471,7 +471,7 @@ namespace ao::audio::backend::detail::test
       auto props = SinkProps{};
       mergeSinkProps(props, pod);
 
-      auto const cls = props.classifyVolume(SinkProps::VolumeClassificationContext::Stream);
+      auto const cls = props.classifyVolume(SinkProps::VolumeClassificationScope::Stream);
       CHECK(cls.hardwareNotUnity == false);
       CHECK(cls.softwareNotUnity == true);
       CHECK(cls.maxSoftwareGain == 1.0F);

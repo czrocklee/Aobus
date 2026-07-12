@@ -3,8 +3,8 @@
 
 #include "TrackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "track/TrackPresentationButton.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -24,13 +24,15 @@ namespace ao::gtk::layout
     class TrackPresentationButtonComponent final : public LayoutComponent
     {
     public:
-      TrackPresentationButtonComponent(LayoutContext& ctx, LayoutNode const& node)
+      TrackPresentationButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _widget{ctx.runtime}
       {
-        if (ctx.track.presentationCatalog != nullptr && ctx.track.presentationPreferences != nullptr)
+        if (ctx.dependencies.trackPresentationCatalog != nullptr &&
+            ctx.dependencies.trackPresentationPreferences != nullptr)
         {
-          _widget.setPresentationServices(
-            ctx.track.presentationCatalog, ctx.track.presentationPreferences, ctx.theme.themeController);
+          _widget.setPresentationServices(ctx.dependencies.trackPresentationCatalog,
+                                          ctx.dependencies.trackPresentationPreferences,
+                                          ctx.dependencies.themeCoordinator);
         }
 
         if (auto const it = node.props.find("variant"); it != node.props.end())
@@ -48,7 +50,7 @@ namespace ao::gtk::layout
       TrackPresentationButton _widget;
     };
 
-    std::unique_ptr<LayoutComponent> createTrackPresentationButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackPresentationButton(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackPresentationButtonComponent>(ctx, node);
     }

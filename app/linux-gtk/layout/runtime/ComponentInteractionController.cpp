@@ -5,7 +5,7 @@
 
 #include "layout/runtime/ActionBinder.h"
 #include "layout/runtime/ActionRegistry.h"
-#include "layout/runtime/LayoutContext.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -35,7 +35,7 @@ namespace ao::gtk::layout
     _secondaryLongPressConn.disconnect();
   }
 
-  void ComponentInteractionController::attach(LayoutContext& ctx,
+  void ComponentInteractionController::attach(LayoutBuildContext& ctx,
                                               uimodel::LayoutNode const& node,
                                               Gtk::Widget& target,
                                               uimodel::LayoutComponentActionPolicy const policy)

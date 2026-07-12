@@ -48,7 +48,6 @@ namespace ao::gtk
 
     Mode _mode;
     Gtk::Label _label;
-    uimodel::PlaybackTimeViewModel _timeViewModel;
     uimodel::PlaybackPositionInterpolator _interpolator;
 
     bool _isPreviewing = false;
@@ -57,6 +56,8 @@ namespace ao::gtk
     std::uint32_t _tickId = 0;
     std::chrono::seconds _lastElapsed{0};
     std::chrono::seconds _lastDuration{0};
+    // Constructed after every field touched by its synchronous initial-state callback.
+    uimodel::PlaybackTimeViewModel _timeViewModel;
     sigc::scoped_connection _mapConnection;
     sigc::scoped_connection _unmapConnection;
   };

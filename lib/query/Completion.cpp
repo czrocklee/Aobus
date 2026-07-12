@@ -454,9 +454,9 @@ namespace ao::query
              token.kind == detail::CompletionTokenKind::Unknown;
     }
 
-    std::optional<QueryValueCompletionContext> analyzeValueCompletion(std::string_view text,
-                                                                      std::span<detail::CompletionToken const> tokens,
-                                                                      std::size_t cursor)
+    std::optional<QueryValueCompletion> analyzeValueCompletion(std::string_view text,
+                                                               std::span<detail::CompletionToken const> tokens,
+                                                               std::size_t cursor)
     {
       auto const valueStart = findValuePrefixStart(tokens, cursor);
       auto operatorEnd = skipWhitespaceBefore(tokens, valueStart);
@@ -498,7 +498,7 @@ namespace ao::query
         return std::nullopt;
       }
 
-      return QueryValueCompletionContext{
+      return QueryValueCompletion{
         .field = optVariable->field,
         .replacement =
           QueryCompletionReplacement{
@@ -509,10 +509,9 @@ namespace ao::query
       };
     }
 
-    std::optional<QueryOperatorCompletionContext> analyzeOperatorCompletion(
-      std::string_view text,
-      std::span<detail::CompletionToken const> tokens,
-      std::size_t cursor)
+    std::optional<QueryOperatorCompletion> analyzeOperatorCompletion(std::string_view text,
+                                                                     std::span<detail::CompletionToken const> tokens,
+                                                                     std::size_t cursor)
     {
       auto prefixStart = cursor;
       auto lvalueEnd = skipWhitespaceBefore(tokens, prefixStart);
@@ -531,7 +530,7 @@ namespace ao::query
         return std::nullopt;
       }
 
-      return QueryOperatorCompletionContext{
+      return QueryOperatorCompletion{
         .field = optVariable->field,
         .replacement =
           QueryCompletionReplacement{
@@ -542,7 +541,7 @@ namespace ao::query
       };
     }
 
-    std::optional<QueryLogicalOperatorCompletionContext> analyzeLogicalOperatorCompletion(
+    std::optional<QueryLogicalOperatorCompletion> analyzeLogicalOperatorCompletion(
       std::string_view text,
       std::span<detail::CompletionToken const> tokens,
       std::size_t cursor)
@@ -562,7 +561,7 @@ namespace ao::query
         return std::nullopt;
       }
 
-      return QueryLogicalOperatorCompletionContext{
+      return QueryLogicalOperatorCompletion{
         .replacement =
           QueryCompletionReplacement{
             .replaceBegin = expressionEnd,
@@ -573,7 +572,7 @@ namespace ao::query
     }
   } // namespace
 
-  std::optional<QueryCompletionContext> analyzeCompletionContext(std::string_view text, std::size_t cursor)
+  std::optional<QueryCompletionAnalysis> analyzeQueryCompletion(std::string_view text, std::size_t cursor)
   {
     if (cursor > text.size())
     {
@@ -590,23 +589,23 @@ namespace ao::query
 
     if (auto optToken = variableCompletionTokenAtCursor(text, prefixTokens, cursor); optToken)
     {
-      return QueryCompletionContext{*optToken};
+      return QueryCompletionAnalysis{*optToken};
     }
 
     if (auto optValueContext = analyzeValueCompletion(text, prefixTokens, cursor); optValueContext)
     {
-      return QueryCompletionContext{*optValueContext};
+      return QueryCompletionAnalysis{*optValueContext};
     }
 
     if (auto optLogicalOperatorContext = analyzeLogicalOperatorCompletion(text, prefixTokens, cursor);
         optLogicalOperatorContext)
     {
-      return QueryCompletionContext{*optLogicalOperatorContext};
+      return QueryCompletionAnalysis{*optLogicalOperatorContext};
     }
 
     if (auto optOperatorContext = analyzeOperatorCompletion(text, prefixTokens, cursor); optOperatorContext)
     {
-      return QueryCompletionContext{*optOperatorContext};
+      return QueryCompletionAnalysis{*optOperatorContext};
     }
 
     return std::nullopt;
@@ -614,7 +613,7 @@ namespace ao::query
 
   std::optional<QueryCompletionToken> queryCompletionTokenAtCursor(std::string_view text, std::size_t cursor)
   {
-    auto optContext = analyzeCompletionContext(text, cursor);
+    auto optContext = analyzeQueryCompletion(text, cursor);
 
     if (!optContext)
     {

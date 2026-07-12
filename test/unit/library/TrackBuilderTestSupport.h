@@ -20,10 +20,10 @@
 
 namespace ao::library::test
 {
-  class TrackSerializationContext final
+  class TrackSerializationFixture final
   {
   public:
-    TrackSerializationContext()
+    TrackSerializationFixture()
       : _env{lmdb::test::openEnvironment(_temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20})}
       , _transaction{lmdb::test::beginWriteTransaction(_env)}
       , _dictionary{lmdb::test::openDatabase(_transaction, "dictionary"), _transaction}
@@ -71,7 +71,7 @@ namespace ao::library::test
 
   inline std::pair<std::vector<std::byte>, std::vector<std::byte>> serializeTestTrack(TrackBuilder& builder)
   {
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
     return context.serialize(builder);
   }
 } // namespace ao::library::test

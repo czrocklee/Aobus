@@ -43,7 +43,6 @@ namespace ao::rt
   class AppRuntime;
   class NotificationService;
   struct PlaybackTransportSessionState;
-  struct PlaybackServiceTestAccess;
 
   class PlaybackService final
   {
@@ -86,7 +85,12 @@ namespace ao::rt
       audio::PlaybackInput input{};
     };
 
-    PlaybackService(async::Executor& executor, library::MusicLibrary& library, NotificationService& notifications);
+    // PlaybackService takes exclusive ownership of its direct audio collaborator.
+    // The composition root configures Player before transferring ownership.
+    PlaybackService(async::Executor& executor,
+                    library::MusicLibrary& library,
+                    NotificationService& notifications,
+                    std::unique_ptr<audio::Player> playerPtr);
     ~PlaybackService();
 
     PlaybackService(PlaybackService const&) = delete;
@@ -161,20 +165,20 @@ namespace ao::rt
     friend class AppRuntime;
     friend class PlaybackSessionPersistence;
     friend class PlaybackSequenceService;
-    friend struct PlaybackServiceTestAccess;
 
-    PlaybackService(async::Executor& executor,
-                    library::MusicLibrary& library,
-                    NotificationService& notifications,
-                    std::unique_ptr<audio::Player> playerPtr);
+    struct SequencePreparedNextReceipt final
+    {
+      PreparedNextToken token{};
+      std::uint64_t issuedGeneration = 0;
+    };
 
     void shutdown() noexcept;
     void bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler);
     void unbindPlaybackFailureRecovery();
     bool isPublishingAcceptedStart() const;
-    std::optional<std::uint64_t> preparedNextIssuedGeneration(PreparedNextToken token) const;
+    Result<SequencePreparedNextReceipt> prepareNextWithReceipt(PlaybackRequest const& request, ListId sourceListId);
     Result<PlaybackStartReceipt> playSequenceTrack(TrackId trackId, ListId sourceListId);
-    Result<PreparedNextToken> prepareSequenceNext(TrackId trackId, ListId sourceListId);
+    Result<SequencePreparedNextReceipt> prepareSequenceNext(TrackId trackId, ListId sourceListId);
     std::optional<PreparedNextToken> clearSequencePreparedNext();
     PreparedCancellationBarrier stopSequence();
     PlaybackTransportSessionState playbackTransportSessionState();

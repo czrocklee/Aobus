@@ -3,8 +3,8 @@
 
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -30,7 +30,7 @@ namespace ao::gtk::layout
     class BoxComponent final : public LayoutComponent
     {
     public:
-      BoxComponent(LayoutContext& ctx, LayoutNode const& node)
+      BoxComponent(LayoutBuildContext& ctx, LayoutNode const& node)
       {
         auto orientation = Gtk::Orientation::VERTICAL;
 
@@ -58,7 +58,7 @@ namespace ao::gtk::layout
       std::vector<std::unique_ptr<LayoutComponent>> _children;
     };
 
-    std::unique_ptr<LayoutComponent> createBox(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createBox(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<BoxComponent>(ctx, node);
     }

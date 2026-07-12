@@ -12,7 +12,7 @@ namespace ao::rt
 
 namespace ao::cli
 {
-  class CliContext;
+  class CliRuntime;
 
-  void configureListCommand(CLI::App& app, CliContext& context);
+  void configureListCommand(CLI::App& app, CliRuntime& cli);
 }

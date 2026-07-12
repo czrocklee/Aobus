@@ -4,8 +4,8 @@
 #include "PlaybackComponentRegistrations.h"
 #include "app/AobusSoul.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -34,7 +34,7 @@ namespace ao::gtk::layout
     class SoulButtonComponent final : public LayoutComponent
     {
     public:
-      SoulButtonComponent(LayoutContext& ctx, LayoutNode const& node)
+      SoulButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _soulViewModel{ctx.runtime.playback(),
                          [this](uimodel::AobusSoulViewState const& state)
                          {
@@ -81,7 +81,7 @@ namespace ao::gtk::layout
       uimodel::AobusSoulViewModel _soulViewModel;
     };
 
-    std::unique_ptr<LayoutComponent> createSoulButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createSoulButton(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<SoulButtonComponent>(ctx, node);
     }

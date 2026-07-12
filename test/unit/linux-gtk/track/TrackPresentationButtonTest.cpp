@@ -31,13 +31,13 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto themeController = ThemeCoordinator{};
+    auto themeCoordinator = ThemeCoordinator{};
     auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace()};
     auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
 
     auto window = Gtk::Window{};
     auto button = TrackPresentationButton{runtime};
-    button.setPresentationServices(&catalog, &preferences, &themeController);
+    button.setPresentationServices(&catalog, &preferences, &themeCoordinator);
     window.set_child(button);
 
     REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
@@ -68,7 +68,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto themeController = ThemeCoordinator{};
+    auto themeCoordinator = ThemeCoordinator{};
     auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace()};
     auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
     auto window = Gtk::Window{};
@@ -80,7 +80,7 @@ namespace ao::gtk::test
     REQUIRE(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
 
     auto buttonPtr = std::make_unique<TrackPresentationButton>(runtime);
-    buttonPtr->setPresentationServices(&catalog, &preferences, &themeController);
+    buttonPtr->setPresentationServices(&catalog, &preferences, &themeCoordinator);
     window.set_child(*buttonPtr);
     drainGtkEvents();
 

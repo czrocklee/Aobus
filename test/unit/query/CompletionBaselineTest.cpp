@@ -15,7 +15,7 @@
 namespace ao::query::test
 {
   // Completion runs on every keystroke, so its per-call latency is a user-facing
-  // metric. This logs the average cost of analyzeCompletionContext over a mix of
+  // metric. This logs the average cost of analyzeQueryCompletion over a mix of
   // inputs (including the completed-predicate path that drives logical-operator
   // suggestions). Log-only baseline - no fixed threshold (machine dependent).
   TEST_CASE("Completion - records latency baseline", "[query][unit][completion][baseline]")
@@ -38,7 +38,7 @@ namespace ao::query::test
     {
       for (auto const input : inputs)
       {
-        if (analyzeCompletionContext(input, input.size()))
+        if (analyzeQueryCompletion(input, input.size()))
         {
           ++sink;
         }

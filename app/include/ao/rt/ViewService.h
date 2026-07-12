@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "PlaybackLaunchContext.h"
+#include "PlaybackLaunchSpec.h"
 #include "Subscription.h"
 #include "TrackMutation.h"
 #include "TrackPresentation.h"
@@ -98,7 +98,7 @@ namespace ao::rt
     Result<TrackPresentationSpec> setPresentation(ViewId viewId, std::string_view presentationId);
     Result<> setSelection(ViewId viewId, std::vector<TrackId> selection);
     Result<> openListInView(ViewId viewId, ListId listId);
-    Result<PlaybackLaunchContext> capturePlaybackLaunchContext(ViewId viewId) const;
+    Result<PlaybackLaunchSpec> capturePlaybackLaunchSpec(ViewId viewId) const;
 
     Subscription onDestroyed(std::move_only_function<void(ViewId)> handler);
     Subscription onProjectionChanged(std::move_only_function<void(TrackListProjectionChanged const&)> handler);

@@ -75,7 +75,7 @@ namespace ao::gtk::test
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
     coordinator.loadSession();
 
-    coordinator.themeController()->setTheme(rt::ThemePresetId::Classic);
+    coordinator.themeCoordinator()->setTheme(rt::ThemePresetId::Classic);
     coordinator.saveSession();
 
     auto loadedPrefs = rt::AppPrefsState{};

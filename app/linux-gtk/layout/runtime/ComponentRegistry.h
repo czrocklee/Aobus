@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/utility/TransparentStringHash.h>
@@ -19,7 +19,7 @@
 
 namespace ao::gtk::layout
 {
-  using ComponentFactory = std::unique_ptr<LayoutComponent> (*)(LayoutContext&, uimodel::LayoutNode const&);
+  using ComponentFactory = std::unique_ptr<LayoutComponent> (*)(LayoutBuildContext&, uimodel::LayoutNode const&);
 
   class ComponentRegistry final
   {
@@ -28,7 +28,7 @@ namespace ao::gtk::layout
 
     void registerComponent(uimodel::LayoutComponentDescriptor descriptor, ComponentFactory factory);
 
-    std::unique_ptr<LayoutComponent> create(LayoutContext& ctx, uimodel::LayoutNode const& node) const;
+    std::unique_ptr<LayoutComponent> create(LayoutBuildContext& ctx, uimodel::LayoutNode const& node) const;
 
     std::vector<uimodel::LayoutComponentDescriptor> const& descriptors() const;
 

@@ -5,7 +5,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>

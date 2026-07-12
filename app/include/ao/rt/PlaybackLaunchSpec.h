@@ -18,12 +18,12 @@ namespace ao::rt
     bool operator==(TrackOrderSpec const&) const = default;
   };
 
-  struct PlaybackLaunchContext final
+  struct PlaybackLaunchSpec final
   {
     ListId sourceListId = kInvalidListId;
     std::string quickFilterExpression{};
     TrackOrderSpec order{};
 
-    bool operator==(PlaybackLaunchContext const&) const = default;
+    bool operator==(PlaybackLaunchSpec const&) const = default;
   };
 } // namespace ao::rt

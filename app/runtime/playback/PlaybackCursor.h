@@ -5,7 +5,7 @@
 
 #include "runtime/playback/ProjectionAnchor.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 
 #include <cstddef>
@@ -91,13 +91,13 @@ namespace ao::rt
       bool operator==(CommandResolution const&) const = default;
     };
 
-    PlaybackCursor(PlaybackLaunchContext launchContext,
+    PlaybackCursor(PlaybackLaunchSpec launchSpec,
                    ProjectionAnchor currentAnchor,
                    RepeatMode repeatMode,
                    ShuffleMode shuffleMode,
                    PlaybackCursorPolicy& policy);
 
-    PlaybackLaunchContext const& launchContext() const noexcept { return _launchContext; }
+    PlaybackLaunchSpec const& launchSpec() const noexcept { return _launchSpec; }
     SourceState sourceState() const noexcept { return _sourceState; }
     TrackId currentTrackId() const noexcept { return _currentTrackId; }
     ProjectionAnchor const& anchor() const noexcept { return _anchor; }
@@ -149,7 +149,7 @@ namespace ao::rt
     bool updateSemanticTuple(PlaybackCursorPolicy& policy);
     MutationEffect effect(bool persistenceIntentChanged, PlaybackCursorPolicy& policy);
 
-    PlaybackLaunchContext const _launchContext;
+    PlaybackLaunchSpec const _launchSpec;
     SourceState _sourceState = SourceState::Live;
     TrackId _currentTrackId = kInvalidTrackId;
     ProjectionAnchor _anchor;

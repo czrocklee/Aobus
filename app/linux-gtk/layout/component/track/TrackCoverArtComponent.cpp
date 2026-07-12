@@ -8,8 +8,8 @@
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailSizing.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
@@ -17,6 +17,8 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/enums.h>
+#include <gtkmm/label.h>
+#include <gtkmm/object.h>
 #include <gtkmm/widget.h>
 
 #include <algorithm>
@@ -117,9 +119,17 @@ namespace ao::gtk::layout
         std::int32_t _targetSize = 0;
       };
 
-      TrackCoverArtComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _imageController{_imageWidget, ctx.runtime.library(), *ctx.detail.imageCache}, _slot{_imageWidget}
+      TrackCoverArtComponent(LayoutBuildContext& ctx, LayoutNode const& node)
+        : _slot{_imageWidget}
       {
+        if (ctx.dependencies.imageCache == nullptr)
+        {
+          _error = Gtk::make_managed<Gtk::Label>("Error: imageCache missing");
+          return;
+        }
+
+        _imageControllerPtr =
+          std::make_unique<ResourceImageController>(_imageWidget, ctx.runtime.library(), *ctx.dependencies.imageCache);
         _imageWidget.set_halign(Gtk::Align::CENTER);
         _imageWidget.set_valign(Gtk::Align::CENTER);
         _imageWidget.set_expand(false);
@@ -156,38 +166,47 @@ namespace ao::gtk::layout
           }
         }
 
-        if (ctx.track.detailScope != nullptr)
+        if (ctx.detailScope != nullptr)
         {
           _scopeConn =
-            ctx.track.detailScope->signalSnapshotChanged().connect([this](auto const& snap) { updateImage(snap); });
-          updateImage(ctx.track.detailScope->snapshot());
+            ctx.detailScope->signalSnapshotChanged().connect([this](auto const& snap) { updateImage(snap); });
+          updateImage(ctx.detailScope->snapshot());
         }
       }
 
-      Gtk::Widget& widget() override { return _slot; }
+      Gtk::Widget& widget() override
+      {
+        if (_error != nullptr)
+        {
+          return *_error;
+        }
+
+        return _slot;
+      }
 
     private:
       void updateImage(rt::TrackDetailSnapshot const& snap)
       {
         if (snap.singleCoverArtId == kInvalidResourceId)
         {
-          _imageController.clear();
+          _imageControllerPtr->clear();
           _imageWidget.set_visible(true);
         }
         else
         {
-          _imageController.load(snap.singleCoverArtId);
+          _imageControllerPtr->load(snap.singleCoverArtId);
           _imageWidget.set_visible(true);
         }
       }
 
       ImageWidget _imageWidget;
-      ResourceImageController _imageController;
+      std::unique_ptr<ResourceImageController> _imageControllerPtr;
       CoverArtSlot _slot;
+      Gtk::Label* _error = nullptr;
       sigc::connection _scopeConn;
     };
 
-    std::unique_ptr<LayoutComponent> createTrackCoverArt(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackCoverArt(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackCoverArtComponent>(ctx, node);
     }

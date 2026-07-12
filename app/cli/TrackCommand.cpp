@@ -3,7 +3,7 @@
 
 #include "TrackCommand.h"
 
-#include "CliContext.h"
+#include "CliRuntime.h"
 #include "CommandError.h"
 #include "DryRunFlag.h"
 #include "DumpOutput.h"
@@ -258,19 +258,19 @@ namespace ao::cli
       std::println(os, "deleted track: {}{}", reply.trackId, dryRun ? " (dry-run)" : "");
     }
 
-    void updateTracks(CliContext& context,
+    void updateTracks(CliRuntime& cli,
                       std::vector<std::uint32_t> const& rawIds,
                       std::string const& filter,
                       rt::MetadataPatch const& patch,
                       bool dryRun)
     {
-      auto& ml = context.musicLibrary();
-      auto reader = context.library().reader();
+      auto& ml = cli.musicLibrary();
+      auto reader = cli.library().reader();
       auto const targetIds = resolveUpdateTargets(ml, reader, rawIds, filter);
 
       if (dryRun)
       {
-        auto const replyResult = context.library().writer().previewUpdateMetadata(targetIds, patch);
+        auto const replyResult = cli.library().writer().previewUpdateMetadata(targetIds, patch);
 
         if (!replyResult)
         {
@@ -278,11 +278,11 @@ namespace ao::cli
         }
 
         formatUpdateReply(
-          *replyResult, true, static_cast<std::uint64_t>(targetIds.size()), context.options().format, context.io().out);
+          *replyResult, true, static_cast<std::uint64_t>(targetIds.size()), cli.options().format, cli.io().out);
         return;
       }
 
-      auto const replyResult = context.library().writer().updateMetadata(targetIds, patch);
+      auto const replyResult = cli.library().writer().updateMetadata(targetIds, patch);
 
       if (!replyResult)
       {
@@ -290,7 +290,7 @@ namespace ao::cli
       }
 
       formatUpdateReply(
-        *replyResult, false, static_cast<std::uint64_t>(targetIds.size()), context.options().format, context.io().out);
+        *replyResult, false, static_cast<std::uint64_t>(targetIds.size()), cli.options().format, cli.io().out);
     }
   } // namespace
 
@@ -916,7 +916,7 @@ namespace ao::cli
       }
     }
 
-    void configureTrackShowCommand(CLI::App& track, CliContext& context)
+    void configureTrackShowCommand(CLI::App& track, CliRuntime& cli)
     {
       auto* showCmd = track.add_subcommand("show", "Show tracks by id or filter");
       auto* ids = showCmd->add_option("id", "track ids to show")->expected(0, -1);
@@ -927,35 +927,35 @@ namespace ao::cli
       showCmd->footer(trackShowHelpFooter());
 
       showCmd->callback(
-        [&context, ids, filter, limit, offset, formatExpression]
+        [&cli, ids, filter, limit, offset, formatExpression]
         {
-          auto reader = context.library().reader();
+          auto reader = cli.library().reader();
           auto const rawIds = ids->count() > 0 ? ids->as<std::vector<std::uint32_t>>() : std::vector<std::uint32_t>{};
           auto const targetIds = resolveShowTargets(
-            context.musicLibrary(), reader, rawIds, filter->count() > 0 ? filter->as<std::string>() : std::string{});
-          show(context.musicLibrary(),
+            cli.musicLibrary(), reader, rawIds, filter->count() > 0 ? filter->as<std::string>() : std::string{});
+          show(cli.musicLibrary(),
                targetIds,
-               context.options().format,
+               cli.options().format,
                formatExpression->count() > 0 ? formatExpression->as<std::string>() : std::string{},
                limit->as<std::size_t>(),
                offset->as<std::size_t>(),
-               context.io().out);
+               cli.io().out);
         });
     }
 
-    void configureTrackCreateCommand(CLI::App& track, CliContext& context)
+    void configureTrackCreateCommand(CLI::App& track, CliRuntime& cli)
     {
       auto* create = track.add_subcommand("create", "Create a track from a file");
       auto* path = create->add_option("path", "audio file path")->required();
       auto* dryRun = addDryRunFlag(*create);
       create->callback(
-        [&context, path, dryRun]
+        [&cli, path, dryRun]
         {
           auto const pathValue = path->as<std::string>();
 
           if (isDryRun(dryRun))
           {
-            auto const trackResult = context.library().writer().previewCreateTrackFromFile(pathValue);
+            auto const trackResult = cli.library().writer().previewCreateTrackFromFile(pathValue);
 
             if (!trackResult)
             {
@@ -968,12 +968,12 @@ namespace ao::cli
                               trackResult->title,
                               trackResult->artist,
                               true,
-                              context.options().format,
-                              context.io().out);
+                              cli.options().format,
+                              cli.io().out);
             return;
           }
 
-          auto const trackResult = context.library().writer().createTrackFromFile(pathValue);
+          auto const trackResult = cli.library().writer().createTrackFromFile(pathValue);
 
           if (trackResult)
           {
@@ -982,8 +982,8 @@ namespace ao::cli
                               trackResult->title,
                               trackResult->artist,
                               false,
-                              context.options().format,
-                              context.io().out);
+                              cli.options().format,
+                              cli.io().out);
           }
           else
           {
@@ -1069,7 +1069,7 @@ namespace ao::cli
       return hasPatch;
     }
 
-    void runTrackUpdateCommand(CliContext& context, TrackUpdateCliOptions const& options)
+    void runTrackUpdateCommand(CliRuntime& cli, TrackUpdateCliOptions const& options)
     {
       auto patch = rt::MetadataPatch{};
       bool hasPatch = applyTrackUpdateFieldOptions(options, patch);
@@ -1083,10 +1083,10 @@ namespace ao::cli
       auto const rawIds =
         options.ids->count() > 0 ? options.ids->as<std::vector<std::uint32_t>>() : std::vector<std::uint32_t>{};
       auto const filter = options.filter->count() > 0 ? options.filter->as<std::string>() : std::string{};
-      updateTracks(context, rawIds, filter, patch, isDryRun(options.dryRun));
+      updateTracks(cli, rawIds, filter, patch, isDryRun(options.dryRun));
     }
 
-    void configureTrackUpdateCommand(CLI::App& track, CliContext& context)
+    void configureTrackUpdateCommand(CLI::App& track, CliRuntime& cli)
     {
       auto* update = track.add_subcommand("update", "Update track metadata");
       update->footer(trackUpdateHelpFooter());
@@ -1120,37 +1120,37 @@ namespace ao::cli
         .unsetsPtr = updateUnsetsPtr,
       };
 
-      update->callback([&context, options] { runTrackUpdateCommand(context, options); });
+      update->callback([&cli, options] { runTrackUpdateCommand(cli, options); });
     }
 
-    void configureTrackDeleteCommand(CLI::App& track, CliContext& context)
+    void configureTrackDeleteCommand(CLI::App& track, CliRuntime& cli)
     {
       auto* del = track.add_subcommand("delete", "Delete a track by id");
       auto* id = del->add_option("id", "track id")->required();
       auto* dryRun = addDryRunFlag(*del);
       del->callback(
-        [&context, id, dryRun]
+        [&cli, id, dryRun]
         {
           auto const trackId = TrackId{id->as<std::uint32_t>()};
 
           if (isDryRun(dryRun))
           {
-            auto const deleteResult = context.library().writer().previewDeleteTrack(trackId);
+            auto const deleteResult = cli.library().writer().previewDeleteTrack(trackId);
 
             if (!deleteResult)
             {
               throwCommandError(deleteResult.error());
             }
 
-            formatTrackDelete(*deleteResult, true, context.options().format, context.io().out);
+            formatTrackDelete(*deleteResult, true, cli.options().format, cli.io().out);
             return;
           }
 
-          auto const deleteResult = context.library().writer().deleteTrack(trackId);
+          auto const deleteResult = cli.library().writer().deleteTrack(trackId);
 
           if (deleteResult)
           {
-            formatTrackDelete(*deleteResult, false, context.options().format, context.io().out);
+            formatTrackDelete(*deleteResult, false, cli.options().format, cli.io().out);
           }
           else
           {
@@ -1159,38 +1159,38 @@ namespace ao::cli
         });
     }
 
-    void configureTrackDumpCommand(CLI::App& track, CliContext& context)
+    void configureTrackDumpCommand(CLI::App& track, CliRuntime& cli)
     {
       auto* dumpCmd = track.add_subcommand("dump", "Dump tracks from database");
       auto* dumpId = dumpCmd->add_option("--id", "track id to dump");
       auto* dumpRaw = dumpCmd->add_flag("--raw", "hex dump raw bytes");
 
       dumpCmd->callback(
-        [&context, dumpId, dumpRaw]
+        [&cli, dumpId, dumpRaw]
         {
-          if (context.options().format != OutputFormat::Plain)
+          if (cli.options().format != OutputFormat::Plain)
           {
             throwCommandError(Error::Code::InvalidInput,
                               "track dump supports only plain output; use track show -O yaml/json for structured data");
           }
 
-          dumpTracks(context.musicLibrary(),
+          dumpTracks(cli.musicLibrary(),
                      dumpId->count() > 0 ? dumpId->as<std::uint32_t>() : 0,
                      dumpRaw->count() > 0,
-                     context.io().out);
+                     cli.io().out);
         });
     }
   } // namespace
 
-  void configureTrackCommand(CLI::App& app, CliContext& context)
+  void configureTrackCommand(CLI::App& app, CliRuntime& cli)
   {
     auto* track = app.add_subcommand("track", "Track management commands");
     track->footer(trackHelpFooter());
     track->require_subcommand(1);
-    configureTrackShowCommand(*track, context);
-    configureTrackCreateCommand(*track, context);
-    configureTrackUpdateCommand(*track, context);
-    configureTrackDeleteCommand(*track, context);
-    configureTrackDumpCommand(*track, context);
+    configureTrackShowCommand(*track, cli);
+    configureTrackCreateCommand(*track, cli);
+    configureTrackUpdateCommand(*track, cli);
+    configureTrackDeleteCommand(*track, cli);
+    configureTrackDumpCommand(*track, cli);
   }
 } // namespace ao::cli

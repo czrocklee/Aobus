@@ -35,18 +35,18 @@ namespace ao::cli
     std::ostream& err;
   };
 
-  class CliContext final
+  class CliRuntime final
   {
   public:
-    explicit CliContext(std::ostream& out, std::ostream& err, std::size_t musicLibraryMapSize = 0);
-    ~CliContext();
+    explicit CliRuntime(std::ostream& out, std::ostream& err, std::size_t musicLibraryMapSize = 0);
+    ~CliRuntime();
 
-    CliContext(CliContext const&) = delete;
-    CliContext& operator=(CliContext const&) = delete;
-    CliContext(CliContext&&) = delete;
-    CliContext& operator=(CliContext&&) = delete;
+    CliRuntime(CliRuntime const&) = delete;
+    CliRuntime& operator=(CliRuntime const&) = delete;
+    CliRuntime(CliRuntime&&) = delete;
+    CliRuntime& operator=(CliRuntime&&) = delete;
 
-    rt::CoreRuntime& runtime();
+    rt::CoreRuntime& core();
     library::MusicLibrary& musicLibrary();
     rt::Library& library();
 

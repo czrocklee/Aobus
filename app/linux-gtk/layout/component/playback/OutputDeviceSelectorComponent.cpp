@@ -3,8 +3,8 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "playback/OutputDevicePopover.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -30,7 +30,7 @@ namespace ao::gtk::layout
     class OutputDeviceSelectorComponent final : public LayoutComponent
     {
     public:
-      OutputDeviceSelectorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      OutputDeviceSelectorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
         : _playback{ctx.runtime.playback()}
         , _viewModel{_playback,
                      [this](uimodel::OutputDeviceViewState const& view)
@@ -64,7 +64,7 @@ namespace ao::gtk::layout
       uimodel::OutputDeviceViewModel _viewModel;
     };
 
-    std::unique_ptr<LayoutComponent> createOutputDeviceSelector(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createOutputDeviceSelector(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<OutputDeviceSelectorComponent>(ctx, node);
     }

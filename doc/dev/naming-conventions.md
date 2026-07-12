@@ -48,12 +48,12 @@ once the code and the principles make them redundant.
 
 ## Enforcement
 
-Naming rules run at three levels. Anything not listed under a mechanical check
-is review judgment; keep mechanical checks free of semantic inference (see
-*Review Practice*).
+Naming rules run at four levels. The first three are mechanical; the fourth is
+review judgment. Keep mechanical checks free of semantic inference (see *Review
+Practice*).
 
-`./ao name-audit`, run as part of `./ao hygiene`, enforces the mechanical file
-and class rules:
+**1. `./ao name-audit`**, run as part of `./ao hygiene`, enforces the mechanical
+file and class-name rules:
 
 - Banned catch-all file name suffixes: `Utils`, `Util`, `Utility`, `Types`.
 - Singular `*Helper` file names are banned; `*Helpers` files must live in
@@ -61,9 +61,11 @@ and class rules:
 - Layer placement for role suffixes: `ViewModel`, `Service`, `Component`,
   `Dialog`, `Widget`, `Panel`, `Controller`, `Coordinator`, `Host`, `Bridge`.
 - `Fake*`, `Mock*`, `Spy*`, and `Stub*` types must live under `test/`.
+- `*TestAccess` definitions are banned in every layer; use public behavior,
+  constructor injection, or a normal production collaboration seam instead.
 
-Project clang-tidy checks, run by `./ao tidy` and on changed files by
-`./ao hygiene`, enforce identifier-level rules:
+**2. Project clang-tidy checks**, run by `./ao tidy` and on changed files by
+`./ao hygiene`, enforce project-specific identifier rules:
 
 - `IdentifierNamingExtensionsCheck`: `_camelCase` class members and plain
   `camelCase` struct members (see *Identifier Shapes*).
@@ -73,8 +75,23 @@ Project clang-tidy checks, run by `./ao tidy` and on changed files by
 - `ChronoNamingConventionCheck`: time noun rules for `std::chrono` types (see
   *Time And Duration Names*).
 
-Everything else — role semantics, verb allocation, vocabulary — is enforced in
-review only.
+**3. Built-in `readability-identifier-naming`**, configured in the shared
+clang-tidy base and run by the same commands, enforces identifier case and
+prefixes:
+
+- `PascalCase` for classes, structs, enums, scoped enum constants, and type
+  aliases.
+- `kCamelCase` (the `k` prefix) for `constexpr` variables.
+- `camelBack` for functions, methods, parameters, and local variables.
+- The `_` prefix for private and protected members.
+- GTK binding methods (`property_*`, `signal_*`, `vfunc_*`, `on_*`) are exempt.
+
+  This check does not case-enforce non-`constexpr` class or static constants:
+  only ignored-regexp keys are configured for them, so the `kCamelCase`
+  constant policy in *Identifier Shapes* is review-enforced for those members.
+
+**4. Review only**: role semantics, verb allocation, and vocabulary. These
+carry architectural meaning and cannot be inferred mechanically.
 
 ## Identifier Shapes
 
@@ -110,6 +127,9 @@ review only.
   contract name for the public role, such as `Backend` or
   `TrackListProjection`, and give concrete implementations a semantic qualifier,
   such as `LiveTrackListProjection`.
+- Do not define `*TestAccess` friend backdoors. Tests observe public behavior;
+  when they need control over a collaborator, use a normal construction seam
+  that is also usable by a production composition root.
 - Avoid catch-all type and header concepts such as `*Types`, `*Common`, and
   generic `*Model` when the declarations can be split or named by a concrete
   concept such as capability, descriptor, binding, metadata, or decoded stream
@@ -117,6 +137,12 @@ review only.
 - Use `*Count` for cardinality and `*Number` for domain ordinals.
 - Use `indices` for positional-index collections. Use `indexes` only for
   database/search index entities.
+- Recognize a small set of framework and C++ idioms at their boundaries. They
+  are not architectural roles and do not enter the *Choosing A Role* order:
+  `*Object` for a GTK `Glib::Object` subclass, `*Deleter` for a `unique_ptr`
+  custom deleter, `*Proxy` for a C++ view or range proxy, `*Tag` for the
+  phantom type parameter of a strong typedef, and `*Hash` for a hash functor.
+  Keep each at the framework or standard-library boundary that motivates it.
 
 ## Class And File Role Names
 
@@ -168,7 +194,9 @@ placement and nuance.
 | `*State` | Passive snapshot or mutable state value. | Behavior-heavy objects or service-owned workflows. |
 | `*Snapshot` | Point-in-time copy captured from a live source. | Mutable live state or persisted session payloads. |
 | `*Cache` | Non-authoritative retained data or derived runtime objects keyed by lookup and invalidated for coherence. | Persistence, source-of-truth ownership, or registration APIs. |
-| `*Config` | Required construction or initialization input. | Optional tuning knobs or runtime-observed state. |
+| `*Config` | Required construction or initialization values; no collaborator objects. | Collaborator wiring, which should use `*Dependencies`; optional knobs, which should use `*Options`; or runtime-observed state. |
+| `*Dependencies` | Construction-scoped collaborator bundle consumed to assemble an object or subsystem. | Value-only settings, which should use `*Config`; per-call inputs, which should use `*Context`; live mutable state; or a plural `*Services` name. |
+| `*Context` | Passive, non-owning environment or input bundle for one call or bounded operation; not retained as wiring. | Construction wiring, which should use `*Dependencies`; ownership, lifecycle, subscriptions, or retained domain state; or a cross-cutting mutable bag. |
 | `*Options` | Optional knobs that alter an operation or construction path. | Required identity, durable state, or result data. |
 | `*Spec` | Declarative requested shape or desired configuration. | Observed runtime facts or persisted state. |
 | `*Descriptor` | Static declared capability, action, property, or registration metadata. | Runtime observations, user music metadata, or mutable registry entries. |
@@ -185,6 +213,7 @@ placement and nuance.
 | `*Plan` | Computed work or execution description consumed by another step. | Mutable runtime state, service ownership, or result summaries. |
 | `*Compiler` | Converts a declarative input into an executable plan, bytecode, or lowered representation. | Parsing alone or direct evaluation. |
 | `*Evaluator` | Executes a plan, expression, or rule set against inputs. | Persistence, lifecycle, or source-of-truth ownership. |
+| `*Executor` | Async execution context that runs submitted tasks on an owning thread or turn model (`dispatch`/`defer`); the primitive that other subsystems post work to. | One-shot prepared work, which should use `*Operation`; or a business boundary, which should use `*Service`. |
 | `*Builder` | Incrementally constructs an object or aggregate. | Choosing implementations from a family. |
 | `*Factory` | Chooses and creates implementations or resources from a family. | Ordinary pure value construction, which should use `make*` functions. |
 | `*Reader` / `*Writer` | Transaction-scoped or boundary-scoped read/write access under a store or import/export workflow. | Long-lived runtime services or arbitrary file helpers. |
@@ -199,6 +228,7 @@ placement and nuance.
 | `*View` | Non-owning read view over core data, or a domain workspace view where `view` is the product concept. | GTK widgets, panels, pages, or view-models. |
 | `*Request` | Input payload crossing a service, engine, process, or IPC boundary. | Local function argument bundles with no boundary meaning. |
 | `*Reply` | Domain-level response from a synchronous command or mutation API. | Long-running operation summaries, which should use `Result`. |
+| `*Outcome` | Enum classifying a discrete completion or disposition state. | Aggregate completion data, which should use `*Result`. |
 | `*Result` | Operation outcome summary after work completes. | Exceptions/errors alone or command reply payloads. |
 | `*Progress` | In-flight progress payload. | Final operation summaries or durable state. |
 | `*Failure` | Structured recoverable failure payload. | Exception classes or generic error wrappers. |
@@ -206,6 +236,7 @@ placement and nuance.
 | `*Record` | Storage/log/foreign-system row or internally indexed entry. | Generic DTOs with no record identity or source. |
 | `*Info` | Observed facts from a runtime, decoder, parser, or external source. | Static declared capabilities, which should usually be `Descriptor`. |
 | `*Metadata` | User music metadata or real format/protocol metadata. | Generic descriptive fields for project-owned capabilities. |
+| `*Actions` | A cohesive set of imperative user or application commands over a subsystem, as either a command interface or a free-function command module; holds no state. | Stateful glue, which should use `*Controller` or `*Coordinator`; a lookup or registration table, which should use `*Registry`; or an owning service. |
 
 ### Model Roles
 
@@ -241,6 +272,9 @@ instead. Placement and nuance:
 - `*Operation` is appropriate when applying prepared work needs a bounded
   execution object for progress, cancellation, transactions, or scoped
   resources. Prefer a free function when the work is pure or stateless.
+- `*Executor` names an async execution context that dispatches or defers tasks
+  onto an owning thread or turn. It is infrastructure other subsystems post
+  work to, not a service boundary and not a one-shot `*Operation`.
 - `*View` is allowed in core storage for non-owning typed views, and in runtime
   workspace APIs where a user-visible workspace view is the domain object.
   GTK surfaces still use `Widget`, `Panel`, `Page`, `Dialog`, or `Window`.
@@ -256,12 +290,16 @@ before debating details:
 3. User music or real protocol/file facts are `*Metadata`.
 4. Current observable values are `*State`.
 5. Point-in-time copies are `*Snapshot`.
-6. Construction inputs split by necessity: required is `*Config`, optional
-   knobs are `*Options`, a requested target shape is `*Spec`.
+6. Construction and call inputs split by kind: required values are `*Config`,
+   optional knobs are `*Options`, a requested target shape is `*Spec`, a
+   construction-scoped bundle of collaborator objects is `*Dependencies`, and a
+   passive non-owning environment bundle for one call or bounded operation is
+   `*Context` (review-enforced: ownership and retention cannot be inferred from
+   the suffix alone).
 7. Operation-boundary data splits by phase: input `*Request`, synchronous
-   response `*Reply`, completed summary `*Result`, in-flight update
-   `*Progress`, recoverable failure `*Failure`, queued/emitted payload
-   `*Event`.
+   response `*Reply`, discrete completion/disposition enum `*Outcome`, completed
+   aggregate summary `*Result`, in-flight update `*Progress`, recoverable
+   failure `*Failure`, queued/emitted payload `*Event`.
 8. Persisted rows, log entries, external records, or registry entries with
    record identity are `*Record`.
 
@@ -269,11 +307,20 @@ Nuance beyond the table:
 
 - `*State` may be mutable as a value object, but it should not own
   subscriptions, callbacks, threads, or resources.
-- `*SessionState` is a persisted or restorable session payload. Keep it stable
-  enough for config/schema handling and separate from live `*Session` objects.
+- Session vocabulary splits three ways. `*Session` owns a bounded active
+  resource conversation or lifetime (see *Production Roles*); `*SessionModel`
+  holds in-memory application session state (see *Model Roles*); `*SessionState`
+  is the persisted or restorable payload. Keep `*SessionState` stable enough for
+  config/schema handling and separate from the live `*Session` and
+  `*SessionModel` objects.
 - `*Snapshot` is not a source of truth and should not imply persistence.
 - Avoid project-owned `*Data` unless the external format or API itself uses
   that term. Prefer a domain noun plus one of the roles above.
+- `*Dto` names a boundary payload owned by a CLI or serialization adapter. It
+  stays inside that adapter and is translated with `to*Dto()` / `from*Dto()`
+  (see *General Verb Allocation*) before it enters a domain or runtime API.
+  Because it is explicit boundary vocabulary rather than a domain payload, it is
+  exempt from the project-owned `*Data` warning above.
 
 ### UI Roles
 
@@ -295,6 +342,10 @@ Nuance beyond the table:
   units. Ordinary GTK widgets are not components unless they implement the
   layout component contract.
 - `*Host` owns and embeds a surface, page, layout runtime, or component tree.
+- `*Actions` names a cohesive command set over a subsystem, expressed as a
+  command interface (`ImportExportActions`) or a free-function command module
+  (`PlaybackActions`). It carries no widget or state ownership; stateful glue
+  stays in `*Controller` or `*Coordinator`.
 
 ### Uimodel Scope
 
@@ -477,6 +528,7 @@ family both fit, pick the narrower one and stop.
 | `make*` / `create*` / `build*` | `make*` constructs pure in-memory values or objects. `create*` creates persistent, registered, externally visible, or owned resources. `build*` assembles derived plans, trees, projections, or aggregates from existing inputs. Do not decide by return type. |
 | `new*` | Do not add project-owned `new*` functions or methods. Use `make*` or `create*`. |
 | `load*` / `read*` / `parse*` | `load*` materializes domain objects or application state from durable sources. `read*` consumes bytes, records, fields, streams, or current state. Low-level helpers such as `readFile()` or `readFileBytes()` may return raw file contents; `load*` is for materialized domain values such as registries, layouts, tracks, or sessions. `parse*` converts syntax, text, or binary representation into structured data. |
+| `decode*` / `encode*` | `decode*` converts an encoded media or binary representation into raw or structured media data; `encode*` performs the reverse. Contrast syntax-oriented `parse*` and storage- or wire-oriented `serialize*`. |
 | `resolve*` / `find*` / `lookup*` | `resolve*` binds an id, name, or reference using context. `find*` searches locally and may not find a match. `lookup*` queries a table, catalog, schema, dictionary, or registry. |
 | `write*` / `serialize*` / `emit*` / `dump*` | `write*` writes into a target object, file, storage, node, patch, or buffer. `serialize*` converts to storage or wire representation. `emit*` produces structured output, signal payload, or event text. `dump*` is diagnostic or user-requested raw/plain output. |
 | `export*` / `import*` | Use for full transfer workflows across a boundary. |
@@ -616,8 +668,11 @@ family both fit, pick the narrower one and stop.
   capability or availability, not visibility or selection.
 - `render*` creates visual representation or renderable data. `draw*` and
   `paint*` are low-level drawing callbacks or drawing-context operations.
-  `layout*` is only UI measure, allocation, or child positioning; do not use it
-  for domain metadata or schema. `arrange*` changes item order or placement.
+  `layout*` as a verb is only UI measure, allocation, or child positioning; do
+  not use it for domain metadata or schema. This restricts the verb only:
+  fixed-field `*Layout` type nouns remain valid boundary vocabulary for
+  binary-format field layouts (see *Boundary Vocabulary*). `arrange*` changes
+  item order or placement.
   `position*` is for coordinates and placement, not generic order.
 - `browse*` starts browsing UI or an external browser. `choose*` is explicit
   user choice from a dialog or options. `pick*` is internal or heuristic
@@ -747,6 +802,8 @@ Examples:
 - Keyboard `Meta`.
 - Existing CLI flags or serialized keys such as `--dict`, `--meta`, and
   YAML `meta:`.
+- Binary-format field-layout structs such as ID3v2 `HeaderLayout` and
+  MPEG `FrameLayout`.
 
 ## Review Practice
 

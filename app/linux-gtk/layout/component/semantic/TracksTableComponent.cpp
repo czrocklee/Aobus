@@ -3,8 +3,8 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "track/TrackPageHost.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -29,15 +29,15 @@ namespace ao::gtk::layout
     class TracksTableComponent final : public LayoutComponent
     {
     public:
-      TracksTableComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      TracksTableComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.track.pageHost == nullptr)
+        if (ctx.dependencies.trackPageHost == nullptr)
         {
           _container.append(*Gtk::make_managed<Gtk::Label>("Error: trackPageHost missing"));
           return;
         }
 
-        Gtk::Stack& stack = ctx.track.pageHost->stack();
+        Gtk::Stack& stack = ctx.dependencies.trackPageHost->stack();
         _container.append(stack);
         _container.set_hexpand(true);
         _container.set_vexpand(true);
@@ -49,7 +49,7 @@ namespace ao::gtk::layout
       Gtk::Box _container{Gtk::Orientation::VERTICAL};
     };
 
-    std::unique_ptr<LayoutComponent> createTracksTable(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTracksTable(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TracksTableComponent>(ctx, node);
     }

@@ -23,7 +23,7 @@ namespace ao::library::test
   {
     constexpr std::size_t kUint16Max = std::numeric_limits<std::uint16_t>::max();
 
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
 
     SECTION("Title length")
     {
@@ -67,7 +67,7 @@ namespace ao::library::test
     constexpr std::size_t kUint16Max = std::numeric_limits<std::uint16_t>::max();
     constexpr auto kUint16Overflow = kUint16Max + 1;
 
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
 
     SECTION("URI length")
     {

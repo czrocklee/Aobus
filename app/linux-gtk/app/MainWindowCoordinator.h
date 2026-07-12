@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "app/GtkUiServices.h"
+#include "app/GtkUiDependencies.h"
 #include "app/ThemeCoordinator.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Subscription.h>
@@ -34,7 +34,7 @@ namespace ao::gtk
 {
   class MainWindow;
   class AppConfigStore;
-  class GtkLayoutConfig;
+  class GtkLayoutStateStore;
   class TrackRowCache;
   class ImageCache;
   class TagEditController;
@@ -64,7 +64,7 @@ namespace ao::gtk
     void saveSession();
     void loadSession();
 
-    GtkUiServices uiServices();
+    GtkUiDependencies uiDependencies();
 
     void rebuildListPages(lmdb::ReadTransaction const& transaction);
 
@@ -78,7 +78,7 @@ namespace ao::gtk
     ListNavigationController* listNavigationController();
     uimodel::TrackPresentationCatalog* trackPresentationCatalog();
     uimodel::ListPresentationPreferenceStore* trackPresentationPreferences();
-    ThemeCoordinator* themeController();
+    ThemeCoordinator* themeCoordinator();
 
     portal::ImportExportCoordinator& importExport();
 

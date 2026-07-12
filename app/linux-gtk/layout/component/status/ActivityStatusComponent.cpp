@@ -4,8 +4,8 @@
 #include "StatusComponentRegistrations.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "status/ActivityStatusWidget.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/library/Library.h>
@@ -76,7 +76,7 @@ namespace ao::gtk::layout
     class ActivityStatusComponent final : public LayoutComponent
     {
     public:
-      ActivityStatusComponent(LayoutContext& ctx, LayoutNode const& node)
+      ActivityStatusComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _runtime{ctx.runtime}
         , _parentWindow{ctx.parentWindow}
         , _actionRegistry{ctx.actionRegistry}
@@ -129,7 +129,7 @@ namespace ao::gtk::layout
       ActivityStatusWidget _widget;
     };
 
-    std::unique_ptr<LayoutComponent> createActivityStatus(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createActivityStatus(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<ActivityStatusComponent>(ctx, node);
     }

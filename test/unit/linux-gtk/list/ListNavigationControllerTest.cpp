@@ -72,8 +72,8 @@ namespace ao::gtk::test
                                                          },
                                                          .listPresentationCallback = {}};
 
-    auto themeController = ThemeCoordinator{};
-    auto controller = ListNavigationController{window, fixture.runtime(), std::move(callbacks), themeController};
+    auto themeCoordinator = ThemeCoordinator{};
+    auto controller = ListNavigationController{window, fixture.runtime(), std::move(callbacks), themeCoordinator};
     window.set_child(controller.widget());
 
     SECTION("rebuildTree populates the navigation panel")

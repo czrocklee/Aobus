@@ -3,8 +3,8 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -26,7 +26,7 @@ namespace ao::gtk::layout
     class ActionButtonComponent final : public LayoutComponent
     {
     public:
-      ActionButtonComponent(LayoutContext& /*ctx*/, LayoutNode const& node)
+      ActionButtonComponent(LayoutBuildContext& /*ctx*/, LayoutNode const& node)
       {
         if (auto const label = node.propertyOr<std::string>("label", ""); !label.empty())
         {
@@ -75,7 +75,7 @@ namespace ao::gtk::layout
       Gtk::Button _button;
     };
 
-    std::unique_ptr<LayoutComponent> createActionButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createActionButton(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<ActionButtonComponent>(ctx, node);
     }

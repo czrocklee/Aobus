@@ -261,8 +261,8 @@ namespace ao::rt::test
             "[runtime][regression][async][concurrency]")
   {
     auto executor = ManualExecutor{};
-    auto runtime = Runtime{executor, 1};
-    auto& sleeper = ControlledSleeper::install(runtime);
+    auto sleeper = ControlledSleeper{};
+    auto runtime = Runtime{executor, 1, &sleeper};
     auto callbackCount = AsyncTestState<std::uint32_t>::create(0);
     auto ranOnWorker = AsyncTestState<bool>::create(false);
 
@@ -279,7 +279,7 @@ namespace ao::rt::test
     CHECK(cancelledCall.cancelled);
     CHECK(cancelledCall.startedOn != cancellingThread);
     CHECK(cancelledCall.cancelledOn == cancellingThread);
-    REQUIRE(sleeper.forceFire(sleepingCall.id));
+    CHECK_FALSE(sleeper.fireById(sleepingCall.id));
     runtime.requestStop();
     runtime.join();
 

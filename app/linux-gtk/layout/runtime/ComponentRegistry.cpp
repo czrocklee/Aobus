@@ -7,8 +7,8 @@
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentInteractionController.h"
 #include "layout/runtime/DecoratedLayoutComponent.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -53,7 +53,8 @@ namespace ao::gtk::layout
     _catalog.registerComponentDescriptor(std::move(descriptor));
   }
 
-  std::unique_ptr<LayoutComponent> ComponentRegistry::create(LayoutContext& ctx, uimodel::LayoutNode const& node) const
+  std::unique_ptr<LayoutComponent> ComponentRegistry::create(LayoutBuildContext& ctx,
+                                                             uimodel::LayoutNode const& node) const
   {
     auto componentPtr = std::unique_ptr<LayoutComponent>{};
     auto const optCompDesc = descriptor(node.type);
@@ -116,10 +117,10 @@ namespace ao::gtk::layout
     {
       struct [[nodiscard]] SurfaceGuard
       {
-        LayoutContext& ctx;
+        LayoutBuildContext& ctx;
         LayoutSurface saved;
 
-        SurfaceGuard(LayoutContext& ctxRef, LayoutSurface surface)
+        SurfaceGuard(LayoutBuildContext& ctxRef, LayoutSurface surface)
           : ctx{ctxRef}, saved{surface}
         {
         }

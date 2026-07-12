@@ -40,8 +40,8 @@ namespace ao::gtk
   ListNavigationController::ListNavigationController(Gtk::Window& parent,
                                                      rt::AppRuntime& runtime,
                                                      Callbacks callbacks,
-                                                     ThemeCoordinator& themeController)
-    : _parent{parent}, _callbacks{std::move(callbacks)}, _runtime{runtime}, _themeController{themeController}
+                                                     ThemeCoordinator& themeCoordinator)
+    : _parent{parent}, _callbacks{std::move(callbacks)}, _runtime{runtime}, _themeCoordinator{themeCoordinator}
   {
     auto panelCallbacks = ListNavigationPanel::Callbacks{
       .onSelectionChanged = [this](ListId listId) { handleSelectionChanged(listId); },
@@ -171,7 +171,7 @@ namespace ao::gtk
     }
 
     auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, parentListId, *_dataProvider);
-    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
 
     if (!initialExpression.empty())
     {
@@ -214,7 +214,7 @@ namespace ao::gtk
       auto const optPres =
         _callbacks.listPresentationCallback ? _callbacks.listPresentationCallback(listId) : std::nullopt;
       auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, optNode->parentId, *_dataProvider);
-      auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
+      auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
       dialog->populate(listId, *optNode, optPres);
       dialog->signal_response().connect(
         [this, dialog, tokenPtr](std::int32_t responseId)

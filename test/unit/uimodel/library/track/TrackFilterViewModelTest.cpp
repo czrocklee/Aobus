@@ -34,7 +34,7 @@ namespace ao::uimodel::test
       TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
       ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
       NotificationService notifications;
-      PlaybackService playback{executor, libraryFixture.library(), notifications};
+      PlaybackService playback{makePlaybackService(executor, libraryFixture.library(), notifications)};
       WorkspaceService workspaceService{viewService, playback, changes, libraryFixture.library()};
       ao::test::RenderLog<TrackFilterViewState> renderLog;
       TrackFilterViewModel viewModel{viewService,

@@ -7,8 +7,8 @@
 
 namespace ao::cli
 {
-  class CliContext;
+  class CliRuntime;
 
-  void runScan(CliContext& context, bool dryRun, bool verbose, bool deferFingerprint = false);
-  void configureScanCommand(CLI::App& app, CliContext& context);
+  void runScan(CliRuntime& cli, bool dryRun, bool verbose, bool deferFingerprint = false);
+  void configureScanCommand(CLI::App& app, CliRuntime& cli);
 } // namespace ao::cli

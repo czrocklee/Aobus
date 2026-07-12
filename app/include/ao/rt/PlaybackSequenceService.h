@@ -37,7 +37,7 @@ namespace ao::rt
   class PlaybackCursorSession;
   class PlaybackSessionPersistence;
   class PlaybackService;
-  struct PlaybackLaunchContext;
+  struct PlaybackLaunchSpec;
   class TrackSourceCache;
   class ViewService;
 
@@ -113,10 +113,10 @@ namespace ao::rt
     friend class PlaybackSessionPersistence;
 
     bool hasActivePlaybackSession() const;
-    bool capturePlaybackSessionSnapshot(PlaybackLaunchContext& launchContext,
+    bool capturePlaybackSessionSnapshot(PlaybackLaunchSpec& launchSpec,
                                         TrackId& currentTrackId,
                                         std::size_t& anchorIndex) const;
-    Result<std::unique_ptr<PlaybackCursorSession>> preparePlaybackSessionRestore(PlaybackLaunchContext launchContext,
+    Result<std::unique_ptr<PlaybackCursorSession>> preparePlaybackSessionRestore(PlaybackLaunchSpec launchSpec,
                                                                                  TrackId currentTrackId,
                                                                                  std::size_t anchorIndex,
                                                                                  ShuffleMode shuffleMode,

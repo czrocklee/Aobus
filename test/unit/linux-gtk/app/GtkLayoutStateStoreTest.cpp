@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/GtkLayoutConfig.h"
+#include "app/GtkLayoutStateStore.h"
 
 #include "test/unit/TestUtils.h"
 #include <ao/rt/TrackField.h>
@@ -15,17 +15,17 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("GtkLayoutConfig - persists column layout preferences", "[gtk][unit][app][config]")
+  TEST_CASE("GtkLayoutStateStore - persists column layout preferences", "[gtk][unit][app][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
 
     SECTION("Load non-existent config returns default")
     {
-      auto const config = GtkLayoutConfig{libraryPath};
+      auto const store = GtkLayoutStateStore{libraryPath};
       auto newState = uimodel::TrackColumnLayoutState{};
       auto newPrefState = uimodel::ListPresentationPreferenceState{};
-      config.load(newState, newPrefState);
+      store.load(newState, newPrefState);
       // Not found should not modify
       CHECK(newState.listLayouts.empty());
       CHECK(newPrefState.presentations.empty());
@@ -34,7 +34,7 @@ namespace ao::gtk::test
     SECTION("Save and load layout state")
     {
       {
-        auto config = GtkLayoutConfig{libraryPath};
+        auto store = GtkLayoutStateStore{libraryPath};
         auto state = uimodel::TrackColumnLayoutState{};
         auto prefState = uimodel::ListPresentationPreferenceState{};
         state.listLayouts[ListId{10}] = {
@@ -42,14 +42,14 @@ namespace ao::gtk::test
         state.listLayouts[ListId{20}] = {
           uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 200, .weight = -1.0}};
         prefState.presentations[ListId{10}] = "albums";
-        config.save(state, prefState);
+        store.save(state, prefState);
       }
 
       {
-        auto const config = GtkLayoutConfig{libraryPath};
+        auto const store = GtkLayoutStateStore{libraryPath};
         auto state = uimodel::TrackColumnLayoutState{};
         auto prefState = uimodel::ListPresentationPreferenceState{};
-        config.load(state, prefState);
+        store.load(state, prefState);
         REQUIRE(state.listLayouts.size() == 2);
         CHECK(state.listLayouts[ListId{10}][0].field == rt::TrackField::Artist);
         CHECK(state.listLayouts[ListId{10}][0].weight == 1.75);
@@ -71,10 +71,10 @@ namespace ao::gtk::test
                 "        width: 321\n";
       output.close();
 
-      auto const config = GtkLayoutConfig{libraryPath};
+      auto const store = GtkLayoutStateStore{libraryPath};
       auto state = uimodel::TrackColumnLayoutState{};
       auto prefState = uimodel::ListPresentationPreferenceState{};
-      config.load(state, prefState);
+      store.load(state, prefState);
 
       REQUIRE(state.listLayouts.contains(ListId{42}));
       REQUIRE(state.listLayouts[ListId{42}].size() == 1);

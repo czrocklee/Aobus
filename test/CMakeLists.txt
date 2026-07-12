@@ -456,7 +456,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp
     unit/linux-gtk/app/ShellLayoutStoreTest.cpp
     unit/linux-gtk/app/ShellLayoutControllerTest.cpp
-    unit/linux-gtk/app/GtkLayoutConfigTest.cpp
+    unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp
     unit/linux-gtk/preferences/PreferencesWindowTest.cpp
     unit/linux-gtk/track/TrackListModelTest.cpp
     unit/linux-gtk/track/TrackSelectionControllerTest.cpp
@@ -479,7 +479,6 @@ add_executable(ao_gtk_test
     unit/linux-gtk/platform/MprisBridgeTest.cpp
       unit/linux-gtk/layout/document/LayoutModelTest.cpp
       unit/linux-gtk/layout/runtime/ActionRegistryTest.cpp
-      unit/linux-gtk/layout/runtime/LayoutContextTest.cpp
       unit/linux-gtk/layout/runtime/ActionBinderTest.cpp
       unit/linux-gtk/layout/runtime/ActionValidatorTest.cpp
       unit/linux-gtk/layout/runtime/ComponentInteractionControllerTest.cpp

@@ -501,7 +501,7 @@ namespace ao::council
       std::string agentId = {};
       std::string roundId = {};
       std::string roundLabel = {};
-      ProcessResult result = {};
+      ProcessResult processResult = {};
     };
 
     using CouncilRows = std::vector<std::pair<std::string, std::string>>;
@@ -559,13 +559,13 @@ namespace ao::council
           }
 
           std::print(out, "\n### {}\n\n", member.agentId);
-          std::print(out, "{}\n\n", processSummary(member.result));
-          std::print(out, "usable: {}\n\n", isUsableMemberResponse(member.result) ? "true" : "false");
-          std::print(out, "stdout:\n{}\n", member.result.standardOutput);
+          std::print(out, "{}\n\n", processSummary(member.processResult));
+          std::print(out, "usable: {}\n\n", isUsableMemberResponse(member.processResult) ? "true" : "false");
+          std::print(out, "stdout:\n{}\n", member.processResult.standardOutput);
 
-          if (!member.result.standardError.empty())
+          if (!member.processResult.standardError.empty())
           {
-            std::print(out, "\nstderr:\n{}\n", member.result.standardError);
+            std::print(out, "\nstderr:\n{}\n", member.processResult.standardError);
           }
         }
 
@@ -605,13 +605,13 @@ namespace ao::council
           constexpr std::size_t kMemberIndent = 6;
           auto const memberPath = std::filesystem::path{"members"} / member.agentId / member.roundId;
           yaml_emit::beginSequenceMap(out, kMemberIndent, "agent", member.agentId);
-          yaml_emit::scalarField(out, 8, "status", toString(member.result.status));
-          yaml_emit::scalarField(out, 8, "exit-code", member.result.exitCode);
-          yaml_emit::scalarField(out, 8, "signal", member.result.signal);
-          yaml_emit::boolField(out, 8, "usable", isUsableMemberResponse(member.result));
-          yaml_emit::scalarField(out, 8, "review-stream", memberReviewStream(member.result));
-          yaml_emit::boolField(out, 8, "stdout-truncated", member.result.standardOutputTruncated);
-          yaml_emit::boolField(out, 8, "stderr-truncated", member.result.standardErrorTruncated);
+          yaml_emit::scalarField(out, 8, "status", toString(member.processResult.status));
+          yaml_emit::scalarField(out, 8, "exit-code", member.processResult.exitCode);
+          yaml_emit::scalarField(out, 8, "signal", member.processResult.signal);
+          yaml_emit::boolField(out, 8, "usable", isUsableMemberResponse(member.processResult));
+          yaml_emit::scalarField(out, 8, "review-stream", memberReviewStream(member.processResult));
+          yaml_emit::boolField(out, 8, "stdout-truncated", member.processResult.standardOutputTruncated);
+          yaml_emit::boolField(out, 8, "stderr-truncated", member.processResult.standardErrorTruncated);
           yaml_emit::scalarField(out, 8, "stdout", (memberPath / "stdout.txt").generic_string());
           yaml_emit::scalarField(out, 8, "stderr", (memberPath / "stderr.txt").generic_string());
           yaml_emit::scalarField(out, 8, "response", (memberPath / "response.md").generic_string());
@@ -713,9 +713,9 @@ namespace ao::council
       std::optional<Error> optError = std::nullopt;
     };
 
-    struct RoundOutcome final
+    struct CouncilRoundResult final
     {
-      std::vector<MemberRoundResult> results = {};
+      std::vector<MemberRoundResult> memberResults = {};
       CouncilRows usableRows = {};
       std::optional<Error> optInfrastructureError = std::nullopt;
     };
@@ -934,14 +934,14 @@ namespace ao::council
       return run;
     }
 
-    Result<RoundOutcome> runCouncilRound(ResolvedPhase const& phase,
-                                         EngineContext const& context,
-                                         ArtifactStore const& store,
-                                         std::filesystem::path const& phaseRoot,
-                                         std::vector<std::string> const& roster,
-                                         std::string const& roundId,
-                                         std::string const& roundLabel,
-                                         CouncilContexts const& memberContexts)
+    Result<CouncilRoundResult> runCouncilRound(ResolvedPhase const& phase,
+                                               EngineContext const& context,
+                                               ArtifactStore const& store,
+                                               std::filesystem::path const& phaseRoot,
+                                               std::vector<std::string> const& roster,
+                                               std::string const& roundId,
+                                               std::string const& roundLabel,
+                                               CouncilContexts const& memberContexts)
     {
       auto memberFutures = std::vector<std::future<MemberRun>>{};
       memberFutures.reserve(roster.size());
@@ -993,15 +993,15 @@ namespace ao::council
           { return runMemberSandbox(context, store, std::move(launch), roundId, roundLabel, phaseId); }));
       }
 
-      auto outcome = RoundOutcome{};
+      auto roundResult = CouncilRoundResult{};
 
       for (auto& futureOutcome : awaitAll(memberFutures))
       {
         if (!futureOutcome)
         {
-          if (!outcome.optInfrastructureError)
+          if (!roundResult.optInfrastructureError)
           {
-            outcome.optInfrastructureError = futureOutcome.error();
+            roundResult.optInfrastructureError = futureOutcome.error();
           }
 
           continue;
@@ -1009,23 +1009,23 @@ namespace ao::council
 
         auto run = std::move(*futureOutcome);
 
-        if (run.optError && !outcome.optInfrastructureError)
+        if (run.optError && !roundResult.optInfrastructureError)
         {
-          outcome.optInfrastructureError = *run.optError;
+          roundResult.optInfrastructureError = *run.optError;
         }
 
         if (isUsableMemberResponse(run.result))
         {
-          outcome.usableRows.emplace_back(run.agentId, std::string{memberReviewText(run.result)});
+          roundResult.usableRows.emplace_back(run.agentId, std::string{memberReviewText(run.result)});
         }
 
-        outcome.results.push_back(MemberRoundResult{.agentId = std::move(run.agentId),
-                                                    .roundId = std::move(run.roundId),
-                                                    .roundLabel = std::move(run.roundLabel),
-                                                    .result = std::move(run.result)});
+        roundResult.memberResults.push_back(MemberRoundResult{.agentId = std::move(run.agentId),
+                                                              .roundId = std::move(run.roundId),
+                                                              .roundLabel = std::move(run.roundLabel),
+                                                              .processResult = std::move(run.result)});
       }
 
-      return outcome;
+      return roundResult;
     }
 
     Result<> writePhaseArtifacts(ArtifactStore const& store,
@@ -1284,8 +1284,8 @@ namespace ao::council
     }
 
     memberResults.insert(memberResults.end(),
-                         std::make_move_iterator(draftRound->results.begin()),
-                         std::make_move_iterator(draftRound->results.end()));
+                         std::make_move_iterator(draftRound->memberResults.begin()),
+                         std::make_move_iterator(draftRound->memberResults.end()));
 
     if (draftRound->optInfrastructureError && draftRound->usableRows.size() < phase.definition.parameters.quorum)
     {
@@ -1313,8 +1313,8 @@ namespace ao::council
       }
 
       memberResults.insert(memberResults.end(),
-                           std::make_move_iterator(challengeRound->results.begin()),
-                           std::make_move_iterator(challengeRound->results.end()));
+                           std::make_move_iterator(challengeRound->memberResults.begin()),
+                           std::make_move_iterator(challengeRound->memberResults.end()));
 
       if (challengeRound->optInfrastructureError &&
           challengeRound->usableRows.size() < phase.definition.parameters.quorum)
@@ -1343,8 +1343,8 @@ namespace ao::council
         }
 
         memberResults.insert(memberResults.end(),
-                             std::make_move_iterator(revisionRound->results.begin()),
-                             std::make_move_iterator(revisionRound->results.end()));
+                             std::make_move_iterator(revisionRound->memberResults.begin()),
+                             std::make_move_iterator(revisionRound->memberResults.end()));
 
         if (revisionRound->optInfrastructureError &&
             revisionRound->usableRows.size() < phase.definition.parameters.quorum)

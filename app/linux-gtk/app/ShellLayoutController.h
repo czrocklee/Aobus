@@ -8,8 +8,10 @@
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/GioActionBridge.h"
-#include "layout/runtime/LayoutContext.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutHost.h"
+#include "layout/runtime/LayoutRuntimeState.h"
+#include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Task.h>
 #include <ao/rt/Subscription.h>
@@ -35,18 +37,35 @@
 namespace ao::rt
 {
   class AppRuntime;
+  class PlaybackSequenceService;
+}
+
+namespace ao::uimodel
+{
+  class ListPresentationPreferenceStore;
+  class PlaybackCommandSurface;
+  class TrackPresentationCatalog;
 }
 
 namespace ao::gtk
 {
   class AppConfigStore;
-  struct GtkUiServices;
+  class ImageCache;
+  class ListNavigationController;
+  struct GtkUiDependencies;
   class ShellLayoutComponentStateStore;
   class ShellLayoutStore;
+  class TagEditController;
   class ThemeCoordinator;
+  class TrackPageHost;
+  class TrackRowCache;
   namespace layout::editor
   {
     class LayoutEditorDialog;
+  }
+  namespace portal
+  {
+    class ImportExportActions;
   }
 
   class ShellLayoutController final : public layout::ActionContextProvider
@@ -64,7 +83,7 @@ namespace ao::gtk
                           std::shared_ptr<AppConfigStore> configStorePtr,
                           std::shared_ptr<ShellLayoutStore> layoutStorePtr,
                           std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-                          ThemeCoordinator& themeCoordinator);
+                          GtkUiDependencies dependencies);
     ~ShellLayoutController() override;
 
     ShellLayoutController(ShellLayoutController const&) = delete;
@@ -74,12 +93,12 @@ namespace ao::gtk
 
     layout::ComponentRegistry& registry() { return _registry; }
     uimodel::LayoutActionCatalog const& actionCatalog() const { return _actionRegistry.catalog(); }
-    layout::LayoutContext& context() { return _context; }
+    layout::LayoutRuntimeState const& runtimeState() const { return _runtimeState; }
     layout::LayoutHost& host() { return _host; }
     uimodel::LayoutDocument const& activeLayout() const { return _session.snapshot().layout; }
 
     void attachToWindow();
-    void bindServices(GtkUiServices const& services);
+    void setMenuModel(Glib::RefPtr<Gio::MenuModel> menuModelPtr);
     void refreshExportedActions();
     void loadLayout(AppConfigStore& configStore);
     void openEditor(AppConfigStore& configStore);
@@ -90,7 +109,7 @@ namespace ao::gtk
     using ConfirmPromotionFn = std::function<void(std::string const& presetId, ConfirmPromotionAnswer answer)>;
     void setConfirmPromotionCallback(ConfirmPromotionFn fn);
 
-    uimodel::LayoutActionActivationOutcome activateAction(std::string_view id);
+    uimodel::LayoutActionActivationResult activateAction(std::string_view id);
     uimodel::LayoutActionAvailability actionAvailability(std::string_view id);
 
     layout::editor::LayoutEditorDialog* editorDialog() const { return _editorDialogPtr.get(); }
@@ -123,9 +142,26 @@ namespace ao::gtk
 
     void handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result);
 
+    /// Assembles a fresh per-build carrier from the owned pieces and (re)builds the host.
+    void rebuildHost(uimodel::LayoutDocument const& doc);
+
+    rt::AppRuntime& _runtime;
+    Gtk::Window& _parentWindow;
     layout::ComponentRegistry _registry;
     layout::ActionRegistry _actionRegistry;
-    layout::LayoutContext _context;
+    layout::LayoutRuntimeState _runtimeState;
+    TrackRowCache* _trackRowCache;
+    ImageCache* _imageCache;
+    rt::PlaybackSequenceService* _playbackSequence;
+    uimodel::PlaybackCommandSurface* _playbackCommandSurface;
+    TagEditController* _tagEditController;
+    portal::ImportExportActions* _importExportActions;
+    TrackPageHost* _trackPageHost;
+    uimodel::TrackPresentationCatalog* _trackPresentationCatalog;
+    uimodel::ListPresentationPreferenceStore* _trackPresentationPreferences;
+    ListNavigationController* _listNavigationController;
+    std::function<void(ListId, std::string)> _createSmartListFromExpression;
+    Glib::RefPtr<Gio::MenuModel> _menuModelPtr;
     layout::LayoutHost _host;
     std::unique_ptr<layout::GioActionBridgeSession> _gioBridgeSessionPtr;
     std::vector<rt::Subscription> _playbackSubs;

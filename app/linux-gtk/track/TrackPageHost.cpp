@@ -60,45 +60,45 @@ namespace ao::gtk
     _projectionChangedSub = _runtime.views().onProjectionChanged(
       [this](rt::TrackListProjectionChanged const& ev)
       {
-        auto* ctx = find(ev.viewId);
+        auto* entry = find(ev.viewId);
 
-        if (ctx == nullptr || ctx->modelPtr == nullptr)
+        if (entry == nullptr || entry->modelPtr == nullptr)
         {
           return;
         }
 
-        ctx->modelPtr->bindProjection(ev.projectionPtr);
-        ctx->pagePtr->applyPresentation(ev.projectionPtr->presentation());
+        entry->modelPtr->bindProjection(ev.projectionPtr);
+        entry->pagePtr->applyPresentation(ev.projectionPtr->presentation());
 
         if (_playingTrackId != kInvalidTrackId)
         {
-          ctx->pagePtr->setPlayingTrackId(_playingTrackId);
+          entry->pagePtr->setPlayingTrackId(_playingTrackId);
         }
       });
 
     _presentationChangedSub = _runtime.views().onPresentationChanged(
       [this](rt::ViewService::PresentationChanged const& ev)
       {
-        auto* ctx = find(ev.viewId);
+        auto* entry = find(ev.viewId);
 
-        if (ctx == nullptr || ctx->pagePtr == nullptr)
+        if (entry == nullptr || entry->pagePtr == nullptr)
         {
           return;
         }
 
-        ctx->pagePtr->applyPresentation(ev.presentation);
+        entry->pagePtr->applyPresentation(ev.presentation);
 
         if (_playingTrackId != kInvalidTrackId)
         {
-          ctx->pagePtr->setPlayingTrackId(_playingTrackId);
+          entry->pagePtr->setPlayingTrackId(_playingTrackId);
         }
       });
   }
   rt::ViewId TrackPageHost::tryFindViewByPreferredList(ListId preferredListId)
   {
-    for (auto const& [id, ctx] : _trackPages)
+    for (auto const& [id, entry] : _trackPages)
     {
-      if (ctx.pagePtr && ctx.pagePtr->listId() == preferredListId)
+      if (entry.pagePtr && entry.pagePtr->listId() == preferredListId)
       {
         return id;
       }
@@ -114,14 +114,14 @@ namespace ao::gtk
 
     if (trackId != kInvalidTrackId)
     {
-      if (auto* ctx = find(viewId); ctx != nullptr)
+      if (auto* entry = find(viewId); entry != nullptr)
       {
         APP_LOG_DEBUG("TrackPageHost: Calling selectTrack on page for trackId: {}", trackId.raw());
-        ctx->pagePtr->selectionController().selectTrack(trackId);
+        entry->pagePtr->selectionController().selectTrack(trackId);
       }
       else
       {
-        APP_LOG_DEBUG("TrackPageHost: Could not find page context for viewId: {}", viewId.raw());
+        APP_LOG_DEBUG("TrackPageHost: Could not find page entry for viewId: {}", viewId.raw());
       }
     }
   }
@@ -221,19 +221,19 @@ namespace ao::gtk
     }
   }
 
-  TrackPageContext* TrackPageHost::find(rt::ViewId viewId)
+  TrackPageEntry* TrackPageHost::find(rt::ViewId viewId)
   {
     auto it = _trackPages.find(viewId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
   }
 
-  TrackPageContext const* TrackPageHost::find(rt::ViewId viewId) const
+  TrackPageEntry const* TrackPageHost::find(rt::ViewId viewId) const
   {
     auto it = _trackPages.find(viewId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
   }
 
-  TrackPageContext* TrackPageHost::currentVisible()
+  TrackPageEntry* TrackPageHost::currentVisible()
   {
     auto* const visibleChild = _stack.get_visible_child();
 
@@ -242,18 +242,18 @@ namespace ao::gtk
       return nullptr;
     }
 
-    for (auto& [id, ctx] : _trackPages)
+    for (auto& [id, entry] : _trackPages)
     {
-      if (ctx.pagePtr.get() == visibleChild)
+      if (entry.pagePtr.get() == visibleChild)
       {
-        return &ctx;
+        return &entry;
       }
     }
 
     return nullptr;
   }
 
-  TrackPageContext const* TrackPageHost::currentVisible() const
+  TrackPageEntry const* TrackPageHost::currentVisible() const
   {
     auto const* const visibleChild = _stack.get_visible_child();
 
@@ -262,11 +262,11 @@ namespace ao::gtk
       return nullptr;
     }
 
-    for (auto const& [id, ctx] : _trackPages)
+    for (auto const& [id, entry] : _trackPages)
     {
-      if (ctx.pagePtr.get() == visibleChild)
+      if (entry.pagePtr.get() == visibleChild)
       {
-        return &ctx;
+        return &entry;
       }
     }
 
@@ -282,11 +282,11 @@ namespace ao::gtk
 
     _playingTrackId = trackId;
 
-    for (auto& [id, ctx] : _trackPages)
+    for (auto& [id, entry] : _trackPages)
     {
-      if (ctx.pagePtr)
+      if (entry.pagePtr)
       {
-        ctx.pagePtr->setPlayingTrackId(trackId);
+        entry.pagePtr->setPlayingTrackId(trackId);
       }
     }
   }
@@ -333,16 +333,16 @@ namespace ao::gtk
 
     _stack.add(*trackPagePtr, pageId, listName);
 
-    auto ctx = TrackPageContext{.viewId = viewId, .modelPtr = std::move(modelPtr), .pagePtr = std::move(trackPagePtr)};
+    auto entry = TrackPageEntry{.viewId = viewId, .modelPtr = std::move(modelPtr), .pagePtr = std::move(trackPagePtr)};
 
-    bindTrackPage(ctx);
-    _trackPages[viewId] = std::move(ctx);
+    bindTrackPage(entry);
+    _trackPages[viewId] = std::move(entry);
   }
 
-  void TrackPageHost::bindTrackPage(TrackPageContext& ctx)
+  void TrackPageHost::bindTrackPage(TrackPageEntry& entry)
   {
-    auto* const page = ctx.pagePtr.get();
-    auto const viewId = rt::ViewId{ctx.viewId};
+    auto* const page = entry.pagePtr.get();
+    auto const viewId = rt::ViewId{entry.viewId};
 
     page->signalSelectionChanged().connect(
       [this, page, viewId]
@@ -363,8 +363,8 @@ namespace ao::gtk
     page->signalContextMenuRequested().connect(
       [this, page](double xPosition, double yPosition)
       {
-        auto const sel = TrackSelectionContext{
-          .listId = page->listId(), .selectedIds = page->selectionController().selectedTrackIds()};
+        auto const sel =
+          TrackSelection{.listId = page->listId(), .selectedIds = page->selectionController().selectedTrackIds()};
         _tagEditController.openTrackContextMenu(*page, sel, xPosition, yPosition);
       });
 
@@ -376,7 +376,7 @@ namespace ao::gtk
           return;
         }
 
-        auto const sel = TrackSelectionContext{.listId = page->listId(), .selectedIds = ids};
+        auto const sel = TrackSelection{.listId = page->listId(), .selectedIds = ids};
         _tagEditController.openTagEditor(sel, *relativeTo);
       });
 
@@ -399,9 +399,9 @@ namespace ao::gtk
 
   ListId TrackPageHost::activeListId() const
   {
-    if (auto const* ctx = currentVisible(); ctx != nullptr)
+    if (auto const* entry = currentVisible(); entry != nullptr)
     {
-      return ctx->pagePtr->listId();
+      return entry->pagePtr->listId();
     }
 
     return rt::kAllTracksListId;

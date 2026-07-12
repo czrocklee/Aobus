@@ -3,8 +3,8 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "playback/NowPlayingFieldLabel.h"
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -26,7 +26,7 @@ namespace ao::gtk::layout
     class NowPlayingFieldComponent final : public LayoutComponent
     {
     public:
-      NowPlayingFieldComponent(LayoutContext& ctx, LayoutNode const& node, rt::TrackField field)
+      NowPlayingFieldComponent(LayoutBuildContext& ctx, LayoutNode const& node, rt::TrackField field)
         : _label{ctx.runtime,
                  field,
                  [action = node.propertyOr<std::string>("action", "none")]
@@ -57,12 +57,12 @@ namespace ao::gtk::layout
       NowPlayingFieldLabel _label;
     };
 
-    std::unique_ptr<LayoutComponent> createCurrentTitleLabel(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createCurrentTitleLabel(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<NowPlayingFieldComponent>(ctx, node, rt::TrackField::Title);
     }
 
-    std::unique_ptr<LayoutComponent> createCurrentArtistLabel(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createCurrentArtistLabel(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<NowPlayingFieldComponent>(ctx, node, rt::TrackField::Artist);
     }

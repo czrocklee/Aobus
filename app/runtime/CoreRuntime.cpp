@@ -44,9 +44,10 @@ namespace ao::rt
     Impl(std::unique_ptr<async::Executor> execPtr,
          std::filesystem::path musicRoot,
          std::filesystem::path databasePath,
-         std::size_t musicLibraryMapSize)
+         std::size_t musicLibraryMapSize,
+         async::Sleeper* sleeper)
       : executorPtr{std::move(execPtr)}
-      , asyncRuntime{*executorPtr}
+      , asyncRuntime{*executorPtr, sleeper}
       , musicRoot{std::move(musicRoot)}
       , databasePath{std::move(databasePath)}
       , musicLibrary{this->musicRoot,
@@ -78,11 +79,13 @@ namespace ao::rt
   CoreRuntime::CoreRuntime(std::unique_ptr<async::Executor> executorPtr,
                            std::filesystem::path musicRoot,
                            std::filesystem::path databasePath,
-                           std::size_t musicLibraryMapSize)
+                           std::size_t musicLibraryMapSize,
+                           async::Sleeper* sleeper)
     : _implPtr{std::make_unique<Impl>(std::move(executorPtr),
                                       std::move(musicRoot),
                                       std::move(databasePath),
-                                      musicLibraryMapSize)}
+                                      musicLibraryMapSize,
+                                      sleeper)}
   {
   }
 

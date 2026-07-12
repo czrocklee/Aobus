@@ -3,7 +3,7 @@
 
 #include "Run.h"
 
-#include "CliContext.h"
+#include "CliRuntime.h"
 #include "CommandError.h"
 #include "InitCommand.h"
 #include "LibCommand.h"
@@ -61,26 +61,26 @@ namespace ao::cli
                    std::ostream& err,
                    CliRunOptions const options)
   {
-    auto context = CliContext{out, err, options.musicLibraryMapSize};
+    auto cli = CliRuntime{out, err, options.musicLibraryMapSize};
     auto app = CLI::App{"Aobus CLI - aobus"};
     app.require_subcommand(1);
     app.fallthrough();
-    app.add_option("-C,--root", context.options().root, "music root")->envname("AOBUS_ROOT");
+    app.add_option("-C,--root", cli.options().root, "music root")->envname("AOBUS_ROOT");
     auto const outputMapping = std::map<std::string, OutputFormat>{
       {"plain", OutputFormat::Plain}, {"yaml", OutputFormat::Yaml}, {"json", OutputFormat::Json}};
-    app.add_option("-O,--output", context.options().format, "output format (plain, yaml, json)")
+    app.add_option("-O,--output", cli.options().format, "output format (plain, yaml, json)")
       ->transform(CLI::CheckedTransformer{outputMapping, CLI::ignore_case});
     app.set_help_all_flag("--help-all", "Print this help message and all subcommand help");
     app.set_version_flag("--version", kAppVersion);
 
     try
     {
-      configureTrackCommand(app, context);
-      configureListCommand(app, context);
-      configureInitCommand(app, context);
-      configureScanCommand(app, context);
-      configureTagCommand(app, context);
-      configureLibCommand(app, context);
+      configureTrackCommand(app, cli);
+      configureListCommand(app, cli);
+      configureInitCommand(app, cli);
+      configureScanCommand(app, cli);
+      configureTagCommand(app, cli);
+      configureLibCommand(app, cli);
 
       if (hasHelpAllArgument(argc, argv))
       {

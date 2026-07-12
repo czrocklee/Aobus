@@ -65,8 +65,8 @@ namespace ao::gtk::layout
     bool tryBind(std::string_view id, uimodel::LayoutActionBindingContext const& ctx) const;
 
     uimodel::LayoutActionAvailability state(std::string_view id, ActionActivationContext const& ctx) const;
-    uimodel::LayoutActionActivationOutcome activate(std::string_view id, ActionActivationContext& ctx) const;
-    uimodel::LayoutActionActivationOutcome tryActivate(std::string_view id, ActionActivationContext& ctx) const;
+    uimodel::LayoutActionActivationResult activate(std::string_view id, ActionActivationContext& ctx) const;
+    uimodel::LayoutActionActivationResult tryActivate(std::string_view id, ActionActivationContext& ctx) const;
 
     uimodel::LayoutActionCatalog const& catalog() const noexcept;
 

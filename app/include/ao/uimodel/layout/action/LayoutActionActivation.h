@@ -9,7 +9,7 @@
 
 namespace ao::uimodel
 {
-  enum class LayoutActionActivationResult : std::uint8_t
+  enum class LayoutActionActivationOutcome : std::uint8_t
   {
     Activated,
     UnknownAction,
@@ -17,9 +17,9 @@ namespace ao::uimodel
     InvalidBinding
   };
 
-  struct LayoutActionActivationOutcome final
+  struct LayoutActionActivationResult final
   {
-    LayoutActionActivationResult result = LayoutActionActivationResult::UnknownAction;
+    LayoutActionActivationOutcome outcome = LayoutActionActivationOutcome::UnknownAction;
     LayoutActionAvailability state = {};
   };
 } // namespace ao::uimodel

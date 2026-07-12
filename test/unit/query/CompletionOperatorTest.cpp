@@ -16,10 +16,10 @@ namespace ao::query::test
 {
   namespace
   {
-    QueryOperatorCompletionContext operatorContext(std::optional<QueryCompletionContext> optContext)
+    QueryOperatorCompletion operatorContext(std::optional<QueryCompletionAnalysis> optContext)
     {
       REQUIRE(optContext);
-      auto const* context = std::get_if<QueryOperatorCompletionContext>(&*optContext);
+      auto const* context = std::get_if<QueryOperatorCompletion>(&*optContext);
       REQUIRE(context != nullptr);
       return *context;
     }
@@ -30,7 +30,7 @@ namespace ao::query::test
     SECTION("Offers an empty operator prefix after trailing whitespace")
     {
       auto const text = std::string{"$artist "};
-      auto const context = operatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = operatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::ArtistId);
       CHECK(context.replacement.replaceBegin == 7);
@@ -43,7 +43,7 @@ namespace ao::query::test
     SECTION("Normalizes replacement over whitespace and typed symbol prefixes")
     {
       auto const text = std::string{"$year >"};
-      auto const context = operatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = operatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::Year);
       CHECK(context.replacement.replaceBegin == 5);
@@ -56,7 +56,7 @@ namespace ao::query::test
     SECTION("Completes keyword operators only after a variable boundary")
     {
       auto const text = std::string{"$artist i"};
-      auto const context = operatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = operatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::ArtistId);
       CHECK(context.replacement.replaceBegin == 7);
@@ -73,7 +73,7 @@ namespace ao::query::test
     SECTION("Resolves quoted user variables as lvalues")
     {
       auto const text = std::string{R"(%"Mood" )"};
-      auto const context = operatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = operatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::Custom);
       CHECK(context.replacement.replaceBegin == 7);
@@ -85,7 +85,7 @@ namespace ao::query::test
     SECTION("Resolves bracketed quoted user variables as lvalues")
     {
       auto const text = std::string{R"(%["Replay Gain"] )"};
-      auto const context = operatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = operatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::Custom);
       CHECK(context.replacement.replaceBegin == text.size() - 1);
@@ -97,7 +97,7 @@ namespace ao::query::test
     SECTION("Resolves bracketed quoted user variables as lvalues without trailing space")
     {
       auto const text = std::string{R"(%["Replay Gain"])"};
-      auto const context = operatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = operatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::Custom);
       CHECK(context.replacement.replaceBegin == text.size());
@@ -109,7 +109,7 @@ namespace ao::query::test
     SECTION("Rejects invalid escape in quoted variable as operator lvalue")
     {
       auto const text = std::string{R"(%"a\x"=)"};
-      CHECK_FALSE(analyzeCompletionContext(text, text.size()));
+      CHECK_FALSE(analyzeQueryCompletion(text, text.size()));
     }
   }
 

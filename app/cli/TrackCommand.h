@@ -12,7 +12,7 @@ namespace ao::rt
 
 namespace ao::cli
 {
-  class CliContext;
+  class CliRuntime;
 
-  void configureTrackCommand(CLI::App& app, CliContext& context);
+  void configureTrackCommand(CLI::App& app, CliRuntime& cli);
 }

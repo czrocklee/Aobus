@@ -6,7 +6,7 @@
 #include "runtime/playback/ShuffleHistory.h"
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
-#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
@@ -158,9 +158,9 @@ namespace ao::rt::test
       std::function<void()> _onIndexOf{};
     };
 
-    PlaybackLaunchContext launchContext()
+    PlaybackLaunchSpec launchSpec()
     {
-      return PlaybackLaunchContext{
+      return PlaybackLaunchSpec{
         .sourceListId = ListId{17},
         .quickFilterExpression = "$artist = \"Aobus\"",
       };
@@ -172,7 +172,7 @@ namespace ao::rt::test
                                RepeatMode const repeatMode = RepeatMode::Off,
                                ShuffleMode const shuffleMode = ShuffleMode::Off)
     {
-      return PlaybackCursor{launchContext(),
+      return PlaybackCursor{launchSpec(),
                             ProjectionAnchor::bound(currentTrackId, currentIndex, policy.tracks().size()),
                             repeatMode,
                             shuffleMode,
@@ -364,19 +364,19 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackCursor - construction owns fixed context and exact initial semantic tuple",
+  TEST_CASE("PlaybackCursor - construction owns fixed launch spec and exact initial semantic tuple",
             "[runtime][unit][playback-cursor]")
   {
     auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack}};
-    auto context = launchContext();
-    auto const originalContext = context;
-    auto cursor = PlaybackCursor{context,
+    auto spec = launchSpec();
+    auto const originalSpec = spec;
+    auto cursor = PlaybackCursor{spec,
                                  ProjectionAnchor::bound(kSecondTrack, 1, policy.tracks().size()),
                                  RepeatMode::Off,
                                  ShuffleMode::Off,
                                  policy};
-    context.sourceListId = ListId{99};
-    context.quickFilterExpression = "changed";
+    spec.sourceListId = ListId{99};
+    spec.quickFilterExpression = "changed";
     auto const expectedTuple = PlaybackCursor::SemanticTuple{
       .sourceState = PlaybackCursor::SourceState::Live,
       .currentTrackId = kSecondTrack,
@@ -385,7 +385,7 @@ namespace ao::rt::test
       .optResolvedSuccessor = kThirdTrack,
     };
 
-    CHECK(cursor.launchContext() == originalContext);
+    CHECK(cursor.launchSpec() == originalSpec);
     CHECK(cursor.currentTrackId() == kSecondTrack);
     CHECK(cursor.anchor().state() == ProjectionAnchor::State::Bound);
     CHECK(cursor.anchor().anchorIndex() == 1);

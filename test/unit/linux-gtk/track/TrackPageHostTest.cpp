@@ -37,12 +37,12 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
 
     auto stack = Gtk::Stack{};
-    auto themeController = ThemeCoordinator{};
+    auto themeCoordinator = ThemeCoordinator{};
     auto tagEditCallbacks = TagEditController::Callbacks{};
-    auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks), themeController};
+    auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks), themeCoordinator};
 
     auto navCallbacks = ListNavigationController::Callbacks{};
-    auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
+    auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeCoordinator};
 
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto host = TrackPageHost{stack, runtime, tagEditController, listNavigation, layoutStore};

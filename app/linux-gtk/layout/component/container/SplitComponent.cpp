@@ -4,8 +4,8 @@
 #include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/StatefulComponentState.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
@@ -37,7 +37,7 @@ namespace ao::gtk::layout
     class SplitComponent final : public LayoutComponent
     {
     public:
-      SplitComponent(LayoutContext& ctx, LayoutNode const& node)
+      SplitComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _state{ctx, node, kSplitComponentType}
       {
         if (node.children.size() != 2)
@@ -206,7 +206,7 @@ namespace ao::gtk::layout
       std::unique_ptr<LayoutComponent> _endChildPtr;
     };
 
-    std::unique_ptr<LayoutComponent> createSplit(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createSplit(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<SplitComponent>(ctx, node);
     }

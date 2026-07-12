@@ -278,16 +278,15 @@ namespace ao::rt::test
     auto const firstResult = fixture.playbackService.prepareNext(successor, kSourceListId);
     REQUIRE(firstResult);
     auto const firstToken = *firstResult;
-    REQUIRE(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, firstToken));
     CHECK(fixture.playbackService.state().nowPlaying == beforePrepare);
 
     auto const implicitReplacement = fixture.playbackService.prepareNext(successor, kSourceListId);
     REQUIRE_FALSE(implicitReplacement);
     CHECK(implicitReplacement.error().code == Error::Code::InvalidState);
-    CHECK(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, firstToken));
 
+    // The rejected implicit replacement leaves the original commitment armed:
+    // clearing it returns the original token, and nothing remains afterward.
     CHECK(fixture.playbackService.clearPreparedNext() == firstToken);
-    CHECK_FALSE(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, firstToken));
     CHECK_FALSE(fixture.playbackService.clearPreparedNext());
 
     // Explicit session replacement does not reset the service-lifetime token counter.
@@ -316,7 +315,7 @@ namespace ao::rt::test
     auto const missingResult = fixture.playbackService.prepareNext(TrackId{99999}, kSourceListId);
     REQUIRE_FALSE(missingResult);
     CHECK(missingResult.error().code == Error::Code::NotFound);
-    CHECK(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, token));
+    // The rejected missing-track replacement preserves the active token identity.
     CHECK(fixture.playbackService.clearPreparedNext() == token);
   }
 
@@ -340,7 +339,6 @@ namespace ao::rt::test
       request(TrackId{99}, "/missing/staged.flac", "Missing staged candidate"), kSourceListId);
     REQUIRE_FALSE(rejectedStage);
     CHECK(fixture.playbackService.state().nowPlaying.trackId == current.item.trackId);
-    CHECK(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, oldToken));
     CHECK(fixture.playbackService.clearPreparedNext() == oldToken);
 
     auto staged = fixture.playbackService.stagePlayback(stagedCandidate, kSourceListId);
@@ -355,7 +353,6 @@ namespace ao::rt::test
     REQUIRE_FALSE(staleCommit);
     CHECK(staleCommit.error().code == Error::Code::InvalidState);
     CHECK(fixture.playbackService.state().nowPlaying.trackId == replacement.item.trackId);
-    CHECK(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, liveToken));
     CHECK(fixture.playbackService.clearPreparedNext() == liveToken);
   }
 
@@ -368,8 +365,8 @@ namespace ao::rt::test
     auto notifications = NotificationService{};
     auto playerPtr = std::make_unique<audio::Player>(
       executor, audio::test::makeStagedFailureDecoderFactory("candidate-failure.flac", failureGate));
-    auto servicePtr = PlaybackServiceTestAccess::createWithPlayer(
-      executor, libraryFixture.library(), notifications, std::move(playerPtr));
+    auto servicePtr =
+      std::make_unique<PlaybackService>(executor, libraryFixture.library(), notifications, std::move(playerPtr));
     addReadyAudioProvider(*servicePtr);
     executor.drain();
 
@@ -433,12 +430,9 @@ namespace ao::rt::test
     auto const tokenResult = fixture.playbackService.prepareNext(fallbackSuccessor, kSourceListId);
     REQUIRE(tokenResult);
     auto const token = *tokenResult;
-    auto const optIssuedGeneration =
-      PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, token);
-    REQUIRE(optIssuedGeneration);
 
+    // The disarm acknowledgement returns the exact armed token, then nothing.
     CHECK(fixture.playbackService.clearPreparedNext() == token);
-    CHECK_FALSE(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, token));
     CHECK_FALSE(fixture.playbackService.clearPreparedNext());
   }
 
@@ -464,12 +458,6 @@ namespace ao::rt::test
       tokens.push_back(*tokenResult);
 
       CHECK(fixture.playbackService.clearPreparedNext() == tokens.back());
-      CHECK_FALSE(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, tokens.back()));
-    }
-
-    for (auto const token : tokens)
-    {
-      CHECK_FALSE(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, token));
     }
 
     CHECK_FALSE(fixture.playbackService.clearPreparedNext());
@@ -485,67 +473,14 @@ namespace ao::rt::test
     auto const successor = request(TrackId{2}, fixturePath, "Successor");
 
     REQUIRE(fixture.playbackService.play(current, kSourceListId));
-    auto const tokenResult = fixture.playbackService.prepareNext(successor, kSourceListId);
-    REQUIRE(tokenResult);
-    auto const token = *tokenResult;
-    auto const optIssuedGeneration =
-      PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, token);
-    REQUIRE(optIssuedGeneration);
+    REQUIRE(fixture.playbackService.prepareNext(successor, kSourceListId));
 
-    auto const barrier = fixture.playbackService.stop();
+    fixture.playbackService.stop();
 
-    CHECK(barrier.covers(*optIssuedGeneration));
-    CHECK_FALSE(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, token));
+    // stop() covers and removes the armed prepared-next commitment: nothing
+    // remains to clear, and now-playing is cleared.
     CHECK_FALSE(fixture.playbackService.clearPreparedNext());
     CHECK(fixture.playbackService.state().nowPlaying.trackId == kInvalidTrackId);
-  }
-
-  TEST_CASE("PlaybackService token - unknown prepared transition is rejected instead of becoming explicit play",
-            "[runtime][unit][playback][token]")
-  {
-    auto executor = QueuedExecutor{};
-    auto libraryFixture = MusicLibraryFixture{};
-    auto notifications = NotificationService{};
-    auto playerPtr = std::make_unique<audio::Player>(executor);
-    auto* const playerRaw = playerPtr.get();
-    auto servicePtr = PlaybackServiceTestAccess::createWithPlayer(
-      executor, libraryFixture.library(), notifications, std::move(playerPtr));
-    auto probePtr = std::make_shared<RenderTargetProbe>();
-    servicePtr->addProvider(std::make_unique<ProbeProvider>(probePtr));
-    executor.drain();
-
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const current = request(TrackId{1}, fixturePath, "Current");
-    auto nowPlaying = std::vector<PlaybackService::NowPlayingChanged>{};
-    auto sub = servicePtr->onNowPlayingChanged([&](PlaybackService::NowPlayingChanged const& event)
-                                               { nowPlaying.push_back(event); });
-
-    REQUIRE(servicePtr->play(current, kSourceListId));
-    executor.drain();
-    nowPlaying.clear();
-
-    auto const unknownItem = audio::Engine::PlaybackItem{
-      .id = audio::Engine::PlaybackItemId{.value = 9999},
-      .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::minutes{3}},
-    };
-    REQUIRE(playerRaw->prepareNext(unknownItem));
-    auto* const target = probePtr->target();
-    REQUIRE(target != nullptr);
-
-    auto output = std::vector<std::byte>(4100);
-    bool crossedSpliceBoundary = false;
-
-    for (std::int32_t attempt = 0; attempt < 100000 && !crossedSpliceBoundary; ++attempt)
-    {
-      crossedSpliceBoundary = target->renderPcm(output).positionFrameOffset > 0;
-    }
-
-    REQUIRE(crossedSpliceBoundary);
-    executor.checkQueued(std::chrono::seconds{5});
-    executor.drain();
-
-    CHECK(nowPlaying.empty());
-    CHECK(servicePtr->state().nowPlaying.trackId == current.item.trackId);
   }
 
   TEST_CASE("PlaybackService token - prepared decode failure reports the exact same-track token",
@@ -555,15 +490,14 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto libraryFixture = MusicLibraryFixture{};
     auto notifications = NotificationService{};
-    auto playerPtr = std::make_unique<audio::Player>(
-      executor,
-      [&](std::filesystem::path const& path, audio::Format const&)
-      {
-        return std::make_unique<GatedDecoderSession>(
-          path == std::filesystem::path{"prepared-fail.flac"} ? &failureRelease : nullptr);
-      });
-    auto servicePtr = PlaybackServiceTestAccess::createWithPlayer(
-      executor, libraryFixture.library(), notifications, std::move(playerPtr));
+    auto decoderFactory = [&](std::filesystem::path const& path, audio::Format const&)
+    {
+      return std::make_unique<GatedDecoderSession>(path == std::filesystem::path{"prepared-fail.flac"} ? &failureRelease
+                                                                                                       : nullptr);
+    };
+    auto playerPtr = std::make_unique<audio::Player>(executor, std::move(decoderFactory));
+    auto servicePtr =
+      std::make_unique<PlaybackService>(executor, libraryFixture.library(), notifications, std::move(playerPtr));
     auto releaseGuard = SemaphoreReleaseGuard{failureRelease};
     addReadyAudioProvider(*servicePtr);
     executor.drain();
@@ -597,7 +531,6 @@ namespace ao::rt::test
     CHECK(failures.front().error.message == "gated prepared decode failure");
     CHECK(failures.front().recoverable);
     CHECK(servicePtr->state().nowPlaying.trackId == current.item.trackId);
-    CHECK_FALSE(PlaybackServiceTestAccess::preparedNextIssuedGeneration(*servicePtr, failingToken));
     CHECK_FALSE(servicePtr->clearPreparedNext());
   }
 

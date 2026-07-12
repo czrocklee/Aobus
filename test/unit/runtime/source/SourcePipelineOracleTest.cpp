@@ -8,7 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/ViewIds.h>

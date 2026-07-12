@@ -4,7 +4,7 @@
 #include "app/ShellLayoutController.h"
 
 #include "app/AppConfigStore.h"
-#include "app/GtkUiServices.h"
+#include "app/GtkUiDependencies.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
@@ -26,11 +26,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/applicationwindow.h>
+#include <gtkmm/paned.h>
 
 #include <cstdint>
 #include <memory>
 #include <string_view>
 #include <tuple>
+#include <utility>
 
 namespace ao::gtk::test
 {
@@ -109,15 +111,19 @@ namespace ao::gtk::test
     auto const configStorePtr = std::make_shared<AppConfigStore>(tempDir / "config.yaml");
     auto const storePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
     auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state");
-    auto themeController = ThemeCoordinator{};
+    auto themeCoordinator = ThemeCoordinator{};
     auto commandSurface =
       uimodel::PlaybackCommandSurface{runtime.playback(),
                                       runtime.playbackSequence(),
                                       [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
-    auto controller =
-      ShellLayoutController{runtime, window, configStorePtr, storePtr, componentStateStorePtr, themeController};
-    controller.bindServices(
-      GtkUiServices{.playbackSequence = &runtime.playbackSequence(), .playbackCommandSurface = &commandSurface});
+    auto controller = ShellLayoutController{runtime,
+                                            window,
+                                            configStorePtr,
+                                            storePtr,
+                                            componentStateStorePtr,
+                                            GtkUiDependencies{.playbackSequence = &runtime.playbackSequence(),
+                                                              .playbackCommandSurface = &commandSurface,
+                                                              .themeCoordinator = &themeCoordinator}};
 
     SECTION("attachToWindow sets child")
     {
@@ -129,7 +135,7 @@ namespace ao::gtk::test
     {
       controller.loadLayout(*configStorePtr);
       drainGtkEvents();
-      CHECK(controller.context().componentStateStore ==
+      CHECK(controller.runtimeState().componentStateStore ==
             static_cast<uimodel::LayoutComponentStateStore*>(componentStateStorePtr.get()));
     }
 
@@ -139,7 +145,7 @@ namespace ao::gtk::test
       prefs.lastLayoutPreset = "classic";
       prefs.lastThemePreset = "classic";
       configStorePtr->saveAppPrefs(prefs);
-      themeController.load(*configStorePtr);
+      themeCoordinator.load(*configStorePtr);
 
       controller.loadLayout(*configStorePtr);
       REQUIRE(pumpGtkEventsUntil([&controller]
@@ -154,7 +160,7 @@ namespace ao::gtk::test
 
       dialog->setSelectedThemeId("modern");
       drainGtkEvents();
-      CHECK(themeController.activeTheme() == rt::ThemePresetId::Modern);
+      CHECK(themeCoordinator.activeTheme() == rt::ThemePresetId::Modern);
 
       auto* const cancelButton = findButtonByLabel(*dialog, "Cancel");
       REQUIRE(cancelButton != nullptr);
@@ -164,7 +170,7 @@ namespace ao::gtk::test
       auto savedPrefs = rt::AppPrefsState{};
       configStorePtr->loadAppPrefs(savedPrefs);
       CHECK(savedPrefs.lastThemePreset == "classic");
-      CHECK(themeController.activeTheme() == rt::ThemePresetId::Classic);
+      CHECK(themeCoordinator.activeTheme() == rt::ThemePresetId::Classic);
     }
 
     SECTION("layout editor save does not persist the previewed theme")
@@ -173,7 +179,7 @@ namespace ao::gtk::test
       prefs.lastLayoutPreset = "classic";
       prefs.lastThemePreset = "classic";
       configStorePtr->saveAppPrefs(prefs);
-      themeController.load(*configStorePtr);
+      themeCoordinator.load(*configStorePtr);
 
       controller.loadLayout(*configStorePtr);
       REQUIRE(pumpGtkEventsUntil([&controller]
@@ -187,7 +193,7 @@ namespace ao::gtk::test
 
       dialog->setSelectedThemeId("modern");
       drainGtkEvents();
-      CHECK(themeController.activeTheme() == rt::ThemePresetId::Modern);
+      CHECK(themeCoordinator.activeTheme() == rt::ThemePresetId::Modern);
 
       auto* const saveButton = findButtonByLabel(*dialog, "Save");
       REQUIRE(saveButton != nullptr);
@@ -198,7 +204,7 @@ namespace ao::gtk::test
       configStorePtr->loadAppPrefs(savedPrefs);
       CHECK(savedPrefs.lastLayoutPreset == "classic");
       CHECK(savedPrefs.lastThemePreset == "classic");
-      CHECK(themeController.activeTheme() == rt::ThemePresetId::Classic);
+      CHECK(themeCoordinator.activeTheme() == rt::ThemePresetId::Classic);
     }
 
     SECTION("attachToWindow exports actions and refreshExportedActions works")
@@ -247,16 +253,16 @@ namespace ao::gtk::test
       REQUIRE(stopActionPtr != nullptr);
       CHECK(stopActionPtr->property_enabled() == false);
 
-      auto const playPauseOutcome = controller.activateAction("playback.playPause");
-      CHECK(playPauseOutcome.result == uimodel::LayoutActionActivationResult::Activated);
+      auto const playPauseResult = controller.activateAction("playback.playPause");
+      CHECK(playPauseResult.outcome == uimodel::LayoutActionActivationOutcome::Activated);
       CHECK(runtime.playback().state().transport == audio::Transport::Playing);
       CHECK(runtime.playback().state().nowPlaying.trackId == trackId);
 
       controller.refreshExportedActions();
       CHECK(stopActionPtr->property_enabled() == true);
 
-      auto const stopOutcome = controller.activateAction("playback.stop");
-      CHECK(stopOutcome.result == uimodel::LayoutActionActivationResult::Activated);
+      auto const stopResult = controller.activateAction("playback.stop");
+      CHECK(stopResult.outcome == uimodel::LayoutActionActivationOutcome::Activated);
       CHECK(runtime.playback().state().transport == audio::Transport::Idle);
     }
 
@@ -279,11 +285,11 @@ namespace ao::gtk::test
       controller.loadLayout(*configStorePtr);
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
-      REQUIRE(controller.context().componentState.components.contains("main-paned"));
+      REQUIRE(controller.runtimeState().componentState.components.contains("main-paned"));
 
       controller.resetRuntimeLayoutState();
 
-      CHECK(controller.context().componentState.components.empty());
+      CHECK(controller.runtimeState().componentState.components.empty());
       CHECK_FALSE(componentStateStorePtr->load("classic").has_value());
       CHECK(storePtr->load("classic").has_value());
     }
@@ -381,5 +387,57 @@ namespace ao::gtk::test
       CHECK(remainingEntry.state.size() == 1);
       CHECK(remainingEntry.state.at("revealed").asBool(true) == false);
     }
+  }
+
+  TEST_CASE("ShellLayoutController - teardown flushes pending component state while its sole store owner is alive",
+            "[gtk][regression][shell][lifecycle]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto window = Gtk::ApplicationWindow{};
+    window.set_application(appPtr);
+    auto themeCoordinator = ThemeCoordinator{};
+    auto commandSurface =
+      uimodel::PlaybackCommandSurface{runtime.playback(),
+                                      runtime.playbackSequence(),
+                                      [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+
+    auto const tempDir = fixture.tempDir().path();
+    auto const componentStateDir = tempDir / "layout-state";
+    auto configStorePtr = std::make_shared<AppConfigStore>(tempDir / "config.yaml");
+    auto* const configStore = configStorePtr.get();
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLayoutPreset = "classic";
+    configStore->saveAppPrefs(prefs);
+    auto layoutStorePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
+    layoutStorePtr->save(panelLayoutDocument(), "classic");
+    auto componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(componentStateDir);
+
+    {
+      auto controller = ShellLayoutController{runtime,
+                                              window,
+                                              std::move(configStorePtr),
+                                              std::move(layoutStorePtr),
+                                              std::move(componentStateStorePtr),
+                                              GtkUiDependencies{.playbackSequence = &runtime.playbackSequence(),
+                                                                .playbackCommandSurface = &commandSurface,
+                                                                .themeCoordinator = &themeCoordinator}};
+      controller.loadLayout(*configStore);
+      REQUIRE(pumpGtkEventsUntil([&controller]
+                                 { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+
+      auto allocationHost = AllocationHost{controller.host()};
+      allocationHost.allocateChild(1000, 400);
+      auto* const paned = findWidget<Gtk::Paned>(controller.host());
+      REQUIRE(paned != nullptr);
+      paned->set_position(400);
+    }
+
+    auto persistedStore = ShellLayoutComponentStateStore{componentStateDir};
+    auto optState = persistedStore.load("classic");
+    REQUIRE(optState);
+    REQUIRE(optState->components.contains("main-paned"));
+    CHECK(optState->components.at("main-paned").state.at("positionPercent").asDouble() == 0.4);
   }
 } // namespace ao::gtk::test

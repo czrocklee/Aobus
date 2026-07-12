@@ -6,8 +6,8 @@
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
@@ -59,7 +59,7 @@ namespace ao::gtk::layout
       , public TrackDetailScope
     {
     public:
-      TrackDetailScopeComponent(LayoutContext& ctx, LayoutNode const& node)
+      TrackDetailScopeComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _box{Gtk::Orientation::VERTICAL, 0}
         , _undoController{ctx.runtime.library().writer(), ctx.timeoutScheduler}
         , _projectionPtr{ctx.runtime.views().detailProjection(rt::FocusedViewTarget{},
@@ -69,10 +69,10 @@ namespace ao::gtk::layout
         _currentSnap = _projectionPtr->snapshot();
 
         // Intercept context
-        auto* previousScope = ctx.track.detailScope;
-        auto* previousUndo = ctx.track.detailUndo;
-        ctx.track.detailScope = this;
-        ctx.track.detailUndo = &_undoController;
+        auto* previousScope = ctx.detailScope;
+        auto* previousUndo = ctx.detailUndo;
+        ctx.detailScope = this;
+        ctx.detailUndo = &_undoController;
 
         // Build children
         for (auto const& childNode : node.children)
@@ -83,8 +83,8 @@ namespace ao::gtk::layout
         }
 
         // Restore context
-        ctx.track.detailScope = previousScope;
-        ctx.track.detailUndo = previousUndo;
+        ctx.detailScope = previousScope;
+        ctx.detailUndo = previousUndo;
 
         // Apply styles
         if (auto const it = node.layout.find("cssClasses"); it != node.layout.end())
@@ -156,7 +156,7 @@ namespace ao::gtk::layout
       sigc::signal<void(rt::TrackDetailSnapshot const&)> _signalSnapshotChanged;
     };
 
-    std::unique_ptr<LayoutComponent> createTrackDetailScope(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackDetailScope(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackDetailScopeComponent>(ctx, node);
     }

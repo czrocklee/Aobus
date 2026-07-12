@@ -36,9 +36,9 @@ namespace ao::gtk
   class TrackViewPage;
 
   /**
-   * TrackPageContext holds the per-page state for a track list.
+   * TrackPageEntry holds the per-page state for a track list.
    */
-  struct TrackPageContext final
+  struct TrackPageEntry final
   {
     rt::ViewId viewId{};
     Glib::RefPtr<TrackListModel> modelPtr = {};
@@ -70,11 +70,11 @@ namespace ao::gtk
     void clear();
     void rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& transaction);
 
-    TrackPageContext* find(rt::ViewId viewId);
-    TrackPageContext const* find(rt::ViewId viewId) const;
+    TrackPageEntry* find(rt::ViewId viewId);
+    TrackPageEntry const* find(rt::ViewId viewId) const;
 
-    TrackPageContext* currentVisible();
-    TrackPageContext const* currentVisible() const;
+    TrackPageEntry* currentVisible();
+    TrackPageEntry const* currentVisible() const;
 
     void setPlayingTrack(TrackId trackId);
 
@@ -85,7 +85,7 @@ namespace ao::gtk
 
   private:
     void ensureViewPage(rt::ViewId viewId, TrackRowCache& dataProvider);
-    void bindTrackPage(TrackPageContext& ctx);
+    void bindTrackPage(TrackPageEntry& entry);
     void syncLayout();
     void handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev);
     rt::ViewId tryFindViewByPreferredList(ListId preferredListId);
@@ -112,7 +112,7 @@ namespace ao::gtk
     // Shared, off-thread thumbnail decoder over the cache above.
     ThumbnailLoader _thumbnailLoader{_runtime.library(), _thumbnailCache, _runtime.async()};
 
-    std::map<rt::ViewId, TrackPageContext> _trackPages;
+    std::map<rt::ViewId, TrackPageEntry> _trackPages;
     TrackId _playingTrackId{kInvalidTrackId};
     TrackRowCache* _activeDataProvider = nullptr;
   };

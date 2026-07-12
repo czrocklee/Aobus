@@ -19,7 +19,7 @@ namespace ao::library::test
   namespace
   {
     std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold> prepareTrack(TrackBuilder& builder,
-                                                                                  TrackSerializationContext& context)
+                                                                                  TrackSerializationFixture& context)
     {
       auto result = builder.prepare(context.transaction(), context.dictionary(), context.resources());
       REQUIRE(result);
@@ -29,7 +29,7 @@ namespace ao::library::test
 
   TEST_CASE("createPreparedTrackRecord writes prepared hot and cold track records", "[library][unit][track]")
   {
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Created Track").artist("Artist");
     builder.property().uri("/tmp/created.flac");
@@ -51,7 +51,7 @@ namespace ao::library::test
 
   TEST_CASE("updatePreparedTrackRecord replaces existing hot and cold track records", "[library][unit][track]")
   {
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
     auto originalBuilder = TrackBuilder::makeEmpty();
     originalBuilder.metadata().title("Original Track");
     originalBuilder.property().uri("/tmp/original.flac");
@@ -80,7 +80,7 @@ namespace ao::library::test
 
   TEST_CASE("prepared track data is a snapshot unaffected by later builder mutation", "[library][unit][track]")
   {
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
 
     {

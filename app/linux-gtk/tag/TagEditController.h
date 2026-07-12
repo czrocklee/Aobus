@@ -34,7 +34,7 @@ namespace ao::gtk
 
 namespace ao::gtk
 {
-  struct TrackSelectionContext final
+  struct TrackSelection final
   {
     ListId listId;
     std::vector<TrackId> selectedIds;
@@ -54,7 +54,7 @@ namespace ao::gtk
     TagEditController(Gtk::Window& parent,
                       rt::AppRuntime& runtime,
                       Callbacks callbacks,
-                      ThemeCoordinator& themeController);
+                      ThemeCoordinator& themeCoordinator);
     ~TagEditController();
 
     // Not copyable or movable
@@ -68,15 +68,12 @@ namespace ao::gtk
     // Add to action group for menu access
     void addActionsTo(Gio::ActionMap& actionMap);
 
-    void openTrackContextMenu(TrackViewPage& page,
-                              TrackSelectionContext const& selection,
-                              double xPosition,
-                              double yPosition);
+    void openTrackContextMenu(TrackViewPage& page, TrackSelection const& selection, double xPosition, double yPosition);
 
-    void openTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo);
-    void presentProperties(TrackSelectionContext const& selection);
+    void openTagEditor(TrackSelection const& selection, Gtk::Widget& relativeTo);
+    void presentProperties(TrackSelection const& selection);
 
-    void submitTagChanges(TrackSelectionContext const& selection,
+    void submitTagChanges(TrackSelection const& selection,
                           std::span<std::string const> tagsToAdd,
                           std::span<std::string const> tagsToRemove);
 
@@ -94,10 +91,10 @@ namespace ao::gtk
     rt::AppRuntime& _runtime;
     TrackRowCache* _dataProvider = nullptr;
     Gtk::Window& _parent;
-    ThemeCoordinator& _themeController;
+    ThemeCoordinator& _themeCoordinator;
 
     // The explicit selection to apply the tags to
-    std::optional<TrackSelectionContext> _optActiveSelection;
+    std::optional<TrackSelection> _optActiveSelection;
 
     // Actions
     Glib::RefPtr<Gio::SimpleAction> _trackTagAddActionPtr;

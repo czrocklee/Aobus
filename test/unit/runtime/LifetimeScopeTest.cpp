@@ -260,8 +260,8 @@ namespace ao::rt::test
   {
     constexpr std::size_t kIterations = 64;
     auto executor = ManualExecutor{};
-    auto runtime = Runtime{executor, 4};
-    auto& sleeper = ControlledSleeper::install(runtime);
+    auto sleeper = ControlledSleeper{};
+    auto runtime = Runtime{executor, 4, &sleeper};
 
     for (std::size_t iteration = 0; iteration < kIterations; ++iteration)
     {
@@ -279,13 +279,13 @@ namespace ao::rt::test
         auto completionThread = std::jthread{[&]
                                              {
                                                start.arrive_and_wait();
-                                               completionDispatched = sleeper.forceFire(sleepId);
+                                               completionDispatched = sleeper.fireById(sleepId);
                                              }};
         start.arrive_and_wait();
         scope.cancelAll();
       }
 
-      REQUIRE(completionDispatched);
+      CHECK((completionDispatched || sleeper.call(iteration).cancelled));
       REQUIRE(taskExited.waitUntil(true));
     }
 

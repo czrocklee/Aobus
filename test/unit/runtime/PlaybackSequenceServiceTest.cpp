@@ -60,7 +60,7 @@ namespace ao::rt::test
         , writer{libraryFixture.library(), changes}
         , sources{libraryFixture.library(), changes}
         , views{executor, libraryFixture.library(), sources}
-        , playback{executor, libraryFixture.library(), notifications}
+        , playback{makePlaybackService(executor, libraryFixture.library(), notifications)}
       {
         playback.addProvider(makeReadyAudioProvider());
       }
@@ -221,9 +221,9 @@ namespace ao::rt::test
 
           return decoderPtr;
         };
-        auto playerPtr = std::make_unique<audio::Player>(executor, decoderFactory);
-        playbackPtr = PlaybackServiceTestAccess::createWithPlayer(
-          executor, libraryFixture.library(), notifications, std::move(playerPtr));
+        auto playerPtr = std::make_unique<audio::Player>(executor, std::move(decoderFactory));
+        playbackPtr =
+          std::make_unique<PlaybackService>(executor, libraryFixture.library(), notifications, std::move(playerPtr));
         playbackPtr->addProvider(makeReadyAudioProvider());
         executor.drain();
       }
@@ -280,7 +280,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("PlaybackSequenceService - strict launch commits only a validated captured context",
+  TEST_CASE("PlaybackSequenceService - strict launch commits only a validated captured spec",
             "[runtime][unit][playback-sequence][launch]")
   {
     auto fixture = PlaybackSequenceFixture{};
@@ -480,7 +480,7 @@ namespace ao::rt::test
     CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
   }
 
-  TEST_CASE("PlaybackSequenceService - launch context remains detached from later view edits and destruction",
+  TEST_CASE("PlaybackSequenceService - launch spec remains detached from later view edits and destruction",
             "[runtime][unit][playback-sequence][launch]")
   {
     auto fixture = PlaybackSequenceFixture{};

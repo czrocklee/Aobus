@@ -4,8 +4,8 @@
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -27,8 +27,8 @@ namespace ao::gtk::layout
     class TrackDetailUndoBarComponent final : public LayoutComponent
     {
     public:
-      TrackDetailUndoBarComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _undoController{ctx.track.detailUndo}
+      TrackDetailUndoBarComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
+        : _undoController{ctx.detailUndo}
       {
         _bar.set_orientation(Gtk::Orientation::HORIZONTAL);
         _bar.set_spacing(8);
@@ -96,7 +96,7 @@ namespace ao::gtk::layout
       sigc::connection _changedConn;
     };
 
-    std::unique_ptr<LayoutComponent> createTrackDetailUndoBar(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackDetailUndoBar(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackDetailUndoBarComponent>(ctx, node);
     }

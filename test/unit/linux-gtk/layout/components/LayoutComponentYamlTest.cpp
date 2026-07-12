@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/layout/document/LayoutDocument.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
-#include "app/linux-gtk/layout/runtime/LayoutContext.h"
+#include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
+#include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
@@ -37,10 +39,14 @@ namespace ao::gtk::layout::test
     SECTION("app.actionButton builds from YAML and binds actions")
     {
       auto actionRegistry = ActionRegistry{};
-      auto actionCtx = LayoutContext{.registry = registry,
-                                     .actionRegistry = actionRegistry,
-                                     .runtime = fixture.runtime(),
-                                     .parentWindow = fixture.window()};
+      auto runtimeState = LayoutRuntimeState{};
+      auto dependencies = GtkUiDependencies{};
+      auto actionCtx = LayoutBuildContext{.registry = registry,
+                                          .actionRegistry = actionRegistry,
+                                          .runtime = fixture.runtime(),
+                                          .parentWindow = fixture.window(),
+                                          .runtimeState = runtimeState,
+                                          .dependencies = dependencies};
       auto const* const yaml = R"(
       type: app.actionButton
       props:

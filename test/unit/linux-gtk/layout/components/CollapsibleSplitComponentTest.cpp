@@ -245,9 +245,9 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      ctx.activePresetId = "classic";
-      ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.componentState.components["detail-split"] = LayoutComponentStateEntry{
+      ctx.runtimeState.activePresetId = "classic";
+      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
+      ctx.runtimeState.componentState.components["detail-split"] = LayoutComponentStateEntry{
         .type = "collapsibleSplit",
         .stateVersion = kStateEntryVersion,
         .baselineHash = componentBaselineHash(doc.root),
@@ -285,9 +285,9 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      ctx.activePresetId = "classic";
-      ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.componentState.components["detail-split"] = LayoutComponentStateEntry{
+      ctx.runtimeState.activePresetId = "classic";
+      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
+      ctx.runtimeState.componentState.components["detail-split"] = LayoutComponentStateEntry{
         .type = "collapsibleSplit",
         .stateVersion = kStateEntryVersion,
         .baselineHash = componentBaselineHash(doc.root),
@@ -302,7 +302,7 @@ namespace ao::gtk::layout::test
       REQUIRE(restoredRevealer != nullptr);
       CHECK(restoredRevealer->get_reveal_child() == false);
 
-      ctx.componentState.components["detail-split"].baselineHash = "stale";
+      ctx.runtimeState.componentState.components["detail-split"].baselineHash = "stale";
 
       auto const fallbackPtr = layoutRuntime.build(ctx, doc);
       auto* const fallbackBox = collapsibleSplitBox(*fallbackPtr);
@@ -316,9 +316,9 @@ namespace ao::gtk::layout::test
     SECTION("collapsibleSplit toggle persists revealed state and current size")
     {
       auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.activePresetId = "classic";
-      ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.componentStateStore = &stateStore;
+      ctx.runtimeState.activePresetId = "classic";
+      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
+      ctx.runtimeState.componentStateStore = &stateStore;
 
       auto doc = LayoutDocument{};
       doc.root.id = "detail-split";
@@ -351,10 +351,10 @@ namespace ao::gtk::layout::test
     SECTION("collapsibleSplit edit mode toggle does not persist runtime state")
     {
       auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.activePresetId = "classic";
-      ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.componentStateStore = &stateStore;
-      ctx.editMode = true;
+      ctx.runtimeState.activePresetId = "classic";
+      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
+      ctx.runtimeState.componentStateStore = &stateStore;
+      ctx.runtimeState.editMode = true;
 
       auto doc = LayoutDocument{};
       doc.root.id = "detail-split";
@@ -382,9 +382,9 @@ namespace ao::gtk::layout::test
     SECTION("collapsibleSplit ignores state writes after context generation advances")
     {
       auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.activePresetId = "classic";
-      ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.componentStateStore = &stateStore;
+      ctx.runtimeState.activePresetId = "classic";
+      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
+      ctx.runtimeState.componentStateStore = &stateStore;
 
       auto doc = LayoutDocument{};
       doc.root.id = "detail-split";
@@ -404,7 +404,7 @@ namespace ao::gtk::layout::test
         auto* const handleButton = endSideCollapsibleToggle(*box);
         REQUIRE(handleButton != nullptr);
 
-        ++ctx.componentStateGeneration;
+        ++ctx.runtimeState.componentStateGeneration;
         emitClicked(*handleButton);
       }
 

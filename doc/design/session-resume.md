@@ -93,7 +93,7 @@ active-session mutation makes new intent dirty.
 ## Dirty Lifecycle and Save Timing
 
 Persistence owns one monotonic composite revision. It advances once for each
-discrete serialized-intent change: launch context, current track or anchor,
+discrete serialized-intent change: launch spec, current track or anchor,
 modes, volume/mute, and final seek. Projection churn that leaves the anchor
 unchanged, source invalidation alone, prepared-token replacement, sticky shuffle
 candidate changes, and shuffle-history operations do not dirty the payload.

@@ -77,7 +77,7 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - serializes cold records without extension blocks",
             "[library][unit][track-builder][serialization]")
   {
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
 
     SECTION("empty URI")
     {
@@ -170,7 +170,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - serialize writes cold header fields", "[library][unit][track-builder][serialization]")
   {
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata()
       .trackNumber(5)
@@ -202,7 +202,7 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - writes extension blocks in deterministic order",
             "[library][unit][track-builder][serialization]")
   {
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
     builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
     builder.metadata().work("Work");
@@ -227,7 +227,7 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - writes custom block logical length and aligned padding",
             "[library][unit][track-builder][serialization]")
   {
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
     builder.customMetadata().add("odd", "abc");
     builder.property().uri("uri");
@@ -274,7 +274,7 @@ namespace ao::library::test
   {
     auto checkSingleClassicalBlock = [](auto configure, auto check)
     {
-      auto context = TrackSerializationContext{};
+      auto context = TrackSerializationFixture{};
       auto builder = TrackBuilder::makeEmpty();
       configure(builder);
 
@@ -318,7 +318,7 @@ namespace ao::library::test
     builder.property().uri("/path/to/file.flac").duration(std::chrono::minutes{4});
     builder.customMetadata().add("key1", "value1").add("key2", "value2");
 
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
     auto const coldData = context.serializeCold(builder);
 
     auto view = TrackView{std::span<std::byte const>{}, coldData};
@@ -328,7 +328,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackBuilder - fromView reconstructs builder fields", "[library][unit][track-builder][serialization]")
   {
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
 
     auto original = TrackBuilder::makeEmpty();
     original.metadata()
@@ -360,7 +360,7 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - serialized views expose property and metadata fields",
             "[library][unit][track-builder][serialization]")
   {
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
 
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata()

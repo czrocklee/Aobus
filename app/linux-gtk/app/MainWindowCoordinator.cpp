@@ -4,8 +4,8 @@
 #include "app/MainWindowCoordinator.h"
 
 #include "app/AppConfigStore.h"
-#include "app/GtkLayoutConfig.h"
-#include "app/GtkUiServices.h"
+#include "app/GtkLayoutStateStore.h"
+#include "app/GtkUiDependencies.h"
 #include "app/MainWindow.h"
 #include "app/ThemeCoordinator.h"
 #include "app/WindowState.h"
@@ -60,7 +60,7 @@ namespace ao::gtk
   struct MainWindowCoordinator::Impl final
   {
     Impl(MainWindowCoordinator* coordinator, MainWindow& window, rt::AppRuntime& runtime)
-      : layoutConfig{runtime.musicLibrary().rootPath() / ".aobus"}
+      : layoutStateStore{runtime.musicLibrary().rootPath() / ".aobus"}
       , trackRowCache{runtime.library()}
       , imageCache{100}
       , playbackCommandSurface{runtime.playback(),
@@ -68,7 +68,7 @@ namespace ao::gtk
                                [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
       , trackPresentationCatalog{runtime.workspace()}
       , trackPresentationPreferences{trackPresentationCatalog}
-      , tagEditController{window, runtime, TagEditController::Callbacks{.onTagsMutated = [] {}}, themeController}
+      , tagEditController{window, runtime, TagEditController::Callbacks{.onTagsMutated = [] {}}, themeCoordinator}
       , listNavigationController{window,
                                  runtime,
                                  ListNavigationController::Callbacks{
@@ -91,7 +91,7 @@ namespace ao::gtk
 
                                      return std::nullopt;
                                    }},
-                                 themeController}
+                                 themeCoordinator}
       , trackPageHost{stack, runtime, tagEditController, listNavigationController, trackColumnLayouts}
       , importExportCoordinator{window,
                                 runtime,
@@ -106,7 +106,7 @@ namespace ao::gtk
                                     coordinator->rebuildListPages(transaction);
                                   },
                                   .onTitleChanged = [&window](std::string const& title) { window.set_title(title); }},
-                                themeController}
+                                themeCoordinator}
     {
       tagEditController.setDataProvider(&trackRowCache);
     }
@@ -178,8 +178,8 @@ namespace ao::gtk
       runtime.playback().revealTrack(restored->trackId, rt::kInvalidViewId, restored->sourceListId);
     }
 
-    GtkLayoutConfig layoutConfig;
-    ThemeCoordinator themeController;
+    GtkLayoutStateStore layoutStateStore;
+    ThemeCoordinator themeCoordinator;
     TrackRowCache trackRowCache;
     ImageCache imageCache;
     uimodel::PlaybackCommandSurface playbackCommandSurface;
@@ -344,7 +344,7 @@ namespace ao::gtk
     // Column layouts (widths and order)
     auto columnState = ao::uimodel::TrackColumnLayoutState{};
     auto prefState = ao::uimodel::ListPresentationPreferenceState{};
-    _implPtr->layoutConfig.load(columnState, prefState);
+    _implPtr->layoutStateStore.load(columnState, prefState);
     _implPtr->trackColumnLayouts.setListLayouts(columnState.listLayouts);
     _implPtr->trackPresentationPreferences.setListPresentations(prefState.presentations);
 
@@ -365,23 +365,27 @@ namespace ao::gtk
         audio::BackendId{outputBackendId}, audio::DeviceId{outputDeviceId}, audio::ProfileId{outputProfileId});
     }
 
-    _implPtr->themeController.load(*_configStorePtr);
-    _optThemeToken = _implPtr->themeController.registerToplevel(_window);
+    _implPtr->themeCoordinator.load(*_configStorePtr);
+    _optThemeToken = _implPtr->themeCoordinator.registerToplevel(_window);
   }
 
-  GtkUiServices MainWindowCoordinator::uiServices()
+  GtkUiDependencies MainWindowCoordinator::uiDependencies()
   {
-    return GtkUiServices{.trackRowCache = &_implPtr->trackRowCache,
-                         .imageCache = &_implPtr->imageCache,
-                         .playbackSequence = &_runtime.playbackSequence(),
-                         .playbackCommandSurface = &_implPtr->playbackCommandSurface,
-                         .tagEditController = &_implPtr->tagEditController,
-                         .importExportCoordinator = &_implPtr->importExportCoordinator,
-                         .trackPageHost = &_implPtr->trackPageHost,
-                         .trackPresentationCatalog = &_implPtr->trackPresentationCatalog,
-                         .trackPresentationPreferences = &_implPtr->trackPresentationPreferences,
-                         .listNavigationController = &_implPtr->listNavigationController,
-                         .themeController = &_implPtr->themeController};
+    return GtkUiDependencies{
+      .trackRowCache = &_implPtr->trackRowCache,
+      .imageCache = &_implPtr->imageCache,
+      .playbackSequence = &_runtime.playbackSequence(),
+      .playbackCommandSurface = &_implPtr->playbackCommandSurface,
+      .tagEditController = &_implPtr->tagEditController,
+      .importExportActions = &_implPtr->importExportCoordinator,
+      .trackPageHost = &_implPtr->trackPageHost,
+      .trackPresentationCatalog = &_implPtr->trackPresentationCatalog,
+      .trackPresentationPreferences = &_implPtr->trackPresentationPreferences,
+      .listNavigationController = &_implPtr->listNavigationController,
+      .themeCoordinator = &_implPtr->themeCoordinator,
+      .createSmartListFromExpression = [navigationController = &_implPtr->listNavigationController](
+                                         ao::ListId parentListId, std::string expression)
+      { navigationController->createSmartListFromExpression(parentListId, std::move(expression)); }};
   }
 
   void MainWindowCoordinator::rebuildListPages(lmdb::ReadTransaction const& transaction)
@@ -400,7 +404,7 @@ namespace ao::gtk
     auto prefState = ao::uimodel::ListPresentationPreferenceState{};
     prefState.presentations = _implPtr->trackPresentationPreferences.listPresentations();
 
-    _implPtr->layoutConfig.save(columnState, prefState);
+    _implPtr->layoutStateStore.save(columnState, prefState);
   }
 
   TrackRowCache* MainWindowCoordinator::trackRowCache()
@@ -443,9 +447,9 @@ namespace ao::gtk
   {
     return &_implPtr->trackPresentationPreferences;
   }
-  ThemeCoordinator* MainWindowCoordinator::themeController()
+  ThemeCoordinator* MainWindowCoordinator::themeCoordinator()
   {
-    return &_implPtr->themeController;
+    return &_implPtr->themeCoordinator;
   }
   portal::ImportExportCoordinator& MainWindowCoordinator::importExport()
   {

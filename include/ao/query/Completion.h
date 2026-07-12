@@ -34,27 +34,25 @@ namespace ao::query
     std::string prefix;
   };
 
-  struct QueryOperatorCompletionContext final
+  struct QueryOperatorCompletion final
   {
     Field field = Field::Title;
     QueryCompletionReplacement replacement;
   };
 
-  struct QueryValueCompletionContext final
+  struct QueryValueCompletion final
   {
     Field field = Field::Title;
     QueryCompletionReplacement replacement;
   };
 
-  struct QueryLogicalOperatorCompletionContext final
+  struct QueryLogicalOperatorCompletion final
   {
     QueryCompletionReplacement replacement;
   };
 
-  using QueryCompletionContext = std::variant<QueryCompletionToken,
-                                              QueryOperatorCompletionContext,
-                                              QueryValueCompletionContext,
-                                              QueryLogicalOperatorCompletionContext>;
+  using QueryCompletionAnalysis =
+    std::variant<QueryCompletionToken, QueryOperatorCompletion, QueryValueCompletion, QueryLogicalOperatorCompletion>;
 
   enum class QueryVariableCompletionMatchKind : std::uint8_t
   {
@@ -78,7 +76,7 @@ namespace ao::query
     std::span<std::string_view const> aliases;
   };
 
-  std::optional<QueryCompletionContext> analyzeCompletionContext(std::string_view text, std::size_t cursor);
+  std::optional<QueryCompletionAnalysis> analyzeQueryCompletion(std::string_view text, std::size_t cursor);
 
   std::optional<QueryCompletionToken> queryCompletionTokenAtCursor(std::string_view text, std::size_t cursor);
 

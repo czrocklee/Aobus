@@ -3,7 +3,7 @@
 
 #include "ListCommand.h"
 
-#include "CliContext.h"
+#include "CliRuntime.h"
 #include "CommandError.h"
 #include "DryRunFlag.h"
 #include "DumpOutput.h"
@@ -220,9 +220,9 @@ namespace ao::cli
       return rows;
     }
 
-    std::vector<rt::TrackRow> resolvedListRows(CliContext& context, rt::ListNode const& node, rt::LibraryReader& reader)
+    std::vector<rt::TrackRow> resolvedListRows(CliRuntime& cli, rt::ListNode const& node, rt::LibraryReader& reader)
     {
-      auto& sources = context.runtime().sources();
+      auto& sources = cli.core().sources();
       sources.reloadAllTracks();
       auto sourceResult = sources.acquire(node.id);
 
@@ -280,9 +280,9 @@ namespace ao::cli
       return dto;
     }
 
-    void printListDetail(CliContext& context, ListId listId)
+    void printListDetail(CliRuntime& cli, ListId listId)
     {
-      auto reader = context.library().reader();
+      auto reader = cli.library().reader();
       auto optNode = reader.listNode(listId);
 
       if (!optNode)
@@ -291,34 +291,33 @@ namespace ao::cli
       }
 
       auto const& node = *optNode;
-      auto const rows = resolvedListRows(context, node, reader);
+      auto const rows = resolvedListRows(cli, node, reader);
 
-      if (context.options().format == OutputFormat::Yaml)
+      if (cli.options().format == OutputFormat::Yaml)
       {
-        emitDocument(
-          context.io().out, context.options().format, ListDetailDocumentDto{.list = toListDetailDto(node, rows)});
+        emitDocument(cli.io().out, cli.options().format, ListDetailDocumentDto{.list = toListDetailDto(node, rows)});
         return;
       }
 
-      if (context.options().format == OutputFormat::Json)
+      if (cli.options().format == OutputFormat::Json)
       {
-        emitDocument(context.io().out, context.options().format, toListDetailDto(node, rows));
+        emitDocument(cli.io().out, cli.options().format, toListDetailDto(node, rows));
         return;
       }
 
-      std::println(context.io().out, "List ID: {}", node.id);
-      std::println(context.io().out, "  Name: {}", node.name);
-      std::println(context.io().out, "  Description: {}", node.description);
-      std::println(context.io().out, "  Type: {}", listKindName(node.kind));
-      std::println(context.io().out, "  Parent ID: {}", node.parentId);
+      std::println(cli.io().out, "List ID: {}", node.id);
+      std::println(cli.io().out, "  Name: {}", node.name);
+      std::println(cli.io().out, "  Description: {}", node.description);
+      std::println(cli.io().out, "  Type: {}", listKindName(node.kind));
+      std::println(cli.io().out, "  Parent ID: {}", node.parentId);
 
       if (node.kind == rt::ListNodeKind::Smart)
       {
-        std::println(context.io().out, "  Filter: {}", node.smartExpression);
+        std::println(cli.io().out, "  Filter: {}", node.smartExpression);
       }
 
-      std::println(context.io().out, "  Tracks: {}", rows.size());
-      printPlainTrackRows(context.io().out, rows);
+      std::println(cli.io().out, "  Tracks: {}", rows.size());
+      printPlainTrackRows(cli.io().out, rows);
     }
   } // namespace
 
@@ -407,12 +406,12 @@ namespace ao::cli
       return kind == rt::LibraryWriter::ListKind::Smart ? "smart" : "manual";
     }
 
-    void printListCreateMutation(CliContext& context,
+    void printListCreateMutation(CliRuntime& cli,
                                  std::optional<ListId> optListId,
                                  rt::LibraryWriter::ListDraft const& draft,
                                  bool dryRun);
 
-    void createList(CliContext& context,
+    void createList(CliRuntime& cli,
                     std::string const& name,
                     std::string const& filter,
                     std::string const& desc,
@@ -428,25 +427,25 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const listResult = context.library().writer().previewCreateList(draft);
+        auto const listResult = cli.library().writer().previewCreateList(draft);
 
         if (!listResult)
         {
           throwCommandError(listResult.error());
         }
 
-        printListCreateMutation(context, std::nullopt, draft, true);
+        printListCreateMutation(cli, std::nullopt, draft, true);
         return;
       }
 
-      auto const listResult = context.library().writer().createList(draft);
+      auto const listResult = cli.library().writer().createList(draft);
 
       if (!listResult)
       {
         throwCommandError(listResult.error());
       }
 
-      printListCreateMutation(context, std::optional<ListId>{*listResult}, draft, false);
+      printListCreateMutation(cli, std::optional<ListId>{*listResult}, draft, false);
     }
 
     rt::LibraryWriter::ListDraft draftFromNode(rt::LibraryReader& reader, rt::ListNode const& node)
@@ -480,15 +479,15 @@ namespace ao::cli
       return draftFromNode(reader, *optNode);
     }
 
-    void printListCreateMutation(CliContext& context,
+    void printListCreateMutation(CliRuntime& cli,
                                  std::optional<ListId> optListId,
                                  rt::LibraryWriter::ListDraft const& draft,
                                  bool dryRun)
     {
-      if (context.options().format != OutputFormat::Plain)
+      if (cli.options().format != OutputFormat::Plain)
       {
-        emitDocument(context.io().out,
-                     context.options().format,
+        emitDocument(cli.io().out,
+                     cli.options().format,
                      ListCreateReportDto{.action = "create",
                                          .dryRun = dryRun,
                                          .optListId = optListId,
@@ -504,23 +503,23 @@ namespace ao::cli
 
       if (optListId)
       {
-        std::println(context.io().out, "add list: {} {}{}", *optListId, draft.name, dryRun ? " (dry-run)" : "");
+        std::println(cli.io().out, "add list: {} {}{}", *optListId, draft.name, dryRun ? " (dry-run)" : "");
         return;
       }
 
-      std::println(context.io().out, "add list: {}{}", draft.name, dryRun ? " (dry-run)" : "");
+      std::println(cli.io().out, "add list: {}{}", draft.name, dryRun ? " (dry-run)" : "");
     }
 
-    void printListUpdateMutation(CliContext& context,
+    void printListUpdateMutation(CliRuntime& cli,
                                  std::string_view action,
                                  ListId listId,
                                  rt::UpdateListReply const& reply,
                                  bool dryRun)
     {
-      if (context.options().format != OutputFormat::Plain)
+      if (cli.options().format != OutputFormat::Plain)
       {
-        emitDocument(context.io().out,
-                     context.options().format,
+        emitDocument(cli.io().out,
+                     cli.options().format,
                      ListUpdateReportDto{.action = std::string{action},
                                          .dryRun = dryRun,
                                          .listId = listId,
@@ -533,24 +532,24 @@ namespace ao::cli
 
       if (action == "add")
       {
-        std::println(context.io().out, "added tracks to list: {}{}", listId, dryRun ? " (dry-run)" : "");
+        std::println(cli.io().out, "added tracks to list: {}{}", listId, dryRun ? " (dry-run)" : "");
       }
       else if (action == "remove")
       {
-        std::println(context.io().out, "removed tracks from list: {}{}", listId, dryRun ? " (dry-run)" : "");
+        std::println(cli.io().out, "removed tracks from list: {}{}", listId, dryRun ? " (dry-run)" : "");
       }
       else
       {
-        std::println(context.io().out, "updated list: {}{}", listId, dryRun ? " (dry-run)" : "");
+        std::println(cli.io().out, "updated list: {}{}", listId, dryRun ? " (dry-run)" : "");
       }
     }
 
-    void printListDeleteMutation(CliContext& context, rt::DeleteListReply const& reply, bool dryRun)
+    void printListDeleteMutation(CliRuntime& cli, rt::DeleteListReply const& reply, bool dryRun)
     {
-      if (context.options().format != OutputFormat::Plain)
+      if (cli.options().format != OutputFormat::Plain)
       {
-        emitDocument(context.io().out,
-                     context.options().format,
+        emitDocument(cli.io().out,
+                     cli.options().format,
                      ListDeleteReportDto{.action = "delete",
                                          .dryRun = dryRun,
                                          .listId = reply.listId,
@@ -560,18 +559,18 @@ namespace ao::cli
         return;
       }
 
-      std::println(context.io().out, "deleted list: {}{}", reply.listId, dryRun ? " (dry-run)" : "");
+      std::println(cli.io().out, "deleted list: {}{}", reply.listId, dryRun ? " (dry-run)" : "");
     }
 
-    void printManualListInsertMutation(CliContext& context,
+    void printManualListInsertMutation(CliRuntime& cli,
                                        ListId listId,
                                        rt::InsertManualListTracksReply const& reply,
                                        bool dryRun)
     {
-      if (context.options().format != OutputFormat::Plain)
+      if (cli.options().format != OutputFormat::Plain)
       {
-        emitDocument(context.io().out,
-                     context.options().format,
+        emitDocument(cli.io().out,
+                     cli.options().format,
                      ListManualInsertReportDto{.action = "add",
                                                .dryRun = dryRun,
                                                .listId = listId,
@@ -584,18 +583,18 @@ namespace ao::cli
         return;
       }
 
-      std::println(context.io().out, "added tracks to list: {}{}", listId, dryRun ? " (dry-run)" : "");
+      std::println(cli.io().out, "added tracks to list: {}{}", listId, dryRun ? " (dry-run)" : "");
     }
 
-    void printManualListRemoveMutation(CliContext& context,
+    void printManualListRemoveMutation(CliRuntime& cli,
                                        ListId listId,
                                        rt::RemoveManualListTracksReply const& reply,
                                        bool dryRun)
     {
-      if (context.options().format != OutputFormat::Plain)
+      if (cli.options().format != OutputFormat::Plain)
       {
-        emitDocument(context.io().out,
-                     context.options().format,
+        emitDocument(cli.io().out,
+                     cli.options().format,
                      ListManualRemoveReportDto{.action = "remove",
                                                .dryRun = dryRun,
                                                .listId = listId,
@@ -606,10 +605,10 @@ namespace ao::cli
         return;
       }
 
-      std::println(context.io().out, "removed tracks from list: {}{}", listId, dryRun ? " (dry-run)" : "");
+      std::println(cli.io().out, "removed tracks from list: {}{}", listId, dryRun ? " (dry-run)" : "");
     }
 
-    void updateList(CliContext& context,
+    void updateList(CliRuntime& cli,
                     ListId listId,
                     std::optional<std::string> const& optName,
                     std::optional<std::string> const& optDescription,
@@ -622,7 +621,7 @@ namespace ao::cli
         throwCommandError(Error::Code::InvalidInput, "list update requires at least one field option");
       }
 
-      auto reader = context.library().reader();
+      auto reader = cli.library().reader();
       auto draft = requireListDraft(listId, reader);
 
       if (optName)
@@ -653,28 +652,28 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const updateResult = context.library().writer().previewUpdateList(draft);
+        auto const updateResult = cli.library().writer().previewUpdateList(draft);
 
         if (!updateResult)
         {
           throwCommandError(updateResult.error());
         }
 
-        printListUpdateMutation(context, "update", listId, *updateResult, true);
+        printListUpdateMutation(cli, "update", listId, *updateResult, true);
         return;
       }
 
-      auto const updateResult = context.library().writer().updateList(draft);
+      auto const updateResult = cli.library().writer().updateList(draft);
 
       if (!updateResult)
       {
         throwCommandError(updateResult.error());
       }
 
-      printListUpdateMutation(context, "update", listId, *updateResult, false);
+      printListUpdateMutation(cli, "update", listId, *updateResult, false);
     }
 
-    void updateManualMembership(CliContext& context,
+    void updateManualMembership(CliRuntime& cli,
                                 ListId listId,
                                 std::vector<std::uint32_t> const& rawTrackIds,
                                 bool add,
@@ -688,13 +687,13 @@ namespace ao::cli
         trackIds.emplace_back(rawTrackId);
       }
 
-      auto& writer = context.library().writer();
+      auto& writer = cli.library().writer();
 
       if (add)
       {
-        auto const insertionIndex = [&context, listId]
+        auto const insertionIndex = [&cli, listId]
         {
-          auto reader = context.library().reader();
+          auto reader = cli.library().reader();
           return reader.listTrackIds(listId).size();
         }();
         auto const insertResult = dryRun ? writer.previewInsertManualListTracks(listId, insertionIndex, trackIds)
@@ -705,7 +704,7 @@ namespace ao::cli
           throwCommandError(insertResult.error());
         }
 
-        printManualListInsertMutation(context, listId, *insertResult, dryRun);
+        printManualListInsertMutation(cli, listId, *insertResult, dryRun);
         return;
       }
 
@@ -717,7 +716,7 @@ namespace ao::cli
         throwCommandError(removeResult.error());
       }
 
-      printManualListRemoveMutation(context, listId, *removeResult, dryRun);
+      printManualListRemoveMutation(cli, listId, *removeResult, dryRun);
     }
 
     void dumpLists(library::MusicLibrary& ml, bool raw, OutputFormat format, std::ostream& os)
@@ -768,7 +767,7 @@ namespace ao::cli
     }
   } // namespace
 
-  void configureListCommand(CLI::App& app, CliContext& context)
+  void configureListCommand(CLI::App& app, CliRuntime& cli)
   {
     auto* list = app.add_subcommand("list", "List management commands");
     list->require_subcommand(1);
@@ -776,21 +775,21 @@ namespace ao::cli
     auto* showCmd = list->add_subcommand("show", "Show lists");
     auto* showId = showCmd->add_option("id", "list id");
     showCmd->callback(
-      [&context, showId]
+      [&cli, showId]
       {
         if (showId->count() > 0)
         {
-          printListDetail(context, ListId{showId->as<std::uint32_t>()});
+          printListDetail(cli, ListId{showId->as<std::uint32_t>()});
           return;
         }
 
-        if (context.options().format == OutputFormat::Plain)
+        if (cli.options().format == OutputFormat::Plain)
         {
-          printListsPlain(context.musicLibrary(), context.io().out);
+          printListsPlain(cli.musicLibrary(), cli.io().out);
         }
         else
         {
-          emitListCollectionDocument(context.musicLibrary(), context.options().format, context.io().out);
+          emitListCollectionDocument(cli.musicLibrary(), cli.options().format, cli.io().out);
         }
       });
 
@@ -802,9 +801,9 @@ namespace ao::cli
     auto* parent = create->add_option("-p,--parent", "parent list id (0 = all-tracks)")->default_val(0);
     auto* createDryRun = addDryRunFlag(*create);
     create->callback(
-      [&context, name, filter, desc, parent, createDryRun]
+      [&cli, name, filter, desc, parent, createDryRun]
       {
-        createList(context,
+        createList(cli,
                    name->as<std::string>(),
                    filter->as<std::string>(),
                    desc->as<std::string>(),
@@ -820,19 +819,14 @@ namespace ao::cli
     auto* updateParent = update->add_option("--parent", "parent list id (0 = all-tracks)");
     auto* updateDryRun = addDryRunFlag(*update);
     update->callback(
-      [&context, updateId, updateName, updateDesc, updateFilter, updateParent, updateDryRun]
+      [&cli, updateId, updateName, updateDesc, updateFilter, updateParent, updateDryRun]
       {
         auto optName = updateName->count() > 0 ? std::optional{updateName->as<std::string>()} : std::nullopt;
         auto optDesc = updateDesc->count() > 0 ? std::optional{updateDesc->as<std::string>()} : std::nullopt;
         auto optFilter = updateFilter->count() > 0 ? std::optional{updateFilter->as<std::string>()} : std::nullopt;
         auto optParent = updateParent->count() > 0 ? std::optional{updateParent->as<std::uint32_t>()} : std::nullopt;
-        updateList(context,
-                   ListId{updateId->as<std::uint32_t>()},
-                   optName,
-                   optDesc,
-                   optFilter,
-                   optParent,
-                   isDryRun(updateDryRun));
+        updateList(
+          cli, ListId{updateId->as<std::uint32_t>()}, optName, optDesc, optFilter, optParent, isDryRun(updateDryRun));
       });
 
     auto* add = list->add_subcommand("add", "Add tracks to a manual list");
@@ -841,10 +835,9 @@ namespace ao::cli
     add->add_option("trackId", *addTrackIdsPtr, "track id")->required();
     auto* addDryRun = addDryRunFlag(*add);
     add->callback(
-      [&context, addListId, addTrackIdsPtr, addDryRun]
+      [&cli, addListId, addTrackIdsPtr, addDryRun]
       {
-        updateManualMembership(
-          context, ListId{addListId->as<std::uint32_t>()}, *addTrackIdsPtr, true, isDryRun(addDryRun));
+        updateManualMembership(cli, ListId{addListId->as<std::uint32_t>()}, *addTrackIdsPtr, true, isDryRun(addDryRun));
       });
 
     auto* remove = list->add_subcommand("remove", "Remove tracks from a manual list");
@@ -853,48 +846,47 @@ namespace ao::cli
     remove->add_option("trackId", *removeTrackIdsPtr, "track id")->required();
     auto* removeDryRun = addDryRunFlag(*remove);
     remove->callback(
-      [&context, removeListId, removeTrackIdsPtr, removeDryRun]
+      [&cli, removeListId, removeTrackIdsPtr, removeDryRun]
       {
         updateManualMembership(
-          context, ListId{removeListId->as<std::uint32_t>()}, *removeTrackIdsPtr, false, isDryRun(removeDryRun));
+          cli, ListId{removeListId->as<std::uint32_t>()}, *removeTrackIdsPtr, false, isDryRun(removeDryRun));
       });
 
     auto* del = list->add_subcommand("delete", "Delete a list");
     auto* id = del->add_option("id", "list id")->required();
     auto* deleteDryRun = addDryRunFlag(*del);
     del->callback(
-      [&context, id, deleteDryRun]
+      [&cli, id, deleteDryRun]
       {
         auto const listId = ListId{id->as<std::uint32_t>()};
 
         if (isDryRun(deleteDryRun))
         {
-          auto const deleteResult = context.library().writer().previewDeleteList(listId);
+          auto const deleteResult = cli.library().writer().previewDeleteList(listId);
 
           if (!deleteResult)
           {
             throwCommandError(deleteResult.error());
           }
 
-          printListDeleteMutation(context, *deleteResult, true);
+          printListDeleteMutation(cli, *deleteResult, true);
           return;
         }
 
-        auto const deleteResult = context.library().writer().deleteList(listId);
+        auto const deleteResult = cli.library().writer().deleteList(listId);
 
         if (!deleteResult)
         {
           throwCommandError(deleteResult.error());
         }
 
-        printListDeleteMutation(context, *deleteResult, false);
+        printListDeleteMutation(cli, *deleteResult, false);
       });
 
     auto* dumpCmd = list->add_subcommand("dump", "Dump lists from database");
     auto* dumpRaw = dumpCmd->add_flag("--raw", "hex dump raw bytes");
 
-    dumpCmd->callback(
-      [&context, dumpRaw]
-      { dumpLists(context.musicLibrary(), dumpRaw->count() > 0, context.options().format, context.io().out); });
+    dumpCmd->callback([&cli, dumpRaw]
+                      { dumpLists(cli.musicLibrary(), dumpRaw->count() > 0, cli.options().format, cli.io().out); });
   }
 } // namespace ao::cli

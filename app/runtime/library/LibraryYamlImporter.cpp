@@ -430,7 +430,7 @@ namespace ao::rt
                                                                       ImportRunMode runMode)
   {
     auto buffer = std::vector<char>{};
-    auto yamlContext = yaml::CallbackContext{path.string()};
+    auto yamlErrorState = yaml::ErrorCallbackState{path.string()};
     auto tree = ryml::Tree{};
 
     auto bufferResult = yaml::readFileResult(path);
@@ -445,8 +445,8 @@ namespace ao::rt
 
     try
     {
-      tree = ryml::Tree{yaml::callbacks(yamlContext)};
-      yaml::parseInPlace(tree, buffer, yamlContext);
+      tree = ryml::Tree{yaml::callbacks(yamlErrorState)};
+      yaml::parseInPlace(tree, buffer, yamlErrorState);
       tree.resolve();
     }
     catch (std::exception const& e)

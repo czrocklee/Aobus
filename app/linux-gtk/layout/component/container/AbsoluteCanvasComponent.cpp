@@ -3,8 +3,8 @@
 
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/AbsoluteCanvasGeometry.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -538,9 +538,9 @@ namespace ao::gtk::layout
     class AbsoluteCanvasComponent final : public LayoutComponent
     {
     public:
-      AbsoluteCanvasComponent(LayoutContext& ctx, uimodel::LayoutNode const& node)
-        : _canvas{ctx.editMode,
-                  ctx.onNodeMoved,
+      AbsoluteCanvasComponent(LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
+        : _canvas{ctx.runtimeState.editMode,
+                  ctx.runtimeState.onNodeMoved,
                   node.propertyOr<bool>("snapToGrid", true),
                   static_cast<std::int32_t>(node.propertyOr<std::int64_t>("gridSize", 8))}
       {
@@ -575,7 +575,7 @@ namespace ao::gtk::layout
       std::vector<std::unique_ptr<LayoutComponent>> _children;
     };
 
-    std::unique_ptr<LayoutComponent> createAbsoluteCanvas(LayoutContext& ctx, uimodel::LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createAbsoluteCanvas(LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
     {
       return std::make_unique<AbsoluteCanvasComponent>(ctx, node);
     }

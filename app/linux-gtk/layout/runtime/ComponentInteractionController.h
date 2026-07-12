@@ -17,7 +17,7 @@
 namespace ao::gtk::layout
 {
   class ActionBinder;
-  struct LayoutContext;
+  struct LayoutBuildContext;
 
   /**
    * @brief Handles standard layout actions (click, secondary click, long press) for a widget.
@@ -36,7 +36,7 @@ namespace ao::gtk::layout
     /**
      * @brief Attaches action controllers to the target widget based on the layout node properties.
      */
-    void attach(LayoutContext& ctx,
+    void attach(LayoutBuildContext& ctx,
                 uimodel::LayoutNode const& node,
                 Gtk::Widget& target,
                 uimodel::LayoutComponentActionPolicy policy);

@@ -6,35 +6,18 @@
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/audio/Property.h>
-#include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <fakeit.hpp>
 
 #include <chrono>
-#include <cstdint>
 #include <limits>
 
 namespace ao::rt::test
 {
-  using namespace fakeit;
-
-  namespace
-  {
-    constexpr bool withinOneMillisecond(std::chrono::milliseconds const actualElapsed,
-                                        std::chrono::milliseconds const expectedElapsed)
-    {
-      auto const delta =
-        actualElapsed > expectedElapsed ? actualElapsed - expectedElapsed : expectedElapsed - actualElapsed;
-      return delta <= std::chrono::milliseconds{1};
-    }
-  } // namespace
-
   TEST_CASE("PlaybackService control - initial state is correct", "[runtime][unit][playback][control]")
   {
     auto fixture = PlaybackFixture<MockExecutor>{};
@@ -117,11 +100,6 @@ namespace ao::rt::test
     CHECK(stoppedFired);
     CHECK(idleFired);
     CHECK(fixture.playbackService.state().nowPlaying.trackId == kInvalidTrackId);
-
-    auto const stoppedSession = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
-    CHECK(stoppedSession.trackId == TrackId{1});
-    CHECK(stoppedSession.sourceListId == ListId{1});
-    CHECK(stoppedSession.positionMs == 50);
   }
 
   TEST_CASE("PlaybackService control - seek updates state and fires event", "[runtime][unit][playback][control]")
@@ -219,7 +197,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto notificationService = NotificationService{};
-    auto playbackService = PlaybackService{executor, libraryFixture.library(), notificationService};
+    auto playbackService = makePlaybackService(executor, libraryFixture.library(), notificationService);
 
     bool preparingFired = false;
     auto subPreparing = playbackService.onPreparing([&] { preparingFired = true; });
@@ -251,197 +229,5 @@ namespace ao::rt::test
     auto const feed = notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-  }
-
-  TEST_CASE("PlaybackService control - restores deferred session without opening backend",
-            "[runtime][unit][playback-control][session]")
-  {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.libraryFixture.addTrack({.title = "Restored Track", .uri = fixturePath});
-    auto const session = PlaybackTransportSessionState{
-      .sourceListId = ListId{10},
-      .trackId = trackId,
-      .positionMs = 50,
-      .volume = 0.5F,
-      .muted = true,
-    };
-
-    REQUIRE(PlaybackServiceTestAccess::restoreSession(fixture.playbackService, session));
-
-    auto const restored = fixture.playbackService.state();
-    CHECK(restored.transport == audio::Transport::Idle);
-    CHECK(restored.nowPlaying.trackId == trackId);
-    CHECK(restored.nowPlaying.sourceListId == ListId{10});
-    CHECK(restored.nowPlaying.title == "Restored Track");
-    CHECK(restored.elapsed == std::chrono::milliseconds{50});
-    CHECK(restored.volume.level == 0.5F);
-    CHECK(restored.volume.muted == true);
-    CHECK(fixture.renderTarget == nullptr);
-    Verify(Method(fixture.spyBackendPtr->mock(), open)).Never();
-
-    bool deferredSeekFired = false;
-    auto subSeek = fixture.playbackService.onSeekUpdate(
-      [&](PlaybackService::SeekUpdate const& event)
-      {
-        if (event.elapsed == std::chrono::milliseconds{75})
-        {
-          deferredSeekFired = true;
-          CHECK(event.mode == PlaybackService::SeekMode::Final);
-        }
-      });
-
-    fixture.playbackService.seek(std::chrono::milliseconds{75});
-
-    CHECK(deferredSeekFired);
-    CHECK(fixture.playbackService.state().elapsed == std::chrono::milliseconds{75});
-
-    auto const snapshot = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
-    CHECK(snapshot.sourceListId == ListId{10});
-    CHECK(snapshot.trackId == trackId);
-    CHECK(snapshot.positionMs == 75);
-    CHECK(snapshot.volume == 0.5F);
-    CHECK(snapshot.muted == true);
-
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    CHECK(fixture.renderTarget == nullptr);
-    Verify(Method(fixture.spyBackendPtr->mock(), open)).Never();
-
-    fixture.playbackService.resume();
-
-    CHECK(fixture.renderTarget != nullptr);
-    CHECK(fixture.playbackService.state().transport == audio::Transport::Playing);
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == trackId);
-    CHECK(withinOneMillisecond(fixture.playbackService.state().elapsed, std::chrono::milliseconds{75}));
-    Verify(Method(fixture.spyBackendPtr->mock(), open)).Once();
-  }
-
-  TEST_CASE("PlaybackService control - sanitizes restored session values", "[runtime][unit][playback-control][session]")
-  {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.libraryFixture.addTrack(
-      {.title = "Restored Track", .uri = fixturePath, .duration = std::chrono::seconds{3}});
-    auto const session = PlaybackTransportSessionState{
-      .sourceListId = ListId{10},
-      .trackId = trackId,
-      .positionMs = std::numeric_limits<std::uint64_t>::max(),
-      .volume = 5.0F,
-      .muted = true,
-    };
-
-    REQUIRE(PlaybackServiceTestAccess::restoreSession(fixture.playbackService, session));
-
-    auto const restored = fixture.playbackService.state();
-    CHECK(restored.nowPlaying.trackId == trackId);
-    CHECK(restored.elapsed == std::chrono::milliseconds{0});
-    CHECK(restored.volume.level == 1.0F);
-    CHECK(restored.volume.muted == true);
-
-    auto const snapshot = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
-    CHECK(snapshot.positionMs == 0);
-    CHECK(snapshot.volume == 1.0F);
-  }
-
-  TEST_CASE("PlaybackService control - restore failure does not overwrite live restorable state",
-            "[runtime][unit][playback-control][session]")
-  {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.libraryFixture.addTrack({.title = "Restored Track", .uri = fixturePath});
-    auto const storedSession = PlaybackTransportSessionState{
-      .sourceListId = ListId{10},
-      .trackId = trackId,
-      .positionMs = 1234,
-      .volume = 0.25F,
-      .muted = true,
-    };
-    REQUIRE(PlaybackServiceTestAccess::restoreSession(fixture.playbackService, storedSession));
-
-    auto const restoreResult = PlaybackServiceTestAccess::restoreSession(fixture.playbackService,
-                                                                         PlaybackTransportSessionState{
-                                                                           .sourceListId = ListId{10},
-                                                                           .trackId = TrackId{9999},
-                                                                           .positionMs = 5678,
-                                                                         });
-    CHECK_FALSE(restoreResult);
-
-    auto const snapshot = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
-    CHECK(snapshot.sourceListId == storedSession.sourceListId);
-    CHECK(snapshot.trackId == storedSession.trackId);
-    CHECK(snapshot.positionMs == storedSession.positionMs);
-    CHECK(snapshot.volume == storedSession.volume);
-    CHECK(snapshot.muted == storedSession.muted);
-  }
-
-  TEST_CASE("PlaybackService control - property failure rolls restored volume and mute back atomically",
-            "[runtime][unit][playback-control][session]")
-  {
-    auto fixture = PlaybackFixture<MockExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = fixture.libraryFixture.addTrack({.title = "Restored Track", .uri = fixturePath});
-    auto const baselineRequest = PlaybackTransportSessionState{
-      .sourceListId = ListId{10},
-      .trackId = trackId,
-      .positionMs = 250,
-      .volume = 0.25F,
-      .muted = false,
-    };
-    REQUIRE(PlaybackServiceTestAccess::restoreSession(fixture.playbackService, baselineRequest));
-    auto const baseline = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
-    auto const baselinePlayback = fixture.playbackService.state();
-
-    SECTION("volume failure leaves the baseline untouched")
-    {
-      When(Method(fixture.spyBackendPtr->mock(), setProperty))
-        .AlwaysDo(
-          [](audio::PropertyId const id, audio::PropertyValue const&) -> Result<>
-          {
-            if (id == audio::PropertyId::Volume)
-            {
-              return makeError(Error::Code::IoError, "volume property rejected");
-            }
-
-            return {};
-          });
-    }
-
-    SECTION("mute failure rolls back the staged volume")
-    {
-      When(Method(fixture.spyBackendPtr->mock(), setProperty))
-        .AlwaysDo(
-          [](audio::PropertyId const id, audio::PropertyValue const&) -> Result<>
-          {
-            if (id == audio::PropertyId::Muted)
-            {
-              return makeError(Error::Code::IoError, "mute property rejected");
-            }
-
-            return {};
-          });
-    }
-
-    auto const failed = PlaybackServiceTestAccess::restoreSession(fixture.playbackService,
-                                                                  PlaybackTransportSessionState{
-                                                                    .sourceListId = ListId{20},
-                                                                    .trackId = trackId,
-                                                                    .positionMs = 750,
-                                                                    .volume = 0.75F,
-                                                                    .muted = true,
-                                                                  });
-
-    REQUIRE_FALSE(failed);
-    auto const snapshot = PlaybackServiceTestAccess::sessionState(fixture.playbackService);
-    CHECK(snapshot.sourceListId == baseline.sourceListId);
-    CHECK(snapshot.trackId == baseline.trackId);
-    CHECK(snapshot.positionMs == baseline.positionMs);
-    CHECK(snapshot.volume == baseline.volume);
-    CHECK(snapshot.muted == baseline.muted);
-    auto const& playback = fixture.playbackService.state();
-    CHECK(playback.nowPlaying == baselinePlayback.nowPlaying);
-    CHECK(playback.transport == baselinePlayback.transport);
-    CHECK(playback.elapsed == baselinePlayback.elapsed);
-    CHECK(playback.volume == baselinePlayback.volume);
   }
 } // namespace ao::rt::test

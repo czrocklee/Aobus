@@ -4,8 +4,8 @@
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "tag/TagEditController.h"
 #include "tag/TagEditor.h"
 #include <ao/CoreIds.h>
@@ -31,23 +31,25 @@ namespace ao::gtk::layout
     class TrackTagEditorComponent final : public LayoutComponent
     {
     public:
-      TrackTagEditorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _writer{ctx.runtime.library().writer()}
+      TrackTagEditorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
+        : _library{ctx.runtime.library()}
+        , _writer{_library.writer()}
+        , _tagEditController{ctx.dependencies.tagEditController}
       {
-        if (ctx.track.detailScope != nullptr)
+        if (ctx.detailScope != nullptr)
         {
-          _scopeConn = ctx.track.detailScope->signalSnapshotChanged().connect([this, &ctx](auto const& snap)
-                                                                              { handleSnapshot(ctx, snap); });
-          handleSnapshot(ctx, ctx.track.detailScope->snapshot());
+          _scopeConn =
+            ctx.detailScope->signalSnapshotChanged().connect([this](auto const& snap) { handleSnapshot(snap); });
+          handleSnapshot(ctx.detailScope->snapshot());
         }
 
         _tagEditor.signalTagsChanged().connect(
-          [this, &ctx](auto const& toAdd, auto const& toRemove)
+          [this](auto const& toAdd, auto const& toRemove)
           {
-            if (ctx.tag.editController != nullptr)
+            if (_tagEditController != nullptr)
             {
-              ctx.tag.editController->submitTagChanges(
-                TrackSelectionContext{.listId = kInvalidListId, .selectedIds = _currentTrackIds}, toAdd, toRemove);
+              _tagEditController->submitTagChanges(
+                TrackSelection{.listId = kInvalidListId, .selectedIds = _currentTrackIds}, toAdd, toRemove);
             }
             else
             {
@@ -72,20 +74,22 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _tagEditor; }
 
     private:
-      void handleSnapshot(LayoutContext& ctx, rt::TrackDetailSnapshot const& snap)
+      void handleSnapshot(rt::TrackDetailSnapshot const& snap)
       {
         _currentTrackIds = snap.trackIds;
-        _tagEditor.setup(ctx.runtime.library(), _currentTrackIds);
+        _tagEditor.setup(_library, _currentTrackIds);
         _tagEditor.set_visible(true);
       }
 
       TagEditor _tagEditor;
+      rt::Library& _library;
       rt::LibraryWriter& _writer;
+      TagEditController* _tagEditController;
       std::vector<TrackId> _currentTrackIds;
       sigc::scoped_connection _scopeConn;
     };
 
-    std::unique_ptr<LayoutComponent> createTrackTagEditor(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackTagEditor(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackTagEditorComponent>(ctx, node);
     }

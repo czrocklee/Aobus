@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "CliContext.h"
+#include "CliRuntime.h"
 
 #include <ao/async/ImmediateExecutor.h>
 #include <ao/rt/CoreRuntime.h>
@@ -14,14 +14,14 @@
 
 namespace ao::cli
 {
-  CliContext::CliContext(std::ostream& out, std::ostream& err, std::size_t const musicLibraryMapSize)
+  CliRuntime::CliRuntime(std::ostream& out, std::ostream& err, std::size_t const musicLibraryMapSize)
     : _io{.out = out, .err = err}, _musicLibraryMapSize{musicLibraryMapSize}
   {
   }
 
-  CliContext::~CliContext() = default;
+  CliRuntime::~CliRuntime() = default;
 
-  rt::CoreRuntime& CliContext::runtime()
+  rt::CoreRuntime& CliRuntime::core()
   {
     if (!_runtimePtr)
     {
@@ -33,13 +33,13 @@ namespace ao::cli
     return *_runtimePtr;
   }
 
-  library::MusicLibrary& CliContext::musicLibrary()
+  library::MusicLibrary& CliRuntime::musicLibrary()
   {
-    return runtime().musicLibrary();
+    return core().musicLibrary();
   }
 
-  rt::Library& CliContext::library()
+  rt::Library& CliRuntime::library()
   {
-    return runtime().library();
+    return core().library();
   }
 } // namespace ao::cli

@@ -3,7 +3,7 @@
 
 #include "LibCommand.h"
 
-#include "CliContext.h"
+#include "CliRuntime.h"
 #include "CommandError.h"
 #include "DryRunFlag.h"
 #include "DumpOutput.h"
@@ -1323,31 +1323,27 @@ namespace ao::cli
     }
   } // namespace
 
-  void configureLibCommand(CLI::App& app, CliContext& context)
+  void configureLibCommand(CLI::App& app, CliRuntime& cli)
   {
     auto* lib = app.add_subcommand("lib", "Library management commands");
     lib->require_subcommand(1);
 
     lib->add_subcommand("show", "Show library information")
-      ->callback([&context] { printMetadata(context.musicLibrary(), context.options().format, context.io().out); });
+      ->callback([&cli] { printMetadata(cli.musicLibrary(), cli.options().format, cli.io().out); });
 
     lib->add_subcommand("stats", "Show library statistics")
-      ->callback(
-        [&context]
-        {
-          printStats(
-            context.musicLibrary(), context.runtime().databasePath(), context.options().format, context.io().out);
-        });
+      ->callback([&cli]
+                 { printStats(cli.musicLibrary(), cli.core().databasePath(), cli.options().format, cli.io().out); });
 
     lib->add_subcommand("verify", "Verify library files against the manifest")
-      ->callback([&context] { verifyLibrary(context.musicLibrary(), context.options().format, context.io().out); });
+      ->callback([&cli] { verifyLibrary(cli.musicLibrary(), cli.options().format, cli.io().out); });
 
     auto* relinkCmd = lib->add_subcommand("relink", "List or apply explicit file relinks");
     auto* relinkFrom = relinkCmd->add_option("--from", "missing manifest URI or path");
     auto* relinkTo = relinkCmd->add_option("--to", "new file URI or path");
     auto* relinkDryRun = addDryRunFlag(*relinkCmd);
     relinkCmd->callback(
-      [&context, relinkFrom, relinkTo, relinkDryRun]
+      [&cli, relinkFrom, relinkTo, relinkDryRun]
       {
         auto optFrom = std::optional<std::string>{};
         auto optTo = std::optional<std::string>{};
@@ -1362,8 +1358,7 @@ namespace ao::cli
           optTo = relinkTo->as<std::string>();
         }
 
-        relinkLibrary(
-          context.musicLibrary(), optFrom, optTo, isDryRun(relinkDryRun), context.options().format, context.io().out);
+        relinkLibrary(cli.musicLibrary(), optFrom, optTo, isDryRun(relinkDryRun), cli.options().format, cli.io().out);
       });
 
     auto* fingerprintCmd = lib->add_subcommand("fingerprint", "Fingerprint pending manifest audio identities");
@@ -1371,15 +1366,15 @@ namespace ao::cli
       fingerprintCmd->add_flag("--pending", "fingerprint manifest rows with pending audio identity");
     auto* fingerprintVerbose = fingerprintCmd->add_flag("--verbose", "print fingerprint progress to stderr");
     fingerprintCmd->callback(
-      [&context, fingerprintPendingFlag, fingerprintVerbose]
+      [&cli, fingerprintPendingFlag, fingerprintVerbose]
       {
-        fingerprintPending(context.runtime(),
-                           context.musicLibrary(),
+        fingerprintPending(cli.core(),
+                           cli.musicLibrary(),
                            fingerprintPendingFlag->count() > 0,
                            fingerprintVerbose->count() > 0,
-                           context.options().format,
-                           context.io().out,
-                           context.io().err);
+                           cli.options().format,
+                           cli.io().out,
+                           cli.io().err);
       });
 
     auto* exportCmd = lib->add_subcommand("export", "Export library to YAML");
@@ -1387,13 +1382,13 @@ namespace ao::cli
     auto* exportMode =
       exportCmd->add_option("-m,--mode", "Export mode (delta, metadata, full, listOnly)")->default_val("full");
     exportCmd->callback(
-      [&context, exportPath, exportMode]
+      [&cli, exportPath, exportMode]
       {
-        exportLib(context.musicLibrary(),
+        exportLib(cli.musicLibrary(),
                   exportPath->as<std::string>(),
                   exportMode->as<std::string>(),
-                  context.options().format,
-                  context.io().out);
+                  cli.options().format,
+                  cli.io().out);
       });
 
     auto* importCmd = lib->add_subcommand("import", "Import library from YAML");
@@ -1401,14 +1396,14 @@ namespace ao::cli
     auto* importMode = importCmd->add_option("-m,--mode", "Import mode (restore, merge)")->default_val("restore");
     auto* importDryRun = addDryRunFlag(*importCmd);
     importCmd->callback(
-      [&context, importPath, importMode, importDryRun]
+      [&cli, importPath, importMode, importDryRun]
       {
-        importLib(context.musicLibrary(),
+        importLib(cli.musicLibrary(),
                   importPath->as<std::string>(),
                   importMode->as<std::string>(),
                   isDryRun(importDryRun),
-                  context.options().format,
-                  context.io().out);
+                  cli.options().format,
+                  cli.io().out);
       });
 
     auto* dumpCmd = lib->add_subcommand("dump", "Dump infrastructure databases");
@@ -1419,35 +1414,35 @@ namespace ao::cli
     auto* dumpRaw = dumpCmd->add_flag("--raw", "hex dump raw bytes");
 
     dumpCmd->callback(
-      [&context, dumpDictionary, dumpManifest, dumpMetadataFlag, dumpResources, dumpRaw]
+      [&cli, dumpDictionary, dumpManifest, dumpMetadataFlag, dumpResources, dumpRaw]
       {
-        dumpLib(context.musicLibrary(),
+        dumpLib(cli.musicLibrary(),
                 dumpDictionary->count() > 0,
                 dumpManifest->count() > 0,
                 dumpMetadataFlag->count() > 0,
                 dumpResources->count() > 0,
                 dumpRaw->count() > 0,
-                context.options().format,
-                context.io().out);
+                cli.options().format,
+                cli.io().out);
       });
 
     auto* resource = lib->add_subcommand("resource", "Library resource commands");
     resource->require_subcommand(1);
 
     resource->add_subcommand("list", "List resources")
-      ->callback([&context] { listResources(context.musicLibrary(), context.options().format, context.io().out); });
+      ->callback([&cli] { listResources(cli.musicLibrary(), cli.options().format, cli.io().out); });
 
     auto* resourceExport = resource->add_subcommand("export", "Export a resource to a file");
     auto* resourceExportId = resourceExport->add_option("id", "resource id")->required();
     auto* resourceExportPath = resourceExport->add_option("-o,--output", "output file path")->required();
     resourceExport->callback(
-      [&context, resourceExportId, resourceExportPath]
+      [&cli, resourceExportId, resourceExportPath]
       {
-        exportResource(context.musicLibrary(),
+        exportResource(cli.musicLibrary(),
                        ResourceId{resourceExportId->as<std::uint32_t>()},
                        resourceExportPath->as<std::filesystem::path>(),
-                       context.options().format,
-                       context.io().out);
+                       cli.options().format,
+                       cli.io().out);
       });
   }
 } // namespace ao::cli

@@ -20,7 +20,7 @@ namespace ao::uimodel::test
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, libraryFixture.library(), notificationService};
+    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
 
     auto log = ao::test::RenderLog<VolumeViewState>{};
     auto viewModel = VolumeViewModel{playback, [&log](auto const& view) { log.render(view); }};

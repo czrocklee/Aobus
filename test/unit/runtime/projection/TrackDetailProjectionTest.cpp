@@ -69,7 +69,7 @@ namespace ao::rt::test
         , sources{libraryFixture.library(), changes}
         , views{executor, libraryFixture.library(), sources}
         , config{libraryFixture.library().rootPath() / "config.json"}
-        , playback{executor, libraryFixture.library(), notifications}
+        , playback{makePlaybackService(executor, libraryFixture.library(), notifications)}
         , workspace{views, playback, changes, libraryFixture.library()}
       {
       }

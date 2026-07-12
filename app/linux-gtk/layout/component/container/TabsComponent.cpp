@@ -3,8 +3,8 @@
 
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -32,7 +32,7 @@ namespace ao::gtk::layout
     class TabsComponent final : public LayoutComponent
     {
     public:
-      TabsComponent(LayoutContext& ctx, LayoutNode const& node)
+      TabsComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _box{Gtk::Orientation::VERTICAL}
       {
         if (node.children.empty())
@@ -80,7 +80,7 @@ namespace ao::gtk::layout
       std::vector<std::unique_ptr<LayoutComponent>> _children;
     };
 
-    std::unique_ptr<LayoutComponent> createTabs(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTabs(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TabsComponent>(ctx, node);
     }

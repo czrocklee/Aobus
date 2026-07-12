@@ -170,14 +170,14 @@ namespace ao::council
       }
     };
 
-    Result<ParsedYaml> parseYamlSource(std::string source, std::string context)
+    Result<ParsedYaml> parseYamlSource(std::string source, std::string sourceLabel)
     {
       try
       {
-        auto yamlContext = yaml::CallbackContext{context};
+        auto yamlErrorState = yaml::ErrorCallbackState{sourceLabel};
         auto parsed = ParsedYaml{};
         parsed.source = std::move(source);
-        yaml::parseInArena(parsed.tree, parsed.source, yamlContext);
+        yaml::parseInArena(parsed.tree, parsed.source, yamlErrorState);
         std::size_t entries = 0;
         validateTree(parsed.tree.rootref(), 0, entries);
         parsed.tree.callbacks(yaml::callbacks());
@@ -185,7 +185,7 @@ namespace ao::council
       }
       catch (std::exception const& exception)
       {
-        return validationError(std::move(context), exception.what());
+        return validationError(std::move(sourceLabel), exception.what());
       }
     }
 

@@ -8,20 +8,24 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Sleeper.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/NullBackend.h>
+#include <ao/audio/Player.h>
 #include <ao/audio/Subscription.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackService.h>
 
-#include <boost/asio/associated_executor.hpp>
-#include <boost/asio/async_result.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/dispatch.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/strand.hpp>
+#include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -33,7 +37,6 @@
 #include <cstddef>
 #include <deque>
 #include <functional>
-#include <latch>
 #include <memory>
 #include <mutex>
 #include <stop_token>
@@ -42,22 +45,20 @@
 #include <thread>
 #include <utility>
 
-namespace ao::async
-{
-  class RuntimeTestAccess final
-  {
-  public:
-    template<typename SleepFor>
-    static void setSleepFor(Runtime& runtime, SleepFor&& sleepFor)
-    {
-      runtime._sleepForOverride = std::forward<SleepFor>(sleepFor);
-    }
-  };
-} // namespace ao::async
-
 namespace ao::rt::test
 {
-  class ControlledSleeper final
+  inline PlaybackService makePlaybackService(async::Executor& executor,
+                                             library::MusicLibrary& library,
+                                             NotificationService& notifications)
+  {
+    return PlaybackService{executor, library, notifications, std::make_unique<audio::Player>(executor)};
+  }
+
+  // Injectable delay strategy for tests: pass a pointer to one into the Runtime
+  // (directly, or via makeRuntime/AppRuntimeDependencies) at construction, then
+  // drive its pending sleeps deterministically. The Sleeper must outlive the
+  // Runtime, so declare it before the Runtime it feeds.
+  class ControlledSleeper final : public async::Sleeper
   {
   public:
     using Delay = std::chrono::milliseconds;
@@ -71,80 +72,19 @@ namespace ao::rt::test
       std::thread::id cancelledOn;
     };
 
-    static ControlledSleeper& install(async::Runtime& runtime)
-    {
-      auto sleeperPtr = std::shared_ptr<ControlledSleeper>{new ControlledSleeper{}};
-      async::RuntimeTestAccess::setSleepFor(runtime,
-                                            [sleeperPtr](Delay const delay, std::stop_token const stopToken)
-                                            { return sleeperPtr->sleepFor(delay, stopToken); });
-      return *sleeperPtr;
-    }
-
-    ~ControlledSleeper() = default;
+    ControlledSleeper() = default;
+    ~ControlledSleeper() override = default;
 
     ControlledSleeper(ControlledSleeper const&) = delete;
     ControlledSleeper& operator=(ControlledSleeper const&) = delete;
     ControlledSleeper(ControlledSleeper&&) = delete;
     ControlledSleeper& operator=(ControlledSleeper&&) = delete;
 
-    async::Task<void> sleepFor(Delay const delay, std::stop_token const stopToken)
+    async::Task<void> sleepFor(Delay const delay, std::stop_token const stopToken) override
     {
-      co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(
-        [this, delay, stopToken](auto handler)
-        {
-          auto const id = _nextId.fetch_add(1);
-          auto executor = boost::asio::get_associated_executor(handler);
-
-          {
-            auto const lock = std::scoped_lock{_mutex};
-            _entries.push_back(Entry{.id = id,
-                                     .delay = delay,
-                                     .resume =
-                                       [executor, handler = std::move(handler)] mutable
-                                     {
-                                       auto dispatched = std::latch{1};
-                                       boost::asio::dispatch(
-                                         executor,
-                                         [handler = std::move(handler), dispatched = &dispatched] mutable
-                                         {
-                                           handler();
-                                           dispatched->count_down();
-                                         });
-                                       dispatched.wait();
-                                     },
-                                     .active = true,
-                                     .startedOn = std::this_thread::get_id(),
-                                     .cancelledOn = {},
-                                     .stopCallbackPtr = {}});
-          }
-
-          auto stopCallbackPtr = std::make_shared<StopCallback>(stopToken,
-                                                                [this, id]
-                                                                {
-                                                                  auto const lock = std::scoped_lock{_mutex};
-
-                                                                  if (auto const it = entry(id); it != _entries.end())
-                                                                  {
-                                                                    it->cancelled = true;
-                                                                    it->cancelledOn = std::this_thread::get_id();
-                                                                    it->active = false;
-                                                                  }
-
-                                                                  _cv.notify_all();
-                                                                });
-
-          {
-            auto const lock = std::scoped_lock{_mutex};
-
-            if (auto const it = entry(id); it != _entries.end())
-            {
-              it->stopCallbackPtr = std::move(stopCallbackPtr);
-            }
-          }
-
-          _cv.notify_all();
-        },
-        boost::asio::use_awaitable);
+      auto executor = co_await boost::asio::this_coro::executor;
+      auto timerExecutor = boost::asio::make_strand(executor);
+      co_await boost::asio::co_spawn(timerExecutor, waitForSignal(delay, stopToken), boost::asio::use_awaitable);
     }
 
     bool waitForCallCount(std::size_t const count,
@@ -180,23 +120,30 @@ namespace ao::rt::test
         lock, timeout, [this, index] { return _entries.size() > index && _entries[index].cancelled; });
     }
 
-    bool fire(std::size_t const index, bool const ignoreCancellation = false)
+    bool fire(std::size_t const index)
     {
-      auto resume = std::move_only_function<void()>{};
+      auto timerPtr = std::shared_ptr<boost::asio::steady_timer>{};
 
       {
         auto const lock = std::scoped_lock{_mutex};
 
-        if (index >= _entries.size() || (!_entries[index].active && !ignoreCancellation) || !_entries[index].resume)
+        if (index >= _entries.size() || !_entries[index].active)
         {
           return false;
         }
 
+        timerPtr = _entries[index].timerPtr.lock();
+
+        if (timerPtr == nullptr)
+        {
+          _entries[index].active = false;
+          return false;
+        }
+
         _entries[index].active = false;
-        resume = std::move(_entries[index].resume);
       }
 
-      resume();
+      boost::asio::dispatch(timerPtr->get_executor(), [timerPtr] { std::ignore = timerPtr->cancel(); });
       return true;
     }
 
@@ -246,7 +193,7 @@ namespace ao::rt::test
       return fire(index);
     }
 
-    bool forceFire(std::uint64_t const id)
+    bool fireById(std::uint64_t const id)
     {
       std::size_t index = 0;
 
@@ -262,7 +209,7 @@ namespace ao::rt::test
         index = static_cast<std::size_t>(it - _entries.begin());
       }
 
-      return fire(index, true);
+      return fire(index);
     }
 
     std::uint64_t lastScheduledId() const
@@ -309,20 +256,80 @@ namespace ao::rt::test
     }
 
   private:
-    ControlledSleeper() = default;
-
     using StopCallback = std::stop_callback<std::function<void()>>;
+
+    async::Task<void> waitForSignal(Delay const delay, std::stop_token const stopToken)
+    {
+      auto executor = co_await boost::asio::this_coro::executor;
+      auto timerPtr = std::make_shared<boost::asio::steady_timer>(executor);
+      timerPtr->expires_at(std::chrono::steady_clock::time_point::max());
+      auto const id = _nextId.fetch_add(1);
+
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        _entries.push_back(Entry{.id = id,
+                                 .delay = delay,
+                                 .timerPtr = timerPtr,
+                                 .active = true,
+                                 .startedOn = std::this_thread::get_id(),
+                                 .cancelledOn = {}});
+      }
+
+      _cv.notify_all();
+
+      auto stopCallback = StopCallback{
+        stopToken,
+        [this, id, timerPtr]
+        {
+          bool wonCancellation = false;
+
+          {
+            auto const lock = std::scoped_lock{_mutex};
+
+            if (auto const it = entry(id); it != _entries.end() && it->active)
+            {
+              it->cancelled = true;
+              it->cancelledOn = std::this_thread::get_id();
+              it->active = false;
+              wonCancellation = true;
+            }
+          }
+
+          _cv.notify_all();
+
+          if (wonCancellation)
+          {
+            boost::asio::dispatch(timerPtr->get_executor(), [timerPtr] { std::ignore = timerPtr->cancel(); });
+          }
+        }};
+
+      if (stopToken.stop_requested())
+      {
+        co_return;
+      }
+
+      try
+      {
+        co_await timerPtr->async_wait(boost::asio::use_awaitable);
+      }
+      catch (boost::system::system_error const& error)
+      {
+        if (error.code() != boost::asio::error::operation_aborted)
+        {
+          throw;
+        }
+      }
+    }
 
     struct Entry final
     {
       std::uint64_t id = 0;
       Delay delay{};
-      std::move_only_function<void()> resume;
+      std::weak_ptr<boost::asio::steady_timer> timerPtr;
       bool active = false;
       bool cancelled = false;
       std::thread::id startedOn;
       std::thread::id cancelledOn;
-      std::shared_ptr<StopCallback> stopCallbackPtr;
     };
 
     std::vector<Entry>::iterator entry(std::uint64_t const id) { return std::ranges::find(_entries, id, &Entry::id); }
@@ -712,7 +719,8 @@ namespace ao::rt::test
 
   inline auto makeRuntime(ao::test::TempDir const& tempDir,
                           std::unique_ptr<async::Executor> executorPtr,
-                          ConfigStore* playbackSessionConfigStore = nullptr)
+                          ConfigStore* playbackSessionConfigStore = nullptr,
+                          async::Sleeper* sleeper = nullptr)
   {
     return AppRuntime{AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
@@ -722,14 +730,17 @@ namespace ao::rt::test
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
       .playbackSessionConfigStore = playbackSessionConfigStore,
+      .sleeper = sleeper,
     }};
   }
 
   /**
    * @brief Creates an AppRuntime backed by a temporary directory with a MockExecutor.
    */
-  inline auto makeRuntime(ao::test::TempDir const& tempDir, ConfigStore* playbackSessionConfigStore = nullptr)
+  inline auto makeRuntime(ao::test::TempDir const& tempDir,
+                          ConfigStore* playbackSessionConfigStore = nullptr,
+                          async::Sleeper* sleeper = nullptr)
   {
-    return makeRuntime(tempDir, std::make_unique<MockExecutor>(), playbackSessionConfigStore);
+    return makeRuntime(tempDir, std::make_unique<MockExecutor>(), playbackSessionConfigStore, sleeper);
   }
 } // namespace ao::rt::test

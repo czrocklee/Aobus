@@ -7,6 +7,7 @@
 #include <ao/async/Executor.h> // NOLINT(misc-include-cleaner): unique_ptr<Executor> destruction needs the complete type.
 #include <ao/async/Runtime.h>
 #include <ao/audio/BackendProvider.h>
+#include <ao/audio/Player.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
@@ -41,7 +42,10 @@ namespace ao::rt
          std::unique_ptr<ConfigStore> workspaceConfigPtr,
          ConfigStore* playbackSessionConfigStoreValue)
       : viewService{runtime.async().callbackExecutor(), runtime.musicLibrary(), runtime.sources()}
-      , playbackService{runtime.async().callbackExecutor(), runtime.musicLibrary(), runtime.notifications()}
+      , playbackService{runtime.async().callbackExecutor(),
+                        runtime.musicLibrary(),
+                        runtime.notifications(),
+                        std::make_unique<audio::Player>(runtime.async().callbackExecutor())}
       , playbackSequenceService{runtime.async().callbackExecutor(),
                                 viewService,
                                 runtime.sources(),
@@ -79,7 +83,8 @@ namespace ao::rt
     : CoreRuntime{std::move(dependencies.executorPtr),
                   std::move(dependencies.musicRoot),
                   std::move(dependencies.databasePath),
-                  dependencies.musicLibraryMapSize}
+                  dependencies.musicLibraryMapSize,
+                  dependencies.sleeper}
     , _implPtr{std::make_unique<Impl>(*this,
                                       std::move(dependencies.workspaceConfigStorePtr),
                                       dependencies.playbackSessionConfigStore)}

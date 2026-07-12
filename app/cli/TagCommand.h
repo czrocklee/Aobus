@@ -12,7 +12,7 @@ namespace ao::rt
 
 namespace ao::cli
 {
-  class CliContext;
+  class CliRuntime;
 
-  void configureTagCommand(CLI::App& app, CliContext& context);
+  void configureTagCommand(CLI::App& app, CliRuntime& cli);
 }

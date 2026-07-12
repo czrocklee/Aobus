@@ -16,6 +16,7 @@ namespace ao::async
 {
   class Executor;
   class Runtime;
+  class Sleeper;
 }
 
 namespace ao::rt
@@ -35,7 +36,8 @@ namespace ao::rt
     CoreRuntime(std::unique_ptr<async::Executor> executorPtr,
                 std::filesystem::path musicRoot,
                 std::filesystem::path databasePath,
-                std::size_t musicLibraryMapSize = 0);
+                std::size_t musicLibraryMapSize = 0,
+                async::Sleeper* sleeper = nullptr);
     virtual ~CoreRuntime();
 
     CoreRuntime(CoreRuntime const&) = delete;

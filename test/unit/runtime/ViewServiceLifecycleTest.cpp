@@ -116,7 +116,7 @@ namespace ao::rt::test
     {
       REQUIRE(service.destroyView(viewId));
 
-      auto const captured = service.capturePlaybackLaunchContext(viewId);
+      auto const captured = service.capturePlaybackLaunchSpec(viewId);
       REQUIRE_FALSE(captured);
       CHECK(captured.error().code == Error::Code::InvalidState);
     }
@@ -194,9 +194,9 @@ namespace ao::rt::test
     CHECK(state.groupBy == TrackGroupKey::None);
     CHECK(state.sortBy == order);
     CHECK(state.presentation.id.empty());
-    auto const context = service.capturePlaybackLaunchContext(result.viewId);
-    REQUIRE(context);
-    CHECK(context->order.sortBy == order);
+    auto const launchSpec = service.capturePlaybackLaunchSpec(result.viewId);
+    REQUIRE(launchSpec);
+    CHECK(launchSpec->order.sortBy == order);
   }
 
   TEST_CASE("ViewService - projection subscription replays initial reset", "[runtime][unit][view][lifecycle]")

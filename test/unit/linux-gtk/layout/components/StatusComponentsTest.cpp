@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/layout/component/status/StatusRegistry.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
-#include "app/linux-gtk/layout/runtime/LayoutContext.h"
+#include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
+#include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -68,8 +70,14 @@ namespace ao::gtk::layout::test
                                     sawActionAnchor = ctx.anchorWidget.has_css_class("ao-activity-detail-action");
                                   });
 
-    auto ctx =
-      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    auto runtimeState = LayoutRuntimeState{};
+    auto dependencies = GtkUiDependencies{};
+    auto ctx = LayoutBuildContext{.registry = registry,
+                                  .actionRegistry = actionRegistry,
+                                  .runtime = runtime,
+                                  .parentWindow = window,
+                                  .runtimeState = runtimeState,
+                                  .dependencies = dependencies};
     auto const node = LayoutNode{.id = "activity-slot", .type = "status.activityStatus"};
     auto const compPtr = registry.create(ctx, node);
     REQUIRE(compPtr != nullptr);
@@ -125,8 +133,14 @@ namespace ao::gtk::layout::test
         return LayoutActionAvailability{.enabled = false, .disabledReason = "Library busy"};
       });
 
-    auto ctx =
-      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
+    auto runtimeState = LayoutRuntimeState{};
+    auto dependencies = GtkUiDependencies{};
+    auto ctx = LayoutBuildContext{.registry = registry,
+                                  .actionRegistry = actionRegistry,
+                                  .runtime = runtime,
+                                  .parentWindow = window,
+                                  .runtimeState = runtimeState,
+                                  .dependencies = dependencies};
     auto const node = LayoutNode{.id = "", .type = "status.activityStatus"};
     auto const compPtr = registry.create(ctx, node);
     REQUIRE(compPtr != nullptr);

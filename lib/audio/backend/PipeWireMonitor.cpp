@@ -284,17 +284,17 @@ namespace ao::audio::backend
     void syncStreamBindings(std::unordered_set<std::uint32_t> const& subscribedStreamIds);
     void syncSinkBindings();
 
-    struct ReachableContext
+    struct StreamGraphSelection
     {
-      std::vector<std::uint32_t> reachableNodes;
-      std::unordered_set<std::uint32_t> reachableSet;
-      std::unordered_set<std::uint32_t> fullSet;
+      std::vector<std::uint32_t> downstreamNodeIds;
+      std::unordered_set<std::uint32_t> downstreamNodeIdSet;
+      std::unordered_set<std::uint32_t> includedNodeIds;
     };
 
-    ReachableContext findReachableNodes(std::uint32_t streamId) const;
+    StreamGraphSelection selectStreamGraphNodes(std::uint32_t streamId) const;
     flow::Node convertToAudioNode(std::uint32_t id,
                                   std::uint32_t streamId,
-                                  std::unordered_set<std::uint32_t> const& reachableSet) const;
+                                  std::unordered_set<std::uint32_t> const& downstreamNodeIdSet) const;
     void populateGraph(flow::Graph& graph, std::uint32_t streamId) const;
 
     static void handleCoreDone(void* data, std::uint32_t /*id*/, std::int32_t seq)
@@ -1019,19 +1019,20 @@ namespace ao::audio::backend
     }
   }
 
-  PipeWireMonitor::Impl::ReachableContext PipeWireMonitor::Impl::findReachableNodes(std::uint32_t streamId) const
+  PipeWireMonitor::Impl::StreamGraphSelection PipeWireMonitor::Impl::selectStreamGraphNodes(
+    std::uint32_t streamId) const
   {
-    auto ctx = ReachableContext{};
+    auto selection = StreamGraphSelection{};
 
     if (streamId != PW_ID_ANY)
     {
-      ctx.reachableNodes.push_back(streamId);
-      ctx.reachableSet.insert(streamId);
+      selection.downstreamNodeIds.push_back(streamId);
+      selection.downstreamNodeIdSet.insert(streamId);
     }
 
-    for (std::size_t i = 0; i < ctx.reachableNodes.size(); ++i)
+    for (std::size_t i = 0; i < selection.downstreamNodeIds.size(); ++i)
     {
-      auto const currentNodeId = ctx.reachableNodes[i];
+      auto const currentNodeId = selection.downstreamNodeIds[i];
 
       for (auto const& [_, link] : links)
       {
@@ -1041,29 +1042,31 @@ namespace ao::audio::backend
           continue;
         }
 
-        if (ctx.reachableSet.insert(link.inputNodeId).second)
+        if (selection.downstreamNodeIdSet.insert(link.inputNodeId).second)
         {
-          ctx.reachableNodes.push_back(link.inputNodeId);
+          selection.downstreamNodeIds.push_back(link.inputNodeId);
         }
       }
     }
 
-    ctx.fullSet = ctx.reachableSet;
+    selection.includedNodeIds = selection.downstreamNodeIdSet;
 
     for (auto const& [_, link] : links)
     {
-      if (isActiveLink(static_cast<::pw_link_state>(link.state)) && ctx.reachableSet.contains(link.inputNodeId))
+      if (isActiveLink(static_cast<::pw_link_state>(link.state)) &&
+          selection.downstreamNodeIdSet.contains(link.inputNodeId))
       {
-        ctx.fullSet.insert(link.outputNodeId);
+        selection.includedNodeIds.insert(link.outputNodeId);
       }
     }
 
-    return ctx;
+    return selection;
   }
 
-  flow::Node PipeWireMonitor::Impl::convertToAudioNode(std::uint32_t id,
-                                                       std::uint32_t streamId,
-                                                       std::unordered_set<std::uint32_t> const& reachableSet) const
+  flow::Node PipeWireMonitor::Impl::convertToAudioNode(
+    std::uint32_t id,
+    std::uint32_t streamId,
+    std::unordered_set<std::uint32_t> const& downstreamNodeIdSet) const
   {
     auto const it = nodes.find(id);
 
@@ -1092,7 +1095,7 @@ namespace ao::audio::backend
     {
       type = flow::NodeType::Sink;
     }
-    else if (reachableSet.contains(id))
+    else if (downstreamNodeIdSet.contains(id))
     {
       type = flow::NodeType::Intermediary;
     }
@@ -1115,8 +1118,8 @@ namespace ao::audio::backend
     if (auto const propsIt = sinkPropsMap.find(id); propsIt != sinkPropsMap.end())
     {
       auto const& sinkProps = propsIt->second;
-      auto const volumeCls = sinkProps.classifyVolume(isRs ? SinkProps::VolumeClassificationContext::Stream
-                                                           : SinkProps::VolumeClassificationContext::Sink);
+      auto const volumeCls = sinkProps.classifyVolume(isRs ? SinkProps::VolumeClassificationScope::Stream
+                                                           : SinkProps::VolumeClassificationScope::Sink);
       node.hardwareVolumeNotUnity = volumeCls.hardwareNotUnity;
       node.softwareVolumeNotUnity = volumeCls.softwareNotUnity;
       node.maxSoftwareGain = volumeCls.maxSoftwareGain;
@@ -1130,11 +1133,11 @@ namespace ao::audio::backend
 
   void PipeWireMonitor::Impl::populateGraph(flow::Graph& graph, std::uint32_t streamId) const
   {
-    auto const ctx = findReachableNodes(streamId);
+    auto const selection = selectStreamGraphNodes(streamId);
 
-    for (auto id : ctx.fullSet)
+    for (auto id : selection.includedNodeIds)
     {
-      auto node = convertToAudioNode(id, streamId, ctx.reachableSet);
+      auto node = convertToAudioNode(id, streamId, selection.downstreamNodeIdSet);
 
       if (!node.id.empty())
       {
@@ -1144,8 +1147,8 @@ namespace ao::audio::backend
 
     for (auto const& [_, link] : links)
     {
-      if (isActiveLink(static_cast<::pw_link_state>(link.state)) && ctx.fullSet.contains(link.outputNodeId) &&
-          ctx.fullSet.contains(link.inputNodeId))
+      if (isActiveLink(static_cast<::pw_link_state>(link.state)) &&
+          selection.includedNodeIds.contains(link.outputNodeId) && selection.includedNodeIds.contains(link.inputNodeId))
       {
         graph.connections.push_back({.sourceId = std::format("{}", link.outputNodeId),
                                      .destinationId = std::format("{}", link.inputNodeId),

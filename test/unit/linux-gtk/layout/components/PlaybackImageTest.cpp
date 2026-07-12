@@ -63,7 +63,7 @@ namespace ao::gtk::layout::test
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.playback_image_test"};
     auto imageCachePtr = std::make_unique<ImageCache>(10);
     auto& ctx = fixture.context();
-    ctx.detail.imageCache = imageCachePtr.get();
+    fixture.dependencies().imageCache = imageCachePtr.get();
 
     SECTION("default image has no extra styling")
     {

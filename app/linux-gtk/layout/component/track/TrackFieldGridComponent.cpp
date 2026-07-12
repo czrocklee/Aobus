@@ -9,8 +9,8 @@
 #include "layout/component/track/TrackFieldGridText.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "track/TrackFieldUi.h"
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
@@ -126,12 +126,12 @@ namespace ao::gtk::layout
     class TrackFieldGridComponent final : public LayoutComponent
     {
     public:
-      TrackFieldGridComponent(LayoutContext& ctx, LayoutNode const& node)
+      TrackFieldGridComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _editCoordinator{ctx.parentWindow}
         , _writer{ctx.runtime.library().writer()}
         , _completion{ctx.runtime.completion()}
-        , _scope{ctx.track.detailScope}
-        , _detailUndo{ctx.track.detailUndo}
+        , _scope{ctx.detailScope}
+        , _detailUndo{ctx.detailUndo}
         , _compositePrimarySizeGroupPtr{Gtk::SizeGroup::create(Gtk::SizeGroup::Mode::HORIZONTAL)}
         , _compositeSecondarySizeGroupPtr{Gtk::SizeGroup::create(Gtk::SizeGroup::Mode::HORIZONTAL)}
       {
@@ -1133,7 +1133,7 @@ namespace ao::gtk::layout
       ConstrainedGridBox _wrapper;
     };
 
-    std::unique_ptr<LayoutComponent> createTrackFieldGrid(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackFieldGrid(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackFieldGridComponent>(ctx, node);
     }

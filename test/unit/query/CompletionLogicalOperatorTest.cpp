@@ -17,15 +17,15 @@ namespace ao::query::test
 {
   namespace
   {
-    bool isLogicalOperatorContext(std::optional<QueryCompletionContext> const& optContext)
+    bool isLogicalOperatorContext(std::optional<QueryCompletionAnalysis> const& optContext)
     {
-      return optContext && std::holds_alternative<QueryLogicalOperatorCompletionContext>(*optContext);
+      return optContext && std::holds_alternative<QueryLogicalOperatorCompletion>(*optContext);
     }
 
-    QueryLogicalOperatorCompletionContext logicalOperatorContext(std::optional<QueryCompletionContext> optContext)
+    QueryLogicalOperatorCompletion logicalOperatorContext(std::optional<QueryCompletionAnalysis> optContext)
     {
       REQUIRE(optContext);
-      auto const* context = std::get_if<QueryLogicalOperatorCompletionContext>(&*optContext);
+      auto const* context = std::get_if<QueryLogicalOperatorCompletion>(&*optContext);
       REQUIRE(context != nullptr);
       return *context;
     }
@@ -36,7 +36,7 @@ namespace ao::query::test
     SECTION("Offers an empty logical operator prefix after a comparison")
     {
       auto const text = std::string{R"($artist = "Miles" )"};
-      auto const context = logicalOperatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = logicalOperatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.replacement.replaceBegin == text.find_last_of('"') + 1);
       CHECK(context.replacement.replaceEnd == text.size());
@@ -48,7 +48,7 @@ namespace ao::query::test
     SECTION("Completes keyword logical operators after a typed prefix")
     {
       auto const text = std::string{R"($artist = "Miles" a)"};
-      auto const context = logicalOperatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = logicalOperatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.replacement.replaceBegin == text.find_last_of('"') + 1);
       CHECK(context.replacement.replaceEnd == text.size());
@@ -59,7 +59,7 @@ namespace ao::query::test
     SECTION("Completes symbolic logical operators after a typed prefix")
     {
       auto const text = std::string{R"($year >= 1999 &)"};
-      auto const context = logicalOperatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = logicalOperatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.replacement.replaceBegin == text.find("1999") + 4);
       CHECK(context.replacement.replaceEnd == text.size());
@@ -70,7 +70,7 @@ namespace ao::query::test
     SECTION("Treats postfix exists as a complete expression")
     {
       auto const text = std::string{"$artist?"};
-      auto const context = logicalOperatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = logicalOperatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.replacement.replaceBegin == text.size());
       CHECK(context.replacement.replaceEnd == text.size());
@@ -86,7 +86,7 @@ namespace ao::query::test
       {
         DYNAMIC_SECTION("Text: " << text)
         {
-          auto const context = logicalOperatorContext(analyzeCompletionContext(text, text.size()));
+          auto const context = logicalOperatorContext(analyzeQueryCompletion(text, text.size()));
 
           CHECK(context.replacement.replaceBegin == text.size() - 1);
           CHECK(context.replacement.replaceEnd == text.size());
@@ -100,7 +100,7 @@ namespace ao::query::test
     SECTION("Completes logical operator prefixes after bare tags")
     {
       auto const text = std::string{"#rock o"};
-      auto const context = logicalOperatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = logicalOperatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.replacement.replaceBegin == text.find(' '));
       CHECK(context.replacement.replaceEnd == text.size());
@@ -110,13 +110,13 @@ namespace ao::query::test
 
     SECTION("Does not offer logical operators after an incomplete comparison")
     {
-      CHECK_FALSE(analyzeCompletionContext("$artist = a", 10));
+      CHECK_FALSE(analyzeQueryCompletion("$artist = a", 10));
     }
 
     SECTION("Completes symbolic logical operator from an Unknown ampersand tail")
     {
       auto const text = std::string{"$year >= 1999 &"};
-      auto const context = logicalOperatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = logicalOperatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.replacement.replaceBegin == text.find_last_of(' '));
       CHECK(context.replacement.replaceEnd == text.size());
@@ -132,7 +132,7 @@ namespace ao::query::test
       REQUIRE(parse(expression).has_value());
 
       auto const text = std::string{expression} + " ";
-      auto const context = logicalOperatorContext(analyzeCompletionContext(text, text.size()));
+      auto const context = logicalOperatorContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.replacement.replaceBegin == expression.size());
       CHECK(context.replacement.replaceEnd == text.size());
@@ -196,7 +196,7 @@ namespace ao::query::test
         REQUIRE_FALSE(parse(expression).has_value());
 
         auto const text = std::string{expression} + " ";
-        CHECK_FALSE(isLogicalOperatorContext(analyzeCompletionContext(text, text.size())));
+        CHECK_FALSE(isLogicalOperatorContext(analyzeQueryCompletion(text, text.size())));
       }
     }
   }
@@ -220,7 +220,7 @@ namespace ao::query::test
         REQUIRE(parse(expression).has_value());
 
         auto const text = std::string{expression} + " ";
-        CHECK_FALSE(isLogicalOperatorContext(analyzeCompletionContext(text, text.size())));
+        CHECK_FALSE(isLogicalOperatorContext(analyzeQueryCompletion(text, text.size())));
       }
     }
   }
@@ -241,7 +241,7 @@ namespace ao::query::test
         REQUIRE_FALSE(parse(expression).has_value());
 
         auto const text = std::string{expression} + " ";
-        CHECK_FALSE(analyzeCompletionContext(text, text.size()));
+        CHECK_FALSE(analyzeQueryCompletion(text, text.size()));
       }
     }
   }

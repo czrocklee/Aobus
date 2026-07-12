@@ -56,7 +56,7 @@ namespace ao::gtk
                    _configStorePtr,
                    std::move(shellLayoutStorePtr),
                    std::move(componentStateStorePtr),
-                   *_mainWindowCoordinatorPtr->themeController()}
+                   _mainWindowCoordinatorPtr->uiDependencies()}
   {
     set_title("Aobus");
     set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);
@@ -75,9 +75,7 @@ namespace ao::gtk
     _menuControllerPtr = std::make_unique<MenuController>();
     _menuControllerPtr->setup();
     _mainWindowCoordinatorPtr->listNavigationController()->addActionsTo(*this);
-    _shellLayout.context().shell.menuModelPtr = _menuControllerPtr->menuModel();
-    _shellLayout.bindServices(_mainWindowCoordinatorPtr->uiServices());
-
+    _shellLayout.setMenuModel(_menuControllerPtr->menuModel());
     _shellLayout.attachToWindow();
 
     auto mprisArtUrlCachePtr = std::make_shared<platform::MprisArtUrlCache>(_runtime.library());
@@ -213,7 +211,6 @@ namespace ao::gtk
   {
     _mainWindowCoordinatorPtr->initializeSession();
 
-    _shellLayout.bindServices(_mainWindowCoordinatorPtr->uiServices());
     _shellLayout.refreshExportedActions();
 
     _shellLayout.loadLayout(*_configStorePtr);
@@ -251,9 +248,9 @@ namespace ao::gtk
 
   void MainWindow::applyTheme(rt::ThemePresetId const theme)
   {
-    if (auto* const themeController = _mainWindowCoordinatorPtr->themeController(); themeController != nullptr)
+    if (auto* const themeCoordinator = _mainWindowCoordinatorPtr->themeCoordinator(); themeCoordinator != nullptr)
     {
-      themeController->setTheme(theme);
+      themeCoordinator->setTheme(theme);
     }
   }
 

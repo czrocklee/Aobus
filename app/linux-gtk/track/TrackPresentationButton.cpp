@@ -52,10 +52,10 @@ namespace ao::gtk
 
   void TrackPresentationButton::setPresentationServices(uimodel::TrackPresentationCatalog* catalog,
                                                         uimodel::ListPresentationPreferenceStore* preferences,
-                                                        ThemeCoordinator* themeController)
+                                                        ThemeCoordinator* themeCoordinator)
   {
     _catalog = catalog;
-    _themeController = themeController;
+    _themeCoordinator = themeCoordinator;
 
     if (_catalog == nullptr || preferences == nullptr)
     {
@@ -174,9 +174,9 @@ namespace ao::gtk
     // NOLINTNEXTLINE(aobus-readability-use-if-init-statement) — RAII: must outlive if-block to keep dialog themed
     auto optToken = std::optional<ThemeRegistrationToken>{};
 
-    if (_themeController != nullptr)
+    if (_themeCoordinator != nullptr)
     {
-      optToken = _themeController->registerToplevel(dialog);
+      optToken = _themeCoordinator->registerToplevel(dialog);
     }
 
     if (auto const optResult = dialog.runDialog(); optResult)

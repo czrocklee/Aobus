@@ -4,8 +4,8 @@
 #include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/StatefulComponentState.h"
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -172,7 +172,7 @@ namespace ao::gtk::layout
         End
       };
 
-      CollapsibleSplitComponent(LayoutContext& ctx, LayoutNode const& node)
+      CollapsibleSplitComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _state{ctx, node, kCollapsibleSplitComponentType}
       {
         if (node.children.size() != 2)
@@ -701,7 +701,7 @@ namespace ao::gtk::layout
       std::unique_ptr<LayoutComponent> _endChildPtr;
     };
 
-    std::unique_ptr<LayoutComponent> createCollapsibleSplit(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createCollapsibleSplit(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<CollapsibleSplitComponent>(ctx, node);
     }

@@ -4,8 +4,8 @@
 #pragma once
 
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 
 #include <memory>
 
@@ -17,7 +17,7 @@ namespace ao::uimodel
 namespace ao::gtk::layout
 {
   class ComponentRegistry;
-  struct LayoutContext;
+  struct LayoutBuildContext;
 
   /**
    * @brief Manages the building of component trees from layout documents.
@@ -30,7 +30,7 @@ namespace ao::gtk::layout
     /**
      * @brief Build a GTK widget tree from a layout document.
      */
-    std::unique_ptr<LayoutComponent> build(LayoutContext& ctx, uimodel::LayoutDocument const& doc);
+    std::unique_ptr<LayoutComponent> build(LayoutBuildContext& ctx, uimodel::LayoutDocument const& doc);
 
     /**
      * @brief Register all built-in components (containers, playback, semantic) to the registry.

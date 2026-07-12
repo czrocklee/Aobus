@@ -6,6 +6,7 @@
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "app/linux-gtk/track/TrackRowCache.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "list/ListNavigationController.h"
@@ -76,7 +77,6 @@ namespace ao::gtk::layout::test
   TEST_CASE("SemanticLayoutComponents - render missing-service errors", "[gtk][unit][layout-component][semantic]")
   {
     auto fixture = LayoutRuntimeFixture{};
-    auto& ctx = fixture.context();
 
     SECTION("library.listTree shows error when rowDataProvider missing")
     {
@@ -93,7 +93,7 @@ namespace ao::gtk::layout::test
     SECTION("library.listTree shows error when listNavigationController missing")
     {
       auto const rdpPtr = std::make_unique<TrackRowCache>(fixture.runtime().library());
-      ctx.track.trackRowCache = rdpPtr.get();
+      fixture.dependencies().trackRowCache = rdpPtr.get();
       auto const node = LayoutNode{.type = "library.listTree"};
       auto const compPtr = fixture.create(node);
 
@@ -121,6 +121,16 @@ namespace ao::gtk::layout::test
       REQUIRE(label != nullptr);
       CHECK(label->get_label().raw().contains("trackPageHost missing"));
     }
+
+    SECTION("track.coverArt shows error when imageCache missing")
+    {
+      auto const compPtr = fixture.create(LayoutNode{.type = "track.coverArt"});
+
+      REQUIRE(compPtr != nullptr);
+      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
+      REQUIRE(label != nullptr);
+      CHECK(label->get_label().raw().contains("imageCache missing"));
+    }
   }
 
   TEST_CASE("SemanticLayoutComponents - render configured GTK widgets", "[gtk][unit][layout-component][semantic]")
@@ -132,8 +142,8 @@ namespace ao::gtk::layout::test
     auto imageCachePtr = std::make_unique<ImageCache>(cacheSize);
     auto menuModelPtr = Gio::Menu::create();
     menuModelPtr->append_submenu("Test Menu", Gio::Menu::create());
-    ctx.detail.imageCache = imageCachePtr.get();
-    ctx.shell.menuModelPtr = menuModelPtr;
+    fixture.dependencies().imageCache = imageCachePtr.get();
+    fixture.dependencies().menuModelPtr = menuModelPtr;
 
     {
       auto const node = LayoutNode{.type = "status.messageLabel"};
@@ -184,7 +194,7 @@ namespace ao::gtk::layout::test
 
     SECTION("app.menuBar tolerates absent menu model")
     {
-      ctx.shell.menuModelPtr.reset();
+      fixture.dependencies().menuModelPtr.reset();
       auto const node = LayoutNode{.type = "app.menuBar"};
       auto const compPtr = fixture.create(node);
 
@@ -199,7 +209,7 @@ namespace ao::gtk::layout::test
 
       REQUIRE(compPtr != nullptr);
       CHECK(dynamic_cast<Gtk::Box*>(&compPtr->widget()) != nullptr);
-      CHECK(ctx.track.detailScope == nullptr); // Ensure context is restored
+      CHECK(ctx.detailScope == nullptr); // Ensure context is restored
     }
 
     SECTION("track.selectionRegion creates box container")
@@ -292,7 +302,7 @@ namespace ao::gtk::layout::test
     SECTION("track.detailUndoBar reflects pending custom metadata undo")
     {
       auto undoController = TrackDetailUndoController{fixture.runtime().library().writer()};
-      ctx.track.detailUndo = &undoController;
+      ctx.detailUndo = &undoController;
 
       auto const node = LayoutNode{.type = "track.detailUndoBar"};
       auto const compPtr = fixture.create(node);
@@ -334,6 +344,22 @@ namespace ao::gtk::layout::test
       REQUIRE(compPtr != nullptr);
       CHECK(compPtr->widget().get_visible());
     }
+  }
+
+  TEST_CASE("TrackTagEditorComponent - snapshot callbacks outlive the transient build context",
+            "[gtk][regression][layout-component]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+    auto& scope = fixture.attachTrackDetailScope();
+    auto const componentPtr = fixture.createWithTransientContext(LayoutNode{.type = "track.tagEditor"});
+    REQUIRE(componentPtr != nullptr);
+
+    auto snapshot = rt::TrackDetailSnapshot{};
+    snapshot.trackIds = {TrackId{123}};
+    scope.setSnapshot(snapshot);
+
+    CHECK(scope.snapshot().trackIds == snapshot.trackIds);
+    CHECK(componentPtr->widget().get_visible());
   }
 
   TEST_CASE("TrackDetailUndoController - restores deleted custom metadata", "[gtk][unit][layout-component][semantic]")
@@ -533,11 +559,11 @@ namespace ao::gtk::layout::test
     auto cache = TrackRowCache{runtime.library()};
     auto window = Gtk::Window{};
     auto stack = Gtk::Stack{};
-    auto themeController = ThemeCoordinator{};
+    auto themeCoordinator = ThemeCoordinator{};
     auto tagEditCallbacks = TagEditController::Callbacks{};
-    auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks), themeController};
+    auto tagEditController = TagEditController{window, runtime, std::move(tagEditCallbacks), themeCoordinator};
     auto navCallbacks = ListNavigationController::Callbacks{};
-    auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeController};
+    auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeCoordinator};
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto pageHost = TrackPageHost{stack, runtime, tagEditController, listNavigation, layoutStore};
 
@@ -552,9 +578,15 @@ namespace ao::gtk::layout::test
     LayoutRuntime::registerStandardComponents(registry);
 
     auto actionRegistry = ActionRegistry{};
-    auto ctx =
-      LayoutContext{.registry = registry, .actionRegistry = actionRegistry, .runtime = runtime, .parentWindow = window};
-    ctx.track.pageHost = &pageHost;
+    auto runtimeState = LayoutRuntimeState{};
+    auto dependencies = GtkUiDependencies{};
+    auto ctx = LayoutBuildContext{.registry = registry,
+                                  .actionRegistry = actionRegistry,
+                                  .runtime = runtime,
+                                  .parentWindow = window,
+                                  .runtimeState = runtimeState,
+                                  .dependencies = dependencies};
+    dependencies.trackPageHost = &pageHost;
     auto pendingDebounce = sigc::slot<bool()>{};
     ctx.timeoutScheduler = [&](std::chrono::milliseconds interval, sigc::slot<bool()> callback)
     {
@@ -564,7 +596,7 @@ namespace ao::gtk::layout::test
     };
     auto capturedParentId = kInvalidListId;
     auto capturedExpression = std::string{};
-    ctx.list.createSmartListFromExpression = [&](ListId parentListId, std::string expression)
+    dependencies.createSmartListFromExpression = [&](ListId parentListId, std::string expression)
     {
       capturedParentId = parentListId;
       capturedExpression = std::move(expression);

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "layout/runtime/LayoutContext.h"
+#include "layout/runtime/LayoutBuildContext.h"
 
 namespace ao::gtk::layout
 {

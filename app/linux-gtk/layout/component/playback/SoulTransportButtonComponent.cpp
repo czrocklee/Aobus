@@ -4,8 +4,8 @@
 #include "PlaybackComponentRegistrations.h"
 #include "app/AobusSoul.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "playback/TransportButton.h"
 #include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
@@ -33,24 +33,24 @@ namespace ao::gtk::layout
 
     constexpr double kDefaultStrokeWidth = 9.0;
 
-    uimodel::PlaybackCommandSurface& commandSurface(LayoutContext& ctx)
+    uimodel::PlaybackCommandSurface& commandSurface(LayoutBuildContext& ctx)
     {
-      if (ctx.playback.commandSurface == nullptr)
+      if (ctx.dependencies.playbackCommandSurface == nullptr)
       {
         throwException<Exception>("SoulTransportButtonComponent: playback command surface is not bound");
       }
 
-      return *ctx.playback.commandSurface;
+      return *ctx.dependencies.playbackCommandSurface;
     }
 
-    rt::PlaybackSequenceService& playbackSequence(LayoutContext& ctx)
+    rt::PlaybackSequenceService& playbackSequence(LayoutBuildContext& ctx)
     {
-      if (ctx.playback.sequence == nullptr)
+      if (ctx.dependencies.playbackSequence == nullptr)
       {
         throwException<Exception>("SoulTransportButtonComponent: playback sequence is not bound");
       }
 
-      return *ctx.playback.sequence;
+      return *ctx.dependencies.playbackSequence;
     }
 
     /**
@@ -59,8 +59,9 @@ namespace ao::gtk::layout
     class SoulTransportButtonComponent final : public LayoutComponent
     {
     public:
-      SoulTransportButtonComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _transportViewModel{ctx.runtime.playback(),
+      SoulTransportButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node)
+        : _hasComplexTooltip{node.optTooltip.has_value()}
+        , _transportViewModel{ctx.runtime.playback(),
                               playbackSequence(ctx),
                               commandSurface(ctx),
                               TransportButton::Action::PlayPause,
@@ -68,7 +69,6 @@ namespace ao::gtk::layout
                               [this](uimodel::TransportViewState const& state) { applyTransportState(state); }}
         , _soulViewModel{ctx.runtime.playback(),
                          [this](uimodel::AobusSoulViewState const& state) { applySoulState(state); }}
-        , _hasComplexTooltip{node.optTooltip.has_value()}
       {
         _button.set_child(_soul);
         _button.set_has_frame(false);
@@ -128,12 +128,13 @@ namespace ao::gtk::layout
 
       Gtk::Button _button;
       AobusSoul _soul;
+      // Initialized before the ViewModel's synchronous initial-state callback.
+      bool _hasComplexTooltip = false;
       uimodel::TransportViewModel _transportViewModel;
       uimodel::AobusSoulViewModel _soulViewModel;
-      bool _hasComplexTooltip = false;
     };
 
-    std::unique_ptr<LayoutComponent> createSoulPlayPauseButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createSoulPlayPauseButton(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<SoulTransportButtonComponent>(ctx, node);
     }

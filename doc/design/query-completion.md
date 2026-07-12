@@ -14,7 +14,7 @@ shared UI adapter:
 
 The engine is split across three layers so the grammar stays free of UI and library concerns:
 
-- **`lib/query` (`ao/query/Completion.h`)** — pure grammar. `analyzeCompletionContext()` classifies the
+- **`lib/query` (`ao/query/Completion.h`)** — pure grammar. `analyzeQueryCompletion()` classifies the
   cursor as `Variable`, field `Operator`, `LogicalOperator`, or `Value` without requiring the expression
   to parse as a complete AST. It works over a token view produced by `detail::tokenizeCompletionQuery()`
   rather than re-deriving lexing by hand. `queryCompletionTokenAtCursor()` remains a variable-only

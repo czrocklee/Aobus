@@ -23,7 +23,7 @@ to platform lifecycle and rendering facilities.
 | --- | --- | --- |
 | Storage, transactions, and library mutation | runtime/core | Runtime facades expose value types, readers, writers, tasks, and change events. |
 | Playback transport and engine control | runtime | `PlaybackService` owns request resolution, transport, prepared-token correlation, now-playing state, output, seek, and volume. |
-| Live playback context and succession | runtime | `PlaybackSequenceService` owns the captured launch context, source lease, projection cursor, next/previous, repeat, shuffle, and bounded recovery walks. |
+| Live playback context and succession | runtime | `PlaybackSequenceService` owns the captured launch spec, source lease, projection cursor, next/previous, repeat, shuffle, and bounded recovery walks. |
 | Playback failure recovery control | runtime composition | One private sequence recovery control port is installed; public failure events are observational. |
 | Playback-session payload and restoration | runtime | Runtime validates and persists cursor plus transport intent, then restores it atomically; frontends trigger lifecycle saves and restores. |
 | Workspace and view lifecycle | runtime | One aggregate keeps existing, open, and active views coherent. |
@@ -54,7 +54,7 @@ order or own repeat and shuffle policy.
 
 `PlaybackSequenceService` is the application succession authority. GTK and TUI
 call `playFromView(viewId, startTrackId)` with identities only. The service asks
-`ViewService` for one coherent launch context, owns its own source lease and
+`ViewService` for one coherent launch spec, owns its own source lease and
 live projection cursor, and applies the same next/previous, repeat, shuffle,
 prepared-next, natural-advance, and recovery policy for every frontend. A
 frontend never passes an ordered track vector or reconstructs succession from

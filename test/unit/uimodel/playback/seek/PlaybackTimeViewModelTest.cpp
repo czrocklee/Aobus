@@ -25,7 +25,7 @@ namespace ao::uimodel::test
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = MockExecutor{};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, libraryFixture.library(), notificationService};
+    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
 
     auto log = ao::test::RenderLog<PlaybackTimeViewState>{};
     auto const viewModel = PlaybackTimeViewModel{playback, [&log](auto const& view) { log.render(view); }};
@@ -40,7 +40,7 @@ namespace ao::uimodel::test
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
     auto notificationService = NotificationService{};
-    auto playback = PlaybackService{executor, libraryFixture.library(), notificationService};
+    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
     addReadyAudioProvider(playback);
     REQUIRE(executor.drainUntil([&] { return playback.state().ready; }));
 

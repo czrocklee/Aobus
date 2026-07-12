@@ -21,8 +21,7 @@ namespace ao::rt::test
     {
     public:
       RestartDeadlineFixture()
-        : asyncRuntime{executor, 1}
-        , scheduler{ControlledSleeper::install(asyncRuntime)}
+        : asyncRuntime{executor, 1, &scheduler}
         , deadline{asyncRuntime,
                    [this]
                    {
@@ -36,8 +35,9 @@ namespace ao::rt::test
       // These fixture values are intentionally public as the tests' assertion surface.
       // NOLINTBEGIN(aobus-readability-identifier-naming-extensions)
       ManualExecutor executor;
+      // The sleeper is declared before asyncRuntime so it outlives the Runtime that borrows it.
+      ControlledSleeper scheduler;
       async::Runtime asyncRuntime;
-      ControlledSleeper& scheduler;
       Elapsed liveElapsed{0};
       std::size_t liveElapsedReadCount = 0;
       std::vector<bool> availabilityEvents;
@@ -63,6 +63,7 @@ namespace ao::rt::test
     fixture.liveElapsed = Elapsed{3000};
     REQUIRE(fixture.scheduler.fire(0));
 
+    fixture.executor.checkQueued();
     CHECK(fixture.executor.queuedCount() == 1);
     CHECK(fixture.liveElapsedReadCount == 0);
     CHECK(fixture.availabilityEvents.empty());
@@ -75,6 +76,7 @@ namespace ao::rt::test
     fixture.liveElapsed = Elapsed{3001};
     REQUIRE(fixture.scheduler.fire(1));
     CHECK_FALSE(fixture.deadline.restartAvailable());
+    fixture.executor.checkQueued();
     CHECK(fixture.executor.queuedCount() == 1);
 
     REQUIRE(fixture.executor.runOne());
@@ -90,6 +92,7 @@ namespace ao::rt::test
     fixture.deadline.start(Elapsed{0});
     REQUIRE(fixture.scheduler.waitForCallCount(1));
     REQUIRE(fixture.scheduler.fire(0));
+    fixture.executor.checkQueued();
     REQUIRE(fixture.executor.queuedCount() == 1);
 
     fixture.deadline.seek(Elapsed{1000});
@@ -103,6 +106,7 @@ namespace ao::rt::test
     CHECK(fixture.deadline.hasScheduledDeadline());
 
     REQUIRE(fixture.scheduler.fire(1));
+    fixture.executor.checkQueued();
     REQUIRE(fixture.executor.runOne());
     CHECK(fixture.liveElapsedReadCount == 1);
     CHECK(fixture.deadline.restartAvailable());
@@ -184,6 +188,7 @@ namespace ao::rt::test
     REQUIRE(fixture.scheduler.waitForCallCount(1));
     fixture.liveElapsed = Elapsed{3001};
     REQUIRE(fixture.scheduler.fire(0));
+    fixture.executor.checkQueued();
     REQUIRE(fixture.executor.queuedCount() == 1);
 
     fixture.deadline.shutdown();

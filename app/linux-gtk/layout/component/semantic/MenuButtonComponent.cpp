@@ -3,8 +3,8 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -25,7 +25,7 @@ namespace ao::gtk::layout
     class MenuButtonComponent final : public LayoutComponent
     {
     public:
-      MenuButtonComponent(LayoutContext& ctx, LayoutNode const& node)
+      MenuButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node)
       {
         if (auto const icon = node.propertyOr<std::string>("icon", ""); !icon.empty())
         {
@@ -39,9 +39,9 @@ namespace ao::gtk::layout
           _button.set_has_frame(false);
         }
 
-        if (ctx.shell.menuModelPtr)
+        if (ctx.dependencies.menuModelPtr)
         {
-          _button.set_menu_model(ctx.shell.menuModelPtr);
+          _button.set_menu_model(ctx.dependencies.menuModelPtr);
         }
       }
 
@@ -51,7 +51,7 @@ namespace ao::gtk::layout
       Gtk::MenuButton _button;
     };
 
-    std::unique_ptr<LayoutComponent> createMenuButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createMenuButton(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<MenuButtonComponent>(ctx, node);
     }

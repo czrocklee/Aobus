@@ -38,7 +38,7 @@ Frontend launch uses `playFromView(viewId, startTrackId)`.
 - Frontends pass no ordering data. `ViewService` already owns the authoritative
   list ID, quick-filter expression, and presentation. The runtime captures
   them synchronously on its executor, so the combination is coherent.
-- The captured `PlaybackLaunchContext` contains a list ID, a quick-filter
+- The captured `PlaybackLaunchSpec` contains a list ID, a quick-filter
   expression, and `TrackOrderSpec`. The start track is command input, not part
   of the durable context.
 - `TrackOrderSpec` contains only `sortBy`. A non-empty sort uses the
@@ -70,7 +70,7 @@ accepts that request leaves the existing playback session unchanged. Once the
 request is accepted, the new cursor session becomes authoritative; later
 asynchronous playback failures follow its normal recovery policy.
 
-The restore path constructs the same `PlaybackLaunchContext` internally. It
+The restore path constructs the same `PlaybackLaunchSpec` internally. It
 does not pretend to own a view.
 
 ## Session ownership and source invalidation
@@ -274,7 +274,7 @@ Public observation and durable-state change are separate:
   current-track and mode changes, source invalidation, and crossing the
   previous-command restart threshold also re-evaluate the tuple.
 - **Persistence revision** changes on discrete serialized-intent mutations,
-  including `anchorIndex`, launch context, current track, modes, volume/mute,
+  including `anchorIndex`, launch spec, current track, modes, volume/mute,
   and a final seek. Ordinary elapsed-time progress is sampled when a periodic
   or significant-event save occurs; it does not dirty the session on every
   playback clock update. Shuffle history and prepared commitments are not
@@ -459,7 +459,7 @@ This cursor-context payload is schema version 3; unsupported versions are
 rejected rather than guessed.
 
 Stopping removes the active cursor, but before removal the runtime captures an
-immutable last-restorable cursor snapshot containing the launch context,
+immutable last-restorable cursor snapshot containing the launch spec,
 current track, and anchor. The composite save path pairs that snapshot with
 `PlaybackService`'s last restorable position/state, preserving the existing
 save-on-stop behavior; while a cursor is active, save reads that live cursor

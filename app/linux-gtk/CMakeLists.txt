@@ -36,7 +36,7 @@ add_library(aobus-gtk-lib STATIC
     app/MainWindowCoordinator.cpp
     app/AppConfigStore.cpp
     app/ShellLayoutStore.cpp
-    app/GtkLayoutConfig.cpp
+    app/GtkLayoutStateStore.cpp
     platform/AudioBackendBootstrap.cpp
     platform/MprisArtUrlCache.cpp
     platform/MprisBridge.cpp

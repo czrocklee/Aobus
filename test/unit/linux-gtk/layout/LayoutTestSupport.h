@@ -3,11 +3,13 @@
 
 #pragma once
 
+#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/layout/component/track/TrackDetailScope.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
@@ -63,29 +65,47 @@ namespace ao::gtk::layout::test
       , _playbackCommandSurface{_runtime.playback(),
                                 _runtime.playbackSequence(),
                                 [this] { std::ignore = _runtime.playSelectionInFocusedView(); }}
-      , _ctx{.registry = _components, .actionRegistry = _actions, .runtime = _runtime, .parentWindow = _window}
+      , _ctx{.registry = _components,
+             .actionRegistry = _actions,
+             .runtime = _runtime,
+             .parentWindow = _window,
+             .runtimeState = _runtimeState,
+             .dependencies = _dependencies}
       , _layoutRuntime{_components}
     {
       LayoutRuntime::registerStandardComponents(_components);
-      _ctx.playback.sequence = &_runtime.playbackSequence();
-      _ctx.playback.commandSurface = &_playbackCommandSurface;
+      _dependencies.playbackSequence = &_runtime.playbackSequence();
+      _dependencies.playbackCommandSurface = &_playbackCommandSurface;
     }
 
     rt::AppRuntime& runtime() { return _runtime; }
     Gtk::Window& window() { return _window; }
     ComponentRegistry& components() { return _components; }
     ActionRegistry const& actions() const { return _actions; }
-    LayoutContext& context() { return _ctx; }
+    LayoutBuildContext& context() { return _ctx; }
+    GtkUiDependencies& dependencies() { return _dependencies; }
     LayoutRuntime& layoutRuntime() { return _layoutRuntime; }
 
     FakeTrackDetailScope& attachTrackDetailScope(rt::TrackDetailSnapshot snap = {})
     {
       _trackDetailScopePtr = std::make_unique<FakeTrackDetailScope>(std::move(snap));
-      _ctx.track.detailScope = _trackDetailScopePtr.get();
+      _ctx.detailScope = _trackDetailScopePtr.get();
       return *_trackDetailScopePtr;
     }
 
     std::unique_ptr<LayoutComponent> create(uimodel::LayoutNode const& node) { return _components.create(_ctx, node); }
+
+    std::unique_ptr<LayoutComponent> createWithTransientContext(uimodel::LayoutNode const& node)
+    {
+      auto ctx = LayoutBuildContext{.registry = _components,
+                                    .actionRegistry = _actions,
+                                    .runtime = _runtime,
+                                    .parentWindow = _window,
+                                    .runtimeState = _runtimeState,
+                                    .dependencies = _dependencies,
+                                    .detailScope = _trackDetailScopePtr.get()};
+      return _components.create(ctx, node);
+    }
 
   private:
     Glib::RefPtr<Gtk::Application> _appPtr;
@@ -95,7 +115,9 @@ namespace ao::gtk::layout::test
     ComponentRegistry _components;
     ActionRegistry _actions;
     Gtk::Window _window;
-    LayoutContext _ctx;
+    LayoutRuntimeState _runtimeState;
+    GtkUiDependencies _dependencies;
+    LayoutBuildContext _ctx;
     LayoutRuntime _layoutRuntime;
     std::unique_ptr<FakeTrackDetailScope> _trackDetailScopePtr;
   };

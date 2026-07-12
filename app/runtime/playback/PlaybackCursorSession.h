@@ -9,7 +9,7 @@
 #include "runtime/playback/ShuffleHistory.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PreparedPlayback.h>
 #include <ao/rt/Subscription.h>
@@ -40,7 +40,7 @@ namespace ao::rt
     using ProjectionBatchHandler =
       std::move_only_function<void(PlaybackCursor::MutationEffect effect, bool sourceInvalidated)>;
 
-    static Result<std::unique_ptr<PlaybackCursorSession>> create(PlaybackLaunchContext launchContext,
+    static Result<std::unique_ptr<PlaybackCursorSession>> create(PlaybackLaunchSpec launchSpec,
                                                                  TrackId startTrackId,
                                                                  TrackSourceCache& sources,
                                                                  library::MusicLibrary& library,
@@ -50,7 +50,7 @@ namespace ao::rt
 
     /** Builds a non-playing restore candidate, allowing the saved current track to be a projection gap. */
     static Result<std::unique_ptr<PlaybackCursorSession>> createForRestore(
-      PlaybackLaunchContext launchContext,
+      PlaybackLaunchSpec launchSpec,
       TrackId currentTrackId,
       std::size_t anchorIndex,
       TrackSourceCache& sources,
@@ -102,7 +102,7 @@ namespace ao::rt
     void resetConsecutiveFailureCount() noexcept { _consecutiveFailureCount = 0; }
 
     // Construction is exposed only in this runtime-internal header so shared launch/restore factories can build it.
-    PlaybackCursorSession(PlaybackLaunchContext launchContext,
+    PlaybackCursorSession(PlaybackLaunchSpec launchSpec,
                           TrackSourceLease baseSourceLease,
                           std::unique_ptr<LiveTrackListProjection> projectionPtr,
                           ProjectionAnchor currentAnchor,

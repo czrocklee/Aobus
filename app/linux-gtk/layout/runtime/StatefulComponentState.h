@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "layout/runtime/LayoutContext.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -19,26 +19,28 @@
 namespace ao::gtk::layout
 {
   /**
-   * @brief Per-component view over the active LayoutContext runtime-state document.
+   * @brief Per-component view over the shared LayoutRuntimeState state document.
    *
    * Reads the restored entry for a node at construction and writes updates back
-   * under the context's preset, baseline-hash and generation guards. Centralises
-   * the persistence ritual shared by stateful container components so each one
-   * only describes *what* it persists, not *how*.
+   * under the runtime state's preset, baseline-hash and generation guards.
+   * Retains the LayoutRuntimeState (not the transient LayoutBuildContext) so writes
+   * remain valid after the build call returns. Centralises the persistence
+   * ritual shared by stateful container components so each one only describes
+   * *what* it persists, not *how*.
    */
   class StatefulComponentState final
   {
   public:
-    StatefulComponentState(LayoutContext& ctx, uimodel::LayoutNode const& node, std::string_view type)
-      : _ctx{&ctx}
+    StatefulComponentState(LayoutBuildContext& ctx, uimodel::LayoutNode const& node, std::string_view type)
+      : _state{&ctx.runtimeState}
       , _componentId{node.id}
       , _type{type}
-      , _presetId{ctx.activePresetId}
+      , _presetId{ctx.runtimeState.activePresetId}
       , _baselineHash{uimodel::componentBaselineHash(node)}
-      , _capturedGeneration{ctx.componentStateGeneration}
-      , _persistable{!ctx.editMode && ctx.surface == LayoutSurface::Main && !node.id.empty() &&
-                     !ctx.activePresetId.empty() && ctx.componentStateStore != nullptr}
-      , _optRestored{uimodel::resolveComponentState(ctx.componentState, node)}
+      , _capturedGeneration{ctx.runtimeState.componentStateGeneration}
+      , _persistable{!ctx.runtimeState.editMode && ctx.surface == LayoutSurface::Main && !node.id.empty() &&
+                     !ctx.runtimeState.activePresetId.empty() && ctx.runtimeState.componentStateStore != nullptr}
+      , _optRestored{uimodel::resolveComponentState(ctx.runtimeState.componentState, node)}
     {
     }
 
@@ -54,8 +56,8 @@ namespace ao::gtk::layout
      */
     bool canWrite() const noexcept
     {
-      return _persistable && _ctx != nullptr && _ctx->componentStateStore != nullptr &&
-             _ctx->componentStateGeneration == _capturedGeneration;
+      return _persistable && _state != nullptr && _state->componentStateStore != nullptr &&
+             _state->componentStateGeneration == _capturedGeneration;
     }
 
     /// Stamp @p state into the active document under this component's id and persist it.
@@ -66,18 +68,18 @@ namespace ao::gtk::layout
         return;
       }
 
-      _ctx->componentState.preset = _presetId;
-      _ctx->componentState.components[_componentId] = uimodel::LayoutComponentStateEntry{
+      _state->componentState.preset = _presetId;
+      _state->componentState.components[_componentId] = uimodel::LayoutComponentStateEntry{
         .type = _type,
         .stateVersion = uimodel::kStateEntryVersion,
         .baselineHash = _baselineHash,
         .state = std::move(state),
       };
-      _ctx->componentStateStore->save(_presetId, _ctx->componentState);
+      _state->componentStateStore->save(_presetId, _state->componentState);
     }
 
   private:
-    LayoutContext* _ctx = nullptr;
+    LayoutRuntimeState* _state = nullptr;
     std::string _componentId;
     std::string _type;
     std::string _presetId;

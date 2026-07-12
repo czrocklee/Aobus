@@ -46,7 +46,7 @@ namespace ao::gtk::layout::test
                               lastAnchor = &ctx.anchorWidget;
                             });
 
-    // Binder doesn't need LayoutContext, only registry, runtime, and parent window
+    // Binder doesn't need LayoutBuildContext, only registry, runtime, and parent window
     auto const binder = ActionBinder{registry, runtime, window};
 
     SECTION("bind returns empty function for 'none'")

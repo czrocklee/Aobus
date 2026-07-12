@@ -9,7 +9,7 @@
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PreparedPlayback.h>
 #include <ao/rt/ViewIds.h>
@@ -35,7 +35,7 @@ namespace ao::rt
   namespace
   {
     Result<std::unique_ptr<PlaybackCursorSession>> buildSession(
-      PlaybackLaunchContext launchContext,
+      PlaybackLaunchSpec launchSpec,
       TrackId const currentTrackId,
       std::optional<std::size_t> const optRequiredCurrentIndex,
       std::size_t const fallbackAnchorIndex,
@@ -45,12 +45,12 @@ namespace ao::rt
       ShuffleMode const shuffleMode,
       ShuffleHistory::CandidateChooser candidateChooser)
     {
-      if (launchContext.sourceListId == kInvalidListId || currentTrackId == kInvalidTrackId)
+      if (launchSpec.sourceListId == kInvalidListId || currentTrackId == kInvalidTrackId)
       {
         return makeError(Error::Code::InvalidInput, "Playback launch requires valid source and track identities");
       }
 
-      auto baseSourceResult = sources.acquire(launchContext.sourceListId);
+      auto baseSourceResult = sources.acquire(launchSpec.sourceListId);
 
       if (!baseSourceResult)
       {
@@ -62,10 +62,10 @@ namespace ao::rt
         auto baseSourceLease = std::move(*baseSourceResult);
         auto projectionSourceLease = baseSourceLease;
 
-        if (!launchContext.quickFilterExpression.empty())
+        if (!launchSpec.quickFilterExpression.empty())
         {
-          auto filteredResult = sources.acquire(SourceSpec{
-            .baseListId = launchContext.sourceListId, .filterExpression = launchContext.quickFilterExpression});
+          auto filteredResult = sources.acquire(
+            SourceSpec{.baseListId = launchSpec.sourceListId, .filterExpression = launchSpec.quickFilterExpression});
 
           if (!filteredResult)
           {
@@ -85,8 +85,8 @@ namespace ao::rt
           return makeError(Error::Code::InvalidState, "Playback source was invalidated during launch");
         }
 
-        auto projectionPtr = std::make_unique<LiveTrackListProjection>(
-          kInvalidViewId, projectionSourceLease, library, launchContext.order);
+        auto projectionPtr =
+          std::make_unique<LiveTrackListProjection>(kInvalidViewId, projectionSourceLease, library, launchSpec.order);
         auto const optCurrentIndex = projectionPtr->indexOf(currentTrackId);
 
         if (optRequiredCurrentIndex && !optCurrentIndex)
@@ -99,7 +99,7 @@ namespace ao::rt
             ? ProjectionAnchor::bound(currentTrackId, *optCurrentIndex, projectionPtr->size())
             : ProjectionAnchor::gap(
                 currentTrackId, std::min(fallbackAnchorIndex, projectionPtr->size()), projectionPtr->size());
-        return std::make_unique<PlaybackCursorSession>(std::move(launchContext),
+        return std::make_unique<PlaybackCursorSession>(std::move(launchSpec),
                                                        std::move(baseSourceLease),
                                                        std::move(projectionPtr),
                                                        std::move(currentAnchor),
@@ -115,7 +115,7 @@ namespace ao::rt
   } // namespace
 
   Result<std::unique_ptr<PlaybackCursorSession>> PlaybackCursorSession::create(
-    PlaybackLaunchContext launchContext,
+    PlaybackLaunchSpec launchSpec,
     TrackId const startTrackId,
     TrackSourceCache& sources,
     library::MusicLibrary& library,
@@ -123,7 +123,7 @@ namespace ao::rt
     ShuffleMode const shuffleMode,
     ShuffleHistory::CandidateChooser candidateChooser)
   {
-    return buildSession(std::move(launchContext),
+    return buildSession(std::move(launchSpec),
                         startTrackId,
                         std::size_t{0},
                         0,
@@ -135,7 +135,7 @@ namespace ao::rt
   }
 
   Result<std::unique_ptr<PlaybackCursorSession>> PlaybackCursorSession::createForRestore(
-    PlaybackLaunchContext launchContext,
+    PlaybackLaunchSpec launchSpec,
     TrackId const currentTrackId,
     std::size_t const anchorIndex,
     TrackSourceCache& sources,
@@ -144,7 +144,7 @@ namespace ao::rt
     ShuffleMode const shuffleMode,
     ShuffleHistory::CandidateChooser candidateChooser)
   {
-    return buildSession(std::move(launchContext),
+    return buildSession(std::move(launchSpec),
                         currentTrackId,
                         std::nullopt,
                         anchorIndex,
@@ -155,7 +155,7 @@ namespace ao::rt
                         std::move(candidateChooser));
   }
 
-  PlaybackCursorSession::PlaybackCursorSession(PlaybackLaunchContext launchContext,
+  PlaybackCursorSession::PlaybackCursorSession(PlaybackLaunchSpec launchSpec,
                                                TrackSourceLease baseSourceLease,
                                                std::unique_ptr<LiveTrackListProjection> projectionPtr,
                                                ProjectionAnchor currentAnchor,
@@ -165,7 +165,7 @@ namespace ao::rt
     : _baseSourceLease{std::move(baseSourceLease)}
     , _projectionPtr{std::move(projectionPtr)}
     , _shuffleHistory{std::move(candidateChooser)}
-    , _cursor{std::move(launchContext), std::move(currentAnchor), repeatMode, shuffleMode, *this}
+    , _cursor{std::move(launchSpec), std::move(currentAnchor), repeatMode, shuffleMode, *this}
   {
   }
 

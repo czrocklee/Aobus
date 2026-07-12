@@ -4,8 +4,8 @@
 #include "PlaybackComponentRegistrations.h"
 #include "app/AobusSoul.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
@@ -31,7 +31,7 @@ namespace ao::gtk::layout
     class QualityIndicatorComponent final : public LayoutComponent
     {
     public:
-      QualityIndicatorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      QualityIndicatorComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
         : _runtime{ctx.runtime}
         , _soulViewModel{_runtime.playback(),
                          [this](uimodel::AobusSoulViewState const& view)
@@ -50,7 +50,7 @@ namespace ao::gtk::layout
       uimodel::AobusSoulViewModel _soulViewModel;
     };
 
-    std::unique_ptr<LayoutComponent> createQualityIndicator(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createQualityIndicator(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<QualityIndicatorComponent>(ctx, node);
     }

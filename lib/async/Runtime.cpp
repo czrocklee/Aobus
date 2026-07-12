@@ -4,6 +4,7 @@
 #include <ao/async/Executor.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Sleeper.h>
 #include <ao/async/Task.h>
 
 #include <boost/asio/async_result.hpp>
@@ -108,13 +109,13 @@ namespace ao::async
     }
   } // namespace
 
-  Runtime::Runtime(Executor& callbackExecutor)
-    : Runtime{callbackExecutor, std::max(1U, std::thread::hardware_concurrency())}
+  Runtime::Runtime(Executor& callbackExecutor, Sleeper* sleeper)
+    : Runtime{callbackExecutor, std::max(1U, std::thread::hardware_concurrency()), sleeper}
   {
   }
 
-  Runtime::Runtime(Executor& callbackExecutor, std::size_t workerCount)
-    : _callbackExecutor{callbackExecutor}, _workerPool{workerCount}
+  Runtime::Runtime(Executor& callbackExecutor, std::size_t workerCount, Sleeper* sleeper)
+    : _callbackExecutor{callbackExecutor}, _workerPool{workerCount}, _sleeper{sleeper}
   {
   }
 
@@ -183,9 +184,9 @@ namespace ao::async
     gsl_Expects(delay > std::chrono::milliseconds::zero());
     throwIfStopRequested(stopToken);
 
-    if (_sleepForOverride)
+    if (_sleeper != nullptr)
     {
-      co_await _sleepForOverride(delay, stopToken);
+      co_await _sleeper->sleepFor(delay, stopToken);
     }
     else
     {

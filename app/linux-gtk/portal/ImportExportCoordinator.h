@@ -49,7 +49,7 @@ namespace ao::gtk::portal
     ImportExportCoordinator(Gtk::Window& parent,
                             rt::AppRuntime& runtime,
                             ImportExportCallbacks callbacks,
-                            ThemeCoordinator& themeController);
+                            ThemeCoordinator& themeCoordinator);
 
     // Not copyable or movable due to GTK and runtime references/subscriptions
     ImportExportCoordinator(ImportExportCoordinator const&) = delete;
@@ -81,7 +81,7 @@ namespace ao::gtk::portal
 
     Gtk::Window& _parent;
     ImportExportCallbacks _callbacks;
-    ThemeCoordinator& _themeController;
+    ThemeCoordinator& _themeCoordinator;
     LibraryImportExportWorkflow _workflow;
   };
 } // namespace ao::gtk::portal

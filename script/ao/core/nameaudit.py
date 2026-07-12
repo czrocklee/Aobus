@@ -160,6 +160,17 @@ def _audit_records(records: Sequence[Record], root: Path) -> list[Issue]:
         if TEST_DOUBLE_RE.match(record.name) is not None and not rel.startswith("test/"):
             issues.append(Issue(record.path, record.line, "test-double", "Fake/Mock/Spy/Stub types belong in tests"))
 
+        if record.name.endswith("TestAccess"):
+            issues.append(
+                Issue(
+                    record.path,
+                    record.line,
+                    "test-access",
+                    "*TestAccess types are banned; use public behavior or inject collaborators "
+                    "through a production composition seam",
+                )
+            )
+
         suffix = _role_suffix(record.name)
         if suffix is None:
             continue

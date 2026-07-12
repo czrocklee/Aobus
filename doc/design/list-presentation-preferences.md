@@ -27,7 +27,7 @@ Library list records remain domain data in LMDB:
 - manual track ids
 
 Presentation preferences live in GTK/user configuration, alongside column
-layout state, through `GtkLayoutConfig` and
+layout state, through `GtkLayoutStateStore` and
 `uimodel::ListPresentationPreferenceStore`.
 
 The store maps `ListId` to presentation id. It never writes presentation data

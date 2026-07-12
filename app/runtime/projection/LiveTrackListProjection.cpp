@@ -7,7 +7,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/ScopedTimer.h>
 #include <ao/rt/Signal.h>
 #include <ao/rt/StorageResult.h>

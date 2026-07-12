@@ -3,8 +3,8 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "list/ListNavigationController.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -26,24 +26,24 @@ namespace ao::gtk::layout
     class ListTreeComponent final : public LayoutComponent
     {
     public:
-      ListTreeComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      ListTreeComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.track.trackRowCache == nullptr)
+        if (ctx.dependencies.trackRowCache == nullptr)
         {
           _error = Gtk::make_managed<Gtk::Label>("Error: trackRowCache missing");
           return;
         }
 
-        if (ctx.list.navigationController == nullptr)
+        if (ctx.dependencies.listNavigationController == nullptr)
         {
           _error = Gtk::make_managed<Gtk::Label>("Error: listNavigationController missing");
           return;
         }
 
-        _controller = ctx.list.navigationController;
+        _controller = ctx.dependencies.listNavigationController;
 
         // Initial rebuild
-        _controller->rebuildTree(*ctx.track.trackRowCache);
+        _controller->rebuildTree(*ctx.dependencies.trackRowCache);
       }
 
       Gtk::Widget& widget() override
@@ -56,7 +56,7 @@ namespace ao::gtk::layout
       Gtk::Label* _error = nullptr;
     };
 
-    std::unique_ptr<LayoutComponent> createListTree(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createListTree(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<ListTreeComponent>(ctx, node);
     }

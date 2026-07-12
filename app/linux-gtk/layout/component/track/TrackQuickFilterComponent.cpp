@@ -3,12 +3,10 @@
 
 #include "TrackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
-#include "list/ListNavigationController.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
-#include <ao/CoreIds.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
@@ -31,29 +29,16 @@ namespace ao::gtk::layout
     class TrackQuickFilterComponent final : public LayoutComponent
     {
     public:
-      TrackQuickFilterComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      TrackQuickFilterComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
         : _widget{ctx.runtime, ctx.timeoutScheduler}
       {
-        if (ctx.track.pageHost == nullptr)
+        auto* const pageHost = ctx.dependencies.trackPageHost;
+        auto createSmartListFromExpression = ctx.dependencies.createSmartListFromExpression;
+
+        if (pageHost == nullptr || !createSmartListFromExpression)
         {
           return;
         }
-
-        auto createSmartListFromExpression = ctx.list.createSmartListFromExpression;
-
-        if (!createSmartListFromExpression && ctx.list.navigationController != nullptr)
-        {
-          auto* const navigationController = ctx.list.navigationController;
-          createSmartListFromExpression = [navigationController](ListId parentListId, std::string expression)
-          { navigationController->createSmartListFromExpression(parentListId, std::move(expression)); };
-        }
-
-        if (!createSmartListFromExpression)
-        {
-          return;
-        }
-
-        auto* const pageHost = ctx.track.pageHost;
 
         _createSmartListConn = _widget.signalCreateSmartListRequested().connect(
           [createSmartListFromExpression = std::move(createSmartListFromExpression),
@@ -71,7 +56,7 @@ namespace ao::gtk::layout
       sigc::scoped_connection _createSmartListConn;
     };
 
-    std::unique_ptr<LayoutComponent> createTrackQuickFilter(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackQuickFilter(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackQuickFilterComponent>(ctx, node);
     }

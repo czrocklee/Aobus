@@ -11,9 +11,9 @@ namespace ao::cli::test
 {
   inline ryml::Tree parseYaml(std::string_view text)
   {
-    auto context = yaml::CallbackContext{};
-    auto tree = ryml::Tree{yaml::callbacks(context)};
-    yaml::parseInArena(tree, text, context);
+    auto state = yaml::ErrorCallbackState{};
+    auto tree = ryml::Tree{yaml::callbacks(state)};
+    yaml::parseInArena(tree, text, state);
     tree.callbacks(yaml::callbacks());
     return tree;
   }

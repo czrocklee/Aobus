@@ -3,8 +3,8 @@
 
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -28,7 +28,7 @@ namespace ao::gtk::layout
     class ScrollComponent final : public LayoutComponent
     {
     public:
-      ScrollComponent(LayoutContext& ctx, LayoutNode const& node)
+      ScrollComponent(LayoutBuildContext& ctx, LayoutNode const& node)
       {
         if (node.children.size() != 1)
         {
@@ -85,7 +85,7 @@ namespace ao::gtk::layout
       std::unique_ptr<LayoutComponent> _childPtr;
     };
 
-    std::unique_ptr<LayoutComponent> createScroll(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createScroll(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<ScrollComponent>(ctx, node);
     }

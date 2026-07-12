@@ -58,6 +58,12 @@ namespace ao::rt
 {
   namespace
   {
+    std::unique_ptr<audio::Player> requireOwnedPlayer(std::unique_ptr<audio::Player> playerPtr)
+    {
+      gsl_Expects(playerPtr != nullptr);
+      return playerPtr;
+    }
+
     bool isTerminalTrackTransport(audio::Transport transport) noexcept
     {
       return transport == audio::Transport::Idle || transport == audio::Transport::Error;
@@ -499,7 +505,7 @@ namespace ao::rt
       NotificationId notificationId = kInvalidNotificationId;
     };
 
-    struct PlaybackRequestContext final
+    struct PlaybackItemProvenance final
     {
       PlaybackService::PlaybackRequest request;
       ListId sourceListId = kInvalidListId;
@@ -857,12 +863,6 @@ namespace ao::rt
 
     void rememberPreparedRequest(PreparedPlaybackRequest request) { preparedRequests.push_back(std::move(request)); }
 
-    std::optional<std::uint64_t> preparedNextIssuedGeneration(PreparedNextToken const token) const
-    {
-      auto const it = std::ranges::find(preparedRequests, token, &PreparedPlaybackRequest::token);
-      return it != preparedRequests.end() ? std::optional{it->issuedGeneration} : std::nullopt;
-    }
-
     std::optional<PreparedPlaybackRequest> takePreparedRequest(audio::Engine::PlaybackItemId const itemId,
                                                                std::uint64_t const generation)
     {
@@ -1053,13 +1053,13 @@ namespace ao::rt
       });
     }
 
-    std::optional<PlaybackRequestContext> contextForPlaybackItem(audio::Engine::PlaybackItemId const itemId,
-                                                                 std::uint64_t const generation) const
+    std::optional<PlaybackItemProvenance> provenanceForPlaybackItem(audio::Engine::PlaybackItemId const itemId,
+                                                                    std::uint64_t const generation) const
     {
       if (itemId == currentPlaybackItemId && generation == currentPlaybackGeneration &&
           currentRequest.item.trackId != kInvalidTrackId)
       {
-        return PlaybackRequestContext{.request = currentRequest, .sourceListId = currentRequest.item.sourceListId};
+        return PlaybackItemProvenance{.request = currentRequest, .sourceListId = currentRequest.item.sourceListId};
       }
 
       auto const it =
@@ -1072,7 +1072,7 @@ namespace ao::rt
         return std::nullopt;
       }
 
-      return PlaybackRequestContext{
+      return PlaybackItemProvenance{
         .request = it->request,
         .sourceListId = it->sourceListId,
         .optPreparedNextToken = it->token,
@@ -1132,9 +1132,9 @@ namespace ao::rt
         .recoverable = failure.recoverable,
       };
 
-      auto const optContext = contextForPlaybackItem(failure.itemId, failure.generation);
+      auto const optProvenance = provenanceForPlaybackItem(failure.itemId, failure.generation);
 
-      if (!optContext)
+      if (!optProvenance)
       {
         APP_LOG_WARN("Dropping stale playback failure kind={} item={} generation={} reason={}",
                      static_cast<std::uint32_t>(translated.kind),
@@ -1145,10 +1145,10 @@ namespace ao::rt
       }
 
       refreshState();
-      translated.trackId = optContext->request.item.trackId;
-      translated.sourceListId = optContext->sourceListId;
-      translated.optPreparedNextToken = optContext->optPreparedNextToken;
-      translated.title = optContext->request.item.title;
+      translated.trackId = optProvenance->request.item.trackId;
+      translated.sourceListId = optProvenance->sourceListId;
+      translated.optPreparedNextToken = optProvenance->optPreparedNextToken;
+      translated.title = optProvenance->request.item.title;
 
       if (translated.optPreparedNextToken)
       {
@@ -1379,16 +1379,9 @@ namespace ao::rt
 
   PlaybackService::PlaybackService(async::Executor& executor,
                                    library::MusicLibrary& library,
-                                   NotificationService& notifications)
-    : PlaybackService{executor, library, notifications, std::make_unique<audio::Player>(executor)}
-  {
-  }
-
-  PlaybackService::PlaybackService(async::Executor& executor,
-                                   library::MusicLibrary& library,
                                    NotificationService& notifications,
                                    std::unique_ptr<audio::Player> playerPtr)
-    : _implPtr{std::make_unique<Impl>(executor, library, notifications, std::move(playerPtr))}
+    : _implPtr{std::make_unique<Impl>(executor, library, notifications, requireOwnedPlayer(std::move(playerPtr)))}
   {
     _implPtr->connectPlayerCallbacks();
   }
@@ -1537,13 +1530,6 @@ namespace ao::rt
     return impl->drainingOutboundEvents;
   }
 
-  std::optional<std::uint64_t> PlaybackService::preparedNextIssuedGeneration(PreparedNextToken const token) const
-  {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
-    return impl->preparedNextIssuedGeneration(token);
-  }
-
   Result<PlaybackStartReceipt> PlaybackService::playSequenceTrack(TrackId const trackId, ListId const sourceListId)
   {
     auto* const impl = _implPtr.get();
@@ -1552,12 +1538,28 @@ namespace ao::rt
     return playTrack(trackId, sourceListId);
   }
 
-  Result<PreparedNextToken> PlaybackService::prepareSequenceNext(TrackId const trackId, ListId const sourceListId)
+  Result<PlaybackService::SequencePreparedNextReceipt> PlaybackService::prepareSequenceNext(TrackId const trackId,
+                                                                                            ListId const sourceListId)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     auto const privilege = Impl::SequenceMutationGrantScope{*impl};
-    return prepareNext(trackId, sourceListId);
+
+    try
+    {
+      auto const requestResult = playbackRequestForTrack(impl->library, trackId);
+
+      if (!requestResult)
+      {
+        return std::unexpected{requestResult.error()};
+      }
+
+      return prepareNextWithReceipt(*requestResult, sourceListId);
+    }
+    catch (std::exception const& ex)
+    {
+      return makeError(Error::Code::Generic, ex.what());
+    }
   }
 
   std::optional<PreparedNextToken> PlaybackService::clearSequencePreparedNext()
@@ -1752,7 +1754,9 @@ namespace ao::rt
     }
   }
 
-  Result<PreparedNextToken> PlaybackService::prepareNext(PlaybackRequest const& request, ListId const sourceListId)
+  Result<PlaybackService::SequencePreparedNextReceipt> PlaybackService::prepareNextWithReceipt(
+    PlaybackRequest const& request,
+    ListId const sourceListId)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
@@ -1801,7 +1805,19 @@ namespace ao::rt
       .transition = result->transition,
     });
     impl->optActivePreparedToken = *tokenResult;
-    return *tokenResult;
+    return SequencePreparedNextReceipt{.token = *tokenResult, .issuedGeneration = result->generation};
+  }
+
+  Result<PreparedNextToken> PlaybackService::prepareNext(PlaybackRequest const& request, ListId const sourceListId)
+  {
+    auto receiptResult = prepareNextWithReceipt(request, sourceListId);
+
+    if (!receiptResult)
+    {
+      return std::unexpected{receiptResult.error()};
+    }
+
+    return receiptResult->token;
   }
 
   Result<PreparedNextToken> PlaybackService::prepareNext(TrackId const trackId, ListId const sourceListId)

@@ -75,9 +75,9 @@ namespace ao::gtk
       }
 
       auto buffer = std::move(*bufferResult);
-      auto yamlContext = yaml::CallbackContext{fileName};
-      auto tree = ryml::Tree{yaml::callbacks(yamlContext)};
-      yaml::parseInPlace(tree, buffer, yamlContext);
+      auto yamlErrorState = yaml::ErrorCallbackState{fileName};
+      auto tree = ryml::Tree{yaml::callbacks(yamlErrorState)};
+      yaml::parseInPlace(tree, buffer, yamlErrorState);
 
       auto doc = uimodel::LayoutComponentStateDocument{};
 

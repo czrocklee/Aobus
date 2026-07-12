@@ -27,10 +27,10 @@
 
 namespace ao::yaml
 {
-  class CallbackContext final
+  class ErrorCallbackState final
   {
   public:
-    explicit CallbackContext(std::string filename = "<buffer>")
+    explicit ErrorCallbackState(std::string filename = "<buffer>")
       : _filename{std::move(filename)}
     {
     }
@@ -45,8 +45,8 @@ namespace ao::yaml
                                       c4::yml::ErrorDataBasic const& dat,
                                       void* userData)
   {
-    auto const* const context = userData != nullptr ? static_cast<CallbackContext const*>(userData) : nullptr;
-    auto const filename = context != nullptr ? context->filename() : std::string{"<buffer>"};
+    auto const* const state = userData != nullptr ? static_cast<ErrorCallbackState const*>(userData) : nullptr;
+    auto const filename = state != nullptr ? state->filename() : std::string{"<buffer>"};
     throwException<Exception>("YAML error at {}:{}:{}: {}",
                               filename,
                               dat.location.line,
@@ -58,8 +58,8 @@ namespace ao::yaml
                                            c4::yml::ErrorDataParse const& dat,
                                            void* userData)
   {
-    auto const* const context = userData != nullptr ? static_cast<CallbackContext const*>(userData) : nullptr;
-    auto const filename = context != nullptr ? context->filename() : std::string{"<buffer>"};
+    auto const* const state = userData != nullptr ? static_cast<ErrorCallbackState const*>(userData) : nullptr;
+    auto const filename = state != nullptr ? state->filename() : std::string{"<buffer>"};
     throwException<Exception>("YAML parse error at {}:{}:{}: {}",
                               filename,
                               dat.ymlloc.line,
@@ -71,8 +71,8 @@ namespace ao::yaml
                                            c4::yml::ErrorDataVisit const& dat,
                                            void* userData)
   {
-    auto const* const context = userData != nullptr ? static_cast<CallbackContext const*>(userData) : nullptr;
-    auto const filename = context != nullptr ? context->filename() : std::string{"<buffer>"};
+    auto const* const state = userData != nullptr ? static_cast<ErrorCallbackState const*>(userData) : nullptr;
+    auto const filename = state != nullptr ? state->filename() : std::string{"<buffer>"};
     throwException<Exception>("YAML visit error at {}:{}:{}: {}",
                               filename,
                               dat.cpploc.line,
@@ -89,10 +89,10 @@ namespace ao::yaml
     return callbacks;
   }
 
-  inline ryml::Callbacks callbacks(CallbackContext& context)
+  inline ryml::Callbacks callbacks(ErrorCallbackState& state)
   {
     auto callbacks = ryml::Callbacks{};
-    callbacks.set_user_data(&context);
+    callbacks.set_user_data(&state);
     callbacks.set_error_basic(throwOnErrorWithContext);
     callbacks.set_error_parse(throwOnParseErrorWithContext);
     callbacks.set_error_visit(throwOnVisitErrorWithContext);
@@ -109,16 +109,16 @@ namespace ao::yaml
     return ryml::substr{buffer.data(), buffer.size()};
   }
 
-  inline void parseInPlace(ryml::Tree& tree, std::vector<char>& buffer, CallbackContext& context)
+  inline void parseInPlace(ryml::Tree& tree, std::vector<char>& buffer, ErrorCallbackState& state)
   {
-    tree.callbacks(callbacks(context));
-    ryml::parse_in_place(toCsubstr(context.filename()), toSubstr(buffer), &tree);
+    tree.callbacks(callbacks(state));
+    ryml::parse_in_place(toCsubstr(state.filename()), toSubstr(buffer), &tree);
   }
 
-  inline void parseInArena(ryml::Tree& tree, std::string_view source, CallbackContext& context)
+  inline void parseInArena(ryml::Tree& tree, std::string_view source, ErrorCallbackState& state)
   {
-    tree.callbacks(callbacks(context));
-    ryml::parse_in_arena(toCsubstr(context.filename()), toCsubstr(source), &tree);
+    tree.callbacks(callbacks(state));
+    ryml::parse_in_arena(toCsubstr(state.filename()), toCsubstr(source), &tree);
   }
 
   inline ryml::csubstr copyToArena(ryml::Tree& tree, std::string_view value)

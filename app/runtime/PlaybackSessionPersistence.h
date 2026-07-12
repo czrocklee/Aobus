@@ -29,7 +29,7 @@ namespace ao::rt
   class PlaybackSequenceService;
   class PlaybackService;
 
-  struct PlaybackSessionRestoreOutcome final
+  struct PlaybackSessionPersistenceRestoreResult final
   {
     bool restored = false;
     TrackId trackId = kInvalidTrackId;
@@ -56,7 +56,7 @@ namespace ao::rt
     void start();
     Result<> checkpoint();
     Result<> shutdown();
-    Result<PlaybackSessionRestoreOutcome> restore();
+    Result<PlaybackSessionPersistenceRestoreResult> restore();
     Result<> discardRestorableSession();
     Subscription onDirty(std::move_only_function<void()> handler);
 

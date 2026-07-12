@@ -389,7 +389,7 @@ namespace ao::audio::backend::detail
     }
   }
 
-  SinkProps::VolumeClassification SinkProps::classifyVolume(VolumeClassificationContext const context) const noexcept
+  SinkProps::VolumeClassification SinkProps::classifyVolume(VolumeClassificationScope const scope) const noexcept
   {
     static constexpr float kUnityEpsilon = 1e-4F;
     auto const isNotUnity = [](float val) { return std::abs(val - 1.0F) >= kUnityEpsilon; };
@@ -439,7 +439,7 @@ namespace ao::audio::backend::detail
       cls.hardwareNotUnity = true;
     }
 
-    if (context == VolumeClassificationContext::Stream && ambiguousNotUnity)
+    if (scope == VolumeClassificationScope::Stream && ambiguousNotUnity)
     {
       cls.softwareNotUnity = true;
 

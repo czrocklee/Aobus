@@ -18,7 +18,7 @@ namespace ao::uimodel
 namespace ao::gtk::layout
 {
   class ComponentRegistry;
-  struct LayoutContext;
+  struct LayoutBuildContext;
 
   /**
    * @brief A GTK widget that hosts a dynamic layout.
@@ -33,7 +33,15 @@ namespace ao::gtk::layout
      *
      * This will rebuild the entire layout tree.
      */
-    void setLayout(LayoutContext& ctx, uimodel::LayoutDocument const& doc);
+    void setLayout(LayoutBuildContext& ctx, uimodel::LayoutDocument const& doc);
+
+    /**
+     * @brief Destroy the active layout tree without invalidating its final state writes.
+     *
+     * Owners use this during teardown while the runtime state and dependencies
+     * borrowed by components are still alive.
+     */
+    void clearLayout();
 
   private:
     LayoutRuntime _runtime;

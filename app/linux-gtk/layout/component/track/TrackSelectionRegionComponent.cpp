@@ -4,8 +4,8 @@
 #include "TrackComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -28,7 +28,7 @@ namespace ao::gtk::layout
     class TrackSelectionRegionComponent final : public LayoutComponent
     {
     public:
-      TrackSelectionRegionComponent(LayoutContext& ctx, LayoutNode const& node)
+      TrackSelectionRegionComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _box{Gtk::Orientation::VERTICAL, 0}
         , _showWhen{node.propertyOr<std::string>("showWhen", "any")}
         , _showPlaceholder{node.propertyOr<bool>("showPlaceholder", false)}
@@ -40,11 +40,11 @@ namespace ao::gtk::layout
           _children.push_back(std::move(childPtr));
         }
 
-        if (ctx.track.detailScope != nullptr)
+        if (ctx.detailScope != nullptr)
         {
-          _scopeConn = ctx.track.detailScope->signalSnapshotChanged().connect([this](auto const& snap)
-                                                                              { updateVisibility(snap); });
-          updateVisibility(ctx.track.detailScope->snapshot());
+          _scopeConn =
+            ctx.detailScope->signalSnapshotChanged().connect([this](auto const& snap) { updateVisibility(snap); });
+          updateVisibility(ctx.detailScope->snapshot());
         }
       }
 
@@ -65,7 +65,7 @@ namespace ao::gtk::layout
       sigc::connection _scopeConn;
     };
 
-    std::unique_ptr<LayoutComponent> createTrackSelectionRegion(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackSelectionRegion(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<TrackSelectionRegionComponent>(ctx, node);
     }

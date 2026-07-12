@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../PlaybackLaunchContext.h"
+#include "../PlaybackLaunchSpec.h"
 #include "../Subscription.h"
 #include "../TrackPresentation.h"
 #include "../ViewIds.h"

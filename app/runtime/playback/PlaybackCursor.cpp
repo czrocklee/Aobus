@@ -6,7 +6,7 @@
 #include "runtime/playback/ProjectionAnchor.h"
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
-#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
@@ -45,18 +45,18 @@ namespace ao::rt
     }
   } // namespace
 
-  PlaybackCursor::PlaybackCursor(PlaybackLaunchContext launchContext,
+  PlaybackCursor::PlaybackCursor(PlaybackLaunchSpec launchSpec,
                                  ProjectionAnchor currentAnchor,
                                  RepeatMode const repeatMode,
                                  ShuffleMode const shuffleMode,
                                  PlaybackCursorPolicy& policy)
-    : _launchContext{std::move(launchContext)}
+    : _launchSpec{std::move(launchSpec)}
     , _currentTrackId{currentAnchor.trackId()}
     , _anchor{std::move(currentAnchor)}
     , _repeatMode{repeatMode}
     , _shuffleMode{shuffleMode}
   {
-    if (_launchContext.sourceListId == kInvalidListId)
+    if (_launchSpec.sourceListId == kInvalidListId)
     {
       throwException<Exception>("Playback cursor requires a valid launch source");
     }

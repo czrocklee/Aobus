@@ -19,7 +19,7 @@
 namespace ao::rt
 {
   ConfigStore::ConfigStore(std::filesystem::path filePath, OpenMode mode)
-    : _filePath{std::move(filePath)}, _yamlContext{_filePath.string()}, _mode{mode}
+    : _filePath{std::move(filePath)}, _yamlErrorState{_filePath.string()}, _mode{mode}
   {
   }
 
@@ -114,8 +114,8 @@ namespace ao::rt
 
     try
     {
-      _root = ryml::Tree{yaml::callbacks(_yamlContext)};
-      yaml::parseInPlace(_root, _inputBuffer, _yamlContext);
+      _root = ryml::Tree{yaml::callbacks(_yamlErrorState)};
+      yaml::parseInPlace(_root, _inputBuffer, _yamlErrorState);
     }
     catch (std::exception const& e)
     {

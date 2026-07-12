@@ -42,8 +42,8 @@ namespace ao::gtk
   TagEditController::TagEditController(Gtk::Window& parent,
                                        rt::AppRuntime& runtime,
                                        Callbacks callbacks,
-                                       ThemeCoordinator& themeController)
-    : _callbacks{std::move(callbacks)}, _runtime{runtime}, _parent{parent}, _themeController{themeController}
+                                       ThemeCoordinator& themeCoordinator)
+    : _callbacks{std::move(callbacks)}, _runtime{runtime}, _parent{parent}, _themeCoordinator{themeCoordinator}
   {
     createActions();
   }
@@ -126,7 +126,7 @@ namespace ao::gtk
   }
 
   void TagEditController::openTrackContextMenu(TrackViewPage& page,
-                                               TrackSelectionContext const& selection,
+                                               TrackSelection const& selection,
                                                double xPosition,
                                                double yPosition)
   {
@@ -186,12 +186,12 @@ namespace ao::gtk
                                                                   _runtime.completion(),
                                                                   *_dataProvider,
                                                                   _optActiveSelection->selectedIds);
-    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
   }
 
-  void TagEditController::presentProperties(TrackSelectionContext const& selection)
+  void TagEditController::presentProperties(TrackSelection const& selection)
   {
     if (selection.selectedIds.empty() || _dataProvider == nullptr)
     {
@@ -204,12 +204,12 @@ namespace ao::gtk
                                                                   _runtime.completion(),
                                                                   *_dataProvider,
                                                                   selection.selectedIds);
-    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeController.registerToplevel(*dialog));
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
   }
 
-  void TagEditController::openTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo)
+  void TagEditController::openTagEditor(TrackSelection const& selection, Gtk::Widget& relativeTo)
   {
     if (selection.selectedIds.empty())
     {
@@ -251,7 +251,7 @@ namespace ao::gtk
     submitTagChanges(*_optActiveSelection, tagsToAdd, tagsToRemove);
   }
 
-  void TagEditController::submitTagChanges(TrackSelectionContext const& selection,
+  void TagEditController::submitTagChanges(TrackSelection const& selection,
                                            std::span<std::string const> tagsToAdd,
                                            std::span<std::string const> tagsToRemove)
   {

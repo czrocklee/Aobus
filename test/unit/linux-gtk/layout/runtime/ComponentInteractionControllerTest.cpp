@@ -3,9 +3,11 @@
 
 #include "layout/runtime/ComponentInteractionController.h"
 
+#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include "layout/runtime/LayoutContext.h"
+#include "layout/runtime/LayoutBuildContext.h"
+#include "layout/runtime/LayoutRuntimeState.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
@@ -46,8 +48,14 @@ namespace ao::gtk::layout::test
     registry.registerAction({.id = "secondaryLong", .label = "Secondary Long", .category = "Test"},
                             [&](auto&) { secondaryLongPressed = true; });
 
-    auto ctx = LayoutContext{
-      .registry = compRegistry, .actionRegistry = registry, .runtime = fixture.runtime(), .parentWindow = window};
+    auto runtimeState = LayoutRuntimeState{};
+    auto dependencies = GtkUiDependencies{};
+    auto ctx = LayoutBuildContext{.registry = compRegistry,
+                                  .actionRegistry = registry,
+                                  .runtime = fixture.runtime(),
+                                  .parentWindow = window,
+                                  .runtimeState = runtimeState,
+                                  .dependencies = dependencies};
 
     SECTION("attaches primary click to Gtk::Button")
     {

@@ -3,8 +3,8 @@
 
 #include "StatusComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "track/SelectionInfoLabel.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -22,7 +22,7 @@ namespace ao::gtk::layout
     class SelectionInfoComponent final : public LayoutComponent
     {
     public:
-      SelectionInfoComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      SelectionInfoComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
         : _widget{ctx.runtime.views()}
       {
         _widget.widget().add_css_class("ao-selection-info-modern");
@@ -34,7 +34,7 @@ namespace ao::gtk::layout
       SelectionInfoLabel _widget;
     };
 
-    std::unique_ptr<LayoutComponent> createSelectionInfo(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createSelectionInfo(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<SelectionInfoComponent>(ctx, node);
     }

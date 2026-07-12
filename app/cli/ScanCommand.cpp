@@ -3,7 +3,7 @@
 
 #include "ScanCommand.h"
 
-#include "CliContext.h"
+#include "CliRuntime.h"
 #include "CommandError.h"
 #include "Output.h"
 #include "ScanOutput.h"
@@ -209,16 +209,16 @@ namespace ao::cli
     }
   } // namespace
 
-  void runScan(CliContext& context, bool dryRun, bool verbose, bool deferFingerprint)
+  void runScan(CliRuntime& cli, bool dryRun, bool verbose, bool deferFingerprint)
   {
-    auto& ml = context.musicLibrary();
+    auto& ml = cli.musicLibrary();
     auto scanService = rt::LibraryScan{ml};
     auto buildProgress = rt::LibraryScan::BuildProgressCallback{};
 
     if (verbose)
     {
-      buildProgress = [&context](std::filesystem::path const& path)
-      { std::println(context.io().err, "scan: {}", path.generic_string()); };
+      buildProgress = [&cli](std::filesystem::path const& path)
+      { std::println(cli.io().err, "scan: {}", path.generic_string()); };
     }
 
     auto planResult = scanService.buildPlan(std::move(buildProgress));
@@ -230,7 +230,7 @@ namespace ao::cli
     }
 
     auto plan = std::move(*planResult);
-    printScanResult(plan, dryRun, context.options().format, context.io().out);
+    printScanResult(plan, dryRun, cli.options().format, cli.io().out);
 
     if (dryRun)
     {
@@ -248,47 +248,46 @@ namespace ao::cli
 
     if (verbose)
     {
-      applyProgress = [&context](rt::ScanApplyProgress const& progress)
+      applyProgress = [&cli](rt::ScanApplyProgress const& progress)
       {
         if (!progress.path.empty())
         {
-          std::println(
-            context.io().err, "{}: {}", scanApplyProgressLabel(progress.stage), progress.path.generic_string());
+          std::println(cli.io().err, "{}: {}", scanApplyProgressLabel(progress.stage), progress.path.generic_string());
         }
       };
     }
 
-    if (auto const applyResult = scanService.applyPlan(std::move(plan),
-                                                       options,
-                                                       std::move(applyProgress),
-                                                       [&context](rt::ScanFailure const& failure)
-                                                       { printFailure(failure, context.io().err); });
+    if (auto const applyResult =
+          scanService.applyPlan(std::move(plan),
+                                options,
+                                std::move(applyProgress),
+                                [&cli](rt::ScanFailure const& failure) { printFailure(failure, cli.io().err); });
         !applyResult)
     {
       auto const& error = applyResult.error();
       throwCommandError(error, "scan apply failed: {}", error.message);
     }
-    else if (context.options().format == OutputFormat::Plain)
+    else if (cli.options().format == OutputFormat::Plain)
     {
-      printApplySummary(*applyResult, context.io().out);
+      printApplySummary(*applyResult, cli.io().out);
 
       if (deferFingerprint && !applyResult->cancelled)
       {
         std::println(
-          context.io().out,
+          cli.io().out,
           "Audio identity fingerprinting was deferred; run `aobus lib fingerprint --pending` to finish indexing.");
       }
     }
   }
 
-  void configureScanCommand(CLI::App& app, CliContext& context)
+  void configureScanCommand(CLI::App& app, CliRuntime& cli)
   {
     auto* const cmd = app.add_subcommand("scan", "Scan music root and reconcile the library");
     auto* const dryRun = cmd->add_flag("--dry-run", "show planned changes without mutating the library");
     auto* const verbose = cmd->add_flag("--verbose", "print scan progress to stderr");
     auto* const deferFingerprint = cmd->add_flag("--defer-fingerprint", "defer new-file audio fingerprinting");
 
-    cmd->callback([&context, dryRun, verbose, deferFingerprint]
-                  { runScan(context, dryRun->count() > 0, verbose->count() > 0, deferFingerprint->count() > 0); });
+    cmd->callback([&cli, dryRun, verbose, deferFingerprint]
+                  { runScan(cli, dryRun->count() > 0, verbose->count() > 0, deferFingerprint->count() > 0); });
   }
 } // namespace ao::cli

@@ -3,8 +3,8 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "track/TrackPageHost.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -33,9 +33,9 @@ namespace ao::gtk::layout
     class WorkspaceWithDetailPaneComponent final : public LayoutComponent
     {
     public:
-      WorkspaceWithDetailPaneComponent(LayoutContext& ctx, LayoutNode const& node)
+      WorkspaceWithDetailPaneComponent(LayoutBuildContext& ctx, LayoutNode const& node)
       {
-        if (ctx.track.pageHost == nullptr)
+        if (ctx.dependencies.trackPageHost == nullptr)
         {
           _container.append(*Gtk::make_managed<Gtk::Label>("Error: trackPageHost missing"));
           return;
@@ -45,7 +45,7 @@ namespace ao::gtk::layout
         _container.set_hexpand(true);
         _container.set_vexpand(true);
 
-        auto& stack = ctx.track.pageHost->stack();
+        auto& stack = ctx.dependencies.trackPageHost->stack();
         stack.set_hexpand(true);
         stack.set_vexpand(true);
         _container.append(stack);
@@ -91,7 +91,7 @@ namespace ao::gtk::layout
       std::unique_ptr<LayoutComponent> _detailPtr;
     };
 
-    std::unique_ptr<LayoutComponent> createWorkspaceWithDetailPane(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createWorkspaceWithDetailPane(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<WorkspaceWithDetailPaneComponent>(ctx, node);
     }

@@ -37,9 +37,9 @@ namespace ao::rt::test
     ryml::Tree loadTree(std::filesystem::path const& path, std::vector<char>& buffer)
     {
       buffer = yaml::readFile(path);
-      auto context = yaml::CallbackContext{path.string()};
-      auto tree = ryml::Tree{yaml::callbacks(context)};
-      yaml::parseInPlace(tree, buffer, context);
+      auto state = yaml::ErrorCallbackState{path.string()};
+      auto tree = ryml::Tree{yaml::callbacks(state)};
+      yaml::parseInPlace(tree, buffer, state);
       tree.callbacks(yaml::callbacks());
       return tree;
     }

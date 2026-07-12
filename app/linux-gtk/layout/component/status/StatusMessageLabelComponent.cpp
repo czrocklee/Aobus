@@ -3,8 +3,8 @@
 
 #include "StatusComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -26,7 +26,7 @@ namespace ao::gtk::layout
     class StatusMessageLabelComponent final : public LayoutComponent
     {
     public:
-      StatusMessageLabelComponent(LayoutContext& /*ctx*/, LayoutNode const& /*node*/)
+      StatusMessageLabelComponent(LayoutBuildContext& /*ctx*/, LayoutNode const& /*node*/)
       {
         _label.set_ellipsize(Pango::EllipsizeMode::END);
         _label.set_halign(Gtk::Align::START);
@@ -39,7 +39,7 @@ namespace ao::gtk::layout
       Gtk::Label _label;
     };
 
-    std::unique_ptr<LayoutComponent> createStatusMessageLabel(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createStatusMessageLabel(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<StatusMessageLabelComponent>(ctx, node);
     }

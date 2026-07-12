@@ -43,7 +43,7 @@ namespace ao::gtk
     ListNavigationController(Gtk::Window& parent,
                              rt::AppRuntime& runtime,
                              Callbacks callbacks,
-                             ThemeCoordinator& themeController);
+                             ThemeCoordinator& themeCoordinator);
     ~ListNavigationController();
 
     // Not copyable or movable
@@ -78,7 +78,7 @@ namespace ao::gtk
     Gtk::Window& _parent;
     Callbacks _callbacks;
     rt::AppRuntime& _runtime;
-    ThemeCoordinator& _themeController;
+    ThemeCoordinator& _themeCoordinator;
     TrackRowCache* _dataProvider = nullptr;
 
     std::unique_ptr<ListNavigationPanel> _panelPtr;

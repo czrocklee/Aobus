@@ -106,13 +106,13 @@ namespace ao::query::test
     CHECK_FALSE(queryCompletionTokenAtCursor(R"("$artist")", 5));
     CHECK_FALSE(queryCompletionTokenAtCursor(R"(#"Rock")", 6));
     CHECK_FALSE(queryCompletionTokenAtCursor(R"(#["Rock"])", 7));
-    CHECK_FALSE(analyzeCompletionContext(R"($artist = "Mil)", 14));
+    CHECK_FALSE(analyzeQueryCompletion(R"($artist = "Mil)", 14));
   }
 
   TEST_CASE("Completion - keeps cursors inside tag tokens as variable completions", "[query][unit][completion]")
   {
     auto const text = std::string{"#rock"};
-    auto const optContext = analyzeCompletionContext(text, text.size());
+    auto const optContext = analyzeQueryCompletion(text, text.size());
 
     REQUIRE(optContext);
     auto const* token = std::get_if<QueryCompletionToken>(&*optContext);

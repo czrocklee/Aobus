@@ -201,23 +201,23 @@ namespace ao::rt
         }
       }
 
-      void operator()(query::QueryOperatorCompletionContext const& context) const
+      void operator()(query::QueryOperatorCompletion const& context) const
       {
         appendOperatorItems(items, context.field, context.replacement.prefix, limit);
       }
 
-      void operator()(query::QueryValueCompletionContext const& context) const
+      void operator()(query::QueryValueCompletion const& context) const
       {
         appendValueItems(items, vocabulary, context.field, context.replacement.prefix, limit);
       }
 
-      void operator()(query::QueryLogicalOperatorCompletionContext const& context) const
+      void operator()(query::QueryLogicalOperatorCompletion const& context) const
       {
         appendLogicalOperatorItems(items, context.replacement.prefix, limit);
       }
     };
 
-    std::pair<std::size_t, std::size_t> replacementRange(query::QueryCompletionContext const& context)
+    std::pair<std::size_t, std::size_t> replacementRange(query::QueryCompletionAnalysis const& context)
     {
       return std::visit(
         [](auto const& value) -> std::pair<std::size_t, std::size_t>
@@ -244,7 +244,7 @@ namespace ao::rt
                                                                      std::size_t cursor,
                                                                      std::size_t limit)
   {
-    auto optContext = query::analyzeCompletionContext(text, cursor);
+    auto optContext = query::analyzeQueryCompletion(text, cursor);
 
     if (!optContext || limit == 0)
     {

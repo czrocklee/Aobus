@@ -14,7 +14,7 @@
 #include <ao/query/QueryCompiler.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
@@ -173,16 +173,16 @@ namespace ao::rt
       return {};
     }
 
-    PlaybackSessionState snapshotState(PlaybackLaunchContext launchContext,
+    PlaybackSessionState snapshotState(PlaybackLaunchSpec launchSpec,
                                        TrackId const currentTrackId,
                                        std::size_t const anchorIndex,
                                        PlaybackTransportSessionState const& transport,
                                        PlaybackSequenceState const& sequence)
     {
       return PlaybackSessionState{
-        .sourceListId = launchContext.sourceListId,
-        .quickFilterExpression = std::move(launchContext.quickFilterExpression),
-        .sortBy = std::move(launchContext.order.sortBy),
+        .sourceListId = launchSpec.sourceListId,
+        .quickFilterExpression = std::move(launchSpec.quickFilterExpression),
+        .sortBy = std::move(launchSpec.order.sortBy),
         .currentTrackId = currentTrackId,
         .anchorIndex = static_cast<std::uint64_t>(anchorIndex),
         .positionMs = transport.positionMs,
@@ -348,10 +348,10 @@ namespace ao::rt
 
   bool PlaybackSessionPersistence::hasRestorableSession() const
   {
-    auto context = PlaybackLaunchContext{};
+    auto launchSpec = PlaybackLaunchSpec{};
     auto trackId = kInvalidTrackId;
     std::size_t anchorIndex = 0;
-    return _sequence.capturePlaybackSessionSnapshot(context, trackId, anchorIndex);
+    return _sequence.capturePlaybackSessionSnapshot(launchSpec, trackId, anchorIndex);
   }
 
   void PlaybackSessionPersistence::markDirty()
@@ -497,11 +497,11 @@ namespace ao::rt
       return {};
     }
 
-    auto launchContext = PlaybackLaunchContext{};
+    auto launchSpec = PlaybackLaunchSpec{};
     auto currentTrackId = kInvalidTrackId;
     std::size_t anchorIndex = 0;
 
-    if (!_sequence.capturePlaybackSessionSnapshot(launchContext, currentTrackId, anchorIndex))
+    if (!_sequence.capturePlaybackSessionSnapshot(launchSpec, currentTrackId, anchorIndex))
     {
       return {};
     }
@@ -515,7 +515,7 @@ namespace ao::rt
 
     auto const capturedRevision = _sessionRevision.capture();
     auto const session =
-      snapshotState(std::move(launchContext), currentTrackId, anchorIndex, transport, _sequence.state());
+      snapshotState(std::move(launchSpec), currentTrackId, anchorIndex, transport, _sequence.state());
 
     if (auto const saved = _config.saveResult(kPlaybackSessionConfigGroup, session); !saved)
     {
@@ -532,7 +532,7 @@ namespace ao::rt
     return {};
   }
 
-  Result<PlaybackSessionRestoreOutcome> PlaybackSessionPersistence::restore()
+  Result<PlaybackSessionPersistenceRestoreResult> PlaybackSessionPersistence::restore()
   {
     if (_restoring)
     {
@@ -548,7 +548,7 @@ namespace ao::rt
 
     if (!*containsSession)
     {
-      return PlaybackSessionRestoreOutcome{};
+      return PlaybackSessionPersistenceRestoreResult{};
     }
 
     auto loaded = PlaybackSessionState{};
@@ -571,11 +571,11 @@ namespace ao::rt
 
       if (!sourceExists && !currentExists)
       {
-        return PlaybackSessionRestoreOutcome{};
+        return PlaybackSessionPersistenceRestoreResult{};
       }
 
       auto restoredState = loaded;
-      auto context = PlaybackLaunchContext{
+      auto launchSpec = PlaybackLaunchSpec{
         .sourceListId = loaded.sourceListId,
         .quickFilterExpression = loaded.quickFilterExpression,
         .order = TrackOrderSpec{.sortBy = loaded.sortBy},
@@ -584,15 +584,18 @@ namespace ao::rt
 
       if (!sourceExists)
       {
-        context.sourceListId = kAllTracksListId;
-        context.quickFilterExpression.clear();
+        launchSpec.sourceListId = kAllTracksListId;
+        launchSpec.quickFilterExpression.clear();
         normalized = true;
       }
 
       auto currentTrackId = loaded.currentTrackId;
       auto positionMs = loaded.positionMs;
-      auto candidate = _sequence.preparePlaybackSessionRestore(
-        context, currentTrackId, static_cast<std::size_t>(loaded.anchorIndex), loaded.shuffleMode, loaded.repeatMode);
+      auto candidate = _sequence.preparePlaybackSessionRestore(launchSpec,
+                                                               currentTrackId,
+                                                               static_cast<std::size_t>(loaded.anchorIndex),
+                                                               loaded.shuffleMode,
+                                                               loaded.repeatMode);
 
       if (!candidate)
       {
@@ -615,14 +618,14 @@ namespace ao::rt
 
         if (!optReplacementIndex)
         {
-          return PlaybackSessionRestoreOutcome{};
+          return PlaybackSessionPersistenceRestoreResult{};
         }
 
         currentTrackId = (*candidate)->trackIdAt(*optReplacementIndex);
         positionMs = 0;
         normalized = true;
         candidate = _sequence.preparePlaybackSessionRestore(
-          context, currentTrackId, *optReplacementIndex, loaded.shuffleMode, loaded.repeatMode);
+          launchSpec, currentTrackId, *optReplacementIndex, loaded.shuffleMode, loaded.repeatMode);
 
         if (!candidate)
         {
@@ -631,19 +634,19 @@ namespace ao::rt
       }
 
       auto const actualAnchor = (*candidate)->cursor().anchor().anchorIndex();
-      restoredState.sourceListId = context.sourceListId;
-      restoredState.quickFilterExpression = context.quickFilterExpression;
+      restoredState.sourceListId = launchSpec.sourceListId;
+      restoredState.quickFilterExpression = launchSpec.quickFilterExpression;
       restoredState.currentTrackId = currentTrackId;
       restoredState.anchorIndex = actualAnchor;
       restoredState.positionMs = positionMs;
       normalized = normalized || restoredState != loaded;
-      auto const outcome = PlaybackSessionRestoreOutcome{
+      auto const outcome = PlaybackSessionPersistenceRestoreResult{
         .restored = true,
         .trackId = currentTrackId,
-        .sourceListId = context.sourceListId,
+        .sourceListId = launchSpec.sourceListId,
       };
       auto const transport = PlaybackTransportSessionState{
-        .sourceListId = context.sourceListId,
+        .sourceListId = launchSpec.sourceListId,
         .trackId = currentTrackId,
         .positionMs = positionMs,
         .volume = loaded.volume,
@@ -660,7 +663,7 @@ namespace ao::rt
            shuffleMode = loaded.shuffleMode,
            repeatMode = loaded.repeatMode,
            currentTrackId,
-           sourceListId = context.sourceListId,
+           sourceListId = launchSpec.sourceListId,
            &restoredState,
            &loaded,
            &normalized](std::chrono::milliseconds const elapsed) mutable noexcept

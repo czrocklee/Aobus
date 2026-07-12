@@ -142,14 +142,14 @@ namespace ao::rt::test
     auto const created =
       env.requireView(service, {.filterExpression = "$year > 2000", .optPresentation = genresPreset->spec});
 
-    auto const captured = service.capturePlaybackLaunchContext(created.viewId);
+    auto const captured = service.capturePlaybackLaunchSpec(created.viewId);
 
     REQUIRE(captured);
     CHECK(captured->sourceListId == kAllTracksListId);
     CHECK(captured->quickFilterExpression == "$year > 2000");
     CHECK(captured->order.sortBy == genresPreset->spec.sortBy);
 
-    auto const missing = service.capturePlaybackLaunchContext(ViewId{999999});
+    auto const missing = service.capturePlaybackLaunchSpec(ViewId{999999});
     REQUIRE_FALSE(missing);
     CHECK(missing.error().code == Error::Code::NotFound);
   }

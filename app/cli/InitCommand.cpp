@@ -10,10 +10,10 @@
 
 namespace ao::cli
 {
-  void configureInitCommand(CLI::App& app, CliContext& context)
+  void configureInitCommand(CLI::App& app, CliRuntime& cli)
   {
     auto* const cmd = app.add_subcommand("init", "Initialize library and scan the music root");
     auto* const dryRun = addDryRunFlag(*cmd);
-    cmd->callback([&context, dryRun] { runScan(context, isDryRun(dryRun), false, false); });
+    cmd->callback([&cli, dryRun] { runScan(cli, isDryRun(dryRun), false, false); });
   }
 } // namespace ao::cli

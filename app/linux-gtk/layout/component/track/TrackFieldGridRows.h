@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include "gtkmm/enums.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
 #include <ao/rt/TrackField.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
 #include <gtkmm/overlay.h>

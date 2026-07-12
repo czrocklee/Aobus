@@ -14,10 +14,10 @@ namespace ao::query::test
 {
   namespace
   {
-    QueryValueCompletionContext valueContext(std::optional<QueryCompletionContext> optContext)
+    QueryValueCompletion valueContext(std::optional<QueryCompletionAnalysis> optContext)
     {
       REQUIRE(optContext);
-      auto const* context = std::get_if<QueryValueCompletionContext>(&*optContext);
+      auto const* context = std::get_if<QueryValueCompletion>(&*optContext);
       REQUIRE(context != nullptr);
       return *context;
     }
@@ -28,7 +28,7 @@ namespace ao::query::test
     SECTION("Detects a normal comparison value")
     {
       auto const text = std::string{"$artist = Ma"};
-      auto const context = valueContext(analyzeCompletionContext(text, text.size()));
+      auto const context = valueContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::ArtistId);
       CHECK(context.replacement.replaceBegin == text.find("Ma"));
@@ -39,7 +39,7 @@ namespace ao::query::test
     SECTION("Detects an empty comparison value")
     {
       auto const text = std::string{"$artist ="};
-      auto const context = valueContext(analyzeCompletionContext(text, text.size()));
+      auto const context = valueContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::ArtistId);
       CHECK(context.replacement.replaceBegin == text.size());
@@ -50,7 +50,7 @@ namespace ao::query::test
     SECTION("Keeps in-list values bound to the left field")
     {
       auto const text = std::string{"$artist in [Ma"};
-      auto const context = valueContext(analyzeCompletionContext(text, text.size()));
+      auto const context = valueContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::ArtistId);
       CHECK(context.replacement.replaceBegin == text.find("Ma"));
@@ -61,7 +61,7 @@ namespace ao::query::test
     SECTION("Handles later values in an in-list")
     {
       auto const text = std::string{R"($artist in ["Miles", Mo)"};
-      auto const context = valueContext(analyzeCompletionContext(text, text.size()));
+      auto const context = valueContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::ArtistId);
       CHECK(context.replacement.replaceBegin == text.find("Mo"));
@@ -72,7 +72,7 @@ namespace ao::query::test
     SECTION("Handles quoted custom keys before values")
     {
       auto const text = std::string{R"(%"Mood" = Br)"};
-      auto const context = valueContext(analyzeCompletionContext(text, text.size()));
+      auto const context = valueContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::Custom);
       CHECK(context.replacement.replaceBegin == text.find("Br"));
@@ -83,7 +83,7 @@ namespace ao::query::test
     SECTION("Ignores escaped quotes inside custom keys")
     {
       auto const text = std::string{R"(%"quote\"key" = Br)"};
-      auto const context = valueContext(analyzeCompletionContext(text, text.size()));
+      auto const context = valueContext(analyzeQueryCompletion(text, text.size()));
 
       CHECK(context.field == Field::Custom);
       CHECK(context.replacement.replaceBegin == text.find("Br"));

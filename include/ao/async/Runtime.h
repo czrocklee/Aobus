@@ -21,15 +21,17 @@ namespace ao::async
 {
   class Executor;
   class LifetimeScope;
-  class RuntimeTestAccess;
+  class Sleeper;
 
   using TaskHandle = utility::ScopedRegistration;
 
   class Runtime final
   {
   public:
-    explicit Runtime(Executor& callbackExecutor);
-    Runtime(Executor& callbackExecutor, std::size_t workerCount);
+    // A non-null sleeper replaces the default steady-timer sleepFor with an
+    // injected delay strategy; the Sleeper must outlive this Runtime.
+    explicit Runtime(Executor& callbackExecutor, Sleeper* sleeper = nullptr);
+    Runtime(Executor& callbackExecutor, std::size_t workerCount, Sleeper* sleeper = nullptr);
     ~Runtime();
 
     Runtime(Runtime const&) = delete;
@@ -60,13 +62,11 @@ namespace ao::async
     void spawnWithLifetime(LifetimeScope* scope, CancellableTask task);
 
   private:
-    friend class RuntimeTestAccess;
-
     std::move_only_function<void()> startCancellable(CancellableTask task,
                                                      std::function<void(std::exception_ptr)> completion);
 
     Executor& _callbackExecutor;
     boost::asio::thread_pool _workerPool;
-    std::function<Task<void>(std::chrono::milliseconds, std::stop_token)> _sleepForOverride;
+    Sleeper* _sleeper;
   };
 } // namespace ao::async

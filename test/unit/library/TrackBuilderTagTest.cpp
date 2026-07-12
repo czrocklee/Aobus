@@ -93,7 +93,7 @@ namespace ao::library::test
     builder.property().uri("/path/to/file.flac");
     builder.tags().add("tag10").add("tag20");
 
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
     auto hotDataResult = builder.serializeHot(context.transaction(), context.dictionary());
     REQUIRE(hotDataResult);
     auto const& hotData = *hotDataResult;

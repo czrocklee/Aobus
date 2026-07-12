@@ -44,7 +44,7 @@ namespace ao::audio::backend::detail
 
   struct SinkProps final
   {
-    enum class VolumeClassificationContext : std::uint8_t
+    enum class VolumeClassificationScope : std::uint8_t
     {
       Sink,
       Stream,
@@ -77,7 +77,7 @@ namespace ao::audio::backend::detail
      * @brief Classifies the volume state based on hardware and software evidence.
      */
     VolumeClassification classifyVolume(
-      VolumeClassificationContext context = VolumeClassificationContext::Sink) const noexcept;
+      VolumeClassificationScope scope = VolumeClassificationScope::Sink) const noexcept;
   };
 
   /**

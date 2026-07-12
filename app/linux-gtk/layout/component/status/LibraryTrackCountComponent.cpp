@@ -3,8 +3,8 @@
 
 #include "StatusComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "track/LibraryTrackCountLabel.h"
 #include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
@@ -39,7 +39,7 @@ namespace ao::gtk::layout
     class LibraryTrackCountComponent final : public LayoutComponent
     {
     public:
-      LibraryTrackCountComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+      LibraryTrackCountComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
         : _widget{acquireAllTracks(ctx.runtime)}
       {
       }
@@ -50,7 +50,7 @@ namespace ao::gtk::layout
       LibraryTrackCountLabel _widget;
     };
 
-    std::unique_ptr<LayoutComponent> createTrackCount(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createTrackCount(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<LibraryTrackCountComponent>(ctx, node);
     }

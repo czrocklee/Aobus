@@ -77,6 +77,39 @@ class NameAuditTest(unittest.TestCase):
 
         self.assertEqual(issues, [])
 
+    def test_reports_every_test_access_definition_but_not_forward_declarations(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            files = {
+                "include/ao/PlaybackService.h": "struct PlaybackServiceTestAccess;",
+                "app/runtime/TestAccess.cpp": "class TestAccess final {};",
+                "test/unit/RuntimeTestSupport.h": "class RuntimeTestAccess final {};",
+            }
+            for name, source in files.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(source, encoding="utf-8")
+
+            issues = nameaudit.audit_paths([], root)
+
+        self.assertEqual(
+            [(issue.path.relative_to(root).as_posix(), issue.kind, issue.message) for issue in issues],
+            [
+                (
+                    "app/runtime/TestAccess.cpp",
+                    "test-access",
+                    "*TestAccess types are banned; use public behavior or inject collaborators "
+                    "through a production composition seam",
+                ),
+                (
+                    "test/unit/RuntimeTestSupport.h",
+                    "test-access",
+                    "*TestAccess types are banned; use public behavior or inject collaborators "
+                    "through a production composition seam",
+                ),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

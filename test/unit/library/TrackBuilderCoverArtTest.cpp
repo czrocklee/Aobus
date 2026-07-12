@@ -59,7 +59,7 @@ namespace ao::library::test
     builder.coverArt().add(PictureType::BackCover, ResourceId{41});
     builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
 
-    auto context = TrackSerializationContext{};
+    auto context = TrackSerializationFixture{};
     auto const coldData = context.serializeCold(builder);
 
     auto const view = TrackView{std::span<std::byte const>{}, coldData};

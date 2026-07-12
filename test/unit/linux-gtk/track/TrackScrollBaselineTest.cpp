@@ -62,19 +62,26 @@ namespace ao::gtk::test
 
       for (std::size_t i = 0; i < count; ++i)
       {
+        auto const title = std::format("Track {}", i);
+        auto const artist = std::format("Artist {}", i % 500);
+        auto const album = std::format("Album {}", i % 1000);
+        auto const albumArtist = std::format("AlbumArtist {}", i % 400);
+        auto const genre = std::format("Genre {}", i % 40);
+        auto const uri = std::format("/music/track_{}.flac", i);
+
         auto builder = library::TrackBuilder::makeEmpty();
         // Spread metadata across many distinct dictionary strings so resolution
         // and the sort/text caches see realistic cardinality rather than one value.
         builder.metadata()
-          .title(std::format("Track {}", i))
-          .artist(std::format("Artist {}", i % 500))
-          .album(std::format("Album {}", i % 1000))
-          .albumArtist(std::format("AlbumArtist {}", i % 400))
-          .genre(std::format("Genre {}", i % 40))
+          .title(title)
+          .artist(artist)
+          .album(album)
+          .albumArtist(albumArtist)
+          .genre(genre)
           .year(static_cast<std::uint16_t>(1950 + (i % 70)))
           .trackNumber(static_cast<std::uint16_t>(1 + (i % 30)));
         builder.property()
-          .uri(std::format("/music/track_{}.flac", i))
+          .uri(uri)
           .duration(std::chrono::milliseconds{120000 + static_cast<std::ptrdiff_t>(i % 200000)})
           .bitrate(Bitrate{320000})
           .sampleRate(SampleRate{44100})

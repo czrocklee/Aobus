@@ -209,7 +209,6 @@ namespace ao::rt::test
 
     REQUIRE(crossedSpliceBoundary);
     fixture.executor.checkQueued(std::chrono::seconds{5});
-    REQUIRE(PlaybackServiceTestAccess::preparedNextIssuedGeneration(fixture.playbackService, preparedToken));
 
     fixture.playbackService.seek(std::chrono::milliseconds{0}, PlaybackService::SeekMode::Final);
     fixture.executor.drain();

@@ -60,7 +60,7 @@ namespace ao::gtk::layout::test
       REQUIRE(all.size() == 1);
       CHECK(all[0].id == "test.action1");
 
-      CHECK(registry.activate("test.action1", ctx).result == LayoutActionActivationResult::Activated);
+      CHECK(registry.activate("test.action1", ctx).outcome == LayoutActionActivationOutcome::Activated);
       CHECK(called);
     }
 
@@ -128,8 +128,8 @@ namespace ao::gtk::layout::test
                                 CHECK(c.componentId == "test_component");
                               });
 
-      auto const outcome = registry.activate("test.action1", ctx);
-      CHECK(outcome.result == LayoutActionActivationResult::Activated);
+      auto const result = registry.activate("test.action1", ctx);
+      CHECK(result.outcome == LayoutActionActivationOutcome::Activated);
       CHECK(called);
     }
 
@@ -145,8 +145,8 @@ namespace ao::gtk::layout::test
       CHECK_FALSE(s.enabled);
       CHECK(s.disabledReason == "Test");
 
-      auto const outcome = registry.activate("test.action1", ctx);
-      CHECK(outcome.result == LayoutActionActivationResult::Disabled);
+      auto const result = registry.activate("test.action1", ctx);
+      CHECK(result.outcome == LayoutActionActivationOutcome::Disabled);
       CHECK_FALSE(called);
     }
 
@@ -162,8 +162,8 @@ namespace ao::gtk::layout::test
 
     SECTION("Activating an unknown action id returns UnknownAction")
     {
-      auto const outcome = registry.activate("unknown", ctx);
-      CHECK(outcome.result == LayoutActionActivationResult::UnknownAction);
+      auto const result = registry.activate("unknown", ctx);
+      CHECK(result.outcome == LayoutActionActivationOutcome::UnknownAction);
     }
 
     SECTION("State provider is called during activate() to gate dispatch")

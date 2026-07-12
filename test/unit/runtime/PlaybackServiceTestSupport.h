@@ -35,37 +35,6 @@ namespace ao::audio
   class RenderTarget;
 }
 
-namespace ao::rt
-{
-  struct PlaybackServiceTestAccess final
-  {
-    static PlaybackTransportSessionState sessionState(PlaybackService& service)
-    {
-      return service.playbackTransportSessionState();
-    }
-
-    static Result<> restoreSession(PlaybackService& service, PlaybackTransportSessionState const& session)
-    {
-      return service.restorePlaybackTransport(session, {});
-    }
-
-    static std::optional<std::uint64_t> preparedNextIssuedGeneration(PlaybackService const& service,
-                                                                     PreparedNextToken const token)
-    {
-      return service.preparedNextIssuedGeneration(token);
-    }
-
-    static std::unique_ptr<PlaybackService> createWithPlayer(async::Executor& executor,
-                                                             library::MusicLibrary& library,
-                                                             NotificationService& notifications,
-                                                             std::unique_ptr<audio::Player> playerPtr)
-    {
-      return std::unique_ptr<PlaybackService>{
-        new PlaybackService{executor, library, notifications, std::move(playerPtr)}};
-    }
-  };
-} // namespace ao::rt
-
 namespace ao::rt::test
 {
   inline PlaybackService::PlaybackRequest playbackRequest(TrackId trackId,
@@ -203,6 +172,9 @@ namespace ao::rt::test
     audio::BackendProvider::OnGraphChangedCallback onGraphChangedCb;
     audio::RenderTarget* renderTarget = nullptr;
 
-    PlaybackService playbackService{executor, libraryFixture.library(), notificationService};
+    PlaybackService playbackService{executor,
+                                    libraryFixture.library(),
+                                    notificationService,
+                                    std::make_unique<audio::Player>(executor)};
   };
 } // namespace ao::rt::test

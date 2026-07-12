@@ -4,8 +4,8 @@
 #include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -28,7 +28,7 @@ namespace ao::gtk::layout
     class ResponsiveClassComponent final : public LayoutComponent
     {
     public:
-      ResponsiveClassComponent(LayoutContext& ctx, LayoutNode const& node)
+      ResponsiveClassComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _axis{node.propertyOr<std::string>("axis", "width")}
         , _compactMax{static_cast<std::int32_t>(node.propertyOr<std::int64_t>("compactMax", kDefaultCompactMax))}
         , _regularMax{static_cast<std::int32_t>(node.propertyOr<std::int64_t>("regularMax", kDefaultRegularMax))}
@@ -148,7 +148,7 @@ namespace ao::gtk::layout
       std::unique_ptr<LayoutComponent> _childPtr;
     };
 
-    std::unique_ptr<LayoutComponent> createResponsiveClass(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createResponsiveClass(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<ResponsiveClassComponent>(ctx, node);
     }

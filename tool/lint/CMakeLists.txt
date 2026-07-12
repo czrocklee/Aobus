@@ -109,6 +109,13 @@ else()
   # Keep the established Linux linkage and libAobusLintPlugin.so path.
   add_library(AobusLintPlugin MODULE ${AOBUS_LINT_PLUGIN_SOURCES})
   target_link_libraries(AobusLintPlugin PRIVATE ${AOBUS_LINT_PLUGIN_LINK_LIBS})
+  # This module is loaded by the externally provided clang-tidy executable.
+  # Instrumenting it would require that unsanitized host to preload the matching
+  # sanitizer runtime before loading the plugin.
+  if(AOBUS_ENABLE_ASAN OR AOBUS_ENABLE_TSAN)
+    target_compile_options(AobusLintPlugin PRIVATE -fno-sanitize=all)
+    target_link_options(AobusLintPlugin PRIVATE -fno-sanitize=all)
+  endif()
   set(AOBUS_LINT_TARGET AobusLintPlugin)
 endif()
 

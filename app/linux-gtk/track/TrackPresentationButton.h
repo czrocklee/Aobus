@@ -44,7 +44,7 @@ namespace ao::gtk
 
     void setPresentationServices(uimodel::TrackPresentationCatalog* catalog,
                                  uimodel::ListPresentationPreferenceStore* preferences,
-                                 ThemeCoordinator* themeController);
+                                 ThemeCoordinator* themeCoordinator);
 
   private:
     void render(uimodel::TrackPresentationPickerState const& state);
@@ -56,7 +56,7 @@ namespace ao::gtk
     rt::AppRuntime& _runtime;
     uimodel::TrackPresentationCatalog* _catalog = nullptr;
     std::unique_ptr<uimodel::TrackPresentationPickerViewModel> _workflowPtr;
-    ThemeCoordinator* _themeController = nullptr;
+    ThemeCoordinator* _themeCoordinator = nullptr;
     uimodel::TrackPresentationPickerState _state;
 
     Gtk::MenuButton _button;

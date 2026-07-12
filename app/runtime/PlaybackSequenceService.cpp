@@ -220,7 +220,7 @@ namespace ao::rt
 
     struct RestorableCursorSnapshot final
     {
-      PlaybackLaunchContext launchContext;
+      PlaybackLaunchSpec launchSpec;
       TrackId currentTrackId = kInvalidTrackId;
       ProjectionAnchor anchor;
     };
@@ -392,7 +392,7 @@ namespace ao::rt
         auto const& cursor = sessionPtr->cursor();
         auto const& semantic = cursor.semanticTuple();
         next.currentTrackId = semantic.currentTrackId;
-        next.sourceListId = cursor.launchContext().sourceListId;
+        next.sourceListId = cursor.launchSpec().sourceListId;
         next.hasNext = semantic.hasNext;
         next.hasPrevious = semantic.hasPrevious;
         next.optResolvedSuccessor = semantic.optResolvedSuccessor;
@@ -431,7 +431,7 @@ namespace ao::rt
 
       auto const& cursor = sessionPtr->cursor();
       optLastRestorableSnapshot = RestorableCursorSnapshot{
-        .launchContext = cursor.launchContext(),
+        .launchSpec = cursor.launchSpec(),
         .currentTrackId = cursor.currentTrackId(),
         .anchor = cursor.anchor(),
       };
@@ -619,21 +619,13 @@ namespace ao::rt
       for (std::size_t attempt = 0; optSuccessor && attempt < kMaxConsecutivePlaybackFailures; ++attempt)
       {
         auto const successor = *optSuccessor;
-        auto prepared = playback.prepareSequenceNext(successor, session.cursor().launchContext().sourceListId);
+        auto prepared = playback.prepareSequenceNext(successor, session.cursor().launchSpec().sourceListId);
 
         if (prepared)
         {
-          auto const optIssuedGeneration = playback.preparedNextIssuedGeneration(*prepared);
-
-          if (!optIssuedGeneration)
-          {
-            auto const optAcknowledged = playback.clearSequencePreparedNext();
-            registry.invalidate(optAcknowledged);
-            return false;
-          }
-
-          registry.activate(
-            *prepared, *optIssuedGeneration, session.anchorFor(successor, session.cursor().anchor().anchorIndex()));
+          registry.activate(prepared->token,
+                            prepared->issuedGeneration,
+                            session.anchorFor(successor, session.cursor().anchor().anchorIndex()));
           return true;
         }
 
@@ -667,7 +659,7 @@ namespace ao::rt
       }
 
       auto const acceptance = AcceptanceTransaction{*this};
-      auto receipt = playback.playSequenceTrack(trackId, sessionPtr->cursor().launchContext().sourceListId);
+      auto receipt = playback.playSequenceTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId);
 
       if (!receipt)
       {
@@ -889,7 +881,7 @@ namespace ao::rt
         return;
       }
 
-      if (event.sourceListId != sessionPtr->cursor().launchContext().sourceListId)
+      if (event.sourceListId != sessionPtr->cursor().launchSpec().sourceListId)
       {
         if (!event.optPreparedNextToken)
         {
@@ -916,7 +908,7 @@ namespace ao::rt
 
     PlaybackFailureDisposition handlePlaybackFailure(PlaybackFailure const& failure)
     {
-      if (!sessionPtr || failure.sourceListId != sessionPtr->cursor().launchContext().sourceListId)
+      if (!sessionPtr || failure.sourceListId != sessionPtr->cursor().launchSpec().sourceListId)
       {
         return PlaybackFailureDisposition::Unhandled;
       }
@@ -1145,14 +1137,14 @@ namespace ao::rt
 
     auto const acceptance = Impl::AcceptanceTransaction{*impl};
 
-    auto context = impl->views.capturePlaybackLaunchContext(viewId);
+    auto launchSpec = impl->views.capturePlaybackLaunchSpec(viewId);
 
-    if (!context)
+    if (!launchSpec)
     {
-      return std::unexpected{context.error()};
+      return std::unexpected{launchSpec.error()};
     }
 
-    auto candidateSession = PlaybackCursorSession::create(*context,
+    auto candidateSession = PlaybackCursorSession::create(*launchSpec,
                                                           startTrackId,
                                                           impl->sources,
                                                           impl->library,
@@ -1172,7 +1164,7 @@ namespace ao::rt
       return std::unexpected{request.error()};
     }
 
-    auto preparedStart = impl->playback.stagePlayback(*request, context->sourceListId);
+    auto preparedStart = impl->playback.stagePlayback(*request, launchSpec->sourceListId);
 
     if (!preparedStart)
     {
@@ -1384,7 +1376,7 @@ namespace ao::rt
     return impl->sessionPtr != nullptr;
   }
 
-  bool PlaybackSequenceService::capturePlaybackSessionSnapshot(PlaybackLaunchContext& launchContext,
+  bool PlaybackSequenceService::capturePlaybackSessionSnapshot(PlaybackLaunchSpec& launchSpec,
                                                                TrackId& currentTrackId,
                                                                std::size_t& anchorIndex) const
   {
@@ -1394,7 +1386,7 @@ namespace ao::rt
     if (impl->sessionPtr)
     {
       auto const& cursor = impl->sessionPtr->cursor();
-      launchContext = cursor.launchContext();
+      launchSpec = cursor.launchSpec();
       currentTrackId = cursor.currentTrackId();
       anchorIndex = cursor.anchor().anchorIndex();
       return true;
@@ -1405,14 +1397,14 @@ namespace ao::rt
       return false;
     }
 
-    launchContext = impl->optLastRestorableSnapshot->launchContext;
+    launchSpec = impl->optLastRestorableSnapshot->launchSpec;
     currentTrackId = impl->optLastRestorableSnapshot->currentTrackId;
     anchorIndex = impl->optLastRestorableSnapshot->anchor.anchorIndex();
     return true;
   }
 
   Result<std::unique_ptr<PlaybackCursorSession>> PlaybackSequenceService::preparePlaybackSessionRestore(
-    PlaybackLaunchContext launchContext,
+    PlaybackLaunchSpec launchSpec,
     TrackId const currentTrackId,
     std::size_t const anchorIndex,
     ShuffleMode const restoredShuffleMode,
@@ -1420,7 +1412,7 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-    return PlaybackCursorSession::createForRestore(std::move(launchContext),
+    return PlaybackCursorSession::createForRestore(std::move(launchSpec),
                                                    currentTrackId,
                                                    anchorIndex,
                                                    impl->sources,

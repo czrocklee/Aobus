@@ -224,7 +224,7 @@ namespace clang::tidy::readability
       return false;
     }
 
-    struct MatchContext final
+    struct BuiltinTypeMatch final
     {
       BuiltinTypeLoc builtinLoc;
       SourceLocation loc;
@@ -233,7 +233,7 @@ namespace clang::tidy::readability
       bool isCast;
     };
 
-    std::optional<MatchContext> getMatchContext(MatchFinder::MatchResult const& result)
+    std::optional<BuiltinTypeMatch> findBuiltinTypeMatch(MatchFinder::MatchResult const& result)
     {
       if (auto const* tl = result.Nodes.getNodeAs<TypeLoc>("tl"); tl != nullptr)
       {
@@ -263,11 +263,11 @@ namespace clang::tidy::readability
           contextDecl = functionDecl;
         }
 
-        return MatchContext{.builtinLoc = builtinLoc,
-                            .loc = builtinLoc.getBeginLoc(),
-                            .type = builtinLoc.getTypePtr(),
-                            .contextDecl = contextDecl,
-                            .isCast = false};
+        return BuiltinTypeMatch{.builtinLoc = builtinLoc,
+                                .loc = builtinLoc.getBeginLoc(),
+                                .type = builtinLoc.getTypePtr(),
+                                .contextDecl = contextDecl,
+                                .isCast = false};
       }
 
       if (auto const* expr = result.Nodes.getNodeAs<ExplicitCastExpr>("cast"); expr != nullptr)
@@ -278,11 +278,11 @@ namespace clang::tidy::readability
 
           if (!builtinLoc.isNull())
           {
-            return MatchContext{.builtinLoc = builtinLoc,
-                                .loc = builtinLoc.getBeginLoc(),
-                                .type = builtinLoc.getTypePtr(),
-                                .contextDecl = nullptr,
-                                .isCast = true};
+            return BuiltinTypeMatch{.builtinLoc = builtinLoc,
+                                    .loc = builtinLoc.getBeginLoc(),
+                                    .type = builtinLoc.getTypePtr(),
+                                    .contextDecl = nullptr,
+                                    .isCast = true};
           }
         }
       }
@@ -290,7 +290,7 @@ namespace clang::tidy::readability
       return std::nullopt;
     }
 
-    bool shouldSkip(MatchContext const& match, SourceManager const& sm)
+    bool shouldSkip(BuiltinTypeMatch const& match, SourceManager const& sm)
     {
       if (match.loc.isInvalid() || match.loc.isMacroID() || sm.isInSystemHeader(match.loc))
       {
@@ -320,7 +320,7 @@ namespace clang::tidy::readability
 
   void UseStdNumbersCheck::check(MatchFinder::MatchResult const& result)
   {
-    auto const optMatch = getMatchContext(result);
+    auto const optMatch = findBuiltinTypeMatch(result);
 
     if (!optMatch)
     {

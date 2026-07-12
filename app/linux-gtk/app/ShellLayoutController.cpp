@@ -6,7 +6,7 @@
 #include "AppConfigStore.h"
 #include "ShellLayoutComponentStateStore.h"
 #include "ShellLayoutStore.h"
-#include "app/GtkUiServices.h"
+#include "app/GtkUiDependencies.h"
 #include "app/ThemeCoordinator.h"
 #include "layout/document/GtkLayoutPresets.h"
 #include "layout/document/LayoutDocument.h"
@@ -14,7 +14,7 @@
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/GioActionBridge.h"
-#include "layout/runtime/LayoutContext.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutHost.h"
 #include "layout/runtime/LayoutRuntime.h"
 #include "playback/AobusSoulWindow.h"
@@ -98,14 +98,24 @@ namespace ao::gtk
       return {.presetId = selection.presetId, .document = std::move(doc), .componentState = std::move(stateDoc)};
     }
 
-    uimodel::PlaybackCommandSurface& commandSurface(layout::PlaybackUiContext const& playback)
+    uimodel::PlaybackCommandSurface& commandSurface(uimodel::PlaybackCommandSurface* surface)
     {
-      if (playback.commandSurface == nullptr)
+      if (surface == nullptr)
       {
         throwException<Exception>("ShellLayoutController: playback command surface is not bound");
       }
 
-      return *playback.commandSurface;
+      return *surface;
+    }
+
+    ThemeCoordinator& requireThemeCoordinator(GtkUiDependencies const& dependencies)
+    {
+      if (dependencies.themeCoordinator == nullptr)
+      {
+        throwException<Exception>("ShellLayoutController: theme coordinator is not bound");
+      }
+
+      return *dependencies.themeCoordinator;
     }
   } // namespace
   ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime,
@@ -113,17 +123,30 @@ namespace ao::gtk
                                                std::shared_ptr<AppConfigStore> configStorePtr,
                                                std::shared_ptr<ShellLayoutStore> layoutStorePtr,
                                                std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-                                               ThemeCoordinator& themeCoordinator)
-    : _registry{}
+                                               GtkUiDependencies dependencies)
+    : _runtime{runtime}
+    , _parentWindow{window}
+    , _registry{}
     , _actionRegistry{}
-    , _context{.registry = _registry, .actionRegistry = _actionRegistry, .runtime = runtime, .parentWindow = window}
+    , _trackRowCache{dependencies.trackRowCache}
+    , _imageCache{dependencies.imageCache}
+    , _playbackSequence{dependencies.playbackSequence}
+    , _playbackCommandSurface{dependencies.playbackCommandSurface}
+    , _tagEditController{dependencies.tagEditController}
+    , _importExportActions{dependencies.importExportActions}
+    , _trackPageHost{dependencies.trackPageHost}
+    , _trackPresentationCatalog{dependencies.trackPresentationCatalog}
+    , _trackPresentationPreferences{dependencies.trackPresentationPreferences}
+    , _listNavigationController{dependencies.listNavigationController}
+    , _createSmartListFromExpression{std::move(dependencies.createSmartListFromExpression)}
+    , _menuModelPtr{std::move(dependencies.menuModelPtr)}
     , _host{_registry}
     , _configStorePtr{std::move(configStorePtr)}
     , _layoutStorePtr{std::move(layoutStorePtr)}
     , _componentStateStorePtr{std::move(componentStateStorePtr)}
-    , _themeCoordinator{themeCoordinator}
+    , _themeCoordinator{requireThemeCoordinator(dependencies)}
   {
-    _context.componentStateStore = _componentStateStorePtr.get();
+    _runtimeState.componentStateStore = _componentStateStorePtr.get();
     layout::LayoutRuntime::registerStandardComponents(_registry);
 
     auto const registerAction = [this](std::string_view id,
@@ -142,10 +165,10 @@ namespace ao::gtk
 
     auto const hasActiveSequence = [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
     {
-      if (auto* const sequence = _context.playback.sequence; sequence != nullptr)
+      if (_playbackSequence != nullptr)
       {
         return uimodel::LayoutActionAvailability{
-          .enabled = sequence->state().currentTrackId != kInvalidTrackId, .disabledReason = ""};
+          .enabled = _playbackSequence->state().currentTrackId != kInvalidTrackId, .disabledReason = ""};
       }
 
       return uimodel::LayoutActionAvailability{.enabled = false, .disabledReason = ""};
@@ -155,37 +178,32 @@ namespace ao::gtk
     registerShellActions(registerAction);
     registerWorkspaceActions(registerAction, hasActiveSequence);
     registerTrackActions(registerAction);
+
+    _playbackSubs.push_back(
+      commandSurface(_playbackCommandSurface).onAvailabilityChanged([this] { refreshExportedActions(); }));
   }
 
   ShellLayoutController::~ShellLayoutController()
   {
+    _tasks.cancelAll();
     _optEditorThemeToken.reset();
     _editorDialogPtr.reset();
+    // Components retain LayoutRuntimeState and may flush pending state while
+    // destructing, so release them before the state and its store owner.
+    _host.clearLayout();
   }
 
-  void ShellLayoutController::bindServices(GtkUiServices const& services)
+  void ShellLayoutController::setMenuModel(Glib::RefPtr<Gio::MenuModel> menuModelPtr)
   {
-    _context.bind(services);
-    _playbackSubs.clear();
-
-    auto const refreshActionStates = [this]
-    {
-      if (_gioBridgeSessionPtr)
-      {
-        _gioBridgeSessionPtr->refreshStates();
-      }
-    };
-
-    _playbackSubs.push_back(commandSurface(_context.playback).onAvailabilityChanged(refreshActionStates));
-
-    refreshActionStates();
+    _menuModelPtr = std::move(menuModelPtr);
   }
 
   void ShellLayoutController::registerPlaybackActions(RegisterActionFn const& registerAction)
   {
     auto const execute = [this](uimodel::PlaybackCommand command)
     {
-      return [this, command](layout::ActionActivationContext&) { commandSurface(_context.playback).execute(command); };
+      return [this, command](layout::ActionActivationContext&)
+      { commandSurface(_playbackCommandSurface).execute(command); };
     };
 
     auto const isEnabled = [this](uimodel::PlaybackCommand command)
@@ -193,7 +211,7 @@ namespace ao::gtk
       return [this, command](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
       {
         return uimodel::LayoutActionAvailability{
-          .enabled = commandSurface(_context.playback).isEnabled(command), .disabledReason = ""};
+          .enabled = commandSurface(_playbackCommandSurface).isEnabled(command), .disabledReason = ""};
       };
     };
 
@@ -277,9 +295,9 @@ namespace ao::gtk
                    uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
-                     if (auto const menuPtr = _context.shell.menuModelPtr; menuPtr)
+                     if (_menuModelPtr)
                      {
-                       auto* const popover = Gtk::make_managed<Gtk::PopoverMenu>(menuPtr);
+                       auto* const popover = Gtk::make_managed<Gtk::PopoverMenu>(_menuModelPtr);
                        popover->set_parent(ctx.anchorWidget);
                        popover->set_has_arrow(true);
                        popover->signal_closed().connect([popover] { popover->unparent(); });
@@ -341,7 +359,7 @@ namespace ao::gtk
       uimodel::LayoutActionCapability::None,
       [this](layout::ActionActivationContext& ctx)
       {
-        if (auto* tagController = _context.tag.editController; tagController != nullptr)
+        if (_tagEditController != nullptr)
         {
           auto const target = rt::FocusedViewTarget{};
           auto projPtr =
@@ -349,8 +367,8 @@ namespace ao::gtk
 
           if (auto const snap = projPtr->snapshot(); !snap.trackIds.empty())
           {
-            tagController->presentProperties(
-              TrackSelectionContext{.listId = kInvalidListId, .selectedIds = snap.trackIds});
+            _tagEditController->presentProperties(
+              TrackSelection{.listId = kInvalidListId, .selectedIds = snap.trackIds});
           }
         }
       },
@@ -370,7 +388,7 @@ namespace ao::gtk
       uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
       [this](layout::ActionActivationContext& ctx)
       {
-        if (auto* tagController = _context.tag.editController; tagController != nullptr)
+        if (_tagEditController != nullptr)
         {
           auto const target = rt::FocusedViewTarget{};
           auto projPtr =
@@ -378,8 +396,8 @@ namespace ao::gtk
 
           if (auto const snap = projPtr->snapshot(); !snap.trackIds.empty())
           {
-            tagController->openTagEditor(
-              TrackSelectionContext{.listId = kInvalidListId, .selectedIds = snap.trackIds}, ctx.anchorWidget);
+            _tagEditController->openTagEditor(
+              TrackSelection{.listId = kInvalidListId, .selectedIds = snap.trackIds}, ctx.anchorWidget);
           }
         }
       },
@@ -395,9 +413,9 @@ namespace ao::gtk
 
   void ShellLayoutController::attachToWindow()
   {
-    _context.parentWindow.set_child(_host);
+    _parentWindow.set_child(_host);
 
-    if (auto* actionMap = dynamic_cast<Gio::ActionMap*>(&_context.parentWindow); actionMap != nullptr)
+    if (auto* actionMap = dynamic_cast<Gio::ActionMap*>(&_parentWindow); actionMap != nullptr)
     {
       _gioBridgeSessionPtr = layout::GioActionBridge::exportActions(_actionRegistry, *actionMap, *this);
     }
@@ -415,9 +433,35 @@ namespace ao::gtk
     }
   }
 
+  void ShellLayoutController::rebuildHost(uimodel::LayoutDocument const& doc)
+  {
+    auto const dependencies = GtkUiDependencies{
+      .trackRowCache = _trackRowCache,
+      .imageCache = _imageCache,
+      .playbackSequence = _playbackSequence,
+      .playbackCommandSurface = _playbackCommandSurface,
+      .tagEditController = _tagEditController,
+      .importExportActions = _importExportActions,
+      .trackPageHost = _trackPageHost,
+      .trackPresentationCatalog = _trackPresentationCatalog,
+      .trackPresentationPreferences = _trackPresentationPreferences,
+      .listNavigationController = _listNavigationController,
+      .themeCoordinator = &_themeCoordinator,
+      .createSmartListFromExpression = _createSmartListFromExpression,
+      .menuModelPtr = _menuModelPtr,
+    };
+    auto ctx = layout::LayoutBuildContext{.registry = _registry,
+                                          .actionRegistry = _actionRegistry,
+                                          .runtime = _runtime,
+                                          .parentWindow = _parentWindow,
+                                          .runtimeState = _runtimeState,
+                                          .dependencies = dependencies};
+    _host.setLayout(ctx, doc);
+  }
+
   void ShellLayoutController::loadLayout(AppConfigStore& /*configStore*/)
   {
-    auto& runtime = _context.runtime.async();
+    auto& runtime = _runtime.async();
     runtime.spawnWithLifetime(
       &_tasks,
       [self = this,
@@ -438,7 +482,7 @@ namespace ao::gtk
   {
     APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
 
-    auto& asyncRuntime = _context.runtime.async();
+    auto& asyncRuntime = _runtime.async();
     auto optResult = std::optional<LayoutLoadResult>{};
     auto exceptionPtr = std::exception_ptr{};
 
@@ -522,8 +566,8 @@ namespace ao::gtk
   {
     _session.applyLoadedLayout(std::move(presetId), std::move(document));
     auto const snapshot = _session.snapshot();
-    _context.activePresetId = snapshot.presetId;
-    _context.componentState = std::move(componentState);
+    _runtimeState.activePresetId = snapshot.presetId;
+    _runtimeState.componentState = std::move(componentState);
 
     for (auto const& diagnostic : uimodel::validateStatefulLayoutNodeIds(snapshot.layout))
     {
@@ -545,7 +589,7 @@ namespace ao::gtk
       }
     }
 
-    _host.setLayout(_context, snapshot.layout);
+    rebuildHost(snapshot.layout);
   }
 
   void ShellLayoutController::openEditor(AppConfigStore& configStore)
@@ -570,21 +614,20 @@ namespace ao::gtk
       return layout::makeBuiltInLayout(layout::presetIdFromString(id));
     };
 
-    _editorDialogPtr =
-      std::make_shared<layout::editor::LayoutEditorDialog>(dynamic_cast<Gtk::Window&>(_context.parentWindow),
-                                                           _registry,
-                                                           _actionRegistry,
-                                                           _session.snapshot().layout,
-                                                           initialPresetId,
-                                                           initialThemeId,
-                                                           std::move(loader));
+    _editorDialogPtr = std::make_shared<layout::editor::LayoutEditorDialog>(dynamic_cast<Gtk::Window&>(_parentWindow),
+                                                                            _registry,
+                                                                            _actionRegistry,
+                                                                            _session.snapshot().layout,
+                                                                            initialPresetId,
+                                                                            initialThemeId,
+                                                                            std::move(loader));
     auto* const dialogRaw = _editorDialogPtr.get();
 
     _optEditorThemeToken = _themeCoordinator.registerToplevel(*dialogRaw);
 
-    _context.editMode = true;
-    _context.onNodeMoved = [weakDialogPtr = std::weak_ptr{_editorDialogPtr}](
-                             std::string const& nodeId, std::int32_t xPosition, std::int32_t yPosition)
+    _runtimeState.editMode = true;
+    _runtimeState.onNodeMoved = [weakDialogPtr = std::weak_ptr{_editorDialogPtr}](
+                                  std::string const& nodeId, std::int32_t xPosition, std::int32_t yPosition)
     {
       if (auto const sharedDialogPtr = weakDialogPtr.lock(); sharedDialogPtr != nullptr)
       {
@@ -592,10 +635,9 @@ namespace ao::gtk
       }
     };
 
-    _host.setLayout(_context, _session.snapshot().layout);
+    rebuildHost(_session.snapshot().layout);
 
-    dialogRaw->signalApplyPreview().connect([this](uimodel::LayoutDocument const& doc)
-                                            { _host.setLayout(_context, doc); });
+    dialogRaw->signalApplyPreview().connect([this](uimodel::LayoutDocument const& doc) { rebuildHost(doc); });
 
     dialogRaw->signalThemePreview().connect([this](std::string_view themeId)
                                             { _themeCoordinator.setTheme(rt::themePresetFromString(themeId)); });
@@ -606,8 +648,8 @@ namespace ao::gtk
     dialogRaw->signal_hide().connect(
       [this]
       {
-        _context.editMode = false;
-        _context.onNodeMoved = nullptr;
+        _runtimeState.editMode = false;
+        _runtimeState.onNodeMoved = nullptr;
         _optEditorThemeToken.reset();
         _editorDialogPtr.reset();
       });
@@ -617,7 +659,7 @@ namespace ao::gtk
       {
         if (responseId == Gtk::ResponseType::CANCEL)
         {
-          _host.setLayout(_context, _session.snapshot().layout);
+          rebuildHost(_session.snapshot().layout);
           _themeCoordinator.setTheme(oldTheme);
         }
       });
@@ -662,11 +704,12 @@ namespace ao::gtk
 
     _session.applyEditorSave(result.activePresetId, result.activeDocument);
     auto const snapshot = _session.snapshot();
-    _context.activePresetId = snapshot.presetId;
-    _context.componentState = _componentStateStorePtr == nullptr
-                                ? uimodel::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId)
-                                : _componentStateStorePtr->load(snapshot.presetId)
-                                    .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId));
+    _runtimeState.activePresetId = snapshot.presetId;
+    _runtimeState.componentState =
+      _componentStateStorePtr == nullptr
+        ? uimodel::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId)
+        : _componentStateStorePtr->load(snapshot.presetId)
+            .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId));
 
     if (_configStorePtr)
     {
@@ -677,7 +720,7 @@ namespace ao::gtk
       _themeCoordinator.setTheme(rt::themePresetFromString(prefsUpdate.lastThemePreset));
     }
 
-    _host.setLayout(_context, snapshot.layout);
+    rebuildHost(snapshot.layout);
   }
 
   void ShellLayoutController::resetRuntimeLayoutState()
@@ -692,15 +735,15 @@ namespace ao::gtk
       }
     }
 
-    _context.activePresetId = reset.presetId;
-    _context.componentState = std::move(reset.componentState);
-    _host.setLayout(_context, _session.snapshot().layout);
+    _runtimeState.activePresetId = reset.presetId;
+    _runtimeState.componentState = std::move(reset.componentState);
+    rebuildHost(_session.snapshot().layout);
     refreshExportedActions();
   }
 
   void ShellLayoutController::saveCurrentPanelSizesAsLayoutDefaults()
   {
-    auto optPromotion = _session.preparePanelSizePromotion(_context.componentState);
+    auto optPromotion = _session.preparePanelSizePromotion(_runtimeState.componentState);
 
     if (!optPromotion)
     {
@@ -759,9 +802,9 @@ namespace ao::gtk
     _session.applyPanelSizePromotion(uimodel::ShellLayoutPanelSizePromotion{
       .presetId = presetId, .layout = std::move(promotedLayout), .componentState = promotedState, .result = {}});
     auto const snapshot = _session.snapshot();
-    _context.activePresetId = snapshot.presetId;
-    _context.componentState = std::move(promotedState);
-    _host.setLayout(_context, snapshot.layout);
+    _runtimeState.activePresetId = snapshot.presetId;
+    _runtimeState.componentState = std::move(promotedState);
+    rebuildHost(snapshot.layout);
     refreshExportedActions();
   }
 
@@ -770,7 +813,7 @@ namespace ao::gtk
     _confirmPromotionFn = std::move(fn);
   }
 
-  uimodel::LayoutActionActivationOutcome ShellLayoutController::activateAction(std::string_view id)
+  uimodel::LayoutActionActivationResult ShellLayoutController::activateAction(std::string_view id)
   {
     auto ctx = actionContext(id);
     return _actionRegistry.tryActivate(id, ctx);
@@ -784,9 +827,9 @@ namespace ao::gtk
 
   layout::ActionActivationContext ShellLayoutController::actionContext(std::string_view componentId)
   {
-    return layout::ActionActivationContext{.runtime = _context.runtime,
-                                           .parentWindow = _context.parentWindow,
-                                           .anchorWidget = _context.parentWindow,
+    return layout::ActionActivationContext{.runtime = _runtime,
+                                           .parentWindow = _parentWindow,
+                                           .anchorWidget = _parentWindow,
                                            .componentId = std::string{componentId}};
   }
 

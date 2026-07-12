@@ -8,7 +8,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/rt/PlaybackLaunchContext.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/ScopedTimer.h>
 #include <ao/rt/Signal.h>
 #include <ao/rt/StorageResult.h>
@@ -524,7 +524,7 @@ namespace ao::rt
     return {};
   }
 
-  Result<PlaybackLaunchContext> ViewService::capturePlaybackLaunchContext(ViewId const viewId) const
+  Result<PlaybackLaunchSpec> ViewService::capturePlaybackLaunchSpec(ViewId const viewId) const
   {
     auto const it = _implPtr->views.find(viewId);
 
@@ -539,7 +539,7 @@ namespace ao::rt
     }
 
     auto const& state = it->second.state;
-    return PlaybackLaunchContext{
+    return PlaybackLaunchSpec{
       .sourceListId = state.listId,
       .quickFilterExpression = state.filterExpression,
       .order = TrackOrderSpec{.sortBy = state.sortBy},

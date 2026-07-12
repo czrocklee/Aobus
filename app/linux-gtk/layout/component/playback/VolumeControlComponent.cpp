@@ -3,8 +3,8 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include "playback/VolumeControlWidget.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -27,7 +27,7 @@ namespace ao::gtk::layout
     class VolumeControlComponent final : public LayoutComponent
     {
     public:
-      VolumeControlComponent(LayoutContext& ctx, LayoutNode const& node)
+      VolumeControlComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _control{ctx.runtime.playback()}
       {
         auto const orient = node.propertyOr<std::string>("orientation", "horizontal");
@@ -44,7 +44,7 @@ namespace ao::gtk::layout
       VolumeControlWidget _control;
     };
 
-    std::unique_ptr<LayoutComponent> createVolumeControl(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createVolumeControl(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<VolumeControlComponent>(ctx, node);
     }

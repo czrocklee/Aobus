@@ -3,8 +3,8 @@
 
 #include "ContainerComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -29,7 +29,7 @@ namespace ao::gtk::layout
     class CenterBoxComponent final : public LayoutComponent
     {
     public:
-      CenterBoxComponent(LayoutContext& ctx, LayoutNode const& node)
+      CenterBoxComponent(LayoutBuildContext& ctx, LayoutNode const& node)
       {
         auto orientation = Gtk::Orientation::HORIZONTAL;
 
@@ -78,7 +78,7 @@ namespace ao::gtk::layout
       std::vector<std::unique_ptr<LayoutComponent>> _overflowChildren;
     };
 
-    std::unique_ptr<LayoutComponent> createCenterBox(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createCenterBox(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<CenterBoxComponent>(ctx, node);
     }

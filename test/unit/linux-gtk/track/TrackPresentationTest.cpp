@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "app/linux-gtk/app/GtkLayoutConfig.h"
+#include "app/linux-gtk/app/GtkLayoutStateStore.h"
 #include "test/unit/TestUtils.h"
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
@@ -14,7 +14,8 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("GtkLayoutConfig - persists track column layouts to gtk_layout.yaml", "[gtk][unit][track][presentation]")
+  TEST_CASE("GtkLayoutStateStore - persists track column layouts to gtk_layout.yaml",
+            "[gtk][unit][track][presentation]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configDir = std::filesystem::path{tempDir.path()} / ".aobus";
@@ -28,16 +29,16 @@ namespace ao::gtk::test
     state.listLayouts.emplace(ListId{42}, layout);
 
     {
-      auto config = GtkLayoutConfig{configDir};
-      config.save(state, prefState);
+      auto store = GtkLayoutStateStore{configDir};
+      store.save(state, prefState);
     }
 
     REQUIRE(std::filesystem::exists(configPath));
 
     auto loaded = uimodel::TrackColumnLayoutState{};
     auto loadedPref = uimodel::ListPresentationPreferenceState{};
-    auto config = GtkLayoutConfig{configDir};
-    config.load(loaded, loadedPref);
+    auto store = GtkLayoutStateStore{configDir};
+    store.load(loaded, loadedPref);
 
     REQUIRE(loaded.listLayouts.contains(ListId{42}));
     auto const& loadedLayout = loaded.listLayouts.at(ListId{42});

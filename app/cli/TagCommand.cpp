@@ -3,7 +3,7 @@
 
 #include "TagCommand.h"
 
-#include "CliContext.h"
+#include "CliRuntime.h"
 #include "CommandError.h"
 #include "DryRunFlag.h"
 #include "Output.h"
@@ -85,7 +85,7 @@ namespace ao::cli
 {
   namespace
   {
-    std::vector<TrackId> resolveTargets(CliContext& context,
+    std::vector<TrackId> resolveTargets(CliRuntime& cli,
                                         std::vector<std::uint32_t> const& rawIds,
                                         std::string const& filter)
     {
@@ -101,10 +101,10 @@ namespace ao::cli
 
       if (!filter.empty())
       {
-        return queryMatchingTrackIds(context.musicLibrary(), filter);
+        return queryMatchingTrackIds(cli.musicLibrary(), filter);
       }
 
-      auto reader = context.library().reader();
+      auto reader = cli.library().reader();
       return requireTrackIds(reader, rawIds);
     }
 
@@ -143,12 +143,12 @@ namespace ao::cli
       std::println(os);
     }
 
-    void printSelectedTags(CliContext& context, std::vector<std::uint32_t> const& rawIds)
+    void printSelectedTags(CliRuntime& cli, std::vector<std::uint32_t> const& rawIds)
     {
-      auto reader = context.library().reader();
+      auto reader = cli.library().reader();
       auto const trackIds = requireTrackIds(reader, rawIds);
       auto const tags = reader.selectionTags(trackIds);
-      printTags(trackIds, tags, context.options().format, context.io().out);
+      printTags(trackIds, tags, cli.options().format, cli.io().out);
     }
 
     void formatMutation(std::string_view action,
@@ -180,48 +180,47 @@ namespace ao::cli
                    dryRun ? " (dry-run)" : "");
     }
 
-    void editTags(CliContext& context,
+    void editTags(CliRuntime& cli,
                   bool add,
                   std::string const& tagName,
                   std::vector<std::uint32_t> const& rawIds,
                   std::string const& filter,
                   bool dryRun)
     {
-      auto const trackIds = resolveTargets(context, rawIds, filter);
+      auto const trackIds = resolveTargets(cli, rawIds, filter);
       auto const tags = std::array{tagName};
 
       if (dryRun)
       {
         auto const replyResult =
-          add ? context.library().writer().previewEditTags(trackIds, tags, std::span<std::string const>{})
-              : context.library().writer().previewEditTags(trackIds, std::span<std::string const>{}, tags);
+          add ? cli.library().writer().previewEditTags(trackIds, tags, std::span<std::string const>{})
+              : cli.library().writer().previewEditTags(trackIds, std::span<std::string const>{}, tags);
 
         if (!replyResult)
         {
           throwCommandError(replyResult.error());
         }
 
-        formatMutation(add ? "add" : "remove", tagName, *replyResult, true, context.options().format, context.io().out);
+        formatMutation(add ? "add" : "remove", tagName, *replyResult, true, cli.options().format, cli.io().out);
         return;
       }
 
-      auto const replyResult = add
-                                 ? context.library().writer().editTags(trackIds, tags, std::span<std::string const>{})
-                                 : context.library().writer().editTags(trackIds, std::span<std::string const>{}, tags);
+      auto const replyResult = add ? cli.library().writer().editTags(trackIds, tags, std::span<std::string const>{})
+                                   : cli.library().writer().editTags(trackIds, std::span<std::string const>{}, tags);
 
       if (!replyResult)
       {
         throwCommandError(replyResult.error());
       }
 
-      formatMutation(add ? "add" : "remove", tagName, *replyResult, false, context.options().format, context.io().out);
+      formatMutation(add ? "add" : "remove", tagName, *replyResult, false, cli.options().format, cli.io().out);
     }
 
-    void listTags(CliContext& context)
+    void listTags(CliRuntime& cli)
     {
-      auto const tags = context.library().reader().allTagsByFrequency();
+      auto const tags = cli.library().reader().allTagsByFrequency();
 
-      if (context.options().format != OutputFormat::Plain)
+      if (cli.options().format != OutputFormat::Plain)
       {
         auto report = TagFrequencyListDto{};
         report.tags.reserve(tags.size());
@@ -231,23 +230,23 @@ namespace ao::cli
           report.tags.push_back(TagFrequencyDto{.name = name, .count = static_cast<std::uint64_t>(count)});
         }
 
-        emitDocument(context.io().out, context.options().format, report);
+        emitDocument(cli.io().out, cli.options().format, report);
         return;
       }
 
       for (auto const& [name, count] : tags)
       {
-        std::println(context.io().out, "{}  {}", name, count);
+        std::println(cli.io().out, "{}  {}", name, count);
       }
     }
   } // namespace
 
-  void configureTagCommand(CLI::App& app, CliContext& context)
+  void configureTagCommand(CLI::App& app, CliRuntime& cli)
   {
     auto* tag = app.add_subcommand("tag", "Tag management commands");
     tag->require_subcommand(1);
 
-    tag->add_subcommand("list", "List tags by frequency")->callback([&context] { listTags(context); });
+    tag->add_subcommand("list", "List tags by frequency")->callback([&cli] { listTags(cli); });
 
     auto* add = tag->add_subcommand("add", "Add a tag to tracks");
     auto* addTagName = add->add_option("tag", "tag name")->required();
@@ -256,11 +255,11 @@ namespace ao::cli
     auto* addFilter = add->add_option("-f,--filter", "track filter expression");
     auto* addDryRun = addDryRunFlag(*add);
     add->callback(
-      [&context, addTagName, addIdsPtr, addFilter, addDryRun]
+      [&cli, addTagName, addIdsPtr, addFilter, addDryRun]
       {
         auto const tagName = addTagName->as<std::string>();
         auto const filter = addFilter->count() > 0 ? addFilter->as<std::string>() : std::string{};
-        editTags(context, true, tagName, *addIdsPtr, filter, isDryRun(addDryRun));
+        editTags(cli, true, tagName, *addIdsPtr, filter, isDryRun(addDryRun));
       });
 
     auto* remove = tag->add_subcommand("remove", "Remove a tag from tracks");
@@ -270,16 +269,16 @@ namespace ao::cli
     auto* remFilter = remove->add_option("-f,--filter", "track filter expression");
     auto* remDryRun = addDryRunFlag(*remove);
     remove->callback(
-      [&context, remTagName, remIdsPtr, remFilter, remDryRun]
+      [&cli, remTagName, remIdsPtr, remFilter, remDryRun]
       {
         auto const tagName = remTagName->as<std::string>();
         auto const filter = remFilter->count() > 0 ? remFilter->as<std::string>() : std::string{};
-        editTags(context, false, tagName, *remIdsPtr, filter, isDryRun(remDryRun));
+        editTags(cli, false, tagName, *remIdsPtr, filter, isDryRun(remDryRun));
       });
 
     auto* show = tag->add_subcommand("show", "Show tags shared by selected tracks");
     auto showIdsPtr = std::make_shared<std::vector<std::uint32_t>>();
     show->add_option("id", *showIdsPtr, "track id")->required();
-    show->callback([&context, showIdsPtr] { printSelectedTags(context, *showIdsPtr); });
+    show->callback([&cli, showIdsPtr] { printSelectedTags(cli, *showIdsPtr); });
   }
 } // namespace ao::cli

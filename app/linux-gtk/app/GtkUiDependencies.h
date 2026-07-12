@@ -3,6 +3,14 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
+
+#include <giomm/menumodel.h>
+#include <glibmm/refptr.h>
+
+#include <functional>
+#include <string>
+
 namespace ao::uimodel
 {
   class PlaybackCommandSurface;
@@ -32,21 +40,29 @@ namespace ao::uimodel
 namespace ao::gtk
 {
   /**
-   * A bag of services provided by the GTK application layer to be consumed by
-   * the UI layout components.
+   * Construction-scoped bundle of borrowed collaborators supplied by the GTK
+   * application layer. Consumers unpack the collaborators they retain; the
+   * bundle itself is not retained as subsystem wiring.
    */
-  struct GtkUiServices final
+  struct GtkUiDependencies final
   {
     TrackRowCache* trackRowCache = nullptr;
     ImageCache* imageCache = nullptr;
     rt::PlaybackSequenceService* playbackSequence = nullptr;
     uimodel::PlaybackCommandSurface* playbackCommandSurface = nullptr;
     TagEditController* tagEditController = nullptr;
-    portal::ImportExportActions* importExportCoordinator = nullptr;
+    portal::ImportExportActions* importExportActions = nullptr;
     TrackPageHost* trackPageHost = nullptr;
     uimodel::TrackPresentationCatalog* trackPresentationCatalog = nullptr;
     uimodel::ListPresentationPreferenceStore* trackPresentationPreferences = nullptr;
     ListNavigationController* listNavigationController = nullptr;
-    ThemeCoordinator* themeController = nullptr;
+    ThemeCoordinator* themeCoordinator = nullptr;
+
+    /// Creates a smart list from a filter expression under the given parent (defaults to the
+    /// navigation controller's dialog flow; injectable so components stay decoupled from it).
+    std::function<void(ao::ListId parentListId, std::string expression)> createSmartListFromExpression{};
+
+    /// Shell menu model, supplied post-construction by MainWindow (not part of coordinator wiring).
+    Glib::RefPtr<Gio::MenuModel> menuModelPtr{};
   };
 } // namespace ao::gtk

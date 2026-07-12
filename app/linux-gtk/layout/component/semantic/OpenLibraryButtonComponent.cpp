@@ -3,8 +3,8 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -24,7 +24,7 @@ namespace ao::gtk::layout
     class OpenLibraryButton final : public LayoutComponent
     {
     public:
-      OpenLibraryButton(LayoutContext& /*ctx*/, LayoutNode const& /*node*/)
+      OpenLibraryButton(LayoutBuildContext& /*ctx*/, LayoutNode const& /*node*/)
       {
         _button.set_label("Open Library...");
         _button.set_icon_name("folder-open-symbolic");
@@ -41,7 +41,7 @@ namespace ao::gtk::layout
       Gtk::Button _button;
     };
 
-    std::unique_ptr<LayoutComponent> createOpenLibraryButton(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<LayoutComponent> createOpenLibraryButton(LayoutBuildContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<OpenLibraryButton>(ctx, node);
     }

@@ -9,6 +9,13 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/NullBackend.h>
+#include <ao/audio/Property.h>
+#include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
@@ -33,6 +40,8 @@
 #include <fstream>
 #include <ios>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -131,6 +140,86 @@ namespace ao::rt::test
       output << yaml;
       REQUIRE(output.good());
     }
+
+    // A ready audio provider whose backend can be armed to reject setProperty for
+    // one property. Session restore applies the restored volume then mute to the
+    // active backend; arming a rejection exercises the atomic rollback path
+    // through the public restore workflow. The arm outlives the backends that
+    // borrow it, so declare it before the runtime it feeds.
+    class PropertyFailArm final
+    {
+    public:
+      void arm(audio::PropertyId const id) { _optFailing = id; }
+      std::optional<audio::PropertyId> failing() const { return _optFailing; }
+
+    private:
+      std::optional<audio::PropertyId> _optFailing{};
+    };
+
+    class ArmedFailBackend final : public audio::NullBackend
+    {
+    public:
+      ArmedFailBackend(audio::BackendId backendId, audio::ProfileId profileId, PropertyFailArm const& arm)
+        : _backendId{std::move(backendId)}, _profileId{std::move(profileId)}, _arm{&arm}
+      {
+      }
+
+      audio::BackendId backendId() const override { return _backendId; }
+      audio::ProfileId profileId() const override { return _profileId; }
+
+      Result<> setProperty(audio::PropertyId const id, audio::PropertyValue const& value) override
+      {
+        if (_arm->failing() == id)
+        {
+          return makeError(Error::Code::IoError, "property rejected");
+        }
+
+        return NullBackend::setProperty(id, value);
+      }
+
+    private:
+      audio::BackendId _backendId;
+      audio::ProfileId _profileId;
+      PropertyFailArm const* _arm;
+    };
+
+    class PropertyFailProvider final : public audio::BackendProvider
+    {
+    public:
+      explicit PropertyFailProvider(PropertyFailArm const& arm)
+        : _arm{&arm}
+      {
+      }
+
+      void shutdown() noexcept override {}
+
+      audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      {
+        if (callback)
+        {
+          callback(_status.devices);
+        }
+
+        return audio::Subscription{};
+      }
+
+      Status status() const override { return _status; }
+
+      std::unique_ptr<audio::Backend> createBackend(audio::Device const& device,
+                                                    audio::ProfileId const& profile) override
+      {
+        return std::make_unique<ArmedFailBackend>(device.backendId, profile, *_arm);
+      }
+
+      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      {
+        return audio::Subscription{};
+      }
+
+    private:
+      PropertyFailArm const* _arm;
+      Status _status = makeReadyAudioStatus();
+    };
   } // namespace
 
   TEST_CASE("PlaybackSession - cursor payload round-trips without autoplay", "[runtime][unit][playback-session]")
@@ -190,26 +279,34 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
-    auto runtime = makeRuntime(tempDir, &playbackSessionStore);
-    auto& sleeper = ControlledSleeper::install(runtime.async());
+    auto sleeper = ControlledSleeper{};
+    auto executorPtr = std::make_unique<ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtime = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
     auto const restored = runtime.restorePlaybackSession();
     REQUIRE(restored);
     CHECK_FALSE(restored->restored);
     REQUIRE(sleeper.waitForPendingDelay(std::chrono::seconds{10}));
 
     addReadyAudioProvider(runtime.playback());
+    executor->runUntilIdle();
     auto const trackId = addPlayableTrack(runtime, "Debounced Track");
     auto const viewId = createView(runtime);
     REQUIRE(runtime.playbackSequence().playFromView(viewId, trackId));
     REQUIRE(runtime.savePlaybackSession());
+    executor->runUntilIdle();
 
     runtime.playback().setVolume(0.4F);
     REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+    executor->checkQueued();
+    REQUIRE(executor->runOne());
 
     CHECK(storedSession(runtime.playbackSessionConfigStore()).volume == 0.4F);
 
     runtime.playback().setVolume(0.6F);
     REQUIRE(sleeper.fireNext(std::chrono::seconds{10}));
+    executor->checkQueued();
+    REQUIRE(executor->runOne());
     CHECK(storedSession(runtime.playbackSessionConfigStore()).volume == 0.6F);
   }
 
@@ -219,17 +316,21 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "application.yaml";
     auto playbackSessionStore = ConfigStore{configPath};
-    auto runtime = makeRuntime(tempDir, &playbackSessionStore);
-    auto& sleeper = ControlledSleeper::install(runtime.async());
+    auto sleeper = ControlledSleeper{};
+    auto executorPtr = std::make_unique<ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtime = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
     auto const restored = runtime.restorePlaybackSession();
     REQUIRE(restored);
     CHECK_FALSE(restored->restored);
 
     addReadyAudioProvider(runtime.playback());
+    executor->runUntilIdle();
     auto const trackId = addPlayableTrack(runtime, "Retry Track");
     auto const viewId = createView(runtime);
     REQUIRE(runtime.playbackSequence().playFromView(viewId, trackId));
     REQUIRE(runtime.savePlaybackSession());
+    executor->runUntilIdle();
     REQUIRE(std::filesystem::remove(configPath));
     REQUIRE(std::filesystem::create_directory(configPath));
     runtime.playback().setVolume(0.4F);
@@ -244,6 +345,8 @@ namespace ao::rt::test
                                   std::chrono::seconds{60}})
     {
       REQUIRE(sleeper.fireNext(retryDelay));
+      executor->checkQueued();
+      REQUIRE(executor->runOne());
     }
 
     REQUIRE(sleeper.waitForPendingDelay(std::chrono::seconds{60}));
@@ -476,7 +579,7 @@ namespace ao::rt::test
     CHECK(runtime.playback().state().nowPlaying.trackId == firstTrackId);
   }
 
-  TEST_CASE("PlaybackSession - validates the complete serialized context before lookup",
+  TEST_CASE("PlaybackSession - validates the complete serialized payload before lookup",
             "[runtime][unit][playback-session][error]")
   {
     auto tempDir = ao::test::TempDir{};
@@ -487,10 +590,12 @@ namespace ao::rt::test
       .sourceListId = kAllTracksListId,
       .currentTrackId = trackId,
     };
+    auto expectedError = Error::Code::CorruptData;
 
     SECTION("schema v2 is rejected")
     {
       payload.schemaVersion = 2;
+      expectedError = Error::Code::FormatRejected;
     }
 
     SECTION("invalid identities are rejected")
@@ -527,18 +632,34 @@ namespace ao::rt::test
     {
       payload.sourceListId = ListId{999'999};
       payload.quickFilterExpression = "$year >";
+      expectedError = Error::Code::FormatRejected;
     }
 
-    SECTION("invalid modes and volume are rejected")
+    SECTION("invalid shuffle mode is rejected")
     {
       payload.shuffleMode = static_cast<ShuffleMode>(99);
+    }
+
+    SECTION("invalid repeat mode is rejected")
+    {
+      payload.repeatMode = static_cast<RepeatMode>(99);
+    }
+
+    SECTION("non-finite volume is rejected")
+    {
       payload.volume = std::numeric_limits<float>::infinity();
+      expectedError = Error::Code::FormatRejected;
+    }
+
+    SECTION("out-of-range volume is rejected")
+    {
+      payload.volume = 5.0F;
     }
 
     storeSession(runtime, payload);
     auto const restored = runtime.restorePlaybackSession();
     REQUIRE_FALSE(restored);
-    CHECK((restored.error().code == Error::Code::FormatRejected || restored.error().code == Error::Code::CorruptData));
+    CHECK(restored.error().code == expectedError);
   }
 
   TEST_CASE("PlaybackSession - exact schema rejects missing and malformed raw YAML fields",
@@ -729,6 +850,69 @@ namespace ao::rt::test
     CHECK(replayCount == 1);
     REQUIRE(runtime.savePlaybackSession());
     CHECK(storedSession(runtime.playbackSessionConfigStore()).positionMs == 0);
+  }
+
+  TEST_CASE("PlaybackSession - backend property failure rolls restored volume and mute back atomically",
+            "[runtime][unit][playback-session][error]")
+  {
+    // The arm is declared before the runtime so the backends that borrow it stay
+    // valid for the runtime's whole lifetime.
+    auto arm = PropertyFailArm{};
+    auto tempDir = ao::test::TempDir{};
+    auto runtime = makeRuntime(tempDir);
+    runtime.playback().addProvider(std::make_unique<PropertyFailProvider>(arm));
+    auto const current = addPlayableTrack(runtime, "Current");
+    runtime.reloadAllTracks();
+
+    // Establish a baseline live volume/mute while the backend still accepts writes.
+    runtime.playback().setVolume(0.25F);
+    runtime.playback().setMuted(false);
+    auto const baseline = runtime.playback().state().volume;
+    REQUIRE(baseline.level == 0.25F);
+    REQUIRE(baseline.muted == false);
+    auto const sequenceBefore = runtime.playbackSequence().state();
+    auto const playbackBefore = runtime.playback().state();
+    std::uint32_t dirtyCount = 0;
+    auto dirtySub = runtime.onPlaybackSessionDirty([&] { ++dirtyCount; });
+
+    auto const payload = PlaybackSessionState{
+      .sourceListId = kAllTracksListId,
+      .currentTrackId = current,
+      .volume = 0.75F,
+      .muted = true,
+    };
+    storeSession(runtime, payload);
+
+    SECTION("volume rejection leaves the baseline untouched")
+    {
+      arm.arm(audio::PropertyId::Volume);
+    }
+
+    SECTION("mute rejection rolls back the staged volume")
+    {
+      arm.arm(audio::PropertyId::Muted);
+    }
+
+    auto const restored = runtime.restorePlaybackSession();
+
+    REQUIRE_FALSE(restored);
+    CHECK(restored.error().code == Error::Code::IoError);
+    CHECK(runtime.playbackSequence().state() == sequenceBefore);
+    auto const& playbackAfter = runtime.playback().state();
+    CHECK(playbackAfter.transport == playbackBefore.transport);
+    CHECK(playbackAfter.elapsed == playbackBefore.elapsed);
+    CHECK(playbackAfter.duration == playbackBefore.duration);
+    CHECK(playbackAfter.ready == playbackBefore.ready);
+    CHECK(playbackAfter.nowPlaying == playbackBefore.nowPlaying);
+    CHECK(playbackAfter.volume == playbackBefore.volume);
+    CHECK(playbackAfter.output == playbackBefore.output);
+    CHECK(playbackAfter.quality == playbackBefore.quality);
+    CHECK(playbackAfter.revision == playbackBefore.revision);
+    CHECK(storedSession(runtime.playbackSessionConfigStore()) == payload);
+    CHECK(dirtyCount == 0);
+    std::uint32_t lateReplayCount = 0;
+    auto lateSub = runtime.onPlaybackSessionDirty([&] { ++lateReplayCount; });
+    CHECK(lateReplayCount == 0);
   }
 
   TEST_CASE("PlaybackSession - freezes invalidated and exhausted cursors as last-restorable intent",

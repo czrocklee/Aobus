@@ -23,7 +23,7 @@ namespace ao::rt
 namespace ao::gtk::layout
 {
   class ActionRegistry;
-  struct LayoutContext;
+  struct LayoutBuildContext;
 
   class ActionBinder final
   {

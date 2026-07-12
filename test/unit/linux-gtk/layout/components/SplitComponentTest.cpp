@@ -79,9 +79,9 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      ctx.activePresetId = "classic";
-      ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.componentState.components["main-paned"] = LayoutComponentStateEntry{
+      ctx.runtimeState.activePresetId = "classic";
+      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
+      ctx.runtimeState.componentState.components["main-paned"] = LayoutComponentStateEntry{
         .type = "split",
         .stateVersion = kStateEntryVersion,
         .baselineHash = componentBaselineHash(doc.root),
@@ -110,9 +110,9 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      ctx.activePresetId = "classic";
-      ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.componentState.components["main-paned"] = LayoutComponentStateEntry{
+      ctx.runtimeState.activePresetId = "classic";
+      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
+      ctx.runtimeState.componentState.components["main-paned"] = LayoutComponentStateEntry{
         .type = "split",
         .stateVersion = kStateEntryVersion,
         .baselineHash = "stale",
@@ -133,9 +133,9 @@ namespace ao::gtk::layout::test
     SECTION("split saves user percent and rebuild restores it")
     {
       auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.activePresetId = "classic";
-      ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.componentStateStore = &stateStore;
+      ctx.runtimeState.activePresetId = "classic";
+      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
+      ctx.runtimeState.componentStateStore = &stateStore;
 
       auto doc = LayoutDocument{};
       doc.root.id = "main-paned";
@@ -161,7 +161,7 @@ namespace ao::gtk::layout::test
       REQUIRE(stateStore.document().components.contains("main-paned"));
       CHECK(stateStore.document().components.at("main-paned").state.at("positionPercent").asDouble() == 0.4);
 
-      ctx.componentState = stateStore.document();
+      ctx.runtimeState.componentState = stateStore.document();
 
       auto const rebuiltPtr = layoutRuntime.build(ctx, doc);
       auto* const rebuiltPaned = splitPaned(*rebuiltPtr);
@@ -177,9 +177,9 @@ namespace ao::gtk::layout::test
     SECTION("anonymous split does not persist user percent")
     {
       auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.activePresetId = "classic";
-      ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.componentStateStore = &stateStore;
+      ctx.runtimeState.activePresetId = "classic";
+      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
+      ctx.runtimeState.componentStateStore = &stateStore;
 
       auto doc = LayoutDocument{};
       doc.root.type = "split";
@@ -205,9 +205,9 @@ namespace ao::gtk::layout::test
     SECTION("split defers pending save when context generation advances")
     {
       auto stateStore = FakeLayoutComponentStateStore{};
-      ctx.activePresetId = "classic";
-      ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.componentStateStore = &stateStore;
+      ctx.runtimeState.activePresetId = "classic";
+      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
+      ctx.runtimeState.componentStateStore = &stateStore;
 
       auto doc = LayoutDocument{};
       doc.root.id = "main-paned";
@@ -228,7 +228,7 @@ namespace ao::gtk::layout::test
         paned->set_position(400);
 
         // Simulate a reset/load/save-defaults operation that invalidates old writes.
-        ++ctx.componentStateGeneration;
+        ++ctx.runtimeState.componentStateGeneration;
       }
 
       CHECK(stateStore.saveCount() == 0);
@@ -246,9 +246,9 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      ctx.activePresetId = "classic";
-      ctx.componentState = LayoutComponentStateDocument{.preset = "classic"};
-      ctx.componentState.components["main-paned"] = LayoutComponentStateEntry{
+      ctx.runtimeState.activePresetId = "classic";
+      ctx.runtimeState.componentState = LayoutComponentStateDocument{.preset = "classic"};
+      ctx.runtimeState.componentState.components["main-paned"] = LayoutComponentStateEntry{
         .type = "split",
         .stateVersion = kStateEntryVersion,
         .baselineHash = componentBaselineHash(doc.root),
@@ -265,7 +265,7 @@ namespace ao::gtk::layout::test
       // GTK may clamp the paned handle one pixel inside the total allocation.
       CHECK(paned->get_position() >= 790);
 
-      ctx.componentState.components["main-paned"].state["positionPercent"] = LayoutValue{-0.5};
+      ctx.runtimeState.componentState.components["main-paned"].state["positionPercent"] = LayoutValue{-0.5};
 
       auto const lowPtr = layoutRuntime.build(ctx, doc);
       auto* const lowPaned = splitPaned(*lowPtr);
