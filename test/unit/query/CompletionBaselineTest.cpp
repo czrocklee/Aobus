@@ -52,5 +52,7 @@ namespace ao::query::test
 
     // Sanity: the representative inputs must keep producing completion contexts.
     CHECK(sink > 0);
+
+    rt::Log::shutdown();
   }
 } // namespace ao::query::test
