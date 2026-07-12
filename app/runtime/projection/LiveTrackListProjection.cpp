@@ -942,13 +942,13 @@ namespace ao::rt
 
         for (auto const trackId : finalSourceOrder)
         {
-          if (auto const it = replacementIndex.find(trackId); it != replacementIndex.end())
+          if (auto const replacementIt = replacementIndex.find(trackId); replacementIt != replacementIndex.end())
           {
-            updatedOrder.push_back(replacementEntries[it->second]);
+            updatedOrder.push_back(replacementEntries[replacementIt->second]);
           }
-          else if (auto const it = retainedIndex.find(trackId); it != retainedIndex.end())
+          else if (auto const retainedIt = retainedIndex.find(trackId); retainedIt != retainedIndex.end())
           {
-            updatedOrder.push_back(retainedEntries[it->second]);
+            updatedOrder.push_back(retainedEntries[retainedIt->second]);
           }
           else
           {
