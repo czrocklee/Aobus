@@ -717,8 +717,7 @@ namespace ao::audio
                                                    Device{.id = DeviceId{"null"},
                                                           .displayName = "None",
                                                           .description = "No audio output device selected",
-                                                          .backendId = kBackendNone,
-                                                          .capabilities = {}},
+                                                          .backendId = kBackendNone},
                                                    std::move(decoderFactory));
 
     _implPtr->connectEngineCallbacks();

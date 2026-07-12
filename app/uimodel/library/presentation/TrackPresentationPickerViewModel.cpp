@@ -55,7 +55,6 @@ namespace ao::uimodel
       .enabled = false,
       .activeViewId = rt::kInvalidViewId,
       .activeListId = kInvalidListId,
-      .activePresentationId = {},
       .label = "Presentation",
       .menuItems = _catalog.menuItems(),
     };

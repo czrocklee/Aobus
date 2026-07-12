@@ -109,7 +109,6 @@ namespace ao::gtk::layout
                                            .kind = LayoutPropertyKind::Bool,
                                            .label = "Show Full Logo",
                                            .defaultValue = LayoutValue{false}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0,
                                 .actionPolicy = kAllExternalActions},

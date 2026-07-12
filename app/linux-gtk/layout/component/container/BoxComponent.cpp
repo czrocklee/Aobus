@@ -82,7 +82,6 @@ namespace ao::gtk::layout
                                            .kind = LayoutPropertyKind::Bool,
                                            .label = "Homogeneous",
                                            .defaultValue = LayoutValue{false}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = std::nullopt},
                                createBox);

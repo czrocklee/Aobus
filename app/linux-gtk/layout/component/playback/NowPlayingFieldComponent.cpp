@@ -78,7 +78,6 @@ namespace ao::gtk::layout
                                            .label = "Action",
                                            .defaultValue = LayoutValue{"none"},
                                            .enumValues = {"none", "reveal", "playPause", "filterByField"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createCurrentTitleLabel);
@@ -91,7 +90,6 @@ namespace ao::gtk::layout
                                            .label = "Action",
                                            .defaultValue = LayoutValue{"none"},
                                            .enumValues = {"none", "reveal", "playPause", "filterByField"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createCurrentArtistLabel);

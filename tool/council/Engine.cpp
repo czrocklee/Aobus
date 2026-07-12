@@ -447,9 +447,7 @@ namespace ao::council
       auto request = ProcessRequest{
         .argv = std::move(argv),
         .cwd = workspace,
-        .standardInput = {},
         .environmentWhitelist = agent.environmentWhitelist,
-        .environment = {},
         .timeout = agent.timeout,
         .terminationGracePeriod = std::chrono::seconds{2},
         .optStdoutSink = StreamSink{.path = stdoutPath},

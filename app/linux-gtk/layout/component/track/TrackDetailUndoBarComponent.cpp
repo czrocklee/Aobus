@@ -107,8 +107,6 @@ namespace ao::gtk::layout
     registry.registerComponent({.type = "track.detailUndoBar",
                                 .displayName = "Detail Undo Bar",
                                 .category = LayoutComponentCategory::Track,
-                                .props = {},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createTrackDetailUndoBar);

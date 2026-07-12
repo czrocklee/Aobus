@@ -292,14 +292,14 @@ namespace ao::audio
     {
       if (!_implPtr->fileCursor.isOpen())
       {
-        return PcmBlock{.bytes = {}, .endOfStream = true};
+        return PcmBlock{.endOfStream = true};
       }
 
       _implPtr->checkDecodeError();
 
       if (_implPtr->eof && _implPtr->bufferedFrames == 0)
       {
-        return PcmBlock{.bytes = {}, .endOfStream = true};
+        return PcmBlock{.endOfStream = true};
       }
 
       // If buffer is empty, process a single frame
@@ -331,7 +331,7 @@ namespace ao::audio
 
       if (_implPtr->bufferedFrames == 0 && _implPtr->eof)
       {
-        return PcmBlock{.bytes = {}, .endOfStream = true};
+        return PcmBlock{.endOfStream = true};
       }
 
       auto block = PcmBlock{

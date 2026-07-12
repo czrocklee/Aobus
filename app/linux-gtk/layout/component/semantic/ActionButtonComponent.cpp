@@ -99,7 +99,6 @@ namespace ao::gtk::layout
                   .label = "Style",
                   .defaultValue = LayoutValue{"flat"},
                   .enumValues = {"flat", "raised", "circular", "suggested", "destructive"}}},
-       .layoutProps = {},
        .minChildren = 0,
        .optMaxChildren = 0,
        .actionPolicy = uimodel::kExternalPrimaryActions},

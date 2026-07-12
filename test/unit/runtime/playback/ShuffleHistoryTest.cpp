@@ -25,8 +25,8 @@ namespace ao::rt::test
 
     struct ScriptedCandidateChooser final
     {
-      std::vector<TrackId> selections;
-      std::vector<std::vector<TrackId>> candidateSets;
+      std::vector<TrackId> selections = {};
+      std::vector<std::vector<TrackId>> candidateSets = {};
 
       TrackId operator()(std::span<TrackId const> const candidates)
       {
@@ -47,7 +47,6 @@ namespace ao::rt::test
   {
     auto chooser = ScriptedCandidateChooser{
       .selections = {kSecondTrack, kThirdTrack},
-      .candidateSets = {},
     };
     auto history = ShuffleHistory{ShuffleHistory::CandidateChooser{std::ref(chooser)}};
     constexpr auto kInitialProjection = std::array{kFirstTrack, kSecondTrack, kThirdTrack};
@@ -68,7 +67,6 @@ namespace ao::rt::test
   {
     auto chooser = ScriptedCandidateChooser{
       .selections = {kSecondTrack, kThirdTrack, kFourthTrack},
-      .candidateSets = {},
     };
     auto history = ShuffleHistory{ShuffleHistory::CandidateChooser{std::ref(chooser)}};
     constexpr auto kInitialProjection = std::array{kFirstTrack, kSecondTrack, kThirdTrack};
@@ -92,7 +90,6 @@ namespace ao::rt::test
   {
     auto chooser = ScriptedCandidateChooser{
       .selections = {kFirstTrack, kFirstTrack},
-      .candidateSets = {},
     };
     auto history = ShuffleHistory{ShuffleHistory::CandidateChooser{std::ref(chooser)}};
     constexpr auto kSoleCurrent = std::array{kFirstTrack};
@@ -113,7 +110,6 @@ namespace ao::rt::test
   {
     auto chooser = ScriptedCandidateChooser{
       .selections = {kSecondTrack, kThirdTrack},
-      .candidateSets = {},
     };
     auto history = ShuffleHistory{ShuffleHistory::CandidateChooser{std::ref(chooser)}};
     constexpr auto kProjection = std::array{kFirstTrack, kSecondTrack, kThirdTrack};
@@ -131,7 +127,6 @@ namespace ao::rt::test
   {
     auto chooser = ScriptedCandidateChooser{
       .selections = {kSecondTrack, kFourthTrack},
-      .candidateSets = {},
     };
     auto history = ShuffleHistory{ShuffleHistory::CandidateChooser{std::ref(chooser)}};
     constexpr auto kProjection = std::array{kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack};

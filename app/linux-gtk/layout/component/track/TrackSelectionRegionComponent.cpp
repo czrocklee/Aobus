@@ -84,7 +84,6 @@ namespace ao::gtk::layout
                                            .kind = LayoutPropertyKind::Bool,
                                            .label = "Show Placeholder",
                                            .defaultValue = LayoutValue{false}}},
-                                .layoutProps = {},
                                 .minChildren = 1,
                                 .optMaxChildren = 0},
                                createTrackSelectionRegion);

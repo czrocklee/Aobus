@@ -128,7 +128,7 @@ namespace ao::rt::test
           return std::unexpected{Error{.code = Error::Code::IoError, .message = "gated prepared decode failure"}};
         }
 
-        return audio::PcmBlock{.bytes = {}, .bitDepth = 16, .endOfStream = true};
+        return audio::PcmBlock{.bitDepth = 16, .endOfStream = true};
       }
 
       audio::DecodedStreamInfo streamInfo() const noexcept override

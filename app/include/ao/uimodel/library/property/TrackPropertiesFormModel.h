@@ -25,7 +25,7 @@ namespace ao::uimodel
   struct TrackPropertiesFormRowView final
   {
     rt::TrackField field = rt::TrackField::Title;
-    std::string text;
+    std::string text = {};
     bool mixed = false;
     bool editable = false;
     bool dirty = false;

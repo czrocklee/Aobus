@@ -69,8 +69,7 @@ namespace ao::gtk::test
                                                          {
                                                            savedPresentationListId = id;
                                                            savedPresentationId = std::move(presentationId);
-                                                         },
-                                                         .listPresentationCallback = {}};
+                                                         }};
 
     auto themeCoordinator = ThemeCoordinator{};
     auto controller = ListNavigationController{window, fixture.runtime(), std::move(callbacks), themeCoordinator};

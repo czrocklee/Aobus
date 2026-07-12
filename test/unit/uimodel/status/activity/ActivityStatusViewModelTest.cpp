@@ -123,7 +123,6 @@ namespace ao::uimodel::test
     {
       auto plan = rt::ScanPlan{};
       plan.items.push_back(rt::ScanItem{.uri = "file:///fake/first.flac",
-                                        .oldUri = {},
                                         .fullPath = "/fake/first.flac",
                                         .classification = rt::ScanClassification::New});
       co_return co_await service->applyScanPlanAsync(std::move(plan));

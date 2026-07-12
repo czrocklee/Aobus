@@ -594,7 +594,6 @@ namespace ao::gtk::layout
                                            .kind = uimodel::LayoutPropertyKind::Int,
                                            .label = "Grid Size",
                                            .defaultValue = uimodel::LayoutValue{static_cast<std::int64_t>(8)}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = std::nullopt},
                                createAbsoluteCanvas);

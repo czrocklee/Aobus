@@ -122,7 +122,6 @@ namespace ao::gtk::layout
                                            .kind = LayoutPropertyKind::Bool,
                                            .label = "Propagate Nat. Height",
                                            .defaultValue = LayoutValue{false}}},
-                                .layoutProps = {},
                                 .minChildren = 1,
                                 .optMaxChildren = 1},
                                createScroll);

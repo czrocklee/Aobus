@@ -72,8 +72,7 @@ namespace ao::uimodel
   {
     auto promotion = ShellLayoutPanelSizePromotion{.presetId = activeOrDefaultPresetId(_activePresetId),
                                                    .layout = _activeLayout,
-                                                   .componentState = runtimeComponentState,
-                                                   .result = {}};
+                                                   .componentState = runtimeComponentState};
     promotion.componentState.preset = promotion.presetId;
     promotion.result = promotePanelSizeDefaults(promotion.layout, promotion.componentState);
 

@@ -67,8 +67,6 @@ namespace ao::gtk::layout
     registry.registerComponent({.type = "library.listTree",
                                 .displayName = "Library Tree",
                                 .category = LayoutComponentCategory::Library,
-                                .props = {},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createListTree);

@@ -33,8 +33,7 @@ namespace ao::library::test
       auto header = MetadataHeader{.magic = kMetadataMagic,
                                    .libraryVersion = libraryVersion,
                                    .flags = 0,
-                                   .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1}},
-                                   .libraryId = {}};
+                                   .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1}}};
       metadataStore.create(transaction, header);
       REQUIRE(transaction.commit());
     }

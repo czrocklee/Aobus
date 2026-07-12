@@ -1146,7 +1146,6 @@ namespace ao::gtk::layout
        .displayName = "Field Grid",
        .category = LayoutComponentCategory::Track,
        .props = {{.name = "categories", .kind = LayoutPropertyKind::StringList, .label = "Categories"}},
-       .layoutProps = {},
        .minChildren = 0,
        .optMaxChildren = 0},
       createTrackFieldGrid);

@@ -267,12 +267,8 @@ namespace ao::rt::test
 
       {
         auto const lock = std::scoped_lock{_mutex};
-        _entries.push_back(Entry{.id = id,
-                                 .delay = delay,
-                                 .timerPtr = timerPtr,
-                                 .active = true,
-                                 .startedOn = std::this_thread::get_id(),
-                                 .cancelledOn = {}});
+        _entries.push_back(Entry{
+          .id = id, .delay = delay, .timerPtr = timerPtr, .active = true, .startedOn = std::this_thread::get_id()});
       }
 
       _cv.notify_all();
@@ -328,8 +324,8 @@ namespace ao::rt::test
       std::weak_ptr<boost::asio::steady_timer> timerPtr;
       bool active = false;
       bool cancelled = false;
-      std::thread::id startedOn;
-      std::thread::id cancelledOn;
+      std::thread::id startedOn = {};
+      std::thread::id cancelledOn = {};
     };
 
     std::vector<Entry>::iterator entry(std::uint64_t const id) { return std::ranges::find(_entries, id, &Entry::id); }

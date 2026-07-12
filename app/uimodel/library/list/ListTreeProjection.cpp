@@ -14,13 +14,10 @@ namespace ao::uimodel
   {
     auto projection = ListTreeProjection{};
 
-    projection.rowsById.emplace(rt::kAllTracksListId,
-                                ListTreeProjectionRow{.id = rt::kAllTracksListId,
-                                                      .parentId = kInvalidListId,
-                                                      .name = "All Tracks",
-                                                      .isSmart = false,
-                                                      .localExpression = {},
-                                                      .childIds = {}});
+    projection.rowsById.emplace(
+      rt::kAllTracksListId,
+      ListTreeProjectionRow{
+        .id = rt::kAllTracksListId, .parentId = kInvalidListId, .name = "All Tracks", .isSmart = false});
     projection.rootIds.push_back(rt::kAllTracksListId);
 
     for (auto const& node : snapshot)
@@ -30,8 +27,7 @@ namespace ao::uimodel
                                                         .parentId = node.parentId,
                                                         .name = node.name,
                                                         .isSmart = node.kind == rt::ListNodeKind::Smart,
-                                                        .localExpression = node.smartExpression,
-                                                        .childIds = {}});
+                                                        .localExpression = node.smartExpression});
     }
 
     for (auto const& [id, row] : projection.rowsById)

@@ -82,7 +82,7 @@ namespace ao::uimodel::test
 
     SECTION("no modifiers")
     {
-      CHECK(KeyChord{.modifiers = {}, .key = "Media:Play"}.toString() == "Media:Play");
+      CHECK(KeyChord{.key = "Media:Play"}.toString() == "Media:Play");
     }
   }
 

@@ -60,7 +60,6 @@ namespace ao::gtk::layout
                                            .label = "Orientation",
                                            .defaultValue = LayoutValue{"horizontal"},
                                            .enumValues = {"horizontal", "vertical"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createSeparator);

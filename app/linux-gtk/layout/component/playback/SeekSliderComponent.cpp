@@ -47,8 +47,6 @@ namespace ao::gtk::layout
     registry.registerComponent({.type = "playback.seekSlider",
                                 .displayName = "Seek Slider",
                                 .category = LayoutComponentCategory::Playback,
-                                .props = {},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createSeekSlider);

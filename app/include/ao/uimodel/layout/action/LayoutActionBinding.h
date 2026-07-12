@@ -19,6 +19,6 @@ namespace ao::uimodel
     LayoutActionSlot slot = LayoutActionSlot::PrimaryClick;
     bool hasAnchor = false;
     bool hasFocusedView = false;
-    std::string_view componentType;
+    std::string_view componentType = {};
   };
 } // namespace ao::uimodel

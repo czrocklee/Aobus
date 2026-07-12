@@ -27,7 +27,7 @@ namespace ao::audio::test
   public:
     struct ReadScriptEntry final
     {
-      std::vector<std::byte> data;
+      std::vector<std::byte> data = {};
       bool endOfStream = false;
       Result<> result = {};
     };
@@ -104,7 +104,7 @@ namespace ao::audio::test
 
       if (_scriptIndex >= _script.size())
       {
-        return PcmBlock{.bytes = {}, .bitDepth = 16, .frames = 0, .firstFrameIndex = 0, .endOfStream = true};
+        return PcmBlock{.bitDepth = 16, .frames = 0, .firstFrameIndex = 0, .endOfStream = true};
       }
 
       auto const& entry = _script[_scriptIndex++];

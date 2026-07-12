@@ -147,7 +147,7 @@ namespace ao::audio
     {
       std::uint64_t sourceGeneration = 0;
       std::uint64_t playbackGeneration = 0;
-      std::optional<Error> optError;
+      std::optional<Error> optError = std::nullopt;
     };
 
     // Notifications already materialized by a control thread that settled a
@@ -1104,9 +1104,8 @@ namespace ao::audio
 
       auto notifications = Notifications{};
       appendStateChangedNotification(notifications, std::move(stateChanged));
-      appendRouteNotification(notifications,
-                              std::move(onRouteChangedCallback),
-                              RouteStatus{.state = {}, .optAnchor = {}, .generation = playbackGeneration});
+      appendRouteNotification(
+        notifications, std::move(onRouteChangedCallback), RouteStatus{.generation = playbackGeneration});
       appendTrackEndedNotification(
         notifications, std::move(onTrackEndedCallback), TrackEnded{.generation = playbackGeneration});
 
@@ -2468,7 +2467,6 @@ namespace ao::audio
     auto stagedStatePtr = std::make_shared<Impl::StagedPlaybackState>(Impl::StagedPlaybackState{
       .sourceGeneration = sourceGeneration,
       .playbackGeneration = candidateGeneration,
-      .optError = {},
     });
     preparedImplPtr->owner = _implPtr.get();
     preparedImplPtr->nodePtr = std::make_unique<Impl::TrackNode>(std::move(*openedTrack));

@@ -65,7 +65,6 @@ namespace ao::gtk::layout
                                            .kind = LayoutPropertyKind::String,
                                            .label = "Variant",
                                            .defaultValue = LayoutValue{"default"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createTrackPresentationButton);

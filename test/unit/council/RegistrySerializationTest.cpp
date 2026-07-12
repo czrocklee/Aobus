@@ -45,8 +45,6 @@ namespace ao::council::test
       PhaseIntent{.id = "phase-a",
                   .taskKind = "council-review",
                   .invariant = "Preserve behavior.",
-                  .focus = {},
-                  .dependsOn = {},
                   .overrides = IntentOverrides{.optRoster = std::vector<std::string>{"anthropic-opus", "openai-gpt"},
                                                .optDepth = Depth::Panel,
                                                .optQuorum = 2},

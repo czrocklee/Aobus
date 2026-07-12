@@ -314,7 +314,6 @@ namespace ao::gtk::layout
                                            .label = "Action",
                                            .defaultValue = LayoutValue{"none"},
                                            .enumValues = {"none", "jumpToAlbum"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0,
                                 .actionPolicy = uimodel::kExternalSecondaryActions},

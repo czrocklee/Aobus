@@ -81,22 +81,19 @@ namespace ao::gtk::layout::test
                                .capabilities = LayoutActionCapability::RequiresAnchor},
                               [](auto&) {});
 
-      CHECK(!registry.canBind(
-        "my.test.action",
-        LayoutActionBindingContext{
-          .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
-      CHECK(registry.canBind(
-        "my.test.action",
-        LayoutActionBindingContext{
-          .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = true, .hasFocusedView = false, .componentType = {}}));
+      CHECK(!registry.canBind("my.test.action",
+                              LayoutActionBindingContext{
+                                .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false}));
+      CHECK(registry.canBind("my.test.action",
+                             LayoutActionBindingContext{
+                               .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = true, .hasFocusedView = false}));
     }
 
     SECTION("canBind returns false for unknown action")
     {
-      CHECK(!registry.canBind(
-        "unknown.action",
-        LayoutActionBindingContext{
-          .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
+      CHECK(!registry.canBind("unknown.action",
+                              LayoutActionBindingContext{
+                                .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false}));
     }
 
     SECTION("Distinguishes canBind() from runtime state()")
@@ -106,12 +103,10 @@ namespace ao::gtk::layout::test
       // Requires anchor, so cannot bind to shortcut
       CHECK_FALSE(registry.canBind(
         "test.action2",
-        LayoutActionBindingContext{
-          .slot = LayoutActionSlot::Shortcut, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
-      CHECK(registry.canBind(
-        "test.action2",
-        LayoutActionBindingContext{
-          .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = true, .hasFocusedView = false, .componentType = {}}));
+        LayoutActionBindingContext{.slot = LayoutActionSlot::Shortcut, .hasAnchor = false, .hasFocusedView = false}));
+      CHECK(registry.canBind("test.action2",
+                             LayoutActionBindingContext{
+                               .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = true, .hasFocusedView = false}));
 
       // Default state is enabled
       auto const s = registry.state("test.action2", ctx);
@@ -154,10 +149,10 @@ namespace ao::gtk::layout::test
     {
       CHECK(registry.descriptors().empty());
       CHECK_FALSE(registry.descriptor("unknown"));
-      CHECK_FALSE(registry.canBind(
-        "unknown",
-        LayoutActionBindingContext{
-          .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false, .componentType = {}}));
+      CHECK_FALSE(
+        registry.canBind("unknown",
+                         LayoutActionBindingContext{
+                           .slot = LayoutActionSlot::PrimaryClick, .hasAnchor = false, .hasFocusedView = false}));
     }
 
     SECTION("Activating an unknown action id returns UnknownAction")

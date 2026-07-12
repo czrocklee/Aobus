@@ -62,8 +62,6 @@ namespace ao::gtk::layout
       {.type = "playback.qualityIndicator",
        .displayName = "Quality Indicator",
        .category = LayoutComponentCategory::Playback,
-       .props = {},
-       .layoutProps = {},
        .minChildren = 0,
        .optMaxChildren = 0,
        .actionPolicy =

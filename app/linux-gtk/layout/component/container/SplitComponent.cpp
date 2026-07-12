@@ -246,7 +246,6 @@ namespace ao::gtk::layout
                                            .kind = LayoutPropertyKind::Bool,
                                            .label = "Shrink End",
                                            .defaultValue = LayoutValue{false}}},
-                                .layoutProps = {},
                                 .minChildren = 2,
                                 .optMaxChildren = 2},
                                createSplit);

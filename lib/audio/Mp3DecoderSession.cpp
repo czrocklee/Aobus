@@ -250,7 +250,7 @@ namespace ao::audio
 
       if (!impl->fileCursor.isOpen() || impl->eof)
       {
-        return PcmBlock{.bytes = {}, .endOfStream = true};
+        return PcmBlock{.endOfStream = true};
       }
 
       size_t done = 0;
@@ -268,7 +268,7 @@ namespace ao::audio
 
           if (done == 0)
           {
-            return PcmBlock{.bytes = {}, .endOfStream = true};
+            return PcmBlock{.endOfStream = true};
           }
 
           break;
@@ -306,7 +306,7 @@ namespace ao::audio
       if (done == 0)
       {
         impl->eof = true;
-        return PcmBlock{.bytes = {}, .endOfStream = true};
+        return PcmBlock{.endOfStream = true};
       }
 
       auto const bytesPerFrame =

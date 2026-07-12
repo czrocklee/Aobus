@@ -34,9 +34,7 @@ namespace ao::council::test
       return runner.run(ProcessRequest{
         .argv = std::move(args),
         .cwd = std::filesystem::path{AOBUS_SOURCE_DIR},
-        .standardInput = {},
         .environmentWhitelist = {"PATH"},
-        .environment = {},
         .timeout = std::chrono::seconds{20},
         .terminationGracePeriod = std::chrono::seconds{1},
       });

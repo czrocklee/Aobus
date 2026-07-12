@@ -83,15 +83,12 @@ namespace ao::rt::test
     ScanItem makeNewAudioScanItem(std::filesystem::path const& fullPath, std::string_view uri)
     {
       return ScanItem{.uri = std::string{uri},
-                      .oldUri = {},
                       .fullPath = fullPath,
                       .classification = ScanClassification::New,
                       .fileSize = std::filesystem::file_size(fullPath),
                       .mtime = fileMtime(fullPath),
                       .audioPayloadLength = 0,
-                      .audioSignature = {},
-                      .trackId = kInvalidTrackId,
-                      .errorMessage = {}};
+                      .trackId = kInvalidTrackId};
     }
 
     std::vector<TrackId> changedTrackIds(ScanApplyResult const& result)
@@ -379,13 +376,10 @@ namespace ao::rt::test
 
     auto plan = ScanPlan{};
     plan.items.push_back(ScanItem{.uri = "corrupted.flac",
-                                  .oldUri = {},
-                                  .fullPath = {},
                                   .classification = ScanClassification::Error,
                                   .fileSize = 0,
                                   .mtime = 0,
                                   .audioPayloadLength = 0,
-                                  .audioSignature = {},
                                   .trackId = kInvalidTrackId,
                                   .errorMessage = "corrupt input"});
     plan.items.push_back(makeNewAudioScanItem(targetFile, "song.flac"));
@@ -857,7 +851,7 @@ namespace ao::rt::test
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     auto plan = ScanPlan{};
-    plan.items.push_back(ScanItem{.uri = "bad.flac", .oldUri = {}, .fullPath = musicRoot / "bad.flac"});
+    plan.items.push_back(ScanItem{.uri = "bad.flac", .fullPath = musicRoot / "bad.flac"});
 
     auto counts = FailureCounts{};
     auto thrower = [](ScanApplyProgress const&) { throwUnexpectedProgressFailure(); };

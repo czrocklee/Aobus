@@ -189,8 +189,6 @@ namespace ao::council::test
                          .taskKind = "council-review",
                          .invariant = "Preserve behavior.",
                          .focus = {FocusRule{.path = "source.txt", .match = FocusMatch::Exact}},
-                         .dependsOn = {},
-                         .overrides = {},
                          .body = "Review the change."};
     }
 

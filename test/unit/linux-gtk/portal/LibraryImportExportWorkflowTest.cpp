@@ -64,9 +64,7 @@ namespace ao::gtk::test
     portal::ImportExportCallbacks callbacksWithMutationCounter(std::int32_t& mutationCallbackCount)
     {
       return portal::ImportExportCallbacks{
-        .onOpenNewLibrary = {},
         .onLibraryDataMutated = [&mutationCallbackCount] { ++mutationCallbackCount; },
-        .onTitleChanged = {},
       };
     }
 

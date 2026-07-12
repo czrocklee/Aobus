@@ -61,9 +61,7 @@ namespace ao::council::test
     auto diff = process.run(ProcessRequest{
       .argv = {"git", "-C", destination.string(), "diff", std::string{kReviewBaseRef} + "..HEAD"},
       .cwd = destination,
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{10},
       .terminationGracePeriod = std::chrono::seconds{1},
     });

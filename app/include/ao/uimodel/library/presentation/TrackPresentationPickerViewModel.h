@@ -29,7 +29,7 @@ namespace ao::uimodel
     bool enabled = false;
     rt::ViewId activeViewId = rt::kInvalidViewId;
     ListId activeListId = kInvalidListId;
-    std::string activePresentationId;
+    std::string activePresentationId = {};
     std::string label = "Presentation";
     std::vector<TrackPresentationMenuItem> menuItems;
 

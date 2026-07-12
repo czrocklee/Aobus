@@ -254,7 +254,7 @@ namespace ao::audio::test
       decPtr->setReadScript({{.data = data, .endOfStream = false},
                              {.data = data, .endOfStream = false},
                              {.data = data, .endOfStream = false},
-                             {.data = {}, .endOfStream = true}});
+                             {.endOfStream = true}});
       return decPtr;
     };
 

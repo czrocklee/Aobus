@@ -79,8 +79,8 @@ namespace ao::audio
 
     struct RouteStatus final
     {
-      AudioRouteFormatState state;
-      std::optional<RouteAnchor> optAnchor;
+      AudioRouteFormatState state = {};
+      std::optional<RouteAnchor> optAnchor = std::nullopt;
       std::uint64_t generation = 0;
 
       bool operator==(RouteStatus const&) const = default;

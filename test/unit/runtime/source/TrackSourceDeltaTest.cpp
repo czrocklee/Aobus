@@ -60,12 +60,9 @@ namespace ao::rt::test
   TEST_CASE("TrackSourceDelta - empty batches and empty ranges are invalid", "[runtime][unit][source]")
   {
     auto const emptyBatch = TrackSourceDeltaBatch{.revision = 1};
-    auto const emptyInsert =
-      TrackSourceDeltaBatch{.revision = 2, .deltas = {SourceInsertRange{.start = 0, .trackIds = {}}}};
-    auto const emptyRemove =
-      TrackSourceDeltaBatch{.revision = 3, .deltas = {SourceRemoveRange{.start = 0, .trackIds = {}}}};
-    auto const emptyUpdate =
-      TrackSourceDeltaBatch{.revision = 4, .deltas = {SourceUpdateRange{.start = 0, .trackIds = {}}}};
+    auto const emptyInsert = TrackSourceDeltaBatch{.revision = 2, .deltas = {SourceInsertRange{.start = 0}}};
+    auto const emptyRemove = TrackSourceDeltaBatch{.revision = 3, .deltas = {SourceRemoveRange{.start = 0}}};
+    auto const emptyUpdate = TrackSourceDeltaBatch{.revision = 4, .deltas = {SourceUpdateRange{.start = 0}}};
 
     CHECK_FALSE(validateTrackSourceDeltaBatch(emptyBatch, 0));
     CHECK_FALSE(validateTrackSourceDeltaBatch(emptyInsert, 0));

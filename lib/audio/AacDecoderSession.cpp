@@ -279,7 +279,7 @@ namespace ao::audio
     {
       if (_implPtr->packetSource.isAtEnd())
       {
-        return PcmBlock{.bytes = {}, .endOfStream = true};
+        return PcmBlock{.endOfStream = true};
       }
 
       auto const packet = _implPtr->packetSource.packet();

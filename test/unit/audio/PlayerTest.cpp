@@ -220,9 +220,7 @@ namespace ao::audio::test
       return BackendProvider::Status{.descriptor = {.id = kBackendPipeWire,
                                                     .name = "PipeWire",
                                                     .description = "PipeWire Provider",
-                                                    .iconName = "audio-card-symbolic",
-                                                    .supportedProfiles = {}},
-                                     .devices = {}};
+                                                    .iconName = "audio-card-symbolic"}};
     }
 
     inline auto const& kSynchronousGraphBackend = kBackendAlsa;
@@ -409,8 +407,7 @@ namespace ao::audio::test
                                   .displayName = "Mock Sink",
                                   .description = "Mock",
                                   .isDefault = true,
-                                  .backendId = kBackendNone,
-                                  .capabilities = {}}});
+                                  .backendId = kBackendNone}});
           }
 
           return Subscription{};
@@ -428,12 +425,8 @@ namespace ao::audio::test
           return Subscription{[] {}};
         });
     When(Method(mockProvider, status))
-      .AlwaysReturn(BackendProvider::Status{.descriptor = {.id = kBackendNone,
-                                                           .name = "Mock",
-                                                           .description = "Mock",
-                                                           .iconName = "audio-card",
-                                                           .supportedProfiles = {}},
-                                            .devices = {}});
+      .AlwaysReturn(BackendProvider::Status{
+        .descriptor = {.id = kBackendNone, .name = "Mock", .description = "Mock", .iconName = "audio-card"}});
 
     auto executor = QueuedExecutor{};
     auto player = Player{executor};
@@ -496,8 +489,7 @@ namespace ao::audio::test
       executor.drain();
 
       // Fire a system graph that has NO Stream node
-      onGraphChanged(
-        flow::Graph{.nodes = {flow::Node{.id = "sys-sink", .type = flow::NodeType::Sink}}, .connections = {}});
+      onGraphChanged(flow::Graph{.nodes = {flow::Node{.id = "sys-sink", .type = flow::NodeType::Sink}}});
       REQUIRE(executor.drainUntil(
         [&]
         {
@@ -604,9 +596,7 @@ namespace ao::audio::test
       .AlwaysReturn(BackendProvider::Status{.descriptor = {.id = kBackendPipeWire,
                                                            .name = "PipeWire",
                                                            .description = "PipeWire Provider",
-                                                           .iconName = "audio-card-symbolic",
-                                                           .supportedProfiles = {}},
-                                            .devices = {}});
+                                                           .iconName = "audio-card-symbolic"}});
 
     auto executor = async::ImmediateExecutor{};
     auto player = Player{executor};
@@ -842,8 +832,7 @@ namespace ao::audio::test
                          .name = "Reentrant",
                          .description = "Test",
                          .iconName = "audio-card-symbolic",
-                         .supportedProfiles = {{.id = kProfileShared, .name = "Shared", .description = "Shared"}}},
-          .devices = {}};
+                         .supportedProfiles = {{.id = kProfileShared, .name = "Shared", .description = "Shared"}}}};
       }
 
       std::unique_ptr<Backend> createBackend(Device const& /*device*/, ProfileId const& /*profile*/) override
@@ -1067,12 +1056,8 @@ namespace ao::audio::test
     player.setOnQualityChanged([&](QualityResult const& quality, bool ready)
                                { qualityEvents.emplace_back(quality, ready); });
 
-    auto worker =
-      std::jthread{[&]
-                   {
-                     onGraphChanged(flow::Graph{
-                       .nodes = {flow::Node{.id = "sys-sink", .type = flow::NodeType::Sink}}, .connections = {}});
-                   }};
+    auto worker = std::jthread{
+      [&] { onGraphChanged(flow::Graph{.nodes = {flow::Node{.id = "sys-sink", .type = flow::NodeType::Sink}}}); }};
     worker.join();
 
     auto snap = player.status();
@@ -1373,13 +1358,12 @@ namespace ao::audio::test
       {
         decoderPtr->setReadScript(
           {{.data = data, .endOfStream = false},
-           {.data = {},
-            .endOfStream = false,
+           {.endOfStream = false,
             .result = std::unexpected{Error{.code = Error::Code::IoError, .message = "prepared decode failed"}}}});
       }
       else
       {
-        decoderPtr->setReadScript({{.data = std::move(data), .endOfStream = false}, {.data = {}, .endOfStream = true}});
+        decoderPtr->setReadScript({{.data = std::move(data), .endOfStream = false}, {.endOfStream = true}});
       }
 
       return decoderPtr;

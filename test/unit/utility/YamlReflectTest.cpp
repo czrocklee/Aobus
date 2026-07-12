@@ -37,15 +37,15 @@ namespace ao::yaml::test
 
   struct ReflectFixtureDto final
   {
-    std::string text;
-    std::string emptyText;
-    std::string_view view;
+    std::string text = {};
+    std::string emptyText = {};
+    std::string_view view = {};
     std::int32_t number = 0;
     bool ok = false;
-    std::optional<std::string> optOmitted;
-    std::optional<std::string> optPresent;
-    std::vector<std::string> emptyNames;
-    std::vector<NestedDto> nested;
+    std::optional<std::string> optOmitted = std::nullopt;
+    std::optional<std::string> optPresent = std::nullopt;
+    std::vector<std::string> emptyNames = {};
+    std::vector<NestedDto> nested = {};
     std::map<std::string, std::string> labels;
     TrackId trackId{};
     ListId listId{};
@@ -115,7 +115,6 @@ namespace ao::yaml::test
       .ok = true,
       .optOmitted = std::nullopt,
       .optPresent = "value",
-      .emptyNames = {},
       .nested = {NestedDto{.name = "child", .count = 7}},
       .labels = {{"alpha", "one"}, {"empty", ""}},
       .trackId = TrackId{42},

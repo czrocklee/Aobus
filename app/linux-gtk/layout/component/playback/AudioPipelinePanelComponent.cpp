@@ -78,7 +78,6 @@ namespace ao::gtk::layout
                   .label = "Variant",
                   .defaultValue = LayoutValue{""},
                   .enumValues = {"inline", "compact", "tooltip"}}},
-       .layoutProps = {},
        .minChildren = 0,
        .optMaxChildren = 0,
        .surfaces = static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Main) |

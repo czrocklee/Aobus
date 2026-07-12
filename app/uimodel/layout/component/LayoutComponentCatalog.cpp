@@ -39,7 +39,6 @@ namespace ao::uimodel
                                   .kind = LayoutPropertyKind::Enum,
                                   .label = std::string{label},
                                   .defaultValue = LayoutValue{""},
-                                  .enumValues = {},
                                   .optActionBinding = LayoutActionBindingProperty{.slot = slot},
                                   .optDefaultActionId = std::move(optDefaultId)});
     };

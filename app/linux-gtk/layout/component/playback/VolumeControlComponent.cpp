@@ -55,8 +55,6 @@ namespace ao::gtk::layout
     registry.registerComponent({.type = "playback.volumeControl",
                                 .displayName = "Volume Control",
                                 .category = LayoutComponentCategory::Playback,
-                                .props = {},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createVolumeControl);

@@ -107,7 +107,7 @@ namespace ao::audio::test
         .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
       auto data = std::vector(20, std::byte{0}); // 10ms
 
-      decPtr->setReadScript({{.data = data, .endOfStream = false}, {.data = {}, .endOfStream = true}});
+      decPtr->setReadScript({{.data = data, .endOfStream = false}, {.endOfStream = true}});
       return decPtr;
     };
 
@@ -245,7 +245,7 @@ namespace ao::audio::test
                  {.track = {.path = "track.flac", .info = makeScriptedStreamInfo(format), .data = initialData},
                   .optSeekScript =
                     std::vector<ScriptedDecoderSession::ReadScriptEntry>{
-                      {.data = seekData, .endOfStream = false}, {.data = {}, .endOfStream = true}}},
+                      {.data = seekData, .endOfStream = false}, {.endOfStream = true}}},
                },
                std::make_shared<std::map<std::filesystem::path, ScriptedDecoderSession*>>())};
 

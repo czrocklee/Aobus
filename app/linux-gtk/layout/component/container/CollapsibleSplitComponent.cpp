@@ -734,7 +734,6 @@ namespace ao::gtk::layout
                                            .kind = LayoutPropertyKind::Bool,
                                            .label = "Initially Revealed",
                                            .defaultValue = LayoutValue{true}}},
-                                .layoutProps = {},
                                 .minChildren = 2,
                                 .optMaxChildren = 2},
                                createCollapsibleSplit);

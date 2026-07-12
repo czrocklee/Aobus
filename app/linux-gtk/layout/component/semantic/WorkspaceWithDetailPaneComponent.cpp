@@ -102,8 +102,6 @@ namespace ao::gtk::layout
     registry.registerComponent({.type = "workspace.withDetailPane",
                                 .displayName = "Workspace with Detail",
                                 .category = LayoutComponentCategory::Layout,
-                                .props = {},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 1},
                                createWorkspaceWithDetailPane);

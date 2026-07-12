@@ -116,8 +116,7 @@ namespace ao::uimodel::test
   TEST_CASE("TrackFilterViewModel - focused track view enables filtering", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
-    auto config = rt::TrackListViewConfig{
-      .listId = rt::kAllTracksListId, .filterExpression = {}, .groupBy = rt::TrackGroupKey::None};
+    auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId, .groupBy = rt::TrackGroupKey::None};
 
     auto reply = ao::test::requireValue(fixture.viewService.createView(config));
     fixture.workspaceService.setFocusedView(reply.viewId);

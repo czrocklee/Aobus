@@ -92,7 +92,6 @@ namespace ao::gtk::layout
       {.type = "tabs",
        .displayName = "Tabs",
        .category = LayoutComponentCategory::Container,
-       .props = {},
        .layoutProps =
          {{.name = "title", .kind = LayoutPropertyKind::String, .label = "Tab Title", .defaultValue = LayoutValue{""}},
           {.name = "icon", .kind = LayoutPropertyKind::String, .label = "Tab Icon", .defaultValue = LayoutValue{""}}},

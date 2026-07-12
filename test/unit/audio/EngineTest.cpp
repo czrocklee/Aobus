@@ -212,7 +212,7 @@ namespace ao::audio::test
         .codec = AudioCodec::Flac,
       });
       decoderPtr->setReadScript(
-        {{.data = std::vector<std::byte>(400, std::byte{0}), .endOfStream = false}, {.data = {}, .endOfStream = true}});
+        {{.data = std::vector<std::byte>(400, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
       return decoderPtr;
     };
     auto engine = Engine{spy.makeProxy(), device, std::move(decoderFactory)};
@@ -235,13 +235,12 @@ namespace ao::audio::test
 
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const device =
-      Device{.id = DeviceId{"alsa-exclusive"},
-             .displayName = "ALSA",
-             .description = "ALSA Exclusive",
-             .isDefault = false,
-             .backendId = kBackendAlsa,
-             .capabilities = {.sampleRates = {44100}, .sampleFormats = {}, .bitDepths = {32}, .channelCounts = {2}}};
+    auto const device = Device{.id = DeviceId{"alsa-exclusive"},
+                               .displayName = "ALSA",
+                               .description = "ALSA Exclusive",
+                               .isDefault = false,
+                               .backendId = kBackendAlsa,
+                               .capabilities = {.sampleRates = {44100}, .bitDepths = {32}, .channelCounts = {2}}};
 
     auto engine = Engine{std::move(backendPtr), device};
     auto const descriptor = PlaybackInput{.filePath = testFile.string()};
@@ -331,7 +330,7 @@ namespace ao::audio::test
       // provide some data for preroll
       auto data = std::vector(100, std::byte{0});
 
-      decPtr->setReadScript({{.data = data, .endOfStream = false}, {.data = {}, .endOfStream = true}});
+      decPtr->setReadScript({{.data = data, .endOfStream = false}, {.endOfStream = true}});
       return decPtr;
     };
 
@@ -374,9 +373,8 @@ namespace ao::audio::test
         .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
       auto data = std::vector(200, std::byte{0}); // 100ms
 
-      decPtr->setReadScript({{.data = data, .endOfStream = false},
-                             {.data = data, .endOfStream = false},
-                             {.data = {}, .endOfStream = true}});
+      decPtr->setReadScript(
+        {{.data = data, .endOfStream = false}, {.data = data, .endOfStream = false}, {.endOfStream = true}});
       return decPtr;
     };
 
@@ -420,7 +418,7 @@ namespace ao::audio::test
       }
 
       auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
-      decPtr->setReadScript({{.data = data, .endOfStream = false}, {.data = {}, .endOfStream = true}});
+      decPtr->setReadScript({{.data = data, .endOfStream = false}, {.endOfStream = true}});
       decPtr->setSeekObserver([&orderedEvents](std::chrono::milliseconds) { orderedEvents.emplace_back("seek"); });
       (*registryPtr)[path] = decPtr.get();
       return decPtr;

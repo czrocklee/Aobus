@@ -64,7 +64,6 @@ namespace ao::gtk::layout
                                            .kind = LayoutPropertyKind::String,
                                            .label = "View Source",
                                            .defaultValue = LayoutValue{"workspace.focused"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createTracksTable);

@@ -107,7 +107,7 @@ namespace ao::uimodel
       };
     }
 
-    return TrackPropertiesFormRowView{.field = field, .text = {}, .mixed = false, .editable = false, .dirty = false};
+    return TrackPropertiesFormRowView{.field = field, .mixed = false, .editable = false, .dirty = false};
   }
 
   bool TrackPropertiesFormModel::canSave() const

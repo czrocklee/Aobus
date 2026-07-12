@@ -29,8 +29,8 @@ namespace ao::rt
   struct ScanItem final
   {
     std::string uri;
-    std::string oldUri;
-    std::filesystem::path fullPath;
+    std::string oldUri = {};
+    std::filesystem::path fullPath = {};
     ScanClassification classification = ScanClassification::Error;
     std::uint64_t fileSize = 0;
     std::uint64_t mtime = 0;

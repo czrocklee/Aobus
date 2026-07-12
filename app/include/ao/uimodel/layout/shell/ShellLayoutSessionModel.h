@@ -31,7 +31,7 @@ namespace ao::uimodel
     std::string presetId;
     LayoutDocument layout;
     LayoutComponentStateDocument componentState;
-    PanelSizePromotionResult result;
+    PanelSizePromotionResult result = {};
   };
 
   struct ShellLayoutSessionSnapshot final

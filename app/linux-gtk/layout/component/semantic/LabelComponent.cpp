@@ -50,7 +50,6 @@ namespace ao::gtk::layout
                                 .displayName = "Text Label",
                                 .category = LayoutComponentCategory::Generic,
                                 .props = {{.name = "label", .kind = LayoutPropertyKind::String, .label = "Text"}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createLabel);

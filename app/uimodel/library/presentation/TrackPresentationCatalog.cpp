@@ -85,8 +85,6 @@ namespace ao::uimodel
     {
       items.push_back(TrackPresentationMenuItem{
         .type = TrackPresentationMenuItemType::Separator,
-        .id = {},
-        .label = {},
       });
 
       for (auto const& preset : customs)
@@ -101,12 +99,9 @@ namespace ao::uimodel
 
     items.push_back(TrackPresentationMenuItem{
       .type = TrackPresentationMenuItemType::Separator,
-      .id = {},
-      .label = {},
     });
     items.push_back(TrackPresentationMenuItem{
       .type = TrackPresentationMenuItemType::CreateCustomView,
-      .id = {},
       .label = "Create Custom View...",
     });
 

@@ -67,7 +67,6 @@ namespace ao::gtk::layout
                                            .label = "Mode",
                                            .defaultValue = LayoutValue{"default"},
                                            .enumValues = {"default", "elapsed", "duration"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createTimeLabel);

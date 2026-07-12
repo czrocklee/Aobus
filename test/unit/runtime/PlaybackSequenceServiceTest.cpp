@@ -207,16 +207,14 @@ namespace ao::rt::test
           {
             decoderPtr->setReadScript(
               {{.data = data, .endOfStream = false},
-               {.data = {},
-                .endOfStream = false,
+               {.endOfStream = false,
                 .result = std::unexpected{
                   Error{.code = Error::Code::DecodeFailed, .message = "scripted sequence decode failure"}}}});
           }
           else
           {
-            decoderPtr->setReadScript({{.data = data, .endOfStream = false},
-                                       {.data = data, .endOfStream = false},
-                                       {.data = {}, .endOfStream = true}});
+            decoderPtr->setReadScript(
+              {{.data = data, .endOfStream = false}, {.data = data, .endOfStream = false}, {.endOfStream = true}});
           }
 
           return decoderPtr;

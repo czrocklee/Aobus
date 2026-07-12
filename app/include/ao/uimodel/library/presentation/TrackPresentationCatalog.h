@@ -31,8 +31,8 @@ namespace ao::uimodel
   struct TrackPresentationMenuItem final
   {
     TrackPresentationMenuItemType type = TrackPresentationMenuItemType::Preset;
-    std::string id;
-    std::string label;
+    std::string id = {};
+    std::string label = {};
 
     bool operator==(TrackPresentationMenuItem const&) const = default;
   };

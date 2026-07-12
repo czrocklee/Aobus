@@ -176,7 +176,6 @@ namespace ao::gtk::layout
                                            .kind = LayoutPropertyKind::String,
                                            .label = "Class Prefix",
                                            .defaultValue = LayoutValue{"ao-width"}}},
-                                .layoutProps = {},
                                 .minChildren = 1,
                                 .optMaxChildren = 1},
                                createResponsiveClass);

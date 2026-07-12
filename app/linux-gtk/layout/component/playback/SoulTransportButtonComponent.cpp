@@ -154,7 +154,6 @@ namespace ao::gtk::layout
                   .kind = LayoutPropertyKind::Double,
                   .label = "Glyph Scale",
                   .defaultValue = LayoutValue{1.0}}},
-       .layoutProps = {},
        .minChildren = 0,
        .optMaxChildren = 0,
        .actionPolicy =

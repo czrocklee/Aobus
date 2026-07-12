@@ -24,9 +24,7 @@ namespace ao::council::test
     auto request = ProcessRequest{
       .argv = {"sh", "-c", "trap '' TERM; sleep 30 & wait"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::milliseconds{100},
       .terminationGracePeriod = std::chrono::milliseconds{100},
     };
@@ -47,9 +45,7 @@ namespace ao::council::test
     auto result = runner.run(ProcessRequest{
       .argv = {"sh", "-c", "mask=$(grep SigIgn /proc/self/status | cut -f2); test $(( 0x$mask & 4096 )) -eq 0"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{5},
       .terminationGracePeriod = std::chrono::seconds{1},
     });
@@ -65,9 +61,7 @@ namespace ao::council::test
     auto result = runner.run(ProcessRequest{
       .argv = {"sh", "-c", "test -z \"${AOBUS_COUNCIL_SECRET:-}\""},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{5},
       .terminationGracePeriod = std::chrono::seconds{1},
     });
@@ -84,9 +78,7 @@ namespace ao::council::test
     auto missing = runner.run(ProcessRequest{
       .argv = {"aobus-council-command-that-does-not-exist"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{1},
       .terminationGracePeriod = std::chrono::seconds{1},
     });
@@ -95,9 +87,7 @@ namespace ao::council::test
     auto signaled = runner.run(ProcessRequest{
       .argv = {"sh", "-c", "kill -TERM $$"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{5},
       .terminationGracePeriod = std::chrono::seconds{1},
     });
@@ -113,9 +103,7 @@ namespace ao::council::test
     auto result = runner.run(ProcessRequest{
       .argv = {"sh", "-c", "sleep 30 & exit 7"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{20},
       .terminationGracePeriod = std::chrono::milliseconds{200},
     });
@@ -133,9 +121,7 @@ namespace ao::council::test
     auto result = runner.run(ProcessRequest{
       .argv = {"sh", "-c", "echo live-marker; sleep 30"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::milliseconds{500},
       .terminationGracePeriod = std::chrono::milliseconds{100},
       .optStdoutSink = StreamSink{.path = sinkPath},
@@ -156,9 +142,7 @@ namespace ao::council::test
     auto result = runner.run(ProcessRequest{
       .argv = {"sh", "-c", "printf 0123456789"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{5},
       .terminationGracePeriod = std::chrono::seconds{1},
       .maxCapturedBytes = 5,
@@ -182,9 +166,7 @@ namespace ao::council::test
     auto result = runner.run(ProcessRequest{
       .argv = {"sh", "-c", "printf '0123\\303\\251xyz'"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{5},
       .terminationGracePeriod = std::chrono::seconds{1},
       .maxCapturedBytes = 5,
@@ -205,9 +187,7 @@ namespace ao::council::test
     auto request = ProcessRequest{
       .argv = {"sh", "-c", "echo first"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{5},
       .terminationGracePeriod = std::chrono::seconds{1},
       .optStdoutSink = StreamSink{.path = sinkPath},
@@ -233,9 +213,7 @@ namespace ao::council::test
     auto result = runner.run(ProcessRequest{
       .argv = {"sh", "-c", "echo out-line; echo err-line >&2"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{5},
       .terminationGracePeriod = std::chrono::seconds{1},
       .optStdoutSink = StreamSink{.path = sinkPath},
@@ -256,9 +234,7 @@ namespace ao::council::test
     auto request = ProcessRequest{
       .argv = {"sh", "-c", "exit 0"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{5},
       .terminationGracePeriod = std::chrono::seconds{1},
     };
@@ -276,9 +252,7 @@ namespace ao::council::test
     auto result = runner.run(ProcessRequest{
       .argv = {"sh", "-c", "echo survives"},
       .cwd = std::filesystem::temp_directory_path(),
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{5},
       .terminationGracePeriod = std::chrono::seconds{1},
       .optStdoutSink = StreamSink{.path = "/proc/version/impossible/stdout.txt"},
@@ -301,7 +275,6 @@ namespace ao::council::test
       .cwd = std::filesystem::temp_directory_path(),
       .standardInput = std::move(input),
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{20},
       .terminationGracePeriod = std::chrono::seconds{2},
     });

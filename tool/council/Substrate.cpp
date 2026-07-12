@@ -129,9 +129,7 @@ namespace ao::council
       return ProcessRequest{
         .argv = std::move(argv),
         .cwd = cwd,
-        .standardInput = {},
         .environmentWhitelist = {"PATH", "HOME", "USER", "TMPDIR", "NIX_PATH", "GIT_CONFIG_NOSYSTEM"},
-        .environment = {},
         .timeout = kDefaultLocalTimeout,
         .terminationGracePeriod = std::chrono::seconds{2},
       };

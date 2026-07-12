@@ -391,7 +391,7 @@ namespace ao::audio
   {
     if (!_implPtr->file.isMapped() || _implPtr->eof)
     {
-      return PcmBlock{.bytes = {}, .endOfStream = true};
+      return PcmBlock{.endOfStream = true};
     }
 
     auto const remainingFrames = _implPtr->totalFrames - _implPtr->nextFrameIndex;

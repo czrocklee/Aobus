@@ -34,12 +34,12 @@ namespace ao::audio::test
     struct ParsedWaveFixture final
     {
       std::vector<std::uint8_t> bytes;
-      media::wav::ParsedWave wave;
+      media::wav::ParsedWave wave = {};
     };
 
     ParsedWaveFixture requireParsedWave(std::filesystem::path const& path)
     {
-      auto fixture = ParsedWaveFixture{.bytes = readFileBytes(path), .wave = {}};
+      auto fixture = ParsedWaveFixture{.bytes = readFileBytes(path)};
       auto result = media::wav::parseWave(asBytes(fixture.bytes));
       REQUIRE(result);
       fixture.wave = *result;

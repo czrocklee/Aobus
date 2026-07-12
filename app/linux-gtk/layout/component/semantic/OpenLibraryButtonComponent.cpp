@@ -52,8 +52,6 @@ namespace ao::gtk::layout
     registry.registerComponent({.type = "library.openLibraryButton",
                                 .displayName = "Open Library Button",
                                 .category = LayoutComponentCategory::Library,
-                                .props = {},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createOpenLibraryButton);

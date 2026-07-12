@@ -294,7 +294,7 @@ namespace ao::tui
 
         if (resizeHandles != nullptr)
         {
-          resizeHandles->push_back(TrackColumnResizeHandle{.field = column.field, .box = {}, .columns = column.width});
+          resizeHandles->push_back(TrackColumnResizeHandle{.field = column.field, .columns = column.width});
           cellPtr = std::move(cellPtr) | reflect(resizeHandles->back().box);
         }
 
@@ -644,7 +644,7 @@ namespace ao::tui
             // Off-window headers are off-screen, so emitting regions only for
             // windowed headers keeps the true sectionIndex for every clickable one.
             options.sectionRowHitRegions->push_back(
-              TrackSectionRowHitRegion{.sectionIndex = static_cast<std::int32_t>(ref.sectionIndex), .box = {}});
+              TrackSectionRowHitRegion{.sectionIndex = static_cast<std::int32_t>(ref.sectionIndex)});
             rowPtr = std::move(rowPtr) | reflect(options.sectionRowHitRegions->back().box);
           }
 

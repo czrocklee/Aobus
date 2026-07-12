@@ -800,7 +800,7 @@ namespace ao::gtk
     }
 
     _session.applyPanelSizePromotion(uimodel::ShellLayoutPanelSizePromotion{
-      .presetId = presetId, .layout = std::move(promotedLayout), .componentState = promotedState, .result = {}});
+      .presetId = presetId, .layout = std::move(promotedLayout), .componentState = promotedState});
     auto const snapshot = _session.snapshot();
     _runtimeState.activePresetId = snapshot.presetId;
     _runtimeState.componentState = std::move(promotedState);

@@ -55,8 +55,7 @@ namespace ao::library::test
     auto header = MetadataHeader{.magic = 0xDEADBEEF,
                                  .libraryVersion = 42,
                                  .flags = 0,
-                                 .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1234567890}},
-                                 .libraryId = {}};
+                                 .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1234567890}}};
     store.create(wtxn, header);
     REQUIRE(wtxn.commit());
 
@@ -94,8 +93,7 @@ namespace ao::library::test
     auto header = MetadataHeader{.magic = 0xAAAAAAAA,
                                  .libraryVersion = 1,
                                  .flags = 0,
-                                 .createdTime = std::chrono::sys_time{std::chrono::milliseconds{100}},
-                                 .libraryId = {}};
+                                 .createdTime = std::chrono::sys_time{std::chrono::milliseconds{100}}};
     store.create(wtxn, header);
     REQUIRE(wtxn.commit());
 

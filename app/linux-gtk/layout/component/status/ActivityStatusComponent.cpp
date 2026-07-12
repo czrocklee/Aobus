@@ -154,7 +154,6 @@ namespace ao::gtk::layout
                                            .kind = LayoutPropertyKind::Int,
                                            .label = "Max Text Chars",
                                            .defaultValue = LayoutValue{kDefaultMaxTextChars}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createActivityStatus);

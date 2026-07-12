@@ -226,8 +226,6 @@ namespace ao::audio
     auto plan = RenderPlan{
       .sourceFormat = sourceFormat,
       .deviceFormat = sourceFormat,
-      .decoderOutputFormat = {},
-      .reason = {},
     };
 
     negotiate(plan.deviceFormat.sampleRate,

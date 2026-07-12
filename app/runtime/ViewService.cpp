@@ -52,7 +52,7 @@ namespace ao::rt
       std::optional<TrackSourceLease> optBaseSourceLease;
       std::optional<TrackSourceLease> optActiveSourceLease;
       std::optional<Error> optFilterError;
-      std::shared_ptr<LiveTrackListProjection> projectionPtr;
+      std::shared_ptr<LiveTrackListProjection> projectionPtr = nullptr;
     };
 
     struct PreparedViewResources final
@@ -309,7 +309,6 @@ namespace ao::rt
       .optBaseSourceLease = std::nullopt,
       .optActiveSourceLease = std::nullopt,
       .optFilterError = std::nullopt,
-      .projectionPtr = {},
     };
     installResources(entry, std::move(*resourcesResult));
     _implPtr->views.emplace(id, std::move(entry));

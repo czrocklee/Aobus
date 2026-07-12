@@ -69,7 +69,6 @@ namespace ao::gtk::layout
                   .label = "Style",
                   .defaultValue = LayoutValue{"flat"},
                   .enumValues = {"flat", "raised"}}},
-       .layoutProps = {},
        .minChildren = 0,
        .optMaxChildren = 0},
       createMenuButton);

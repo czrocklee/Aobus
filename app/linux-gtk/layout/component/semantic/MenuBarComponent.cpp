@@ -49,8 +49,6 @@ namespace ao::gtk::layout
     registry.registerComponent({.type = "app.menuBar",
                                 .displayName = "Menu Bar",
                                 .category = LayoutComponentCategory::Application,
-                                .props = {},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createMenuBar);

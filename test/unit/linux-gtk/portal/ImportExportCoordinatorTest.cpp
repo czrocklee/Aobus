@@ -67,8 +67,6 @@ namespace ao::gtk::test
         receivedScanAfterOpen = scanAfterOpen;
         ++openCallbackCount;
       },
-      .onLibraryDataMutated = {},
-      .onTitleChanged = {},
     };
     auto coordinator = portal::ImportExportCoordinator{parent, fixture.runtime(), callbacks, theme};
 

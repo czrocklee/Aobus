@@ -19,8 +19,8 @@ namespace ao::uimodel
     ListId parentId = kInvalidListId;
     std::string name;
     bool isSmart = false;
-    std::string localExpression;
-    std::vector<ListId> childIds;
+    std::string localExpression = {};
+    std::vector<ListId> childIds = {};
   };
 
   struct ListTreeProjection final

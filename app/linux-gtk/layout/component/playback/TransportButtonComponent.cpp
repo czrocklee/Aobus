@@ -119,7 +119,6 @@ namespace ao::gtk::layout
                                            .label = "Size",
                                            .defaultValue = LayoutValue{"normal"},
                                            .enumValues = {"small", "normal", "large"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createPlayPauseButton);
@@ -136,7 +135,6 @@ namespace ao::gtk::layout
                                            .label = "Size",
                                            .defaultValue = LayoutValue{"normal"},
                                            .enumValues = {"small", "normal", "large"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createStopButton);
@@ -153,7 +151,6 @@ namespace ao::gtk::layout
                                            .label = "Size",
                                            .defaultValue = LayoutValue{"normal"},
                                            .enumValues = {"small", "normal", "large"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createNextButton);
@@ -170,7 +167,6 @@ namespace ao::gtk::layout
                                            .label = "Size",
                                            .defaultValue = LayoutValue{"normal"},
                                            .enumValues = {"small", "normal", "large"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createPreviousButton);
@@ -187,7 +183,6 @@ namespace ao::gtk::layout
                                            .label = "Size",
                                            .defaultValue = LayoutValue{"normal"},
                                            .enumValues = {"small", "normal", "large"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createShuffleButton);
@@ -204,7 +199,6 @@ namespace ao::gtk::layout
                                            .label = "Size",
                                            .defaultValue = LayoutValue{"normal"},
                                            .enumValues = {"small", "normal", "large"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createRepeatButton);
@@ -221,7 +215,6 @@ namespace ao::gtk::layout
                                            .label = "Size",
                                            .defaultValue = LayoutValue{"normal"},
                                            .enumValues = {"small", "normal", "large"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createPlayButton);
@@ -238,7 +231,6 @@ namespace ao::gtk::layout
                                            .label = "Size",
                                            .defaultValue = LayoutValue{"normal"},
                                            .enumValues = {"small", "normal", "large"}}},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createPauseButton);

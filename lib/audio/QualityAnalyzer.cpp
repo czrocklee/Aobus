@@ -359,7 +359,6 @@ namespace ao::audio
         .nodeType = node->type,
         .optFormat = node->optFormat,
         .worstQuality = Quality::BitwisePerfect,
-        .findings = {},
       };
 
       assessNodeSelfProperties(*node, assessment);

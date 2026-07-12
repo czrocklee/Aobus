@@ -66,9 +66,7 @@ body: |
     auto result = process.run(ProcessRequest{
       .argv = std::move(argv),
       .cwd = cwd,
-      .standardInput = {},
       .environmentWhitelist = {"PATH"},
-      .environment = {},
       .timeout = std::chrono::seconds{10},
       .terminationGracePeriod = std::chrono::seconds{1},
     });

@@ -35,9 +35,9 @@ namespace ao::gtk
   public:
     struct Callbacks final
     {
-      std::function<void(ListId)> onListSelected;
-      std::function<void(ListId, std::string)> onListPresentationSaved;
-      std::function<std::optional<std::string>(ListId)> listPresentationCallback;
+      std::function<void(ListId)> onListSelected = {};
+      std::function<void(ListId, std::string)> onListPresentationSaved = {};
+      std::function<std::optional<std::string>(ListId)> listPresentationCallback = {};
     };
 
     ListNavigationController(Gtk::Window& parent,

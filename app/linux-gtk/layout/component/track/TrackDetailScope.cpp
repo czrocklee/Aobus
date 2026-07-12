@@ -168,7 +168,6 @@ namespace ao::gtk::layout
       {.type = "track.detailScope",
        .displayName = "Detail Scope",
        .category = LayoutComponentCategory::Track,
-       .props = {},
        .layoutProps = {{.name = "cssClasses", .kind = LayoutPropertyKind::String, .label = "CSS Classes"}},
        .minChildren = 1,
        .optMaxChildren = 0},

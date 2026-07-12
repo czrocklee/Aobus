@@ -100,8 +100,6 @@ namespace ao::gtk::layout
     registry.registerComponent({.type = "track.tagEditor",
                                 .displayName = "Tag Editor",
                                 .category = LayoutComponentCategory::Track,
-                                .props = {},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createTrackTagEditor);

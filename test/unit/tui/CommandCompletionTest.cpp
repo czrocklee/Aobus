@@ -66,8 +66,7 @@ namespace ao::tui::test
 
   TEST_CASE("CommandCompletion - completes artists and lists for quick filters", "[tui][unit][completion]")
   {
-    auto const lists =
-      std::vector<LibraryNavEntry>{{.label = "[#] Road Trips", .detail = {}, .completionText = "Road Trips"}};
+    auto const lists = std::vector<LibraryNavEntry>{{.label = "[#] Road Trips", .completionText = "Road Trips"}};
     auto const artists = std::vector<rt::VocabularyEntry>{{.value = "Aimer", .frequency = 7}};
 
     auto optResult = completeCommandDraft("Ai", CommandCompletionContext{.lists = lists, .artists = artists});
@@ -90,8 +89,7 @@ namespace ao::tui::test
   TEST_CASE("CommandCompletion - bare quick filters match the whole draft for multi-word names",
             "[tui][unit][completion]")
   {
-    auto const lists =
-      std::vector<LibraryNavEntry>{{.label = "[#] Road Trips", .detail = {}, .completionText = "Road Trips"}};
+    auto const lists = std::vector<LibraryNavEntry>{{.label = "[#] Road Trips", .completionText = "Road Trips"}};
     auto const artists = std::vector<rt::VocabularyEntry>{
       {.value = "Road The Beatles", .frequency = 1},
       {.value = "Road Trip Artist", .frequency = 1},

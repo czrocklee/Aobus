@@ -78,7 +78,6 @@ namespace ao::rt
       {
         auto const uri = std::filesystem::relative(entry.path(), root, entryEc).generic_string();
         auto item = ScanItem{.uri = uri,
-                             .oldUri = {},
                              .fullPath = entry.path(),
                              .classification = ScanClassification::Error,
                              .errorMessage = entryEc.message()};
@@ -104,7 +103,7 @@ namespace ao::rt
       auto const uri = std::filesystem::relative(path, root, entryEc).generic_string();
       seenUris.insert(uri);
 
-      auto item = ScanItem{.uri = uri, .oldUri = {}, .fullPath = path, .classification = ScanClassification::Error};
+      auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
 
       try
       {
@@ -164,15 +163,12 @@ namespace ao::rt
         if (auto const uri = std::string{uriView}; !seenUris.contains(uri))
         {
           auto item = ScanItem{.uri = uri,
-                               .oldUri = {},
-                               .fullPath = {},
                                .classification = ScanClassification::Missing,
                                .fileSize = view.fileSize(),
                                .mtime = view.mtime(),
                                .audioPayloadLength = view.audioPayloadLength(),
                                .audioSignature = view.audioSignature(),
-                               .trackId = view.trackId(),
-                               .errorMessage = {}};
+                               .trackId = view.trackId()};
           plan.items.push_back(std::move(item));
         }
       }
@@ -353,7 +349,6 @@ namespace ao::rt
         {
           auto const uri = std::filesystem::relative(entry.path(), root, entryEc).generic_string();
           auto item = ScanItem{.uri = uri,
-                               .oldUri = {},
                                .fullPath = entry.path(),
                                .classification = ScanClassification::Error,
                                .errorMessage = testEc.message()};

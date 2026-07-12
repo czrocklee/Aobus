@@ -75,8 +75,6 @@ namespace ao::gtk::layout
     registry.registerComponent({.type = "playback.outputDeviceSelector",
                                 .displayName = "Output Device Selector",
                                 .category = LayoutComponentCategory::Playback,
-                                .props = {},
-                                .layoutProps = {},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createOutputDeviceSelector);
