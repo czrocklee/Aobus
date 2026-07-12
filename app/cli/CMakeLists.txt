@@ -10,7 +10,6 @@ add_library(aobus-cli-lib STATIC
     LibCommand.h
     ListCommand.cpp
     ListCommand.h
-    Output.cpp
     Output.h
     QueryHelp.cpp
     QueryHelp.h

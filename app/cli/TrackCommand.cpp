@@ -294,7 +294,6 @@ namespace ao::cli
     }
   } // namespace
 
-  // NOLINTNEXTLINE(bugprone-exception-escape) -- MSVC's std::map move constructor may allocate its sentinel.
   struct TrackRecordDto final
   {
     TrackId id{};

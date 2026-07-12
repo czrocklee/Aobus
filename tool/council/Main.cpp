@@ -99,7 +99,6 @@ namespace
   }
 } // namespace
 
-// NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char** argv)
 {
   // Agent stdin pipes and our own stdout may close early; report EPIPE as an error

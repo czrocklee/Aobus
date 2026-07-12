@@ -622,7 +622,6 @@ namespace
   }
 } // namespace
 
-// NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char* argv[])
 {
   std::int32_t exitCode = 0;

@@ -60,6 +60,8 @@ STRICT_CHECKS = ",".join(
         "google-readability-namespace-comments",
         # === disabled: false positives or project preference ===
         "-bugprone-easily-swappable-parameters",  # frequent false positives
+        "-bugprone-exception-escape",  # dominated by allocation paths and MSVC container moves
+        "-bugprone-throwing-static-initialization",  # dominated by STL startup-allocation details
         "-cppcoreguidelines-avoid-magic-numbers",  # handled by aobus readability check
         "-cppcoreguidelines-avoid-const-or-ref-data-members",  # common pattern for views
         "-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access",  # .at() is not a universal hot-path policy
@@ -85,7 +87,6 @@ RELAXED_CHECKS = ",".join(
         STRICT_CHECKS,
         # === additionally disabled for test code ===
         "-bugprone-unchecked-optional-access",  # test code uses .value() liberally
-        "-bugprone-throwing-static-initialization",  # test process startup does not need production static-init policy
         "-bugprone-unused-return-value",  # tests often discard return values
         "-cppcoreguidelines-avoid-c-arrays",  # Catch2 API and test data arrays
         "-cppcoreguidelines-avoid-magic-numbers",  # not enforced in tests

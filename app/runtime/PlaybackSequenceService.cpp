@@ -1431,7 +1431,6 @@ namespace ao::rt
   }
 
   // Executor-affinity failure deliberately terminates this otherwise contained noexcept commit.
-  // NOLINTNEXTLINE(bugprone-exception-escape)
   void PlaybackSequenceService::commitPlaybackSessionRestore(std::unique_ptr<PlaybackCursorSession> sessionPtr,
                                                              ShuffleMode const restoredShuffleMode,
                                                              RepeatMode const restoredRepeatMode,

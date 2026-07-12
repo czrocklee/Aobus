@@ -14,7 +14,6 @@
 
 using namespace ao;
 
-// NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char const* argv[])
 {
   return cli::run(argc, argv, std::cout, std::cerr);

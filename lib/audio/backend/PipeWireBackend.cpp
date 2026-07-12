@@ -154,7 +154,7 @@ namespace ao::audio::backend
     void handlePropsParam(::spa_pod const* param);
   };
 
-  ::pw_stream_events const PipeWireBackend::Impl::streamEvents = [] // NOLINT(bugprone-throwing-static-initialization)
+  ::pw_stream_events const PipeWireBackend::Impl::streamEvents = []
   {
     auto ev = ::pw_stream_events{};
     ev.version = PW_VERSION_STREAM_EVENTS;

@@ -50,6 +50,8 @@ namespace ao::audio::detail
     return count;
   }
 
+  // Result error materialization may allocate; the cursor intentionally fails
+  // fast if an allocation escapes this noexcept boundary.
   Result<std::uint64_t> MappedFileCursor::seek(std::int64_t offset, SeekOrigin origin) noexcept
   {
     auto const fileSize = size();

@@ -24,8 +24,6 @@
 #include <utility>
 #include <vector>
 
-using namespace std::string_view_literals;
-
 namespace ao::library::test
 {
   using namespace ao::lmdb;
@@ -342,11 +340,11 @@ namespace ao::library::test
       auto db = openDatabase(wtxn, "dictionary");
       auto writer = db.writer(wtxn);
 
-      REQUIRE(writer.create(1, utility::bytes::view("first"sv)));
+      REQUIRE(writer.create(1, utility::bytes::view(std::string_view{"first"})));
       // SKIP ID 2
-      REQUIRE(writer.create(3, utility::bytes::view("third"sv)));
+      REQUIRE(writer.create(3, utility::bytes::view(std::string_view{"third"})));
       // SKIP ID 4
-      REQUIRE(writer.create(5, utility::bytes::view("fifth"sv)));
+      REQUIRE(writer.create(5, utility::bytes::view(std::string_view{"fifth"})));
 
       REQUIRE(wtxn.commit());
     }
@@ -382,9 +380,9 @@ namespace ao::library::test
       auto db = openDatabase(wtxn, "dictionary");
       auto writer = db.writer(wtxn);
 
-      REQUIRE(writer.create(1, utility::bytes::view("first"sv)));
+      REQUIRE(writer.create(1, utility::bytes::view(std::string_view{"first"})));
       // SKIP ID 2
-      REQUIRE(writer.create(3, utility::bytes::view("third"sv)));
+      REQUIRE(writer.create(3, utility::bytes::view(std::string_view{"third"})));
 
       REQUIRE(wtxn.commit());
     }
@@ -466,7 +464,7 @@ namespace ao::library::test
       seededIds.push_back(dictionary.getOrIntern("seed_" + std::to_string(i)));
     }
 
-    auto failed = std::atomic<bool>{false};
+    auto failed = std::atomic{false};
 
     // Writer: keep interning fresh strings to force storage growth underneath
     // the readers.

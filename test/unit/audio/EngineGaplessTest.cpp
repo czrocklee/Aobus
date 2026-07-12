@@ -306,7 +306,7 @@ namespace ao::audio::test
     auto endedLatch = CallbackLatch{};
     auto routeEntered = CallbackLatch{};
     auto releaseRoute = std::binary_semaphore{0};
-    auto parkOnce = std::atomic<bool>{true};
+    auto parkOnce = std::atomic{true};
 
     auto engine =
       Engine{std::move(backendPtr),
@@ -714,8 +714,8 @@ namespace ao::audio::test
                          makeEngineTestDevice(),
                          makeStagedFailureDecoderFactory("candidate-failure.flac", failureGate)};
     auto stateChanged = CallbackLatch{};
-    auto failureCount = std::atomic<std::size_t>{0};
-    auto endedCount = std::atomic<std::size_t>{0};
+    auto failureCount = std::atomic{std::size_t{0}};
+    auto endedCount = std::atomic{std::size_t{0}};
     engine.setOnStateChanged([&] { stateChanged.notify(); });
     engine.setOnPlaybackFailure([&](Engine::PlaybackFailure const&)
                                 { failureCount.fetch_add(1, std::memory_order_relaxed); });
@@ -815,7 +815,7 @@ namespace ao::audio::test
                            {.path = "explicit.flac", .info = makeScriptedStreamInfo(format), .data = explicitData},
                          })};
     auto releaseGuard = WorkerReleaseGuard{workerRelease};
-    auto advancedCount = std::atomic<std::size_t>{0};
+    auto advancedCount = std::atomic{std::size_t{0}};
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&)
                               { advancedCount.fetch_add(1, std::memory_order_relaxed); });
 

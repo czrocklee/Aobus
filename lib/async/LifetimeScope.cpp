@@ -6,6 +6,7 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 
+#include <cstdio> // NOLINT(misc-include-cleaner) -- directly provides stderr on MSVC
 #include <exception>
 #include <memory>
 #include <mutex>

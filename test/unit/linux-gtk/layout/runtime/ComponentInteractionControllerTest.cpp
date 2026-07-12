@@ -68,7 +68,7 @@ namespace ao::gtk::layout::test
       auto node = uimodel::LayoutNode{.type = "btn"}; // No props
 
       auto policy = uimodel::kExternalPrimaryActions;
-      policy.defaultActionIds[LayoutActionSlot::PrimaryClick] = "primary";
+      policy.defaultActionIds.emplace_back(LayoutActionSlot::PrimaryClick, "primary");
 
       auto controller = ComponentInteractionController{};
       controller.attach(ctx, node, button, policy);

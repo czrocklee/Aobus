@@ -53,7 +53,6 @@ namespace ao::rt::test
     std::string label{};
   };
 
-  // NOLINTNEXTLINE(bugprone-exception-escape) — clang models MSVC's standard-library map move as throwing.
   struct ComplexAggregate final
   {
     std::int32_t count = 0;

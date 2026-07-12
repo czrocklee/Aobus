@@ -115,6 +115,8 @@ namespace ao::audio
     return calculateBufferedDuration(_ringBuffer.size(), _bytesPerSecond);
   }
 
+  // Result error materialization and decoder-thread startup may allocate; the
+  // streaming source intentionally fails fast if that escapes its noexcept contract.
   Result<> StreamingSource::seek(std::chrono::milliseconds offset) noexcept
   {
     stopDecodeThread();

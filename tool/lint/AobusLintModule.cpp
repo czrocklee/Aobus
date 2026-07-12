@@ -92,7 +92,6 @@ namespace clang::tidy::readability
     };
 
     // LLVM requires registration through a namespace-scope constructor.
-    // NOLINTNEXTLINE(bugprone-throwing-static-initialization)
     ClangTidyModuleRegistry::Add<AobusLintModule> const aobusLintModuleRegistration{"aobus-lint-module",
                                                                                     "Adds Aobus custom checks."};
   } // namespace

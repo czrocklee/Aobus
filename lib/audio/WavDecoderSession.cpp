@@ -353,6 +353,8 @@ namespace ao::audio
     _implPtr->eof = false;
   }
 
+  // Result error materialization may allocate; DecoderSession intentionally
+  // fails fast if an allocation escapes this noexcept boundary.
   Result<> WavDecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
     if (!_implPtr->file.isMapped())
@@ -383,6 +385,8 @@ namespace ao::audio
     _implPtr->pcmBuffer.clear();
   }
 
+  // The decode buffer may allocate; DecoderSession intentionally fails fast if
+  // an allocation escapes this noexcept boundary.
   Result<PcmBlock> WavDecoderSession::readNextBlock() noexcept
   {
     if (!_implPtr->file.isMapped() || _implPtr->eof)

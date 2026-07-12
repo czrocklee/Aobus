@@ -165,6 +165,7 @@ namespace ao::query::detail
     }
 
     template<typename Scanner>
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity) -- lexy macros expand into synthetic branches.
     bool branchKnownToken(Scanner& scanner, std::string_view text, std::vector<CompletionToken>& tokens)
     {
       namespace dsl = lexy::dsl;

@@ -27,7 +27,7 @@ drive-by lint sweep.
   `tool/`.
 - `RELAXED` checks apply to C++ tests under `test/`. Test mode keeps the same
   baseline but disables test-noisy checks such as unchecked optional access,
-  discarded return values, throwing static initialization, designated
+  discarded return values, designated
   initializers for positional expected-data tables, cognitive complexity,
   identifier length, magic numbers, C arrays, C varargs, and test-only casts.
 - `test/main.cpp` and non-fixture files under `test/integration/lint/` are
@@ -124,7 +124,15 @@ suppressions.
   framework-required names, or vocabulary names just to appease a generic rule.
 - If the tool is consistently wrong for a project pattern, consider narrowing
   the check configuration or custom rule. Do not scatter many identical
-  suppressions across the tree.
+suppressions across the tree.
+
+`bugprone-throwing-static-initialization` and `bugprone-exception-escape` are
+disabled for all source modes. On MSVC they are dominated by standard-library
+implementation details such as `std::map` allocating its sentinel node, while
+explicit `noexcept` paths also report every potentially allocating error or
+buffer operation. These diagnostics are not actionable enough to justify local
+suppressions or data-structure churn. Review and tests remain responsible for
+the project's intentional fail-fast boundaries.
 
 ## Suppressions
 

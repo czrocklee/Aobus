@@ -500,7 +500,7 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    static inline ::pw_core_events const coreEvents = [] // NOLINT(bugprone-throwing-static-initialization)
+    static inline ::pw_core_events const coreEvents = []
     {
       auto ev = ::pw_core_events{};
       ev.version = PW_VERSION_CORE_EVENTS;
@@ -508,7 +508,7 @@ namespace ao::audio::backend
       return ev;
     }();
 
-    static inline ::pw_registry_events const registryEvents = [] // NOLINT(bugprone-throwing-static-initialization)
+    static inline ::pw_registry_events const registryEvents = []
     {
       auto ev = ::pw_registry_events{};
       ev.version = PW_VERSION_REGISTRY_EVENTS;
@@ -517,7 +517,7 @@ namespace ao::audio::backend
       return ev;
     }();
 
-    static inline ::pw_node_events const streamNodeEvents = [] // NOLINT(bugprone-throwing-static-initialization)
+    static inline ::pw_node_events const streamNodeEvents = []
     {
       auto ev = ::pw_node_events{};
       ev.version = PW_VERSION_NODE_EVENTS;
@@ -526,7 +526,7 @@ namespace ao::audio::backend
       return ev;
     }();
 
-    static inline ::pw_node_events const sinkNodeEvents = [] // NOLINT(bugprone-throwing-static-initialization)
+    static inline ::pw_node_events const sinkNodeEvents = []
     {
       auto ev = ::pw_node_events{};
       ev.version = PW_VERSION_NODE_EVENTS;

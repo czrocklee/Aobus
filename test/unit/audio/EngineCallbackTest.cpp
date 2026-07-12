@@ -457,7 +457,7 @@ namespace ao::audio::test
     auto workerFlushed = std::binary_semaphore{0};
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
     auto releaseGuard = SemaphoreReleaseGuard{stateRelease};
-    auto routeCount = std::atomic<std::size_t>{0};
+    auto routeCount = std::atomic{std::size_t{0}};
 
     engine.setOnStateChanged(
       [&]
@@ -506,7 +506,7 @@ namespace ao::audio::test
     auto workerFlushed = std::binary_semaphore{0};
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
     auto releaseGuard = SemaphoreReleaseGuard{stateRelease};
-    auto endedCount = std::atomic<std::size_t>{0};
+    auto endedCount = std::atomic{std::size_t{0}};
 
     engine.setOnStateChanged(
       [&]
@@ -560,7 +560,7 @@ namespace ao::audio::test
     auto workerFlushed = std::binary_semaphore{0};
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
     auto releaseGuard = SemaphoreReleaseGuard{workerRelease};
-    auto failureCount = std::atomic<std::size_t>{0};
+    auto failureCount = std::atomic{std::size_t{0}};
 
     engine.setOnPlaybackFailure([&](Engine::PlaybackFailure const&)
                                 { failureCount.fetch_add(1, std::memory_order_relaxed); });

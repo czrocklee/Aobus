@@ -12,9 +12,7 @@ namespace ao::audio
   using BackendId = utility::StrongType<std::string, struct BackendTag>;
   using ProfileId = utility::StrongType<std::string, struct ProfileTag>;
 
-  // These owning process-lifetime vocabulary values are needed before runtime
-  // error handling exists; allocation failure during startup is unrecoverable.
-  // NOLINTBEGIN(bugprone-throwing-static-initialization)
+  // These owning vocabulary values live for the process lifetime.
   inline BackendId const kBackendNone{""};
   inline BackendId const kBackendPipeWire{"pipewire"};
   inline BackendId const kBackendAlsa{"alsa"};
@@ -22,5 +20,4 @@ namespace ao::audio
 
   inline ProfileId const kProfileShared{"shared"};
   inline ProfileId const kProfileExclusive{"exclusive"};
-  // NOLINTEND(bugprone-throwing-static-initialization)
 } // namespace ao::audio

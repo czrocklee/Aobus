@@ -250,6 +250,8 @@ namespace ao::audio
     _implPtr->info = {};
   }
 
+  // Result error materialization may allocate; DecoderSession intentionally
+  // fails fast if an allocation escapes this noexcept boundary.
   Result<> AacDecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
     if (auto const result = _implPtr->packetSource.seek(offset); !result)
@@ -269,6 +271,8 @@ namespace ao::audio
     }
   }
 
+  // Result error materialization and decode buffers may allocate; DecoderSession
+  // intentionally fails fast if an allocation escapes this noexcept boundary.
   Result<PcmBlock> AacDecoderSession::readNextBlock() noexcept
   {
     try

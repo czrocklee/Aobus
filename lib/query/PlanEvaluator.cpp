@@ -4,6 +4,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/library/CoverArt.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>

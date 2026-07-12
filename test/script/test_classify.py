@@ -57,8 +57,11 @@ class TidyChecksTest(unittest.TestCase):
 
     def test_clang_22_policy_exclusions_are_mode_specific(self):
         self.assertIn("-misc-multiple-inheritance", tidy.STRICT_CHECKS.split(","))
+        self.assertIn("-bugprone-exception-escape", tidy.STRICT_CHECKS.split(","))
+        self.assertIn("-bugprone-throwing-static-initialization", tidy.STRICT_CHECKS.split(","))
         self.assertNotIn("-modernize-use-designated-initializers", tidy.STRICT_CHECKS.split(","))
         self.assertIn("-modernize-use-designated-initializers", tidy.RELAXED_CHECKS.split(","))
+        self.assertIn("-bugprone-exception-escape", tidy.RELAXED_CHECKS.split(","))
         self.assertIn("-bugprone-throwing-static-initialization", tidy.RELAXED_CHECKS.split(","))
 
 

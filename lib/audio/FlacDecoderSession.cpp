@@ -238,7 +238,6 @@ namespace ao::audio
 
   // Result error materialization may allocate; DecoderSession requires fail-fast
   // termination if that escapes its recoverable decoder-error boundary.
-  // NOLINTNEXTLINE(bugprone-exception-escape)
   Result<> FlacDecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
     try
@@ -287,7 +286,6 @@ namespace ao::audio
 
   // Result error materialization may allocate; DecoderSession requires fail-fast
   // termination if that escapes its recoverable decoder-error boundary.
-  // NOLINTNEXTLINE(bugprone-exception-escape)
   Result<PcmBlock> FlacDecoderSession::readNextBlock() noexcept
   {
     try

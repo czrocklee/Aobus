@@ -465,7 +465,6 @@ namespace ao::rt
         owner.drainingOutboundEvents = true;
       }
       // All event alternatives are nothrow-movable and observer calls are contained.
-      // NOLINTNEXTLINE(bugprone-exception-escape)
       ~OutboundEventBatchScope()
       {
         if (_ownsDrain)

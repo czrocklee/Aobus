@@ -553,7 +553,6 @@ namespace ao::audio::backend
 
       // Lock failure at this noexcept lifecycle boundary is unrecoverable and
       // intentionally retains the provider's fail-fast contract.
-      // NOLINTNEXTLINE(bugprone-exception-escape)
       void requestShutdown() noexcept
       {
         if (shutdownRequested.exchange(true, std::memory_order_acq_rel))

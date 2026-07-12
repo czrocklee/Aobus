@@ -5,9 +5,11 @@
 
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 
-#include <map>
+#include <algorithm>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::uimodel
 {
@@ -17,13 +19,15 @@ namespace ao::uimodel
   struct LayoutComponentActionPolicy final
   {
     LayoutActionSlotMask slotMask = 0;
-    std::map<LayoutActionSlot, std::string> defaultActionIds = {};
+    std::vector<std::pair<LayoutActionSlot, std::string>> defaultActionIds = {};
 
     constexpr bool isSlotAllowed(LayoutActionSlot const slot) const noexcept { return (slotMask & slotBit(slot)) != 0; }
 
     std::string_view defaultAction(LayoutActionSlot const slot) const
     {
-      if (auto const it = defaultActionIds.find(slot); it != defaultActionIds.end())
+      if (auto const it =
+            std::ranges::find_if(defaultActionIds, [slot](auto const& entry) { return entry.first == slot; });
+          it != defaultActionIds.end())
       {
         return it->second;
       }

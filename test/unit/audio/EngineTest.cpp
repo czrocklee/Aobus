@@ -411,10 +411,8 @@ namespace ao::audio::test
     auto const path = std::filesystem::path{"offset.flac"};
     auto info = makeScriptedStreamInfo(fmt);
     info.duration = std::chrono::milliseconds{100};
-    // The decoder-factory contract is noexcept, while this test double copies scripted storage.
-    auto factory = [info, data, path, registryPtr, &orderedEvents]( // NOLINT(bugprone-exception-escape)
-                     std::filesystem::path const& requestedPath,
-                     Format const&)
+    auto factory = [info, data, path, registryPtr, &orderedEvents](
+                     std::filesystem::path const& requestedPath, Format const&)
     {
       if (requestedPath != path)
       {

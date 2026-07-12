@@ -88,8 +88,7 @@ namespace ao::audio::backend::test
         _cv.notify_all();
       }
 
-      // Test-only observation stores text behind RenderTarget's required noexcept boundary.
-      void handleRouteReady(std::string_view routeAnchor) noexcept override // NOLINT(bugprone-exception-escape)
+      void handleRouteReady(std::string_view routeAnchor) noexcept override
       {
         auto const lock = std::scoped_lock{_mutex};
         _routeAnchor = std::string{routeAnchor};
@@ -98,8 +97,7 @@ namespace ao::audio::backend::test
       void handleFormatChanged(Format const& /*format*/) noexcept override {}
       void handlePropertyChanged(PropertySnapshot /*snapshot*/) noexcept override {}
 
-      // Test-only observation stores text behind RenderTarget's required noexcept boundary.
-      void handleBackendError(std::string_view message) noexcept override // NOLINT(bugprone-exception-escape)
+      void handleBackendError(std::string_view message) noexcept override
       {
         {
           auto const lock = std::scoped_lock{_mutex};
