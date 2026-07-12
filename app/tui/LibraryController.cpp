@@ -225,6 +225,19 @@ namespace ao::tui
       return false;
     }
 
+    // The projection maintains an indexed track-to-row lookup. _tracks can drift
+    // from projection indices when a row's LMDB lookup was skipped, so trust the
+    // index only when the materialized row matches and otherwise scan below.
+    if (auto const projectionPtr = _runtime.views().trackListProjection(_activeViewId); projectionPtr != nullptr)
+    {
+      if (auto const optIndex = projectionPtr->indexOf(trackId);
+          optIndex && *optIndex < _tracks.size() && _tracks[*optIndex].id == trackId)
+      {
+        _selectedTrack = static_cast<std::int32_t>(*optIndex);
+        return true;
+      }
+    }
+
     for (std::size_t index = 0; index < _tracks.size(); ++index)
     {
       if (_tracks[index].id == trackId)

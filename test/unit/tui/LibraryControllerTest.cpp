@@ -133,6 +133,41 @@ namespace ao::tui::test
     CHECK(controller.selectedTrack() == 0);
   }
 
+  TEST_CASE("LibraryController - revealTrack selects a track after presentation reorder", "[tui][unit][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const lastId = fixture.addTrack(library::test::TrackSpec{.title = "B One",
+                                                                  .artist = "Artist",
+                                                                  .album = "Album B",
+                                                                  .albumArtist = "Artist",
+                                                                  .uri = "/tmp/b1.flac",
+                                                                  .year = 2021});
+    auto const targetId = fixture.addTrack(library::test::TrackSpec{.title = "A One",
+                                                                    .artist = "Artist",
+                                                                    .album = "Album A",
+                                                                    .albumArtist = "Artist",
+                                                                    .uri = "/tmp/a1.flac",
+                                                                    .year = 2020});
+    auto const secondId = fixture.addTrack(library::test::TrackSpec{.title = "A Two",
+                                                                    .artist = "Artist",
+                                                                    .album = "Album A",
+                                                                    .albumArtist = "Artist",
+                                                                    .uri = "/tmp/a2.flac",
+                                                                    .year = 2020});
+
+    auto controller = LibraryController{fixture.runtime};
+    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.tracks().size() == 3);
+    CHECK(controller.tracks()[0].id == targetId);
+    CHECK(controller.tracks()[1].id == secondId);
+    CHECK(controller.tracks()[2].id == lastId);
+
+    CHECK(controller.revealTrack(targetId) == "Revealed A One");
+    CHECK(controller.selectedTrack() == 0);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == targetId);
+  }
+
   TEST_CASE("LibraryController - setPresentation applies active workspace presentation", "[tui][unit][library]")
   {
     auto fixture = LibraryControllerFixture{};
