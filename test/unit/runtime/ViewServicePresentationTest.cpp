@@ -232,6 +232,27 @@ namespace ao::rt::test
     CHECK(callCount == 2);
   }
 
+  TEST_CASE("ViewService - trackListPresentation returns a reference to the stored spec",
+            "[runtime][unit][view][presentation]")
+  {
+    auto env = ViewServiceFixture{};
+    auto service = env.makeService();
+
+    auto const result = env.requireView(service);
+    auto const* preset = builtinTrackPresentationPreset("albums");
+    REQUIRE(preset != nullptr);
+    REQUIRE(service.setPresentation(result.viewId, preset->spec));
+
+    auto const& presentation = service.trackListPresentation(result.viewId);
+    auto const& presentationAgain = service.trackListPresentation(result.viewId);
+
+    // Both calls hand back the same stored object: an accessor to the view's spec,
+    // not a per-call copy of the whole TrackListViewState.
+    CHECK(&presentation == &presentationAgain);
+    CHECK(presentation.id == "albums");
+    CHECK(presentation.id == service.trackListState(result.viewId).presentation.id);
+  }
+
   TEST_CASE("ViewService - setPresentation with preset string", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};

@@ -10,6 +10,7 @@
 #include "CoverArt.h"
 #include "EventController.h"
 #include "Executor.h"
+#include "FrameTimer.h"
 #include "LibraryController.h"
 #include "NotificationCenterPanel.h"
 #include "OutputDeviceController.h"
@@ -36,7 +37,6 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
@@ -447,11 +447,14 @@ namespace ao::tui
                                     { return commandCompletions.complete(draft); },
                                   }};
 
+    auto frameTimer = FrameTimer{};
+
     auto rendererPtr = ftxui::Renderer(
       [&]
       {
         using namespace ftxui;
 
+        auto const frameBuildScope = frameTimer.measureBuild();
         auto const selectedTrackView = library.selectedTrackView();
         auto const selectedCoverArtId = selectedTrackView.coverArtId;
 
@@ -480,7 +483,7 @@ namespace ao::tui
         auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(frameTime));
         auto const animationElapsed =
           std::chrono::duration_cast<std::chrono::milliseconds>(frameTime.time_since_epoch());
-        auto const viewState = runtime.views().trackListState(library.activeViewId());
+        auto const& presentation = runtime.views().trackListPresentation(library.activeViewId());
         auto const terminalSize = ftxui::Terminal::Size();
         auto const terminalColumns = terminalSize.dimx;
         auto const terminalRows = terminalSize.dimy;
@@ -491,13 +494,14 @@ namespace ao::tui
                          library.sections(),
                          library.selectedTrack(),
                          state.nowPlaying.trackId,
-                         viewState.presentation,
+                         presentation,
                          TrackTableViewOptions{.columnWidths = &trackColumnWidthOverrides,
                                                .resizeHandles = &hitRegions.trackColumnResizeHandles,
                                                .sectionRowHitRegions = &hitRegions.trackSectionRows,
                                                .tableBox = &hitRegions.trackTableBox,
-                                               .availableColumns = std::max(1, terminalColumns - 2)});
-        auto const presentationTitle = trackPresentationDisplayId(viewState.presentation.id);
+                                               .availableColumns = std::max(1, terminalColumns - 2),
+                                               .viewportRows = terminalRows});
+        auto const presentationTitle = trackPresentationDisplayId(presentation.id);
         auto workspaceElementPtr =
           style::titledPanel(
             "",
@@ -677,6 +681,7 @@ namespace ao::tui
     while (!loop.HasQuitted())
     {
       loop.RunOnceBlocking();
+      frameTimer.recordPresentIfDrawn();
 
       activityStatusViewModel.expireTransientIfDue();
 
@@ -695,6 +700,7 @@ namespace ao::tui
     playback.stop();
     runtime.async().requestStop();
     runtime.async().join();
+    frameTimer.flush();
     rt::Log::shutdown();
     return 0;
   }

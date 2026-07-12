@@ -16,10 +16,12 @@
 #include <ftxui/screen/screen.hpp>
 #include <ftxui/screen/string.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -70,6 +72,72 @@ namespace ao::tui::test
                                              .album = std::move(album),
                                              .duration = duration,
                                              .trackNumber = trackNumber});
+    }
+
+    std::vector<TrackListEntry> manyTracks(std::size_t const count)
+    {
+      auto tracks = std::vector<TrackListEntry>{};
+      tracks.reserve(count);
+
+      for (std::size_t index = 0; index < count; ++index)
+      {
+        tracks.push_back(trackEntry(TrackId{static_cast<std::uint32_t>(index + 1)},
+                                    std::format("Track {:05}", index),
+                                    "Artist",
+                                    "Album",
+                                    static_cast<std::uint16_t>((index % 99) + 1),
+                                    std::chrono::seconds{60}));
+      }
+
+      return tracks;
+    }
+
+    // Sectioned list of `sectionCount` equal-sized groups covering `perSection`
+    // tracks each, matching the projection's contiguous row-range convention.
+    std::vector<TrackSection> equalSections(std::size_t const sectionCount, std::size_t const perSection)
+    {
+      auto sections = std::vector<TrackSection>{};
+      sections.reserve(sectionCount);
+
+      for (std::size_t index = 0; index < sectionCount; ++index)
+      {
+        sections.push_back(TrackSection{
+          .rowBegin = index * perSection, .rowCount = perSection, .primaryText = std::format("Album {:03}", index)});
+      }
+
+      return sections;
+    }
+
+    // Reference implementation of the header interleaving used by trackTableView
+    // before virtualization, against which enumerateTrackTableRows is checked.
+    std::vector<TrackTableRowRef> bruteForceTrackTableRows(std::span<TrackSection const> const sections,
+                                                           std::size_t const trackCount)
+    {
+      auto rows = std::vector<TrackTableRowRef>{};
+      std::size_t sectionIndex = 0;
+
+      for (std::size_t trackIndex = 0; trackIndex < trackCount; ++trackIndex)
+      {
+        while (sectionIndex < sections.size() && sections[sectionIndex].rowBegin <= trackIndex)
+        {
+          rows.push_back(TrackTableRowRef{.isSectionHeader = true, .sectionIndex = sectionIndex});
+          ++sectionIndex;
+        }
+
+        rows.push_back(TrackTableRowRef{.isSectionHeader = false, .trackIndex = trackIndex});
+      }
+
+      return rows;
+    }
+
+    bool sameRowRef(TrackTableRowRef const& lhs, TrackTableRowRef const& rhs)
+    {
+      if (lhs.isSectionHeader != rhs.isSectionHeader)
+      {
+        return false;
+      }
+
+      return lhs.isSectionHeader ? lhs.sectionIndex == rhs.sectionIndex : lhs.trackIndex == rhs.trackIndex;
     }
   } // namespace
 
@@ -478,5 +546,263 @@ namespace ao::tui::test
       trackTableView(tracks, -1, kInvalidTrackId, presentation, TrackTableViewOptions{.availableColumns = 140}), 140);
 
     CHECK(text.contains("wide-terminal-tail"));
+  }
+
+  TEST_CASE("TrackTable - computeTrackTableWindow disables windowing without a viewport", "[tui][unit][track-table]")
+  {
+    auto const window = computeTrackTableWindow(50, 100, 0, kTrackTableOverscanRows);
+
+    CHECK(window.startVisualRow == 0);
+    CHECK(window.endVisualRow == 100);
+    CHECK(window.topSpacerRows == 0);
+    CHECK(window.bottomSpacerRows == 0);
+  }
+
+  TEST_CASE("TrackTable - computeTrackTableWindow keeps spacer sums equal to the total", "[tui][unit][track-table]")
+  {
+    std::int32_t const overscan = 8;
+    std::int32_t const total = 1000;
+    std::int32_t const viewport = 40;
+    auto const half = viewport + overscan;
+
+    auto const check = [&](std::int32_t const selected)
+    {
+      auto const window = computeTrackTableWindow(selected, total, viewport, overscan);
+
+      CHECK(window.topSpacerRows == window.startVisualRow);
+      CHECK(window.bottomSpacerRows == total - window.endVisualRow);
+      CHECK(window.startVisualRow >= 0);
+      CHECK(window.endVisualRow <= total);
+      CHECK(window.startVisualRow < window.endVisualRow);
+      CHECK(window.topSpacerRows + (window.endVisualRow - window.startVisualRow) + window.bottomSpacerRows == total);
+      CHECK(window.endVisualRow - window.startVisualRow <= (2 * half) + 1);
+      return window;
+    };
+
+    auto const middle = check(500);
+    CHECK(middle.startVisualRow == 500 - half);
+    CHECK(middle.endVisualRow == 500 + half + 1);
+
+    auto const top = check(10);
+    CHECK(top.startVisualRow == 0);
+    CHECK(top.topSpacerRows == 0);
+
+    auto const bottom = check(990);
+    CHECK(bottom.endVisualRow == total);
+    CHECK(bottom.bottomSpacerRows == 0);
+
+    // selected == -1 anchors at row 0, matching focusPosition(0, max(0, selected)).
+    auto const negative = check(-1);
+    CHECK(negative.startVisualRow == 0);
+  }
+
+  TEST_CASE("TrackTable - computeTrackTableWindow drops both spacers for short lists", "[tui][unit][track-table]")
+  {
+    auto const window = computeTrackTableWindow(25, 50, 40, 8);
+
+    CHECK(window.startVisualRow == 0);
+    CHECK(window.endVisualRow == 50);
+    CHECK(window.topSpacerRows == 0);
+    CHECK(window.bottomSpacerRows == 0);
+  }
+
+  TEST_CASE("TrackTable - computeTrackTableWindow returns empty for an empty list", "[tui][unit][track-table]")
+  {
+    auto const window = computeTrackTableWindow(0, 0, 40, 8);
+
+    CHECK(window.startVisualRow == 0);
+    CHECK(window.endVisualRow == 0);
+    CHECK(window.topSpacerRows == 0);
+    CHECK(window.bottomSpacerRows == 0);
+  }
+
+  TEST_CASE("TrackTable - enumerateTrackTableRows reproduces the full build across windows", "[tui][unit][track-table]")
+  {
+    auto const noSections = std::vector<TrackSection>{};
+    auto const grouped = equalSections(6, 5); // 30 tracks, headers at 0/5/10/15/20/25
+
+    auto const check = [](std::span<TrackSection const> const sections, std::size_t const trackCount)
+    {
+      auto const full = bruteForceTrackTableRows(sections, trackCount);
+      auto const totalVisualRows = static_cast<std::int32_t>(full.size());
+
+      for (std::int32_t start = 0; start <= totalVisualRows; ++start)
+      {
+        for (std::int32_t end = start; end <= totalVisualRows + 2; ++end)
+        {
+          auto const windowed = enumerateTrackTableRows(sections, trackCount, start, end);
+          auto const clampedEnd = std::min(end, totalVisualRows);
+          auto const expectedSize = static_cast<std::size_t>(std::max(0, clampedEnd - start));
+
+          REQUIRE(windowed.size() == expectedSize);
+
+          for (std::size_t index = 0; index < windowed.size(); ++index)
+          {
+            CHECK(sameRowRef(windowed[index], full[static_cast<std::size_t>(start) + index]));
+          }
+        }
+      }
+    };
+
+    check(noSections, 20);
+    check(grouped, 30);
+  }
+
+  TEST_CASE("TrackTable - enumerateTrackTableRows honors window boundaries", "[tui][unit][track-table]")
+  {
+    auto const sections = std::vector{
+      TrackSection{.rowBegin = 0, .rowCount = 2, .primaryText = "Album A"},
+      TrackSection{.rowBegin = 2, .rowCount = 1, .primaryText = "Album B"},
+    };
+    // Visual rows: 0=header A, 1=track 0, 2=track 1, 3=header B, 4=track 2.
+    SECTION("window starting on a header emits the header then its track")
+    {
+      auto const rows = enumerateTrackTableRows(sections, 3, 3, 5);
+
+      REQUIRE(rows.size() == 2);
+      CHECK(rows[0].isSectionHeader);
+      CHECK(rows[0].sectionIndex == 1);
+      CHECK_FALSE(rows[1].isSectionHeader);
+      CHECK(rows[1].trackIndex == 2);
+    }
+
+    SECTION("window starting mid-section omits the enclosing header")
+    {
+      auto const rows = enumerateTrackTableRows(sections, 3, 2, 3);
+
+      REQUIRE(rows.size() == 1);
+      CHECK_FALSE(rows[0].isSectionHeader);
+      CHECK(rows[0].trackIndex == 1);
+    }
+  }
+
+  TEST_CASE("TrackTable - virtualized render is pixel-identical to the full build", "[tui][unit][track-table]")
+  {
+    auto const tracks = manyTracks(5000);
+    auto const presentation = rt::TrackPresentationSpec{
+      .id = "virtualized", .visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
+    std::int32_t const width = 80;
+    std::int32_t const height = 30;
+
+    auto const render = [&](std::int32_t const selected, std::int32_t const viewportRows)
+    {
+      return renderElement(
+        trackTableView(tracks,
+                       selected,
+                       kInvalidTrackId,
+                       presentation,
+                       TrackTableViewOptions{.availableColumns = width, .viewportRows = viewportRows}),
+        width,
+        height);
+    };
+
+    for (auto const selected : {0, 2500, 4999})
+    {
+      auto const full = render(selected, 0);
+      auto const windowed = render(selected, height);
+
+      CHECK(full.text == windowed.text);
+      CHECK(full.screen.ToString() == windowed.screen.ToString());
+      CHECK(windowed.text.contains(std::format("Track {:05}", selected)));
+    }
+  }
+
+  TEST_CASE("TrackTable - virtualized grouped render matches the full build", "[tui][unit][track-table]")
+  {
+    auto const tracks = manyTracks(300);
+    auto const sections = equalSections(10, 30);
+    auto const presentation = rt::TrackPresentationSpec{
+      .id = "virtualized-grouped", .visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
+    std::int32_t const width = 80;
+    std::int32_t const height = 24;
+    std::int32_t const selected = 150; // deep in section 5
+
+    auto const render = [&](std::int32_t const viewportRows)
+    {
+      return renderElement(
+        trackTableView(tracks,
+                       sections,
+                       selected,
+                       kInvalidTrackId,
+                       presentation,
+                       TrackTableViewOptions{.availableColumns = width, .viewportRows = viewportRows}),
+        width,
+        height);
+    };
+
+    auto const full = render(0);
+    auto hitRegions = std::vector<TrackSectionRowHitRegion>{};
+    auto const windowed = renderElement(
+      trackTableView(
+        tracks,
+        sections,
+        selected,
+        kInvalidTrackId,
+        presentation,
+        TrackTableViewOptions{.sectionRowHitRegions = &hitRegions, .availableColumns = width, .viewportRows = height}),
+      width,
+      height);
+
+    CHECK(full.text == windowed.text);
+    CHECK(full.screen.ToString() == windowed.screen.ToString());
+    // The enclosing section header for the selected row stays visible.
+    auto const sectionLine = lineIndexContaining(windowed.text, "Album 005");
+    REQUIRE(sectionLine >= 0);
+    CHECK(windowed.text.contains(std::format("Track {:05}", selected)));
+
+    auto const sectionRegion = std::ranges::find(hitRegions, 5, &TrackSectionRowHitRegion::sectionIndex);
+    REQUIRE(sectionRegion != hitRegions.end());
+    CHECK(sectionRegion->box.y_min == sectionLine);
+    CHECK(sectionRegion->box.y_max == sectionLine);
+  }
+
+  TEST_CASE("TrackTable - virtualized render without selection matches the full build", "[tui][unit][track-table]")
+  {
+    auto const tracks = manyTracks(4000);
+    auto const presentation = rt::TrackPresentationSpec{
+      .id = "virtualized-noselect", .visibleFields = {rt::TrackField::DisplayTrackNumber, rt::TrackField::Title}};
+    std::int32_t const width = 72;
+    std::int32_t const height = 20;
+
+    auto const render = [&](std::int32_t const viewportRows)
+    {
+      return renderElement(
+        trackTableView(tracks,
+                       -1,
+                       kInvalidTrackId,
+                       presentation,
+                       TrackTableViewOptions{.availableColumns = width, .viewportRows = viewportRows}),
+        width,
+        height);
+    };
+
+    auto const full = render(0);
+    auto const windowed = render(height);
+
+    CHECK(full.text == windowed.text);
+    CHECK(full.screen.ToString() == windowed.screen.ToString());
+
+    // No row is highlighted when nothing is selected (the clamped window anchor
+    // must not leak into the selection highlight).
+    for (std::int32_t row = 0; row < windowed.screen.dimy(); ++row)
+    {
+      CHECK_FALSE(windowed.screen.PixelAt(2, row).inverted);
+    }
+  }
+
+  TEST_CASE("TrackTable - virtualization builds O(viewport) rows, not the whole library",
+            "[tui][regression][track-table]")
+  {
+    std::size_t const trackCount = 5000;
+    std::int32_t const viewportRows = 40;
+    auto const totalVisualRows = static_cast<std::int32_t>(trackCount);
+    auto const selectedVisualRow = trackVisualRow(2500, {});
+    auto const window =
+      computeTrackTableWindow(selectedVisualRow, totalVisualRows, viewportRows, kTrackTableOverscanRows);
+    auto const rows = enumerateTrackTableRows({}, trackCount, window.startVisualRow, window.endVisualRow);
+
+    CHECK(rows.size() == static_cast<std::size_t>(window.endVisualRow - window.startVisualRow));
+    CHECK(rows.size() <= static_cast<std::size_t>((2 * (viewportRows + kTrackTableOverscanRows)) + 1));
+    CHECK(rows.size() < trackCount);
   }
 } // namespace ao::tui::test

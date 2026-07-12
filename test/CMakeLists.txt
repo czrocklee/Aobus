@@ -327,6 +327,7 @@ add_executable(ao_tui_test
     unit/tui/CoverArtTest.cpp
     unit/tui/EventControllerTest.cpp
     unit/tui/ExecutorTest.cpp
+    unit/tui/FrameTimerTest.cpp
     unit/tui/LibraryControllerTest.cpp
     unit/tui/ListNavigationTest.cpp
     unit/tui/LibraryNavigationTest.cpp
@@ -351,6 +352,16 @@ add_executable(ao_tui_test
 
 target_link_libraries(ao_tui_test PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
 add_test(NAME ao_tui_test COMMAND ao_tui_test)
+
+# ao_tui_bench: allocation-bound TUI render micro-benchmarks. EXCLUDE_FROM_ALL so
+# it is never built by the gate -- it links mimalloc to mirror the shipping
+# aobus-tui allocator, which would collide with the ASan/TSan interceptors that
+# --asan/--tsan apply to every in-gate target. Build explicitly and run directly:
+#   ./ao build --target ao_tui_bench && <builddir>/test/ao_tui_bench
+add_executable(ao_tui_bench EXCLUDE_FROM_ALL
+    unit/tui/TrackTableBenchmark.cpp
+)
+target_link_libraries(ao_tui_bench PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_options Catch2::Catch2WithMain mimalloc)
 endif()
 
 if(AOBUS_BUILD_CLI)

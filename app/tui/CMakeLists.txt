@@ -6,6 +6,7 @@ add_library(aobus-tui-lib STATIC
     CommandCompletionState.cpp
     EventController.cpp
     Executor.cpp
+    FrameTimer.cpp
     LibraryController.cpp
     ListNavigation.cpp
     NotificationCenterPanel.cpp

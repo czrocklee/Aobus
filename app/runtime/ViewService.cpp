@@ -567,6 +567,11 @@ namespace ao::rt
     return _implPtr->views.at(viewId).state;
   }
 
+  TrackPresentationSpec const& ViewService::trackListPresentation(ViewId viewId) const&
+  {
+    return _implPtr->views.at(viewId).state.presentation;
+  }
+
   std::chrono::milliseconds ViewService::selectionDuration(ViewId viewId) const
   {
     auto const it = _implPtr->views.find(viewId);

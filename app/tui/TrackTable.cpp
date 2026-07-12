@@ -414,6 +414,16 @@ namespace ao::tui
 
       return vbox(std::move(rows)) | focusPosition(0, std::max(0, selected)) | vscroll_indicator | frame | flex;
     }
+
+    // A fixed-height, flexible-width empty box standing in for the off-window rows
+    // above/below the built window. Preserving the total child height keeps the
+    // frame scroll offset and vscroll thumb identical to a full build.
+    ftxui::Element fixedHeightSpacer(std::int32_t const rows)
+    {
+      using namespace ftxui;
+
+      return filler() | size(HEIGHT, EQUAL, rows);
+    }
   } // namespace
 
   std::int32_t trackVisualRow(std::int32_t const trackIndex, std::span<TrackSection const> const sections) noexcept
@@ -473,6 +483,101 @@ namespace ao::tui
     return std::clamp(trackIndex, 0, maxTrackIndex);
   }
 
+  TrackTableWindow computeTrackTableWindow(std::int32_t const selectedVisualRow,
+                                           std::int32_t const totalVisualRows,
+                                           std::int32_t const viewportRows,
+                                           std::int32_t const overscanRows) noexcept
+  {
+    if (totalVisualRows <= 0)
+    {
+      return TrackTableWindow{};
+    }
+
+    if (viewportRows <= 0)
+    {
+      return TrackTableWindow{
+        .startVisualRow = 0, .endVisualRow = totalVisualRows, .topSpacerRows = 0, .bottomSpacerRows = 0};
+    }
+
+    // frame keeps the focused row inside the viewport, so the visible area is
+    // always a subset of [anchor - viewportRows, anchor + viewportRows]. A window
+    // half-height of viewportRows + overscan covers it regardless of the (never
+    // read) frame scroll offset. 64-bit intermediates avoid int overflow on huge
+    // lists before the clamp back into [0, totalVisualRows].
+    auto const half = static_cast<std::int64_t>(viewportRows) + std::max(0, overscanRows);
+    auto const anchor = static_cast<std::int64_t>(std::clamp(selectedVisualRow, 0, totalVisualRows - 1));
+    auto const total = static_cast<std::int64_t>(totalVisualRows);
+    auto const start = static_cast<std::int32_t>(std::clamp<std::int64_t>(anchor - half, 0, total));
+    auto const end = static_cast<std::int32_t>(std::clamp<std::int64_t>(anchor + half + 1, 0, total));
+
+    return TrackTableWindow{
+      .startVisualRow = start, .endVisualRow = end, .topSpacerRows = start, .bottomSpacerRows = totalVisualRows - end};
+  }
+
+  std::vector<TrackTableRowRef> enumerateTrackTableRows(std::span<TrackSection const> const sections,
+                                                        std::size_t const trackCount,
+                                                        std::int32_t const startVisualRow,
+                                                        std::int32_t const endVisualRow)
+  {
+    auto rows = std::vector<TrackTableRowRef>{};
+
+    if (trackCount == 0)
+    {
+      return rows;
+    }
+
+    auto const start = std::max(0, startVisualRow);
+
+    if (endVisualRow <= start)
+    {
+      return rows;
+    }
+
+    // Section header s occupies visual row (sections[s].rowBegin + s), a value
+    // strictly increasing in s. Binary-search the count of headers strictly above
+    // the window start; that count is the section cursor and start - it is the
+    // track cursor at that point, exactly reproducing trackTableView's loop state.
+    std::size_t lo = 0;
+    std::size_t hi = sections.size();
+
+    while (lo < hi)
+    {
+      auto const mid = lo + ((hi - lo) / 2);
+
+      if (auto const headerVisualRow = sections[mid].rowBegin + mid; std::cmp_less(headerVisualRow, start))
+      {
+        lo = mid + 1;
+      }
+      else
+      {
+        hi = mid;
+      }
+    }
+
+    auto sectionIndex = lo;
+    auto trackIndex = static_cast<std::size_t>(start) - sectionIndex;
+    auto visualRow = start;
+    rows.reserve(static_cast<std::size_t>(endVisualRow - start));
+
+    while (visualRow < endVisualRow && trackIndex < trackCount)
+    {
+      if (sectionIndex < sections.size() && sections[sectionIndex].rowBegin <= trackIndex)
+      {
+        rows.push_back(TrackTableRowRef{.isSectionHeader = true, .sectionIndex = sectionIndex, .trackIndex = 0});
+        ++sectionIndex;
+      }
+      else
+      {
+        rows.push_back(TrackTableRowRef{.isSectionHeader = false, .sectionIndex = 0, .trackIndex = trackIndex});
+        ++trackIndex;
+      }
+
+      ++visualRow;
+    }
+
+    return rows;
+  }
+
   ftxui::Element trackTableView(std::span<TrackListEntry const> const tracks,
                                 std::int32_t const selected,
                                 TrackId const playingTrackId,
@@ -493,9 +598,6 @@ namespace ao::tui
     using namespace ftxui;
 
     auto const columns = columnsForPresentation(presentation, options.columnWidths, options.availableColumns);
-    auto rows = Elements{};
-    rows.reserve(tracks.size() + sections.size());
-    std::size_t sectionIndex = 0;
 
     if (options.sectionRowHitRegions != nullptr)
     {
@@ -503,36 +605,86 @@ namespace ao::tui
       options.sectionRowHitRegions->reserve(sections.size());
     }
 
-    for (std::size_t trackIndex = 0; trackIndex < tracks.size(); ++trackIndex)
+    auto listElementPtr = ftxui::Element{};
+
+    if (tracks.empty())
     {
-      while (sectionIndex < sections.size() && sections[sectionIndex].rowBegin <= trackIndex)
+      listElementPtr = selectableRows(Elements{}, -1, true, "No tracks found. Run `aobus init` in this library first.");
+    }
+    else
+    {
+      // Visual-row index equals Y pixel (every row is height 1), so windowing
+      // around the selected row while padding the off-window rows with spacers
+      // keeps frame/vscroll math and the focused coordinate pixel-identical to a
+      // full build.
+      auto const totalVisualRows = trackVisualRow(static_cast<std::int32_t>(tracks.size()) - 1, sections) + 1;
+      auto const selectedVisualRow = trackVisualRow(selected, sections);
+      auto const window =
+        computeTrackTableWindow(selectedVisualRow, totalVisualRows, options.viewportRows, kTrackTableOverscanRows);
+      auto const rowRefs = enumerateTrackTableRows(sections, tracks.size(), window.startVisualRow, window.endVisualRow);
+
+      auto rows = Elements{};
+      rows.reserve(rowRefs.size() + 2);
+
+      if (window.topSpacerRows > 0)
       {
-        auto rowPtr = sectionHeaderRow(sections[sectionIndex]);
-
-        if (options.sectionRowHitRegions != nullptr)
-        {
-          // reflect() stores into the vector element during layout, so reserve()
-          // above must keep row-box addresses stable while rows are built.
-          options.sectionRowHitRegions->push_back(
-            TrackSectionRowHitRegion{.sectionIndex = static_cast<std::int32_t>(sectionIndex), .box = {}});
-          rowPtr = std::move(rowPtr) | reflect(options.sectionRowHitRegions->back().box);
-        }
-
-        rows.push_back(std::move(rowPtr));
-        ++sectionIndex;
+        rows.push_back(fixedHeightSpacer(window.topSpacerRows));
       }
 
-      rows.push_back(trackRow(tracks[trackIndex], playingTrackId, columns));
+      for (auto const& ref : rowRefs)
+      {
+        if (ref.isSectionHeader)
+        {
+          auto rowPtr = sectionHeaderRow(sections[ref.sectionIndex]);
+
+          if (options.sectionRowHitRegions != nullptr)
+          {
+            // reflect() stores into the vector element during layout, so reserve()
+            // above must keep row-box addresses stable while rows are built.
+            // Off-window headers are off-screen, so emitting regions only for
+            // windowed headers keeps the true sectionIndex for every clickable one.
+            options.sectionRowHitRegions->push_back(
+              TrackSectionRowHitRegion{.sectionIndex = static_cast<std::int32_t>(ref.sectionIndex), .box = {}});
+            rowPtr = std::move(rowPtr) | reflect(options.sectionRowHitRegions->back().box);
+          }
+
+          rows.push_back(std::move(rowPtr));
+        }
+        else
+        {
+          rows.push_back(trackRow(tracks[ref.trackIndex], playingTrackId, columns));
+        }
+      }
+
+      if (window.bottomSpacerRows > 0)
+      {
+        rows.push_back(fixedHeightSpacer(window.bottomSpacerRows));
+      }
+
+      // Highlight only when a row is selected; selected == -1 highlights nothing.
+      // The selected visual row is always a built track row (never a header),
+      // sitting at local offset (selectedVisualRow - startVisualRow) after the
+      // optional top spacer.
+      if (selected >= 0 && selectedVisualRow >= window.startVisualRow && selectedVisualRow < window.endVisualRow)
+      {
+        auto const rowIndex = (window.topSpacerRows > 0 ? 1 : 0) + (selectedVisualRow - window.startVisualRow);
+
+        if (rowIndex >= 0 && std::cmp_less(rowIndex, rows.size()))
+        {
+          auto const index = static_cast<std::size_t>(rowIndex);
+          rows[index] = std::move(rows[index]) | style::selected();
+        }
+      }
+
+      listElementPtr =
+        vbox(std::move(rows)) | focusPosition(0, std::max(0, selectedVisualRow)) | vscroll_indicator | frame | flex;
     }
 
-    auto const visualSelected = trackVisualRow(selected, sections);
-    auto tablePtr =
-      vbox({
-        trackHeaderRow(columns, options.resizeHandles),
-        selectableRows(
-          std::move(rows), visualSelected, true, "No tracks found. Run `aobus init` in this library first."),
-      }) |
-      flex;
+    auto tablePtr = vbox({
+                      trackHeaderRow(columns, options.resizeHandles),
+                      std::move(listElementPtr),
+                    }) |
+                    flex;
 
     if (options.tableBox != nullptr)
     {
