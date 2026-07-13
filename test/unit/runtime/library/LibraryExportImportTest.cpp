@@ -29,6 +29,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -400,6 +401,73 @@ library:
     }
   }
 
+  TEST_CASE("LibraryYaml - merge distinguishes omitted and empty tag collections",
+            "[runtime][workflow][import-export][overlay]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const uri = std::string{"track.flac"};
+    auto const trackId = library::test::addTrack(
+      ml,
+      library::test::TrackSpec{
+        .title = "Original", .uri = uri, .tags = {"favorite"}, .customMetadata = {{"mood", "focused"}}});
+    {
+      auto transaction = ml.writeTransaction();
+      auto builder = FileManifestBuilder::makeEmpty();
+      builder.trackId(trackId);
+      REQUIRE(ml.manifest().writer(transaction).put(uri, builder.serialize()));
+      REQUIRE(transaction.commit());
+    }
+
+    auto const yamlPath = std::filesystem::path{temp.path()} / "overlay.yaml";
+    auto importer = LibraryYamlImporter{ml};
+
+    SECTION("omitted collections preserve the merge baseline")
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << R"(version: 1
+export_mode: full
+library:
+  tracks:
+    - uri: track.flac
+      title: Updated
+  lists: []
+)";
+      yaml.close();
+
+      REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
+
+      auto transaction = ml.readTransaction();
+      auto const optView = ml.tracks().reader(transaction).get(trackId, TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      CHECK(optView->tags().count() == 1);
+      CHECK(std::ranges::distance(optView->customMetadata()) == 1);
+    }
+
+    SECTION("present empty collections clear the merge baseline")
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << R"(version: 1
+export_mode: full
+library:
+  tracks:
+    - uri: track.flac
+      tags: []
+      custom: {}
+  lists: []
+)";
+      yaml.close();
+
+      REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
+
+      auto transaction = ml.readTransaction();
+      auto const optView = ml.tracks().reader(transaction).get(trackId, TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      CHECK(optView->tags().count() == 0);
+      CHECK(optView->customMetadata().empty());
+    }
+  }
+
   TEST_CASE("LibraryYaml - import reports counts and dry-run leaves target unchanged",
             "[runtime][workflow][import-export][dry-run]")
   {
@@ -634,6 +702,38 @@ library:
 
     auto resultDelta = importer.importFromYaml(yamlPathDelta, ImportMode::Merge);
     REQUIRE(resultDelta);
+  }
+
+  TEST_CASE("LibraryYaml - import accepts the minimum mode alias and ignores extension fields",
+            "[runtime][workflow][import-export][compatibility]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const yamlPath = std::filesystem::path{temp.path()} / "compatibility.yaml";
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << R"(version: 1
+export_mode: minimum
+extension_root: future
+library:
+  extension_library: future
+  tracks:
+    - uri: compatible.flac
+      title: Compatible
+      codec: FUTURE-CODEC
+      extension_track: future
+  lists: []
+)";
+    }
+
+    auto importer = LibraryYamlImporter{ml};
+    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Restore));
+
+    auto transaction = ml.readTransaction();
+    auto const optView = ml.tracks().reader(transaction).get(TrackId{1}, TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optView);
+    CHECK(optView->metadata().title() == "Compatible");
+    CHECK(optView->property().codec() == AudioCodec::Unknown);
   }
 
   TEST_CASE("LibraryYaml - metadata import clears absent classical fields from file tags",

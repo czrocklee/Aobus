@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write Documentation"
+  short_description: "Create and migrate Aobus documentation"
+  default_prompt: "Use $write-documentation to create or migrate Aobus documentation under the project taxonomy."

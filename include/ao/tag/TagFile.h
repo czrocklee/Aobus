@@ -60,7 +60,7 @@ namespace ao::tag
      *
      * Error model: external failures are returned as Result errors. Malformed
      * tag/container bytes return Error::Code::CorruptData; mapping failures return
-     * Error::Code::IoError. See doc/design/error-model.md.
+     * Error::Code::IoError. See doc/spec/media/file-interpretation.md.
      */
     Result<library::TrackBuilder> loadTrack() const;
 

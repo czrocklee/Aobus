@@ -16,7 +16,7 @@ Stay focused on the failing behavior. Do not start documentation updates, format
 
 When the fix touches C++ files, follow the repository's local style directly and keep the edit scoped to the failing path. Use `use-clang-tidy` only when the user explicitly asks to diagnose linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session; otherwise do not run lint validation.
 
-Follow the project validation policy in `doc/dev/testing/validation-and-review.md`. While diagnosing, focused commands are allowed only to reproduce a known failure or prove one concrete hypothesis.
+Follow the project validation policy in `doc/development/test/validation-and-review.md`. While diagnosing, focused commands are allowed only to reproduce a known failure or prove one concrete hypothesis.
 
 ## Debugging Loop
 

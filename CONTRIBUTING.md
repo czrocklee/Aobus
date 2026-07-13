@@ -9,20 +9,20 @@ page hard to scan.
 | Document | Scope |
 |---|---|
 | `doc/README.md` | Documentation tree organization and update expectations |
-| `doc/dev/coding-style.md` | C++ standard, formatting, includes, language idioms, class design, const/threading rules |
-| `doc/dev/naming-conventions.md` | Identifier, type/contract, vocabulary, file, helper, and support naming |
-| `doc/dev/commit-messages.md` | Commit message format, scopes, subject/body guidance, and examples |
-| `doc/dev/linting.md` | Lint policy: warning triage, suppression rules, cleanup playbook, Python hygiene, automatic-fix guidance |
-| `doc/dev/windows-development.md` | Native Windows portal, local state and tool bootstrap, mapped-source workflow, and migration guidance |
-| `doc/design/error-model.md` | Error contracts by layer and subsystem |
-| `doc/dev/testing.md` | Testing policy and detailed test-writing references |
+| `doc/development/coding-style.md` | C++ standard, formatting, includes, language idioms, class design, const/threading rules |
+| `doc/development/naming-convention.md` | Identifier, type/contract, vocabulary, file, helper, and support naming |
+| `doc/development/commit-message.md` | Commit message format, scopes, subject/body guidance, and examples |
+| `doc/development/linting.md` | Lint policy: warning triage, suppression rules, cleanup playbook, Python hygiene, automatic-fix guidance |
+| `doc/development/windows.md` | Native Windows portal, local state and tool bootstrap, mapped-source workflow, and migration guidance |
+| `doc/architecture/failure-and-reporting.md` | Failure ownership, recovery, reporting, and presentation boundaries |
+| `doc/development/test.md` | Testing policy and detailed test-writing references |
 
 ## Development Workflow
 
 Run repository operations through `./ao` on Linux or `ao.bat` on Windows from
 the project root. Windows source checkouts may be mapped, while build trees and
 managed Python/LLVM state default to the local `%LOCALAPPDATA%\Aobus` directory;
-see `doc/dev/windows-development.md` before overriding those locations.
+see `doc/development/windows.md` before overriding those locations.
 
 ## Coding Style Highlights
 
@@ -31,13 +31,13 @@ see `doc/dev/windows-development.md` before overriding those locations.
 - Use `PascalCase` for types and classes, `camelCase` for functions and
   variables, `_camelCase` for non-static class data members, and `kCamelCase` for
   constants.
-- Use `doc/dev/naming-conventions.md` for type/contract names, vocabulary,
+- Use `doc/development/naming-convention.md` for type/contract names, vocabulary,
   pointer/optional naming, file names, and helper/support allocation.
 - Prefer modern C++ library facilities when they clarify intent; use ordinary
   loops when ranges obscure control flow, side effects, allocation, or debugging.
 - Prefer `ao::Result<T>` for recoverable failures, exceptions for programmer
   errors or impossible states, and `std::optional<T>` for legitimate absence.
-- See `doc/dev/coding-style.md` and `doc/dev/naming-conventions.md` for the
+- See `doc/development/coding-style.md` and `doc/development/naming-convention.md` for the
   rules used in reviews.
 
 ## Commit Message Highlights
@@ -49,7 +49,7 @@ see `doc/dev/windows-development.md` before overriding those locations.
 - Use the body only when the motivation, tradeoff, or validation is not obvious
   from the diff.
 - Do not mention AI tools, internal plans, or co-author signatures.
-- See `doc/dev/commit-messages.md` for examples and review rules.
+- See `doc/development/commit-message.md` for examples and review rules.
 
 ## Testing Highlights
 
@@ -60,5 +60,5 @@ see `doc/dev/windows-development.md` before overriding those locations.
   `[layer][type][subsystem]`.
 - Assert observable outcomes and postconditions, not just `called == true` or
   `has_value()`.
-- See `doc/dev/testing.md` for testing policy, GTK guidance, coverage workflow,
+- See `doc/development/test.md` for testing policy, GTK guidance, coverage workflow,
   and suite organization.

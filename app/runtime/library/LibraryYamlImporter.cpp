@@ -11,6 +11,7 @@
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MetadataLayout.h>
+#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
@@ -526,16 +527,26 @@ namespace ao::rt
 
     auto const revision = ml.libraryRevision(transaction);
 
+    if (mode == ImportMode::Restore && validated.optLibraryId)
+    {
+      auto header = ml.metadata().load(transaction);
+
+      if (!header)
+      {
+        return std::unexpected{header.error()};
+      }
+
+      header->libraryId = parseUuid(*validated.optLibraryId);
+
+      if (auto result = ml.metadata().update(transaction, *header); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+    }
+
     if (auto result = transaction.commit(); !result)
     {
       return std::unexpected{result.error()};
-    }
-
-    if (mode == ImportMode::Restore && validated.optLibraryId)
-    {
-      auto header = ml.metadataHeader();
-      header.libraryId = parseUuid(*validated.optLibraryId);
-      ml.updateMetadataHeader(header);
     }
 
     if (changes != nullptr)
@@ -584,12 +595,6 @@ namespace ao::rt
       }
 
       changes->publish(std::move(changeSet));
-
-      if (mode == ImportMode::Restore && validated.optLibraryId)
-      {
-        auto readTransaction = ml.readTransaction();
-        changes->publish(LibraryChangeSet{.libraryRevision = ml.libraryRevision(readTransaction)});
-      }
     }
 
     return report;

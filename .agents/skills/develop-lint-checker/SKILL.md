@@ -20,15 +20,25 @@ development as chair-owned end-to-end work.
 
 Always prioritize integration tests. You must define the expected behavior before writing the AST Matcher.
 
-1.  **Create the Fixture**: Add a file named `<CheckName>Fixture.cpp` in `test/integration/lint/fixture/`.
+1.  **Create the Fixture**: Add a file such as `BasicFixture.cpp` under
+    `test/integration/lint/fixture/<check-alias>/` — one subdirectory per check alias, and the
+    directory name is what binds the fixture to the check.
 2.  **Define Expected Diagnostics** (markers go on the line *immediately preceding* the code):
     -   `// POSITIVE: FIX-TO: <fixed line>` — diagnostic must fire AND the auto-fix output must match.
     -   `// POSITIVE` (bare) — diagnostic must fire; no fix verification. Use for diag-only cases, e.g. a FixIt deliberately suppressed at a macro location.
     -   `// NEGATIVE` — must *not* trigger the checker (avoids false positives).
-3.  **Run and Fail**: Execute the integration script and verify it fails (as the check isn't built yet):
+3.  **Run and Fail**: Run the lint integration suite and verify the new fixture fails (the check
+    isn't built yet):
     ```bash
-    nix-shell --run "./test/integration/lint/run_integration_test.sh aobus-your-check-alias"
+    ./ao test --lint
     ```
+    The suite runs every fixture. To iterate on one fixture's diagnostics, invoke tidy directly:
+    ```bash
+    ./ao tidy --no-build --check aobus-your-check-alias \
+      test/integration/lint/fixture/aobus-your-check-alias/BasicFixture.cpp
+    ```
+    Suite mechanics live in `doc/development/test/test-suite.md`; the runner is
+    `script/ao/core/linttest.py`.
 
 ## Shared Helpers — Check These Before Writing Your Own
 
@@ -93,4 +103,7 @@ nix-shell -p clang-tools --run "clang++ -std=c++26 -fsyntax-only -Xclang -ast-du
 3.  **Register the Check**:
     -   Include your header and register it via `checkFactories.registerCheck<MyCheck>("aobus-your-alias");` in `tool/lint/AobusLintModule.cpp`.
     -   Add `check/MyCheck.cpp` to the `tool/lint/CMakeLists.txt`.
-4.  **Verify**: Re-run the integration test script. The test runner will automatically rebuild `libAobusLintPlugin.so`, run `clang-tidy`, apply `--fix`, and compile the fixed output to guarantee valid C++ code generation.
+4.  **Verify**: Re-run `./ao test --lint`. The suite builds the `AobusLintPlugin` target, verifies
+    every fixture's diagnostics against the `POSITIVE`/`NEGATIVE` markers through `./ao tidy
+    --no-build`, applies `--fix` on a temporary copy of each fixture that declares `FIX-TO`
+    expectations, and syntax-checks the fixed output so the auto-fix cannot generate invalid C++.

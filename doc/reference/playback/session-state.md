@@ -1,0 +1,110 @@
+---
+id: playback.session-state
+type: reference
+status: current
+domain: playback
+summary: Enumerates the exact playback-session group, version 3 fields, types, defaults, transient exclusions, and compatibility gate.
+---
+# Playback session state
+
+## Scope and version
+
+This reference owns the exact serialized `PlaybackSessionState` payload in schema version `3`.
+Capture, validation, restore, normalization, dirty, retry, discard, and shutdown behavior belongs to the [playback session persistence specification](../../spec/playback/session-persistence.md).
+
+## Code boundary
+
+The payload belongs to the **application runtime** layer in the [system architecture](../../architecture/system-overview.md), under the [playback](../../architecture/playback.md) and [persistence](../../architecture/persistence-and-managed-state.md) architectures.
+It is encoded through the runtime grouped configuration store.
+
+## Surface
+
+The literal top-level group is `playback-session`.
+Exact decoding requires every aggregate field:
+
+| Field | C++ type | Default | Meaning |
+|---|---|---|---|
+| `schemaVersion` | Unsigned 32-bit integer | `3` | Exact compatibility gate. |
+| `sourceListId` | `ListId` | Invalid id | Library-scoped source list. |
+| `quickFilterExpression` | String | Empty | Ad-hoc filter applied over the source. |
+| `sortBy` | Sequence of `TrackSortTerm` | Empty | Ordered field/direction terms. |
+| `currentTrackId` | `TrackId` | Invalid id | Last restorable subject. |
+| `anchorIndex` | Unsigned 64-bit integer | `0` | Saved semantic cursor anchor. |
+| `positionMs` | Unsigned 64-bit integer | `0` | Transport offset in milliseconds. |
+| `shuffleMode` | `ShuffleMode` | `Off` | Current shuffle policy. |
+| `repeatMode` | `RepeatMode` | `Off` | Current repeat policy. |
+| `volume` | Float | `1.0` | Normalized application volume intent. |
+| `muted` | Boolean | `false` | Mute intent. |
+
+`sortBy` contains at most `kTrackSortFieldCount` terms.
+Track sort field ids and directions use the runtime track-presentation values.
+
+## Transient exclusions
+
+The payload contains none of these:
+
+- materialized track ids or a queue index;
+- source lease, live projection rows, or source-validity state;
+- workspace view id or selection;
+- prepared-next ids or tokens;
+- sticky shuffle candidate or shuffle history;
+- decoder, Engine, audio, route, render, or callback generations;
+- output backend/profile/device identity; or
+- dirty revision and timer state.
+
+## Validation rules
+
+- `schemaVersion` must equal `3`.
+- List and track identities must satisfy semantic restore validation against the active library.
+- Anchor and position must convert to their runtime index/duration representations without overflow.
+- Shuffle and repeat values must be supported enumerators.
+- Volume must be finite and within `[0, 1]` for stored-state acceptance.
+- Sort fields and directions must be valid, fields cannot repeat, and term count cannot exceed the field catalog.
+- The quick filter must parse and compile under the active library vocabulary.
+- Exact aggregate decode rejects missing fields and wrong node kinds before semantic validation.
+
+## Compatibility and versioning
+
+Only version `3` is accepted.
+There is no migration or seeded missing-field fallback for another/malformed version.
+
+List and track ids are scoped to one library, but version 3 stores no library UUID.
+The current GTK lifecycle prevents cross-library interpretation by discarding the group before replacement; RFC 0019 proposes a durable library binding.
+
+## Examples
+
+```yaml
+playback-session:
+  schemaVersion: 3
+  sourceListId: 1
+  quickFilterExpression: "artist = 'Example'"
+  sortBy: []
+  currentTrackId: 42
+  anchorIndex: 7
+  positionMs: 12500
+  shuffleMode: 0
+  repeatMode: 0
+  volume: 0.8
+  muted: false
+```
+
+Enum and strong-id scalar encoding follows the application YAML codec; semantic validity remains the specification's responsibility.
+
+## Implementation authority
+
+- [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h) defines group, version, fields, defaults, and maximum sort terms.
+- [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) defines exact decode and validation.
+- [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) defines exact aggregate decode.
+
+## Test authority
+
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects every field, missing-field rejection, schema gate, semantic validation, and round trip.
+- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects exact aggregate decode mechanics.
+
+## Related documents
+
+- [Playback session persistence](../../spec/playback/session-persistence.md)
+- [Playback architecture](../../architecture/playback.md)
+- [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
+- [Application managed-state surface](../persistence/application-config.md)
+- [Track presentation preset reference](../presentation/track-preset.md)

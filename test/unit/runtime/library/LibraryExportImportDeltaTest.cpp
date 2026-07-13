@@ -9,10 +9,12 @@
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <c4/yml/tree.hpp>
@@ -279,5 +281,61 @@ library:
     CHECK(observed.front().libraryReset);
     auto transaction = ml.readTransaction();
     CHECK(observed.front().libraryRevision == ml.libraryRevision(transaction));
+  }
+
+  TEST_CASE("LibraryYaml - restore commits library id and content under one revision",
+            "[runtime][workflow][import-export][changeset]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const yamlPath = std::filesystem::path{temp.path()} / "restore-with-id.yaml";
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << "version: 1\n"
+           << "libraryId: 123E4567-E89B-12D3-A456-426614174000\n"
+           << "library:\n"
+           << "  tracks: []\n"
+           << "  lists: []\n";
+    }
+
+    auto changes = LibraryChanges{};
+    auto observed = std::vector<LibraryChangeSet>{};
+    auto subscription = changes.onChanged([&observed](LibraryChangeSet const& value) { observed.push_back(value); });
+    auto importer = LibraryYamlImporter{ml, changes};
+
+    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Restore));
+
+    CHECK(utility::formatUuid(ml.metadataHeader().libraryId) == "123e4567-e89b-12d3-a456-426614174000");
+    REQUIRE(observed.size() == 1);
+    CHECK(observed.front().libraryReset);
+    auto transaction = ml.readTransaction();
+    CHECK(observed.front().libraryRevision == ml.libraryRevision(transaction));
+  }
+
+  TEST_CASE("LibraryYaml - preview preserves library id and publishes no changes",
+            "[runtime][workflow][import-export][dry-run]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const originalLibraryId = ml.metadataHeader().libraryId;
+    auto const yamlPath = std::filesystem::path{temp.path()} / "preview-with-id.yaml";
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << "version: 1\n"
+           << "libraryId: 123e4567-e89b-12d3-a456-426614174000\n"
+           << "library:\n"
+           << "  tracks: []\n"
+           << "  lists: []\n";
+    }
+
+    auto changes = LibraryChanges{};
+    auto observed = std::vector<LibraryChangeSet>{};
+    auto subscription = changes.onChanged([&observed](LibraryChangeSet const& value) { observed.push_back(value); });
+    auto importer = LibraryYamlImporter{ml, changes};
+
+    REQUIRE(importer.previewImportFromYaml(yamlPath, ImportMode::Restore));
+
+    CHECK(ml.metadataHeader().libraryId == originalLibraryId);
+    CHECK(observed.empty());
   }
 } // namespace ao::rt::test

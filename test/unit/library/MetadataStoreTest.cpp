@@ -56,7 +56,7 @@ namespace ao::library::test
                                  .libraryVersion = 42,
                                  .flags = 0,
                                  .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1234567890}}};
-    store.create(wtxn, header);
+    REQUIRE(store.create(wtxn, header));
     REQUIRE(wtxn.commit());
 
     auto rtxn = beginReadTransaction(env);
@@ -94,12 +94,15 @@ namespace ao::library::test
                                  .libraryVersion = 1,
                                  .flags = 0,
                                  .createdTime = std::chrono::sys_time{std::chrono::milliseconds{100}}};
-    store.create(wtxn, header);
+    REQUIRE(store.create(wtxn, header));
     REQUIRE(wtxn.commit());
 
     auto wtxn2 = beginWriteTransaction(env);
     header.libraryVersion = 2;
-    store.update(wtxn2, header);
+    REQUIRE(store.update(wtxn2, header));
+    auto const stagedResult = store.load(wtxn2);
+    REQUIRE(stagedResult);
+    CHECK(stagedResult->libraryVersion == 2);
     REQUIRE(wtxn2.commit());
 
     auto rtxn = beginReadTransaction(env);

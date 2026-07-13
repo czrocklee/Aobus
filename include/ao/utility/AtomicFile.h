@@ -20,11 +20,15 @@ namespace ao::utility
   /**
    * @brief Write data to targetPath atomically using a temp file and rename.
    *
-   * The temp file is created in the same directory as the target, optionally
-   * chmod'd, fully written, fsync'd, and renamed over the target. The parent
-   * directory is fsync'd on success. Temp files are removed on failure.
+   * The temp file is created in the target directory, fully written, flushed,
+   * closed, and replaced through the platform rename operation. Non-Windows
+   * builds attempt a best-effort parent-directory fsync after replacement.
+   * Temporary cleanup after failure is also best-effort.
+   *
    * On Windows, permission values are advisory; the replaced file inherits the
-   * destination directory ACLs.
+   * destination directory ACLs. See
+   * doc/spec/persistence/atomic-replacement.md for the exact platform and
+   * crash-durability boundaries.
    */
   Result<> writeAtomically(std::filesystem::path const& targetPath,
                            std::string_view data,

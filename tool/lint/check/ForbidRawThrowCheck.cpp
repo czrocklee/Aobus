@@ -19,7 +19,7 @@ namespace clang::tidy::readability
     // A raw throw is allowed only inside a dedicated throwing helper in the ao
     // namespace tree: a function whose name begins with "throw" followed by an
     // upper-case letter. This admits the core ao::throwException and each
-    // subsystem's throw<Domain>Error helper (see doc/design/error-model.md), but
+    // subsystem's throw<Domain>Error helper (see doc/spec/failure/outcome-channel.md), but
     // not incidental names such as "throwaway" nor any throw-named helper outside
     // ao. Every other site must raise through such a helper. The "::ao" name pins
     // the top-level namespace, so a foreign "other::ao" would not qualify.

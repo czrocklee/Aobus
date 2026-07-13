@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <cstring>
 #include <format>
-#include <tuple>
 
 namespace ao::library
 {
@@ -38,14 +37,35 @@ namespace ao::library
     return header;
   }
 
-  void MetadataStore::create(lmdb::WriteTransaction& transaction, MetadataHeader const& header)
+  Result<MetadataHeader> MetadataStore::load(lmdb::WriteTransaction& transaction) const
   {
-    std::ignore = _database.writer(transaction).create(kMetadataHeaderRecordId, utility::bytes::view(header));
+    auto const optBytes = _database.writer(transaction).get(kMetadataHeaderRecordId);
+
+    if (!optBytes)
+    {
+      return makeError(Error::Code::NotFound, "Library metadata header was not found");
+    }
+
+    if (optBytes->size() != sizeof(MetadataHeader))
+    {
+      return makeError(
+        Error::Code::CorruptData,
+        std::format("Invalid library metadata header size {} (expected {})", optBytes->size(), sizeof(MetadataHeader)));
+    }
+
+    auto header = MetadataHeader{};
+    std::memcpy(&header, optBytes->data(), sizeof(header));
+    return header;
   }
 
-  void MetadataStore::update(lmdb::WriteTransaction& transaction, MetadataHeader const& header)
+  Result<> MetadataStore::create(lmdb::WriteTransaction& transaction, MetadataHeader const& header)
   {
-    std::ignore = _database.writer(transaction).update(kMetadataHeaderRecordId, utility::bytes::view(header));
+    return _database.writer(transaction).create(kMetadataHeaderRecordId, utility::bytes::view(header));
+  }
+
+  Result<> MetadataStore::update(lmdb::WriteTransaction& transaction, MetadataHeader const& header)
+  {
+    return _database.writer(transaction).update(kMetadataHeaderRecordId, utility::bytes::view(header));
   }
 
   std::uint64_t MetadataStore::revision(lmdb::ReadTransaction const& transaction) const

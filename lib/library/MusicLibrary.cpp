@@ -91,7 +91,6 @@ namespace ao::library
     lmdb::Environment env;
     lmdb::WriteTransaction initializationTransaction;
     MetadataStore metadataStore;
-    MetadataHeader metadataHeader{};
     TrackStore tracks;
     ListStore lists;
     ResourceStore resources;
@@ -271,13 +270,15 @@ namespace ao::library
         {
           return std::unexpected{result.error()};
         }
-
-        _implPtr->metadataHeader = *headerResult;
       }
       else
       {
-        _implPtr->metadataHeader = makeMetadataHeader();
-        _implPtr->metadataStore.create(_implPtr->initializationTransaction, _implPtr->metadataHeader);
+        auto const header = makeMetadataHeader();
+
+        if (auto result = _implPtr->metadataStore.create(_implPtr->initializationTransaction, header); !result)
+        {
+          return result;
+        }
       }
 
       // Load dictionary entries before first commit
@@ -387,27 +388,27 @@ namespace ao::library
     return _implPtr->manifest;
   }
 
-  MetadataHeader const& MusicLibrary::metadataHeader() const
+  MetadataStore& MusicLibrary::metadata()
   {
-    return _implPtr->metadataHeader;
+    return _implPtr->metadataStore;
   }
 
-  void MusicLibrary::updateMetadataHeader(MetadataHeader const& header)
+  MetadataStore const& MusicLibrary::metadata() const
   {
-    if (auto result = validateMetadataHeader(header); !result)
+    return _implPtr->metadataStore;
+  }
+
+  MetadataHeader MusicLibrary::metadataHeader() const
+  {
+    auto transaction = readTransaction();
+    auto header = _implPtr->metadataStore.load(transaction);
+
+    if (!header)
     {
-      throwException<Exception>("Invalid library metadata header: {}", result.error().message);
+      throwException<Exception>("Failed to load library metadata header: {}", header.error().message);
     }
 
-    auto transaction = writeTransaction();
-    _implPtr->metadataStore.update(transaction, header);
-
-    if (auto result = transaction.commit(); !result)
-    {
-      throwException<Exception>("Failed to update library metadata header: {}", result.error().message);
-    }
-
-    _implPtr->metadataHeader = header;
+    return *header;
   }
 
   std::filesystem::path const& MusicLibrary::rootPath() const

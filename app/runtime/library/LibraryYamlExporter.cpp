@@ -10,6 +10,7 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MetadataLayout.h>
+#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -484,11 +485,18 @@ namespace ao::rt
     auto root = tree.rootref();
     root |= ryml::MAP;
 
+    auto const transaction = ml.readTransaction();
+    auto const header = ml.metadata().load(transaction);
+
+    if (!header)
+    {
+      return std::unexpected{header.error()};
+    }
+
     root.append_child() << ryml::key("version") << 1;
-    appendString(root, "libraryId", utility::formatUuid(ml.metadataHeader().libraryId));
+    appendString(root, "libraryId", utility::formatUuid(header->libraryId));
     appendString(root, "export_mode", modeToString(mode));
 
-    auto const transaction = ml.readTransaction();
     auto library = root.append_child();
     yaml::setKey(library, "library");
     library |= ryml::MAP;

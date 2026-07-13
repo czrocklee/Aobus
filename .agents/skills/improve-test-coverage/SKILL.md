@@ -9,7 +9,7 @@ Use this skill when the task is explicitly about coverage percentage, missing li
 
 For coverage workflow, common Aobus coverage gaps, and execution steps, read:
 
-- `doc/dev/testing/coverage-workflow.md`
+- `doc/development/test/coverage-workflow.md`
 
 For how to write each test, use the `write-unit-test` skill.
 

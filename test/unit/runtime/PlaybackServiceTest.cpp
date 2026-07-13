@@ -200,15 +200,7 @@ namespace ao::rt::test
     nowPlaying.clear();
 
     auto buffer = std::array<std::byte, 4096>{};
-    bool crossedSpliceBoundary = false;
-
-    for (std::int32_t i = 0; i < 100000 && !crossedSpliceBoundary; ++i)
-    {
-      crossedSpliceBoundary = fixture.renderTarget->renderPcm(buffer).positionFrameOffset > 0;
-    }
-
-    REQUIRE(crossedSpliceBoundary);
-    fixture.executor.checkQueued(std::chrono::seconds{5});
+    REQUIRE(driveRenderUntilTaskQueued(*fixture.renderTarget, fixture.executor, buffer));
 
     fixture.playbackService.seek(std::chrono::milliseconds{0}, PlaybackService::SeekMode::Final);
     fixture.executor.drain();

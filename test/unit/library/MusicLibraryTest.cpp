@@ -34,7 +34,7 @@ namespace ao::library::test
                                    .libraryVersion = libraryVersion,
                                    .flags = 0,
                                    .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1}}};
-      metadataStore.create(transaction, header);
+      REQUIRE(metadataStore.create(transaction, header));
       REQUIRE(transaction.commit());
     }
   } // namespace

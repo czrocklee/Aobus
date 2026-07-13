@@ -57,7 +57,7 @@ Preserve unrelated worktree changes.
    lint) and re-run until clean.
 4. Run `./ao check`; fix any failures and re-run it until clean.
 5. Stage only intended changes.
-6. Commit using `doc/dev/commit-messages.md`. The subject must describe the primary technical
+6. Commit using `doc/development/commit-message.md`. The subject must describe the primary technical
    contribution and must not mention AI, internal plans, or append co-author signatures.
    Do not add validation trailers such as `Validation: ./ao check`; report validation results in the
    final user-facing response instead.

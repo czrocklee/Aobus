@@ -46,7 +46,7 @@ namespace ao::media::mp4
      *
      * Error model: the media decode entry returns Result (it sits on the audio open/seek path);
      * lower-level byte-view parser exceptions are translated to Error::Code::CorruptData here.
-     * See doc/design/error-model.md.
+     * See doc/spec/media/file-interpretation.md.
      */
     Result<> parseTrack(std::string_view targetFormat);
 

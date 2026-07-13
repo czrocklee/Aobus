@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import pythoncheck
+from . import doccheck, pythoncheck
 from .paths import PROJECT_ROOT
 
 TEST_COUNT_RE = re.compile(r"Ran (\d+) tests?")
@@ -15,6 +15,16 @@ TEST_COUNT_RE = re.compile(r"Ran (\d+) tests?")
 def run(*, log: Path | None = None) -> int:
     # Ruff and mypy are read-only, so they can gate the tooling suite without touching files.
     static_status = pythoncheck.run_paths([], log=log)
+    documentation_issues = doccheck.check_tree()
+    documentation_status = 1 if documentation_issues else 0
+
+    if documentation_issues:
+        lines = [issue.format() for issue in documentation_issues]
+        print("Documentation checks failed.")
+        print("\n".join(lines))
+        if log is not None:
+            with log.open("a", encoding="utf-8") as sink:
+                sink.write("\n".join(lines) + "\n")
 
     env = dict(os.environ)
     script_dir = str(PROJECT_ROOT / "script")
@@ -40,4 +50,4 @@ def run(*, log: Path | None = None) -> int:
         print("Tooling tests failed.")
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
 
-    return result.returncode or static_status
+    return result.returncode or static_status or documentation_status

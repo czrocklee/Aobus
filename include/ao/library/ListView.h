@@ -20,7 +20,7 @@ namespace ao::library
   /**
    * ListView - Read-only view over a serialized list record.
    *
-   * Error model (see doc/design/error-model.md, "Persisted binary layouts"):
+   * Record contract (see doc/reference/library/storage/database.md):
    * records are produced by ListBuilder and validated at write time, so the
    * constructor runs a single O(1) structural gate (header fits, track-id
    * array and string extents stay inside the record). A record that fails

@@ -365,7 +365,7 @@ def verify_build_report(
         if not policy.accepts(resolved):
             raise DependencyPolicyError(
                 f"{name}: expected {policy.requested}, resolved {resolved} on {platform}; "
-                "see doc/dev/dependency-upgrades.md"
+                "see doc/development/dependency-upgrade.md"
             )
         if entry.get("exceptionId") != policy.exception_id:
             raise DependencyPolicyError(f"{name}: report exception does not match the effective platform policy")

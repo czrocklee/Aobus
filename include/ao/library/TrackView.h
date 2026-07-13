@@ -160,7 +160,7 @@ namespace ao::library
   /**
    * TrackView - Unified view of a track with hot and optional cold data.
    *
-   * Error model (see doc/design/error-model.md, "Persisted binary layouts"):
+   * Record contract (see doc/reference/library/storage/database.md):
    * records are produced exclusively by TrackBuilder and validated at write
    * time; LMDB returns committed bytes unchanged, so the read path performs
    * only an O(1) structural gate per record side. The gate runs once per view

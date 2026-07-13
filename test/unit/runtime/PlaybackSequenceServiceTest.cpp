@@ -156,15 +156,7 @@ namespace ao::rt::test
         transport.executor.drain();
         REQUIRE(transport.renderTarget != nullptr);
         auto output = std::array<std::byte, 4096>{};
-        bool crossedSpliceBoundary = false;
-
-        for (std::int32_t i = 0; i < 100000 && !crossedSpliceBoundary; ++i)
-        {
-          crossedSpliceBoundary = transport.renderTarget->renderPcm(output).positionFrameOffset > 0;
-        }
-
-        REQUIRE(crossedSpliceBoundary);
-        transport.executor.checkQueued(std::chrono::seconds{5});
+        REQUIRE(driveRenderUntilTaskQueued(*transport.renderTarget, transport.executor, output));
       }
 
       PlaybackFixture<QueuedExecutor> transport;

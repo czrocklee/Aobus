@@ -5,7 +5,7 @@ description: Review and validate Aobus thread safety, cancellation, executor aff
 
 # review-concurrency
 
-Read `doc/dev/testing/concurrency-and-sanitizers.md` completely before acting; it
+Read `doc/development/test/concurrency-and-sanitizer.md` completely before acting; it
 routes to the authoritative style, tag, and suite references.
 
 ## Workflow

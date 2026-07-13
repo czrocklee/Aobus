@@ -21,7 +21,7 @@ namespace ao::library
   /**
    * FileManifestView - Unified view of a file manifest entry.
    *
-   * Error model (see doc/design/error-model.md, "Persisted binary layouts"):
+   * Record contract (see doc/reference/library/storage/database.md):
    * the constructor runs the O(1) structural gate (fixed-size header fits
    * and is aligned). A record that fails the gate is a poisoned view:
    * isValid() reports false and accessors return zero values. Accessors

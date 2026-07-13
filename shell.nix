@@ -8,7 +8,7 @@ let
   requireToolVersion = name: expected: actual:
     if expected == actual then true else throw (
       "Aobus requires ${name} ${expected}, but pinned Nixpkgs resolves ${actual}. "
-      + "Follow doc/dev/dependency-upgrades.md to update the toolchain contract and both platform locks."
+      + "Follow doc/development/dependency-upgrade.md to update the toolchain contract and both platform locks."
     );
   lexy-src = (
     builtins.fetchTarball {

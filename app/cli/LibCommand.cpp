@@ -106,7 +106,7 @@ namespace ao::cli
 
     LibraryMetadataDto toLibraryMetadataDto(library::MusicLibrary& ml)
     {
-      auto const& header = ml.metadataHeader();
+      auto const header = ml.metadataHeader();
       return LibraryMetadataDto{.libraryId = utility::formatUuid(header.libraryId),
                                 .libraryVersion = header.libraryVersion,
                                 .flags = std::format("0x{:x}", header.flags),
@@ -115,7 +115,7 @@ namespace ao::cli
 
     void printMetadataPlain(library::MusicLibrary& ml, std::ostream& os)
     {
-      auto const& header = ml.metadataHeader();
+      auto const header = ml.metadataHeader();
 
       std::println(os, "Library ID:    {}", utility::formatUuid(header.libraryId));
       std::println(os, "Library Version:  {}", header.libraryVersion);
@@ -1182,7 +1182,7 @@ namespace ao::cli
 
       if (raw)
       {
-        auto const& header = ml.metadataHeader();
+        auto const header = ml.metadataHeader();
         hexDump(std::as_bytes(std::span{&header, 1}), os);
         return;
       }

@@ -77,18 +77,12 @@ out="$(mktemp -d /tmp/aobus-council/council-XXXXXX)"
 ./ao council run --registry config/agent-council.yaml --repo "$PWD" --out "$out" /tmp/council-intent.yaml
 ```
 
-For each intent, read artifacts under `$out/<intent-id>/`: `dossier.md`, `manifest.yaml`,
-`evidence.yaml`, `trace.yaml`, and per-member round artifacts under `members/<member>/<round>/`.
-Round ids are `r1` for independent review, `r2` for peer challenge, and `r3` for self-revision. Each
-round directory contains `prompt.md`, `stdout.txt`, `stderr.txt`, `response.md`, and a copied
-`workspace/`. Treat `usable: false` in `evidence.yaml` or `response.md` as not contributing to
-quorum, even if the process exited successfully. `review-stream` tells whether the usable review text
-came from stdout or stderr. Member sandboxes bind the host `HOME` at `/tmp/aobus-home` for agent CLI
-auth/config and expose review tools under `/tmp/aobus-tools` at the front of `PATH`.
-Resolved-intent errors are rejected before output setup. Phase-level infrastructure failures still
-write `evidence.yaml`, `dossier.md`, `manifest.yaml`, and `trace.yaml`; dependent phases are then
-recorded as `dependency-failed`, and the CLI exits with the infrastructure code if any phase is
-`infrastructure-failed`.
+For each intent, read `dossier.md` first, then `evidence.yaml`, under
+`$out/<intent-id>/`; per-member round artifacts live under
+`members/<member>/<round>/`. Treat `usable: false` in `evidence.yaml` as not
+contributing to quorum, even when the member process exited successfully. The
+artifact layout, round ids, sandbox binds, exit codes, and failure semantics
+are owned by `doc/development/agent-council.md`.
 
 The dossier is advisory. Write the final plan or review yourself after checking claims against the
 repository.

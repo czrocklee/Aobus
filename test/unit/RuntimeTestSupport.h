@@ -15,6 +15,7 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/Player.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/Subscription.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
@@ -39,6 +40,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -712,6 +714,35 @@ namespace ao::rt::test
   private:
     std::thread::id _ownerThreadId = std::this_thread::get_id();
   };
+
+  inline bool driveRenderUntilTaskQueued(audio::RenderTarget& renderTarget,
+                                         QueuedExecutor& executor,
+                                         std::span<std::byte> output,
+                                         std::chrono::milliseconds timeout = std::chrono::seconds{5})
+  {
+    auto const deadline = std::chrono::steady_clock::now() + timeout;
+
+    while (executor.queuedCount() == 0)
+    {
+      renderTarget.renderPcm(output);
+      auto const now = std::chrono::steady_clock::now();
+
+      if (now >= deadline)
+      {
+        return false;
+      }
+
+      auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+      auto const pollInterval = std::min(remaining, std::chrono::milliseconds{1});
+
+      if (executor.waitUntilQueued(pollInterval))
+      {
+        return true;
+      }
+    }
+
+    return true;
+  }
 
   inline auto makeRuntime(ao::test::TempDir const& tempDir,
                           std::unique_ptr<async::Executor> executorPtr,

@@ -1,4 +1,4 @@
-"""Tests that keep doc/dev/naming-conventions.md and the naming tooling in sync."""
+"""Tests that keep doc/development/naming-convention.md and the naming tooling in sync."""
 
 import re
 import unittest
@@ -6,14 +6,14 @@ import unittest
 from ao.core import nameaudit
 from ao.core.paths import PROJECT_ROOT
 
-DOC_PATH = PROJECT_ROOT / "doc" / "dev" / "naming-conventions.md"
+DOC_PATH = PROJECT_ROOT / "doc" / "development" / "naming-convention.md"
 LINT_CHECK_DIR = PROJECT_ROOT / "tool" / "lint" / "check"
 
 
 def _enforcement_section(text: str) -> str:
     match = re.search(r"^## Enforcement$(.*?)^## ", text, re.MULTILINE | re.DOTALL)
     if match is None:
-        raise AssertionError("naming-conventions.md has no top-level '## Enforcement' section")
+        raise AssertionError("naming-convention.md has no top-level '## Enforcement' section")
     return match.group(1)
 
 

@@ -18,7 +18,7 @@ CMake serializes access to the shared SDK below the local
 version-plus-SHA completion marker validate. The default cache is
 `%LOCALAPPDATA%\Aobus\cache\llvm`, independent of the source checkout and shared
 by its Windows build trees. See
-[Windows development](../../doc/dev/windows-development.md) for the full state
+[Windows development](../../doc/development/windows.md) for the full state
 layout, mapped-source rules, overrides, and migration guidance.
 
 For an offline configure, extract the exact pinned archive first and run the

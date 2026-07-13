@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Documentation"
+  short_description: "Review Aobus docs for accuracy and ownership"
+  default_prompt: "Use $review-documentation to review Aobus documentation for correctness, ownership, and structure."

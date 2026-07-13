@@ -1,0 +1,153 @@
+---
+id: library.mutation
+type: spec
+status: current
+domain: library
+summary: Defines coherent runtime reads and one-operation track and list mutation transactions.
+---
+# Library access and mutation
+
+## Scope
+
+This specification defines `ao::rt::LibraryReader` snapshot reads and `ao::rt::LibraryWriter` synchronous commands.
+It owns transaction scope, previews, no-op behavior, validation, atomicity, and the semantics of track and list mutations.
+
+`ao::library::MusicLibrary` is the physical storage facade: it opens transactions and exposes specialized stores.
+It does not own application commands such as metadata edits, list operations, file import, scanning, or relinking.
+`ao::rt::Library` is the runtime facade that groups reader, writer, task, and change roles; callers select a role instead of adding unrelated public methods to `MusicLibrary`.
+
+Change delivery belongs to [library change publication](change-publication.md), and exact entity fields belong to [library reference](../../../reference/library/README.md).
+
+## Code boundary
+
+This contract belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md).
+Its public boundary is `app/include/ao/rt/library/LibraryReader.h` and `LibraryWriter.h`, its implementation is `app/runtime/library/`, and it coordinates the core `ao::library::MusicLibrary` without exposing LMDB transactions or transaction-bound views to normal application consumers.
+
+## Terminology
+
+- **Read batch** is the lifetime of one `LibraryReader` and its one LMDB read transaction.
+- **Command** is one public `LibraryWriter` mutator invocation.
+- **Effective change** means serialized library state differs after applying a valid command.
+- **Preview** executes the command path but leaves its write transaction uncommitted and publishes nothing.
+- **Stored order** is the complete explicit membership order of a manual list, including ids hidden by an upstream source.
+
+## Invariants
+
+- One reader observes one coherent committed snapshot for its complete lifetime.
+- One writer command owns at most one write transaction and is independently atomic.
+- A sequence of writer calls is a sequence of commits; the API exposes no caller-controlled multi-command transaction.
+- A command publishes only after commit and only when it makes an effective change.
+- A preview returns the same classifications and report values as its committing counterpart from the same starting state, except it returns no allocated durable id.
+- User-authored validation failure, storage failure, serialization failure, and commit failure leave library content unchanged.
+- Runtime return values own their data and never retain transaction-bound `TrackView`, `ListView`, or manifest views.
+
+## Read model
+
+`Library::reader()` creates a movable `LibraryReader` with one read transaction.
+Its track, dictionary, list, resource, and tag queries use that same snapshot.
+
+Pure misses use the value channel selected by the method: `false`, an empty value, an invalid id, or `std::nullopt`.
+Selection-tag intersection treats a stale selected track id as contributing no tags, so the result becomes empty.
+The all-tags query returns distinct tag text and usage counts ordered by descending frequency and then ascending name.
+
+## Track commands
+
+### Metadata and tags
+
+Metadata updates apply one patch to every existing requested track.
+Missing ids and fields whose current value already equals the patch are skipped.
+The reply contains only ids whose serialized metadata changed.
+
+Tag edit adds absent requested tags and removes present requested tags.
+Duplicate, already-present, missing, and stale-track cases do not create an effective change.
+One command updates all affected tracks atomically.
+
+### Create from file
+
+Track creation accepts an absolute path or a path relative to the configured music root.
+The resolved file must be a supported regular audio file inside that root and must not already have a manifest row.
+
+The command parses tags and technical properties, creates hot and cold track records, creates or reuses dictionary and cover resources, writes an available manifest row, and commits these facts together.
+Missing or out-of-root paths, unsupported or malformed media, filesystem failures, record limits, and duplicate manifest rows return a recoverable `Result` error.
+
+The preview validates and prepares the same import but does not expose a `TrackId`, because allocation is not durable before commit.
+
+### Delete track
+
+Deleting an existing track removes its hot and cold records and manifest row and removes every occurrence from manual lists in the same transaction.
+The reply reports the deleted track and affected list memberships.
+A missing track returns `NotFound`.
+
+## List commands
+
+### Kinds and drafts
+
+A list draft is either smart or manual.
+A smart draft stores a filter expression and computes membership; a manual draft stores explicit track ids and has no filter expression.
+
+Creation and update validate the name, parent relationship, kind-specific fields, smart expression, membership ids, size bounds, and parent cycles before commit.
+A non-empty Smart List expression must parse and compile under the [predicate contracts](../../query/predicate-evaluation.md) before the transaction commits.
+A stale update target returns `NotFound`.
+
+Full manual drafts canonicalize duplicate ids to first occurrence and reject missing track ids atomically.
+An unchanged update is a successful no-op.
+
+### Manual insert
+
+Insertion uses a gap index in the current stored order, from zero through the current size.
+Requested ids are classified in request order with this precedence: duplicate request, already present, missing track, inserted.
+Only inserted ids enter the list, in their first request order.
+An all-skipped request is a successful no-op.
+
+### Manual remove
+
+Removal selects each requested id at most once.
+The reply distinguishes duplicate requests and ids not present in stored order.
+Existing ids are removed atomically, and their reported order follows stored order rather than request order.
+
+### Manual move
+
+Move selects existing requested ids once, preserves their stored relative order, removes them, and inserts them at a gap measured after removal.
+The reply distinguishes duplicate requests and absent ids.
+Empty selection and a resulting identical order are successful no-ops.
+
+### List deletion
+
+Deleting an existing list removes its stored definition.
+Source invalidation and dependent-list behavior follow the source specification after the committed deletion is published.
+A missing list returns `NotFound`.
+
+## Failure and cancellation
+
+Synchronous commands are not cooperatively cancellable.
+All recoverable input and persistence failures use `Result`; malformed internal edit coordinates and impossible invariants remain programmer errors.
+
+No command publishes a change for a failed, previewed, or no-op transaction.
+When commit fails, allocated ids and prepared resources are not observable as successful command results.
+
+## Persistence and versioning
+
+Every effective command commits its records and one bumped library revision in the same LMDB transaction.
+Exact records and identifier allocation belong to the [library database reference](../../../reference/library/storage/database.md).
+
+## Implementation map
+
+- [`Library.h`](../../../../app/include/ao/rt/library/Library.h) composes the runtime roles.
+- [`LibraryReader.h`](../../../../app/include/ao/rt/library/LibraryReader.h) defines the scoped read surface.
+- [`LibraryWriter.h`](../../../../app/include/ao/rt/library/LibraryWriter.h) defines commands and reply values.
+- [`LibraryWriter.cpp`](../../../../app/runtime/library/LibraryWriter.cpp) owns command validation and transaction orchestration.
+- [`MusicLibrary.h`](../../../../include/ao/library/MusicLibrary.h) defines the lower physical facade.
+
+## Test map
+
+- [`LibraryReaderTest.cpp`](../../../../test/unit/runtime/library/LibraryReaderTest.cpp) proves coherent runtime values.
+- `LibraryWriter*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, lists, manual ordering, track creation/deletion, previews, errors, and publication boundaries.
+
+## Related documents
+
+- [Library architecture](../../../architecture/library.md)
+- [Library change publication](change-publication.md)
+- [Track model](../../../reference/library/model/track.md)
+- [List model](../../../reference/library/model/list.md)
+- [Predicate evaluation](../../query/predicate-evaluation.md)
+- [Predicate language](../../../reference/query/predicate-language.md)

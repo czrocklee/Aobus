@@ -23,8 +23,9 @@ namespace ao::library
     }
 
     Result<MetadataHeader> load(lmdb::ReadTransaction const& transaction) const;
-    void create(lmdb::WriteTransaction& transaction, MetadataHeader const& header);
-    void update(lmdb::WriteTransaction& transaction, MetadataHeader const& header);
+    Result<MetadataHeader> load(lmdb::WriteTransaction& transaction) const;
+    Result<> create(lmdb::WriteTransaction& transaction, MetadataHeader const& header);
+    Result<> update(lmdb::WriteTransaction& transaction, MetadataHeader const& header);
 
     std::uint64_t revision(lmdb::ReadTransaction const& transaction) const;
     std::uint64_t revision(lmdb::WriteTransaction& transaction) const;

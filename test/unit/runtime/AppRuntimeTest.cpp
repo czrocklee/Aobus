@@ -30,7 +30,6 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -194,15 +193,9 @@ namespace ao::rt::test
         callbackCompleted = true;
       });
 
+    executor->drain();
     auto output = std::array<std::byte, 4096>{};
-    bool crossedSpliceBoundary = false;
-
-    for (std::int32_t i = 0; i < 100000 && !crossedSpliceBoundary; ++i)
-    {
-      crossedSpliceBoundary = audioStatePtr->renderTarget->renderPcm(output).positionFrameOffset > 0;
-    }
-
-    REQUIRE(crossedSpliceBoundary);
+    REQUIRE(driveRenderUntilTaskQueued(*audioStatePtr->renderTarget, *executor, output));
     REQUIRE(executor->drainUntil([&] { return callbackEntered; }));
     CHECK(callbackCompleted);
     REQUIRE(appPtr);

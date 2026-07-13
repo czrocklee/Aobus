@@ -24,9 +24,9 @@ and then verify them with read-only tidy runs.
 ## Policy
 
 The project lint policy — which warnings to fix, when `NOLINT` is acceptable, the NOLINT cleanup
-playbook, include-cleaner triage, and automatic-fix guidance — lives in `doc/dev/linting.md`. Read
+playbook, include-cleaner triage, and automatic-fix guidance — lives in `doc/development/linting.md`. Read
 it before fixing or suppressing any finding. When editing C++ to fix warnings, follow the
-conventions in `doc/dev/coding-style.md` and `doc/dev/naming-conventions.md` (the `aobus-*` checks
+conventions in `doc/development/coding-style.md` and `doc/development/naming-convention.md` (the `aobus-*` checks
 enforce them).
 
 ## Default Workflow
@@ -41,7 +41,7 @@ Choose the smallest useful scope, then widen only when needed.
    ./ao tidy --commit HEAD~3 -o /tmp/aobus-clang-tidy.log
    ```
 
-2. **Fix the warnings** per `doc/dev/linting.md`: prefer real code improvements; use `NOLINT` only for justified tool/API boundaries.
+2. **Fix the warnings** per `doc/development/linting.md`: prefer real code improvements; use `NOLINT` only for justified tool/API boundaries.
 
 3. **Re-run narrowly after edits.**
    Recheck only modified files first. If the initial scope was a folder, commit range, or `--all`, re-run that broader scope only after the narrow checks are clean or when the fix could affect other files.
@@ -81,7 +81,7 @@ Choose the smallest useful scope, then widen only when needed.
 ./ao tidy --no-build --check aobus-include-convention path/to/file.cpp
 ```
 
-Scope behavior (STRICT vs RELAXED, fixture handling) is documented in `doc/dev/linting.md`. For C++ files, the command prepares `/tmp/build/debug-clang-tidy`, builds `AobusLintPlugin` if needed, loads the plugin, and de-duplicates repeated diagnostics.
+Scope behavior (STRICT vs RELAXED, fixture handling) is documented in `doc/development/linting.md`. For C++ files, the command prepares `/tmp/build/debug-clang-tidy`, builds `AobusLintPlugin` if needed, loads the plugin, and de-duplicates repeated diagnostics.
 
 ## Verification
 
@@ -103,6 +103,6 @@ Report the initial scope, warning count or notable diagnostics, what was fixed, 
 
 ## References
 
-- **`doc/dev/linting.md`** — project lint policy: warning fix/suppress/avoid rules, NOLINT cleanup playbook, include-cleaner triage, automatic-fix guidance.
+- **`doc/development/linting.md`** — project lint policy: warning fix/suppress/avoid rules, NOLINT cleanup playbook, include-cleaner triage, automatic-fix guidance.
 - **`references/type-to-header-map.md`** — exact header for every GTKmm, GLib, STL, and Aobus type. Consult before adding/removing any `#include`.
 - **`./ao tidy`** (implemented in `script/ao/command/tidy.py`) — authoritative entry point; owns file discovery, strict/relaxed check configuration, plugin loading, and diagnostic de-duplication.

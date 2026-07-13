@@ -101,6 +101,7 @@ class CliParseTest(unittest.TestCase):
             "name-audit",
             "coverage",
             "deps",
+            "docs",
             "tidy",
             "analyze",
             "format",
@@ -143,6 +144,11 @@ class CliParseTest(unittest.TestCase):
 
         self.assertEqual(args.deps_action, "verify")
         self.assertEqual(args.path, "/tmp/aobus-deps")
+
+    def test_docs_check_arguments(self):
+        args = self.parse(["docs", "check"])
+
+        self.assertEqual(args.docs_action, "check")
 
     def test_windows_build_selects_the_shared_flavor_preset(self):
         with tempfile.TemporaryDirectory() as temp_dir:

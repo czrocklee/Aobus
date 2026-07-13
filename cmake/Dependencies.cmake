@@ -139,14 +139,14 @@ if(NOT Boost_FOUND)
   message(FATAL_ERROR
     "Aobus dependency 'boost' requires ${AOBUS_BOOST_REQUESTED_VERSION}, but the active resolver "
     "could not provide an exact compatible package. Considered versions: "
-    "'${Boost_CONSIDERED_VERSIONS}'. See doc/dev/dependency-upgrades.md.")
+    "'${Boost_CONSIDERED_VERSIONS}'. See doc/development/dependency-upgrade.md.")
 endif()
 find_package(spdlog ${AOBUS_SPDLOG_FIND_ARGUMENTS} CONFIG QUIET)
 if(NOT spdlog_FOUND)
   message(FATAL_ERROR
     "Aobus dependency 'spdlog' requires ${AOBUS_SPDLOG_REQUESTED_VERSION}, but the active resolver "
     "could not provide an exact compatible package. Considered versions: "
-    "'${spdlog_CONSIDERED_VERSIONS}'. See doc/dev/dependency-upgrades.md.")
+    "'${spdlog_CONSIDERED_VERSIONS}'. See doc/development/dependency-upgrade.md.")
 endif()
 find_package(ryml CONFIG REQUIRED)
 find_package(c4core CONFIG REQUIRED)
@@ -175,7 +175,7 @@ if(AOBUS_BUILD_TUI)
     message(FATAL_ERROR
       "Aobus dependency 'ftxui' requires ${AOBUS_FTXUI_REQUESTED_VERSION}, but the active resolver "
       "could not provide an exact compatible package. Considered versions: "
-      "'${ftxui_CONSIDERED_VERSIONS}'. See doc/dev/dependency-upgrades.md.")
+      "'${ftxui_CONSIDERED_VERSIONS}'. See doc/development/dependency-upgrade.md.")
   endif()
 
   # stb is header-only; vcpkg installs stb_image.h at the include root,
@@ -204,7 +204,7 @@ function(aobus_validate_dependency_targets dependency)
     if(NOT TARGET "${required_target}")
       message(FATAL_ERROR
         "Aobus dependency '${dependency}' resolved without required CMake target "
-        "'${required_target}'. See doc/dev/dependency-upgrades.md.")
+        "'${required_target}'. See doc/development/dependency-upgrade.md.")
     endif()
   endforeach()
 endfunction()
@@ -265,7 +265,7 @@ if(NOT AOBUS_BOOST_RESOLVED_VERSION OR NOT AOBUS_SPDLOG_RESOLVED_VERSION
   message(FATAL_ERROR
     "A governed dependency package did not expose its resolved version. "
     "Boost='${AOBUS_BOOST_RESOLVED_VERSION}', spdlog='${AOBUS_SPDLOG_RESOLVED_VERSION}', "
-    "ftxui='${AOBUS_FTXUI_RESOLVED_VERSION}'. See doc/dev/dependency-upgrades.md.")
+    "ftxui='${AOBUS_FTXUI_RESOLVED_VERSION}'. See doc/development/dependency-upgrade.md.")
 endif()
 
 function(aobus_json_quote output value)

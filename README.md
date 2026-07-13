@@ -50,7 +50,7 @@ Aobus uses CMake with pinned Nix dependencies on Linux and vcpkg on Windows.
 The portal re-enters the pinned `nix-shell` automatically. Set
 `AOBUS_BUILD_ROOT` to move build trees off the default `/tmp/build`.
 Governed dependency versions and native resolver identities can be inspected
-with `./ao deps report`. Follow the [dependency upgrade workflow](doc/dev/dependency-upgrades.md)
+with `./ao deps report`. Follow the [dependency upgrade workflow](doc/development/dependency-upgrade.md)
 when changing Nixpkgs, vcpkg, C++ dependency, Python, Ruff, or mypy pins.
 
 ### Windows
@@ -67,26 +67,30 @@ ao.bat check
 ```
 
 `ao.bat` initializes the Visual Studio environment and uses the vcpkg bundled
-with Visual Studio. See [Windows development](doc/dev/windows-development.md)
+with Visual Studio. See [Windows development](doc/development/windows.md)
 for prerequisites, build trees, and suite availability.
 
 ## 🧪 Running Tests
 
-Aobus takes stability seriously. We maintain a comprehensive suite of unit and integration tests.
+Aobus takes stability seriously. We maintain a comprehensive suite of unit and integration tests. All suites run through the development portal:
 
 ```bash
-# Run core test suite
-/tmp/build/debug/test/ao_core_test
+# Run the default fast loop (core + GTK on Linux)
+./ao test
 
-# Run Linux-specific tests
-/tmp/build/debug/test/ao_gtk_test
-
-# Run every registered suite through the development portal
+# Run every registered suite
 ./ao test --all
 
 # Run tests for the development tooling
 ./ao test --tooling
+
+# Full validation gate: build everything + all test suites
+./ao check
 ```
+
+The portal resolves the correct build tree, including when
+`AOBUS_BUILD_ROOT` relocates it. Invoking Catch2 binaries directly from the
+build tree is a debugging technique, not the supported workflow.
 
 ## 🤖 AI Agents
 
