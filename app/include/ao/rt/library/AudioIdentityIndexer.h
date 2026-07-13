@@ -60,9 +60,10 @@ namespace ao::rt
     std::string message{};
   };
 
-  /// Same contract as library::readAudioIdentity(path, progress, stopToken).
+  /// Composes path opening and payload parsing with library::readAudioIdentity.
   /// Invoked concurrently from multiple worker threads, so a replacement must
-  /// be thread-safe.
+  /// be thread-safe. Its Result reports the composition failures; an empty
+  /// optional reports cooperative cancellation.
   using AudioIdentityFingerprintFunction =
     std::function<Result<std::optional<library::AudioIdentity>>(std::filesystem::path const& path,
                                                                 library::AudioIdentityProgressCallback progress,

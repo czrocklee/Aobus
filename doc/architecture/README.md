@@ -54,8 +54,8 @@ These documents own reusable product or core capabilities with independent state
 
 | Document | Owns |
 |---|---|
+| [Encoded media architecture](encoded-media.md) | Encoded-file reading, reusable container primitives, consumer dependency direction, and zero-copy view lifetimes. |
 | [Library architecture](library.md) | Storage/runtime access roles, revisioned changes, tasks, sources, projections, and their ownership graph. |
-| [Media interpretation architecture](media-interpretation.md) | Encoded-container parsing, metadata and property interpretation, payload extraction, parser containment, and consumer boundaries. |
 | [Track expression architecture](track-expression.md) | Expression authoring, core compilation, source membership, completion composition, and scalar formatting boundaries. |
 | [Playback architecture](playback.md) | Succession, transport, session persistence, audio execution, output, and their cross-domain protocols. |
 
@@ -78,7 +78,7 @@ It refines its broader domain and application owners instead of becoming a peer 
 | Document | Broader owners | Owns |
 |---|---|---|
 | [Audio quality architecture](audio-quality.md) | [Playback](playback.md) and [presentation](presentation.md) | Quality evidence, graph composition, runtime publication, shared UIModel interpretation, and frontend adaptation. |
-| [Resource delivery architecture](resource-delivery.md) | [Library](library.md), [media interpretation](media-interpretation.md), [playback](playback.md), and [presentation](presentation.md) | Immutable resource identity, runtime materialization, projections, frontend transforms, caches, stale-result suppression, and external artifacts. |
+| [Resource delivery architecture](resource-delivery.md) | [Encoded media](encoded-media.md), [library](library.md), [playback](playback.md), and [presentation](presentation.md) | Immutable resource identity, runtime materialization, projections, frontend transforms, caches, stale-result suppression, and external artifacts. |
 
 ## Architecture relationships
 
@@ -91,8 +91,8 @@ This table records primary structural relationships rather than every document l
 | [Runtime execution](runtime-execution.md) | System layer and lifetime model | Library tasks and projections, playback, workspace lifecycle, persistence scheduling, and failure delivery |
 | [Failure and reporting](failure-and-reporting.md) | Failures from every subsystem plus runtime execution boundaries | Recovery owners, runtime notifications, UIModel status, frontend and CLI reporting |
 | [Persistence and managed state](persistence-and-managed-state.md) | Filesystem, LMDB, YAML, and state-owner boundaries | Library durability, workspace and playback sessions, application and UI-local state |
+| [Encoded media](encoded-media.md) | Encoded bytes and filesystem mappings | Library ingestion and identity, audio decoding, resource persistence, and their lifetime boundaries |
 | [Library](library.md) | Core storage, query, and async mechanisms | Track expressions, workspace views, playback resolution, and presentation projections |
-| [Media interpretation](media-interpretation.md) | Filesystem bytes and shared container primitives | Library ingestion and identity plus decoder container consumers |
 | [Track expression](track-expression.md) | Query language and library values | Smart membership, filtering, completion, scalar formatting, presentation, and CLI output |
 | [Playback](playback.md) | Library identities and sources, runtime execution, managed state | Audio quality, presentation, and platform output adapters |
 | [Workspace](workspace.md) | Library sources, track expressions, presentation values, and managed-state boundaries | Interactive session lifecycle, playback reveal, and presentation consumers |
@@ -112,10 +112,10 @@ The table tracks capability families with architecture-bearing boundaries, not e
 |---|---|---|---|
 | Layering and composition roots | [System](system-overview.md) | Current | Focused architectures must continue to refine rather than redefine the layer map. |
 | Execution, cancellation, and teardown | [Runtime execution](runtime-execution.md) | Current | Subsystems still own their more specific execution and lifetime refinements. |
-| Failure propagation and reporting | [Failure and reporting](failure-and-reporting.md) | Current | Tag, media, YAML, storage, and audio failure behavior remains delegated to the media, persistence, storage, and playback specification owners. |
+| Failure propagation and reporting | [Failure and reporting](failure-and-reporting.md) | Current | Media, YAML, storage, and audio failure behavior remains delegated to the media, persistence, storage, and playback specification owners. |
 | Durable library data and managed state | [Persistence and managed state](persistence-and-managed-state.md) | Current | Exact schemas, paths, and state-owner behavior remain delegated to reference and specifications. |
 | Library storage, tasks, live sources, and projections | [Library](library.md) | Current | Scan, transfer, mutation, source, and projection behavior is split into library specifications. |
-| Encoded-media and tag interpretation | [Media interpretation](media-interpretation.md) | Current | The current tag-to-library representation cycle is explicit; RFC 0020 proposes an owned, acyclic boundary. |
+| Encoded-media reading and container reuse | [Encoded media](encoded-media.md) | Current | Encoded media owns `ao_media`, its zero-copy lifetime model, and its library/audio consumer directions; exact reader behavior and surfaces belong to specification and reference. |
 | Smart Lists, filtering, completion, and scalar formatting | [Track expression](track-expression.md) | Current | Presentation remains a separate owner for track-list shape and rendering. |
 | Interactive playback and platform audio output | [Playback](playback.md) | Current | Session persistence and audio-execution behavior remains delegated to the playback specification and reference owners. |
 | Audio-quality evidence and presentation | [Audio quality](audio-quality.md) | Current | The slice remains subordinate to playback and presentation ownership. |

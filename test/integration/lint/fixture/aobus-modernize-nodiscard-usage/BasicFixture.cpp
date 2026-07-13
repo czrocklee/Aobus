@@ -93,16 +93,16 @@ public:
   SomeResourceToken(SomeResourceToken const&) = delete;
 };
 
-namespace ao::tag
+namespace ao::media::file
 {
-  // POSITIVE: FIX-TO: class [[nodiscard]] TagFile
-  class TagFile
+  // POSITIVE: FIX-TO: class [[nodiscard]] File
+  class File
   {
   public:
-    ~TagFile() {}
-    TagFile(TagFile const&) = delete;
+    ~File() {}
+    File(File const&) = delete;
   };
-} // namespace ao::tag
+} // namespace ao::media::file
 
 namespace ao
 {

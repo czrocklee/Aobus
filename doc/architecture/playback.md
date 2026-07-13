@@ -111,7 +111,7 @@ Engine does not know library track or list identities, views, shuffle, repeat, s
 
 Engine opens an audio item into a decoder-backed PCM source through its track-session construction path.
 `StreamingSource` owns the decoder, its decode thread, PCM ring buffer, seek cancellation, and source-error handoff.
-Decoder implementations may reuse container primitives from the [media interpretation architecture](media-interpretation.md), but metadata interpretation does not own decoder-session state or PCM behavior.
+Decoder implementations may reuse container primitives from `ao_media`, but the [encoded media architecture](encoded-media.md) keeps encoded-file reading and decoder consumption as independent capabilities; neither media file reading nor its visitor owns decoder-session state or PCM behavior.
 
 `BackendProvider` owns platform output discovery and creates `Backend` instances for selected devices and profiles.
 A Backend owns its native output handles, render/control resources, and platform threads; its realtime callback consumes PCM through the narrow source/render boundary and reports non-realtime state back to Engine.
@@ -340,8 +340,8 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [System architecture](system-overview.md)
 - [Runtime execution architecture](runtime-execution.md)
 - [Failure and reporting architecture](failure-and-reporting.md)
+- [Encoded media architecture](encoded-media.md)
 - [Library architecture](library.md)
-- [Media interpretation architecture](media-interpretation.md)
 - [Resource delivery architecture](resource-delivery.md)
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
 - [Presentation architecture](presentation.md)

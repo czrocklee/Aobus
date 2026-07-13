@@ -43,7 +43,7 @@ namespace ao::audio::test
 
   TEST_CASE("AacDecoderSession - seeks within decoded MP4 samples", "[audio][unit][aac][seek]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
+    auto const testFile = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.m4a";
 
     if (!std::filesystem::exists(testFile))
     {
@@ -66,7 +66,7 @@ namespace ao::audio::test
 
   TEST_CASE("AacDecoderSession - 32-bit padded output", "[audio][unit][aac]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
+    auto const testFile = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.m4a";
 
     if (!std::filesystem::exists(testFile))
     {
@@ -92,7 +92,7 @@ namespace ao::audio::test
 
   TEST_CASE("AacDecoderSession - reports error paths", "[audio][unit][aac][error]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
+    auto const testFile = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.m4a";
 
     SECTION("Rejects unsupported output bit depth")
     {

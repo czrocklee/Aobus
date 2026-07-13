@@ -10,9 +10,9 @@
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/media/file/File.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/tag/TagFile.h>
 
 #include <algorithm>
 #include <atomic>
@@ -242,7 +242,7 @@ namespace ao::rt
         return RowSlot{.outcome = RowOutcome::Failed};
       }
 
-      if (!isRegularFile || !tag::TagFile::isSupported(row.fullPath))
+      if (!isRegularFile || !media::file::File::isSupported(row.fullPath))
       {
         return RowSlot{.outcome = RowOutcome::Skipped};
       }
@@ -422,7 +422,24 @@ namespace ao::rt
         : FingerprintFunction{
             [](
               std::filesystem::path const& path, library::AudioIdentityProgressCallback progress, std::stop_token token)
-            { return library::readAudioIdentity(path, std::move(progress), token); }};
+            {
+              auto fileResult = media::file::File::open(path);
+
+              if (!fileResult)
+              {
+                return Result<std::optional<library::AudioIdentity>>{std::unexpected{fileResult.error()}};
+              }
+
+              auto payloadResult = fileResult->audioPayload();
+
+              if (!payloadResult)
+              {
+                return Result<std::optional<library::AudioIdentity>>{std::unexpected{payloadResult.error()}};
+              }
+
+              return Result<std::optional<library::AudioIdentity>>{
+                library::readAudioIdentity(payloadResult->bytes, std::move(progress), token)};
+            }};
     auto const concurrency = effectiveConcurrency(options.maxConcurrency);
     auto const totalCount = countPendingRows(_library);
     auto processedCount = std::atomic<std::int32_t>{0};

@@ -240,7 +240,7 @@ namespace ao::cli::test
       void copyAudio(std::string_view sourceName, std::string_view targetName) const
       {
         fs::copy_file(
-          fs::path{TAG_TEST_DATA_DIR} / sourceName, root() / targetName, fs::copy_options::overwrite_existing);
+          fs::path{AUDIO_TEST_DATA_DIR} / sourceName, root() / targetName, fs::copy_options::overwrite_existing);
       }
 
       TrackId addTrack(library::test::TrackSpec const& spec) const

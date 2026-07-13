@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "MediaTrack.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -19,7 +20,6 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/tag/TagFile.h>
 #include <ao/utility/Base64.h>
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -577,8 +577,8 @@ namespace ao::rt
     auto const property = view.property();
     appendString(trackNode, "uri", property.uri());
 
+    auto optMediaTrack = std::optional<MediaTrack>{};
     auto optBaseline = std::optional<library::TrackBuilder>{};
-    auto tagFilePtr = std::unique_ptr<tag::TagFile>{};
 
     if (mode == ExportMode::Delta)
     {
@@ -586,16 +586,10 @@ namespace ao::rt
 
       if (auto const fullPath = ml.rootPath() / property.uri(); std::filesystem::exists(fullPath, fileEc) && !fileEc)
       {
-        auto tagFileResult = tag::TagFile::open(fullPath);
-
-        if (tagFileResult)
+        if (auto mediaTrackResult = readMediaTrack(fullPath); mediaTrackResult)
         {
-          tagFilePtr = std::move(*tagFileResult);
-
-          if (auto baselineResult = tagFilePtr->loadTrack(); baselineResult)
-          {
-            optBaseline = *baselineResult;
-          }
+          optMediaTrack.emplace(std::move(*mediaTrackResult));
+          optBaseline = optMediaTrack->builder();
         }
       }
       else if (fileEc)

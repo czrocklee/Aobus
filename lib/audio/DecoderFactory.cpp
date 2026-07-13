@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <expected>
 #include <filesystem>
 #include <format>
 #include <memory>
@@ -43,7 +44,20 @@ namespace ao::audio
           Error::Code::IoError, std::format("Failed to map '{}': {}", filePath.string(), mapResult.error().message));
       }
 
-      auto const sampleEntryType = media::mp4::audioSampleEntryType(mappedFile.bytes());
+      auto const sampleEntryTypeResult = media::mp4::audioSampleEntryType(mappedFile.bytes());
+
+      if (!sampleEntryTypeResult)
+      {
+        if (sampleEntryTypeResult.error().code == Error::Code::NotFound)
+        {
+          return makeError(Error::Code::NotSupported,
+                           std::format("MP4 container in '{}' has no supported audio track", filePath.string()));
+        }
+
+        return std::unexpected{sampleEntryTypeResult.error()};
+      }
+
+      auto const& sampleEntryType = *sampleEntryTypeResult;
 
       if (sampleEntryType == "alac")
       {

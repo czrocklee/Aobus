@@ -18,6 +18,12 @@ namespace ao::media::wav
   inline constexpr std::uint16_t kFormatIeeeFloat = 0x0003;
   inline constexpr std::uint16_t kFormatExtensible = 0xFFFE;
 
+  enum class WaveParseExtent : std::uint8_t
+  {
+    Complete,
+    RequiredAudio,
+  };
+
   struct FormatChunk final
   {
     std::uint16_t formatTag = 0;
@@ -45,7 +51,7 @@ namespace ao::media::wav
     std::vector<ChunkView> chunks{};
   };
 
-  Result<ParsedWave> parseWave(std::span<std::byte const> bytes);
+  Result<ParsedWave> parseWave(std::span<std::byte const> bytes, WaveParseExtent extent = WaveParseExtent::Complete);
 
   bool hasChunkId(ChunkView const& chunk, std::string_view id) noexcept;
 } // namespace ao::media::wav

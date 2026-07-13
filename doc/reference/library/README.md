@@ -27,7 +27,7 @@ This reference is the exact-surface companion to the Library stages in [system a
 | Runtime field catalog | `app/include/ao/rt/TrackField.h`, `app/runtime/TrackField.cpp` | [`model/`](model/track-field.md) |
 | Core physical storage | `include/ao/library/*Layout.h`, `lib/library/` | [`storage/`](storage/database.md) |
 | Runtime interchange boundary | `app/runtime/library/` | [`format/`](format/yaml.md) |
-| External media interpretation | `include/ao/tag/`, `lib/tag/`, and `lib/media/` | [Supported audio files](../media/audio-file.md) |
+| External media-file reading | `include/ao/media/file/`, `lib/media/file/`, and reusable `lib/media/` primitives | [Supported audio files](../media/audio-file.md) |
 
 ## Out of scope
 

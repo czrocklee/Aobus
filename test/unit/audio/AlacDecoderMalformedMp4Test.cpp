@@ -66,7 +66,7 @@ namespace ao::audio::test
 
     AlacFixtureBytes loadAlacFixture()
     {
-      auto const path = std::filesystem::path{TAG_TEST_DATA_DIR} / "alac16.m4a";
+      auto const path = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "alac16.m4a";
 
       if (!std::filesystem::exists(path))
       {

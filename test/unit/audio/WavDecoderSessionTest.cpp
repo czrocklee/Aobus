@@ -194,6 +194,22 @@ namespace ao::audio::test
     }
   }
 
+  TEST_CASE("WavDecoderSession - ignores malformed chunks after required audio data", "[audio][regression][wav]")
+  {
+    auto data = ao::test::wav::makeWav({});
+    ao::test::wav::appendTruncatedChunk(data, "JUNK", 100);
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto decoder = WavDecoderSession{Format{.isInterleaved = true}};
+
+    auto const openResult = decoder.open(temp.path);
+
+    REQUIRE(openResult);
+    CHECK(decoder.streamInfo().codec == AudioCodec::Wav);
+    auto blockResult = decoder.readNextBlock();
+    REQUIRE(blockResult);
+    CHECK(blockResult->frames > 0);
+  }
+
   TEST_CASE("WavDecoderSession - seek and end-of-stream are stable", "[audio][unit][wav]")
   {
     auto decoder = WavDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};

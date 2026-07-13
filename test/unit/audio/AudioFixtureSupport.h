@@ -17,7 +17,7 @@ namespace ao::audio::test
 {
   inline std::filesystem::path requireAudioFixture(std::string_view fileName)
   {
-    auto const path = std::filesystem::path{TAG_TEST_DATA_DIR} / fileName;
+    auto const path = std::filesystem::path{AUDIO_TEST_DATA_DIR} / fileName;
 
     if (!std::filesystem::exists(path))
     {

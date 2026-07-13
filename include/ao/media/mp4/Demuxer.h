@@ -13,7 +13,7 @@
 
 namespace ao::media::mp4
 {
-  class Atom;
+  class AtomView;
 
   /**
    * @brief Demuxer for extracting specific streams (like ALAC/AAC packets) from an MP4 file container.
@@ -46,7 +46,7 @@ namespace ao::media::mp4
      *
      * Error model: the media decode entry returns Result (it sits on the audio open/seek path);
      * lower-level byte-view parser exceptions are translated to Error::Code::CorruptData here.
-     * See doc/spec/media/file-interpretation.md.
+     * See doc/spec/media/file-reading.md.
      */
     Result<> parseTrack(std::string_view targetFormat);
 
@@ -106,7 +106,7 @@ namespace ao::media::mp4
     void parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out);
     void parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
     void parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
-    void parseSampleTable(Atom const& table,
+    void parseSampleTable(AtomView const& table,
                           std::vector<std::uint64_t>& chunkOffsets,
                           std::vector<SampleToChunkEntry>& sampleToChunk,
                           std::vector<TimeToSampleEntry>& timeToSample);

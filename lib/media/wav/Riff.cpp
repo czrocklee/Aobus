@@ -214,9 +214,43 @@ namespace ao::media::wav
               static_cast<char>(std::to_integer<unsigned char>(bytes[offset + 2])),
               static_cast<char>(std::to_integer<unsigned char>(bytes[offset + 3]))};
     }
+
+    Result<> applyChunk(ParsedWave& parsed, ChunkView const& chunk, bool& hasFormat, bool& hasData)
+    {
+      if (hasChunkId(chunk, "fmt "))
+      {
+        if (hasFormat)
+        {
+          return makeError(Error::Code::CorruptData, "WAV file has multiple fmt chunks");
+        }
+
+        auto formatResult = parseFormatChunk(chunk.bytes);
+
+        if (!formatResult)
+        {
+          return std::unexpected{formatResult.error()};
+        }
+
+        parsed.format = *formatResult;
+        hasFormat = true;
+      }
+      else if (hasChunkId(chunk, "data") && !chunk.bytes.empty())
+      {
+        if (hasData)
+        {
+          return makeError(Error::Code::CorruptData, "WAV file has multiple data chunks");
+        }
+
+        parsed.dataOffset = chunk.offset;
+        parsed.data = chunk.bytes;
+        hasData = true;
+      }
+
+      return {};
+    }
   } // namespace
 
-  Result<ParsedWave> parseWave(std::span<std::byte const> bytes)
+  Result<ParsedWave> parseWave(std::span<std::byte const> bytes, WaveParseExtent extent)
   {
     if (bytes.size() < kRiffHeaderSize)
     {
@@ -267,36 +301,19 @@ namespace ao::media::wav
       auto chunk = ChunkView{.id = chunkId, .offset = payloadOffset, .bytes = bytes.subspan(payloadOffset, chunkSize)};
       parsed.chunks.push_back(chunk);
 
-      if (hasChunkId(chunk, "fmt "))
+      auto applyResult = applyChunk(parsed, chunk, hasFormat, hasData);
+
+      if (!applyResult)
       {
-        if (hasFormat)
-        {
-          return makeError(Error::Code::CorruptData, "WAV file has multiple fmt chunks");
-        }
-
-        auto formatResult = parseFormatChunk(chunk.bytes);
-
-        if (!formatResult)
-        {
-          return std::unexpected{formatResult.error()};
-        }
-
-        parsed.format = *formatResult;
-        hasFormat = true;
-      }
-      else if (hasChunkId(chunk, "data"))
-      {
-        if (hasData)
-        {
-          return makeError(Error::Code::CorruptData, "WAV file has multiple data chunks");
-        }
-
-        parsed.dataOffset = chunk.offset;
-        parsed.data = chunk.bytes;
-        hasData = true;
+        return std::unexpected{applyResult.error()};
       }
 
       offset = paddedEnd;
+
+      if (extent == WaveParseExtent::RequiredAudio && hasFormat && hasData)
+      {
+        break;
+      }
     }
 
     if (!hasFormat)

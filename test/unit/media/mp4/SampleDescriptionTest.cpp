@@ -48,16 +48,29 @@ namespace ao::media::mp4::test
     SECTION("Returns ALAC sample entry type")
     {
       auto const fileData = toBytes(ao::test::mp4::makeMinimalAudioMp4("alac"));
+      auto const result = audioSampleEntryType(fileData);
 
-      CHECK(audioSampleEntryType(fileData) == "alac");
+      REQUIRE(result);
+      CHECK(*result == "alac");
     }
 
     SECTION("Returns AAC sample entry type")
     {
       auto const esdsAtom = ao::test::mp4::makeAtom("esds", {0, 0, 0, 0});
       auto const fileData = toBytes(ao::test::mp4::makeMinimalAudioMp4("mp4a", esdsAtom));
+      auto const result = audioSampleEntryType(fileData);
 
-      CHECK(audioSampleEntryType(fileData) == "mp4a");
+      REQUIRE(result);
+      CHECK(*result == "mp4a");
+    }
+
+    SECTION("Reads an extended-size sample description")
+    {
+      auto const stsdAtom = ao::test::mp4::makeExtendedFromCompactAtom(ao::test::mp4::makeStsdAtom("alac"));
+      auto const result = audioSampleEntryType(makeFileWithStsd(stsdAtom));
+
+      REQUIRE(result);
+      CHECK(*result == "alac");
     }
 
     SECTION("Skips non-audio tracks before the audio sample entry")
@@ -69,8 +82,10 @@ namespace ao::media::mp4::test
       moovBody.insert(moovBody.end(), videoTrack.begin(), videoTrack.end());
       moovBody.insert(moovBody.end(), audioTrack.begin(), audioTrack.end());
       ao::test::mp4::addAtom(data, "moov", moovBody);
+      auto const result = audioSampleEntryType(toBytes(data));
 
-      CHECK(audioSampleEntryType(toBytes(data)) == "mp4a");
+      REQUIRE(result);
+      CHECK(*result == "mp4a");
     }
 
     SECTION("Accepts supported audio sample entries when hdlr is absent")
@@ -82,8 +97,10 @@ namespace ao::media::mp4::test
       auto const trakAtom = ao::test::mp4::makeAtom("trak", mdiaAtom);
       auto data = std::vector<std::uint8_t>{};
       ao::test::mp4::addAtom(data, "moov", trakAtom);
+      auto const result = audioSampleEntryType(toBytes(data));
 
-      CHECK(audioSampleEntryType(toBytes(data)) == "alac");
+      REQUIRE(result);
+      CHECK(*result == "alac");
     }
 
     SECTION("Accepts supported audio sample entries when hdlr is too short")
@@ -99,8 +116,10 @@ namespace ao::media::mp4::test
       auto const trakAtom = ao::test::mp4::makeAtom("trak", mdiaAtom);
       auto data = std::vector<std::uint8_t>{};
       ao::test::mp4::addAtom(data, "moov", trakAtom);
+      auto const result = audioSampleEntryType(toBytes(data));
 
-      CHECK(audioSampleEntryType(toBytes(data)) == "alac");
+      REQUIRE(result);
+      CHECK(*result == "alac");
     }
 
     SECTION("Rejects unsupported sample entries when hdlr is absent")
@@ -112,27 +131,40 @@ namespace ao::media::mp4::test
       auto const trakAtom = ao::test::mp4::makeAtom("trak", mdiaAtom);
       auto data = std::vector<std::uint8_t>{};
       ao::test::mp4::addAtom(data, "moov", trakAtom);
+      auto const result = audioSampleEntryType(toBytes(data));
 
-      CHECK(audioSampleEntryType(toBytes(data)).empty());
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::NotFound);
     }
 
     SECTION("Returns unknown sample entry types for dispatch decisions")
     {
       auto const fileData = toBytes(ao::test::mp4::makeMinimalAudioMp4("zzzz"));
+      auto const result = audioSampleEntryType(fileData);
 
-      CHECK(audioSampleEntryType(fileData) == "zzzz");
+      REQUIRE(result);
+      CHECK(*result == "zzzz");
     }
 
-    SECTION("Returns empty string when stsd is missing or malformed")
+    SECTION("Reports NotFound when stsd is missing")
     {
       auto const missingStsd = toBytes(ao::test::mp4::makeAtom("moov", {}));
-      auto const malformed = std::vector{std::byte{0x00}, std::byte{0x01}, std::byte{0x02}};
+      auto const result = audioSampleEntryType(missingStsd);
 
-      CHECK(audioSampleEntryType(missingStsd).empty());
-      CHECK(audioSampleEntryType(malformed).empty());
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::NotFound);
     }
 
-    SECTION("Returns empty string for malformed stsd sample entries")
+    SECTION("Preserves malformed container errors")
+    {
+      auto const malformed = std::vector{std::byte{0x00}, std::byte{0x01}, std::byte{0x02}};
+      auto const result = audioSampleEntryType(malformed);
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
+    }
+
+    SECTION("Reports NotFound for malformed stsd sample entries")
     {
       auto data = std::vector<std::uint8_t>{};
       auto moovBody = std::vector<std::uint8_t>{};
@@ -148,33 +180,41 @@ namespace ao::media::mp4::test
       auto const trakAtom = ao::test::mp4::makeAtom("trak", mdiaAtom);
       moovBody.insert(moovBody.end(), trakAtom.begin(), trakAtom.end());
       ao::test::mp4::addAtom(data, "moov", moovBody);
+      auto const result = audioSampleEntryType(toBytes(data));
 
-      CHECK(audioSampleEntryType(toBytes(data)).empty());
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::NotFound);
     }
 
-    SECTION("Returns empty string when stsd has no entries")
+    SECTION("Reports NotFound when stsd has no entries")
     {
       auto const stsdAtom = ao::test::mp4::makeAtom("stsd", {0, 0, 0, 0, 0, 0, 0, 0});
+      auto const result = audioSampleEntryType(makeFileWithStsd(stsdAtom));
 
-      CHECK(audioSampleEntryType(makeFileWithStsd(stsdAtom)).empty());
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::NotFound);
     }
 
-    SECTION("Returns empty string when stsd has multiple entries")
+    SECTION("Reports NotFound when stsd has multiple entries")
     {
       auto const alacEntry = ao::test::mp4::makeAudioSampleEntryAtom("alac");
       auto const mp4aEntry = ao::test::mp4::makeAudioSampleEntryAtom("mp4a", ao::test::mp4::makeAtom("esds", {}));
       auto const stsdAtom = ao::test::mp4::makeStsdAtomFromSampleEntries({alacEntry, mp4aEntry});
+      auto const result = audioSampleEntryType(makeFileWithStsd(stsdAtom));
 
-      CHECK(audioSampleEntryType(makeFileWithStsd(stsdAtom)).empty());
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::NotFound);
     }
 
-    SECTION("Returns empty string when sample entry length is invalid")
+    SECTION("Preserves a malformed sample entry boundary error")
     {
       auto stsdBody = std::vector<std::uint8_t>{0, 0, 0, 0, 0, 0, 0, 1};
       stsdBody.insert(stsdBody.end(), {0, 0, 0, 100, 'a', 'l', 'a', 'c'});
       auto const stsdAtom = ao::test::mp4::makeAtom("stsd", stsdBody);
+      auto const result = audioSampleEntryType(makeFileWithStsd(stsdAtom));
 
-      CHECK(audioSampleEntryType(makeFileWithStsd(stsdAtom)).empty());
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
     }
   }
 } // namespace ao::media::mp4::test

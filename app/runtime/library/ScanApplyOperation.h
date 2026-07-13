@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "MediaTrack.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -10,23 +11,18 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
-
-namespace ao::tag
-{
-  class TagFile;
-}
 
 namespace ao::library
 {
@@ -112,8 +108,7 @@ namespace ao::rt
                       library::TrackBuilder& builder,
                       std::optional<AudioFingerprint> const& optFingerprint);
 
-    std::optional<std::pair<std::unique_ptr<tag::TagFile>, library::TrackBuilder>> loadTrackBuilder(
-      ScanItem const& item);
+    std::optional<MediaTrack> loadTrackBuilder(ScanItem const& item);
 
     std::optional<AudioFingerprint> cachedAudioFingerprint(ScanItem const& item) const noexcept;
 
@@ -122,7 +117,7 @@ namespace ao::rt
     bool isFingerprintRequiredForApply(ScanItem const& item) const noexcept;
 
     std::optional<AudioFingerprint> fingerprintAudioPayload(ScanItem const& item,
-                                                            tag::TagFile const& tagFile,
+                                                            media::file::File const& file,
                                                             std::size_t itemIndex,
                                                             std::stop_token stopToken);
 

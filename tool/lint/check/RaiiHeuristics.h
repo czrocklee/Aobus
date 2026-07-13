@@ -85,7 +85,7 @@ namespace clang::tidy::aobus
   inline ast_matchers::internal::Matcher<CXXRecordDecl> isWhitelistedRaiiName()
   {
     return ast_matchers::anyOf(
-      ast_matchers::matchesName(detail::kRaiiSuffixPattern), ast_matchers::hasName("::ao::tag::TagFile"));
+      ast_matchers::matchesName(detail::kRaiiSuffixPattern), ast_matchers::hasName("::ao::media::file::File"));
   }
 
   inline bool isScopedOrRaiiType(QualType type, ASTContext& context)
@@ -131,8 +131,8 @@ namespace clang::tidy::aobus
 
     auto const name = recordDecl->getQualifiedNameAsString();
 
-    // 2. Check if it's TagFile
-    if (name == "ao::tag::TagFile")
+    // 2. Check if it is the mapped media File owner.
+    if (name == "ao::media::file::File")
     {
       return true;
     }

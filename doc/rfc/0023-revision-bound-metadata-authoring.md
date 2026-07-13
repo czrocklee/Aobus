@@ -32,7 +32,7 @@ Undo is especially weak.
 Custom-metadata deletion records ids, key, and a representative previous value when the initial aggregate is uniform, then restores that value through the same unconditional writer call.
 It does not prove that the deletion is still the latest write or that the ids still denote the same authoring targets.
 
-The command edits the library database only; `TagFile` remains a read-only ingestion boundary and source audio files are not rewritten.
+The command edits the library database only; `media::file::File` remains a read-only ingestion boundary and source audio files are not rewritten.
 That ownership is sound but easy to obscure when the end-to-end authoring contract is split across presentation and library documents.
 
 ## Dependencies
@@ -186,7 +186,7 @@ Runtime owns generation checks, baseline validation, transaction orchestration, 
 Core library owns record and dictionary integrity.
 GTK/TUI own editor lifetime and conflict presentation.
 
-No command in this proposal invokes `TagFile` writing.
+No command in this proposal writes through `media::file::File`.
 If source-file authoring is ever added, it requires a separate transactional/file-consistency design and an explicit user-facing operation.
 
 ## Alternatives

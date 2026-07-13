@@ -71,7 +71,7 @@ namespace ao::audio::test
 
   TEST_CASE("Engine - graph integrity", "[audio][integration][playback-graph]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac";
+    auto const testFile = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.flac";
 
     if (!std::filesystem::exists(testFile))
     {

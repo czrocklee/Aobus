@@ -147,7 +147,7 @@ namespace ao::rt::test
 
     std::filesystem::path copyFixtureAudio(MusicLibraryFixture const& libraryFixture, std::string const& name)
     {
-      auto const source = std::filesystem::path{TAG_TEST_DATA_DIR} / "empty.flac";
+      auto const source = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "empty.flac";
 
       if (!std::filesystem::exists(source))
       {

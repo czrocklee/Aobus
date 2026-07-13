@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "MediaTrack.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -17,7 +18,6 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/tag/TagFile.h>
 
 #include <algorithm>
 #include <chrono>
@@ -1518,18 +1518,11 @@ namespace ao::rt
     }
 
     auto const& target = *targetResult;
-    auto tagFileResult = tag::TagFile::open(target.fullPath);
+    auto mediaTrackResult = readMediaTrack(target.fullPath);
 
-    if (!tagFileResult)
+    if (!mediaTrackResult)
     {
-      return std::unexpected{tagFileResult.error()};
-    }
-
-    auto trackResult = (*tagFileResult)->loadTrack();
-
-    if (!trackResult)
-    {
-      return std::unexpected{trackResult.error()};
+      return std::unexpected{mediaTrackResult.error()};
     }
 
     auto transaction = library.writeTransaction();
@@ -1548,7 +1541,7 @@ namespace ao::rt
       return storageError("Failed to read file manifest", existingManifest.error());
     }
 
-    auto builder = *trackResult;
+    auto& builder = mediaTrackResult->builder();
     builder.property().uri(target.uri);
     auto const title = std::string{builder.metadata().title()};
     auto const artist = std::string{builder.metadata().artist()};

@@ -154,7 +154,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [Resource blob reference](../../reference/resource/blob.md)
 - [Track model](../../reference/library/model/track.md)
 - [Library database](../../reference/library/storage/database.md)
-- [Media file interpretation](../media/file-interpretation.md)
+- [Media file reading](../media/file-reading.md)
 - [Library mutation](../library/runtime/mutation.md)
 - [GTK MPRIS specification](../linux-gtk/mpris.md) and [surface reference](../../reference/linux-gtk/mpris.md)
 - [RFC 0021: bounded asynchronous resource delivery](../../rfc/0021-bounded-resource-delivery.md)

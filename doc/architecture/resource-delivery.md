@@ -12,18 +12,18 @@ summary: Defines end-to-end ownership and lifetime boundaries from immutable lib
 This document owns the current end-to-end structural graph for library resources, with cover art as the principal consumer.
 It covers content-derived `ResourceId` allocation, track cover references and primary selection, runtime byte materialization, projection and playback identity flow, GTK decode/cache/widget delivery, TUI transforms, CLI export, and MPRIS file-URL publication.
 
-It does not own tag/container cover extraction, track mutation transactions, exact track record layout, general presentation policy, MPRIS transport behavior, or toolkit-specific image rendering algorithms.
-Those facts belong to media interpretation, library, presentation, platform, specification, and reference owners.
+It does not own encoded-media cover extraction, track mutation transactions, exact track record layout, general presentation policy, MPRIS transport behavior, or toolkit-specific image rendering algorithms.
+Those facts belong to media, library, presentation, platform, specification, and reference owners.
 
 The subject qualifies as an end-to-end vertical slice because one immutable resource identity crosses Core storage, runtime values, application playback/projection state, asynchronous work, platform caches, widget lifetimes, terminal rendering, and an external file-URL boundary.
 
 ## System context
 
-The [architecture landscape](README.md) classifies resource delivery as an end-to-end vertical slice refining library, media interpretation, playback, and presentation.
+The [architecture landscape](README.md) classifies resource delivery as an end-to-end vertical slice refining media, library, playback, and presentation.
 The [system architecture](system-overview.md) places raw resource storage in Core library, resource reads and projections in application runtime, and decoding, caching, display, terminal protocols, and MPRIS export in frontends.
 
 ```text
-media interpretation or YAML import
+media file reading or YAML import
   -> TrackBuilder cover bytes
   -> ResourceStore immutable blob + ResourceId
   -> ordered Track cover references
@@ -87,7 +87,7 @@ CLI resource commands expose raw ids and bytes for inspection and export without
 - GTK and TUI own decoding, scaling, display caches, and stale-view suppression.
 - MPRIS file export is a GTK platform adapter and cannot become the canonical resource store.
 - The same resource id always names the same bytes within one library database; ids are not portable identities across unrelated libraries.
-- Cover extraction belongs to [media interpretation](media-interpretation.md); ordered storage and mutation belong to [library](library.md); image adaptation belongs to [presentation](presentation.md).
+- Cover extraction behavior belongs to the [media file reading specification](../spec/media/file-reading.md); ordered storage and mutation belong to [library](library.md); image adaptation belongs to [presentation](presentation.md).
 
 ## Data and control flow
 
@@ -174,8 +174,8 @@ RFC 0021 proposes that missing operational boundary.
 
 - [Architecture landscape](README.md)
 - [System architecture](system-overview.md)
+- [Encoded media architecture](encoded-media.md)
 - [Library architecture](library.md)
-- [Media interpretation architecture](media-interpretation.md)
 - [Playback architecture](playback.md)
 - [Presentation architecture](presentation.md)
 - [Runtime execution architecture](runtime-execution.md)

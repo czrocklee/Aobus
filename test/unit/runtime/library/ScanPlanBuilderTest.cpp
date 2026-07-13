@@ -9,9 +9,9 @@
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/media/file/File.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/tag/TagFile.h>
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Xxh3.h>
 #include <runtime/library/ScanPlanBuilder.h>
@@ -117,10 +117,10 @@ namespace ao::rt::test
 
     AudioIdentity requireAudioIdentity(std::filesystem::path const& path)
     {
-      auto tagFileResult = tag::TagFile::open(path);
-      REQUIRE(tagFileResult);
+      auto fileResult = media::file::File::open(path);
+      REQUIRE(fileResult);
 
-      auto payloadResult = (*tagFileResult)->audioPayload();
+      auto payloadResult = fileResult->audioPayload();
       REQUIRE(payloadResult);
 
       return AudioIdentity{.payloadLength = static_cast<std::uint64_t>(payloadResult->bytes.size()),

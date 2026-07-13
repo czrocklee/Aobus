@@ -644,7 +644,7 @@ library:
 
     // Create symlink to valid flac
     auto const songPath = std::filesystem::path{temp.path()} / "A.flac";
-    std::filesystem::copy_file(std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.flac", songPath);
+    std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.flac", songPath);
 
     {
       auto yaml = std::ofstream{yamlPath};
@@ -743,7 +743,7 @@ library:
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto const uri = std::string{"tagged.flac"};
     auto const songPath = std::filesystem::path{temp.path()} / uri;
-    std::filesystem::copy_file(std::filesystem::path{TAG_TEST_DATA_DIR} / "classical_metadata.flac", songPath);
+    std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / "classical_metadata.flac", songPath);
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "metadata.yaml";
     {

@@ -29,11 +29,15 @@ The exact common error vocabulary belongs to the [error value reference](../fail
 | `.m4a` or `.mp4` with `alac` sample entry | ALAC session value |
 | `.m4a` or `.mp4` with `mp4a` sample entry | AAC session value |
 | supported MP4 extension cannot be mapped | `IoError` |
+| supported MP4 extension has no audio track | `NotSupported` |
 | unsupported MP4 audio sample entry | `NotSupported` |
+| malformed MP4 structure encountered before audio-track selection | propagated `CorruptData` or `FormatRejected` |
 | unsupported extension | `NotSupported` |
 
 Extension matching is ASCII case-insensitive.
+MP4 route selection stops after the first usable audio track and does not validate unrelated later siblings.
 The factory does not open non-MP4 decoder sessions; open-time media validation belongs to the returned session.
+WAV session open uses the RIFF parser's `RequiredAudio` extent and therefore does not surface malformed chunk boundaries after the first complete supported `fmt` and non-empty `data` pair.
 
 ## Session operation surface
 

@@ -91,7 +91,7 @@ Explicit user-input parsing may retain a `Result` long enough to produce validat
 - [`Error.h`](../../../include/ao/Error.h) defines `ao::Error`, `ao::Result<T>`, and `makeError`.
 - [`Exception.h`](../../../include/ao/Exception.h) defines `ao::Exception` and source-location-preserving throw helpers.
 - [`StorageResult.h`](../../../app/include/ao/rt/StorageResult.h) demonstrates the deliberate `NotFound`-to-absence translation used by runtime storage reads.
-- Domain-private translation helpers live under subsystem `detail/` boundaries such as [`DecoderError.h`](../../../include/ao/audio/detail/DecoderError.h), [`LibraryError.h`](../../../include/ao/library/detail/LibraryError.h), [`QueryError.h`](../../../include/ao/query/detail/QueryError.h), and [`TagError.h`](../../../include/ao/tag/detail/TagError.h).
+- Domain-private translation helpers live under subsystem `detail/` boundaries such as [`DecoderError.h`](../../../include/ao/audio/detail/DecoderError.h), [`LibraryError.h`](../../../include/ao/library/detail/LibraryError.h), [`QueryError.h`](../../../include/ao/query/detail/QueryError.h), and [`MediaError.h`](../../../include/ao/media/detail/MediaError.h).
 
 ## Test map
 

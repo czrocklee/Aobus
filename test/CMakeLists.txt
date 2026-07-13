@@ -1,7 +1,7 @@
 # ao_test_options: shared test compilation settings
 add_library(ao_test_options INTERFACE)
 target_include_directories(ao_test_options INTERFACE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_compile_definitions(ao_test_options INTERFACE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
+target_compile_definitions(ao_test_options INTERFACE AUDIO_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/audio")
 target_compile_options(ao_test_options INTERFACE
   $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>:-Wno-array-bounds>
   $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,15>>:-Wno-mismatched-new-delete>
@@ -61,18 +61,18 @@ add_executable(ao_core_test
     unit/query/SerializerTest.cpp
     unit/query/QueryErrorTest.cpp
 
-    # tag tests
-    unit/tag/MpegFrameTest.cpp
-    unit/tag/MpegFileTest.cpp
-    unit/tag/Mp4FileTest.cpp
-    unit/tag/id3v2/ReaderTest.cpp
-    unit/tag/FlacFileTest.cpp
-    unit/tag/WavFileTest.cpp
-    unit/tag/TagFileTest.cpp
-    unit/tag/DecoderTest.cpp
-    unit/tag/TagErrorTest.cpp
+    # media file tests
+    unit/media/file/MpegFrameTest.cpp
+    unit/media/file/MpegFileTest.cpp
+    unit/media/file/Mp4FileTest.cpp
+    unit/media/file/id3v2/ReaderTest.cpp
+    unit/media/file/FlacFileTest.cpp
+    unit/media/file/WavFileTest.cpp
+    unit/media/file/FileTest.cpp
+    unit/media/file/DecoderTest.cpp
 
     # media tests
+    unit/media/mp4/AtomTest.cpp
     unit/media/mp4/DemuxerTest.cpp
     unit/media/mp4/SampleDescriptionTest.cpp
     unit/media/wav/RiffTest.cpp
@@ -219,6 +219,7 @@ add_executable(ao_core_test
     unit/runtime/AsyncRuntimeTest.cpp
     unit/runtime/QueuedExecutorTest.cpp
     unit/runtime/library/LibraryReaderTest.cpp
+    unit/runtime/library/MediaTrackTest.cpp
     unit/runtime/StorageResultTest.cpp
     unit/runtime/completion/CompletionServiceTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
@@ -404,7 +405,7 @@ endif()
 add_executable(ao_integration_test
     integration/audio/DecoderIntegrationTest.cpp
     integration/audio/GraphIntegrityTest.cpp
-    integration/tag/TagTest.cpp
+    integration/media/file/FileTest.cpp
 )
 
 target_link_libraries(ao_integration_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)

@@ -55,7 +55,7 @@ Each row records the outgoing direct edges of one RFC; sequence numbers alone im
 
 ## Proposal inventory
 
-`draft` entries below are durable proposal candidates, not an assertion that review or implementation is active.
+Entries below retain durable proposal history; most are `draft` candidates, while terminal entries state their disposition.
 The front-matter lifecycle state is authoritative; `in-review` identifies active adjudication.
 
 - [RFC 0001: Safe library transfer](0001-safe-library-transfer.md) proposes fail-closed import validation, root-contained URIs, and preview-bound destructive authorization.
@@ -77,7 +77,7 @@ The front-matter lifecycle state is authoritative; `in-review` identifies active
 - [RFC 0017: Versioned semantic workspace sessions](0017-versioned-workspace-session.md) proposes library-bound versioning, exact session-local active-view identity, bounded strict validation, and transactional restoration.
 - [RFC 0018: Frontend-neutral interactive session lifecycle](0018-interactive-session-lifecycle.md) proposes one startup, restore, checkpoint, degraded-operation, and shutdown state machine shared by GTK and TUI.
 - [RFC 0019: Transactional active-library switching](0019-transactional-active-library-switch.md) proposes canonical location identity, prepared runtime candidates, rollback-safe activation, and library-bound restorable sessions.
-- [RFC 0020: Decoupled media interpretation](0020-decoupled-media-interpretation.md) proposes an acyclic Core target graph, owned interpretation results, explicit format capabilities, and one library adapter.
+- [RFC 0020: Decoupled media interpretation](0020-decoupled-media-interpretation.md) is rejected: a narrower zero-copy `File`/`Visitor` boundary and private runtime adapter removed the cycle without its owned aggregate or capability registry.
 - [RFC 0021: Bounded asynchronous resource delivery](0021-bounded-resource-delivery.md) proposes shared asynchronous byte reads, bounded transforms, typed request lifetimes, and non-blocking GTK, TUI, and MPRIS delivery.
 - [RFC 0022: Transaction-coherent library dictionary](0022-transaction-coherent-library-dictionary.md) proposes transaction-local interning and post-commit publication for the process dictionary index.
 - [RFC 0023: Revision-bound metadata authoring](0023-revision-bound-metadata-authoring.md) proposes generation- and baseline-bound metadata/tag commands, typed conflicts, atomic multi-target edits, and compare-and-restore undo.

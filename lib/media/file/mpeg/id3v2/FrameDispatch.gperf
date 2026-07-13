@@ -1,0 +1,36 @@
+%{
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <span>
+%}
+%language=C++
+%readonly-tables
+%compare-strncmp
+%compare-lengths
+%struct-type
+%define class-name Id3v2FrameDispatchTable
+%define lookup-function-name lookupFrame
+struct Id3v2FrameDispatchEntry
+{
+  using FrameHandler = void (*)(ao::media::file::detail::ContentBuilder&, std::span<std::byte const>, std::uint8_t);
+  char const* name;
+  FrameHandler handler;
+};
+%%
+TIT1, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::work>
+TIT2, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::title>
+TPE1, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::artist>
+TPE2, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::albumArtist>
+TPE3, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::conductor>
+TALB, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::album>
+TCOM, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::composer>
+TYER, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::year>
+TDRC, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::year>
+TRCK, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>
+TPOS, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::discNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::discTotal>
+TCON, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::genre>
+MVNM, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movement>
+MVIN, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>
+APIC, &handlePicture
+TXXX, &handleTxxx

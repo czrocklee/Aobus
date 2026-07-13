@@ -48,6 +48,37 @@ namespace ao::test::mp4
     return atom;
   }
 
+  inline std::vector<std::uint8_t> makeExtendedAtom(std::string_view type, std::vector<std::uint8_t> const& body)
+  {
+    auto atom = std::vector<std::uint8_t>{};
+    appendBe32(atom, 1);
+    atom.insert(atom.end(), type.begin(), type.begin() + 4);
+    appendBe64(atom, 16U + static_cast<std::uint64_t>(body.size()));
+    atom.insert(atom.end(), body.begin(), body.end());
+    return atom;
+  }
+
+  inline std::vector<std::uint8_t> makeEndOfFileAtom(std::string_view type, std::vector<std::uint8_t> const& body)
+  {
+    auto atom = std::vector<std::uint8_t>{};
+    appendBe32(atom, 0);
+    atom.insert(atom.end(), type.begin(), type.begin() + 4);
+    atom.insert(atom.end(), body.begin(), body.end());
+    return atom;
+  }
+
+  inline std::vector<std::uint8_t> makeExtendedFromCompactAtom(std::vector<std::uint8_t> const& atom)
+  {
+    if (atom.size() < 8)
+    {
+      return {};
+    }
+
+    auto const type = std::string_view{reinterpret_cast<char const*>(atom.data() + 4), 4};
+    auto const body = std::vector<std::uint8_t>{atom.begin() + 8, atom.end()};
+    return makeExtendedAtom(type, body);
+  }
+
   inline std::vector<std::uint8_t> makeAudioSampleEntryAtom(std::string_view sampleEntryType,
                                                             std::vector<std::uint8_t> const& extensions = {},
                                                             std::uint32_t sampleRate = 44100)

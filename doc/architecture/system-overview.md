@@ -24,12 +24,12 @@ GTK -> ao_app_uimodel -> ao_app_runtime -> core libraries
 TUI -> ao_app_uimodel -> ao_app_runtime -> core libraries
 CLI -----------------> ao_app_runtime -> core libraries
 
-core libraries: utility, async, lmdb, media, tag, library, query, audio
+core libraries: utility, async, lmdb, media, library, query, audio
 ```
 
 An arrow in this diagram means “depends on.”
 
-The core libraries provide storage, media interpretation, query, asynchronous, and audio primitives without depending on application services or frontends.
+The core libraries provide storage, encoded-media reading, query, asynchronous, and audio primitives without depending on application services or frontends.
 `ao_app_runtime` composes those primitives into frontend-neutral services.
 `ao_app_uimodel` turns runtime state and commands into platform-neutral presentation state and interaction policy.
 GTK and TUI bind runtime and UIModel state to their native event loops and rendering systems.
@@ -40,7 +40,7 @@ The CLI uses `ao_app_runtime` directly when an interactive presentation model is
 ### Core libraries
 
 The libraries under `lib/` and `include/ao/` own reusable mechanisms and domain storage.
-They include the LMDB adapter and music library stores, media and tag decoding, query evaluation, asynchronous runtime primitives, and the audio engine and backends.
+They include the LMDB adapter and music library stores, media-file reading, reusable container parsing, query evaluation, asynchronous runtime primitives, and the audio engine and backends.
 
 Core libraries do not own application workspace state, frontend lifecycle, user notifications, or cross-service orchestration.
 
@@ -115,7 +115,7 @@ These routes expose where a change crosses architecture owners without duplicati
 | Flow | Top-level route | Focused architecture owners |
 |---|---|---|
 | Library maintenance | Frontend or CLI intent -> runtime library role -> core storage or external-data mechanism -> revisioned changes -> sources and projections | [Library](library.md), [runtime execution](runtime-execution.md), and [failure and reporting](failure-and-reporting.md) |
-| Media ingestion and identity | Encoded path -> media/tag interpretation -> owned or borrowed candidate and payload evidence -> runtime library workflow -> stored records and resources | [Media interpretation](media-interpretation.md), [library](library.md), and [failure and reporting](failure-and-reporting.md) |
+| Media ingestion and identity | Encoded path -> `ao_media` file reader -> visitor-to-library runtime adapter and payload evidence -> stored records and resources | [Encoded media](encoded-media.md), [library](library.md), and [failure and reporting](failure-and-reporting.md) |
 | Cover-art delivery | Stored resource -> runtime id and owned bytes -> projection/playback state -> GTK, TUI, MPRIS, or CLI transform | [Resource delivery](resource-delivery.md), [library](library.md), [playback](playback.md), and [presentation](presentation.md) |
 | Track discovery and organization | UI authoring or CLI expression -> query compilation/evaluation -> live source membership -> projection shape -> frontend adaptation | [Track expression](track-expression.md), [library](library.md), and [presentation](presentation.md) |
 | Interactive playback | Frontend intent -> UIModel/runtime command -> workspace or live-source context -> succession and transport -> Player/Engine -> platform output | [Workspace](workspace.md), [playback](playback.md), and [runtime execution](runtime-execution.md) |
@@ -149,6 +149,7 @@ Subsystem-specific code families and translations belong to their focused specif
 ## Implementation map
 
 - [`lib/CMakeLists.txt`](../../lib/CMakeLists.txt) defines the core module graph and the `ao` umbrella target.
+- [`include/ao/media/file/`](../../include/ao/media/file/) and [`lib/media/file/`](../../lib/media/file/) form the library-neutral media-file sub-boundary within `ao_media`.
 - [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines runtime, UIModel, frontend targets, and layer guardrails.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) is the non-interactive application composition.
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) is the interactive application composition.
@@ -167,8 +168,8 @@ Subsystem-specific code families and translations belong to their focused specif
 
 - [Runtime execution architecture](runtime-execution.md)
 - [Failure and reporting architecture](failure-and-reporting.md)
+- [Encoded media architecture](encoded-media.md)
 - [Library architecture](library.md)
-- [Media interpretation architecture](media-interpretation.md)
 - [Resource delivery architecture](resource-delivery.md)
 - [Track expression architecture](track-expression.md)
 - [Playback architecture](playback.md)

@@ -29,8 +29,8 @@ namespace clang::tidy::readability
   {
     bool isGeneratedDispatchHeader(StringRef fileName)
     {
-      return fileName == "tag/flac/VorbisCommentDispatch.h" || fileName == "tag/mp4/AtomDispatch.h" ||
-             fileName == "tag/mpeg/id3v2/FrameDispatch.h";
+      return fileName == "media/file/flac/VorbisCommentDispatch.h" || fileName == "media/file/mp4/AtomDispatch.h" ||
+             fileName == "media/file/mpeg/id3v2/FrameDispatch.h";
     }
 
     class IncludeConventionPPCallbacks final : public PPCallbacks

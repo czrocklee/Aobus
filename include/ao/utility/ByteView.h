@@ -107,11 +107,9 @@ namespace ao::utility
     }
 
     /**
-     * Always-checked typed view over raw bytes. Unlike layout::view<T>, the bounds
-     * and alignment checks here are NOT gated on the gsl contract mode (contracts
-     * are compiled out in release builds), so this is safe for untrusted /
-     * attacker-controlled input. Returns nullptr when the span is shorter than
-     * sizeof(T) or misaligned for T.
+     * Always-checked typed view over raw bytes. Unlike layout::view<T>, invalid
+     * bounds or alignment return nullptr instead of violating a contract, so this
+     * is safe for untrusted / attacker-controlled input.
      */
     template<typename T>
     inline T const* tryLayout(std::span<std::byte const> span) noexcept

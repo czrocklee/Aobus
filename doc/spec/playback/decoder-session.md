@@ -67,6 +67,8 @@ FLAC treats corrupted metadata, headers, frames, CRC mismatches, missing frames,
 
 Decoder, streaming-source, and factory public entry points use `Result` for external media, IO, and capability failures.
 `createDecoderSession` returns a non-null session or a recoverable factory error; `nullptr` is not an alternate error channel.
+MP4 factory routing stops after selecting the first usable audio track. No matching audio track is translated to `NotSupported`, while a structural parser failure encountered before selection preserves its parser error.
+WAV open validates chunk boundaries only through the first complete supported `fmt` and non-empty `data` pair; unrelated later chunks do not prevent decoding already-bounded audio data.
 End of stream is a normal `PcmBlock` value.
 
 Implementations may use the private `ao::audio::detail::DecoderException` and `throwDecoderError` helper to unwind codec helpers.

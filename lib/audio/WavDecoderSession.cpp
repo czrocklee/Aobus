@@ -312,7 +312,7 @@ namespace ao::audio
         detail::throwDecoderError(result.error());
       }
 
-      auto parsedResult = media::wav::parseWave(_implPtr->file.bytes());
+      auto parsedResult = media::wav::parseWave(_implPtr->file.bytes(), media::wav::WaveParseExtent::RequiredAudio);
 
       if (!parsedResult)
       {

@@ -3,6 +3,7 @@
 
 #include "ScanApplyOperation.h"
 
+#include "MediaTrack.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/AudioIdentity.h>
@@ -13,14 +14,13 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWrite.h>
+#include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/tag/TagFile.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -145,12 +145,13 @@ namespace ao::rt
       return;
     }
 
-    auto& [tagFilePtr, builder] = *optLoad;
+    auto& mediaTrack = *optLoad;
+    auto& builder = mediaTrack.builder();
     auto optFingerprint = cachedAudioFingerprint(item);
 
     if (!optFingerprint && shouldFingerprintDuringApply(item))
     {
-      optFingerprint = fingerprintAudioPayload(item, *tagFilePtr, itemIndex, stopToken);
+      optFingerprint = fingerprintAudioPayload(item, mediaTrack.file(), itemIndex, stopToken);
     }
 
     if (!optFingerprint && isFingerprintRequiredForApply(item))
@@ -246,29 +247,19 @@ namespace ao::rt
     }
   }
 
-  std::optional<std::pair<std::unique_ptr<tag::TagFile>, library::TrackBuilder>> ScanApplyOperation::loadTrackBuilder(
-    ScanItem const& item)
+  std::optional<MediaTrack> ScanApplyOperation::loadTrackBuilder(ScanItem const& item)
   {
-    auto tagFileResult = tag::TagFile::open(item.fullPath);
+    auto mediaTrackResult = readMediaTrack(item.fullPath);
 
-    if (!tagFileResult)
+    if (!mediaTrackResult)
     {
       // The scanner only admits decodable extensions, so open() should not see
       // an unsupported format here; a failure is a genuine I/O or parse fault.
-      reportFailure(item.uri, "open", tagFileResult.error().message);
+      reportFailure(item.uri, "read media file", mediaTrackResult.error().message);
       return std::nullopt;
     }
 
-    auto tagFilePtr = std::move(*tagFileResult);
-    auto builderResult = tagFilePtr->loadTrack();
-
-    if (!builderResult)
-    {
-      reportFailure(item.uri, "read tags from", builderResult.error().message);
-      return std::nullopt;
-    }
-
-    return std::make_pair(std::move(tagFilePtr), *builderResult);
+    return std::move(*mediaTrackResult);
   }
 
   std::optional<ScanApplyOperation::AudioFingerprint> ScanApplyOperation::cachedAudioFingerprint(
@@ -314,29 +305,31 @@ namespace ao::rt
 
   std::optional<ScanApplyOperation::AudioFingerprint> ScanApplyOperation::fingerprintAudioPayload(
     ScanItem const& item,
-    tag::TagFile const& tagFile,
+    media::file::File const& file,
     std::size_t itemIndex,
     std::stop_token stopToken)
   {
-    auto identityResult = library::readAudioIdentity(
-      tagFile,
+    auto payloadResult = file.audioPayload();
+
+    if (!payloadResult)
+    {
+      reportFailure(item.uri, "read audio payload", payloadResult.error().message);
+      return std::nullopt;
+    }
+
+    auto optIdentity = library::readAudioIdentity(
+      payloadResult->bytes,
       [this, &item, itemIndex](double fraction)
       { reportProgress(item, itemIndex, ScanApplyProgressStage::Fingerprinting, fraction); },
       stopToken);
 
-    if (!identityResult)
-    {
-      reportFailure(item.uri, "fingerprint", identityResult.error().message);
-      return std::nullopt;
-    }
-
-    if (!*identityResult)
+    if (!optIdentity)
     {
       _result.cancelled = true;
       return std::nullopt;
     }
 
-    auto const& identity = **identityResult;
+    auto const& identity = *optIdentity;
     return AudioFingerprint{.signature = identity.signature, .payloadLength = identity.payloadLength};
   }
 

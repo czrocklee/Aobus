@@ -170,7 +170,7 @@ Subscriptions held by sources and projections release before the `LibraryChanges
 Recoverable storage and external-data failures cross the runtime facade as typed results.
 Shared channel behavior belongs to the [outcome channel specification](../spec/failure/outcome-channel.md), and exact common codes belong to the [error value reference](../reference/failure/error.md).
 Raw LMDB behavior belongs to the [LMDB operation specification](../spec/storage/lmdb-operation.md), while operation-specific library failure behavior belongs to the [library specifications](../spec/library/README.md).
-External-file recognition, tag/media containment, and borrowed parser lifetimes belong to the [media interpretation architecture](media-interpretation.md) and [media file interpretation specification](../spec/media/file-interpretation.md).
+External-file recognition, parser containment, reusable container structure, and mapped-view lifetimes belong to the [encoded media architecture](encoded-media.md); exact reader behavior belongs to the [media file reading specification](../spec/media/file-reading.md).
 Audio decoder translation belongs to the [decoder session specification](../spec/playback/decoder-session.md) and [decoder error reference](../reference/playback/decoder-error.md), not the library boundary.
 
 ## Implementation map
@@ -198,7 +198,7 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [System architecture](system-overview.md)
 - [Runtime execution architecture](runtime-execution.md)
 - [Failure and reporting architecture](failure-and-reporting.md)
-- [Media interpretation architecture](media-interpretation.md)
+- [Encoded media architecture](encoded-media.md)
 - [Resource delivery architecture](resource-delivery.md)
 - [Track expression architecture](track-expression.md)
 - [Presentation architecture](presentation.md)
@@ -209,6 +209,6 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [Library reference](../reference/library/README.md)
 - [LMDB operation specification](../spec/storage/lmdb-operation.md)
 - [Library YAML transfer specification](../spec/library/runtime/yaml-transfer.md) and [format reference](../reference/library/format/yaml.md)
-- [Media file interpretation specification](../spec/media/file-interpretation.md) and [supported audio files reference](../reference/media/audio-file.md)
+- [Media file reading specification](../spec/media/file-reading.md) and [supported audio files reference](../reference/media/audio-file.md)
 - [RFC 0022: transaction-coherent library dictionary](../rfc/0022-transaction-coherent-library-dictionary.md)
 - [RFC 0023: revision-bound metadata authoring](../rfc/0023-revision-bound-metadata-authoring.md)

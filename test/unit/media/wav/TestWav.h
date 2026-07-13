@@ -91,6 +91,17 @@ namespace ao::test::wav
     appendChunk(output, {id[0], id[1], id[2], id[3]}, payload);
   }
 
+  inline void appendTruncatedChunk(std::vector<std::uint8_t>& riff, std::string_view id, std::uint32_t declaredSize)
+  {
+    appendId(riff, id);
+    appendLe32(riff, declaredSize);
+    auto const riffSize = static_cast<std::uint32_t>(riff.size() - 8U);
+    riff[4] = static_cast<std::uint8_t>(riffSize & 0xFFU);
+    riff[5] = static_cast<std::uint8_t>((riffSize >> 8U) & 0xFFU);
+    riff[6] = static_cast<std::uint8_t>((riffSize >> 16U) & 0xFFU);
+    riff[7] = static_cast<std::uint8_t>((riffSize >> 24U) & 0xFFU);
+  }
+
   inline void appendGuid(std::vector<std::uint8_t>& output, SampleFormat sampleFormat)
   {
     std::uint8_t first = 0x01;

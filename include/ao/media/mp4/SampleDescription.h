@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/Error.h>
+
 #include <cstddef>
 #include <span>
 #include <string>
@@ -10,7 +12,9 @@
 namespace ao::media::mp4
 {
   /**
-   * @brief Returns the first audio sample entry type from an MP4 audio track, such as "alac" or "mp4a".
+   * Returns the first audio sample entry type, such as "alac" or "mp4a".
+   * Returns NotFound when the container has no audio track and preserves
+   * structural parse failures encountered before selection.
    */
-  std::string audioSampleEntryType(std::span<std::byte const> fileData);
+  Result<std::string> audioSampleEntryType(std::span<std::byte const> fileData);
 } // namespace ao::media::mp4

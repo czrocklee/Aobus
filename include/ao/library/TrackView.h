@@ -6,6 +6,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>

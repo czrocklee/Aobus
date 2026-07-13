@@ -5,6 +5,7 @@ add_library(ao_app_runtime STATIC
     runtime/library/Library.cpp
     runtime/library/LibraryReader.cpp
     runtime/library/LibraryChanges.cpp
+    runtime/library/MediaTrack.cpp
     runtime/library/LibraryYamlImporter.cpp
     runtime/library/LibraryYamlExporter.cpp
     runtime/completion/CompletionService.cpp

@@ -65,16 +65,16 @@ static void testUseIfInit(std::int32_t cond)
   }
 }
 
-namespace ao::tag
+namespace ao::media::file
 {
-  class TagFile
+  class File
   {
   public:
-    TagFile() {}
-    virtual ~TagFile() {}
+    File() {}
+    virtual ~File() {}
     bool isValid() const { return true; }
   };
-} // namespace ao::tag
+} // namespace ao::media::file
 
 class [[nodiscard]] MockTransaction
 {
@@ -95,9 +95,9 @@ static void testRaiiProtection(std::int32_t cond)
     (void)guard;
   }
 
-  // NEGATIVE - TagFile is whitelisted
-  ao::tag::TagFile tagFile;
-  if (tagFile.isValid())
+  // NEGATIVE - media File is whitelisted
+  ao::media::file::File mediaFile;
+  if (mediaFile.isValid())
   {
     std::cout << "tag";
   }
@@ -109,9 +109,9 @@ static void testRaiiProtection(std::int32_t cond)
     std::cout << "txn";
   }
 
-  // NEGATIVE - Wrapper unique_ptr<TagFile> is protected
-  std::unique_ptr<ao::tag::TagFile> tagFilePtr;
-  if (tagFilePtr.operator->() != nullptr)
+  // NEGATIVE - Wrapper unique_ptr<File> is protected
+  std::unique_ptr<ao::media::file::File> mediaFilePtr;
+  if (mediaFilePtr.operator->() != nullptr)
   {
     std::cout << "ptr";
   }

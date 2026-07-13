@@ -21,6 +21,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
+#include <ao/media/file/File.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
 #include <ao/rt/library/LibraryScan.h>
@@ -584,22 +585,31 @@ namespace ao::cli
 
     RelinkIdentity readRelinkAudioIdentity(std::filesystem::path const& path)
     {
-      auto identityResult = library::readAudioIdentity(path);
+      auto fileResult = media::file::File::open(path);
 
-      if (!identityResult)
+      if (!fileResult)
       {
-        auto const& error = identityResult.error();
-        throwCommandError(error, "failed to fingerprint relink candidate: {}", error.message);
+        auto const& error = fileResult.error();
+        throwCommandError(error, "failed to open relink candidate: {}", error.message);
       }
 
-      if (!*identityResult)
+      auto payloadResult = fileResult->audioPayload();
+
+      if (!payloadResult)
+      {
+        auto const& error = payloadResult.error();
+        throwCommandError(error, "failed to read relink candidate payload: {}", error.message);
+      }
+
+      auto optIdentity = library::readAudioIdentity(payloadResult->bytes);
+
+      if (!optIdentity)
       {
         throwCommandError(
           Error::Code::InvalidState, "fingerprinting relink candidate was cancelled: {}", path.string());
       }
 
-      return RelinkIdentity{
-        .payloadLength = (*identityResult)->payloadLength, .signature = (*identityResult)->signature};
+      return RelinkIdentity{.payloadLength = optIdentity->payloadLength, .signature = optIdentity->signature};
     }
 
     bool hasSameRelinkIdentity(RelinkIdentity const& left, RelinkIdentity const& right)

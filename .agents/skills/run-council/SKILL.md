@@ -39,8 +39,8 @@ id: custom-metadata-review
 task-kind: council-review
 invariant: Preserve the intended metadata import boundary.
 focus:
-  - path: lib/tag/mpeg/id3v2/Reader.cpp
-  - path: test/unit/tag/MpegFileTest.cpp
+  - path: lib/media/file/mpeg/id3v2/Reader.cpp
+  - path: test/unit/media/file/MpegFileTest.cpp
 depends-on: []
 overrides: {}
 body: |

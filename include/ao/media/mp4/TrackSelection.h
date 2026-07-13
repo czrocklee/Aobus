@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/media/mp4/Atom.h>
 
-#include <optional>
 #include <string>
 #include <string_view>
 
@@ -13,11 +13,14 @@ namespace ao::media::mp4
 {
   struct AudioTrackSelection final
   {
-    Atom const* track = nullptr;
-    AtomView const* stsd = nullptr;
+    AtomView track;
+    AtomView stsd;
     std::string sampleEntryType;
   };
 
-  std::optional<std::string> firstSampleEntryType(AtomView const& stsdView);
-  std::optional<AudioTrackSelection> findAudioTrack(Atom const& root, std::string_view targetSampleEntryType = {});
+  /**
+   * Finds the first matching audio track without validating unrelated later
+   * siblings. Returns NotFound when no matching track exists.
+   */
+  Result<AudioTrackSelection> findAudioTrack(AtomView const& root, std::string_view targetSampleEntryType = {});
 } // namespace ao::media::mp4

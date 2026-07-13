@@ -31,7 +31,7 @@ Use the [reference template](../template/reference.md).
 
 ## Media
 
-- [Supported audio files](media/audio-file.md) enumerates recognized extensions, codec and tag mappings, cover roles, and encoded payload ranges.
+- [Supported audio files](media/audio-file.md) enumerates recognized extensions, visitor fields, codec and source mappings, cover roles, and encoded payload ranges.
 
 ## Resource
 

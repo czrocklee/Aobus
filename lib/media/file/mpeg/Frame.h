@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 Aobus Contributors
+
+#pragma once
+
+#include "FrameLayout.h"
+
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+
+namespace ao::media::file::mpeg
+{
+  class FrameView
+  {
+  public:
+    FrameView(void const* data, std::size_t size, std::size_t resolvedLength = 0)
+      : _data{data}, _size{size}, _resolvedLength{resolvedLength}
+    {
+    }
+
+    std::size_t length() const;
+    bool isValid() const;
+
+    FrameLayout const& layout() const { return *static_cast<FrameLayout const*>(_data); }
+    void const* data() const { return _data; }
+    std::size_t size() const { return _size; }
+
+    std::uint32_t sampleRate() const;
+    std::uint32_t bitrate() const;
+    std::uint8_t channels() const;
+    std::uint16_t samplesPerFrame() const;
+
+    struct XingInfo
+    {
+      std::uint32_t frames = 0;
+      std::uint32_t bytes = 0;
+    };
+    std::optional<XingInfo> xingInfo() const;
+
+  private:
+    void const* _data = nullptr;
+    std::size_t _size = 0;
+    std::size_t _resolvedLength = 0;
+  };
+
+  std::optional<FrameView> locate(void const* buffer, std::size_t size);
+} // namespace ao::media::file::mpeg

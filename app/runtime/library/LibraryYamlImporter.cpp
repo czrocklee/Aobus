@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "MediaTrack.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/library/CoverArt.h>
+#include <ao/PictureType.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListBuilder.h>
@@ -21,7 +22,6 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
-#include <ao/tag/TagFile.h>
 #include <ao/utility/Base64.h>
 #include <ao/yaml/RymlAdapter.h>
 
@@ -361,7 +361,7 @@ namespace ao::rt
                                std::optional<TrackId> const& optExistingTrackId,
                                ExportMode payloadMode,
                                std::optional<library::TrackBuilder>& optBuilder,
-                               std::unique_ptr<tag::TagFile>& keepAliveTagFilePtr,
+                               std::optional<MediaTrack>& optMediaTrack,
                                library::TrackStore::Writer& trackWriter);
 
     Result<> importLists(std::vector<ValidatedList> const& lists,
@@ -396,7 +396,7 @@ namespace ao::rt
     Result<> loadFileBaseline(std::string_view uriStr,
                               ExportMode payloadMode,
                               std::optional<library::TrackBuilder>& optBuilder,
-                              std::unique_ptr<tag::TagFile>& keepAliveTagFilePtr) const;
+                              std::optional<MediaTrack>& optMediaTrack) const;
 
     library::MusicLibrary& ml;
     LibraryChanges* changes = nullptr;
@@ -1014,11 +1014,11 @@ namespace ao::rt
       }
     }
 
+    auto optMediaTrack = std::optional<MediaTrack>{};
     auto optBuilder = std::optional<library::TrackBuilder>{};
-    auto keepAliveTagFilePtr = std::unique_ptr<tag::TagFile>{};
 
     if (auto result =
-          loadTrackBaseline(uriStr, optExistingTrackId, payloadMode, optBuilder, keepAliveTagFilePtr, trackWriter);
+          loadTrackBaseline(uriStr, optExistingTrackId, payloadMode, optBuilder, optMediaTrack, trackWriter);
         !result)
     {
       return std::unexpected{result.error()};
@@ -1140,9 +1140,9 @@ namespace ao::rt
           return std::unexpected{data.error()};
         }
 
-        auto const picType = *rawType <= static_cast<std::uint32_t>(library::PictureType::PublisherLogo)
-                               ? static_cast<library::PictureType>(*rawType)
-                               : library::PictureType::Other;
+        auto const picType = *rawType <= static_cast<std::uint32_t>(PictureType::PublisherLogo)
+                               ? static_cast<PictureType>(*rawType)
+                               : PictureType::Other;
 
         // Keep the borrowed blob alive in decodedCoverBlobs until the builder serializes below.
         if (auto optDecoded = utility::base64Decode(*data); optDecoded && !optDecoded->empty())
@@ -1265,7 +1265,7 @@ namespace ao::rt
                                                         std::optional<TrackId> const& optExistingTrackId,
                                                         ExportMode payloadMode,
                                                         std::optional<library::TrackBuilder>& optBuilder,
-                                                        std::unique_ptr<tag::TagFile>& keepAliveTagFilePtr,
+                                                        std::optional<MediaTrack>& optMediaTrack,
                                                         library::TrackStore::Writer& trackWriter)
   {
     if (optExistingTrackId)
@@ -1278,7 +1278,7 @@ namespace ao::rt
 
     if (payloadMode == ExportMode::Delta || payloadMode == ExportMode::Metadata)
     {
-      if (auto result = loadFileBaseline(uriStr, payloadMode, optBuilder, keepAliveTagFilePtr); !result)
+      if (auto result = loadFileBaseline(uriStr, payloadMode, optBuilder, optMediaTrack); !result)
       {
         return std::unexpected{result.error()};
       }
@@ -1290,7 +1290,7 @@ namespace ao::rt
   Result<> LibraryYamlImporter::Impl::loadFileBaseline(std::string_view uriStr,
                                                        ExportMode payloadMode,
                                                        std::optional<library::TrackBuilder>& optBuilder,
-                                                       std::unique_ptr<tag::TagFile>& keepAliveTagFilePtr) const
+                                                       std::optional<MediaTrack>& optMediaTrack) const
   {
     auto fileEc = std::error_code{};
     auto const fullPath = ml.rootPath() / uriStr;
@@ -1307,24 +1307,18 @@ namespace ao::rt
       return {};
     }
 
-    auto tagFileResult = tag::TagFile::open(fullPath);
+    auto mediaTrackResult = readMediaTrack(fullPath);
 
-    if (!tagFileResult)
+    if (!mediaTrackResult)
     {
       return {};
     }
 
-    keepAliveTagFilePtr = std::move(*tagFileResult);
-    auto fileBuilderResult = keepAliveTagFilePtr->loadTrack();
-
-    if (!fileBuilderResult)
-    {
-      return {};
-    }
+    optMediaTrack.emplace(std::move(*mediaTrackResult));
 
     if (!optBuilder)
     {
-      optBuilder = std::move(*fileBuilderResult);
+      optBuilder = optMediaTrack->builder();
 
       if (payloadMode == ExportMode::Metadata)
       {
@@ -1355,7 +1349,7 @@ namespace ao::rt
       return {};
     }
 
-    auto const& fileBuilder = *fileBuilderResult;
+    auto const& fileBuilder = optMediaTrack->builder();
     auto const& props = fileBuilder.property();
     optBuilder->property()
       .duration(props.duration())

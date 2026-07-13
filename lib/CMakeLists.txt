@@ -7,7 +7,6 @@ add_subdirectory(utility)
 add_subdirectory(async)
 add_subdirectory(lmdb)
 add_subdirectory(media)
-add_subdirectory(tag)
 add_subdirectory(library)
 add_subdirectory(query)
 add_subdirectory(audio)
@@ -19,7 +18,6 @@ target_link_libraries(ao INTERFACE
     ao_async
     ao_lmdb
     ao_media
-    ao_tag
     ao_library
     ao_query
     ao_audio

@@ -200,6 +200,45 @@ namespace ao::media::mp4::test
     }
   }
 
+  TEST_CASE("MP4 Demuxer - selected track ignores unrelated trailing structure", "[media][regression][mp4]")
+  {
+    auto const config = ao::test::mp4::makeAtom("alac", {9, 8, 7});
+    auto const track = ao::test::mp4::makeCompleteAudioTrackAtom("alac", config, 48000, 96000, 7, 2048, 321);
+
+    SECTION("Extended-size mdat after moov")
+    {
+      auto data = ao::test::mp4::makeAtom("moov", track);
+      auto const mdat = ao::test::mp4::makeExtendedAtom("mdat", {1, 2, 3});
+      data.insert(data.end(), mdat.begin(), mdat.end());
+      auto const fileData = toBytes(data);
+      auto demuxer = Demuxer{fileData};
+
+      REQUIRE(demuxer.parseTrack("alac"));
+    }
+
+    SECTION("End-of-file mdat after moov")
+    {
+      auto data = ao::test::mp4::makeAtom("moov", track);
+      auto const mdat = ao::test::mp4::makeEndOfFileAtom("mdat", {1, 2, 3});
+      data.insert(data.end(), mdat.begin(), mdat.end());
+      auto const fileData = toBytes(data);
+      auto demuxer = Demuxer{fileData};
+
+      REQUIRE(demuxer.parseTrack("alac"));
+    }
+
+    SECTION("Malformed sibling after selected track")
+    {
+      auto moovBody = track;
+      auto const malformedSibling = std::array<std::uint8_t, 8>{0x00, 0x00, 0x00, 0x10, 'f', 'r', 'e', 'e'};
+      moovBody.insert(moovBody.end(), malformedSibling.begin(), malformedSibling.end());
+      auto const fileData = toBytes(ao::test::mp4::makeAtom("moov", moovBody));
+      auto demuxer = Demuxer{fileData};
+
+      REQUIRE(demuxer.parseTrack("alac"));
+    }
+  }
+
   TEST_CASE("MP4 Demuxer - parses version 1 media timing", "[media][unit][mp4]")
   {
     auto const stbl = ao::test::mp4::makeSampleTableAtom(makeAlacStsd());
@@ -213,9 +252,29 @@ namespace ao::media::mp4::test
     CHECK(demuxer.duration() == 96000);
   }
 
+  TEST_CASE("MP4 Demuxer - parses extended-size media timing and sample tables", "[media][regression][mp4]")
+  {
+    auto const stsd = ao::test::mp4::makeExtendedFromCompactAtom(makeAlacStsd());
+    auto const stsz = ao::test::mp4::makeExtendedFromCompactAtom(ao::test::mp4::makeStszAtom(7));
+    auto const stsc = ao::test::mp4::makeExtendedFromCompactAtom(ao::test::mp4::makeStscAtom());
+    auto const stco = ao::test::mp4::makeExtendedFromCompactAtom(ao::test::mp4::makeStcoAtom(321));
+    auto const stbl = makeSampleTable(stsd, stsz, stsc, stco);
+    auto const mdhd = ao::test::mp4::makeExtendedFromCompactAtom(ao::test::mp4::makeMdhdAtom(48000, 96000));
+    auto const track = ao::test::mp4::makeTrackAtomWithMdhd("soun", stbl, mdhd);
+    auto const fileData = makeFile(track);
+    auto demuxer = Demuxer{fileData};
+
+    REQUIRE(demuxer.parseTrack("alac"));
+    CHECK(demuxer.timescale() == 48000);
+    CHECK(demuxer.duration() == 96000);
+    CHECK(demuxer.sampleCount() == 1);
+    CHECK(demuxer.sampleInfo(0).offset == 321);
+    CHECK(demuxer.sampleInfo(0).size == 7);
+  }
+
   TEST_CASE("MP4 Demuxer - extracts AAC AudioSpecificConfig", "[media][unit][mp4]")
   {
-    auto const testFile = std::filesystem::path{TAG_TEST_DATA_DIR} / "basic_metadata.m4a";
+    auto const testFile = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.m4a";
 
     if (!std::filesystem::exists(testFile))
     {

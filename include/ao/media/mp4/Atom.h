@@ -1,186 +1,156 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
 #include "AtomLayout.h"
+#include <ao/Error.h>
 #include <ao/utility/ByteView.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
-#include <algorithm>
 #include <cstddef>
-#include <cstdint>
+#include <expected>
 #include <functional>
-#include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
-#include <vector>
 
 namespace ao::media::mp4
 {
-  class Atom
+  class AtomCursor;
+
+  /**
+   * Non-owning view of one MP4 atom or of the synthetic root container.
+   *
+   * Views contain only spans into the caller-owned file buffer. Copying a view
+   * does not parse children, allocate nodes, or extend the buffer lifetime.
+   */
+  class AtomView final
   {
   public:
-    using Visitor = std::move_only_function<bool(Atom const&)>;
+    static AtomView root(std::span<std::byte const> bytes) noexcept;
 
-    virtual ~Atom() = default;
+    AtomView(AtomView const&) = default;
+    AtomView& operator=(AtomView const&) = default;
+    AtomView(AtomView&&) noexcept = default;
+    AtomView& operator=(AtomView&&) noexcept = default;
+    ~AtomView() = default;
 
-    Atom(Atom const&) = delete;
-    Atom& operator=(Atom const&) = delete;
+    std::string_view type() const noexcept { return _type; }
+    std::span<std::byte const> bytes() const noexcept { return _bytes; }
+    std::span<std::byte const> payload() const noexcept { return _bytes.subspan(_headerSize); }
+    bool isLeaf() const noexcept { return !_isContainer; }
 
-    virtual std::uint32_t length() const = 0;
-
-    virtual std::string_view type() const = 0;
-
-    virtual Atom const* parent() const = 0;
-
-    virtual bool isLeaf() const = 0;
-
-    virtual void visitChildren(Visitor visitor) const = 0;
+    AtomCursor children() const noexcept;
 
     /**
-     * @brief Find an atom by its path (e.g., {"root", "moov", "trak"}).
-     * @return Pointer to the found atom, or nullptr if not found.
+     * Returns a typed view for layouts that begin with a compact AtomLayout,
+     * only when both the available bytes and declared length satisfy Layout.
+     * Extended-size semantic readers parse payload() relative to the actual
+     * header instead. Malformed file data is an ordinary parse failure.
      */
-    Atom const* find(std::span<std::string_view const> path) const;
-
-  protected:
-    Atom() = default;
-    Atom(Atom&&) = default;
-    Atom& operator=(Atom&&) = default;
-  };
-
-  class AtomView : public Atom
-  {
-  public:
-    AtomView(std::span<std::byte const> data, Atom const& parent)
-      : _data{data}, _parent{parent}
-    {
-    }
-
-    std::uint32_t length() const override { return layout<AtomLayout>().length.value(); }
-
-    std::string_view type() const override
-    {
-      return utility::bytes::stringView(utility::bytes::view(layout<AtomLayout>().type));
-    }
-
-    Atom const* parent() const override { return &_parent; }
-
-    std::span<std::byte const> bytes() const { return _data; }
-
     template<typename Layout>
-    Layout const& layout() const
+    Layout const* tryLayout() const noexcept
     {
-      if constexpr (sizeof(typename Layout::FixedSize) != 0 && Layout::FixedSize::value)
+      auto const* const atomLayout = utility::bytes::tryLayout<AtomLayout>(_bytes);
+      auto const* const typedLayout = utility::bytes::tryLayout<Layout>(_bytes);
+
+      if (_headerSize != sizeof(AtomLayout) || atomLayout == nullptr || typedLayout == nullptr)
       {
-        gsl_Expects(utility::layout::view<AtomLayout>(_data)->length.value() == sizeof(Layout));
-      }
-      else
-      {
-        gsl_Expects(utility::layout::view<AtomLayout>(_data)->length.value() >= sizeof(Layout));
+        return nullptr;
       }
 
-      return *utility::layout::view<Layout>(_data);
+      auto const declaredLength = static_cast<std::size_t>(atomLayout->length.value());
+
+      if (declaredLength > _bytes.size())
+      {
+        return nullptr;
+      }
+
+      if constexpr (Layout::FixedSize::value)
+      {
+        return declaredLength == sizeof(Layout) ? typedLayout : nullptr;
+      }
+
+      return declaredLength >= sizeof(Layout) ? typedLayout : nullptr;
     }
 
   private:
-    std::span<std::byte const> _data;
-    Atom const& _parent;
-  };
+    friend class AtomCursor;
 
-  class LeafAtomView : public AtomView
-  {
-  public:
-    using AtomView::AtomView;
-    using Visitor = Atom::Visitor;
-
-    bool isLeaf() const override { return true; };
-
-    void visitChildren(Visitor /*visitor*/) const override {}
-  };
-
-  // Container atoms parse their children lazily: the child layer is materialized
-  // on the first visitChildren()/find() and cached, so subtrees that a given
-  // consumer never walks (e.g. udta/meta/ilst metadata during demuxing) are never
-  // parsed. The cache is filled in a const method via mutable members; this is
-  // safe because an atom tree is owned and accessed by a single thread (each
-  // fromBuffer() result is a function-local value), never shared concurrently.
-  class ContainerAtomView : public AtomView
-  {
-  public:
-    ContainerAtomView(std::span<std::byte const> data, std::span<std::byte const> payload, Atom const& parent)
-      : AtomView{data, parent}, _payload{payload}
+    AtomView(std::span<std::byte const> bytes,
+             std::span<std::byte const> childBytes,
+             std::string_view type,
+             std::size_t headerSize,
+             bool isContainer) noexcept
+      : _bytes{bytes}, _childBytes{childBytes}, _type{type}, _headerSize{headerSize}, _isContainer{isContainer}
     {
     }
 
-    using Visitor = Atom::Visitor;
+    std::span<std::byte const> _bytes;
+    std::span<std::byte const> _childBytes;
+    std::string_view _type;
+    std::size_t _headerSize = 0;
+    bool _isContainer = false;
+  };
 
-    bool isLeaf() const override { return false; };
+  using OptionalAtom = std::optional<AtomView>;
 
-    void visitChildren(Visitor visitor) const override
-    {
-      ensureParsed();
-
-      for (auto const& childPtr : _children)
-      {
-        if (!std::invoke(visitor, *childPtr))
-        {
-          break;
-        }
-      }
-    }
+  /**
+   * Single-pass cursor over the immediate children of an AtomView.
+   *
+   * next() validates the complete boundary of each returned child. It reports
+   * malformed trailing bytes when the caller advances to them; callers that
+   * stop early deliberately stop validation at the same point.
+   */
+  class AtomCursor final
+  {
+  public:
+    Result<OptionalAtom> next();
 
   private:
-    void ensureParsed() const;
+    friend class AtomView;
 
-    std::span<std::byte const> _payload;
-    mutable std::vector<std::unique_ptr<Atom>> _children;
-    mutable bool _parsed = false;
+    AtomCursor(std::span<std::byte const> remaining, std::string_view parentType) noexcept
+      : _remaining{remaining}, _parentType{parentType}
+    {
+    }
+
+    std::span<std::byte const> _remaining;
+    std::string_view _parentType;
   };
 
-  class RootAtom : public Atom
+  AtomView fromBuffer(std::span<std::byte const> data) noexcept;
+
+  /**
+   * Finds the first atom at path, validating sibling boundaries only until a
+   * complete match is found.
+   * The first path element names root itself (for example root/moov/trak).
+   */
+  Result<OptionalAtom> findAtom(AtomView const& root, std::span<std::string_view const> path);
+
+  template<typename Visitor>
+  Result<> visitChildren(AtomView const& parent, Visitor visitor)
   {
-  public:
-    explicit RootAtom(std::span<std::byte const> data)
-      : _data{data}
+    auto cursor = parent.children();
+
+    while (true)
     {
-    }
+      auto childResult = cursor.next();
 
-    std::uint32_t length() const override
-    {
-      ensureParsed();
-      return std::ranges::fold_left(
-        _children, 0U, [](auto size, auto const& atomPtr) { return size + atomPtr->length(); });
-    }
-
-    std::string_view type() const override { return "root"; }
-
-    Atom const* parent() const override { return nullptr; }
-
-    bool isLeaf() const override { return false; };
-
-    void visitChildren(Visitor visitor) const override
-    {
-      ensureParsed();
-
-      for (auto const& childPtr : _children)
+      if (!childResult)
       {
-        if (!std::invoke(visitor, *childPtr))
-        {
-          break;
-        }
+        return std::unexpected{childResult.error()};
+      }
+
+      if (!*childResult)
+      {
+        return {};
+      }
+
+      if (!std::invoke(visitor, **childResult))
+      {
+        return {};
       }
     }
-
-  private:
-    void ensureParsed() const;
-
-    std::span<std::byte const> _data;
-    mutable std::vector<std::unique_ptr<Atom>> _children;
-    mutable bool _parsed = false;
-  };
-
-  RootAtom fromBuffer(std::span<std::byte const> data);
+  }
 } // namespace ao::media::mp4

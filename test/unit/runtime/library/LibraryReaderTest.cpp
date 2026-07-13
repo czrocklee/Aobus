@@ -7,7 +7,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
-#include <ao/library/CoverArt.h>
+#include <ao/PictureType.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
@@ -108,7 +108,7 @@ namespace ao::rt::test
         .bitDepth(BitDepth{24})
         .codec(AudioCodec::Flac);
       trackBuilder.tags().add("Favorite").add("Live");
-      trackBuilder.coverArt().add(library::PictureType::FrontCover, resourceId);
+      trackBuilder.coverArt().add(PictureType::FrontCover, resourceId);
 
       auto hotData = trackBuilder.serializeHot(transaction, library.dictionary());
       REQUIRE(hotData);

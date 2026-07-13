@@ -7,8 +7,8 @@
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/tag/TagFile.h>
 #include <ao/utility/Hash128.h>
 
 #include <chrono>
@@ -95,7 +95,7 @@ namespace ao::rt
       // Only files we can actually decode belong in the plan. Everything else -
       // cover art, playlists, logs, or formats we have no reader for (.ogg,
       // a literal .alac) - is not music we support and is ignored here.
-      if (!tag::TagFile::isSupported(path))
+      if (!media::file::File::isSupported(path))
       {
         return;
       }
@@ -209,14 +209,14 @@ namespace ao::rt
           continue;
         }
 
-        auto tagFileResult = tag::TagFile::open(item.fullPath);
+        auto fileResult = media::file::File::open(item.fullPath);
 
-        if (!tagFileResult)
+        if (!fileResult)
         {
           continue;
         }
 
-        auto payloadResult = (*tagFileResult)->audioPayload();
+        auto payloadResult = fileResult->audioPayload();
 
         if (!payloadResult)
         {
@@ -230,15 +230,15 @@ namespace ao::rt
           continue;
         }
 
-        auto identityResult = library::readAudioIdentity(**tagFileResult);
+        auto optIdentity = library::readAudioIdentity(payloadResult->bytes);
 
-        if (!identityResult || !*identityResult)
+        if (!optIdentity)
         {
           continue;
         }
 
-        item.audioPayloadLength = (*identityResult)->payloadLength;
-        item.audioSignature = (*identityResult)->signature;
+        item.audioPayloadLength = optIdentity->payloadLength;
+        item.audioSignature = optIdentity->signature;
         auto const key = AudioIdentityKey{.payloadLength = item.audioPayloadLength, .signature = item.audioSignature};
         newByIdentity[key].push_back(index);
       }

@@ -1,0 +1,32 @@
+%{
+#include <cstring>
+%}
+%language=C++
+%readonly-tables
+%compare-strncmp
+%compare-lengths
+%struct-type
+%define class-name Mp4AtomDispatchTable
+%define lookup-function-name lookupAtomField
+struct Mp4AtomDispatchEntry
+{
+  char const* name;
+  AtomHandler handler;
+};
+%%
+trkn, &handleTrackNumbers
+disk, &handleDiscNumbers
+"\251nam", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::title>
+"\251ART", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::artist>
+"\251alb", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::album>
+"\251wrt", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::composer>
+"\251wrk", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::work>
+"\251grp", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::work>
+"\251mvn", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movement>
+"\251mvi", &handleIntegerNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementNumber>
+"\251mvc", &handleIntegerNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>
+aART, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::albumArtist>
+"\251gen", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::genre>
+"\251day", &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::year>
+covr, &handleCoverArt
+"----", &handleFreeform

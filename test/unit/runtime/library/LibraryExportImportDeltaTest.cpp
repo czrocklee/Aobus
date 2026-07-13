@@ -71,19 +71,20 @@ namespace ao::rt::test
                                                      .sampleRate = SampleRate{},
                                                      .channels = Channels{},
                                                      .bitDepth = BitDepth{}});
-    library::test::addTrack(ml,
-                            library::test::TrackSpec{.title = "Will fallback to full export because TagFile fails",
-                                                     .artist = "",
-                                                     .album = "",
-                                                     .uri = "dummy.flac",
-                                                     .year = 0,
-                                                     .discNumber = 0,
-                                                     .trackNumber = 0,
-                                                     .duration = std::chrono::milliseconds{0},
-                                                     .bitrate = Bitrate{},
-                                                     .sampleRate = SampleRate{},
-                                                     .channels = Channels{},
-                                                     .bitDepth = BitDepth{}});
+    library::test::addTrack(
+      ml,
+      library::test::TrackSpec{.title = "Will fallback to full export because media file read fails",
+                               .artist = "",
+                               .album = "",
+                               .uri = "dummy.flac",
+                               .year = 0,
+                               .discNumber = 0,
+                               .trackNumber = 0,
+                               .duration = std::chrono::milliseconds{0},
+                               .bitrate = Bitrate{},
+                               .sampleRate = SampleRate{},
+                               .channels = Channels{},
+                               .bitDepth = BitDepth{}});
     library::test::addTrack(ml,
                             library::test::TrackSpec{.title = "Different Title",
                                                      .artist = "",
@@ -112,9 +113,9 @@ namespace ao::rt::test
                                                      .channels = Channels{},
                                                      .bitDepth = BitDepth{}});
 
-    std::filesystem::copy_file(
-      std::filesystem::path{TAG_TEST_DATA_DIR} / "with_cover.flac", std::filesystem::path{temp.path()} / "cover.flac");
-    std::filesystem::copy_file(std::filesystem::path{TAG_TEST_DATA_DIR} / "with_cover.flac",
+    std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / "with_cover.flac",
+                               std::filesystem::path{temp.path()} / "cover.flac");
+    std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / "with_cover.flac",
                                std::filesystem::path{temp.path()} / "cover-removed.flac");
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "delta.yaml";
@@ -130,13 +131,13 @@ namespace ao::rt::test
       REQUIRE(tracks.num_children() == 4);
 
       CHECK(yaml::scalarView(tracks[0]["title"]) == "Should Export Fully");
-      CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because TagFile fails");
+      CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because media file read fails");
       CHECK(yaml::scalarView(tracks[2]["title"]) == "Different Title");
       CHECK(tracks[2].has_child("covers"));
       REQUIRE(tracks[3].has_child("covers"));
       CHECK(tracks[3]["covers"].is_seq());
       CHECK(tracks[3]["covers"].num_children() == 0);
-      CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because TagFile fails");
+      CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because media file read fails");
     }
   }
 

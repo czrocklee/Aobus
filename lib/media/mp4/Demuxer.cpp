@@ -37,11 +37,22 @@ namespace ao::media::mp4
     constexpr std::uint8_t kEsStreamDependenceFlag = 0x80;
     constexpr std::uint8_t kEsUrlFlag = 0x40;
 
-    struct MdhdVersion1PrefixLayout final
+    struct MdhdVersion0BodyLayout final
     {
-      static constexpr std::size_t kByteCount = 40;
+      boost::endian::big_uint32_buf_t versionAndFlags;
+      boost::endian::big_uint32_buf_t creationTime;
+      boost::endian::big_uint32_buf_t modificationTime;
+      boost::endian::big_uint32_buf_t timescale;
+      boost::endian::big_uint32_buf_t duration;
+    };
 
-      AtomLayout common;
+    constexpr std::size_t kMdhdVersion0BodySize = 20;
+    static_assert(sizeof(MdhdVersion0BodyLayout) == kMdhdVersion0BodySize);
+    static_assert(alignof(MdhdVersion0BodyLayout) == 1);
+    static_assert(utility::layout::kIsBinaryLayoutType<MdhdVersion0BodyLayout>);
+
+    struct MdhdVersion1BodyLayout final
+    {
       boost::endian::big_uint32_buf_t versionAndFlags;
       boost::endian::big_uint64_buf_t creationTime;
       boost::endian::big_uint64_buf_t modificationTime;
@@ -49,9 +60,31 @@ namespace ao::media::mp4
       boost::endian::big_uint64_buf_t duration;
     };
 
-    static_assert(sizeof(MdhdVersion1PrefixLayout) == MdhdVersion1PrefixLayout::kByteCount);
-    static_assert(alignof(MdhdVersion1PrefixLayout) == 1);
-    static_assert(utility::layout::kIsBinaryLayoutType<MdhdVersion1PrefixLayout>);
+    static_assert(sizeof(MdhdVersion1BodyLayout) == 32);
+    static_assert(alignof(MdhdVersion1BodyLayout) == 1);
+    static_assert(utility::layout::kIsBinaryLayoutType<MdhdVersion1BodyLayout>);
+
+    struct EntryCountBodyLayout final
+    {
+      boost::endian::big_uint32_buf_t versionAndFlags;
+      boost::endian::big_uint32_buf_t entryCount;
+    };
+
+    static_assert(sizeof(EntryCountBodyLayout) == 8);
+    static_assert(alignof(EntryCountBodyLayout) == 1);
+    static_assert(utility::layout::kIsBinaryLayoutType<EntryCountBodyLayout>);
+
+    struct SampleSizeBodyLayout final
+    {
+      boost::endian::big_uint32_buf_t versionAndFlags;
+      boost::endian::big_uint32_buf_t sampleSize;
+      boost::endian::big_uint32_buf_t sampleCount;
+    };
+
+    constexpr std::size_t kSampleSizeBodySize = 12;
+    static_assert(sizeof(SampleSizeBodyLayout) == kSampleSizeBodySize);
+    static_assert(alignof(SampleSizeBodyLayout) == 1);
+    static_assert(utility::layout::kIsBinaryLayoutType<SampleSizeBodyLayout>);
 
     struct TrackTiming final
     {
@@ -205,21 +238,33 @@ namespace ao::media::mp4
 
     std::vector<std::byte> extractAacMagicCookie(AtomView const& esdsView)
     {
-      auto const bytes = esdsView.bytes();
+      auto const payload = esdsView.payload();
 
-      constexpr std::size_t kFullAtomHeaderSize = sizeof(AtomLayout) + 4;
+      constexpr std::size_t kFullBoxHeaderSize = 4;
 
-      if (bytes.size() <= kFullAtomHeaderSize)
+      if (payload.size() <= kFullBoxHeaderSize)
       {
         return {};
       }
 
-      auto const descriptors = bytes.subspan(kFullAtomHeaderSize);
+      auto const descriptors = payload.subspan(kFullBoxHeaderSize);
       auto optCookie = findDescriptorPayload(descriptors, kDecoderSpecificInfoTag);
       return optCookie.value_or(std::vector<std::byte>{});
     }
 
-    TrackTiming parseTrackTiming(Atom const& track)
+    OptionalAtom findAtomOrThrow(AtomView const& root, std::span<std::string_view const> path)
+    {
+      auto nodeResult = findAtom(root, path);
+
+      if (!nodeResult)
+      {
+        detail::throwMediaError(Error::Code::FormatRejected, nodeResult.error().message);
+      }
+
+      return *nodeResult;
+    }
+
+    TrackTiming parseTrackTiming(AtomView const& track)
     {
       static constexpr auto kMdhdPath = std::to_array<std::string_view>({
         "trak",
@@ -228,31 +273,30 @@ namespace ao::media::mp4
       });
 
       auto timing = TrackTiming{};
-      auto const* node = track.find(kMdhdPath);
+      auto const optNode = findAtomOrThrow(track, kMdhdPath);
 
-      if (node == nullptr)
+      if (!optNode)
       {
         return timing;
       }
 
-      auto const& view = utility::unsafeDowncast<AtomView const>(*node);
-      auto const bytes = view.bytes();
+      auto const payload = optNode->payload();
 
-      if (bytes.size() < sizeof(AtomLayout) + sizeof(std::uint32_t))
+      if (payload.size() < sizeof(std::uint32_t))
       {
         detail::throwMediaError(Error::Code::FormatRejected, "Malformed mdhd atom");
       }
 
-      auto const version = std::to_integer<std::uint8_t>(bytes[sizeof(AtomLayout)]);
+      auto const version = std::to_integer<std::uint8_t>(payload[0]);
 
       if (version == 0)
       {
-        if (bytes.size() < sizeof(MdhdAtomLayout))
+        if (payload.size() < sizeof(MdhdVersion0BodyLayout))
         {
           detail::throwMediaError(Error::Code::FormatRejected, "Malformed version 0 mdhd atom");
         }
 
-        auto const* layout = utility::layout::view<MdhdAtomLayout>(bytes);
+        auto const* layout = utility::layout::view<MdhdVersion0BodyLayout>(payload);
         timing.timescale = layout->timescale.value();
         timing.duration = layout->duration.value();
         return timing;
@@ -260,12 +304,12 @@ namespace ao::media::mp4
 
       if (version == 1)
       {
-        if (bytes.size() < sizeof(MdhdVersion1PrefixLayout))
+        if (payload.size() < sizeof(MdhdVersion1BodyLayout))
         {
           detail::throwMediaError(Error::Code::FormatRejected, "Malformed version 1 mdhd atom");
         }
 
-        auto const* layout = utility::layout::view<MdhdVersion1PrefixLayout>(bytes);
+        auto const* layout = utility::layout::view<MdhdVersion1BodyLayout>(payload);
         timing.timescale = layout->timescale.value();
         timing.duration = layout->duration.value();
         return timing;
@@ -391,14 +435,14 @@ namespace ao::media::mp4
 
   void Demuxer::parseStts(std::span<std::byte const> bytes, std::vector<TimeToSampleEntry>& out)
   {
-    if (bytes.size() < sizeof(SttsAtomLayout))
+    if (bytes.size() < sizeof(EntryCountBodyLayout))
     {
       detail::throwMediaError(Error::Code::FormatRejected, "Malformed stts atom");
     }
 
-    auto const* header = utility::layout::view<SttsAtomLayout>(bytes);
+    auto const* header = utility::layout::view<EntryCountBodyLayout>(bytes);
     auto const count = header->entryCount.value();
-    auto const optEntries = validatedEntries<SttsAtomLayout, SttsAtomLayout::Entry>(bytes, count);
+    auto const optEntries = validatedEntries<EntryCountBodyLayout, SttsAtomLayout::Entry>(bytes, count);
 
     if (!optEntries)
     {
@@ -417,17 +461,17 @@ namespace ao::media::mp4
 
   void Demuxer::parseStsz(std::span<std::byte const> bytes)
   {
-    if (bytes.size() < sizeof(StszAtomLayout))
+    if (bytes.size() < sizeof(SampleSizeBodyLayout))
     {
       detail::throwMediaError(Error::Code::FormatRejected, "Malformed stsz atom");
     }
 
-    auto const* header = utility::layout::view<StszAtomLayout>(bytes);
+    auto const* header = utility::layout::view<SampleSizeBodyLayout>(bytes);
     auto const sampleSize = header->sampleSize.value();
 
     if (auto const count = header->sampleCount.value(); sampleSize == 0)
     {
-      auto const optEntries = validatedEntries<StszAtomLayout, StszAtomLayout::Entry>(bytes, count);
+      auto const optEntries = validatedEntries<SampleSizeBodyLayout, StszAtomLayout::Entry>(bytes, count);
 
       if (!optEntries)
       {
@@ -443,7 +487,7 @@ namespace ao::media::mp4
     }
     else
     {
-      if (bytes.size() != sizeof(StszAtomLayout))
+      if (bytes.size() != sizeof(SampleSizeBodyLayout))
       {
         detail::throwMediaError(Error::Code::FormatRejected, "Malformed fixed-size stsz atom");
       }
@@ -459,14 +503,14 @@ namespace ao::media::mp4
 
   void Demuxer::parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out)
   {
-    if (bytes.size() < sizeof(StscAtomLayout))
+    if (bytes.size() < sizeof(EntryCountBodyLayout))
     {
       detail::throwMediaError(Error::Code::FormatRejected, "Malformed stsc atom");
     }
 
-    auto const* header = utility::layout::view<StscAtomLayout>(bytes);
+    auto const* header = utility::layout::view<EntryCountBodyLayout>(bytes);
     auto const count = header->entryCount.value();
-    auto const optEntries = validatedEntries<StscAtomLayout, StscAtomLayout::Entry>(bytes, count);
+    auto const optEntries = validatedEntries<EntryCountBodyLayout, StscAtomLayout::Entry>(bytes, count);
 
     if (!optEntries)
     {
@@ -486,14 +530,14 @@ namespace ao::media::mp4
 
   void Demuxer::parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out)
   {
-    if (bytes.size() < sizeof(StcoAtomLayout))
+    if (bytes.size() < sizeof(EntryCountBodyLayout))
     {
       detail::throwMediaError(Error::Code::FormatRejected, "Malformed stco atom");
     }
 
-    auto const* header = utility::layout::view<StcoAtomLayout>(bytes);
+    auto const* header = utility::layout::view<EntryCountBodyLayout>(bytes);
     auto const count = header->entryCount.value();
-    auto const optEntries = validatedEntries<StcoAtomLayout, StcoAtomLayout::Entry>(bytes, count);
+    auto const optEntries = validatedEntries<EntryCountBodyLayout, StcoAtomLayout::Entry>(bytes, count);
 
     if (!optEntries)
     {
@@ -510,14 +554,14 @@ namespace ao::media::mp4
 
   void Demuxer::parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out)
   {
-    if (bytes.size() < sizeof(Co64AtomLayout))
+    if (bytes.size() < sizeof(EntryCountBodyLayout))
     {
       detail::throwMediaError(Error::Code::FormatRejected, "Malformed co64 atom");
     }
 
-    auto const* header = utility::layout::view<Co64AtomLayout>(bytes);
+    auto const* header = utility::layout::view<EntryCountBodyLayout>(bytes);
     auto const count = header->entryCount.value();
-    auto const optEntries = validatedEntries<Co64AtomLayout, Co64AtomLayout::Entry>(bytes, count);
+    auto const optEntries = validatedEntries<EntryCountBodyLayout, Co64AtomLayout::Entry>(bytes, count);
 
     if (!optEntries)
     {
@@ -532,40 +576,44 @@ namespace ao::media::mp4
     }
   }
 
-  void Demuxer::parseSampleTable(Atom const& table,
+  void Demuxer::parseSampleTable(AtomView const& table,
                                  std::vector<std::uint64_t>& chunkOffsets,
                                  std::vector<SampleToChunkEntry>& sampleToChunk,
                                  std::vector<TimeToSampleEntry>& timeToSample)
   {
-    table.visitChildren(
-      [this, &chunkOffsets, &sampleToChunk, &timeToSample](Atom const& atom)
-      {
-        auto type = atom.type();
-        auto const& view = utility::unsafeDowncast<AtomView const>(atom);
+    auto const visitResult = visitChildren(table,
+                                           [this, &chunkOffsets, &sampleToChunk, &timeToSample](AtomView const& atom)
+                                           {
+                                             auto type = atom.type();
 
-        if (auto const atomBytes = view.bytes(); type == "stsz")
-        {
-          parseStsz(atomBytes);
-        }
-        else if (type == "stts")
-        {
-          parseStts(atomBytes, timeToSample);
-        }
-        else if (type == "stsc")
-        {
-          parseStsc(atomBytes, sampleToChunk);
-        }
-        else if (type == "stco")
-        {
-          parseStco(atomBytes, chunkOffsets);
-        }
-        else if (type == "co64")
-        {
-          parseCo64(atomBytes, chunkOffsets);
-        }
+                                             if (auto const atomPayload = atom.payload(); type == "stsz")
+                                             {
+                                               parseStsz(atomPayload);
+                                             }
+                                             else if (type == "stts")
+                                             {
+                                               parseStts(atomPayload, timeToSample);
+                                             }
+                                             else if (type == "stsc")
+                                             {
+                                               parseStsc(atomPayload, sampleToChunk);
+                                             }
+                                             else if (type == "stco")
+                                             {
+                                               parseStco(atomPayload, chunkOffsets);
+                                             }
+                                             else if (type == "co64")
+                                             {
+                                               parseCo64(atomPayload, chunkOffsets);
+                                             }
 
-        return true;
-      });
+                                             return true;
+                                           });
+
+    if (!visitResult)
+    {
+      detail::throwMediaError(Error::Code::FormatRejected, visitResult.error().message);
+    }
   }
 
   Result<> Demuxer::parseTrack(std::string_view targetFormat)
@@ -577,19 +625,19 @@ namespace ao::media::mp4
 
     auto parse = [&] -> Result<>
     {
-      RootAtom const root = fromBuffer(_fileData);
+      auto const root = fromBuffer(_fileData);
       auto chunkOffsets = std::vector<std::uint64_t>{};
       auto sampleToChunk = std::vector<SampleToChunkEntry>{};
       auto timeToSample = std::vector<TimeToSampleEntry>{};
 
-      auto const optTrack = findAudioTrack(root, targetFormat);
+      auto const selectionResult = findAudioTrack(root, targetFormat);
 
-      if (!optTrack || optTrack->track == nullptr)
+      if (!selectionResult)
       {
-        return makeError(Error::Code::FormatRejected, "Missing target audio track");
+        return makeError(Error::Code::FormatRejected, selectionResult.error().message);
       }
 
-      auto const& track = *optTrack->track;
+      auto const& track = selectionResult->track;
 
       auto const timing = parseTrackTiming(track);
       _timescale = timing.timescale;
@@ -605,10 +653,9 @@ namespace ao::media::mp4
         targetFormat,
       });
 
-      if (auto const* node = track.find(kCookiePath); node != nullptr)
+      if (auto const optNode = findAtomOrThrow(track, kCookiePath); optNode)
       {
-        auto const& view = utility::unsafeDowncast<AtomView const>(*node);
-        auto const bytes = view.bytes();
+        auto const bytes = optNode->bytes();
         _magicCookie.assign(bytes.begin(), bytes.end());
       }
 
@@ -624,10 +671,9 @@ namespace ao::media::mp4
           "esds",
         });
 
-        if (auto const* node = track.find(kEsdsPath); node != nullptr)
+        if (auto const optNode = findAtomOrThrow(track, kEsdsPath); optNode)
         {
-          auto const& view = utility::unsafeDowncast<AtomView const>(*node);
-          _magicCookie = extractAacMagicCookie(view);
+          _magicCookie = extractAacMagicCookie(*optNode);
         }
       }
 
@@ -638,14 +684,14 @@ namespace ao::media::mp4
         "stbl",
       });
 
-      auto const* stblNode = track.find(kStblPath);
+      auto const optStbl = findAtomOrThrow(track, kStblPath);
 
-      if (stblNode == nullptr)
+      if (!optStbl)
       {
         return makeError(Error::Code::FormatRejected, "Missing stbl atom");
       }
 
-      parseSampleTable(*stblNode, chunkOffsets, sampleToChunk, timeToSample);
+      parseSampleTable(*optStbl, chunkOffsets, sampleToChunk, timeToSample);
 
       if (_magicCookie.empty() || _samples.empty())
       {

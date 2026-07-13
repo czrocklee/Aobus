@@ -26,7 +26,7 @@ Use the [specification template](../template/spec.md).
 
 ## Media
 
-- [Media file interpretation](media/file-interpretation.md) defines supported-file recognition, mapping, metadata and property interpretation, payload extraction, parser containment, and borrowed-result lifetimes.
+- [Media file reading](media/file-reading.md) defines supported-file recognition, mapping, visitor delivery, payload extraction, parser containment, and mapped-view lifetimes.
 
 ## Resource
 

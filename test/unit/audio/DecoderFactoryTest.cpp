@@ -66,6 +66,30 @@ namespace ao::audio::test
       CHECK(*session != nullptr);
     }
 
+    SECTION("Creates MP4 runtime when an extended-size mdat follows the selected track")
+    {
+      auto data = ao::test::mp4::makeMinimalAudioMp4("alac");
+      auto const mdat = ao::test::mp4::makeExtendedAtom("mdat", {1, 2, 3});
+      data.insert(data.end(), mdat.begin(), mdat.end());
+      auto const m4a = ao::test::TempFile{data, ".m4a"};
+
+      auto session = createDecoderSession(m4a.path, format);
+      REQUIRE(session);
+      CHECK(*session != nullptr);
+    }
+
+    SECTION("Creates MP4 runtime when an extended-size mdat precedes the selected track")
+    {
+      auto data = ao::test::mp4::makeExtendedAtom("mdat", {1, 2, 3});
+      auto const movie = ao::test::mp4::makeMinimalAudioMp4("alac");
+      data.insert(data.end(), movie.begin(), movie.end());
+      auto const m4a = ao::test::TempFile{data, ".m4a"};
+
+      auto session = createDecoderSession(m4a.path, format);
+      REQUIRE(session);
+      CHECK(*session != nullptr);
+    }
+
     SECTION("Creates MP3 runtime for .mp3")
     {
       auto session = createDecoderSession("song.mp3", format);
@@ -97,6 +121,24 @@ namespace ao::audio::test
       auto const result = createDecoderSession(m4a.path, format);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("Reports NotSupported when an MP4 container has no audio track")
+    {
+      auto const m4a = ao::test::TempFile{ao::test::mp4::makeAtom("moov", {}), ".m4a"};
+
+      auto const result = createDecoderSession(m4a.path, format);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("Preserves malformed MP4 structure errors")
+    {
+      auto const m4a = ao::test::TempFile{std::vector<std::uint8_t>{0, 1, 2}, ".m4a"};
+
+      auto const result = createDecoderSession(m4a.path, format);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Reports IoError when an MP4 container cannot be read")

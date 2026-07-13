@@ -3,19 +3,14 @@
 
 #pragma once
 
-#include <ao/Error.h>
 #include <ao/utility/Hash128.h>
 
+#include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <optional>
+#include <span>
 #include <stop_token>
-
-namespace ao::tag
-{
-  class TagFile;
-}
 
 namespace ao::library
 {
@@ -38,17 +33,11 @@ namespace ao::library
   /**
    * Compute the identity of the file's encoded audio payload.
    *
-   * Cancellation is not an error: when @p stopToken is stop-requested the
-   * function returns an engaged Result holding an empty optional (per the
-   * error model, cooperative cancellation is not carried as an Error). The
-   * error channel is used only for I/O and parse failures; a successful,
-   * uncancelled run always returns an engaged optional.
+   * Cancellation returns an empty optional. A completed calculation returns
+   * an identity. File opening and encoded-payload parsing belong to the caller
+   * and retain their own Result channels.
    */
-  Result<std::optional<AudioIdentity>> readAudioIdentity(tag::TagFile const& tagFile,
-                                                         AudioIdentityProgressCallback progress = {},
-                                                         std::stop_token stopToken = {});
-
-  Result<std::optional<AudioIdentity>> readAudioIdentity(std::filesystem::path const& path,
-                                                         AudioIdentityProgressCallback progress = {},
-                                                         std::stop_token stopToken = {});
+  std::optional<AudioIdentity> readAudioIdentity(std::span<std::byte const> audioPayload,
+                                                 AudioIdentityProgressCallback progress = {},
+                                                 std::stop_token stopToken = {});
 } // namespace ao::library

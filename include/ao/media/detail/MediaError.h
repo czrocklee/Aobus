@@ -14,8 +14,8 @@ namespace ao::media::detail
 {
   // Short-range control-flow exception internal to the media byte-view/layout
   // layer. Carries a recoverable Error raised with throwMediaError and caught
-  // once at a format-parser Result boundary (e.g. flac::File::loadTrackImpl in
-  // lib/tag). Implementation detail (detail/ + ao::media::detail): never catch
+  // once at a format-parser Result boundary (currently MP4 decoder demuxing).
+  // Implementation detail (detail/ + ao::media::detail): never catch
   // it outside a boundary that explicitly translates media-layer corruption;
   // keep the catch narrow to this leaf so a non-domain fault (e.g.
   // std::bad_alloc or a real invariant throw) fail-fast terminates instead of
