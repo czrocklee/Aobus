@@ -3,6 +3,9 @@
 
 #include <ao/async/QueuedExecutor.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
+#include <exception>
 #include <functional>
 #include <mutex>
 #include <thread>
@@ -44,19 +47,54 @@ namespace ao::async
 
   void QueuedExecutorBase::drainQueuedTasks()
   {
-    auto tasksToRun = std::vector<std::move_only_function<void()>>{};
+    gsl_Expects(isCurrent());
 
     {
       auto const lock = std::scoped_lock{_mutex};
-      tasksToRun.swap(_tasks);
+
+      if (_draining)
+      {
+        return;
+      }
+
+      _draining = true;
+      _drainTasks.swap(_pendingTasks);
     }
 
-    for (auto& task : tasksToRun)
+    auto taskException = std::exception_ptr{};
+
+    try
     {
-      if (task)
+      for (auto& task : _drainTasks)
       {
-        executeTask(task);
+        if (task)
+        {
+          executeTask(task);
+        }
       }
+    }
+    catch (...)
+    {
+      taskException = std::current_exception();
+    }
+
+    _drainTasks.clear();
+
+    bool shouldWake = false;
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      _draining = false;
+      shouldWake = !_pendingTasks.empty();
+    }
+
+    if (shouldWake)
+    {
+      wake();
+    }
+
+    if (taskException)
+    {
+      std::rethrow_exception(taskException);
     }
   }
 
@@ -67,11 +105,16 @@ namespace ao::async
       return;
     }
 
+    bool shouldWake = false;
     {
       auto const lock = std::scoped_lock{_mutex};
-      _tasks.push_back(std::move(task));
+      shouldWake = _pendingTasks.empty() && !_draining;
+      _pendingTasks.push_back(std::move(task));
     }
 
-    wake();
+    if (shouldWake)
+    {
+      wake();
+    }
   }
 } // namespace ao::async

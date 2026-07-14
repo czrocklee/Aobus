@@ -10,8 +10,10 @@
 #include <ao/utility/ByteView.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <expected>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <span>
@@ -20,14 +22,11 @@
 
 namespace ao::library
 {
-  // Initial bucket count for the string-to-id lookup map.
-  constexpr std::uint32_t kInitialBucketCount = 1024;
-
   DictionaryStore::DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& transaction)
-    : _database{std::move(db)}
-    , _stringToId{kInitialBucketCount, DictHash{&_idToStringStorage}, DictEqual{&_idToStringStorage}}
+    : _database{std::move(db)}, _stringToId{0, DictHash{&_idToStringStorage}, DictEqual{&_idToStringStorage}}
   {
     auto const reader = _database.reader(transaction);
+    _stringToId.reserve(reader.entryCount());
 
     std::uint32_t expectedId = 1;
 
@@ -180,5 +179,40 @@ namespace ao::library
     _reservedStrings.insert(id);
     _stringToId.insert(id);
     return id;
+  }
+
+  DictionaryReadCache::DictionaryReadCache(DictionaryStore const& dictionary)
+    : _dictionary{&dictionary}
+  {
+  }
+
+  std::string_view DictionaryReadCache::get(DictionaryId id)
+  {
+    if (_entriesPtr != nullptr && id != kInvalidDictionaryId)
+    {
+      if (auto const& entry = (*_entriesPtr)[id.raw() % kCapacity]; entry.id == id)
+      {
+        return entry.value;
+      }
+    }
+
+    auto const value = _dictionary->get(id);
+
+    if (!value.empty())
+    {
+      if (_entriesPtr == nullptr)
+      {
+        _entriesPtr = std::make_unique<std::array<Entry, kCapacity>>();
+      }
+
+      (*_entriesPtr)[id.raw() % kCapacity] = Entry{.id = id, .value = value};
+    }
+
+    return value;
+  }
+
+  DictionaryStore const& DictionaryReadCache::dictionary() const noexcept
+  {
+    return *_dictionary;
   }
 } // namespace ao::library

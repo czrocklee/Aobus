@@ -8,6 +8,7 @@
 #include "test/unit/media/file/TestFile.h"
 #include <ao/AudioCodec.h>
 #include <ao/PictureType.h>
+#include <ao/media/file/File.h>
 #include <ao/media/file/Visitor.h>
 #include <ao/utility/Xxh3.h>
 
@@ -20,11 +21,12 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::media::file::mpeg::test
 {
-  using File = ao::media::file::test::TestFile;
+  using TestFile = ao::media::file::test::TestFile;
   using namespace ao::test;
 
   namespace
@@ -264,7 +266,7 @@ namespace ao::media::file::mpeg::test
       data.insert(data.end(), footer.begin(), footer.end());
     }
 
-    ao::media::file::test::RecordedContent readContent(File const& file)
+    ao::media::file::test::RecordedContent readContent(TestFile const& file)
     {
       auto result = file.readContent();
       REQUIRE(result);
@@ -277,7 +279,7 @@ namespace ao::media::file::mpeg::test
     auto const data = createMp3WithTags();
     auto const temp = TempFile{data, ".mp3"};
 
-    auto const file = File{temp.path};
+    auto const file = TestFile{temp.path};
     auto content = readContent(file);
 
     auto const& metadata = content;
@@ -314,7 +316,7 @@ namespace ao::media::file::mpeg::test
 
   TEST_CASE("MPEG File - maps orchestra fallback when ensemble is absent", "[media][unit][mpeg][file]")
   {
-    auto const file = File{audio::test::requireAudioFixture("classical_fallback.mp3")};
+    auto const file = TestFile{audio::test::requireAudioFixture("classical_fallback.mp3")};
     auto const content = readContent(file);
 
     CHECK(content.text(TextField::Title) == "Classical Fallback");
@@ -323,7 +325,7 @@ namespace ao::media::file::mpeg::test
 
   TEST_CASE("MPEG File - emits real fixture tag fields", "[media][unit][mpeg][file]")
   {
-    auto const file = File{audio::test::requireAudioFixture("basic_metadata.mp3")};
+    auto const file = TestFile{audio::test::requireAudioFixture("basic_metadata.mp3")};
     auto content = readContent(file);
     auto const& metadata = content;
 
@@ -347,7 +349,7 @@ namespace ao::media::file::mpeg::test
     appendId3v1Tag(data);
 
     auto const temp = TempFile{data, ".mp3"};
-    auto const file = File{temp.path};
+    auto const file = TestFile{temp.path};
     auto rangeResult = file.audioPayload();
 
     REQUIRE(rangeResult);
@@ -371,7 +373,7 @@ namespace ao::media::file::mpeg::test
     appendId3v1Tag(data);
 
     auto const temp = TempFile{data, ".mp3"};
-    auto const file = File{temp.path};
+    auto const file = TestFile{temp.path};
     auto rangeResult = file.audioPayload();
 
     REQUIRE(rangeResult);
@@ -392,7 +394,7 @@ namespace ao::media::file::mpeg::test
     appendApeV2HeaderAndFooter(data);
 
     auto const temp = TempFile{data, ".mp3"};
-    auto const file = File{temp.path};
+    auto const file = TestFile{temp.path};
     auto rangeResult = file.audioPayload();
 
     REQUIRE(rangeResult);
@@ -422,8 +424,8 @@ namespace ao::media::file::mpeg::test
 
     auto const firstTemp = TempFile{firstData, ".mp3"};
     auto const secondTemp = TempFile{secondData, ".mp3"};
-    auto const firstFile = File{firstTemp.path};
-    auto const secondFile = File{secondTemp.path};
+    auto const firstFile = TestFile{firstTemp.path};
+    auto const secondFile = TestFile{secondTemp.path};
 
     auto const firstPayloadResult = firstFile.audioPayload();
     auto const secondPayloadResult = secondFile.audioPayload();
@@ -440,7 +442,7 @@ namespace ao::media::file::mpeg::test
     auto const data = createValidMpegFrames(40);
 
     auto const temp = TempFile{data, ".mp3"};
-    auto const file = File{temp.path};
+    auto const file = TestFile{temp.path};
     auto content = readContent(file);
 
     CHECK(content.duration() == std::chrono::milliseconds{1042});
@@ -454,7 +456,7 @@ namespace ao::media::file::mpeg::test
     appendApeV2HeaderAndFooter(data);
 
     auto const temp = TempFile{data, ".mp3"};
-    auto const file = File{temp.path};
+    auto const file = TestFile{temp.path};
     auto content = readContent(file);
 
     CHECK(content.duration() == std::chrono::milliseconds{1042});
@@ -465,7 +467,7 @@ namespace ao::media::file::mpeg::test
     auto const data = createFreeFormatMpegFrames(3);
 
     auto const temp = TempFile{data, ".mp3"};
-    auto const file = File{temp.path};
+    auto const file = TestFile{temp.path};
     auto content = readContent(file);
     auto payloadResult = file.audioPayload();
 
@@ -490,7 +492,7 @@ namespace ao::media::file::mpeg::test
     auto const frame = createValidMpegFrame();
     data.insert(data.end(), frame.begin(), frame.end());
     auto const temp = TempFile{data, ".mp3"};
-    auto const file = File{temp.path};
+    auto const file = TestFile{temp.path};
     auto const content = readContent(file);
     auto const& metadata = content;
 
@@ -510,9 +512,24 @@ namespace ao::media::file::mpeg::test
       auto const frame = createValidMpegFrame();
       data.insert(data.end(), frame.begin(), frame.end());
       auto const temp = TempFile{data, ".mp3"};
-      auto const file = File{temp.path};
+      auto const file = TestFile{temp.path};
       auto const content = readContent(file);
       CHECK(content.text(TextField::Title) == "\xC3\xA9x");
+    }
+
+    SECTION("UTF-8 trailing terminators")
+    {
+      auto const utf8 = std::to_array<std::uint8_t>({'H', 'i', 0x00, 0x00});
+      auto body = std::vector<std::uint8_t>{};
+      addV24TextFrame(body, "TIT2", id3v2::Encoding::Utf8, utf8);
+
+      auto data = wrapId3v2(4, body);
+      auto const frame = createValidMpegFrame();
+      data.insert(data.end(), frame.begin(), frame.end());
+      auto const temp = TempFile{data, ".mp3"};
+      auto const file = TestFile{temp.path};
+      auto const content = readContent(file);
+      CHECK(content.text(TextField::Title) == "Hi");
     }
 
     SECTION("UTF-16BE without BOM")
@@ -525,10 +542,64 @@ namespace ao::media::file::mpeg::test
       auto const frame = createValidMpegFrame();
       data.insert(data.end(), frame.begin(), frame.end());
       auto const temp = TempFile{data, ".mp3"};
-      auto const file = File{temp.path};
+      auto const file = TestFile{temp.path};
       auto const content = readContent(file);
       CHECK(content.text(TextField::Title) == "Hi");
     }
+  }
+
+  TEST_CASE("MPEG File - mixed borrowed and converted ID3 text remains stable across File move",
+            "[media][regression][lifetime]")
+  {
+    auto body = std::vector<std::uint8_t>{};
+    auto const utf8Title = std::to_array<std::uint8_t>(
+      {0xEF, 0xBB, 0xBF, 'B', 'o', 'r', 'r', 'o', 'w', 'e', 'd', ' ', 'U', 'T', 'F', '-', '8', 0x00});
+    addV24TextFrame(body, "TIT2", id3v2::Encoding::Utf8, utf8Title);
+    addV24TextFrame(body, "TPE1", id3v2::Encoding::Latin1, asBytes("ASCII Latin-1"));
+
+    auto const latin1Album = std::to_array<std::uint8_t>({'C', 'a', 'f', 0xE9});
+    addV24TextFrame(body, "TALB", id3v2::Encoding::Latin1, latin1Album);
+
+    auto const utf16Composer = std::to_array<std::uint8_t>({0x4F, 0x60, 0x59, 0x7D});
+    addV24TextFrame(body, "TCOM", id3v2::Encoding::Utf16Be, utf16Composer);
+
+    auto const latin1Txxx =
+      std::to_array<std::uint8_t>({'w', 'o', 'r', 'k', 0x00, 'C', 'a', 'f', 0xE9, ' ', 'W', 'o', 'r', 'k'});
+    addV24TextFrame(body, "TXXX", id3v2::Encoding::Latin1, latin1Txxx);
+
+    auto data = wrapId3v2(4, body);
+    auto const frame = createValidMpegFrame();
+    data.insert(data.end(), frame.begin(), frame.end());
+    auto const temp = TempFile{data, ".mp3"};
+    auto fileResult = File::open(temp.path);
+    REQUIRE(fileResult);
+    auto file = std::move(*fileResult);
+
+    auto first = ao::media::file::test::RecordedContent{};
+    auto firstVisitor = ao::media::file::test::VisitorSpy{first};
+    REQUIRE(file.visit(firstVisitor));
+
+    auto const firstTitle = first.text(TextField::Title);
+    auto const firstArtist = first.text(TextField::Artist);
+    auto const firstAlbum = first.text(TextField::Album);
+    auto const firstComposer = first.text(TextField::Composer);
+    auto const firstWork = first.text(TextField::Work);
+
+    auto movedFile = std::move(file);
+    auto second = ao::media::file::test::RecordedContent{};
+    auto secondVisitor = ao::media::file::test::VisitorSpy{second};
+    REQUIRE(movedFile.visit(secondVisitor));
+
+    CHECK(firstTitle == "Borrowed UTF-8");
+    CHECK(firstArtist == "ASCII Latin-1");
+    CHECK(firstAlbum == "Caf\xC3\xA9");
+    CHECK(firstComposer == "\xE4\xBD\xA0\xE5\xA5\xBD");
+    CHECK(firstWork == "Caf\xC3\xA9 Work");
+    CHECK(second.text(TextField::Title).data() == firstTitle.data());
+    CHECK(second.text(TextField::Artist).data() == firstArtist.data());
+    CHECK(second.text(TextField::Album).data() == firstAlbum.data());
+    CHECK(second.text(TextField::Composer).data() == firstComposer.data());
+    CHECK(second.text(TextField::Work).data() == firstWork.data());
   }
 
   TEST_CASE("MPEG File - handles unsupported or malformed input", "[media][unit][mpeg][file]")
@@ -546,7 +617,7 @@ namespace ao::media::file::mpeg::test
       data.insert(data.end(), frame.begin(), frame.end());
 
       auto const temp = TempFile{data, ".mp3"};
-      auto const file = File{temp.path};
+      auto const file = TestFile{temp.path};
       auto result = file.readContent();
 
       REQUIRE(result);
@@ -567,7 +638,7 @@ namespace ao::media::file::mpeg::test
       data.resize(data.size() + 10, 0);
 
       auto const temp = TempFile{data, ".mp3"};
-      auto const file = File{temp.path};
+      auto const file = TestFile{temp.path};
       auto result = file.readContent();
 
       REQUIRE_FALSE(result);
@@ -588,7 +659,7 @@ namespace ao::media::file::mpeg::test
       data.insert(data.end(), frame.begin(), frame.end());
 
       auto const temp = TempFile{data, ".mp3"};
-      auto const file = File{temp.path};
+      auto const file = TestFile{temp.path};
       auto trackResult = file.readContent();
       auto payloadResult = file.audioPayload();
 
@@ -621,7 +692,7 @@ namespace ao::media::file::mpeg::test
       data.insert(data.end(), frame.begin(), frame.end());
 
       auto const temp = TempFile{data, ".mp3"};
-      auto const file = File{temp.path};
+      auto const file = TestFile{temp.path};
       auto result = file.readContent();
 
       REQUIRE(result);
@@ -633,7 +704,7 @@ namespace ao::media::file::mpeg::test
     {
       auto data = std::vector<std::uint8_t>(1000, 0x42); // Just 1000 bytes of garbage, no 0xFF 0xFB sync
       auto const temp = TempFile{data, ".mp3"};
-      auto const file = File{temp.path};
+      auto const file = TestFile{temp.path};
       auto result = file.readContent();
 
       REQUIRE_FALSE(result);
@@ -659,7 +730,7 @@ namespace ao::media::file::mpeg::test
       auto const frame = createValidMpegFrame();
       data.insert(data.end(), frame.begin(), frame.end());
       auto const temp = TempFile{data, ".mp3"};
-      auto const file = File{temp.path};
+      auto const file = TestFile{temp.path};
       auto const content = readContent(file);
       CHECK(content.pictures().empty());
     }
@@ -670,7 +741,7 @@ namespace ao::media::file::mpeg::test
       data.resize(12);
 
       auto const temp = TempFile{data, ".mp3"};
-      auto const file = File{temp.path};
+      auto const file = TestFile{temp.path};
       auto trackResult = file.readContent();
       auto payloadResult = file.audioPayload();
 

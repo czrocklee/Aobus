@@ -16,9 +16,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string_view>
 
 namespace ao::query::test
 {
@@ -124,7 +126,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator - resolves dictionary artist ids for LIKE expressions", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - dictionary cache preserves string predicate results", "[query][unit][plan-evaluator]")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
@@ -133,22 +135,47 @@ namespace ao::query::test
     auto bachId = ao::test::requireValue(dictionary.put(wtxn, "Johann Sebastian Bach"));
     auto mozartId = ao::test::requireValue(dictionary.put(wtxn, "Wolfgang Amadeus Mozart"));
 
-    auto expr = parseOk(R"($artist ~ "Bach")");
     auto compiler = QueryCompiler{&dictionary};
-    auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
     auto matchingHotData = makeHotOnlyTrack(bachId);
     auto matchingTrack = library::TrackView{matchingHotData, std::span<std::byte const>{}};
-    CHECK(evaluator.evaluateFull(plan, matchingTrack) == true);
-
     auto nonMatchingHotData = makeHotOnlyTrack(mozartId);
     auto nonMatchingTrack = library::TrackView{nonMatchingHotData, std::span<std::byte const>{}};
-    CHECK(evaluator.evaluateFull(plan, nonMatchingTrack) == false);
-
     auto missingArtistHotData = makeHotOnlyTrack();
     auto missingArtistTrack = library::TrackView{missingArtistHotData, std::span<std::byte const>{}};
-    CHECK(evaluator.evaluateFull(plan, missingArtistTrack) == false);
+
+    auto wrongDictionary = DictionaryStore{openDatabase(wtxn, "other-dictionary"), wtxn};
+    auto dictionaryCache = library::DictionaryReadCache{dictionary};
+    auto wrongDictionaryCache = library::DictionaryReadCache{wrongDictionary};
+
+    struct PredicateCase final
+    {
+      std::string_view expression;
+      bool missingArtistMatches;
+    };
+
+    auto const cases = std::array{
+      PredicateCase{.expression = R"($artist ~ "Bach")", .missingArtistMatches = false},
+      PredicateCase{.expression = R"($artist < "K")", .missingArtistMatches = true},
+      PredicateCase{.expression = R"($artist in ["Johann Sebastian Bach", "George Frideric Handel"])",
+                    .missingArtistMatches = false},
+    };
+
+    for (auto const& testCase : cases)
+    {
+      DYNAMIC_SECTION(testCase.expression)
+      {
+        auto const plan = compileOk(compiler, parseOk(testCase.expression));
+
+        CHECK(evaluator.evaluateFull(plan, matchingTrack) == true);
+        CHECK(evaluator.evaluateFull(plan, matchingTrack, &dictionaryCache) == true);
+        CHECK(evaluator.evaluateFull(plan, matchingTrack, &wrongDictionaryCache) == true);
+
+        CHECK(evaluator.evaluateFull(plan, nonMatchingTrack, &dictionaryCache) == false);
+        CHECK(evaluator.evaluateFull(plan, missingArtistTrack, &dictionaryCache) == testCase.missingArtistMatches);
+      }
+    }
   }
 
   TEST_CASE("PlanEvaluator - matches dictionary-backed metadata and property fields", "[query][unit][plan-evaluator]")

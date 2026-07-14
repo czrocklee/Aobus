@@ -409,27 +409,22 @@ namespace ao::rt
       auto const reader = _ml.tracks().reader(transaction);
       auto const mode = unionMode(std::span<SmartListSource* const>{evaluatableLists});
       auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
+      auto dictionaryCache = library::DictionaryReadCache{_ml.dictionary()};
 
-      for (auto const trackId : bucket.upstreamTracks.ids())
+      auto visitTrack = [&](TrackId trackId, library::TrackView const& view)
       {
-        auto const optView =
-          storageValueOrNullopt(reader.get(trackId, storeMode), "Failed to rebuild smart-list membership");
-
-        if (!optView)
-        {
-          continue;
-        }
-
         for (std::size_t index = 0; index < lists.size(); ++index)
         {
-          if (auto* const list = lists[index]; list->state() == TrackSourceState::Live && !list->_current.optError &&
-                                               list->_current.planPtr != nullptr &&
-                                               list->_planEvaluator.matches(*list->_current.planPtr, *optView))
+          if (auto* const list = lists[index];
+              list->state() == TrackSourceState::Live && !list->_current.optError &&
+              list->_current.planPtr != nullptr &&
+              list->_planEvaluator.matches(*list->_current.planPtr, view, &dictionaryCache))
           {
             nextMembers[index].push_back(trackId);
           }
         }
-      }
+      };
+      reader.visitTracks(bucket.upstreamTracks.ids(), storeMode, visitTrack);
     }
 
     auto previousSizes = std::vector<std::size_t>{};

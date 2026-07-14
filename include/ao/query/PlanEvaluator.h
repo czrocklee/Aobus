@@ -8,6 +8,11 @@
 #include <cstdint>
 #include <vector>
 
+namespace ao::library
+{
+  class DictionaryReadCache;
+}
+
 namespace ao::query
 {
   struct ExecutionPlan;
@@ -22,9 +27,13 @@ namespace ao::query
   public:
     PlanEvaluator() = default;
 
-    bool matches(ExecutionPlan const& plan, library::TrackView const& track) const;
+    bool matches(ExecutionPlan const& plan,
+                 library::TrackView const& track,
+                 library::DictionaryReadCache* dictionaryCache = nullptr) const;
 
-    bool evaluateFull(ExecutionPlan const& plan, library::TrackView const& track) const;
+    bool evaluateFull(ExecutionPlan const& plan,
+                      library::TrackView const& track,
+                      library::DictionaryReadCache* dictionaryCache = nullptr) const;
 
   private:
     // Register stack for evaluation

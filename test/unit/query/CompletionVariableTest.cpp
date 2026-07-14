@@ -124,6 +124,29 @@ namespace ao::query::test
     CHECK(token->prefix == "rock");
   }
 
+  TEST_CASE("Completion - preserves mid-input variable and malformed-tail analysis", "[query][unit][completion]")
+  {
+    SECTION("Variable before a suffix remains completable")
+    {
+      auto const text = std::string{"$ar + $album"};
+      auto const cursor = text.find(' ');
+      auto const optToken = queryCompletionTokenAtCursor(text, cursor);
+
+      REQUIRE(optToken);
+      CHECK(optToken->type == VariableType::Metadata);
+      CHECK(optToken->replaceBegin == 0);
+      CHECK(optToken->replaceEnd == cursor);
+      CHECK(optToken->prefix == "ar");
+    }
+
+    SECTION("Malformed partial tail remains blocked before a suffix")
+    {
+      auto const text = std::string{R"(%"a\x"= + $artist)"};
+      auto const cursor = text.find(" +");
+      CHECK_FALSE(analyzeQueryCompletion(text, cursor));
+    }
+  }
+
   TEST_CASE("Completion - lists query variable specs in UI catalog order", "[query][unit][completion]")
   {
     auto const metadata = detail::queryVariableCompletionSpecs(VariableType::Metadata);

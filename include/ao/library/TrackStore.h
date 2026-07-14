@@ -122,6 +122,18 @@ namespace ao::library
      */
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
+    /**
+     * Visit tracks selected by ID, preserving the requested order.
+     *
+     * Missing rows are skipped. Duplicate IDs therefore produce duplicate
+     * visits when the row exists. Views remain transaction-scoped, like get().
+     * Strictly ascending dense selections may use cursor traversal internally;
+     * sparse or arbitrarily ordered selections retain point-lookup behavior.
+     */
+    template<typename Visitor>
+      requires std::invocable<Visitor&, TrackId, TrackView const&>
+    void visitTracks(std::span<TrackId const> ids, LoadMode mode, Visitor& visitor) const;
+
     auto hot() const;
     auto cold() const;
     auto both() const;
@@ -130,6 +142,8 @@ namespace ao::library
     lmdb::Database::Reader const& coldReader() const noexcept { return _coldReader; }
 
   private:
+    bool shouldUseCursorScan(std::span<TrackId const> ids, LoadMode mode) const;
+
     lmdb::Database::Reader _hotReader;
     lmdb::Database::Reader _coldReader;
     friend class TrackStore;
@@ -164,8 +178,10 @@ namespace ao::library
              lmdb::Database::Reader::Iterator&& coldIter,
              Reader::LoadMode mode);
 
-    std::optional<lmdb::Database::Reader::Iterator> _optHotIter;
-    std::optional<lmdb::Database::Reader::Iterator> _optColdIter;
+    void alignBoth();
+
+    lmdb::Database::Reader::Iterator _hotIter;
+    lmdb::Database::Reader::Iterator _coldIter;
     Reader::LoadMode _mode = Reader::LoadMode::Both;
     friend class Reader;
   };
@@ -183,6 +199,47 @@ namespace ao::library
   inline auto TrackStore::Reader::both() const
   {
     return std::ranges::subrange{begin(LoadMode::Both), EndSentinel{}};
+  }
+
+  template<typename Visitor>
+    requires std::invocable<Visitor&, TrackId, TrackView const&>
+  void TrackStore::Reader::visitTracks(std::span<TrackId const> ids, LoadMode mode, Visitor& visitor) const
+  {
+    if (!shouldUseCursorScan(ids, mode))
+    {
+      for (auto const id : ids)
+      {
+        if (auto const optView = get(id, mode); optView)
+        {
+          std::invoke(visitor, id, *optView);
+        }
+      }
+
+      return;
+    }
+
+    auto requested = ids.begin();
+
+    for (auto iterator = begin(mode); iterator != EndSentinel{} && requested != ids.end(); ++iterator)
+    {
+      auto&& [storedId, view] = *iterator;
+
+      while (requested != ids.end() && *requested < storedId)
+      {
+        ++requested;
+      }
+
+      if (requested == ids.end())
+      {
+        break;
+      }
+
+      if (*requested == storedId)
+      {
+        std::invoke(visitor, storedId, view);
+        ++requested;
+      }
+    }
   }
 
   /**

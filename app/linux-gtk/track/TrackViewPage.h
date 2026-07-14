@@ -21,7 +21,6 @@
 #include <gtkmm/popover.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/signallistitemfactory.h>
-#include <gtkmm/sortlistmodel.h>
 #include <gtkmm/widget.h>
 #include <sigc++/scoped_connection.h>
 #include <sigc++/signal.h>
@@ -118,7 +117,6 @@ namespace ao::gtk
     uimodel::TrackColumnLayoutStore& _layoutStore;
     rt::AppRuntime& _runtime;
     ThumbnailLoader& _thumbnailLoader;
-    Glib::RefPtr<Gtk::SortListModel> _groupModelPtr;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactoryPtr;
     TrackId _playingTrackId{kInvalidTrackId};

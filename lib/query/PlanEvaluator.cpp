@@ -5,6 +5,7 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
@@ -47,7 +48,10 @@ namespace ao::query
       return plan->stringConstants[index];
     }
 
-    std::string_view readDictionaryFieldValue(library::TrackView const& track, Field field, ExecutionPlan const* plan)
+    std::string_view readDictionaryFieldValue(library::TrackView const& track,
+                                              Field field,
+                                              ExecutionPlan const* plan,
+                                              library::DictionaryReadCache* dictionaryCache)
     {
       gsl_Expects(plan != nullptr);
       gsl_Expects(plan->dictionary != nullptr);
@@ -57,7 +61,19 @@ namespace ao::query
         return {};
       }
 
-      return dictionaryFieldValue(track, field, *plan->dictionary);
+      auto const dictionaryId = dictionaryFieldId(track, field);
+
+      if (dictionaryId == kInvalidDictionaryId)
+      {
+        return {};
+      }
+
+      if (dictionaryCache != nullptr && &dictionaryCache->dictionary() == plan->dictionary)
+      {
+        return dictionaryCache->get(dictionaryId);
+      }
+
+      return plan->dictionary->get(dictionaryId);
     }
 
     std::string_view readStringFieldValue(library::TrackView const& track, Field field, std::int64_t customDictionaryId)
@@ -137,6 +153,7 @@ namespace ao::query
     void executeComparison(std::vector<std::int64_t>& registers,
                            library::TrackView const& track,
                            ExecutionPlan const* plan,
+                           library::DictionaryReadCache* dictionaryCache,
                            Instruction const& instr,
                            Op&& op)
     {
@@ -152,7 +169,7 @@ namespace ao::query
       {
         // Dictionary fields hold interned IDs whose order is arbitrary, so an
         // ordered comparison resolves the ID back to text and compares that.
-        auto const fieldStr = readDictionaryFieldValue(track, field, plan);
+        auto const fieldStr = readDictionaryFieldValue(track, field, plan, dictionaryCache);
         auto const constantStr = stringConstant(plan, stringIndex);
         reg(registers, instr.operand - 1) = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
@@ -198,6 +215,7 @@ namespace ao::query
     void executeLike(std::vector<std::int64_t>& registers,
                      library::TrackView const& track,
                      ExecutionPlan const* plan,
+                     library::DictionaryReadCache* dictionaryCache,
                      Instruction const& instr)
     {
       // instr.field carries the left field; instr.constValue its Custom dictionaryId (if any).
@@ -212,7 +230,7 @@ namespace ao::query
       }
       else if (isDictionaryField(field))
       {
-        fieldStr = readDictionaryFieldValue(track, field, plan);
+        fieldStr = readDictionaryFieldValue(track, field, plan, dictionaryCache);
       }
 
       auto const constantStr = stringConstant(plan, rhs);
@@ -281,6 +299,7 @@ namespace ao::query
     void executeInSet(std::vector<std::int64_t>& registers,
                       library::TrackView const& track,
                       ExecutionPlan const* plan,
+                      library::DictionaryReadCache* dictionaryCache,
                       Instruction const& instr)
     {
       if (plan == nullptr || instr.constValue < 0)
@@ -311,7 +330,7 @@ namespace ao::query
         }
         else if (isDictionaryField(field) && plan->dictionary != nullptr)
         {
-          fieldValue = readDictionaryFieldValue(track, field, plan);
+          fieldValue = readDictionaryFieldValue(track, field, plan, dictionaryCache);
         }
 
         reg(registers, instr.operand) = containsString(set, fieldValue) ? 1 : 0;
@@ -322,7 +341,9 @@ namespace ao::query
     }
   } // namespace
 
-  bool PlanEvaluator::matches(ExecutionPlan const& plan, library::TrackView const& track) const
+  bool PlanEvaluator::matches(ExecutionPlan const& plan,
+                              library::TrackView const& track,
+                              library::DictionaryReadCache* dictionaryCache) const
   {
     // Fast path: empty query matches all
     if (plan.matchesAll)
@@ -345,10 +366,12 @@ namespace ao::query
     }
 
     // Full evaluation
-    return evaluateFull(plan, track);
+    return evaluateFull(plan, track, dictionaryCache);
   }
 
-  bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, library::TrackView const& track) const
+  bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan,
+                                   library::TrackView const& track,
+                                   library::DictionaryReadCache* dictionaryCache) const
   {
     if (plan.matchesAll)
     {
@@ -375,23 +398,28 @@ namespace ao::query
         case OpCode::Eq: executeEq(_registers, track, &plan, instr); break;
 
         case OpCode::Ne:
-          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs != rhs; });
+          executeComparison(
+            _registers, track, &plan, dictionaryCache, instr, [](auto lhs, auto rhs) { return lhs != rhs; });
           break;
 
         case OpCode::Lt:
-          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs < rhs; });
+          executeComparison(
+            _registers, track, &plan, dictionaryCache, instr, [](auto lhs, auto rhs) { return lhs < rhs; });
           break;
 
         case OpCode::Le:
-          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs <= rhs; });
+          executeComparison(
+            _registers, track, &plan, dictionaryCache, instr, [](auto lhs, auto rhs) { return lhs <= rhs; });
           break;
 
         case OpCode::Gt:
-          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs > rhs; });
+          executeComparison(
+            _registers, track, &plan, dictionaryCache, instr, [](auto lhs, auto rhs) { return lhs > rhs; });
           break;
 
         case OpCode::Ge:
-          executeComparison(_registers, track, &plan, instr, [](auto lhs, auto rhs) { return lhs >= rhs; });
+          executeComparison(
+            _registers, track, &plan, dictionaryCache, instr, [](auto lhs, auto rhs) { return lhs >= rhs; });
           break;
 
         case OpCode::And:
@@ -417,11 +445,11 @@ namespace ao::query
           break;
         }
 
-        case OpCode::Like: executeLike(_registers, track, &plan, instr); break;
+        case OpCode::Like: executeLike(_registers, track, &plan, dictionaryCache, instr); break;
 
         case OpCode::Exists: reg(_registers, instr.operand) = executeExists(track, instr) ? 1 : 0; break;
 
-        case OpCode::InSet: executeInSet(_registers, track, &plan, instr); break;
+        case OpCode::InSet: executeInSet(_registers, track, &plan, dictionaryCache, instr); break;
 
         case OpCode::Nop:
         default: break;

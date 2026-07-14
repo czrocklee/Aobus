@@ -1,6 +1,7 @@
 """ao build — configure and build one flavor, without running tests (see `ao check`)."""
 
 import argparse
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -108,7 +109,12 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
     if run(configure, env=env, log=log) != 0:
         raise die("configure failed.")
 
-    build = ["cmake", "--build", str(build_dir), "--parallel"]
+    build = ["cmake", "--build", str(build_dir)]
+    if getattr(args, "asan", False) or getattr(args, "tsan", False):
+        jobs = max(1, (os.cpu_count() or 1) // 2)
+        build += ["--parallel", str(jobs)]
+    else:
+        build.append("--parallel")
     for target in targets:
         build += ["--target", target]
     if args.verbose:

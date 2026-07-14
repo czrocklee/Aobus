@@ -48,6 +48,23 @@ namespace ao::library
       std::memset(buffer.data() + uri.size(), 0, paddedSize - uri.size());
       return buffer.subspan(0, paddedSize);
     }
+
+    class PaddedUriKey final
+    {
+    public:
+      // padUri initializes every byte exposed by _view.
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
+      explicit PaddedUriKey(std::string_view uri)
+        : _view{padUri(uri, _buffer)}
+      {
+      }
+
+      std::span<std::byte const> view() const { return _view; }
+
+    private:
+      std::array<std::byte, kUriPaddingBufferSize> _buffer;
+      std::span<std::byte const> _view;
+    };
   } // namespace
 
   FileManifestStore::Reader FileManifestStore::reader(lmdb::ReadTransaction const& transaction) const
@@ -72,10 +89,9 @@ namespace ao::library
       return makeError(Error::Code::NotFound, "File manifest entry for empty URI was not found");
     }
 
-    auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};
-    auto const key = padUri(uri, buffer);
+    auto const key = PaddedUriKey{uri};
 
-    auto optData = _reader.get(key);
+    auto optData = _reader.get(key.view());
 
     if (!optData)
     {
@@ -117,10 +133,9 @@ namespace ao::library
       return makeError(Error::Code::NotFound, "File manifest entry for empty URI was not found");
     }
 
-    auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};
-    auto const key = padUri(uri, buffer);
+    auto const key = PaddedUriKey{uri};
 
-    auto optData = _writer.get(key);
+    auto optData = _writer.get(key.view());
 
     if (!optData)
     {
@@ -142,10 +157,9 @@ namespace ao::library
       return std::unexpected{result.error()};
     }
 
-    auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};
-    auto const key = padUri(uri, buffer);
+    auto const key = PaddedUriKey{uri};
 
-    return _writer.update(key, payload);
+    return _writer.update(key.view(), payload);
   }
 
   Result<> FileManifestStore::Writer::remove(std::string_view uri)
@@ -155,11 +169,10 @@ namespace ao::library
       return std::unexpected{result.error()};
     }
 
-    auto buffer = std::array<std::byte, kUriPaddingBufferSize>{};
-    auto const key = padUri(uri, buffer);
+    auto const key = PaddedUriKey{uri};
 
     // Idempotent: a missing row is success. Storage faults throw (see lmdb).
-    _writer.del(key);
+    _writer.del(key.view());
     return {};
   }
 

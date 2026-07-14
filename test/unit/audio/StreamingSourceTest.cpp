@@ -5,6 +5,7 @@
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/PcmRingBuffer.h>
 #include <ao/audio/StreamingSource.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -92,6 +93,25 @@ namespace ao::audio::test
     auto result = sourcePtr->initialize();
     CHECK_FALSE(result);
     CHECK(errorCount.load() == 1);
+  }
+
+  TEST_CASE("StreamingSource - initialize rejects a decoded block larger than the ring buffer",
+            "[audio][unit][streaming-source]")
+  {
+    auto const info = testStreamInfo();
+    auto callbackError = Error{};
+    auto onError = [&](Error const& error) { callbackError = error; };
+
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    decoderPtr->setReadScript({{silenceBlock(kRingBufferCapacity + 1), false}});
+
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, onError, std::chrono::milliseconds{1}, std::chrono::milliseconds{500});
+    auto const result = sourcePtr->initialize();
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::DecodeFailed);
+    CHECK(callbackError.code == Error::Code::DecodeFailed);
   }
 
   TEST_CASE("StreamingSource - seek clears buffered data and prerolls the requested offset",

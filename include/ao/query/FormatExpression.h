@@ -63,6 +63,15 @@ namespace ao::query
   {
   public:
     std::string evaluate(FormatPlan const& plan, library::TrackView const& track) const;
+
+    /**
+     * Evaluate into caller-owned storage.
+     *
+     * Clears @p output before evaluation, including when @p track does not
+     * provide the data required by @p plan. Retained string capacity may be
+     * reused by later calls.
+     */
+    void evaluate(FormatPlan const& plan, library::TrackView const& track, std::string& output) const;
   };
 
   /**

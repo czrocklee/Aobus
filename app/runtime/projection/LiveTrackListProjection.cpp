@@ -272,38 +272,50 @@ namespace ao::rt
       };
     }
 
-    // Resolve a dictionary id to its normalized sort key, cached per id. The normalized text
-    // is interned into the shared arena so the cache stores a stable view rather than owning
-    // a string; repeated ids and repeated content both reuse the same arena bytes.
-    using NormCache = boost::unordered_flat_map<DictionaryId, std::string_view, std::hash<DictionaryId>>;
-
-    std::string_view normalizeCached(NormCache& normCache,
-                                     utility::StringArena& arena,
-                                     std::string& scratch,
-                                     library::DictionaryStore& dictionary,
-                                     DictionaryId id)
+    struct CachedDictionaryText final
     {
-      if (auto const it = normCache.find(id); it != normCache.end())
+      std::string_view raw;
+      std::string_view normalized;
+    };
+
+    // Resolve a dictionary id once for both presentation text and normalized sort/group keys.
+    // Raw text borrows DictionaryStore's stable storage; normalized text is interned in the
+    // projection arena. Empty nonzero slots are not cached because they can later be recycled.
+    using DictionaryTextCache = boost::unordered_flat_map<DictionaryId, CachedDictionaryText, std::hash<DictionaryId>>;
+
+    CachedDictionaryText dictionaryTextCached(DictionaryTextCache& textCache,
+                                              utility::StringArena& arena,
+                                              std::string& scratch,
+                                              library::DictionaryStore& dictionary,
+                                              DictionaryId id)
+    {
+      if (auto const it = textCache.find(id); it != textCache.end())
       {
         return it->second;
       }
 
-      normalizeInto(scratch, dictionary.getOrDefault(id));
-      auto const view = arena.intern(scratch);
-      normCache.emplace(id, view);
-      return view;
+      auto const raw = dictionary.getOrDefault(id);
+      normalizeInto(scratch, raw);
+      auto const text = CachedDictionaryText{.raw = raw, .normalized = arena.intern(scratch)};
+
+      if (id == kInvalidDictionaryId || !raw.empty())
+      {
+        textCache.emplace(id, text);
+      }
+
+      return text;
     }
 
     void fillSortKeys(SortKeys& keys,
                       library::TrackView const& view,
                       library::DictionaryStore& dictionary,
                       std::vector<TrackSortTerm> const& sortBy,
-                      NormCache& normCache,
+                      DictionaryTextCache& textCache,
                       utility::StringArena& arena,
                       std::string& scratch)
     {
       auto const normalizedText = [&](DictionaryId id) -> std::string_view
-      { return normalizeCached(normCache, arena, scratch, dictionary, id); };
+      { return dictionaryTextCached(textCache, arena, scratch, dictionary, id).normalized; };
 
       for (auto const& term : sortBy)
       {
@@ -337,12 +349,12 @@ namespace ao::rt
                              library::TrackView const& view,
                              library::DictionaryStore& dictionary,
                              TrackGroupKey groupBy,
-                             NormCache& normCache,
+                             DictionaryTextCache& textCache,
                              utility::StringArena& arena,
                              std::string& scratch)
     {
       auto const normalizedText = [&](DictionaryId id) -> std::string_view
-      { return normalizeCached(normCache, arena, scratch, dictionary, id); };
+      { return dictionaryTextCached(textCache, arena, scratch, dictionary, id).normalized; };
 
       switch (groupBy)
       {
@@ -448,16 +460,23 @@ namespace ao::rt
                            library::TrackView const& view,
                            library::DictionaryStore& dictionary,
                            TrackGroupKey groupBy,
+                           DictionaryTextCache& textCache,
                            utility::StringArena& arena,
                            std::string& scratch)
     {
+      auto const dictionaryText = [&](DictionaryId id)
+      { return dictionaryTextCached(textCache, arena, scratch, dictionary, id); };
+
       switch (groupBy)
       {
         case TrackGroupKey::None: return;
         case TrackGroupKey::Artist:
+        {
+          auto const text = dictionaryText(view.metadata().artistId());
           entry.groupKey = entry.keys.artistKey;
-          entry.primaryText = dictionary.getOrDefault(view.metadata().artistId(), "Unknown Artist");
-          break;
+          entry.primaryText = text.raw.empty() ? "Unknown Artist" : text.raw;
+        }
+        break;
         case TrackGroupKey::Album:
           entry.groupKey = internCompoundKey(arena, scratch, entry.keys.albumArtistKey, entry.keys.albumKey);
 
@@ -467,8 +486,8 @@ namespace ao::rt
           }
 
           {
-            auto album = std::string{dictionary.getOrDefault(view.metadata().albumId())};
-            auto albumArtist = std::string{dictionary.getOrDefault(view.metadata().albumArtistId())};
+            auto const album = dictionaryText(view.metadata().albumId());
+            auto const albumArtist = dictionaryText(view.metadata().albumArtistId());
 
             if (entry.keys.albumKey.empty())
             {
@@ -476,7 +495,7 @@ namespace ao::rt
             }
             else
             {
-              entry.primaryText = arena.intern(std::move(album));
+              entry.primaryText = album.raw;
             }
 
             if (entry.keys.albumArtistKey.empty())
@@ -485,7 +504,7 @@ namespace ao::rt
             }
             else
             {
-              entry.secondaryText = arena.intern(std::move(albumArtist));
+              entry.secondaryText = albumArtist.raw;
             }
 
             if (auto year = view.metadata().year(); year != 0)
@@ -500,30 +519,49 @@ namespace ao::rt
 
           break;
         case TrackGroupKey::AlbumArtist:
+        {
+          auto const text = dictionaryText(view.metadata().albumArtistId());
           entry.groupKey = entry.keys.albumArtistKey;
-          entry.primaryText = dictionary.getOrDefault(view.metadata().albumArtistId(), "Unknown Artist");
-          break;
+          entry.primaryText = text.raw.empty() ? "Unknown Artist" : text.raw;
+        }
+        break;
         case TrackGroupKey::Genre:
+        {
+          auto const text = dictionaryText(view.metadata().genreId());
           entry.groupKey = entry.keys.genreKey;
-          entry.primaryText = dictionary.getOrDefault(view.metadata().genreId(), "Unknown Genre");
-          break;
+          entry.primaryText = text.raw.empty() ? "Unknown Genre" : text.raw;
+        }
+        break;
         case TrackGroupKey::Composer:
+        {
+          auto const text = dictionaryText(view.metadata().composerId());
           entry.groupKey = entry.keys.composerKey;
-          entry.primaryText = dictionary.getOrDefault(view.metadata().composerId(), "Unknown Composer");
-          break;
+          entry.primaryText = text.raw.empty() ? "Unknown Composer" : text.raw;
+        }
+        break;
         case TrackGroupKey::Conductor:
+        {
+          auto const text = dictionaryText(view.classical().conductorId());
           entry.groupKey = entry.keys.conductorKey;
-          entry.primaryText = dictionary.getOrDefault(view.classical().conductorId(), "Unknown Conductor");
-          break;
+          entry.primaryText = text.raw.empty() ? "Unknown Conductor" : text.raw;
+        }
+        break;
         case TrackGroupKey::Ensemble:
+        {
+          auto const text = dictionaryText(view.classical().ensembleId());
           entry.groupKey = entry.keys.ensembleKey;
-          entry.primaryText = dictionary.getOrDefault(view.classical().ensembleId(), "Unknown Ensemble");
-          break;
+          entry.primaryText = text.raw.empty() ? "Unknown Ensemble" : text.raw;
+        }
+        break;
         case TrackGroupKey::Work:
+        {
+          auto const work = dictionaryText(view.classical().workId());
+          auto const composer = dictionaryText(view.metadata().composerId());
           entry.groupKey = internCompoundKey(arena, scratch, entry.keys.composerKey, entry.keys.workKey);
-          entry.primaryText = dictionary.getOrDefault(view.classical().workId(), "Unknown Work");
-          entry.secondaryText = dictionary.getOrDefault(view.metadata().composerId(), "Unknown Composer");
-          break;
+          entry.primaryText = work.raw.empty() ? "Unknown Work" : work.raw;
+          entry.secondaryText = composer.raw.empty() ? "Unknown Composer" : composer.raw;
+        }
+        break;
         case TrackGroupKey::Year:
         {
           std::uint16_t const year = entry.keys.year;
@@ -567,13 +605,13 @@ namespace ao::rt
     std::vector<TrackField> redundantFields;
     Comparator comparator;
     library::TrackStore::Reader::LoadMode loadMode = library::TrackStore::Reader::LoadMode::Hot;
-    // Sort/group key strings live in the arena (bump-allocated, content-deduplicated); the
-    // string_views in orderIndex/sections/normCache below all point into it, so it is declared
-    // first to outlive them. normScratch is a reused normalization buffer that keeps the
-    // per-track title path allocation-free.
+    // Normalized sort/group key views in orderIndex/sections/dictionaryTextCache point into
+    // the arena (bump-allocated and content-deduplicated), so it is declared first to outlive
+    // them. Raw cache views borrow the library dictionary, which outlives this projection.
+    // normScratch is a reused buffer that keeps the per-track normalization path allocation-free.
     utility::StringArena stringArena;
     std::string normScratch;
-    NormCache normCache;
+    DictionaryTextCache dictionaryTextCache;
 
     std::vector<TrackId> sourceOrder;
     std::vector<OrderEntry> orderIndex;
@@ -594,12 +632,12 @@ namespace ao::rt
     OrderEntry buildOrderEntry(TrackId id, library::TrackView const& view, library::DictionaryStore& dictionary)
     {
       auto entry = OrderEntry{.trackId = id};
-      fillSortKeys(entry.keys, view, dictionary, sortBy, normCache, stringArena, normScratch);
+      fillSortKeys(entry.keys, view, dictionary, sortBy, dictionaryTextCache, stringArena, normScratch);
 
       if (groupBy != TrackGroupKey::None)
       {
-        ensureGroupSortKeys(entry.keys, view, dictionary, groupBy, normCache, stringArena, normScratch);
-        fillGroupMetadata(entry, view, dictionary, groupBy, stringArena, normScratch);
+        ensureGroupSortKeys(entry.keys, view, dictionary, groupBy, dictionaryTextCache, stringArena, normScratch);
+        fillGroupMetadata(entry, view, dictionary, groupBy, dictionaryTextCache, stringArena, normScratch);
       }
 
       return entry;
@@ -678,12 +716,12 @@ namespace ao::rt
       sections.clear();
 
       // A full rebuild discards every container that holds an arena-backed view, so this is
-      // the one safe point to reclaim the arena: clear the view holders first, then normCache
-      // (whose values are arena views too), then the arena itself. Without this the arena
-      // would only grow across presentation switches / resets, trading the allocation wins
-      // for unbounded memory. Incremental insert/update/remove must NOT clear: they keep
-      // existing entries whose views still point into the arena.
-      normCache.clear();
+      // the one safe point to reclaim the arena: clear the view holders first, then the text
+      // cache (whose normalized values are arena views too), then the arena itself. Without
+      // this the arena would only grow across presentation switches / resets, trading the
+      // allocation wins for unbounded memory. Incremental insert/update/remove must NOT clear:
+      // they keep existing entries whose views still point into the arena.
+      dictionaryTextCache.clear();
       stringArena.clear();
 
       auto& source = sourceLease.source();
@@ -696,15 +734,12 @@ namespace ao::rt
 
       for (std::size_t index = 0; index < source.size(); ++index)
       {
-        auto const trackId = source.trackIdAt(index);
-        sourceOrder.push_back(trackId);
-
-        if (auto const optView = storageValueOrNullopt(reader.get(trackId, loadMode), "Failed to rebuild track order");
-            optView)
-        {
-          orderIndex.push_back(buildOrderEntry(trackId, *optView, dictionary));
-        }
+        sourceOrder.push_back(source.trackIdAt(index));
       }
+
+      auto visitTrack = [&](TrackId trackId, library::TrackView const& view)
+      { orderIndex.push_back(buildOrderEntry(trackId, view, dictionary)); };
+      reader.visitTracks(sourceOrder, loadMode, visitTrack);
 
       if (comparator)
       {
@@ -1393,6 +1428,18 @@ namespace ao::rt
   std::optional<std::size_t> LiveTrackListProjection::groupIndexAt(std::size_t rowIndex) const
   {
     return _implPtr->findSectionIndexAt(rowIndex);
+  }
+
+  std::optional<TrackRowRange> LiveTrackListProjection::groupRangeAt(std::size_t rowIndex) const noexcept
+  {
+    auto const optSectionIndex = _implPtr->findSectionIndexAt(rowIndex);
+
+    if (!optSectionIndex)
+    {
+      return std::nullopt;
+    }
+
+    return _implPtr->sections[*optSectionIndex].rows;
   }
 
   Subscription LiveTrackListProjection::subscribe(

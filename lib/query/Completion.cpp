@@ -580,7 +580,14 @@ namespace ao::query
     }
 
     auto const tokens = detail::tokenizeCompletionQuery(text);
-    auto const prefixTokens = detail::tokenizeCompletionQuery(text.substr(0, cursor));
+    auto prefixTokenStorage = std::vector<detail::CompletionToken>{};
+    auto prefixTokens = std::span<detail::CompletionToken const>{tokens};
+
+    if (cursor != text.size())
+    {
+      prefixTokenStorage = detail::tokenizeCompletionQuery(text.substr(0, cursor));
+      prefixTokens = prefixTokenStorage;
+    }
 
     if (shouldBlockCompletionAtCursor(tokens, cursor) || hasBlockingPartialTailAtCursor(text, prefixTokens, cursor))
     {

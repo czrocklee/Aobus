@@ -3,6 +3,7 @@
 
 #include "track/TrackViewPage.h"
 
+#include "../../TestUtils.h"
 #include "image/ImageCache.h"
 #include "image/ThumbnailLoader.h"
 #include "layout/LayoutConstants.h"
@@ -13,6 +14,9 @@
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -27,9 +31,12 @@
 #include <gtkmm/window.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <format>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -45,6 +52,35 @@ namespace ao::gtk::test
                                                               .uri = "/tmp/track.flac",
                                                               .trackNumber = 1,
                                                               .duration = std::chrono::minutes{3}});
+    }
+
+    std::vector<TrackId> seedLargeProjection(library::MusicLibrary& library, std::size_t count)
+    {
+      auto transaction = library.writeTransaction();
+      auto writer = library.tracks().writer(transaction);
+      auto trackIds = std::vector<TrackId>{};
+      trackIds.reserve(count);
+
+      for (std::size_t index = 0; index < count; ++index)
+      {
+        auto builder = library::TrackBuilder::makeEmpty();
+        auto const spec = library::test::TrackSpec{
+          .title = std::format("Track {:05}", index),
+          .artist = std::format("Artist {:03}", index % 100),
+          .album = std::format("Album {:04}", index % 1000),
+          .albumArtist = std::format("Album Artist {:03}", index % 100),
+          .uri = std::format("/music/track_{}.flac", index),
+          .duration = std::chrono::minutes{3},
+        };
+        library::test::applyTrackSpec(builder, spec);
+
+        auto data = builder.serialize(transaction, library.dictionary(), library.resources());
+        REQUIRE(data);
+        trackIds.push_back(ao::test::requireValue(writer.createHotCold(data->first, data->second)).first);
+      }
+
+      REQUIRE(transaction.commit());
+      return trackIds;
     }
   } // namespace
 
@@ -113,5 +149,56 @@ namespace ao::gtk::test
       CHECK(natSizeHoriz >= layout::kSectionCoverLogicalSize);
       CHECK(natSizeHoriz <= layout::kSectionCoverLogicalSize + 2);
     }
+  }
+
+  TEST_CASE("TrackViewPage - large projections materialize only the GTK prefetch window",
+            "[gtk][regression][track-view]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    constexpr std::size_t kTrackCount = 10000;
+    constexpr std::size_t kMaximumPrefetchedRows = kTrackCount / 10;
+    auto const trackIds = seedLargeProjection(runtime.musicLibrary(), kTrackCount);
+    REQUIRE(trackIds.size() == kTrackCount);
+
+    auto sourcePtr = rt::test::makeMutableTrackSource(trackIds);
+    auto projectionPtr = std::make_shared<rt::LiveTrackListProjection>(
+      rt::kInvalidViewId, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
+    auto rowCache = TrackRowCache{runtime.library()};
+    auto modelPtr = TrackListModel::create(rowCache);
+    modelPtr->bindProjection(projectionPtr);
+    auto imageCache = ImageCache{200};
+    auto thumbnailLoader = ThumbnailLoader{runtime.library(), imageCache, runtime.async()};
+
+    auto materializedRowsForPage = [&]
+    {
+      auto layoutStore = uimodel::TrackColumnLayoutStore{};
+      auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, layoutStore, runtime, thumbnailLoader};
+      auto window = Gtk::Window{};
+      window.set_child(page);
+      window.set_default_size(600, 320);
+      window.set_visible(true);
+      drainGtkEvents();
+
+      auto const materializedRows = rowCache.cachedRowCount();
+      window.unset_child();
+      drainGtkEvents();
+      return materializedRows;
+    };
+
+    auto const ungroupedRows = materializedRowsForPage();
+    CHECK(ungroupedRows > 0);
+    CHECK(ungroupedRows < kMaximumPrefetchedRows);
+
+    rowCache.clearCache();
+    projectionPtr->setPresentation(rt::TrackPresentationSpec{
+      .groupBy = rt::TrackGroupKey::Album,
+      .sortBy = {{.field = rt::TrackSortField::Album}},
+    });
+
+    auto const groupedRows = materializedRowsForPage();
+    CHECK(groupedRows > 0);
+    CHECK(groupedRows < kMaximumPrefetchedRows);
   }
 } // namespace ao::gtk::test

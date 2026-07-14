@@ -73,6 +73,22 @@ namespace ao::rt::test
     CHECK(proj.groupIndexAt(2) == 1);
     CHECK(proj.groupIndexAt(3) == 2);
     CHECK(proj.groupIndexAt(4) == 2);
+
+    auto const optFirstRange = proj.groupRangeAt(0);
+    REQUIRE(optFirstRange);
+    CHECK(optFirstRange->start == 0);
+    CHECK(optFirstRange->count == 1);
+
+    auto const optMiddleRange = proj.groupRangeAt(2);
+    REQUIRE(optMiddleRange);
+    CHECK(optMiddleRange->start == 1);
+    CHECK(optMiddleRange->count == 2);
+
+    auto const optLastRange = proj.groupRangeAt(4);
+    REQUIRE(optLastRange);
+    CHECK(optLastRange->start == 3);
+    CHECK(optLastRange->count == 2);
+    CHECK_FALSE(proj.groupRangeAt(5));
   }
 
   TEST_CASE("TrackListProjection - large artist groups keep compound sort order", "[runtime][unit][projection]")
@@ -193,10 +209,43 @@ namespace ao::rt::test
       for (std::size_t row = group.rows.start; row < group.rows.start + group.rows.count; ++row)
       {
         CHECK(proj.groupIndexAt(row) == groupIndex);
+
+        auto const optRange = proj.groupRangeAt(row);
+        REQUIRE(optRange);
+        CHECK(optRange->start == group.rows.start);
+        CHECK(optRange->count == group.rows.count);
       }
     }
 
     CHECK_FALSE(proj.groupIndexAt(expectedOrder.size()).has_value());
+    CHECK_FALSE(proj.groupRangeAt(expectedOrder.size()).has_value());
+  }
+
+  TEST_CASE("TrackListProjection - normalized artist order retains raw group labels", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+
+    auto const coldplay = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "Clocks", .artist = "Coldplay", .album = "A Rush of Blood to the Head"});
+    auto const beatles = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "Come Together", .artist = "The Beatles", .album = "Abbey Road"});
+    env.setupFiltered({{coldplay, beatles}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::Artist,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Artist, .ascending = true}},
+    });
+
+    REQUIRE(proj.size() == 2);
+    CHECK(proj.trackIdAt(0) == beatles);
+    CHECK(proj.trackIdAt(1) == coldplay);
+
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(proj.groupAt(0).primaryText == "The Beatles");
+    CHECK(proj.groupAt(1).primaryText == "Coldplay");
   }
 
   TEST_CASE("TrackListProjection - group sections empty for None grouping", "[runtime][unit][projection]")
@@ -218,6 +267,7 @@ namespace ao::rt::test
     CHECK(s.rows.count == 0);
     CHECK(s.primaryText.empty());
     CHECK_FALSE(proj.groupIndexAt(0).has_value());
+    CHECK_FALSE(proj.groupRangeAt(0).has_value());
   }
 
   TEST_CASE("TrackListProjection - empty source has no group sections", "[runtime][unit][projection]")
@@ -235,6 +285,7 @@ namespace ao::rt::test
 
     CHECK(proj.size() == 0);
     CHECK(proj.groupCount() == 0);
+    CHECK_FALSE(proj.groupRangeAt(0).has_value());
   }
 
   TEST_CASE("TrackListProjection - group label for unknown artist", "[runtime][unit][projection]")

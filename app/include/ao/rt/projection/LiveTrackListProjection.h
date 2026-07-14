@@ -56,6 +56,7 @@ namespace ao::rt
     std::size_t groupCount() const noexcept override;
     TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const override;
     std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const override;
+    std::optional<TrackRowRange> groupRangeAt(std::size_t rowIndex) const noexcept override;
 
     std::size_t size() const noexcept override;
     TrackId trackIdAt(std::size_t index) const override;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "detail/StreamingBufferPolicy.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
@@ -51,7 +52,8 @@ namespace ao::audio
     , _onError{std::move(onError)}
     , _bytesPerSecond{bytesPerSecond(streamInfo.outputFormat)}
     , _prerollDuration{prerollDuration}
-    , _decodeHighWatermarkThreshold{decodeHighWatermarkThreshold}
+    , _decodeHighWatermarkByteCount{
+        detail::bufferByteCountForDuration(_bytesPerSecond, decodeHighWatermarkThreshold, _ringBuffer.capacity())}
   {
   }
 
@@ -132,6 +134,7 @@ namespace ao::audio
     }
     _decoderReachedEof = false;
     _ringBuffer.clear();
+    _previousBlockByteCount = 0;
 
     try
     {
@@ -207,7 +210,10 @@ namespace ao::audio
       while (!threadStopToken.stop_requested() && !_failed.load(std::memory_order_relaxed) &&
              !_decoderReachedEof.load(std::memory_order_relaxed) && !seekToken.stop_requested())
       {
-        if (bufferedDuration() >= _decodeHighWatermarkThreshold)
+        if (!detail::permitsDecode(_decodeHighWatermarkByteCount,
+                                   _ringBuffer.size(),
+                                   _ringBuffer.availableToWrite(),
+                                   _previousBlockByteCount))
         {
           std::this_thread::sleep_for(kDecodeBackoffInterval);
           continue;
@@ -240,8 +246,13 @@ namespace ao::audio
 
   void StreamingSource::fillUntil(std::chrono::milliseconds targetBufferedThreshold, std::stop_token const& seekToken)
   {
+    auto const targetByteCount =
+      detail::bufferByteCountForDuration(_bytesPerSecond, targetBufferedThreshold, _ringBuffer.capacity());
+
     while (!_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
-           !seekToken.stop_requested() && bufferedDuration() < targetBufferedThreshold)
+           !seekToken.stop_requested() &&
+           detail::permitsDecode(
+             targetByteCount, _ringBuffer.size(), _ringBuffer.availableToWrite(), _previousBlockByteCount))
     {
       if (auto const status = decodeNextBlock(seekToken, nullptr);
           status == StreamingSource::DecodeBlockStatus::Stopped)
@@ -291,6 +302,16 @@ namespace ao::audio
     {
       _decoderReachedEof = true;
       return DecodeBlockStatus::Stopped;
+    }
+
+    if (block.bytes.size() > _ringBuffer.capacity())
+    {
+      detail::throwDecoderError(Error::Code::DecodeFailed, "Decoded PCM block exceeds streaming buffer capacity");
+    }
+
+    if (!block.bytes.empty())
+    {
+      _previousBlockByteCount = block.bytes.size();
     }
 
     if (!writeBlock(std::span<std::byte const>{block.bytes.data(), block.bytes.size()}, seekToken, threadStopToken))

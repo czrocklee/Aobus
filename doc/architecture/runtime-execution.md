@@ -49,6 +49,12 @@ TUI supplies its `Executor`, which posts work into the FTXUI screen loop.
 CLI supplies `ImmediateExecutor`, which executes dispatch inline and preserves deferred-turn ordering with a local FIFO queue.
 `ImmediateExecutor` reports every calling thread as current and does not synchronize that queue, so the current CLI/test host is safe only while no foreign producer reaches it; [RFC 0027](../rfc/0027-serialized-headless-callback-executor.md) proposes a thread-safe owner-thread pump.
 
+The GTK and TUI adapters share `QueuedExecutorBase`.
+Producer threads admit foreign dispatches and deferred tasks into one mutex-protected FIFO, while only the constructing event-loop thread drains and executes it.
+An owner drain is non-reentrant: it extracts the entry snapshot, releases the queue mutex, and then executes that snapshot.
+Tasks admitted while it runs remain pending for a later executor turn.
+The first task in a pending burst owns the wake request, and drain completion requests one follow-up wake when later work remains; this coalesces redundant event-loop notifications without losing the final wake.
+
 ### Worker pool
 
 `ao::async::Runtime` owns a general-purpose worker pool for asynchronous application tasks.
@@ -129,6 +135,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 ## Implementation map
 
 - [`ao::async::Executor`](../../include/ao/async/Executor.h) defines callback dispatch and deferred-turn semantics.
+- [`QueuedExecutorBase`](../../include/ao/async/QueuedExecutor.h) implements the multi-producer, owner-drained FIFO and wake-coalescing turn boundary used by GTK and TUI.
 - [`ao::async::Runtime`](../../include/ao/async/Runtime.h) owns the worker pool and coroutine switching operations.
 - [`Runtime.cpp`](../../lib/async/Runtime.cpp) implements worker spawning, cancellation, timers, and callback resumption.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) owns executor/runtime lifetime and worker shutdown ordering.
@@ -139,6 +146,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 ## Test map
 
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) tests executor switching, cancellation, and runtime lifetime.
+- [`QueuedExecutorTest.cpp`](../../test/unit/runtime/QueuedExecutorTest.cpp) protects burst wake coalescing, multi-producer admission, non-reentrant drains, and later-turn delivery.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp) protects the audio control/event thread boundary.
 - [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp) protects callback delivery and teardown constraints.
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects marshalling from engine/provider events to the callback executor.

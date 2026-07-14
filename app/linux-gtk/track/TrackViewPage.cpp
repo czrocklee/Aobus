@@ -37,8 +37,6 @@
 #include <glibmm/main.h>
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
-#include <glibmm/wrap.h>
-#include <gobject/gobject.h>
 #include <gtk/gtkstyleprovider.h>
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
@@ -50,8 +48,6 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/selectionmodel.h>
 #include <gtkmm/signallistitemfactory.h>
-#include <gtkmm/sorter.h>
-#include <gtkmm/sortlistmodel.h>
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
 
@@ -75,56 +71,6 @@ namespace ao::gtk
     {
       return std::format("{} {}", count, count == 1 ? "track" : "tracks");
     }
-
-    TrackRowObject* trackRowFromSorterItem(gpointer item)
-    {
-      auto* const object = static_cast<GObject*>(item);
-      // The GTK sorter passes a borrowed row object; wrap_auto(..., false)
-      // returns the existing C++ wrapper without taking ownership.
-      return object != nullptr ? dynamic_cast<TrackRowObject*>(Glib::wrap_auto(object, false)) : nullptr;
-    }
-
-    class ProjectionGroupSectionSorter final : public Gtk::Sorter
-    {
-    public:
-      static Glib::RefPtr<ProjectionGroupSectionSorter> create(Glib::RefPtr<TrackListModel> modelPtr)
-      {
-        return Glib::make_refptr_for_instance<ProjectionGroupSectionSorter>(
-          new ProjectionGroupSectionSorter{std::move(modelPtr)});
-      }
-
-    protected:
-      explicit ProjectionGroupSectionSorter(Glib::RefPtr<TrackListModel> modelPtr)
-        : Glib::ObjectBase{typeid(ProjectionGroupSectionSorter)}, Gtk::Sorter{}, _modelPtr{std::move(modelPtr)}
-      {
-      }
-
-      Gtk::Ordering compare_vfunc(::gpointer item1, ::gpointer item2) override
-      {
-        auto const* const lhs = trackRowFromSorterItem(item1);
-        auto const* const rhs = trackRowFromSorterItem(item2);
-
-        if (lhs == nullptr || rhs == nullptr)
-        {
-          return Gtk::Ordering::EQUAL;
-        }
-
-        auto const optLhsGroup = _modelPtr->groupIndexForTrack(lhs->trackId());
-        auto const optRhsGroup = _modelPtr->groupIndexForTrack(rhs->trackId());
-
-        if (!optLhsGroup || !optRhsGroup || *optLhsGroup == *optRhsGroup)
-        {
-          return Gtk::Ordering::EQUAL;
-        }
-
-        return *optLhsGroup < *optRhsGroup ? Gtk::Ordering::SMALLER : Gtk::Ordering::LARGER;
-      }
-
-      Order get_order_vfunc() override { return Order::PARTIAL; }
-
-    private:
-      Glib::RefPtr<TrackListModel> _modelPtr;
-    };
 
     void configureSectionLabel(Gtk::Label& label)
     {
@@ -298,8 +244,7 @@ namespace ao::gtk
     , _layoutStore{layoutStore}
     , _runtime{runtime}
     , _thumbnailLoader{thumbnailLoader}
-    , _groupModelPtr{Gtk::SortListModel::create(_modelPtr, Glib::RefPtr<Gtk::Sorter>{})}
-    , _selectionModelPtr{Gtk::MultiSelection::create(_groupModelPtr)}
+    , _selectionModelPtr{Gtk::MultiSelection::create(_modelPtr)}
     , _viewHostPtr{std::make_unique<TrackColumnViewHost>(_modelPtr, _layoutStore, _selectionModelPtr, listId)}
   {
     _layoutStore.setActiveListId(_listId);
@@ -428,7 +373,6 @@ namespace ao::gtk
         widget->bind(snap, headerPtr->get_n_items(), reserveCoverSlot);
       });
 
-    _groupModelPtr->set_section_sorter(ProjectionGroupSectionSorter::create(_modelPtr));
     _viewHostPtr->columnView().set_header_factory(_sectionHeaderFactoryPtr);
   }
 
@@ -529,13 +473,11 @@ namespace ao::gtk
 
     if (groupBy == rt::TrackGroupKey::None)
     {
-      _groupModelPtr->set_section_sorter({});
       _viewHostPtr->columnView().set_header_factory({});
       _viewHostPtr->columnView().set_show_row_separators(true);
       return;
     }
 
-    _groupModelPtr->set_section_sorter(ProjectionGroupSectionSorter::create(_modelPtr));
     _viewHostPtr->columnView().set_header_factory(_sectionHeaderFactoryPtr);
     _viewHostPtr->columnView().set_show_row_separators(false);
   }

@@ -33,10 +33,27 @@ namespace ao::media::file::mpeg::id3v2
     constexpr std::uint8_t kId3v23MajorVersion = 3;
     constexpr std::uint8_t kId3v24MajorVersion = 4;
     constexpr std::uint8_t kSyncSafeHighBit = 0x80U;
+    constexpr std::uint8_t kAsciiHighBit = 0x80U;
     constexpr std::size_t kFrameHeaderSize = sizeof(V23CommonFrameLayout);
 
-    std::optional<std::string> decodeFrameText(std::span<std::byte const> content)
+    struct DecodedTextView final
     {
+      std::string_view value;
+      bool requiresOwnership = false;
+    };
+
+    void trimTrailingTerminators(std::string_view& value) noexcept
+    {
+      while (!value.empty() && value.back() == '\0')
+      {
+        value.remove_suffix(1);
+      }
+    }
+
+    std::optional<DecodedTextView> decodeFrameText(std::span<std::byte const> content, std::string& convertedStorage)
+    {
+      convertedStorage.clear();
+
       if (content.empty())
       {
         return std::nullopt;
@@ -49,31 +66,55 @@ namespace ao::media::file::mpeg::id3v2
         return std::nullopt;
       }
 
-      auto result = convertToUtf8(content.subspan(1), static_cast<Encoding>(rawEncoding));
+      auto const encoding = static_cast<Encoding>(rawEncoding);
+      auto const encodedText = content.subspan(1);
 
-      while (!result.empty() && result.back() == '\0')
+      if (encoding == Encoding::Utf8)
       {
-        result.pop_back();
+        auto value = text::utf8View(encodedText);
+        trimTrailingTerminators(value);
+        return DecodedTextView{.value = value};
       }
 
-      return result;
+      if (encoding == Encoding::Latin1 &&
+          std::ranges::all_of(
+            encodedText, [](std::byte value) { return (std::to_integer<std::uint8_t>(value) & kAsciiHighBit) == 0; }))
+      {
+        auto value = utility::bytes::stringView(encodedText);
+        trimTrailingTerminators(value);
+        return DecodedTextView{.value = value};
+      }
+
+      convertedStorage = convertToUtf8(encodedText, encoding);
+
+      while (!convertedStorage.empty() && convertedStorage.back() == '\0')
+      {
+        convertedStorage.pop_back();
+      }
+
+      return DecodedTextView{.value = convertedStorage, .requiresOwnership = true};
     }
 
     template<TextSetter Setter>
     void handleText(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t /*version*/)
     {
-      if (auto optText = decodeFrameText(content); optText && !optText->empty())
+      auto convertedStorage = std::string{};
+
+      if (auto const optText = decodeFrameText(content, convertedStorage); optText && !optText->value.empty())
       {
-        (builder.metadata().*Setter)(builder.own(std::move(*optText)));
+        auto const value = optText->requiresOwnership ? builder.own(std::move(convertedStorage)) : optText->value;
+        (builder.metadata().*Setter)(value);
       }
     }
 
     template<NumberSetter Setter>
     void handleNumber(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t /*version*/)
     {
-      if (auto optText = decodeFrameText(content); optText)
+      auto convertedStorage = std::string{};
+
+      if (auto const optText = decodeFrameText(content, convertedStorage); optText)
       {
-        if (auto const optValue = decodeUint16(*optText); optValue)
+        if (auto const optValue = decodeUint16(optText->value); optValue)
         {
           (builder.metadata().*Setter)(*optValue);
         }
@@ -85,9 +126,11 @@ namespace ao::media::file::mpeg::id3v2
                            std::span<std::byte const> content,
                            std::uint8_t /*version*/)
     {
-      if (auto const optText = decodeFrameText(content); optText)
+      auto convertedStorage = std::string{};
+
+      if (auto const optText = decodeFrameText(content, convertedStorage); optText)
       {
-        auto const pair = parseSlashPair(*optText);
+        auto const pair = parseSlashPair(optText->value);
 
         if (pair.optPrimary)
         {
@@ -184,44 +227,46 @@ namespace ao::media::file::mpeg::id3v2
 
     void handleTxxx(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t /*version*/)
     {
-      auto optText = decodeFrameText(content);
+      auto convertedStorage = std::string{};
+      auto const optText = decodeFrameText(content, convertedStorage);
 
       if (!optText)
       {
         return;
       }
 
-      auto const nullOffset = optText->find('\0');
+      auto const nullOffset = optText->value.find('\0');
 
       if (nullOffset == std::string::npos)
       {
         return;
       }
 
-      auto const key = std::string_view{*optText}.substr(0, nullOffset);
-      auto const value = std::string_view{*optText}.substr(nullOffset + 1);
+      auto const key = optText->value.substr(0, nullOffset);
+      auto const value = optText->value.substr(nullOffset + 1);
+      auto setter = TextSetter{};
 
       if (equalsAsciiCaseInsensitive(key, "work") || equalsAsciiCaseInsensitive(key, "grouping"))
       {
-        builder.metadata().work(builder.own(std::string{value}));
+        setter = &detail::ContentBuilder::MetadataBuilder::work;
       }
       else if (equalsAsciiCaseInsensitive(key, "conductor"))
       {
-        builder.metadata().conductor(builder.own(std::string{value}));
+        setter = &detail::ContentBuilder::MetadataBuilder::conductor;
       }
       else if (equalsAsciiCaseInsensitive(key, "ensemble") ||
                (equalsAsciiCaseInsensitive(key, "orchestra") && builder.metadata().ensemble().empty()))
       {
-        builder.metadata().ensemble(builder.own(std::string{value}));
+        setter = &detail::ContentBuilder::MetadataBuilder::ensemble;
       }
       else if (equalsAsciiCaseInsensitive(key, "soloist"))
       {
-        builder.metadata().soloist(builder.own(std::string{value}));
+        setter = &detail::ContentBuilder::MetadataBuilder::soloist;
       }
       else if (equalsAsciiCaseInsensitive(key, "movementname") || equalsAsciiCaseInsensitive(key, "movement_name") ||
                equalsAsciiCaseInsensitive(key, "mvnm"))
       {
-        builder.metadata().movement(builder.own(std::string{value}));
+        setter = &detail::ContentBuilder::MetadataBuilder::movement;
       }
       else if (equalsAsciiCaseInsensitive(key, "movement") || equalsAsciiCaseInsensitive(key, "mvin"))
       {
@@ -236,6 +281,12 @@ namespace ao::media::file::mpeg::id3v2
         {
           builder.metadata().movementTotal(*pair.optSecondary);
         }
+      }
+
+      if (setter != nullptr)
+      {
+        auto const stableText = optText->requiresOwnership ? builder.own(std::move(convertedStorage)) : optText->value;
+        (builder.metadata().*setter)(stableText.substr(nullOffset + 1));
       }
     }
 

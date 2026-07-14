@@ -8,8 +8,11 @@
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
+#include <functional>
 #include <optional>
 #include <span>
 #include <utility>
@@ -70,6 +73,34 @@ namespace ao::library
     return TrackView{hotBuffer, coldBuffer};
   }
 
+  bool TrackStore::Reader::shouldUseCursorScan(std::span<TrackId const> ids, LoadMode mode) const
+  {
+    if (ids.empty())
+    {
+      return false;
+    }
+
+    std::size_t rowCount = 0;
+
+    switch (mode)
+    {
+      case LoadMode::Hot: rowCount = _hotReader.entryCount(); break;
+      case LoadMode::Cold: rowCount = _coldReader.entryCount(); break;
+      case LoadMode::Both: rowCount = std::min(_hotReader.entryCount(), _coldReader.entryCount()); break;
+    }
+
+    constexpr std::size_t kCursorScanDensityDenominator = 4;
+    auto const minimumDenseSelection = (rowCount / kCursorScanDensityDenominator) +
+                                       static_cast<std::size_t>(rowCount % kCursorScanDensityDenominator != 0);
+
+    if (rowCount == 0 || ids.size() < minimumDenseSelection)
+    {
+      return false;
+    }
+
+    return std::ranges::adjacent_find(ids, std::ranges::greater_equal{}) == ids.end();
+  }
+
   TrackStore::Reader::Iterator TrackStore::Reader::begin(LoadMode mode) const
   {
     return Iterator{_hotReader.begin(), _coldReader.begin(), mode};
@@ -84,10 +115,48 @@ namespace ao::library
   TrackStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& hotIter,
                                          lmdb::Database::Reader::Iterator&& coldIter,
                                          Reader::LoadMode mode)
-    : _optHotIter{mode != LoadMode::Cold ? std::make_optional(std::move(hotIter)) : std::nullopt}
-    , _optColdIter{mode != LoadMode::Hot ? std::make_optional(std::move(coldIter)) : std::nullopt}
-    , _mode{mode}
+    : _hotIter{std::move(hotIter)}, _coldIter{std::move(coldIter)}, _mode{mode}
   {
+    if (_mode == LoadMode::Hot)
+    {
+      _coldIter = lmdb::Database::Reader::Iterator{};
+    }
+    else if (_mode == LoadMode::Cold)
+    {
+      _hotIter = lmdb::Database::Reader::Iterator{};
+    }
+    else
+    {
+      alignBoth();
+    }
+  }
+
+  void TrackStore::Reader::Iterator::alignBoth()
+  {
+    auto const end = lmdb::Database::Reader::Iterator{};
+
+    while (_hotIter != end && _coldIter != end)
+    {
+      auto const hotId = static_cast<std::uint32_t>((*_hotIter).first);
+      auto const coldId = static_cast<std::uint32_t>((*_coldIter).first);
+
+      if (hotId == coldId)
+      {
+        return;
+      }
+
+      if (hotId < coldId)
+      {
+        ++_hotIter;
+      }
+      else
+      {
+        ++_coldIter;
+      }
+    }
+
+    _hotIter = lmdb::Database::Reader::Iterator{};
+    _coldIter = lmdb::Database::Reader::Iterator{};
   }
 
   bool TrackStore::Reader::Iterator::operator==(Iterator const& other) const
@@ -97,36 +166,53 @@ namespace ao::library
       return false;
     }
 
-    if (_optHotIter && other._optHotIter && *(_optHotIter) != *(other._optHotIter))
+    if (_mode == LoadMode::Hot)
     {
-      return false;
+      return _hotIter == other._hotIter;
     }
 
-    if (_optColdIter && other._optColdIter && *(_optColdIter) != *(other._optColdIter))
+    if (_mode == LoadMode::Cold)
     {
-      return false;
+      return _coldIter == other._coldIter;
     }
 
-    return true;
+    return _hotIter == other._hotIter && _coldIter == other._coldIter;
   }
 
   bool TrackStore::Reader::Iterator::operator==(EndSentinel /*unused*/) const
   {
-    auto isAtEnd = [](std::optional<lmdb::Database::Reader::Iterator> const& opt) -> bool
-    { return !opt || *opt == lmdb::Database::Reader::Iterator{}; };
-    return isAtEnd(_optHotIter) && isAtEnd(_optColdIter);
+    auto const end = lmdb::Database::Reader::Iterator{};
+
+    if (_mode == LoadMode::Hot)
+    {
+      return _hotIter == end;
+    }
+
+    if (_mode == LoadMode::Cold)
+    {
+      return _coldIter == end;
+    }
+
+    return _hotIter == end && _coldIter == end;
   }
 
   TrackStore::Reader::Iterator& TrackStore::Reader::Iterator::operator++()
   {
-    if (_optHotIter)
+    if (_mode == LoadMode::Both)
     {
-      ++(*_optHotIter);
+      ++_hotIter;
+      ++_coldIter;
+      alignBoth();
+      return *this;
     }
 
-    if (_optColdIter)
+    if (_mode == LoadMode::Hot)
     {
-      ++(*_optColdIter);
+      ++_hotIter;
+    }
+    else
+    {
+      ++_coldIter;
     }
 
     return *this;
@@ -138,17 +224,22 @@ namespace ao::library
     auto hotBuffer = std::span<std::byte const>{};
     auto coldBuffer = std::span<std::byte const>{};
 
-    if (_optHotIter)
+    if (_mode != LoadMode::Cold)
     {
-      auto const item = **_optHotIter;
+      auto const item = *_hotIter;
       trackId = TrackId{item.first};
       hotBuffer = item.second;
     }
 
-    if (_optColdIter)
+    if (_mode != LoadMode::Hot)
     {
-      auto const item = **_optColdIter;
-      trackId = TrackId{item.first};
+      auto const item = *_coldIter;
+
+      if (_mode == LoadMode::Cold)
+      {
+        trackId = TrackId{item.first};
+      }
+
       coldBuffer = item.second;
     }
 

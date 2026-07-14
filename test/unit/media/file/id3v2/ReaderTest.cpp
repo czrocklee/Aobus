@@ -22,6 +22,12 @@ namespace ao::media::file::mpeg::id3v2::test
       CHECK(output == "H\xC3\xA9llo"); // UTF-8 'é' is 0xC3 0xA9
     }
 
+    SECTION("Latin1 ASCII remains unchanged")
+    {
+      auto input = std::string{"Plain ASCII"};
+      CHECK(convertToUtf8(utility::bytes::view(input), Encoding::Latin1) == input);
+    }
+
     SECTION("UCS-2 BE to UTF-8")
     {
       // BOM (FE FF) + "Test" in UTF-16BE
@@ -96,6 +102,23 @@ namespace ao::media::file::mpeg::id3v2::test
       auto input = std::vector{std::byte{0xD8}, std::byte{0x3D}, std::byte{0xDE}, std::byte{0x00}};
       auto output = convertToUtf8(input, Encoding::Utf16Be);
       CHECK(output == std::string{"\xF0\x9F\x98\x80"});
+    }
+
+    SECTION("UTF-16BE decodes BMP CJK text")
+    {
+      auto input = std::vector{std::byte{0x4F}, std::byte{0x60}, std::byte{0x59}, std::byte{0x7D}};
+      auto output = convertToUtf8(input, Encoding::Utf16Be);
+      CHECK(output == std::string{"\xE4\xBD\xA0\xE5\xA5\xBD"});
+    }
+
+    SECTION("UTF-16BE replaces malformed surrogates")
+    {
+      auto input = std::vector{
+        std::byte{0xD8}, std::byte{0x3D}, std::byte{0x00}, std::byte{'A'}, std::byte{0xDC}, std::byte{0x00}};
+      auto output = convertToUtf8(input, Encoding::Utf16Be);
+      CHECK(output == std::string{"\xEF\xBF\xBD"
+                                  "A"
+                                  "\xEF\xBF\xBD"});
     }
   }
 } // namespace ao::media::file::mpeg::id3v2::test

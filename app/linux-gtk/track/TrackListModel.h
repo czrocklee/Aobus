@@ -12,6 +12,7 @@
 #include <glib.h>
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
+#include <gtkmm/sectionmodel.h>
 #include <sigc++/signal.h>
 
 #include <cstddef>
@@ -24,6 +25,7 @@ namespace ao::gtk
 
   class TrackListModel final
     : public Gio::ListModel
+    , public Gtk::SectionModel
     , public Glib::Object
   {
   public:
@@ -35,7 +37,6 @@ namespace ao::gtk
     rt::TrackListProjection* projection() const noexcept { return _projectionPtr.get(); }
 
     std::optional<std::size_t> indexOf(TrackId trackId) const noexcept;
-    std::optional<std::size_t> groupIndexForTrack(TrackId trackId) const noexcept;
 
     /// Update the track rendered as now-playing. This emits signalPlayingChanged()
     /// instead of items_changed(); visible cells restyle from playingTrackId(), and
@@ -50,17 +51,13 @@ namespace ao::gtk
     /// rebind on items_changed.
     sigc::signal<void()>& signalPlayingChanged() noexcept { return _playingChanged; }
 
-    void notifyReset(::guint oldSize, ::guint newSize);
-    void notifyInsert(::guint position, ::guint count);
-    void notifyRemove(::guint position, ::guint count);
-    void notifyUpdate(::guint position, ::guint count);
-
   protected:
     TrackListModel();
 
     ::GType get_item_type_vfunc() override;
     ::guint get_n_items_vfunc() override;
     ::gpointer get_item_vfunc(::guint position) override;
+    void get_section_vfunc(::guint position, ::guint& outStart, ::guint& outEnd) override;
 
   private:
     void applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch);
@@ -69,11 +66,14 @@ namespace ao::gtk
     void applyInsertRange(rt::ProjectionInsertRange const& delta);
     void applyRemoveRange(rt::ProjectionRemoveRange const& delta);
     void applyUpdateRange(rt::ProjectionUpdateRange const& delta);
+    void notifyReset(::guint oldSize, ::guint newSize);
+    void notifyInsert(::guint position, ::guint count);
+    void notifyRemove(::guint position, ::guint count);
+    void notifyUpdate(::guint position, ::guint count);
 
     std::shared_ptr<rt::TrackListProjection> _projectionPtr;
     rt::Subscription _projectionSub;
     TrackRowCache const* _provider = nullptr;
-    mutable ::GType _cachedItemType = G_TYPE_INVALID;
     TrackId _playingTrackId{kInvalidTrackId};
     sigc::signal<void()> _playingChanged;
     std::size_t _modelSize = 0;

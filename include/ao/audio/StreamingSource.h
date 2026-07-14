@@ -74,6 +74,10 @@ namespace ao::audio
     std::optional<Error> _optLastError;
     std::uint64_t _bytesPerSecond = 0;
     std::chrono::milliseconds _prerollDuration{0};
-    std::chrono::milliseconds _decodeHighWatermarkThreshold{0};
+    std::size_t _decodeHighWatermarkByteCount = 0;
+
+    // Producer-confined. initialize()/seek() run before the decode worker, and
+    // seek stops and joins that worker before resetting this value.
+    std::size_t _previousBlockByteCount = 0;
   };
 } // namespace ao::audio

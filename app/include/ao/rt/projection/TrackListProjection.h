@@ -98,6 +98,7 @@ namespace ao::rt
     virtual std::size_t groupCount() const noexcept = 0;
     virtual TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const = 0;
     virtual std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const = 0;
+    virtual std::optional<TrackRowRange> groupRangeAt(std::size_t rowIndex) const noexcept = 0;
 
     virtual std::size_t size() const noexcept = 0;
     virtual TrackId trackIdAt(std::size_t index) const = 0;

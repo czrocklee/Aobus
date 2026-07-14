@@ -11,13 +11,13 @@
 #include <ao/utility/VariantVisitor.h>
 
 #include <giomm/listmodel.h>
-#include <giomm/private/listmodel_p.h>
 #include <glib-object.h>
 #include <glib.h>
 #include <glibmm/main.h>
 #include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
 #include <gsl-lite/gsl-lite.hpp>
+#include <gtkmm/sectionmodel.h>
 
 #include <cstddef>
 #include <functional>
@@ -27,38 +27,10 @@
 #include <utility>
 #include <variant>
 
-namespace
-{
-  Glib::Interface_Class const& listModelInterfaceClass()
-  {
-    static auto theClass = Gio::ListModel_Class{};
-    return theClass.init();
-  }
-
-  ::GType resolveTrackRowObjectType(Glib::RefPtr<ao::gtk::TrackRowObject> const& rowPtr)
-  {
-    auto type = ::g_type_from_name("gtkmm__CustomObject_TrackRowObject");
-
-    if (type != G_TYPE_INVALID)
-    {
-      return type;
-    }
-
-    type = ::g_type_from_name("TrackRowObject");
-
-    if (type != G_TYPE_INVALID)
-    {
-      return type;
-    }
-
-    return rowPtr ? G_OBJECT_TYPE(rowPtr->gobj()) : G_TYPE_OBJECT; // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)
-  }
-} // namespace
-
 namespace ao::gtk
 {
   TrackListModel::TrackListModel()
-    : Glib::ObjectBase{typeid(TrackListModel)}, Gio::ListModel{listModelInterfaceClass()}
+    : Glib::ObjectBase{typeid(TrackListModel)}, Gio::ListModel{}, Gtk::SectionModel{}
   {
   }
 
@@ -88,41 +60,9 @@ namespace ao::gtk
     return (_projectionPtr != nullptr) ? _projectionPtr->indexOf(trackId) : std::nullopt;
   }
 
-  std::optional<std::size_t> TrackListModel::groupIndexForTrack(TrackId trackId) const noexcept
-  {
-    if (_projectionPtr == nullptr)
-    {
-      return std::nullopt;
-    }
-
-    if (auto const optIndex = _projectionPtr->indexOf(trackId); optIndex)
-    {
-      return _projectionPtr->groupIndexAt(*optIndex);
-    }
-
-    return std::nullopt;
-  }
-
   ::GType TrackListModel::get_item_type_vfunc()
   {
-    if (_cachedItemType != G_TYPE_INVALID)
-    {
-      return _cachedItemType;
-    }
-
-    if (_projectionPtr != nullptr && _provider != nullptr && _projectionPtr->size() > 0)
-    {
-      auto const id = _projectionPtr->trackIdAt(0);
-
-      if (auto const rowPtr = _provider->trackRow(id); rowPtr)
-      {
-        _cachedItemType = resolveTrackRowObjectType(rowPtr);
-        return _cachedItemType;
-      }
-    }
-
-    _cachedItemType = resolveTrackRowObjectType({});
-    return _cachedItemType;
+    return TrackRowObject::objectType();
   }
 
   ::guint TrackListModel::get_n_items_vfunc()
@@ -156,6 +96,29 @@ namespace ao::gtk
     auto* const gobj = rowPtr->gobj();
     (::g_object_ref)(gobj); // NOLINT(readability-redundant-parentheses): bypass the GLib function-like macro.
     return gobj;
+  }
+
+  void TrackListModel::get_section_vfunc(::guint position, ::guint& outStart, ::guint& outEnd)
+  {
+    auto const size = static_cast<::guint>(_modelSize);
+
+    if (_projectionPtr == nullptr || position >= size)
+    {
+      outStart = size;
+      outEnd = G_MAXUINT;
+      return;
+    }
+
+    if (auto const optGroupRange = _projectionPtr->groupRangeAt(position); optGroupRange)
+    {
+      outStart = static_cast<::guint>(optGroupRange->start);
+      outEnd = static_cast<::guint>(optGroupRange->start + optGroupRange->count);
+      return;
+    }
+
+    gsl_Expects(_projectionPtr->groupCount() == 0);
+    outStart = 0;
+    outEnd = size;
   }
 
   void TrackListModel::setPlayingTrackId(TrackId id)

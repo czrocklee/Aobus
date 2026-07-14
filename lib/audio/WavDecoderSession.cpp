@@ -108,10 +108,10 @@ namespace ao::audio
       return sample;
     }
 
-    void writeIntegerSample(std::vector<std::byte>& destination,
+    void writeIntegerSample(std::span<std::byte> destination,
                             std::int32_t sample,
                             std::uint8_t sourceBits,
-                            std::uint8_t outputBits)
+                            std::uint8_t outputBits) noexcept
     {
       auto const aligned = alignSample(sample, sourceBits, outputBits);
 
@@ -119,24 +119,36 @@ namespace ao::audio
       {
         auto const value = static_cast<std::int16_t>(aligned);
         auto const bits = static_cast<std::uint16_t>(value);
-        destination.push_back(std::byte{static_cast<std::uint8_t>(bits & kLowByteMask)});
-        destination.push_back(std::byte{static_cast<std::uint8_t>((bits >> 8U) & kLowByteMask)});
+        destination[0] = std::byte{static_cast<std::uint8_t>(bits & kLowByteMask)};
+        destination[1] = std::byte{static_cast<std::uint8_t>((bits >> 8U) & kLowByteMask)};
       }
       else if (outputBits == 24)
       {
         auto const bits = static_cast<std::uint32_t>(aligned);
-        destination.push_back(std::byte{static_cast<std::uint8_t>(bits & kLowByteMask)});
-        destination.push_back(std::byte{static_cast<std::uint8_t>((bits >> 8U) & kLowByteMask)});
-        destination.push_back(std::byte{static_cast<std::uint8_t>((bits >> 16U) & kLowByteMask)});
+        destination[0] = std::byte{static_cast<std::uint8_t>(bits & kLowByteMask)};
+        destination[1] = std::byte{static_cast<std::uint8_t>((bits >> 8U) & kLowByteMask)};
+        destination[2] = std::byte{static_cast<std::uint8_t>((bits >> 16U) & kLowByteMask)};
       }
       else if (outputBits == 32)
       {
         auto const bits = static_cast<std::uint32_t>(aligned);
-        destination.push_back(std::byte{static_cast<std::uint8_t>(bits & kLowByteMask)});
-        destination.push_back(std::byte{static_cast<std::uint8_t>((bits >> 8U) & kLowByteMask)});
-        destination.push_back(std::byte{static_cast<std::uint8_t>((bits >> 16U) & kLowByteMask)});
-        destination.push_back(std::byte{static_cast<std::uint8_t>((bits >> 24U) & kLowByteMask)});
+        destination[0] = std::byte{static_cast<std::uint8_t>(bits & kLowByteMask)};
+        destination[1] = std::byte{static_cast<std::uint8_t>((bits >> 8U) & kLowByteMask)};
+        destination[2] = std::byte{static_cast<std::uint8_t>((bits >> 16U) & kLowByteMask)};
+        destination[3] = std::byte{static_cast<std::uint8_t>((bits >> 24U) & kLowByteMask)};
       }
+    }
+
+    bool canCopyIntegerPcmBytes(Format const& source, Format const& output) noexcept
+    {
+      // RIFF PCM input and this decoder's integer PcmBlock output are both
+      // little-endian. The sample type, interleaving, container width, and
+      // valid width must also match before their byte representations are
+      // identical. The parser currently rejects restricted-valid-width input;
+      // keeping that requirement here makes the fast path independently safe.
+      return !source.isFloat && !output.isFloat && source.isInterleaved && output.isInterleaved &&
+             source.bitDepth == output.bitDepth && source.validBits == source.bitDepth &&
+             output.validBits == output.bitDepth;
     }
 
     bool isSupportedIntegerOutput(std::uint8_t bitDepth) noexcept
@@ -404,7 +416,8 @@ namespace ao::audio
 
     _implPtr->pcmBuffer.clear();
 
-    if (_implPtr->info.outputFormat.isFloat)
+    if (_implPtr->info.outputFormat.isFloat ||
+        canCopyIntegerPcmBytes(_implPtr->info.sourceFormat, _implPtr->info.outputFormat))
     {
       _implPtr->pcmBuffer.resize(sourceBytes.size());
       std::memcpy(_implPtr->pcmBuffer.data(), sourceBytes.data(), sourceBytes.size());
@@ -414,15 +427,18 @@ namespace ao::audio
       auto const outputSampleBytes = static_cast<std::size_t>(bytesPerSample(_implPtr->info.outputFormat));
       auto const sampleCount = static_cast<std::size_t>(frames) * _implPtr->info.outputFormat.channels;
 
-      _implPtr->pcmBuffer.reserve(sampleCount * outputSampleBytes);
+      _implPtr->pcmBuffer.resize(sampleCount * outputSampleBytes);
+      auto outputBytes = std::span<std::byte>{_implPtr->pcmBuffer};
 
       for (std::size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
       {
         auto const sampleOffset = sampleIndex * sizeof(float);
         auto const sample = floatToIntegerSample(
           readLeFloat32(sourceBytes.subspan(sampleOffset, sizeof(float)), 0), _implPtr->info.outputFormat.bitDepth);
-        writeIntegerSample(
-          _implPtr->pcmBuffer, sample, _implPtr->info.outputFormat.bitDepth, _implPtr->info.outputFormat.bitDepth);
+        writeIntegerSample(outputBytes.subspan(sampleIndex * outputSampleBytes, outputSampleBytes),
+                           sample,
+                           _implPtr->info.outputFormat.bitDepth,
+                           _implPtr->info.outputFormat.bitDepth);
       }
     }
     else
@@ -431,15 +447,18 @@ namespace ao::audio
       auto const outputSampleBytes = static_cast<std::size_t>(bytesPerSample(_implPtr->info.outputFormat));
       auto const sampleCount = static_cast<std::size_t>(frames) * _implPtr->info.outputFormat.channels;
 
-      _implPtr->pcmBuffer.reserve(sampleCount * outputSampleBytes);
+      _implPtr->pcmBuffer.resize(sampleCount * outputSampleBytes);
+      auto outputBytes = std::span<std::byte>{_implPtr->pcmBuffer};
 
       for (std::size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
       {
         auto const sampleOffset = sampleIndex * sourceSampleBytes;
         auto const sample =
           readIntegerSample(sourceBytes.subspan(sampleOffset, sourceSampleBytes), _implPtr->sourceBitsPerSample);
-        writeIntegerSample(
-          _implPtr->pcmBuffer, sample, _implPtr->info.sourceFormat.validBits, _implPtr->info.outputFormat.bitDepth);
+        writeIntegerSample(outputBytes.subspan(sampleIndex * outputSampleBytes, outputSampleBytes),
+                           sample,
+                           _implPtr->info.sourceFormat.validBits,
+                           _implPtr->info.outputFormat.bitDepth);
       }
     }
 

@@ -179,4 +179,59 @@ namespace ao::library::test
     CHECK(collectedArtistIds == std::vector<DictionaryId>{DictionaryId{10}, DictionaryId{11}, DictionaryId{12}});
     CHECK(collectedTrackNumbers == std::vector<std::uint16_t>{1, 2, 3});
   }
+
+  TEST_CASE("TrackStore - visitTracks preserves arbitrary request order and duplicates", "[library][unit][track-store]")
+  {
+    auto fixture = TrackStoreFixture{};
+    auto wtxn = beginWriteTransaction(fixture.env);
+    auto writer = fixture.store.writer(wtxn);
+    auto const id1 = requireCreate(writer, makeHotData({}, "One"), makeColdData()).first;
+    auto const id2 = requireCreate(writer, makeHotData({}, "Two"), makeColdData()).first;
+    auto const id3 = requireCreate(writer, makeHotData({}, "Three"), makeColdData()).first;
+    REQUIRE(wtxn.commit());
+
+    auto const missingId = TrackId{id3.raw() + 1};
+    auto const requested = std::vector{id3, missingId, id1, id3, id2};
+    auto visitedIds = std::vector<TrackId>{};
+    auto titles = std::vector<std::string_view>{};
+    auto rtxn = beginReadTransaction(fixture.env);
+    auto const reader = fixture.store.reader(rtxn);
+
+    auto visitTrack = [&](TrackId id, TrackView const& view)
+    {
+      visitedIds.push_back(id);
+      titles.push_back(view.metadata().title());
+    };
+    reader.visitTracks(requested, TrackStore::Reader::LoadMode::Hot, visitTrack);
+
+    CHECK(visitedIds == std::vector<TrackId>{id3, id1, id3, id2});
+    CHECK(titles == std::vector<std::string_view>{"Three", "One", "Three", "Two"});
+  }
+
+  TEST_CASE("TrackStore - visitTracks skips missing IDs in ascending dense requests", "[library][unit][track-store]")
+  {
+    auto fixture = TrackStoreFixture{};
+    auto wtxn = beginWriteTransaction(fixture.env);
+    auto writer = fixture.store.writer(wtxn);
+    auto const id1 = requireCreate(writer, makeHotData({}, "One"), makeColdData()).first;
+    auto const id2 = requireCreate(writer, makeHotData({}, "Two"), makeColdData()).first;
+    auto const id3 = requireCreate(writer, makeHotData({}, "Three"), makeColdData()).first;
+    REQUIRE(wtxn.commit());
+
+    auto const missingId = TrackId{id3.raw() + 1};
+    auto const requested = std::vector{id1, id2, id3, missingId};
+    auto visitedIds = std::vector<TrackId>{};
+    auto rtxn = beginReadTransaction(fixture.env);
+    auto const reader = fixture.store.reader(rtxn);
+
+    auto visitTrack = [&](TrackId id, TrackView const& view)
+    {
+      REQUIRE(view.isHotValid());
+      REQUIRE(view.isColdValid());
+      visitedIds.push_back(id);
+    };
+    reader.visitTracks(requested, TrackStore::Reader::LoadMode::Both, visitTrack);
+
+    CHECK(visitedIds == std::vector<TrackId>{id1, id2, id3});
+  }
 } // namespace ao::library::test

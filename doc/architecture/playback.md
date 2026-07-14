@@ -249,6 +249,11 @@ DecoderSession
 Engine control prepares and retires the objects visible to this path.
 The render callback does not call runtime code; a natural transition emits only a bounded realtime signal that the Engine event worker later turns into control-plane state and callbacks.
 
+`StreamingSource` expresses preroll and steady-state high watermarks as capacity-bounded byte targets.
+Its sole PCM producer requests another decoded block only while below the target and while the ring has predictive headroom for the previous nonempty block.
+Synchronous preroll and seek filling use the same policy as the later decode worker; a larger-than-predicted block retains the cancellable partial-write fallback.
+This producer-side policy adds no lock, notification, or accounting operation to the realtime consumer.
+
 ## Execution domains
 
 The detailed process-wide rules belong to [runtime execution architecture](runtime-execution.md).
@@ -260,7 +265,7 @@ Playback refines them as follows:
 | Async runtime timer/worker | Persistence delays and cancellable scheduling | Stop tokens and weak/shared lifetime guards; it resumes on the callback executor before touching playback state. | Scheduled checkpoint intent returns to the callback domain. |
 | Engine control domain | Engine transport, route attachment, timeline, and synchronized snapshots | Thread-tolerant public API serialized by Engine control/state synchronization. | Commands affect Backend/StreamingSource; notifications are queued to the event worker. |
 | Engine event worker | Ordered backend/source events and realtime transition signals | One owned worker, synchronized event queue, bounded realtime signal ring. | Engine callbacks enter the Player callback gate. |
-| StreamingSource decode thread | Decoder progress and PCM production for one source | Owned `jthread`, decoder/error synchronization, stop tokens, PCM ring buffer. | PCM enters the render plane; errors enqueue toward Engine. |
+| StreamingSource decode thread | Decoder progress and PCM production for one source | Owned `jthread`, decoder/error synchronization, stop tokens, capacity-bounded byte targets, and producer-confined block headroom over the PCM ring. | PCM enters the render plane; errors enqueue toward Engine. |
 | Backend render/device domains | Native output, render cursor, and provider discovery | Backend-specific synchronization; realtime render avoids Engine control locks and unbounded work. | Non-realtime events enqueue toward Engine or provider callbacks toward Player. |
 
 Player is the intentional bridge between the callback-executor domain and the thread-tolerant Engine.
@@ -284,6 +289,7 @@ These guards contain reentrant commands but do not create a third transaction ex
 - Runtime-visible state and public playback observations are accepted on the callback executor.
 - Engine callbacks carry generation evidence; application prepared transitions additionally carry a token that can be correlated without leaking application identity into core audio.
 - Realtime render performs no UI, storage, notification, list policy, blocking join, or general application work.
+- StreamingSource has one PCM producer at a time; seek stops and joins that producer before clearing the ring and its predictive block-headroom state.
 - Decoder and backend implementations remain replaceable without changing succession or session-persistence policy.
 - Persisted listening intent contains application semantics, not transient projections, prepared handles, audio generations, or thread state.
 - A coherent durable session requires matching sequence and transport current subjects; persistence reports an invariant failure rather than persisting split generations.
@@ -319,7 +325,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`PlaybackSessionPersistence`](../../app/runtime/PlaybackSessionPersistence.h) coordinates the composite durable session lifecycle.
 - [`PlaybackCommandSurface`](../../app/include/ao/uimodel/playback/command/PlaybackCommandSurface.h) is the reusable UIModel command boundary.
 - [`Player`](../../include/ao/audio/Player.h) owns providers, Engine, route/quality state, and callback marshalling.
-- [`Engine`](../../include/ao/audio/Engine.h), [`TrackSession`](../../lib/audio/detail/TrackSession.h), and [`StreamingSource`](../../include/ao/audio/StreamingSource.h) own audio execution and source construction.
+- [`Engine`](../../include/ao/audio/Engine.h), [`TrackSession`](../../lib/audio/detail/TrackSession.h), and [`StreamingSource`](../../include/ao/audio/StreamingSource.h) own audio execution and source construction; [`PcmRingBuffer`](../../include/ao/audio/PcmRingBuffer.h) and [`StreamingBufferPolicy`](../../lib/audio/detail/StreamingBufferPolicy.h) own bounded PCM capacity and producer admission.
 - [`BackendProvider`](../../include/ao/audio/BackendProvider.h) and [`Backend`](../../include/ao/audio/Backend.h) define the platform output boundary.
 - [`AudioBackendBootstrap.cpp`](../../app/linux-gtk/platform/AudioBackendBootstrap.cpp) and [`app/tui/AudioBackendBootstrap.cpp`](../../app/tui/AudioBackendBootstrap.cpp) construct concrete providers at frontend composition roots.
 
@@ -332,7 +338,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`PlaybackCommandSurfaceTest.cpp`](../../test/unit/uimodel/playback/command/PlaybackCommandSurfaceTest.cpp) protects the UIModel/runtime command boundary.
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects Player ownership, provider/Engine composition, and callback marshalling.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp), [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp), [`EngineGaplessTest.cpp`](../../test/unit/audio/EngineGaplessTest.cpp), and [`EngineBackendSwapTest.cpp`](../../test/unit/audio/EngineBackendSwapTest.cpp) protect Engine control, event, transition, and backend boundaries.
-- [`StreamingSourceTest.cpp`](../../test/unit/audio/StreamingSourceTest.cpp) protects decode-worker, PCM-buffer, seek, and teardown ownership.
+- [`StreamingSourceTest.cpp`](../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker ownership, bounded PCM admission, seek, and teardown.
 - [`AudioBackendBootstrapTest.cpp`](../../test/unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp) protects provider construction at the GTK composition boundary.
 
 ## Related documents

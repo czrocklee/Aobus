@@ -52,6 +52,7 @@ Neither plan owns source membership, presentation shape, or frontend state.
 `LibraryWriter` validates a smart-list expression before committing its text as part of a list definition.
 `TrackSourceCache`, `SmartListSource`, and `SmartListEvaluator` compile that text and maintain the resulting ordered membership over an upstream source.
 The same source machinery materializes transient `ViewService` filters without persisting a new list.
+During one membership rebuild, `SmartListEvaluator` may share a library-owned dictionary read cache across plan evaluations; cache presence and eviction do not change predicate results.
 
 `CompletionService` owns live library vocabularies and `QueryExpressionCompleter` combines them with the core completion analysis.
 The runtime does not redefine expression grammar or field aliases.
@@ -177,12 +178,14 @@ Completion is synchronous and tolerant of incomplete text.
 `CompletionService` caches are owner-thread confined and are invalidated by library changes before their next lazy rebuild.
 
 Execution and format plans borrow dictionary state when required and cannot outlive the library composition that owns that dictionary.
+An evaluator dictionary cache is an optional batch-local acceleration over stable borrowed values, not plan state or a dictionary snapshot.
 Source leases and projections retain their ordinary lifetime rules from the [library architecture](library.md).
 
 ## Implementation map
 
 - [`lib/query/CMakeLists.txt`](../../lib/query/CMakeLists.txt) defines the core expression module and its dependency on `ao_library`.
 - [`Parser.h`](../../include/ao/query/Parser.h), [`QueryCompiler.h`](../../include/ao/query/QueryCompiler.h), and [`FormatExpression.h`](../../include/ao/query/FormatExpression.h) define the public parse and compile paths.
+- [`PlanEvaluator`](../../include/ao/query/PlanEvaluator.h) evaluates predicates and optionally consumes a matching batch-local dictionary read cache.
 - [`Completion.h`](../../include/ao/query/Completion.h) defines tolerant core completion analysis.
 - [`LibraryWriter.cpp`](../../app/runtime/library/LibraryWriter.cpp) validates persisted Smart List definitions.
 - [`SmartListSource`](../../app/include/ao/rt/source/SmartListSource.h), [`SmartListEvaluator`](../../app/include/ao/rt/source/SmartListEvaluator.h), and [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h) materialize predicate membership.

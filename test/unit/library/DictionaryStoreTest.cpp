@@ -14,6 +14,7 @@
 #include <lmdb.h>
 
 #include <atomic>
+#include <barrier>
 #include <cstddef>
 #include <cstdint>
 #include <stop_token>
@@ -329,6 +330,34 @@ namespace ao::library::test
     CHECK(dictionary.getOrDefault(DictionaryId{999}).empty());
   }
 
+  TEST_CASE("DictionaryStore - loads dense database lookups", "[library][unit][dictionary]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+
+    {
+      auto wtxn = beginWriteTransaction(env);
+      auto db = openDatabase(wtxn, "dictionary");
+      auto writer = db.writer(wtxn);
+
+      REQUIRE(writer.create(1, utility::bytes::view(std::string_view{"first"})));
+      REQUIRE(writer.create(2, utility::bytes::view(std::string_view{"second"})));
+      REQUIRE(writer.create(3, utility::bytes::view(std::string_view{"third"})));
+      REQUIRE(wtxn.commit());
+    }
+
+    auto rtxn = beginReadTransaction(env);
+    auto dictionary = DictionaryStore{openDatabase(rtxn, "dictionary"), rtxn};
+
+    CHECK(dictionary.size() == 3);
+    CHECK(dictionary.get(DictionaryId{1}) == "first");
+    CHECK(dictionary.get(DictionaryId{2}) == "second");
+    CHECK(dictionary.get(DictionaryId{3}) == "third");
+    CHECK(dictionary.lookupId("first") == DictionaryId{1});
+    CHECK(dictionary.lookupId("second") == DictionaryId{2});
+    CHECK(dictionary.lookupId("third") == DictionaryId{3});
+  }
+
   TEST_CASE("DictionaryStore - loads databases with gapped IDs", "[library][unit][dictionary]")
   {
     auto const temp = ao::test::TempDir{};
@@ -438,6 +467,95 @@ namespace ao::library::test
 
     // And get() should resolve correctly
     CHECK(dictionary.get(firstId) == "very_first_string");
+  }
+
+  TEST_CASE("DictionaryReadCache - observes dictionary slots filled after an empty read", "[library][unit][dictionary]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+
+    {
+      auto wtxn = beginWriteTransaction(env);
+      auto db = openDatabase(wtxn, "dictionary");
+      auto writer = db.writer(wtxn);
+      REQUIRE(writer.create(1, utility::bytes::view(std::string_view{"first"})));
+      REQUIRE(writer.create(3, utility::bytes::view(std::string_view{"third"})));
+      REQUIRE(wtxn.commit());
+    }
+
+    auto rtxn = beginReadTransaction(env);
+    auto dictionary = DictionaryStore{openDatabase(rtxn, "dictionary"), rtxn};
+    auto cache = DictionaryReadCache{dictionary};
+
+    CHECK(cache.get(DictionaryId{2}).empty());
+    CHECK(dictionary.getOrIntern("second") == DictionaryId{2});
+    CHECK(cache.get(DictionaryId{2}) == "second");
+  }
+
+  TEST_CASE("DictionaryReadCache - resolves values after bounded cache collisions", "[library][unit][dictionary]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
+    REQUIRE(wtxn.commit());
+
+    constexpr std::int32_t kValueCount = 5000;
+    auto ids = std::vector<DictionaryId>{};
+    ids.reserve(kValueCount);
+
+    for (std::int32_t index = 0; index < kValueCount; ++index)
+    {
+      ids.push_back(dictionary.getOrIntern("value_" + std::to_string(index)));
+    }
+
+    auto cache = DictionaryReadCache{dictionary};
+
+    for (std::int32_t index = 0; index < kValueCount; ++index)
+    {
+      CHECK(cache.get(ids[static_cast<std::size_t>(index)]) == "value_" + std::to_string(index));
+    }
+
+    for (std::int32_t index = kValueCount - 1; index >= 0; --index)
+    {
+      CHECK(cache.get(ids[static_cast<std::size_t>(index)]) == "value_" + std::to_string(index));
+    }
+  }
+
+  TEST_CASE("DictionaryReadCache - retained values survive concurrent dictionary growth",
+            "[library][unit][dictionary][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
+    REQUIRE(wtxn.commit());
+
+    auto const stableId = dictionary.getOrIntern("stable");
+    auto cache = DictionaryReadCache{dictionary};
+    REQUIRE(cache.get(stableId) == "stable");
+
+    auto start = std::barrier{2};
+    auto writer = std::jthread{[&]
+                               {
+                                 start.arrive_and_wait();
+
+                                 for (std::int32_t index = 0; index < 10000; ++index)
+                                 {
+                                   dictionary.getOrIntern("growth_" + std::to_string(index));
+                                 }
+                               }};
+
+    start.arrive_and_wait();
+    bool retainedValueStayedValid = true;
+
+    for (std::int32_t index = 0; index < 50000; ++index)
+    {
+      retainedValueStayedValid = retainedValueStayedValid && cache.get(stableId) == "stable";
+    }
+
+    writer.join();
+    CHECK(retainedValueStayedValid);
   }
 
   // Run under TSan (./ao test --tsan) to verify the shared_mutex guards every

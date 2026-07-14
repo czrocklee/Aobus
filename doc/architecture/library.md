@@ -62,8 +62,20 @@ The core [LMDB operation specification](../spec/storage/lmdb-operation.md) owns 
 The current `DictionaryStore` process index changes during `put()` and `getOrIntern()` before the surrounding LMDB transaction outcome is known.
 [RFC 0022](../rfc/0022-transaction-coherent-library-dictionary.md) proposes a transaction-local overlay and post-commit cache publication; that proposal is not current behavior.
 
+`DictionaryStore` serializes index mutation and lookup with its internal shared mutex.
+Published non-empty strings are immutable and use stable storage, so a borrowed view remains valid until the store is destroyed even when later mutations grow the dictionary.
+`DictionaryReadCache` is a bounded, owner-thread batch accelerator over those views rather than a snapshot or a wider lock scope.
+Its collision replacement may cause another store lookup but cannot change a result, and empty nonzero slots are not retained because a later dictionary mutation may recycle them.
+
 Store types own physical representation and transaction-scoped access.
 They do not publish application events or construct frontend projections.
+
+`TrackStore` owns both point reads and ordered batch reads of track records.
+Its batch boundary preserves the caller's requested ID order, skips missing
+rows, and retains duplicate requests. It chooses between point lookup and
+coordinated cursor traversal internally, so smart-list evaluators and
+projections do not duplicate LMDB access policy. Combined hot/cold traversal is
+an ID merge join: only IDs present in both stores produce a combined view.
 
 ### Runtime library facade
 
@@ -83,6 +95,9 @@ It groups roles and lifetime; it does not introduce another database or transact
 `TrackSource` is the runtime boundary for an ordered, observable set of track identities.
 `TrackSourceCache` owns the all-tracks source, cached list sources, smart-list evaluation, dependency links between lists, and reusable ad-hoc filtered sources.
 
+One `SmartListEvaluator` bucket rebuild creates one batch-local dictionary read cache and shares it across the plans and tracks evaluated in that batch.
+This removes repeated dictionary locks for reused IDs without holding a shared lock across track visitation or delaying dictionary writers for a whole scan.
+
 Callers acquire leases rather than taking raw ownership of cached sources.
 The cache observes `LibraryChanges` and turns committed storage changes into source refreshes or incremental source deltas.
 
@@ -90,6 +105,9 @@ The cache observes `LibraryChanges` and turns committed storage changes into sou
 
 Live projections combine a source lease with library reads and presentation structure.
 They own frontend-neutral row/detail snapshots and publish projection deltas to consumers such as `ViewService` and `PlaybackSequenceService`.
+
+`LiveTrackListProjection` resolves each dictionary ID into one cached pair: raw presentation text borrowed from `DictionaryStore` and a normalized sort/group key owned by its `StringArena`.
+The cache is projection-local and owner-thread confined; a full rebuild releases every dependent row and section view, clears the cache, and then reclaims the arena.
 
 `ViewService` owns the lifecycle of open runtime views and their projections.
 Its track-list state keeps the content axis (`listId` plus a transient `filterExpression`) separate from the shape axis (`TrackPresentationSpec`).
@@ -155,6 +173,8 @@ Changing presentation reshapes the projection without changing base-list or filt
 - `LibraryChanges` serializes revision delivery onto the callback executor even when producers finish out of order.
 - Source caches and projections derive state from storage plus the ordered change stream; they are not independent persistence authorities.
 - A source lease pins source lifetime for its consumer, while the cache may otherwise evict unused implementations.
+- Dictionary read caches never extend a store view beyond the owning `MusicLibrary`, and they do not provide transaction isolation or a dictionary snapshot.
+- Projection raw-text caches borrow stable dictionary storage, while normalized projection keys never outlive the projection arena that owns them.
 - Exact persistence records and exact delta operations are delegated to reference and specification documents.
 
 ## Failure, cancellation, and lifetime boundaries
@@ -166,6 +186,7 @@ Cancellation never reinterprets an already committed transaction as uncommitted.
 
 `CoreRuntime` destroys source, completion, facade, change-bus, and storage collaborators only after worker tasks are stopped and joined.
 Subscriptions held by sources and projections release before the `LibraryChanges` owner they observe.
+Batch and projection dictionary caches are destroyed before the `MusicLibrary` that owns their borrowed raw views.
 
 Recoverable storage and external-data failures cross the runtime facade as typed results.
 Shared channel behavior belongs to the [outcome channel specification](../spec/failure/outcome-channel.md), and exact common codes belong to the [error value reference](../reference/failure/error.md).
@@ -176,6 +197,8 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 ## Implementation map
 
 - [`MusicLibrary`](../../include/ao/library/MusicLibrary.h) owns the physical library environment and store access.
+- [`DictionaryStore`](../../include/ao/library/DictionaryStore.h) owns synchronized dictionary access, stable published values, and the bounded batch read cache.
+- [`TrackStore`](../../include/ao/library/TrackStore.h) owns transaction-scoped point and ordered batch access to hot/cold track records.
 - [`Library`](../../app/include/ao/rt/library/Library.h) composes the runtime reader, writer, task, and change roles.
 - [`LibraryReader`](../../app/include/ao/rt/library/LibraryReader.h) and [`LibraryWriter`](../../app/include/ao/rt/library/LibraryWriter.h) define scoped read and synchronous mutation boundaries.
 - [`LibraryTaskService`](../../app/include/ao/rt/library/LibraryTaskService.h) defines asynchronous library operations.
@@ -187,11 +210,15 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 ## Test map
 
 - [`MusicLibraryTest.cpp`](../../test/unit/library/MusicLibraryTest.cpp) protects physical environment and store composition.
+- [`TrackStoreTest.cpp`](../../test/unit/library/TrackStoreTest.cpp) and [`TrackStoreRawLayoutTest.cpp`](../../test/unit/library/TrackStoreRawLayoutTest.cpp) protect batch order, missing-row behavior, and coordinated hot/cold traversal.
+- [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects stable borrowed views, bounded-cache collision behavior, empty-slot recycling, and concurrent growth.
+- [`PlanEvaluatorDictionaryTest.cpp`](../../test/unit/query/PlanEvaluatorDictionaryTest.cpp) protects cached and uncached dictionary predicate equivalence.
 - [`LibraryReaderTest.cpp`](../../test/unit/runtime/library/LibraryReaderTest.cpp) and [`LibraryWriterTest.cpp`](../../test/unit/runtime/library/LibraryWriterTest.cpp) protect runtime access roles.
 - [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protects revision ordering and callback publication.
 - [`LibraryTaskServiceTest.cpp`](../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects worker/callback task boundaries.
 - [`TrackSourceCacheTest.cpp`](../../test/unit/runtime/source/TrackSourceCacheTest.cpp) protects source lifetime, reuse, and refresh composition.
 - [`TrackListProjectionLifecycleTest.cpp`](../../test/unit/runtime/projection/TrackListProjectionLifecycleTest.cpp) and [`TrackListProjectionDeltaContractTest.cpp`](../../test/unit/runtime/projection/TrackListProjectionDeltaContractTest.cpp) protect the source-to-projection boundary.
+- [`TrackListProjectionGroupingTest.cpp`](../../test/unit/runtime/projection/TrackListProjectionGroupingTest.cpp) protects normalized grouping keys and raw presentation labels.
 
 ## Related documents
 

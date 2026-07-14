@@ -329,7 +329,7 @@ namespace ao::tui
         output.append(std::format("\033_Gm={};", hasMore ? 1 : 0));
       }
 
-      output.append(encoded.substr(offset, chunkSize));
+      output.append(encoded, offset, chunkSize);
       output.append("\033\\");
       offset += chunkSize;
     }

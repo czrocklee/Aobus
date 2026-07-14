@@ -291,4 +291,47 @@ namespace ao::library::test
     auto optView = fixture.store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Both);
     CHECK_FALSE(optView);
   }
+
+  TEST_CASE("TrackStore - both-mode iteration joins hot and cold rows by track ID",
+            "[library][regression][track-store][raw-layout]")
+  {
+    auto fixture = TrackStoreFixture{};
+    auto wtxn = beginWriteTransaction(fixture.env);
+    auto writer = fixture.store.writer(wtxn);
+    auto const id1 = requireCreate(writer,
+                                   makeHotData(TrackHotHeader{.artistId = DictionaryId{1}}),
+                                   makeColdData(TrackColdHeader{.duration = std::chrono::minutes{1}}))
+                       .first;
+    auto const id2 = requireCreate(writer,
+                                   makeHotData(TrackHotHeader{.artistId = DictionaryId{2}}),
+                                   makeColdData(TrackColdHeader{.duration = std::chrono::minutes{2}}))
+                       .first;
+
+    SECTION("orphan hot row is skipped")
+    {
+      auto coldDb = openDatabase(wtxn, "tracks_cold");
+      REQUIRE(coldDb.writer(wtxn).del(id1.raw()));
+    }
+
+    SECTION("orphan cold row is skipped")
+    {
+      auto hotDb = openDatabase(wtxn, "tracks_hot");
+      REQUIRE(hotDb.writer(wtxn).del(id1.raw()));
+    }
+
+    REQUIRE(wtxn.commit());
+
+    auto rtxn = beginReadTransaction(fixture.env);
+    auto reader = fixture.store.reader(rtxn);
+    auto visitedIds = std::vector<TrackId>{};
+
+    for (auto&& [id, view] : reader.both())
+    {
+      visitedIds.push_back(id);
+      CHECK(view.metadata().artistId() == DictionaryId{2});
+      CHECK(view.property().duration() == std::chrono::minutes{2});
+    }
+
+    CHECK(visitedIds == std::vector<TrackId>{id2});
+  }
 } // namespace ao::library::test

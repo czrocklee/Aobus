@@ -10,9 +10,12 @@
 
 #include <boost/unordered/unordered_flat_set.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
+#include <memory>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
@@ -54,7 +57,8 @@ namespace ao::library
     /**
      * Look up a string by its ID using in-memory index.
      * @param id The dictionary ID
-     * @return The string
+     * @return A borrowed view that remains valid until this store is destroyed.
+     *         Published non-empty entries are immutable.
      * @throws std::runtime_error if id is not found
      */
     std::string_view get(DictionaryId id) const;
@@ -63,7 +67,8 @@ namespace ao::library
      * Look up a string by its ID, returning a default if the ID is invalid.
      * @param id The dictionary ID
      * @param defaultValue Value to return when id is 0 or out of range
-     * @return The string or defaultValue
+     * @return The stored string as a borrowed view, or defaultValue. A stored
+     *         non-empty view remains valid until this store is destroyed.
      */
     std::string_view getOrDefault(DictionaryId id, std::string_view defaultValue = {}) const;
 
@@ -159,5 +164,35 @@ namespace ao::library
 
     // Track previously freed/skipped IDs to recycle them and prevent gap accumulation
     std::vector<DictionaryId> _freeIds;
+  };
+
+  /**
+   * Reuses immutable dictionary values during one bounded read batch.
+   *
+   * The cache is not thread-safe. It borrows values from the DictionaryStore
+   * and must not outlive that store. Its collision-replacing table has bounded
+   * memory; eviction only causes a later store read and never changes results.
+   * Empty slots are deliberately not cached, because DictionaryStore may later
+   * recycle them.
+   */
+  class DictionaryReadCache final
+  {
+  public:
+    explicit DictionaryReadCache(DictionaryStore const& dictionary);
+
+    std::string_view get(DictionaryId id);
+    DictionaryStore const& dictionary() const noexcept;
+
+  private:
+    struct Entry final
+    {
+      DictionaryId id{};
+      std::string_view value{};
+    };
+
+    static constexpr std::size_t kCapacity = 4096;
+
+    DictionaryStore const* _dictionary;
+    std::unique_ptr<std::array<Entry, kCapacity>> _entriesPtr;
   };
 } // namespace ao::library

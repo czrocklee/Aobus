@@ -362,26 +362,29 @@ namespace ao::query
     return true;
   }
 
+  DictionaryId dictionaryFieldId(library::TrackView const& track, Field field)
+  {
+    switch (field)
+    {
+      case Field::ArtistId: return track.metadata().artistId();
+      case Field::AlbumId: return track.metadata().albumId();
+      case Field::GenreId: return track.metadata().genreId();
+      case Field::AlbumArtistId: return track.metadata().albumArtistId();
+      case Field::ComposerId: return track.metadata().composerId();
+      case Field::ConductorId: return track.classical().conductorId();
+      case Field::EnsembleId: return track.classical().ensembleId();
+      case Field::WorkId: return track.classical().workId();
+      case Field::MovementId: return track.classical().movementId();
+      case Field::SoloistId: return track.classical().soloistId();
+      default: return kInvalidDictionaryId;
+    }
+  }
+
   std::string_view dictionaryFieldValue(library::TrackView const& track,
                                         Field field,
                                         library::DictionaryStore const& dictionary)
   {
-    auto dictionaryId = kInvalidDictionaryId;
-
-    switch (field)
-    {
-      case Field::ArtistId: dictionaryId = track.metadata().artistId(); break;
-      case Field::AlbumId: dictionaryId = track.metadata().albumId(); break;
-      case Field::GenreId: dictionaryId = track.metadata().genreId(); break;
-      case Field::AlbumArtistId: dictionaryId = track.metadata().albumArtistId(); break;
-      case Field::ComposerId: dictionaryId = track.metadata().composerId(); break;
-      case Field::ConductorId: dictionaryId = track.classical().conductorId(); break;
-      case Field::EnsembleId: dictionaryId = track.classical().ensembleId(); break;
-      case Field::WorkId: dictionaryId = track.classical().workId(); break;
-      case Field::MovementId: dictionaryId = track.classical().movementId(); break;
-      case Field::SoloistId: dictionaryId = track.classical().soloistId(); break;
-      default: return {};
-    }
+    auto const dictionaryId = dictionaryFieldId(track, field);
 
     if (dictionaryId == kInvalidDictionaryId)
     {

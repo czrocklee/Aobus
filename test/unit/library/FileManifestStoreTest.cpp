@@ -15,6 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <array>
 #include <cstddef>
 #include <span>
 #include <string>
@@ -71,6 +72,77 @@ namespace ao::library::test
     CHECK(viewResult->audioPayloadLength() == 55555);
     CHECK(viewResult->audioSignature() == signature);
     CHECK(viewResult->status() == FileStatus::Available);
+  }
+
+  TEST_CASE("FileManifestStore - URI padding boundaries preserve read, write, and remove behavior",
+            "[library][unit][manifest]")
+  {
+    constexpr auto kUriLengths = std::array<std::size_t, 13>{1, 2, 3, 4, 5, 6, 7, 8, 9, 497, 498, 499, 500};
+
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "manifests", Database::KeyKind::Blob);
+    auto store = FileManifestStore{db};
+
+    auto builder = FileManifestBuilder::makeEmpty();
+    builder.trackId(TrackId{42}).fileSize(12345).mtime(67890).status(FileStatus::Available);
+    auto const payload = builder.serialize();
+
+    {
+      auto writer = store.writer(wtxn);
+
+      for (auto const uriLength : kUriLengths)
+      {
+        auto const uri = std::string(uriLength, 'a');
+        REQUIRE(writer.put(uri, payload));
+
+        auto const viewResult = writer.get(uri);
+        REQUIRE(viewResult);
+        CHECK(viewResult->trackId() == TrackId{42});
+      }
+    }
+
+    REQUIRE(wtxn.commit());
+
+    {
+      auto const rtxn = beginReadTransaction(env);
+      auto const reader = store.reader(rtxn);
+
+      for (auto const uriLength : kUriLengths)
+      {
+        auto const viewResult = reader.get(std::string(uriLength, 'a'));
+        REQUIRE(viewResult);
+        CHECK(viewResult->trackId() == TrackId{42});
+      }
+    }
+
+    {
+      auto removeTxn = beginWriteTransaction(env);
+      auto writer = store.writer(removeTxn);
+
+      for (auto const uriLength : kUriLengths)
+      {
+        auto const uri = std::string(uriLength, 'a');
+        REQUIRE(writer.remove(uri));
+
+        auto const viewResult = writer.get(uri);
+        REQUIRE_FALSE(viewResult);
+        CHECK(viewResult.error().code == Error::Code::NotFound);
+      }
+
+      REQUIRE(removeTxn.commit());
+    }
+
+    auto const rtxn = beginReadTransaction(env);
+    auto const reader = store.reader(rtxn);
+
+    for (auto const uriLength : kUriLengths)
+    {
+      auto const viewResult = reader.get(std::string(uriLength, 'a'));
+      REQUIRE_FALSE(viewResult);
+      CHECK(viewResult.error().code == Error::Code::NotFound);
+    }
   }
 
   TEST_CASE("FileManifestStore - get returns NotFound for missing URI", "[library][unit][manifest]")

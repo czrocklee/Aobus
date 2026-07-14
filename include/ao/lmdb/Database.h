@@ -89,6 +89,9 @@ namespace ao::lmdb
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
     std::optional<std::span<std::byte const>> get(std::span<std::byte const> key) const;
 
+    // Number of rows visible to this transaction. Throws on fault.
+    std::size_t entryCount() const;
+
     // Largest integer key, or 0 when the database is empty. Throws on fault.
     std::uint32_t maxKey() const;
 
@@ -131,8 +134,9 @@ namespace ao::lmdb
    * SIGBUS through the mmap, which no Result can intercept, so a recoverable
    * channel at this layer would be a false promise. We therefore treat every
    * non-EOF cursor failure as fatal, consistent with the error model's
-   * invariant/fatal rule. The same reasoning is why point lookups (get/maxKey)
-   * report only the recoverable miss and throw on everything else.
+   * invariant/fatal rule. The same reasoning is why point lookups and metadata
+   * queries (get/entryCount/maxKey) report only the recoverable miss and throw
+   * on everything else.
    */
   class Database::Reader::Iterator final
   {

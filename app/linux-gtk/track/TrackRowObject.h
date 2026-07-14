@@ -24,6 +24,7 @@ namespace ao::gtk
   {
   public:
     static Glib::RefPtr<TrackRowObject> create(TrackId id, TrackRowCache const& provider);
+    static ::GType objectType();
 
     TrackId trackId() const { return _id; }
 

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/query/Expression.h>
 
 #include <cstdint>
@@ -89,6 +90,12 @@ namespace ao::query
   bool isDictionaryField(Field field);
   bool isStringField(Field field);
   bool isTagField(Field field);
+
+  /**
+   * Reads the dictionary ID stored in a dictionary-backed metadata field.
+   * Returns kInvalidDictionaryId for non-dictionary fields.
+   */
+  DictionaryId dictionaryFieldId(library::TrackView const& track, Field field);
 
   /**
    * Resolves a dictionary-backed metadata field (ArtistId, AlbumId, ...) to its

@@ -704,6 +704,7 @@ namespace ao::cli
         }
 
         auto evaluator = query::FormatEvaluator{};
+        auto formattedTrack = std::string{};
         std::size_t const end = (limit == 0) ? trackIds.size() : std::min(offset + limit, trackIds.size());
         auto const transaction = ml.readTransaction();
         auto const reader = ml.tracks().reader(transaction);
@@ -716,7 +717,8 @@ namespace ao::cli
 
           if (optView)
           {
-            std::println(os, "{}", evaluator.evaluate(*plan, *optView));
+            evaluator.evaluate(*plan, *optView, formattedTrack);
+            std::println(os, "{}", formattedTrack);
           }
         }
 

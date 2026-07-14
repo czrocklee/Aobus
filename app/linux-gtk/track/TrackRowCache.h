@@ -9,6 +9,7 @@
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
+#include <cstddef>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -28,7 +29,7 @@ namespace ao::gtk
    * TrackRowCache - Central repository and shared cache for UI TrackRows.
    *
    * Responsibilities:
-   * - Batch-load all track metadata from LMDB into memory exactly once.
+   * - Load track metadata from LMDB on first request.
    * - Cache and share Glib::RefPtr<TrackRowObject> instances across all playlists/tabs.
    * - Efficiently resolve dictionary strings for UI display.
    * - Provider manages its own transactions internally.
@@ -43,6 +44,8 @@ namespace ao::gtk
      * @return TrackRowObject if it was loaded, nullptr otherwise.
      */
     Glib::RefPtr<TrackRowObject> trackRow(TrackId id) const;
+
+    std::size_t cachedRowCount() const noexcept { return _rowCache.size(); }
 
     /**
      * Resolve a dictionary string and cache it.

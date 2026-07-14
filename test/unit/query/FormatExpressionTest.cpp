@@ -198,6 +198,28 @@ namespace ao::query::test
     CHECK(evaluator.evaluate(plan, emptyTrack) == "literal");
   }
 
+  TEST_CASE("FormatEvaluator - clears and reuses caller-owned output", "[query][unit][format-expression]")
+  {
+    auto fixture = TrackFixture{formatTrackSpec()};
+    auto ast = parseOk(R"($artist + "|" + $title + "|" + %catalog + "|" + $year + "|" + @codec)");
+    auto compiler = FormatCompiler{&fixture.dictionary()};
+    auto plan = compileOk(compiler, ast);
+    auto evaluator = FormatEvaluator{};
+    auto output = std::string{"stale data"};
+
+    evaluator.evaluate(plan, fixture.view(), output);
+
+    CHECK(output == "Johann Sebastian Bach|Cello Suite|Archiv 123|1720|FLAC");
+    CHECK(output == evaluator.evaluate(plan, fixture.view()));
+
+    output += " appended garbage";
+    evaluator.evaluate(plan, fixture.view(), output);
+    CHECK(output == "Johann Sebastian Bach|Cello Suite|Archiv 123|1720|FLAC");
+
+    evaluator.evaluate(plan, fixture.coldOnlyView(), output);
+    CHECK(output.empty());
+  }
+
   TEST_CASE("FormatExpression - returns empty when required track data is missing", "[query][unit][format-expression]")
   {
     auto fixture = TrackFixture{formatTrackSpec()};

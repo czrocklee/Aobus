@@ -136,6 +136,13 @@ namespace ao::lmdb
     return utility::bytes::view(static_cast<void const*>(val.mv_data), val.mv_size);
   }
 
+  std::size_t Database::Reader::entryCount() const
+  {
+    auto stat = ::MDB_stat{};
+    throwOnError("mdb_stat", ::mdb_stat(_txn, _dbi, &stat));
+    return stat.ms_entries;
+  }
+
   std::uint32_t Database::Reader::maxKey() const
   {
     auto cursorPtr = create(_txn, _dbi);

@@ -118,6 +118,105 @@ namespace ao::audio::test
     CHECK(std::ranges::equal(block.bytes, parsed.wave.data.first(block.bytes.size())));
   }
 
+  TEST_CASE("WavDecoderSession - preserves 32-bit integer PCM across reopen", "[audio][unit][wav]")
+  {
+    auto const audioData = std::vector<std::uint8_t>{
+      0x00,
+      0x00,
+      0x00,
+      0x00, // zero
+      0xFF,
+      0xFF,
+      0xFF,
+      0x7F, // positive extreme
+      0x00,
+      0x00,
+      0x00,
+      0x80, // negative extreme
+      0x78,
+      0x56,
+      0x34,
+      0x12, // non-trivial byte order
+    };
+    auto data = ao::test::wav::makeWav({.bitsPerSample = 32, .audioData = audioData});
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto decoder = WavDecoderSession{Format{.bitDepth = 32, .validBits = 32, .isInterleaved = true}};
+
+    for (std::size_t openCount = 0; openCount < 2; ++openCount)
+    {
+      REQUIRE(decoder.open(temp.path));
+      auto blockResult = decoder.readNextBlock();
+      REQUIRE(blockResult);
+      CHECK(blockResult->frames == 4);
+      CHECK(blockResult->endOfStream);
+      CHECK(std::ranges::equal(blockResult->bytes, asBytes(audioData)));
+    }
+  }
+
+  TEST_CASE("WavDecoderSession - converts 24-bit integer extremes to 16-bit output", "[audio][unit][wav]")
+  {
+    auto const audioData = std::vector<std::uint8_t>{
+      0xFF,
+      0xFF,
+      0x7F,
+      0x00,
+      0x00,
+      0x80,
+      0x00,
+      0x00,
+      0x00,
+    };
+    auto data = ao::test::wav::makeWav({.bitsPerSample = 24, .audioData = audioData});
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto decoder = WavDecoderSession{Format{.bitDepth = 16, .validBits = 16, .isInterleaved = true}};
+
+    REQUIRE(decoder.open(temp.path));
+    auto const info = decoder.streamInfo();
+    CHECK(info.sourceFormat.validBits == 24);
+    CHECK(info.outputFormat.validBits == 16);
+    auto blockResult = decoder.readNextBlock();
+    REQUIRE(blockResult);
+
+    auto const expected = std::vector<std::uint8_t>{
+      0xFF,
+      0x7F,
+      0x00,
+      0x80,
+      0x00,
+      0x00,
+    };
+    CHECK(std::ranges::equal(blockResult->bytes, asBytes(expected)));
+  }
+
+  TEST_CASE("WavDecoderSession - preserves a partial final passthrough block", "[audio][unit][wav]")
+  {
+    constexpr std::size_t kFrameCount = 4097;
+    auto audioData = std::vector<std::uint8_t>(kFrameCount * sizeof(std::int16_t));
+
+    for (std::size_t index = 0; index < audioData.size(); ++index)
+    {
+      audioData[index] = static_cast<std::uint8_t>(index % 251U);
+    }
+
+    auto data = ao::test::wav::makeWav({.bitsPerSample = 16, .audioData = audioData});
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto decoder = WavDecoderSession{Format{.bitDepth = 16, .validBits = 16, .isInterleaved = true}};
+
+    REQUIRE(decoder.open(temp.path));
+
+    auto firstResult = decoder.readNextBlock();
+    REQUIRE(firstResult);
+    CHECK(firstResult->frames == 4096);
+    CHECK_FALSE(firstResult->endOfStream);
+    CHECK(std::ranges::equal(firstResult->bytes, asBytes(audioData).first(4096 * sizeof(std::int16_t))));
+
+    auto finalResult = decoder.readNextBlock();
+    REQUIRE(finalResult);
+    CHECK(finalResult->frames == 1);
+    CHECK(finalResult->endOfStream);
+    CHECK(std::ranges::equal(finalResult->bytes, asBytes(audioData).last(sizeof(std::int16_t))));
+  }
+
   TEST_CASE("WavDecoderSession - preserves real 32-bit float PCM", "[audio][unit][wav]")
   {
     auto const fixture = requireAudioFixture("float32.wav");

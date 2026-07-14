@@ -39,6 +39,8 @@ namespace ao::async
 
     std::thread::id _ownerThread;
     std::mutex _mutex;
-    std::vector<std::move_only_function<void()>> _tasks;
+    std::vector<std::move_only_function<void()>> _pendingTasks;
+    std::vector<std::move_only_function<void()>> _drainTasks;
+    bool _draining = false;
   };
 } // namespace ao::async

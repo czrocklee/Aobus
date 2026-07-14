@@ -3,13 +3,13 @@ id: playback.audio-execution
 type: spec
 status: current
 domain: playback
-summary: Defines Engine control serialization, event delivery, realtime rendering, gapless transitions, generation fences, Player marshalling, backend lifetime, and shutdown.
+summary: Defines Engine control serialization, streaming PCM buffering, event delivery, realtime rendering, gapless transitions, generation fences, Player marshalling, backend lifetime, and shutdown.
 ---
 # Audio execution and concurrency
 
 ## Scope
 
-This specification defines current concurrency and lifetime behavior below the application playback authorities: Engine control serialization, event-worker delivery, realtime render rules, explicit and gapless transitions, generation correlation, Player executor marshalling, backend responsibilities, and shutdown.
+This specification defines current concurrency and lifetime behavior below the application playback authorities: Engine control serialization, streaming PCM buffering, event-worker delivery, realtime render rules, explicit and gapless transitions, generation correlation, Player executor marshalling, backend responsibilities, and shutdown.
 
 Succession policy belongs to the [playback cursor specification](cursor.md), decoder behavior belongs to the [decoder session specification](decoder-session.md), and cross-layer ownership belongs to the [playback](../../architecture/playback.md) and [runtime execution](../../architecture/runtime-execution.md) architectures.
 
@@ -27,6 +27,8 @@ This contract belongs primarily to the **Core libraries** layer in the [system a
 - **Splice signal**: the non-owning realtime notification that a prepared lookahead became active at end of stream.
 - **Callback-generation floor**: the minimum audio generation whose materialized callbacks may still begin after a synchronizing receipt.
 - **Player graph epoch**: Player's current provider/route graph identity used when accepting marshalled route state.
+- **Buffer target**: a requested buffered duration converted to a rounded-up byte count and capped by the PCM ring capacity.
+- **Predictive block headroom**: writable ring capacity reserved from the previous nonempty decoded block size before requesting the next block.
 
 ## Invariants
 
@@ -36,6 +38,8 @@ This contract belongs primarily to the **Core libraries** layer in the [system a
 - The steady-state realtime render path is lock-free and allocation-free.
 - A natural splice is wait-free and transfers no owning pointer on the render thread.
 - Timeline-node destruction and decode-thread joins happen off the render thread exactly once.
+- Preroll and background decode use the same capacity-bounded byte-target policy.
+- The source requests another decoded block only while below its buffer target and with predictive block headroom; one decoded block cannot exceed the whole PCM ring.
 - Engine callbacks have one origin thread: the event worker.
 - Player state and public methods have one owner executor; lower callbacks are marshalled before touching that state.
 - A callback from a retired render/audio/provider generation cannot mutate a newer state generation.
@@ -98,6 +102,21 @@ Backends report progress with `RenderPcmResult::positionFrameOffset` and `positi
 
 The ring is single-producer across render splice and drain-complete publication.
 A backend may report drain completion from another thread only when its own synchronization orders it after the final render callback.
+
+### Streaming decode and buffering
+
+`StreamingSource` converts each duration target to bytes by rounding fractional bytes upward and capping the result at the fixed PCM ring capacity.
+This makes a high-rate target reachable even when its requested duration represents more data than the ring can hold.
+Initial preroll, post-seek preroll, and the background decode loop all use this byte policy.
+
+Before reading another decoder block, the sole producer checks both that buffered bytes remain below the target and that writable capacity can hold the previous nonempty block.
+For stable or decreasing decoder block sizes this prevents a predictable partial write and its timed retry.
+The previous size is predictive rather than a decoder maximum: if a later block grows, the existing stop-token-aware partial-write loop remains the fallback.
+A decoded block larger than the entire ring fails with `DecodeFailed` instead of entering an impossible write wait.
+
+The predictive size is producer-confined.
+Seek stops and joins the decode worker before clearing the ring and resetting that size, then synchronous preroll becomes the producer until the worker restarts.
+The realtime consumer still performs only ring reads; it does not update a separate occupancy counter, take a lock, or notify the producer.
 
 ### Prepared lookahead
 
@@ -181,6 +200,7 @@ Destruction closes the shared gate before providers and Engine stop, so already 
 ## Failure and cancellation
 
 External media, device, route, and capability failures cross public audio boundaries as `Result` or asynchronous typed events.
+A decoded PCM block larger than the source ring is a recoverable `DecodeFailed` media outcome.
 Stale generation events are discarded.
 Terminal events remain asynchronous relative to the producer callback, so queries may briefly show the earlier transport.
 
@@ -207,7 +227,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 ## Implementation map
 
 - [`Engine.h`](../../../include/ao/audio/Engine.h) and [`Engine.cpp`](../../../lib/audio/Engine.cpp) own control, event, timeline, render, generation, and shutdown behavior.
-- Audio detail timeline, track-session, and streaming-source code under [`lib/audio/detail/`](../../../lib/audio/detail/) owns nodes and decode lifetime.
+- Audio detail timeline and track-session code under [`lib/audio/detail/`](../../../lib/audio/detail/) owns nodes and decode lifetime; [`StreamingSource`](../../../include/ao/audio/StreamingSource.h), [`PcmRingBuffer`](../../../include/ao/audio/PcmRingBuffer.h), and [`StreamingBufferPolicy`](../../../lib/audio/detail/StreamingBufferPolicy.h) own PCM production, bounded storage, and producer admission.
 - [`Player.h`](../../../include/ao/audio/Player.h) and [`Player.cpp`](../../../lib/audio/Player.cpp) own provider composition, executor marshalling, graph epochs, and teardown gate.
 - [`Backend.h`](../../../include/ao/audio/Backend.h) and concrete backends under [`lib/audio/backend/`](../../../lib/audio/backend/) own native lifetime.
 - [`PlaybackService.cpp`](../../../app/runtime/PlaybackService.cpp) owns executor-affine application publication and prepared metadata.
@@ -218,7 +238,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`EngineGaplessTest.cpp`](../../../test/unit/audio/EngineGaplessTest.cpp), [`EngineDrainTest.cpp`](../../../test/unit/audio/EngineDrainTest.cpp), and [`AudioBackendRenderProgressTest.cpp`](../../../test/unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp) protect splice, drain, mixed-buffer progress, and fallback.
 - [`EngineCallbackTest.cpp`](../../../test/unit/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/unit/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/unit/audio/EngineBackendSwapTest.cpp) protect generations and stale events.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) protects executor marshalling, graph epochs, and gate behavior.
-- [`StreamingSourceTest.cpp`](../../../test/unit/audio/StreamingSourceTest.cpp) protects decode worker and source retirement.
+- [`StreamingSourceTest.cpp`](../../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker lifetime, bounded producer admission, oversized blocks, and source retirement.
 - Runtime playback tests under [`test/unit/runtime/`](../../../test/unit/runtime/) protect executor-affine publication and application metadata.
 
 ## Related documents

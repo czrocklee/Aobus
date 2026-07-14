@@ -83,6 +83,52 @@ namespace ao::lmdb::test
     }
   }
 
+  TEST_CASE("Database::Reader - entryCount reports visible row cardinality",
+            "[lmdb][unit][database-reader][entry-count]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openDatabase(wtxn, "test");
+
+    SECTION("empty database")
+    {
+      REQUIRE(wtxn.commit());
+
+      auto const rtxn = beginReadTransaction(env);
+      CHECK(db.reader(rtxn).entryCount() == 0);
+    }
+
+    SECTION("dense integer keys")
+    {
+      auto writer = db.writer(wtxn);
+      REQUIRE(writer.create(1, createStringData("one")));
+      REQUIRE(writer.create(2, createStringData("two")));
+      REQUIRE(writer.create(3, createStringData("three")));
+      REQUIRE(wtxn.commit());
+
+      auto const rtxn = beginReadTransaction(env);
+      auto const reader = db.reader(rtxn);
+      CHECK(reader.entryCount() == 3);
+      CHECK(reader.maxKey() == 3);
+    }
+
+    SECTION("sparse integer keys")
+    {
+      auto writer = db.writer(wtxn);
+      REQUIRE(writer.create(1, createStringData("one")));
+      REQUIRE(writer.create(100, createStringData("one hundred")));
+      REQUIRE(writer.create(1000, createStringData("one thousand")));
+      REQUIRE(wtxn.commit());
+
+      auto const rtxn = beginReadTransaction(env);
+      auto const reader = db.reader(rtxn);
+      CHECK(reader.entryCount() == 3);
+      CHECK(reader.maxKey() == 1000);
+    }
+  }
+
   TEST_CASE("Database::Reader::Iterator - default constructor", "[lmdb][unit][database][reader]")
   {
     auto const it = Database::Reader::Iterator{};

@@ -91,9 +91,9 @@ namespace ao::media::file::mpeg::id3v2
       return result;
     }
 
-    // ID3v2.4 UTF-8 text is already in the target encoding; copy it through,
+    // ID3v2.4 UTF-8 text is already in the target encoding. Return a view after
     // dropping an optional leading BOM (EF BB BF).
-    inline std::string utf8PassThrough(std::span<std::byte const> buf)
+    inline std::string_view utf8View(std::span<std::byte const> buf) noexcept
     {
       static constexpr std::size_t kBomSize = 3;
       static constexpr std::uint8_t kBom0 = 0xEF;
@@ -103,19 +103,13 @@ namespace ao::media::file::mpeg::id3v2
       auto const hasBom = buf.size() >= kBomSize && std::to_integer<std::uint8_t>(buf[0]) == kBom0 &&
                           std::to_integer<std::uint8_t>(buf[1]) == kBom1 &&
                           std::to_integer<std::uint8_t>(buf[2]) == kBom2;
+      auto const textBytes = buf.subspan(hasBom ? kBomSize : 0);
+      return utility::bytes::stringView(textBytes);
+    }
 
-      auto const* const start = hasBom ? buf.data() + kBomSize : buf.data();
-      auto const size = hasBom ? buf.size() - kBomSize : buf.size();
-
-      auto result = std::string{};
-      result.reserve(size);
-
-      for (auto const byte : std::span<std::byte const>{start, size})
-      {
-        result.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
-      }
-
-      return result;
+    inline std::string utf8PassThrough(std::span<std::byte const> buf)
+    {
+      return std::string{utf8View(buf)};
     }
 
     // UCS-2 (ID3v2.3) and UTF-16BE (ID3v2.4) share this decoder: it is BOM-aware
@@ -151,7 +145,12 @@ namespace ao::media::file::mpeg::id3v2
       }
 
       auto result = std::string{};
-      result.reserve(buf.size()); // Heuristic
+      auto const codeUnitCount = static_cast<std::size_t>(u16End - u16Begin) / 2U;
+      constexpr std::size_t kMaxUtf8BytesPerCodeUnit = 3;
+      auto const maxCodeUnitCount = result.max_size() / kMaxUtf8BytesPerCodeUnit;
+      auto const worstCaseSize =
+        codeUnitCount > maxCodeUnitCount ? result.max_size() : codeUnitCount * kMaxUtf8BytesPerCodeUnit;
+      result.reserve(worstCaseSize);
 
       auto readCodeUnit = [bigEndian](std::uint8_t const* it) noexcept
       {

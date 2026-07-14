@@ -35,6 +35,7 @@ namespace ao::audio::test
 
     SECTION("Empty read and write are no-ops")
     {
+      CHECK(buffer.availableToWrite() == buffer.capacity());
       CHECK(buffer.write({}) == 0);
       CHECK(buffer.read({}) == 0);
       CHECK(buffer.size() == 0);
@@ -48,12 +49,14 @@ namespace ao::audio::test
       CHECK(buffer.write(dataA) == 3);
       CHECK(buffer.write(dataB) == 2);
       CHECK(buffer.size() == 5);
+      CHECK(buffer.availableToWrite() == buffer.capacity() - 5);
 
       auto output = std::vector<std::byte>(5);
       REQUIRE(buffer.read(std::span{output}.subspan(0, 2)) == 2);
       CHECK(output[0] == std::byte{1});
       CHECK(output[1] == std::byte{2});
       CHECK(buffer.size() == 3);
+      CHECK(buffer.availableToWrite() == buffer.capacity() - 3);
 
       REQUIRE(buffer.read(std::span{output}.subspan(2, 3)) == 3);
       CHECK(output[2] == std::byte{3});

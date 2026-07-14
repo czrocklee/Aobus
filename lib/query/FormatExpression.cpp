@@ -48,58 +48,65 @@ namespace ao::query
     }
 
     template<typename T>
-    std::string decimalTextOrEmpty(T value)
+    void appendDecimalText(std::string& output, T value)
     {
-      if (value == 0)
+      if (value != 0)
       {
-        return {};
+        std::format_to(std::back_inserter(output), "{}", value);
       }
-
-      return std::format("{}", value);
     }
 
-    std::string readFieldText(library::TrackView const& track,
-                              FormatInstruction const& instr,
-                              library::DictionaryStore const* dictionary)
+    void appendFieldText(std::string& output,
+                         library::TrackView const& track,
+                         FormatInstruction const& instr,
+                         library::DictionaryStore const* dictionary)
     {
       auto const field = instr.field;
 
       if (isDictionaryField(field))
       {
-        return std::string{readDictionaryFieldValue(track, field, dictionary)};
+        output.append(readDictionaryFieldValue(track, field, dictionary));
+        return;
       }
 
       switch (field)
       {
-        case Field::Title: return std::string{track.metadata().title()};
-        case Field::Uri: return std::string{track.property().uri()};
+        case Field::Title: output.append(track.metadata().title()); break;
+        case Field::Uri: output.append(track.property().uri()); break;
         case Field::Custom:
         {
-          if (instr.constValue <= 0)
+          if (instr.constValue > 0)
           {
-            return {};
+            auto const dictionaryId = DictionaryId{static_cast<std::uint32_t>(instr.constValue)};
+
+            if (auto const optValue = track.customMetadata().get(dictionaryId); optValue)
+            {
+              output.append(*optValue);
+            }
           }
 
-          auto const dictionaryId = DictionaryId{static_cast<std::uint32_t>(instr.constValue)};
-          return std::string{track.customMetadata().get(dictionaryId).value_or("")};
+          break;
         }
-        case Field::Year: return decimalTextOrEmpty(track.metadata().year());
-        case Field::TrackNumber: return decimalTextOrEmpty(track.metadata().trackNumber());
-        case Field::TrackTotal: return decimalTextOrEmpty(track.metadata().trackTotal());
-        case Field::DiscNumber: return decimalTextOrEmpty(track.metadata().discNumber());
-        case Field::DiscTotal: return decimalTextOrEmpty(track.metadata().discTotal());
-        case Field::MovementNumber: return decimalTextOrEmpty(track.classical().movementNumber());
-        case Field::MovementTotal: return decimalTextOrEmpty(track.classical().movementTotal());
-        case Field::Duration: return decimalTextOrEmpty(track.property().duration().count());
-        case Field::Bitrate: return decimalTextOrEmpty(track.property().bitrate().raw());
-        case Field::SampleRate: return decimalTextOrEmpty(track.property().sampleRate().raw());
-        case Field::Channels: return decimalTextOrEmpty(track.property().channels().raw());
-        case Field::BitDepth: return decimalTextOrEmpty(track.property().bitDepth().raw());
+        case Field::Year: appendDecimalText(output, track.metadata().year()); break;
+        case Field::TrackNumber: appendDecimalText(output, track.metadata().trackNumber()); break;
+        case Field::TrackTotal: appendDecimalText(output, track.metadata().trackTotal()); break;
+        case Field::DiscNumber: appendDecimalText(output, track.metadata().discNumber()); break;
+        case Field::DiscTotal: appendDecimalText(output, track.metadata().discTotal()); break;
+        case Field::MovementNumber: appendDecimalText(output, track.classical().movementNumber()); break;
+        case Field::MovementTotal: appendDecimalText(output, track.classical().movementTotal()); break;
+        case Field::Duration: appendDecimalText(output, track.property().duration().count()); break;
+        case Field::Bitrate: appendDecimalText(output, track.property().bitrate().raw()); break;
+        case Field::SampleRate: appendDecimalText(output, track.property().sampleRate().raw()); break;
+        case Field::Channels: appendDecimalText(output, track.property().channels().raw()); break;
+        case Field::BitDepth: appendDecimalText(output, track.property().bitDepth().raw()); break;
         case Field::Codec:
-          return track.property().codec() == AudioCodec::Unknown
-                   ? std::string{}
-                   : std::string{audioCodecName(track.property().codec())};
-        default: return {};
+          if (track.property().codec() != AudioCodec::Unknown)
+          {
+            output.append(audioCodecName(track.property().codec()));
+          }
+
+          break;
+        default: break;
       }
     }
   } // namespace
@@ -260,12 +267,19 @@ namespace ao::query
 
   std::string FormatEvaluator::evaluate(FormatPlan const& plan, library::TrackView const& track) const
   {
+    auto output = std::string{};
+    evaluate(plan, track, output);
+    return output;
+  }
+
+  void FormatEvaluator::evaluate(FormatPlan const& plan, library::TrackView const& track, std::string& output) const
+  {
+    output.clear();
+
     if (!hasRequiredTrackData(plan.accessProfile, track))
     {
-      return {};
+      return;
     }
-
-    auto output = std::string{};
 
     for (auto const& instr : plan.instructions)
     {
@@ -274,14 +288,12 @@ namespace ao::query
         case FormatOpCode::AppendLiteral:
           if (instr.literalIndex < plan.literals.size())
           {
-            output += plan.literals[instr.literalIndex];
+            output.append(plan.literals[instr.literalIndex]);
           }
 
           break;
-        case FormatOpCode::AppendField: output += readFieldText(track, instr, plan.dictionary); break;
+        case FormatOpCode::AppendField: appendFieldText(output, track, instr, plan.dictionary); break;
       }
     }
-
-    return output;
   }
 } // namespace ao::query

@@ -20,7 +20,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
+#include <gtk/gtksectionmodel.h>
 #include <gtkmm/application.h>
+#include <gtkmm/multiselection.h>
 #include <sigc++/functors/mem_fun.h>
 
 #include <algorithm>
@@ -54,6 +56,14 @@ namespace ao::gtk::test
       spec.year = year;
       spec.duration = std::chrono::minutes{3};
       return spec;
+    }
+
+    std::pair<::guint, ::guint> sectionRangeAt(GtkSectionModel* model, ::guint position)
+    {
+      ::guint start = 0;
+      ::guint end = 0;
+      ::gtk_section_model_get_section(model, position, &start, &end);
+      return {start, end};
     }
 
     struct SpyTrackListModelEvents final
@@ -118,6 +128,18 @@ namespace ao::gtk::test
       {
         recordQuery();
         return rowIndex < _trackIds.size() ? std::optional<std::size_t>{0} : std::nullopt;
+      }
+
+      std::optional<rt::TrackRowRange> groupRangeAt(std::size_t rowIndex) const noexcept override
+      {
+        recordQuery();
+
+        if (rowIndex >= _trackIds.size())
+        {
+          return std::nullopt;
+        }
+
+        return rt::TrackRowRange{.start = 0, .count = _trackIds.size()};
       }
 
       std::size_t size() const noexcept override
@@ -238,7 +260,6 @@ namespace ao::gtk::test
       CHECK(modelPtr->projection() == projectionPtr.get());
       CHECK(modelPtr->indexOf(id1) == 0);
       CHECK(modelPtr->indexOf(id2) == 1);
-      CHECK_FALSE(modelPtr->groupIndexForTrack(id1).has_value());
       CHECK(modelPtr->get_n_items() == 2);
       CHECK(modelPtr->get_item_type() != G_TYPE_INVALID);
 
@@ -386,6 +407,61 @@ namespace ao::gtk::test
     }
   }
 
+  TEST_CASE("TrackListModel - section ranges propagate without materializing rows", "[gtk][regression][track-model]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto& library = runtime.musicLibrary();
+
+    auto const albumA1 = library::test::addTrack(library, makeTrackSpec("A1", "Artist", "Album A"));
+    auto const albumA2 = library::test::addTrack(library, makeTrackSpec("A2", "Artist", "Album A"));
+    auto const albumB = library::test::addTrack(library, makeTrackSpec("B1", "Artist", "Album B"));
+    auto sourcePtr = rt::test::makeMutableTrackSource({albumA1, albumA2, albumB});
+    auto projectionPtr =
+      std::make_shared<rt::LiveTrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, library);
+    auto rowCache = TrackRowCache{runtime.library()};
+    auto modelPtr = TrackListModel::create(rowCache);
+    modelPtr->bindProjection(projectionPtr);
+
+    CHECK(modelPtr->get_item_type() == TrackRowObject::objectType());
+    CHECK(rowCache.cachedRowCount() == 0);
+    CHECK(modelPtr->get_section(0) == std::make_pair(::guint{0}, ::guint{3}));
+    CHECK(modelPtr->get_section(3) == std::make_pair(::guint{3}, ::guint{G_MAXUINT}));
+
+    projectionPtr->setPresentation(rt::TrackPresentationSpec{
+      .groupBy = rt::TrackGroupKey::Album,
+      .sortBy = {{.field = rt::TrackSortField::Album}},
+    });
+    auto selectionPtr = Gtk::MultiSelection::create(modelPtr);
+    auto* const sectionModel = GTK_SECTION_MODEL(selectionPtr->gobj());
+    REQUIRE(GTK_IS_SECTION_MODEL(sectionModel));
+
+    CHECK(sectionRangeAt(sectionModel, 0) == std::make_pair(::guint{0}, ::guint{2}));
+    CHECK(sectionRangeAt(sectionModel, 1) == std::make_pair(::guint{0}, ::guint{2}));
+    CHECK(sectionRangeAt(sectionModel, 2) == std::make_pair(::guint{2}, ::guint{3}));
+
+    auto const albumA3 = library::test::addTrack(library, makeTrackSpec("A3", "Artist", "Album A"));
+    sourcePtr->append(albumA3);
+    CHECK(sectionRangeAt(sectionModel, 0) == std::make_pair(::guint{0}, ::guint{3}));
+    CHECK(sectionRangeAt(sectionModel, 3) == std::make_pair(::guint{3}, ::guint{4}));
+
+    sourcePtr->update(albumA3);
+    CHECK(sectionRangeAt(sectionModel, 2) == std::make_pair(::guint{0}, ::guint{3}));
+
+    sourcePtr->remove(albumA3);
+    CHECK(sectionRangeAt(sectionModel, 0) == std::make_pair(::guint{0}, ::guint{2}));
+    CHECK(sectionRangeAt(sectionModel, 2) == std::make_pair(::guint{2}, ::guint{3}));
+
+    auto const albumC = library::test::addTrack(library, makeTrackSpec("C1", "Artist", "Album C"));
+    sourcePtr->append(albumC);
+    CHECK(sectionRangeAt(sectionModel, 3) == std::make_pair(::guint{3}, ::guint{4}));
+
+    sourcePtr->remove(albumC);
+    CHECK(sectionRangeAt(sectionModel, 2) == std::make_pair(::guint{2}, ::guint{3}));
+    CHECK(rowCache.cachedRowCount() == 0);
+  }
+
   TEST_CASE("TrackListModel - source invalidation clears rows and detaches without stale projection queries",
             "[gtk][regression][track-model]")
   {
@@ -397,7 +473,6 @@ namespace ao::gtk::test
     modelPtr->bindProjection(projectionPtr);
 
     REQUIRE(modelPtr->get_n_items() == 2);
-    CHECK(modelPtr->groupIndexForTrack(TrackId{11}) == 0);
     CHECK(projectionPtr->hasSubscriber());
 
     auto spy = SpyTrackListModelEvents{};
@@ -415,7 +490,6 @@ namespace ao::gtk::test
     CHECK(modelPtr->get_n_items() == 0);
     CHECK(modelPtr->projection() == nullptr);
     CHECK_FALSE(modelPtr->indexOf(TrackId{11}));
-    CHECK_FALSE(modelPtr->groupIndexForTrack(TrackId{11}));
     CHECK(modelPtr->get_object(0) == nullptr);
     CHECK_FALSE(projectionPtr->hasSubscriber());
     CHECK(projectionPtr->postInvalidationQueryCount() == 0);
