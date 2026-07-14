@@ -38,7 +38,9 @@ namespace ao::audio::test
       CHECK(buffer.availableToWrite() == buffer.capacity());
       CHECK(buffer.write({}) == 0);
       CHECK(buffer.read({}) == 0);
+      buffer.clear();
       CHECK(buffer.size() == 0);
+      CHECK(buffer.availableToWrite() == buffer.capacity());
     }
 
     SECTION("Preserves FIFO order across multiple writes and reads")
@@ -95,6 +97,31 @@ namespace ao::audio::test
       CHECK(buffer.size() == 10);
       REQUIRE(buffer.read(output) == 10);
       CHECK(output[0] == std::byte{0xBB});
+    }
+
+    SECTION("Clear resets wrapped state and preserves FIFO order after reuse")
+    {
+      auto const capacity = buffer.capacity();
+      auto initial = std::vector(capacity, std::byte{0x11});
+      REQUIRE(buffer.write(initial) == capacity);
+
+      auto discarded = std::vector<std::byte>(capacity / 2);
+      REQUIRE(buffer.read(discarded) == discarded.size());
+
+      auto wrapped = std::vector(capacity / 2, std::byte{0x22});
+      REQUIRE(buffer.write(wrapped) == wrapped.size());
+      REQUIRE(buffer.size() == capacity);
+
+      buffer.clear();
+      CHECK(buffer.size() == 0);
+      CHECK(buffer.availableToWrite() == capacity);
+
+      auto replacement = std::vector{std::byte{1}, std::byte{2}, std::byte{3}};
+      REQUIRE(buffer.write(replacement) == replacement.size());
+
+      auto output = std::vector<std::byte>(replacement.size());
+      REQUIRE(buffer.read(output) == output.size());
+      CHECK(output == replacement);
     }
   }
 

@@ -45,6 +45,9 @@ namespace ao::audio
     ~StreamingSource() override;
 
     Result<> initialize();
+
+    // The caller quiesces render and query consumers. This method separately
+    // stops and joins the source-owned decode producer before resetting PCM.
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
 
     std::size_t read(std::span<std::byte> output) noexcept override;

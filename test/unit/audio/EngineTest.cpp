@@ -391,8 +391,10 @@ namespace ao::audio::test
     {
       engine.play(makePlaybackItem(desc));
       engine.seek(std::chrono::milliseconds{50});
-      CHECK(engine.status().elapsed == std::chrono::milliseconds{50});
-      CHECK(engine.status().transport == Transport::Playing);
+      auto const snapshot = engine.status();
+      CHECK(snapshot.elapsed == std::chrono::milliseconds{50});
+      CHECK(snapshot.transport == Transport::Playing);
+      CHECK(snapshot.bufferedDuration == std::chrono::milliseconds{200});
     }
   }
 

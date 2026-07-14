@@ -13,8 +13,11 @@
 #include <ao/audio/backend/detail/PipeWireRuntime.h>
 #include <ao/utility/Raii.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 extern "C"
 {
+#include <pipewire/loop.h>
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/raw.h>
 #include <spa/param/format.h>
@@ -24,6 +27,8 @@ extern "C"
 #include <spa/pod/builder.h>
 #include <spa/pod/iter.h>
 #include <spa/pod/pod.h>
+#include <spa/support/loop.h>
+#include <spa/utils/defs.h>
 #include <spa/utils/type.h>
 }
 
@@ -35,6 +40,7 @@ extern "C"
 #include <cstdint>
 #include <format>
 #include <memory>
+#include <tuple>
 
 namespace ao::audio::backend
 {
@@ -43,7 +49,28 @@ namespace ao::audio::backend
   namespace
   {
     constexpr std::size_t kPodBufferSize = 1024;
-  }
+
+    std::int32_t completeLoopBarrier(::spa_loop* /*loop*/,
+                                     bool /*async*/,
+                                     std::uint32_t /*seq*/,
+                                     void const* /*data*/,
+                                     std::size_t /*size*/,
+                                     void* /*userData*/)
+    {
+      return 0;
+    }
+
+    void waitForLoopBarrier(::pw_loop* loop)
+    {
+      if (loop == nullptr)
+      {
+        return;
+      }
+
+      auto const result = ::pw_loop_invoke(loop, completeLoopBarrier, SPA_ID_INVALID, nullptr, 0, true, nullptr);
+      gsl_Expects(result >= 0);
+    }
+  } // namespace
 
   /**
    * @brief Implementation of PipeWireBackend.
@@ -84,7 +111,7 @@ namespace ao::audio::backend
     Impl& operator=(Impl&&) = delete;
 
     // Event Handlers
-    void handleStreamProcess() const;
+    void handleStreamProcess();
     void handleStreamParamChanged(std::uint32_t id, ::spa_pod const* param);
     void handleStreamStateChanged(::pw_stream_state oldState, ::pw_stream_state newState, char const* errorMessage);
     void handleStreamDrained();
@@ -95,7 +122,8 @@ namespace ao::audio::backend
     PipeWireEnvironmentGuard envGuard;
     RenderTarget* renderTarget = nullptr;
     Format format;
-    std::atomic<bool> drainPending = false;
+    std::atomic<bool> renderAdmissionOpen{false};
+    std::atomic<bool> drainPending{false};
     bool strictFormatRequired = false;
     bool strictFormatRejected = false;
     bool routeAnchorReported = false;
@@ -111,6 +139,7 @@ namespace ao::audio::backend
     std::atomic<bool> outputControlAvailable{true};
 
     void applyCachedControls() const;
+    void stopRenderCycles();
     PropertyInfo volumePropertyInfo() const noexcept
     {
       return {.canRead = true,
@@ -167,8 +196,13 @@ namespace ao::audio::backend
     return ev;
   }();
 
-  void PipeWireBackend::Impl::handleStreamProcess() const
+  void PipeWireBackend::Impl::handleStreamProcess()
   {
+    if (!renderAdmissionOpen.load(std::memory_order_acquire))
+    {
+      return;
+    }
+
     auto* buffer = ::pw_stream_dequeue_buffer(streamPtr.get());
 
     if (buffer == nullptr)
@@ -235,7 +269,12 @@ namespace ao::audio::backend
 
     if (renderResult.drained)
     {
-      ::pw_stream_flush(streamPtr.get(), true);
+      drainPending.store(true, std::memory_order_release);
+
+      if (::pw_stream_flush(streamPtr.get(), true) < 0)
+      {
+        drainPending.store(false, std::memory_order_release);
+      }
     }
   }
 
@@ -314,8 +353,44 @@ namespace ao::audio::backend
 
   void PipeWireBackend::Impl::handleStreamDrained()
   {
-    drainPending = false;
-    renderTarget->handleDrainComplete();
+    if (drainPending.exchange(false, std::memory_order_acq_rel))
+    {
+      renderTarget->handleDrainComplete();
+    }
+  }
+
+  void PipeWireBackend::Impl::stopRenderCycles()
+  {
+    // Admission is project-owned: a future asynchronous PipeWire deactivation
+    // can no longer admit a RenderTarget call after this store.
+    renderAdmissionOpen.store(false, std::memory_order_release);
+
+    auto* dataLoop = static_cast<::pw_loop*>(nullptr);
+    auto* mainLoop = static_cast<::pw_loop*>(nullptr);
+    {
+      auto guard = PwThreadLoopGuard{threadLoopPtr.get()};
+
+      if (!streamPtr)
+      {
+        drainPending.store(false, std::memory_order_release);
+        return;
+      }
+
+      std::ignore = ::pw_stream_set_active(streamPtr.get(), false);
+      dataLoop = ::pw_stream_get_data_loop(streamPtr.get());
+      mainLoop = ::pw_thread_loop_get_loop(threadLoopPtr.get());
+    }
+
+    // A process callback that observed open admission is serialized before
+    // this round-trip. It has therefore returned, including all RenderTarget
+    // notifications and any request that queued a drained event.
+    waitForLoopBarrier(dataLoop);
+
+    // Suppress that cycle's drain and run every already-queued main-loop drain
+    // dispatch before returning. Never block on a loop while holding the
+    // thread-loop lock.
+    drainPending.store(false, std::memory_order_release);
+    waitForLoopBarrier(mainLoop);
   }
 
   void PipeWireBackend::Impl::applyCachedControls() const
@@ -447,8 +522,8 @@ namespace ao::audio::backend
 
     auto const* param = static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &frame));
     auto params = std::array<::spa_pod const*, 1>{param};
-    auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
-                                                PW_STREAM_FLAG_RT_PROCESS);
+    auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_INACTIVE |
+                                                PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS);
 
     if (useExclusive)
     {
@@ -475,7 +550,13 @@ namespace ao::audio::backend
       return;
     }
 
-    ::pw_stream_set_active(_implPtr->streamPtr.get(), true);
+    _implPtr->drainPending.store(false, std::memory_order_release);
+    _implPtr->renderAdmissionOpen.store(true, std::memory_order_release);
+
+    if (::pw_stream_set_active(_implPtr->streamPtr.get(), true) < 0)
+    {
+      _implPtr->renderAdmissionOpen.store(false, std::memory_order_release);
+    }
   }
 
   void PipeWireBackend::pause()
@@ -497,7 +578,7 @@ namespace ao::audio::backend
 
   void PipeWireBackend::flush()
   {
-    _implPtr->drainPending = false;
+    _implPtr->drainPending.store(false, std::memory_order_release);
     auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
 
     if (!_implPtr->streamPtr)
@@ -510,19 +591,12 @@ namespace ao::audio::backend
 
   void PipeWireBackend::stop()
   {
-    _implPtr->drainPending = false;
-    auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
-
-    if (!_implPtr->streamPtr)
-    {
-      return;
-    }
-
-    ::pw_stream_set_active(_implPtr->streamPtr.get(), false);
+    _implPtr->stopRenderCycles();
   }
 
   void PipeWireBackend::close()
   {
+    _implPtr->stopRenderCycles();
     _implPtr->destroyStream();
   }
 

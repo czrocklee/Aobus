@@ -4,6 +4,9 @@
 #include "council/ProcessRunner.h"
 
 #include "council/CouncilSchema.h"
+// Preload the GCC TSan fence guard before Asio; this header is used for its preprocessing effect.
+// NOLINTNEXTLINE(misc-include-cleaner)
+#include <ao/async/detail/BoostAsioTsanPrelude.h>
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/buffer.hpp>

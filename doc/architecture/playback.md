@@ -254,6 +254,9 @@ Its sole PCM producer requests another decoded block only while below the target
 Synchronous preroll and seek filling use the same policy as the later decode worker; a larger-than-predicted block retains the cancellable partial-write fallback.
 This producer-side policy adds no lock, notification, or accounting operation to the realtime consumer.
 
+Engine seek establishes exclusive PCM reset access in three steps.
+Backend `stop()` first closes render admission and waits for the active render cycle to return, complete `status()` snapshots participate in Engine control serialization while observing buffered duration, and `StreamingSource::seek()` stops and joins its decode producer before resetting the ring in constant time.
+
 ## Execution domains
 
 The detailed process-wide rules belong to [runtime execution architecture](runtime-execution.md).
@@ -263,7 +266,7 @@ Playback refines them as follows:
 |---|---|---|---|
 | Runtime callback executor | Sequence, PlaybackService, PlaybackSessionPersistence, Player application state | Executor affinity; no lower callback mutates these objects inline. | Values and commands enter Engine; observations publish to UIModel/frontends. |
 | Async runtime timer/worker | Persistence delays and cancellable scheduling | Stop tokens and weak/shared lifetime guards; it resumes on the callback executor before touching playback state. | Scheduled checkpoint intent returns to the callback domain. |
-| Engine control domain | Engine transport, route attachment, timeline, and synchronized snapshots | Thread-tolerant public API serialized by Engine control/state synchronization. | Commands affect Backend/StreamingSource; notifications are queued to the event worker. |
+| Engine control domain | Engine transport, route attachment, timeline, and synchronized snapshots | Thread-tolerant commands and complete status snapshots are serialized by Engine control/state synchronization; scalar state-only queries use the narrower state synchronization. | Commands affect Backend/StreamingSource; notifications are queued to the event worker. |
 | Engine event worker | Ordered backend/source events and realtime transition signals | One owned worker, synchronized event queue, bounded realtime signal ring. | Engine callbacks enter the Player callback gate. |
 | StreamingSource decode thread | Decoder progress and PCM production for one source | Owned `jthread`, decoder/error synchronization, stop tokens, capacity-bounded byte targets, and producer-confined block headroom over the PCM ring. | PCM enters the render plane; errors enqueue toward Engine. |
 | Backend render/device domains | Native output, render cursor, and provider discovery | Backend-specific synchronization; realtime render avoids Engine control locks and unbounded work. | Non-realtime events enqueue toward Engine or provider callbacks toward Player. |
@@ -289,7 +292,8 @@ These guards contain reentrant commands but do not create a third transaction ex
 - Runtime-visible state and public playback observations are accepted on the callback executor.
 - Engine callbacks carry generation evidence; application prepared transitions additionally carry a token that can be correlated without leaking application identity into core audio.
 - Realtime render performs no UI, storage, notification, list policy, blocking join, or general application work.
-- StreamingSource has one PCM producer at a time; seek stops and joins that producer before clearing the ring and its predictive block-headroom state.
+- Backend `stop()` is the render-quiescence boundary: it is called outside the render domain, prevents another render cycle, and waits for the active cycle and its render notifications to return.
+- StreamingSource has one PCM producer at a time; Engine quiesces render and buffered-duration observation, then seek stops and joins the producer before resetting the ring and its predictive block-headroom state.
 - Decoder and backend implementations remain replaceable without changing succession or session-persistence policy.
 - Persisted listening intent contains application semantics, not transient projections, prepared handles, audio generations, or thread state.
 - A coherent durable session requires matching sequence and transport current subjects; persistence reports an invariant failure rather than persisting split generations.
@@ -337,8 +341,8 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) and [`PlaybackSessionRevisionTest.cpp`](../../test/unit/runtime/playback/PlaybackSessionRevisionTest.cpp) protect composite persistence and restore coordination.
 - [`PlaybackCommandSurfaceTest.cpp`](../../test/unit/uimodel/playback/command/PlaybackCommandSurfaceTest.cpp) protects the UIModel/runtime command boundary.
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects Player ownership, provider/Engine composition, and callback marshalling.
-- [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp), [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp), [`EngineGaplessTest.cpp`](../../test/unit/audio/EngineGaplessTest.cpp), and [`EngineBackendSwapTest.cpp`](../../test/unit/audio/EngineBackendSwapTest.cpp) protect Engine control, event, transition, and backend boundaries.
-- [`StreamingSourceTest.cpp`](../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker ownership, bounded PCM admission, seek, and teardown.
+- [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp), [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp), [`EngineGaplessTest.cpp`](../../test/unit/audio/EngineGaplessTest.cpp), and [`EngineBackendSwapTest.cpp`](../../test/unit/audio/EngineBackendSwapTest.cpp) protect Engine control, status/seek serialization, event, transition, and backend boundaries.
+- [`StreamingSourceTest.cpp`](../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker ownership, bounded PCM admission, seek, constant-time reset reuse, and teardown.
 - [`AudioBackendBootstrapTest.cpp`](../../test/unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp) protects provider construction at the GTK composition boundary.
 
 ## Related documents

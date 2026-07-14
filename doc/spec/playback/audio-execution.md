@@ -29,6 +29,7 @@ This contract belongs primarily to the **Core libraries** layer in the [system a
 - **Player graph epoch**: Player's current provider/route graph identity used when accepting marshalled route state.
 - **Buffer target**: a requested buffered duration converted to a rounded-up byte count and capped by the PCM ring capacity.
 - **Predictive block headroom**: writable ring capacity reserved from the previous nonempty decoded block size before requesting the next block.
+- **Render quiescence**: the `Backend::stop()` postcondition that closes render admission and waits for the active render cycle and its render notifications to return.
 
 ## Invariants
 
@@ -43,7 +44,9 @@ This contract belongs primarily to the **Core libraries** layer in the [system a
 - Engine callbacks have one origin thread: the event worker.
 - Player state and public methods have one owner executor; lower callbacks are marshalled before touching that state.
 - A callback from a retired render/audio/provider generation cannot mutate a newer state generation.
+- `stop()` establishes render quiescence without revoking the backend's open target.
 - `close()` revokes a backend's render target; no render callback begins after it returns.
+- PCM ring reset runs only while its producer, render consumer, and buffered-duration observer are quiescent.
 - Shutdown closes callback admission and joins producers before their targets are destroyed.
 
 ## State model
@@ -63,8 +66,11 @@ PlaybackService owns runtime metadata separately; `audio::PlaybackInput` contain
 Concurrent calls to `play`, `stagePlayback`, `commitPlayback`, `setNext`, `clearNext`, `pause`, `resume`, `stop`, `seek`, `setBackend`, `updateDevice`, `setVolume`, and `setMuted` enter the Engine control serialization.
 This order guarantees safety and a coherent final state, not user-intent priority between racing callers.
 
-Queries including status, transport, backend id, route state, volume, mute, and availability are safe concurrently.
-They do not settle a pending splice and may observe an intermediate transport or the pre-splice snapshot until the event worker or a control command applies it.
+The complete `status()` snapshot enters control serialization because it observes the current source's PCM queue.
+It waits for an in-flight command such as seek to finish before reading buffered duration, but unlike control-command entry it does not settle pending realtime signals and may still return the pre-splice snapshot.
+
+Scalar state-only queries including transport, backend id, route state, volume, mute, and availability use narrower state or atomic synchronization and remain safe concurrently.
+They may observe an intermediate transport until the active control command or event worker publishes its next state.
 
 Every public control command settles pending splice signals at entry under the control lock.
 This closes the window after the realtime cursor changed but before status and current-format state caught up.
@@ -115,7 +121,10 @@ The previous size is predictive rather than a decoder maximum: if a later block 
 A decoded block larger than the entire ring fails with `DecodeFailed` instead of entering an impossible write wait.
 
 The predictive size is producer-confined.
-Seek stops and joins the decode worker before clearing the ring and resetting that size, then synchronous preroll becomes the producer until the worker restarts.
+For an active Engine seek, backend `stop()` first establishes render quiescence and Engine control serialization excludes complete `status()` queue observation.
+`StreamingSource::seek()` then stops and joins the decode worker before resetting the byte ring and predictive size, after which synchronous preroll becomes the producer until the worker restarts.
+The byte ring reset is constant-time for its trivially destructible element type and requires that no read, write, or queue-availability observation overlap it.
+Direct `PcmSource` users must establish the same consumer and observer quiescence before calling seek.
 The realtime consumer still performs only ring reads; it does not update a separate occupancy counter, take a lock, or notify the producer.
 
 ### Prepared lookahead
@@ -180,7 +189,9 @@ Hosts using it must remain effectively single-threaded; it supplies no confineme
 Backends protect native handles against public-method/callback interleavings.
 They do not hold locks needed by public methods while invoking `RenderTarget` callbacks.
 
-`stop()` stops rendering without revoking the target, permitting stop/flush/start seek flows.
+`stop()` is called from the non-render Engine control domain, closes admission of new render cycles, and waits for every admitted cycle to finish before returning.
+A render cycle includes `renderPcm` and its directly associated position, underrun, and drain notifications; a backend may deliver such a notification synchronously inside `stop()`, but not after it returns until rendering is restarted.
+The target remains open, permitting stop/flush/start seek flows, while non-render route, property, and error callbacks remain protected by generation checks and the `close()` lifetime boundary.
 `close()` is the revocation boundary and waits for in-flight target callbacks.
 An unrecoverable backend error quiesces its render loop or enters a bounded retry; Engine does not synchronously call stop from the backend error callback.
 
@@ -234,11 +245,11 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 
 ## Test map
 
-- [`EngineConcurrencyTest.cpp`](../../../test/unit/audio/EngineConcurrencyTest.cpp) protects concurrent commands and teardown.
+- [`EngineConcurrencyTest.cpp`](../../../test/unit/audio/EngineConcurrencyTest.cpp) protects concurrent commands, status/seek serialization, render/reset exclusion, and teardown.
 - [`EngineGaplessTest.cpp`](../../../test/unit/audio/EngineGaplessTest.cpp), [`EngineDrainTest.cpp`](../../../test/unit/audio/EngineDrainTest.cpp), and [`AudioBackendRenderProgressTest.cpp`](../../../test/unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp) protect splice, drain, mixed-buffer progress, and fallback.
 - [`EngineCallbackTest.cpp`](../../../test/unit/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/unit/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/unit/audio/EngineBackendSwapTest.cpp) protect generations and stale events.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) protects executor marshalling, graph epochs, and gate behavior.
-- [`StreamingSourceTest.cpp`](../../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker lifetime, bounded producer admission, oversized blocks, and source retirement.
+- [`StreamingSourceTest.cpp`](../../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker lifetime, bounded producer admission, oversized blocks, constant-time reset reuse, and source retirement.
 - Runtime playback tests under [`test/unit/runtime/`](../../../test/unit/runtime/) protect executor-affine publication and application metadata.
 
 ## Related documents

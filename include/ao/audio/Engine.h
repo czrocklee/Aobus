@@ -42,9 +42,11 @@ namespace ao::audio
      * applied in one internal order. The order is an implementation detail and
      * does not encode user-intent priority.
      *
-     * Query methods such as status(), routeStatus(), transport(), volume(), and
-     * isMuted() are safe to call concurrently and return self-consistent
-     * snapshots, but they are not linearized with in-flight control commands.
+     * The complete status() snapshot is linearized with control commands
+     * because it also observes the current source's PCM queue. State-only
+     * queries such as routeStatus(), transport(), volume(), and isMuted() are
+     * safe to call concurrently, but are not linearized with in-flight control
+     * commands.
      *
      * User callbacks registered through setOnStateChanged(), setOnTrackEnded(),
      * setOnTrackAdvanced(), setOnPlaybackFailure(), and setOnRouteChanged() are

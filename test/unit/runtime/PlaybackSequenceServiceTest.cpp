@@ -4,6 +4,7 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/audio/EngineTestSupport.h"
 #include "test/unit/audio/ScriptedDecoderSession.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
@@ -41,7 +42,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <filesystem>
 #include <memory>
 #include <span>
@@ -175,7 +175,7 @@ namespace ao::rt::test
 
     struct PlaybackSequenceSeekFixture final
     {
-      explicit PlaybackSequenceSeekFixture(bool const failDecode = false)
+      explicit PlaybackSequenceSeekFixture(audio::test::StagedFailureGate* const failureGate = nullptr)
         : asyncRuntime{executor}
         , writer{libraryFixture.library(), changes}
         , sources{libraryFixture.library(), changes}
@@ -184,33 +184,31 @@ namespace ao::rt::test
         // A 48 kHz clock represents every whole millisecond exactly, including
         // the 3001 ms edge immediately above the strict restart threshold.
         auto const format = audio::Format{.sampleRate = 48000, .channels = 2, .bitDepth = 16, .isInterleaved = true};
-        auto const decoderFactory = [format, failDecode](std::filesystem::path const&, audio::Format const&)
-        {
-          auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
-            .sourceFormat = format,
-            .outputFormat = format,
-            .duration = std::chrono::seconds{10},
-            .isLossy = false,
-            .codec = AudioCodec::Flac,
-          });
-          auto const data = std::vector<std::byte>(100000, std::byte{0});
+        auto decoderFactory = audio::DecoderFactoryFn{};
 
-          if (failDecode)
+        if (failureGate != nullptr)
+        {
+          decoderFactory = [failureGate](std::filesystem::path const&, audio::Format const&)
+          { return std::make_unique<audio::test::StagedFailureDecoderSession>(failureGate); };
+        }
+        else
+        {
+          decoderFactory = [format](std::filesystem::path const&, audio::Format const&)
           {
-            decoderPtr->setReadScript(
-              {{.data = data, .endOfStream = false},
-               {.endOfStream = false,
-                .result = std::unexpected{
-                  Error{.code = Error::Code::DecodeFailed, .message = "scripted sequence decode failure"}}}});
-          }
-          else
-          {
+            auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
+              .sourceFormat = format,
+              .outputFormat = format,
+              .duration = std::chrono::seconds{10},
+              .isLossy = false,
+              .codec = AudioCodec::Flac,
+            });
+            auto const data = std::vector<std::byte>(100000, std::byte{0});
             decoderPtr->setReadScript(
               {{.data = data, .endOfStream = false}, {.data = data, .endOfStream = false}, {.endOfStream = true}});
-          }
+            return decoderPtr;
+          };
+        }
 
-          return decoderPtr;
-        };
         auto playerPtr = std::make_unique<audio::Player>(executor, std::move(decoderFactory));
         playbackPtr =
           std::make_unique<PlaybackService>(executor, libraryFixture.library(), notifications, std::move(playerPtr));
@@ -900,17 +898,21 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSequenceService - track failure on an invalidated source posts one terminal sequence error",
-            "[runtime][unit][playback-sequence][failure]")
+            "[runtime][unit][playback-sequence][concurrency]")
   {
-    auto fixture = PlaybackSequenceSeekFixture{true};
+    auto failureGate = audio::test::StagedFailureGate{};
+    auto fixture = PlaybackSequenceSeekFixture{&failureGate};
+    auto releaseGuard = audio::test::StagedFailureReleaseGuard{failureGate};
     fixture.buildSingleTrackManualView();
     auto failures = std::vector<PlaybackFailure>{};
     auto const subscription =
       fixture.playbackPtr->onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
     REQUIRE(fixture.sequencePtr->playFromView(fixture.viewId, fixture.firstTrackId));
+    REQUIRE(failureGate.waitForRead());
 
     REQUIRE(fixture.writer.deleteList(fixture.listId));
     REQUIRE(fixture.sequencePtr->state().sourceState == PlaybackSequenceSourceState::Invalidated);
+    releaseGuard.release();
     REQUIRE(fixture.executor.drainUntil([&] { return !failures.empty(); }));
 
     REQUIRE(failures.size() == 1);
@@ -924,7 +926,7 @@ namespace ao::rt::test
     CHECK(feed.entries.front().sticky);
     CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
     CHECK(feed.entries.front().message.contains("Failing current"));
-    CHECK(feed.entries.front().message.contains("scripted sequence decode failure"));
+    CHECK(feed.entries.front().message.contains("gated staged decode failure"));
   }
 
   TEST_CASE("PlaybackSequenceService - previous restart uses a strict greater-than three-second final seek",

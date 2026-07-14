@@ -11,6 +11,13 @@
 
 namespace ao::audio
 {
+  /**
+   * @brief PCM source consumed by one active backend render domain.
+   *
+   * seek() requires the caller to quiesce concurrent read(), isDrained(), and
+   * bufferedDuration() calls. Implementations may own a producer that seek()
+   * must stop separately before replacing buffered content.
+   */
   class PcmSource
   {
   public:

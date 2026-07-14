@@ -141,6 +141,7 @@ if(NOT Boost_FOUND)
     "could not provide an exact compatible package. Considered versions: "
     "'${Boost_CONSIDERED_VERSIONS}'. See doc/development/dependency-upgrade.md.")
 endif()
+
 find_package(spdlog ${AOBUS_SPDLOG_FIND_ARGUMENTS} CONFIG QUIET)
 if(NOT spdlog_FOUND)
   message(FATAL_ERROR

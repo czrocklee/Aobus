@@ -28,6 +28,12 @@ namespace ao::audio
    *   RenderTarget callback if a public backend method can acquire that same
    *   lock. Non-realtime Engine events are handed off internally, but the
    *   backend must still avoid callback/native-lock reentrancy hazards.
+   * - stop() is called from the non-render Engine control domain. It closes
+   *   render admission and does not return until every in-flight render cycle,
+   *   including its RenderTarget render notifications, has returned. No new
+   *   render cycle begins until start() reactivates the backend.
+   *   Non-render route, property, and error callbacks remain governed by their
+   *   existing generation checks and the close() lifetime boundary.
    * - close() is the render-target lifetime boundary. After close() returns, the
    *   backend must not issue further callbacks to the RenderTarget passed to
    *   open(), and all in-flight callbacks for that target must have returned.

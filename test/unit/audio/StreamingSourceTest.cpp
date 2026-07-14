@@ -120,11 +120,13 @@ namespace ao::audio::test
     auto const info = testStreamInfo();
     auto errorCount = std::atomic{0};
     auto onError = [&](Error const&) { errorCount.fetch_add(1); };
-    auto block = silenceBlock(400);
+    auto beforeSeekBlock = std::vector(400, std::byte{0x11});
+    auto afterSeekBlock = std::vector(400, std::byte{0x22});
 
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
     auto* const decoderRaw = decoderPtr.get();
-    decoderPtr->setReadScript({{block, false}, {block, false}, {{}, true}});
+    decoderPtr->setReadScript({{beforeSeekBlock, false}, {{}, true}});
+    decoderPtr->setSeekReadScript({{afterSeekBlock, false}, {{}, true}});
 
     auto sourcePtr = std::make_unique<StreamingSource>(
       std::move(decoderPtr), info, onError, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
@@ -132,7 +134,11 @@ namespace ao::audio::test
 
     CHECK(sourcePtr->seek(std::chrono::milliseconds{50}));
     CHECK(decoderRaw->lastSeekOffset() == std::chrono::milliseconds{50});
-    CHECK(sourcePtr->bufferedDuration() >= std::chrono::milliseconds{100});
+    CHECK(sourcePtr->bufferedDuration() == std::chrono::milliseconds{200});
+
+    auto output = std::vector<std::byte>(afterSeekBlock.size());
+    REQUIRE(sourcePtr->read(output) == output.size());
+    CHECK(output == afterSeekBlock);
     CHECK(errorCount.load() == 0);
   }
 

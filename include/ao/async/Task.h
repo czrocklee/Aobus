@@ -3,6 +3,10 @@
 
 #pragma once
 
+// Preload the GCC TSan fence guard before Asio; this header is used for its preprocessing effect.
+// NOLINTNEXTLINE(misc-include-cleaner)
+#include <ao/async/detail/BoostAsioTsanPrelude.h>
+
 #include <boost/asio/awaitable.hpp>
 
 #include <functional>

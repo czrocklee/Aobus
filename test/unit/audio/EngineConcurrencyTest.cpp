@@ -235,8 +235,9 @@ namespace ao::audio::test
   }
 
   // Run under TSan (./ao test --tsan): the control thread loops play/seek/stop
-  // while a render thread reads the lock-free source pointer and a poller reads
-  // status() through the source slot owner.
+  // while a contract-conforming backend joins its render thread before each
+  // source reset and a poller reads the same queue through status(). PipeWire
+  // closes its own render admission and drains both data- and main-loop work.
   TEST_CASE("Engine - concurrent source swap is race-free", "[audio][unit][engine][concurrency]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},

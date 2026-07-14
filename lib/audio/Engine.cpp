@@ -2575,13 +2575,21 @@ namespace ao::audio
 
   Engine::Status Engine::status() const
   {
+    // Unlike scalar state-only queries, the complete snapshot observes the
+    // current source's PCM queue. Serialize that observation with seek(), whose
+    // control-ordered source reset requires exclusive queue access.
+    auto const controlLock = std::scoped_lock{_implPtr->controlMutex};
     auto const sourcePtr = _implPtr->currentSource();
-    auto const lock = std::scoped_lock{_implPtr->stateMutex};
-    auto snap = Status{_implPtr->status};
+    auto snap = Status{};
+    {
+      auto const stateLock = std::scoped_lock{_implPtr->stateMutex};
+      snap = _implPtr->status;
+      snap.routeState = _implPtr->routeTracker.state();
+    }
+
     auto const totalFrames = _implPtr->accumulatedFrames.load(std::memory_order_relaxed);
     auto const sampleRate = _implPtr->engineSampleRate.load(std::memory_order_relaxed);
     snap.elapsed = samplesToDuration(totalFrames, sampleRate);
-    snap.routeState = _implPtr->routeTracker.state();
     snap.bufferedDuration = sourcePtr ? sourcePtr->bufferedDuration() : std::chrono::milliseconds{0};
     snap.underrunCount = _implPtr->underrunCount.load(std::memory_order_relaxed);
     return snap;
