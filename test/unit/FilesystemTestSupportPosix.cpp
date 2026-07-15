@@ -76,6 +76,22 @@ namespace ao::test
     }
   } // namespace
 
+  bool hasPrivateManagedFileAccess(std::filesystem::path const& path)
+  {
+    auto ec = std::error_code{};
+    auto const permissions = std::filesystem::status(path, ec).permissions();
+
+    if (ec)
+    {
+      throw std::system_error{ec, "failed to inspect private file permissions"};
+    }
+
+    auto const ownerAccess = permissions & std::filesystem::perms::owner_all;
+    auto const ownerReadWrite = std::filesystem::perms::owner_read | std::filesystem::perms::owner_write;
+    auto const broadAccess = permissions & (std::filesystem::perms::group_all | std::filesystem::perms::others_all);
+    return ownerAccess == ownerReadWrite && broadAccess == std::filesystem::perms::none;
+  }
+
   struct ScopedDirectoryAccessGuard::Impl final
   {
     Impl(std::filesystem::path inputPath, DeniedDirectoryAccess inputAccess)

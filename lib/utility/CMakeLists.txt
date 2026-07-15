@@ -8,6 +8,7 @@ add_library(ao_utility STATIC
 )
 if(WIN32)
     target_sources(ao_utility PRIVATE AtomicFileWindows.cpp)
+    target_link_libraries(ao_utility PRIVATE Advapi32)
 else()
     target_sources(ao_utility PRIVATE AtomicFile.cpp)
 endif()

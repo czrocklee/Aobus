@@ -9,6 +9,12 @@
 
 namespace ao::test
 {
+  /**
+   * Verifies the platform's private managed-file policy used by AtomicFile.
+   * Throws when the security metadata cannot be inspected.
+   */
+  bool hasPrivateManagedFileAccess(std::filesystem::path const& path);
+
   enum class DeniedDirectoryAccess : std::uint8_t
   {
     Read,

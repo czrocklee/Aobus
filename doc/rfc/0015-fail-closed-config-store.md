@@ -46,12 +46,11 @@ The API makes destructive sequencing easy, safe sequencing repetitive, and schem
 
 - Hard: None.
 - Conditional: None.
-- Integration: [RFC 0005](0005-coherent-playback-boundary.md), [RFC 0010](0010-versioned-presentation-state.md), [RFC 0014](0014-observable-atomic-replacement.md).
+- Integration: [RFC 0005](0005-coherent-playback-boundary.md), [RFC 0010](0010-versioned-presentation-state.md).
 
 RFC 0005 introduces a serialized configuration writer for shared runtime stores; that writer should own the transactions proposed here rather than serialize the legacy mutation/flush split.
 RFC 0010 introduces versioned presentation codecs and fail-closed object recovery; those codecs should target the candidate-read contract instead of a second store API.
-RFC 0014 introduces applied-versus-barrier-completed replacement receipts; the commit receipt proposed here must preserve that lower outcome.
-This RFC can first use the current synchronous writer and replacement result, but joint implementations align at those boundaries.
+The current [atomic replacement specification](../spec/persistence/atomic-replacement.md) supplies the lower byte-integrity boundary: an error is pre-replacement, while success means the platform replacement call succeeded without claiming absolute power-loss durability.
 
 ## Goals
 
@@ -62,7 +61,7 @@ This RFC can first use the current synchronous writer and replacement result, bu
 - Stage one or more group changes in an isolated complete-document transaction.
 - Give every staged group operation a strong failure guarantee: failure leaves both the live store and transaction candidate unchanged.
 - Emit and replace only a completely encoded transaction candidate.
-- Return one commit receipt that identifies the committed store generation and preserves lower replacement evidence.
+- Return one commit receipt that identifies the committed store generation after successful file replacement.
 - Let semantic owners choose missing-data, recovery, retry, acknowledgement, and reporting policy without message parsing.
 - Preserve one writer authority and executor confinement rather than hiding concurrency policy in the YAML codec.
 
@@ -195,9 +194,9 @@ Commit performs one ordered state transition:
 There is no public bare `flush()`.
 Only a transaction whose base document was established and whose complete candidate was emitted can reach file replacement.
 
-`ConfigCommitReceipt` contains the accepted store generation and the lower replacement receipt when RFC 0014 is implemented.
-With the current replacement API it initially represents ordinary applied success.
-After RFC 0014, `VisibilityOnly` is still an applied commit: the live store advances to the candidate, while the semantic owner decides whether its own revision remains dirty pending a barrier-confirmed retry.
+`ConfigCommitReceipt` contains the accepted store generation after the current atomic replacement operation returns success.
+It records the store transaction that was applied; it is not a stronger filesystem-durability receipt than the lower replacement contract.
+A future payload-specific recovery protocol must define and integrate any additional evidence explicitly rather than silently widening this receipt.
 
 An emission or pre-replacement I/O failure is not applied and leaves the live document unchanged.
 A commit API may retain its transaction candidate for retry, but it cannot make retry automatic or acknowledge a semantic revision.
@@ -295,7 +294,7 @@ Implementation proceeds in phases:
 3. Add isolated document transactions, detached group encoding, store generation, and commit tests while adapting to the current atomic replacement result.
 4. Migrate `PlaybackSessionPersistence`, then multi-group GTK presentation state, workspace, global GTK groups, keymaps, and layout documents to result-bearing transactions.
 5. Remove void `save()`, public `saveResult()`, bare `flush()`, target-mutating load overloads, and generic silent container salvage.
-6. Integrate the serialized writer from RFC 0005 and replacement receipt from RFC 0014 when those proposals are implemented.
+6. Integrate the serialized writer from RFC 0005 when that proposal is implemented.
 7. Move legacy numeric enum payloads to their owning explicit codecs, coordinating presentation formats with RFC 0010.
 8. Add reporting dispositions at semantic owners and remove lower wrapper logging where typed outcomes now propagate.
 
@@ -318,7 +317,7 @@ A compatible document is written only through a semantic save or explicit migrat
 - Stale same-store transactions return `Conflict` and cannot replace a newer accepted generation.
 - Emission and pre-replacement write failure retain the old live document and backing file.
 - An applied commit installs the matching candidate and returns its exact store generation.
-- RFC 0014 integration preserves `VisibilityOnly` versus `PlatformBarrierCompleted` without treating an applied receipt as not applied.
+- A successful commit receipt names the exact applied store generation without claiming stronger durability than atomic replacement provides.
 - Playback revision tests acknowledge only the revision named by a matching applied commit.
 - GTK presentation tests prove column and preference groups cannot be split across transactions.
 - Workspace, keymap, global GTK, and layout tests prove their wrappers return or deliberately classify every commit outcome.
@@ -343,5 +342,5 @@ Update the [workspace session specification](../spec/workspace/session.md) with 
 Update the [interactive session lifecycle architecture](../architecture/interactive-session-lifecycle.md) and [GTK active-library lifecycle specification](../spec/linux-gtk/active-library-lifecycle.md) if result-bearing checkpoints change switch or shutdown ordering.
 Add or update playback-session, keymap, presentation, and layout specifications with their missing, recovery, transaction, acknowledgement, and reporting policy.
 
-Coordinate RFC 0005's serialized writer, RFC 0010's versioned presentation codecs, and RFC 0014's replacement receipt when implemented together.
+Coordinate RFC 0005's serialized writer and RFC 0010's versioned presentation codecs when implemented together.
 Update the failure/reporting documents only where new typed outcomes cross a semantic owner, and record an ADR if candidate transactions, blocked-store recovery, or removal of generic salvage represents a durable choice with credible alternatives.

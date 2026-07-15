@@ -42,6 +42,31 @@ namespace ao::test
       Handle& operator=(Handle&&) = delete;
     };
 
+    class LocalSecurityDescriptor final
+    {
+    public:
+      explicit LocalSecurityDescriptor(PSECURITY_DESCRIPTOR value)
+        : _value{value}
+      {
+      }
+
+      ~LocalSecurityDescriptor() noexcept
+      {
+        if (_value != nullptr)
+        {
+          ::LocalFree(_value);
+        }
+      }
+
+      LocalSecurityDescriptor(LocalSecurityDescriptor const&) = delete;
+      LocalSecurityDescriptor& operator=(LocalSecurityDescriptor const&) = delete;
+      LocalSecurityDescriptor(LocalSecurityDescriptor&&) = delete;
+      LocalSecurityDescriptor& operator=(LocalSecurityDescriptor&&) = delete;
+
+    private:
+      PSECURITY_DESCRIPTOR _value = nullptr;
+    };
+
     std::system_error windowsError(DWORD code, char const* operation)
     {
       return std::system_error{static_cast<std::int32_t>(code), std::system_category(), operation};
@@ -121,6 +146,86 @@ namespace ao::test
       throw windowsError(error, "failed to probe denied directory write access");
     }
   } // namespace
+
+  bool hasPrivateManagedFileAccess(std::filesystem::path const& path)
+  {
+    auto token = currentUserToken();
+    auto* const tokenUser = static_cast<TOKEN_USER*>(static_cast<void*>(token.data()));
+    auto systemSid = std::array<std::byte, SECURITY_MAX_SID_SIZE>{};
+    DWORD systemSidSize = static_cast<DWORD>(systemSid.size());
+
+    if (::CreateWellKnownSid(WinLocalSystemSid, nullptr, systemSid.data(), &systemSidSize) == FALSE)
+    {
+      throw windowsError(::GetLastError(), "CreateWellKnownSid failed");
+    }
+
+    auto nativePath = path.wstring();
+    PSECURITY_DESCRIPTOR rawDescriptor = nullptr;
+    PACL dacl = nullptr;
+    auto const securityError = ::GetNamedSecurityInfoW(
+      nativePath.data(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr, nullptr, &dacl, nullptr, &rawDescriptor);
+
+    if (securityError != ERROR_SUCCESS)
+    {
+      throw windowsError(securityError, "GetNamedSecurityInfoW failed");
+    }
+
+    auto descriptor = LocalSecurityDescriptor{rawDescriptor};
+    SECURITY_DESCRIPTOR_CONTROL control = 0;
+    DWORD revision = 0;
+
+    if (::GetSecurityDescriptorControl(rawDescriptor, &control, &revision) == FALSE)
+    {
+      throw windowsError(::GetLastError(), "GetSecurityDescriptorControl failed");
+    }
+
+    if ((control & SE_DACL_PRESENT) == 0 || (control & SE_DACL_PROTECTED) == 0 || dacl == nullptr ||
+        dacl->AceCount != 2)
+    {
+      return false;
+    }
+
+    bool userHasFullControl = false;
+    bool systemHasFullControl = false;
+
+    for (DWORD index = 0; index < dacl->AceCount; ++index)
+    {
+      void* rawAccessEntry = nullptr;
+
+      if (::GetAce(dacl, index, &rawAccessEntry) == FALSE)
+      {
+        throw windowsError(::GetLastError(), "GetAce failed");
+      }
+
+      auto const* header = static_cast<ACE_HEADER const*>(rawAccessEntry);
+
+      if (header->AceType != ACCESS_ALLOWED_ACE_TYPE || (header->AceFlags & INHERITED_ACE) != 0)
+      {
+        return false;
+      }
+
+      auto const* accessEntry = static_cast<ACCESS_ALLOWED_ACE const*>(rawAccessEntry);
+
+      if ((accessEntry->Mask & FILE_ALL_ACCESS) != FILE_ALL_ACCESS)
+      {
+        return false;
+      }
+
+      PSID const sid = const_cast<DWORD*>(&accessEntry->SidStart);
+      auto const currentUser = ::EqualSid(sid, tokenUser->User.Sid) != FALSE;
+      auto const localSystem = ::EqualSid(sid, systemSid.data()) != FALSE;
+
+      if (!currentUser && !localSystem)
+      {
+        return false;
+      }
+
+      userHasFullControl |= currentUser;
+      systemHasFullControl |= localSystem;
+    }
+
+    return userHasFullControl && systemHasFullControl;
+  }
 
   struct ScopedDirectoryAccessGuard::Impl final
   {

@@ -41,10 +41,10 @@ Layout budgets must account for template expansion and widget construction, conc
 
 - Hard: None.
 - Conditional: None.
-- Integration: [RFC 0010](0010-versioned-presentation-state.md), [RFC 0014](0014-observable-atomic-replacement.md), [RFC 0015](0015-fail-closed-config-store.md).
+- Integration: [RFC 0010](0010-versioned-presentation-state.md), [RFC 0015](0015-fail-closed-config-store.md).
 
 RFC 0010 should align stable component/action/node identifiers and presentation-state migration with supported layout versions.
-RFC 0014 should provide observable replacement for saved custom documents.
+The current [atomic replacement contract](../spec/persistence/atomic-replacement.md) provides complete private-file replacement for saved custom documents.
 RFC 0015 should ensure a failed layout candidate or flush cannot be mistaken for a durable shell commit.
 
 ## Goals
@@ -65,7 +65,7 @@ RFC 0015 should ensure a failed layout candidate or flush cannot be mistaken for
 - Define exact component properties or action ids; those remain catalog/reference facts.
 - Replace RapidYAML or `ConfigStore` solely for this feature.
 - Make every visible unknown component fatal; diagnostic components can remain a deliberate compatibility behavior.
-- Solve grouped-store durability independently of RFCs 0014 and 0015.
+- Solve grouped-store transaction and recovery policy independently of RFC 0015.
 
 ## Proposed design
 

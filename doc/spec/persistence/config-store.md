@@ -43,6 +43,7 @@ Direct users of the reusable YAML adapter outside `ConfigStore` retain their own
 - One non-copyable, non-movable `ConfigStore` instance owns one backing path, one YAML document, one parser input buffer, and one parser callback state.
 - A successfully initialized document is cached for the remaining lifetime of the instance; the store does not merge or reload later external file changes.
 - File inspection, file reading, or YAML parsing failure does not mark the document loaded, so a later group operation retries initialization.
+- Loading never writes the backing file; a failed parse preserves its original bytes and destruction does not flush automatically.
 - Group decode failure occurs after successful document initialization and does not cause a disk reload on the next operation.
 - Every group in one instance shares the same whole-file document and flush boundary.
 - Mutation and durability are distinct: a successful in-memory mutation does not update the backing file until a later successful `flush()`.
@@ -140,7 +141,7 @@ Removal remains in memory until a successful flush and is idempotent after the f
 
 ### Flush
 
-`flush()` emits the complete current document and passes it to the [atomic file replacement contract](atomic-replacement.md) with owner-read/write permissions.
+`flush()` emits the complete current document and passes it to the [atomic file replacement contract](atomic-replacement.md), which always installs a private-user file.
 It returns the replacement helper's recoverable failure and does not clear, reload, roll back, or acknowledge any semantic dirty state.
 
 `flush()` does not verify that initialization or a preceding mutation succeeded.
@@ -197,7 +198,7 @@ A runtime or frontend workflow decides whether a store failure is local validati
 
 ## Test map
 
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects round trips, seeded defaults, group absence, scalar boundaries, group overwrite and preservation, removal, read-only behavior, retry after initialization failure, and flush results.
+- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects round trips, seeded defaults, group absence, scalar boundaries, group overwrite and preservation, malformed-file byte preservation, removal, read-only behavior, retry after initialization failure, and flush results.
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects the aggregate/vector exact-decode path and semantic validation above it.
 - [`RymlAdapterTest.cpp`](../../../test/unit/utility/RymlAdapterTest.cpp) protects complete scalar parsing, range rejection, canonical booleans, recoverable file helpers, and callback diagnostic lifetime.
 - [`AtomicFileTest.cpp`](../../../test/unit/utility/AtomicFileTest.cpp) protects replacement, owner-only permissions, and lower write-failure behavior.
@@ -216,5 +217,5 @@ The direct Unloaded-`flush()` path and the `save()`-discarded-initialization-fai
 - [Failure and reporting architecture](../../architecture/failure-and-reporting.md)
 - [RFC 0005: coherent playback application boundary](../../rfc/0005-coherent-playback-boundary.md)
 - [RFC 0010: versioned presentation state](../../rfc/0010-versioned-presentation-state.md)
-- [RFC 0014: observable atomic replacement](../../rfc/0014-observable-atomic-replacement.md)
+- [RFC 0014: observable atomic replacement](../../rfc/0014-observable-atomic-replacement.md), rejected after narrower atomic-replacement hardening was implemented
 - [RFC 0015: fail-closed grouped configuration transactions](../../rfc/0015-fail-closed-config-store.md)

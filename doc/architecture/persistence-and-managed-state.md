@@ -114,7 +114,7 @@ The schema owner decides whether absence preserves seeded defaults, whether unkn
 
 `ConfigStore` is the application-runtime mechanism for multiple named groups that share one whole-file document and writer authority.
 The [grouped configuration store specification](../spec/persistence/config-store.md) owns its lazy initialization, decode modes, group operations, flush behavior, failures, and concurrency contract.
-The semantic owner above the store remains responsible for dirty state, scheduling, retry, observation, cross-field validation, fallback, and durability acknowledgement.
+The semantic owner above the store remains responsible for dirty state, scheduling, retry, observation, cross-field validation, fallback, and save acknowledgement.
 
 A specialized store may bypass `ConfigStore` when its document boundary, synchronization, or pruning behavior differs from grouped application configuration.
 `ShellLayoutComponentStateStore`, for example, reads and emits one complete component-state document directly, protects its operations with a mutex, and still uses the shared YAML and atomic-file mechanisms.
@@ -169,11 +169,12 @@ semantic owner captures one coherent typed value
   -> store mutates its in-memory tree
   -> explicit flush emits the complete file
   -> AtomicFile replaces the previous file
-  -> semantic owner acknowledges only the successfully durable snapshot
+  -> semantic owner acknowledges only the successfully replaced snapshot
 ```
 
 Atomic replacement protects the target path from a helper-written partial replacement under the [platform replacement contract](../spec/persistence/atomic-replacement.md).
-It does not make separate group mutations a semantic transaction, serialize concurrent writers, or acknowledge a newer in-memory revision on behalf of the state owner.
+It always installs a private-user file after a complete write, data barrier, and close, and gives every uncommitted temporary file one RAII cleanup owner.
+Its success means the platform replacement call succeeded; it does not make separate group mutations a semantic transaction, serialize concurrent writers, prove absolute power-loss durability, or acknowledge a newer in-memory revision on behalf of the state owner.
 
 Playback-session persistence adds dirty revisions, debounce, retry, and final checkpoint policy above this mechanism.
 Workspace, GTK preference, layout, and presentation owners currently use their own explicit lifecycle save points.
@@ -193,7 +194,7 @@ The [interactive session lifecycle architecture](interactive-session-lifecycle.m
 - Defaults are typed model state, not values inferred by the YAML parser.
 - Version and migration policy is declared by the semantic owner; automatic aggregate reflection is not a compatibility guarantee.
 - A restore that can invalidate live cross-service state prepares and validates a candidate before changing the live authority.
-- An owner marks the exact captured state durable only after encoding and file replacement report success; the atomic-replacement specification owns the platform crash-durability limit of that success.
+- An owner settles the exact captured state only after encoding and file replacement report success; the atomic-replacement specification owns the platform crash-durability limit of that acknowledgement.
 - Path overrides change location, not schema ownership or lifecycle semantics.
 - Authored configuration, runtime component state, and regenerable caches remain separate persistence classes even when they share YAML as an encoding.
 - Exact schemas, paths, enum encodings, and version gates are delegated to reference rather than duplicated in architecture.
@@ -221,7 +222,7 @@ The specialized layout component-state store provides its own mutex-protected op
 
 - [`MusicLibrary`](../../include/ao/library/MusicLibrary.h) owns durable per-library database state.
 - [`RymlAdapter.h`](../../include/ao/yaml/RymlAdapter.h) contains RapidYAML callbacks, file reading, parsing, scalar conversion, and node helpers.
-- [`AtomicFile.h`](../../include/ao/utility/AtomicFile.h), [`AtomicFile.cpp`](../../lib/utility/AtomicFile.cpp), and [`AtomicFileWindows.cpp`](../../lib/utility/AtomicFileWindows.cpp) provide platform file replacement.
+- [`AtomicFile.h`](../../include/ao/utility/AtomicFile.h), [`AtomicFileTransaction.h`](../../lib/utility/AtomicFileTransaction.h), [`AtomicFile.cpp`](../../lib/utility/AtomicFile.cpp), and [`AtomicFileWindows.cpp`](../../lib/utility/AtomicFileWindows.cpp) provide the private-file replacement state machine and platform operations.
 - [`ConfigStore`](../../app/include/ao/rt/ConfigStore.h), [`ConfigStore.cpp`](../../app/runtime/ConfigStore.cpp), and [`ConfigTraits.h`](../../app/include/ao/yaml/ConfigTraits.h) implement the grouped runtime mechanism and common application codec.
 - [`AppRuntimeDependencies`](../../app/include/ao/rt/AppRuntime.h) injects workspace and playback-session stores.
 - [`WorkspaceService`](../../app/include/ao/rt/WorkspaceService.h) and [`WorkspaceService.cpp`](../../app/runtime/WorkspaceService.cpp) own workspace snapshot and restore coordination.
@@ -235,7 +236,7 @@ The specialized layout component-state store provides its own mutex-protected op
 
 - [`MusicLibraryTest.cpp`](../../test/unit/library/MusicLibraryTest.cpp) protects library-database ownership and lifetime.
 - [`ConfigStoreTest.cpp`](../../test/unit/runtime/ConfigStoreTest.cpp) protects lazy load, grouped mutation, permissive decoding, read-only mode, failures, removal, and flush results.
-- [`AtomicFileTest.cpp`](../../test/unit/utility/AtomicFileTest.cpp) protects replacement, permissions, and write-failure behavior below the stores.
+- [`AtomicFileTest.cpp`](../../test/unit/utility/AtomicFileTest.cpp) protects replacement, cross-platform private-file policy, opaque payloads, and deterministic pre-replacement failure and cleanup behavior below the stores.
 - [`RymlAdapterTest.cpp`](../../test/unit/utility/RymlAdapterTest.cpp) protects strict scalar parsing, recoverable helpers, and callback diagnostic lifetime.
 - [`WorkspaceSessionTest.cpp`](../../test/unit/runtime/WorkspaceSessionTest.cpp) protects workspace absence, restore rollback, and failure propagation.
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) and [`PlaybackSessionRevisionTest.cpp`](../../test/unit/runtime/playback/PlaybackSessionRevisionTest.cpp) protect exact decoding, semantic validation, dirty revisions, retry, discard, and store selection.
@@ -263,7 +264,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [Library database reference](../reference/library/storage/database.md)
 - [RFC 0005: coherent playback application boundary](../rfc/0005-coherent-playback-boundary.md), including the proposed serialized configuration writer
 - [RFC 0010: versioned presentation state](../rfc/0010-versioned-presentation-state.md), including the proposed stable-id codec and migrations
-- [RFC 0014: observable atomic replacement](../rfc/0014-observable-atomic-replacement.md), including proposed replacement receipts, security policy, cleanup, and fault injection
+- [RFC 0014: observable atomic replacement](../rfc/0014-observable-atomic-replacement.md), rejected after narrower private-file, RAII-cleanup, and fault-test hardening was implemented
 - [RFC 0015: fail-closed grouped configuration transactions](../rfc/0015-fail-closed-config-store.md), including candidate decoding, blocked-store recovery, and receipt-bearing document commits
 - [RFC 0025: bounded shell layout documents](../rfc/0025-bounded-shell-layout-documents.md), including strict version dispatch, resource budgets, and unsupported-file preservation
 - [Playback session persistence specification](../spec/playback/session-persistence.md) and [state reference](../reference/playback/session-state.md)

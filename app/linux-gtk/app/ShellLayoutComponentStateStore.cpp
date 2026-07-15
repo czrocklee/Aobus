@@ -128,8 +128,7 @@ namespace ao::gtk
       yaml::write(tree.rootref(), stored);
       auto const text = ryml::emitrs_yaml<std::string>(tree);
 
-      if (auto const result = utility::writeAtomically(path, text, utility::AtomicFilePermissions::OwnerReadWrite);
-          !result)
+      if (auto const result = utility::writeAtomically(path, text); !result)
       {
         APP_LOG_ERROR(
           "ShellLayoutComponentStateStore: Failed to save state file ({}): {}", path.string(), result.error().message);

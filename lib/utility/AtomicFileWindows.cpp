@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/Error.h>
+#include "AtomicFileTransaction.h"
 #include <ao/utility/AtomicFile.h>
 
 #ifndef NOMINMAX
@@ -10,6 +10,7 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#include <sddl.h>
 #include <windows.h>
 
 #include <algorithm>
@@ -24,14 +25,83 @@
 #include <system_error>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 namespace ao::utility
 {
   namespace
   {
+    class LocalAllocation final
+    {
+    public:
+      explicit LocalAllocation(HLOCAL value)
+        : _value{value}
+      {
+      }
+
+      ~LocalAllocation() noexcept
+      {
+        if (_value != nullptr)
+        {
+          std::ignore = ::LocalFree(_value);
+        }
+      }
+
+      LocalAllocation(LocalAllocation const&) = delete;
+      LocalAllocation& operator=(LocalAllocation const&) = delete;
+
+      LocalAllocation(LocalAllocation&& other) noexcept
+        : _value{std::exchange(other._value, nullptr)}
+      {
+      }
+
+      LocalAllocation& operator=(LocalAllocation&&) = delete;
+
+      HLOCAL get() const noexcept { return _value; }
+
+    private:
+      HLOCAL _value = nullptr;
+    };
+
+    class KernelHandle final
+    {
+    public:
+      explicit KernelHandle(HANDLE value)
+        : _value{value}
+      {
+      }
+
+      ~KernelHandle() noexcept { closeBestEffort(); }
+
+      KernelHandle(KernelHandle const&) = delete;
+      KernelHandle& operator=(KernelHandle const&) = delete;
+
+      KernelHandle(KernelHandle&& other) noexcept
+        : _value{std::exchange(other._value, INVALID_HANDLE_VALUE)}
+      {
+      }
+
+      KernelHandle& operator=(KernelHandle&&) = delete;
+
+      HANDLE get() const noexcept { return _value; }
+      HANDLE release() noexcept { return std::exchange(_value, INVALID_HANDLE_VALUE); }
+
+      void closeBestEffort() noexcept
+      {
+        if (_value != nullptr && _value != INVALID_HANDLE_VALUE)
+        {
+          HANDLE const handle = release();
+          std::ignore = ::CloseHandle(handle);
+        }
+      }
+
+    private:
+      HANDLE _value = INVALID_HANDLE_VALUE;
+    };
+
     std::string systemMessage(DWORD const errorCode)
     {
-      auto* rawBuffer = static_cast<char*>(nullptr);
+      char* rawBuffer = nullptr;
       auto const size =
         ::FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                          nullptr,
@@ -47,8 +117,8 @@ namespace ao::utility
         return std::format("Windows error {}", errorCode);
       }
 
+      auto allocation = LocalAllocation{rawBuffer};
       auto message = std::string{rawBuffer, size};
-      ::LocalFree(rawBuffer);
 
       while (!message.empty() && (message.back() == '\r' || message.back() == '\n'))
       {
@@ -75,234 +145,265 @@ namespace ao::utility
       return std::filesystem::path{L"\\\\?\\" + native};
     }
 
-    Result<std::filesystem::path> normalizedTargetPath(std::filesystem::path const& targetPath)
+    Result<std::wstring> currentUserSidString()
     {
-      auto ec = std::error_code{};
-      auto const absolute = std::filesystem::absolute(targetPath, ec);
+      HANDLE rawToken = nullptr;
 
-      if (ec)
+      if (::OpenProcessToken(::GetCurrentProcess(), TOKEN_QUERY, &rawToken) == FALSE)
       {
+        auto const errorCode = ::GetLastError();
         return makeError(
-          Error::Code::IoError, std::format("Failed to resolve target path {}: {}", targetPath.string(), ec.message()));
+          Error::Code::IoError, std::format("Failed to open process token: {}", systemMessage(errorCode)));
       }
 
-      return extendedPath(absolute);
+      auto token = KernelHandle{rawToken};
+      DWORD tokenInfoSize = 0;
+      auto const firstQuery = ::GetTokenInformation(token.get(), TokenUser, nullptr, 0, &tokenInfoSize);
+
+      if (firstQuery != FALSE || ::GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+      {
+        auto const errorCode = ::GetLastError();
+        return makeError(
+          Error::Code::IoError, std::format("Failed to size process token information: {}", systemMessage(errorCode)));
+      }
+
+      auto tokenInfo = std::vector<std::byte>(tokenInfoSize);
+
+      if (::GetTokenInformation(token.get(), TokenUser, tokenInfo.data(), tokenInfoSize, &tokenInfoSize) == FALSE)
+      {
+        auto const errorCode = ::GetLastError();
+        return makeError(
+          Error::Code::IoError, std::format("Failed to read process token information: {}", systemMessage(errorCode)));
+      }
+
+      auto const* tokenUser = static_cast<TOKEN_USER const*>(static_cast<void const*>(tokenInfo.data()));
+      LPWSTR rawSidString = nullptr;
+
+      if (::ConvertSidToStringSidW(tokenUser->User.Sid, &rawSidString) == FALSE)
+      {
+        auto const errorCode = ::GetLastError();
+        return makeError(
+          Error::Code::IoError, std::format("Failed to encode process SID: {}", systemMessage(errorCode)));
+      }
+
+      auto sidAllocation = LocalAllocation{rawSidString};
+      return std::wstring{rawSidString};
     }
 
-    Result<> createParentDirs(std::filesystem::path const& parentPath)
+    Result<LocalAllocation> createPrivateSecurityDescriptor()
     {
-      auto ec = std::error_code{};
-      std::filesystem::create_directories(parentPath, ec);
+      auto sidResult = currentUserSidString();
 
-      if (ec)
+      if (!sidResult)
       {
-        return makeError(
-          Error::Code::IoError, std::format("Failed to create directory {}: {}", parentPath.string(), ec.message()));
+        return std::unexpected{sidResult.error()};
       }
 
-      return {};
+      auto descriptorText = std::wstring{L"D:P(A;;FA;;;SY)(A;;FA;;;"};
+      descriptorText += *sidResult;
+      descriptorText += L")";
+
+      PSECURITY_DESCRIPTOR rawDescriptor = nullptr;
+
+      if (::ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            descriptorText.c_str(), SDDL_REVISION_1, &rawDescriptor, nullptr) == FALSE)
+      {
+        auto const errorCode = ::GetLastError();
+        return makeError(
+          Error::Code::IoError, std::format("Failed to create private file ACL: {}", systemMessage(errorCode)));
+      }
+
+      return LocalAllocation{rawDescriptor};
     }
 
-    struct [[nodiscard]] FileHandle final
+    class WindowsTemporaryFile final
     {
-      HANDLE handle = INVALID_HANDLE_VALUE;
-
-      explicit FileHandle(HANDLE value)
-        : handle{value}
+    public:
+      WindowsTemporaryFile(std::filesystem::path path, HANDLE handle)
+        : _path{std::move(path)}, _file{handle}
       {
       }
 
-      ~FileHandle()
+      ~WindowsTemporaryFile() noexcept
       {
-        if (handle != INVALID_HANDLE_VALUE)
+        _file.closeBestEffort();
+
+        if (!_path.empty())
         {
-          ::CloseHandle(handle);
+          std::ignore = ::DeleteFileW(_path.c_str());
         }
       }
 
-      FileHandle(FileHandle const&) = delete;
-      FileHandle& operator=(FileHandle const&) = delete;
+      WindowsTemporaryFile(WindowsTemporaryFile const&) = delete;
+      WindowsTemporaryFile& operator=(WindowsTemporaryFile const&) = delete;
 
-      FileHandle(FileHandle&& other) noexcept
-        : handle{std::exchange(other.handle, INVALID_HANDLE_VALUE)}
+      WindowsTemporaryFile(WindowsTemporaryFile&& other) noexcept
+        : _path{std::move(other._path)}, _file{std::move(other._file)}
       {
+        other._path.clear();
       }
 
-      FileHandle& operator=(FileHandle&& other) noexcept
+      WindowsTemporaryFile& operator=(WindowsTemporaryFile&&) = delete;
+
+      Result<> writeAll(std::string_view data) const
       {
-        if (this != &other)
+        std::size_t written = 0;
+
+        while (written < data.size())
         {
-          if (handle != INVALID_HANDLE_VALUE)
+          auto const chunk = static_cast<DWORD>(std::min<std::size_t>(data.size() - written, 0x7ffff000ULL));
+          DWORD bytesWritten = 0;
+
+          if (::WriteFile(_file.get(), data.data() + written, chunk, &bytesWritten, nullptr) == FALSE)
           {
-            ::CloseHandle(handle);
+            auto const errorCode = ::GetLastError();
+            return makeError(
+              Error::Code::IoError, std::format("Failed to write temp file: {}", systemMessage(errorCode)));
           }
 
-          handle = std::exchange(other.handle, INVALID_HANDLE_VALUE);
+          if (bytesWritten == 0)
+          {
+            return makeError(Error::Code::IoError, "Failed to write temp file: no bytes written");
+          }
+
+          written += bytesWritten;
         }
 
-        return *this;
-      }
-    };
-
-    struct TempFile final
-    {
-      std::filesystem::path path;
-      FileHandle file;
-    };
-
-    Result<TempFile> createTempFile(std::filesystem::path const& parentPath)
-    {
-      static auto nextId = std::atomic<std::uint64_t>{0};
-      constexpr std::uint32_t kMaxAttempts = 128;
-
-      for (std::uint32_t attempt = 0; attempt < kMaxAttempts; ++attempt)
-      {
-        auto const id = nextId.fetch_add(1, std::memory_order_relaxed) + 1;
-        auto const fileName =
-          std::format(".ao.tmp.{:08x}.{:016x}.{:016x}", ::GetCurrentProcessId(), ::GetTickCount64(), id);
-        auto candidate = parentPath / fileName;
-        auto* const handle = ::CreateFileW(
-          candidate.wstring().c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
-
-        if (handle != INVALID_HANDLE_VALUE)
-        {
-          return TempFile{.path = std::move(candidate), .file = FileHandle{handle}};
-        }
-
-        if (auto const errorCode = ::GetLastError();
-            errorCode != ERROR_FILE_EXISTS && errorCode != ERROR_ALREADY_EXISTS)
-        {
-          return makeError(
-            Error::Code::IoError, std::format("Failed to create temp file: {}", systemMessage(errorCode)));
-        }
-      }
-
-      return makeError(Error::Code::IoError, "Failed to create a unique temp file after 128 attempts");
-    }
-
-    Result<> writeAll(HANDLE handle, std::string_view const data)
-    {
-      std::size_t written = 0;
-
-      while (written < data.size())
-      {
-        auto const chunk = static_cast<DWORD>(std::min<std::size_t>(data.size() - written, 0x7ffff000ULL));
-        DWORD bytesWritten = 0;
-
-        if (::WriteFile(handle, data.data() + written, chunk, &bytesWritten, nullptr) == FALSE)
-        {
-          return makeError(
-            Error::Code::IoError, std::format("Failed to write temp file: {}", systemMessage(::GetLastError())));
-        }
-
-        if (bytesWritten == 0)
-        {
-          return makeError(Error::Code::IoError, "Failed to write temp file: no bytes written");
-        }
-
-        written += bytesWritten;
-      }
-
-      return {};
-    }
-
-    Result<> flushFile(HANDLE handle)
-    {
-      if (::FlushFileBuffers(handle) == FALSE)
-      {
-        return makeError(
-          Error::Code::IoError, std::format("Failed to flush temp file: {}", systemMessage(::GetLastError())));
-      }
-
-      return {};
-    }
-
-    Result<> closeFile(FileHandle& file, std::filesystem::path const& tempPath)
-    {
-      if (file.handle == INVALID_HANDLE_VALUE)
-      {
         return {};
       }
 
-      if (::CloseHandle(file.handle) == FALSE)
+      Result<> synchronizeData() const
       {
-        auto error = makeError(
-          Error::Code::IoError,
-          std::format("Failed to close temp file {}: {}", tempPath.string(), systemMessage(::GetLastError())));
-        file.handle = INVALID_HANDLE_VALUE;
-        return error;
+        if (::FlushFileBuffers(_file.get()) == FALSE)
+        {
+          auto const errorCode = ::GetLastError();
+          return makeError(
+            Error::Code::IoError, std::format("Failed to flush temp file: {}", systemMessage(errorCode)));
+        }
+
+        return {};
       }
 
-      file.handle = INVALID_HANDLE_VALUE;
-      return {};
-    }
-  } // namespace
+      Result<> closeForReplacement()
+      {
+        HANDLE const handle = _file.release();
 
-  Result<> writeAtomically(std::filesystem::path const& targetPath,
-                           std::string_view const data,
-                           AtomicFilePermissions const /*permissions*/)
-  {
-    auto normalizedTargetResult = normalizedTargetPath(targetPath);
+        if (::CloseHandle(handle) == FALSE)
+        {
+          auto const errorCode = ::GetLastError();
+          return makeError(Error::Code::IoError,
+                           std::format("Failed to close temp file {}: {}", _path.string(), systemMessage(errorCode)));
+        }
 
-    if (!normalizedTargetResult)
-    {
-      return std::unexpected{normalizedTargetResult.error()};
-    }
+        return {};
+      }
 
-    auto const& normalizedTarget = *normalizedTargetResult;
-    auto const parentPath = normalizedTarget.parent_path();
+      Result<> replaceTarget(std::filesystem::path const& targetPath)
+      {
+        if (::MoveFileExW(_path.c_str(), targetPath.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) ==
+            FALSE)
+        {
+          auto const errorCode = ::GetLastError();
+          return makeError(
+            Error::Code::IoError,
+            std::format("Failed to rename temp file to {}: {}", targetPath.string(), systemMessage(errorCode)));
+        }
 
-    if (auto const result = createParentDirs(parentPath); !result)
-    {
-      return result;
-    }
+        _path.clear();
+        return {};
+      }
 
-    auto tempFileResult = createTempFile(parentPath);
-
-    if (!tempFileResult)
-    {
-      return std::unexpected{tempFileResult.error()};
-    }
-
-    auto tempFile = std::move(*tempFileResult);
-    auto const& tempPath = tempFile.path;
-    auto removeTemp = [&tempPath]
-    {
-      auto ec = std::error_code{};
-      std::filesystem::remove(tempPath, ec);
+    private:
+      std::filesystem::path _path;
+      KernelHandle _file;
     };
 
-    if (auto const result = writeAll(tempFile.file.handle, data); !result)
+    class WindowsAtomicFileOperations final
     {
-      std::ignore = closeFile(tempFile.file, tempPath);
-      removeTemp();
-      return result;
-    }
+    public:
+      Result<std::filesystem::path> normalizeTargetPath(std::filesystem::path const& targetPath) const
+      {
+        auto ec = std::error_code{};
+        auto const absolute = std::filesystem::absolute(targetPath, ec);
 
-    if (auto const result = flushFile(tempFile.file.handle); !result)
-    {
-      std::ignore = closeFile(tempFile.file, tempPath);
-      removeTemp();
-      return result;
-    }
+        if (ec)
+        {
+          return makeError(Error::Code::IoError,
+                           std::format("Failed to resolve target path {}: {}", targetPath.string(), ec.message()));
+        }
 
-    if (auto const result = closeFile(tempFile.file, tempPath); !result)
-    {
-      removeTemp();
-      return result;
-    }
+        return extendedPath(absolute);
+      }
 
-    if (::MoveFileExW(tempPath.wstring().c_str(),
-                      normalizedTarget.wstring().c_str(),
-                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) == FALSE)
-    {
-      auto error = makeError(
-        Error::Code::IoError,
-        std::format("Failed to rename temp file to {}: {}", targetPath.string(), systemMessage(::GetLastError())));
-      removeTemp();
-      return error;
-    }
+      Result<> createParentDirectories(std::filesystem::path const& parentPath) const
+      {
+        auto ec = std::error_code{};
+        std::filesystem::create_directories(parentPath, ec);
 
-    return {};
+        if (ec)
+        {
+          return makeError(
+            Error::Code::IoError, std::format("Failed to create directory {}: {}", parentPath.string(), ec.message()));
+        }
+
+        return {};
+      }
+
+      Result<WindowsTemporaryFile> createPrivateTemporaryFile(std::filesystem::path const& parentPath) const
+      {
+        auto descriptorResult = createPrivateSecurityDescriptor();
+
+        if (!descriptorResult)
+        {
+          return std::unexpected{descriptorResult.error()};
+        }
+
+        auto descriptor = std::move(*descriptorResult);
+        auto securityAttributes = SECURITY_ATTRIBUTES{
+          .nLength = static_cast<DWORD>(sizeof(SECURITY_ATTRIBUTES)),
+          .lpSecurityDescriptor = descriptor.get(),
+          .bInheritHandle = FALSE,
+        };
+        static auto nextId = std::atomic<std::uint64_t>{0};
+        constexpr std::uint32_t kMaxAttempts = 128;
+
+        for (std::uint32_t attempt = 0; attempt < kMaxAttempts; ++attempt)
+        {
+          auto const id = nextId.fetch_add(1, std::memory_order_relaxed) + 1;
+          auto const fileName =
+            std::format(L".ao.tmp.{:08x}.{:016x}.{:016x}", ::GetCurrentProcessId(), ::GetTickCount64(), id);
+          auto candidate = parentPath / fileName;
+          HANDLE const handle = ::CreateFileW(
+            candidate.c_str(), GENERIC_WRITE, 0, &securityAttributes, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+
+          if (handle != INVALID_HANDLE_VALUE)
+          {
+            return WindowsTemporaryFile{std::move(candidate), handle};
+          }
+
+          auto const errorCode = ::GetLastError();
+
+          if (errorCode != ERROR_FILE_EXISTS && errorCode != ERROR_ALREADY_EXISTS)
+          {
+            return makeError(
+              Error::Code::IoError, std::format("Failed to create temp file: {}", systemMessage(errorCode)));
+          }
+        }
+
+        return makeError(Error::Code::IoError, "Failed to create a unique temp file after 128 attempts");
+      }
+
+      void synchronizeParentDirectoryBestEffort(std::filesystem::path const& /*parentPath*/) const noexcept
+      {
+        // MoveFileExW's write-through request is the complete documented Windows
+        // sequence; there is no separate directory-handle barrier here.
+      }
+    };
+  } // namespace
+
+  Result<> writeAtomically(std::filesystem::path const& targetPath, std::string_view data)
+  {
+    auto operations = WindowsAtomicFileOperations{};
+    return detail::runAtomicReplacement(operations, targetPath, data);
   }
 } // namespace ao::utility

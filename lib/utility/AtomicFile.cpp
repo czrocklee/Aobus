@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "AtomicFileTransaction.h"
 #include <ao/Error.h>
 #include <ao/utility/AtomicFile.h>
 
@@ -11,13 +12,13 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <expected>
 #include <filesystem>
 #include <format>
 #include <string>
 #include <string_view>
 #include <sys/stat.h>
 #include <system_error>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -25,210 +26,176 @@ namespace ao::utility
 {
   namespace
   {
-    Result<> createParentDirs(std::filesystem::path const& parentPath)
+    class PosixTemporaryFile final
     {
-      auto ec = std::error_code{};
-      std::filesystem::create_directories(parentPath, ec);
-
-      if (ec)
+    public:
+      PosixTemporaryFile(std::vector<char> path, std::int32_t fd)
+        : _path{std::move(path)}, _fd{fd}
       {
-        return makeError(
-          Error::Code::IoError, std::format("Failed to create directory {}: {}", parentPath.string(), ec.message()));
       }
 
-      return {};
-    }
-
-    Result<int> createTempFile(std::filesystem::path const& parentPath, std::vector<char>& tempPath)
-    {
-      auto const tempTemplate = (parentPath / ".temp.XXXXXX").string();
-      tempPath = std::vector<char>(tempTemplate.begin(), tempTemplate.end());
-      tempPath.push_back('\0');
-
-      int const fd = ::mkstemp(tempPath.data());
-
-      if (fd < 0)
+      ~PosixTemporaryFile() noexcept
       {
-        return makeError(Error::Code::IoError, std::format("Failed to create temp file: {}", std::strerror(errno)));
+        if (_fd >= 0)
+        {
+          std::ignore = ::close(_fd);
+        }
+
+        if (!_path.empty())
+        {
+          std::ignore = ::unlink(_path.data());
+        }
       }
 
-      return fd;
-    }
+      PosixTemporaryFile(PosixTemporaryFile const&) = delete;
+      PosixTemporaryFile& operator=(PosixTemporaryFile const&) = delete;
 
-    Result<> setTempPermissions(int fd, AtomicFilePermissions permissions)
-    {
-      if (permissions == AtomicFilePermissions::Default)
+      PosixTemporaryFile(PosixTemporaryFile&& other) noexcept
+        : _path{std::move(other._path)}, _fd{std::exchange(other._fd, -1)}
       {
-        // Default leaves the mode mkstemp() created the file with (0600: owner
-        // read/write only). Callers that need group/other access pass an explicit
-        // permission value.
+        other._path.clear();
+      }
+
+      PosixTemporaryFile& operator=(PosixTemporaryFile&&) = delete;
+
+      std::int32_t nativeHandle() const noexcept { return _fd; }
+
+      Result<> writeAll(std::string_view data) const
+      {
+        std::size_t written = 0;
+
+        while (written < data.size())
+        {
+          ssize_t const bytesWritten = ::write(_fd, data.data() + written, data.size() - written);
+
+          if (bytesWritten < 0)
+          {
+            if (errno == EINTR)
+            {
+              continue;
+            }
+
+            return makeError(Error::Code::IoError, std::format("Failed to write temp file: {}", std::strerror(errno)));
+          }
+
+          if (bytesWritten == 0)
+          {
+            return makeError(Error::Code::IoError, "Failed to write temp file: no bytes written");
+          }
+
+          written += static_cast<std::size_t>(bytesWritten);
+        }
+
         return {};
       }
 
-      if (::fchmod(fd, static_cast<std::int32_t>(permissions)) != 0)
+      Result<> synchronizeData() const
       {
-        return makeError(
-          Error::Code::IoError, std::format("Failed to set permissions on temp file: {}", std::strerror(errno)));
-      }
-
-      return {};
-    }
-
-    Result<> writeAll(int fd, std::string_view data)
-    {
-      std::size_t written = 0;
-
-      while (written < data.size())
-      {
-        ssize_t const bytesWritten = ::write(fd, data.data() + written, data.size() - written);
-
-        if (bytesWritten < 0)
+        if (::fsync(_fd) != 0)
         {
-          if (errno == EINTR)
-          {
-            continue;
-          }
-
-          return makeError(Error::Code::IoError, std::format("Failed to write temp file: {}", std::strerror(errno)));
+          return makeError(
+            Error::Code::IoError, std::format("Failed to fsync temp file {}: {}", _path.data(), std::strerror(errno)));
         }
 
-        written += static_cast<std::size_t>(bytesWritten);
+        return {};
       }
 
-      return {};
-    }
-
-    Result<> closeTempFile(int fd, std::vector<char> const& tempPath)
-    {
-      // fsync here is the durability barrier before the rename: if it fails the
-      // temp file's bytes are not guaranteed on disk, so renaming it over the
-      // target could expose a truncated/corrupt file after a crash. Treat it as a
-      // hard error and let the caller discard the temp file. Capture the message
-      // before close(), which may clobber errno.
-      if (::fsync(fd) != 0)
+      Result<> closeForReplacement()
       {
-        auto error = makeError(
-          Error::Code::IoError, std::format("Failed to fsync temp file {}: {}", tempPath.data(), std::strerror(errno)));
-        ::close(fd);
-        return error;
-      }
-
-      if (::close(fd) != 0)
-      {
-        return makeError(
-          Error::Code::IoError, std::format("Failed to close temp file {}: {}", tempPath.data(), std::strerror(errno)));
-      }
-
-      return {};
-    }
-
-    Result<> renameTempFile(std::vector<char> const& tempPath, std::filesystem::path const& targetPath)
-    {
-      if (::rename(tempPath.data(), targetPath.c_str()) != 0)
-      {
-        return makeError(
-          Error::Code::IoError,
-          std::format("Failed to rename temp file to {}: {}", targetPath.string(), std::strerror(errno)));
-      }
-
-      return {};
-    }
-
-    void syncParentDirectory(std::filesystem::path const& parentPath)
-    {
-      // Best-effort, unlike the temp-file fsync above: this runs after the rename
-      // has already made the new contents visible, so a failure here only means the
-      // rename may not survive a crash. Reporting it as an error would falsely
-      // signal that the write did not apply, so attempt the barrier and continue
-      // regardless of the outcome. The realistic failures are environmental anyway
-      // (a filesystem that does not support directory fsync, e.g. some network or
-      // FUSE mounts), where the barrier is unavailable rather than broken.
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-      int const parentFd = ::open(parentPath.c_str(), O_RDONLY | O_DIRECTORY);
-
-      if (parentFd < 0)
-      {
-        return;
-      }
-
-      std::ignore = ::fsync(parentFd);
-      ::close(parentFd);
-    }
-    struct [[nodiscard]] FdGuard final
-    {
-      int fd = -1;
-
-      explicit FdGuard(std::int32_t fdValue)
-        : fd{fdValue}
-      {
-      }
-
-      ~FdGuard()
-      {
-        if (fd >= 0)
+        if (std::int32_t const fd = std::exchange(_fd, -1); ::close(fd) != 0)
         {
-          ::close(fd);
+          return makeError(
+            Error::Code::IoError, std::format("Failed to close temp file {}: {}", _path.data(), std::strerror(errno)));
         }
+
+        return {};
       }
 
-      FdGuard(FdGuard const&) = delete;
-      FdGuard& operator=(FdGuard const&) = delete;
-      FdGuard(FdGuard&&) = delete;
-      FdGuard& operator=(FdGuard&&) = delete;
+      Result<> replaceTarget(std::filesystem::path const& targetPath)
+      {
+        if (::rename(_path.data(), targetPath.c_str()) != 0)
+        {
+          return makeError(
+            Error::Code::IoError,
+            std::format("Failed to rename temp file to {}: {}", targetPath.string(), std::strerror(errno)));
+        }
+
+        _path.clear();
+        return {};
+      }
+
+    private:
+      std::vector<char> _path;
+      std::int32_t _fd = -1;
+    };
+
+    class PosixAtomicFileOperations final
+    {
+    public:
+      Result<std::filesystem::path> normalizeTargetPath(std::filesystem::path const& targetPath) const
+      {
+        return targetPath;
+      }
+
+      Result<> createParentDirectories(std::filesystem::path const& parentPath) const
+      {
+        auto ec = std::error_code{};
+        std::filesystem::create_directories(parentPath, ec);
+
+        if (ec)
+        {
+          return makeError(
+            Error::Code::IoError, std::format("Failed to create directory {}: {}", parentPath.string(), ec.message()));
+        }
+
+        return {};
+      }
+
+      Result<PosixTemporaryFile> createPrivateTemporaryFile(std::filesystem::path const& parentPath) const
+      {
+        auto const tempTemplate = (parentPath / ".temp.XXXXXX").string();
+        auto tempPath = std::vector<char>(tempTemplate.begin(), tempTemplate.end());
+        tempPath.push_back('\0');
+
+        std::int32_t const fd = ::mkstemp(tempPath.data());
+
+        if (fd < 0)
+        {
+          return makeError(Error::Code::IoError, std::format("Failed to create temp file: {}", std::strerror(errno)));
+        }
+
+        auto temporaryFile = PosixTemporaryFile{std::move(tempPath), fd};
+
+        if (::fchmod(temporaryFile.nativeHandle(), S_IRUSR | S_IWUSR) != 0)
+        {
+          return makeError(
+            Error::Code::IoError, std::format("Failed to set permissions on temp file: {}", std::strerror(errno)));
+        }
+
+        return temporaryFile;
+      }
+
+      void synchronizeParentDirectoryBestEffort(std::filesystem::path const& parentPath) const noexcept
+      {
+        // The replacement is already visible. A directory-barrier failure must
+        // not be reported as a conventional "not applied" error.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+        std::int32_t const parentFd = ::open(parentPath.c_str(), O_RDONLY | O_DIRECTORY);
+
+        if (parentFd < 0)
+        {
+          return;
+        }
+
+        std::ignore = ::fsync(parentFd);
+        std::ignore = ::close(parentFd);
+      }
     };
   } // namespace
 
-  Result<> writeAtomically(std::filesystem::path const& targetPath,
-                           std::string_view data,
-                           AtomicFilePermissions const permissions)
+  Result<> writeAtomically(std::filesystem::path const& targetPath, std::string_view data)
   {
-    auto const parentPath = targetPath.parent_path();
-
-    if (auto const result = createParentDirs(parentPath); !result)
-    {
-      return result;
-    }
-
-    auto tempPath = std::vector<char>{};
-    auto fdResult = createTempFile(parentPath, tempPath);
-
-    if (!fdResult)
-    {
-      return std::unexpected{fdResult.error()};
-    }
-
-    int const fd = *fdResult;
-    auto guard = FdGuard{fd};
-
-    if (auto const result = setTempPermissions(fd, permissions); !result)
-    {
-      return result;
-    }
-
-    if (auto const result = writeAll(fd, data); !result)
-    {
-      auto removeEc = std::error_code{};
-      std::filesystem::remove(tempPath.data(), removeEc);
-      return result;
-    }
-
-    guard.fd = -1; // Hand off ownership to closeTempFile
-
-    if (auto const result = closeTempFile(fd, tempPath); !result)
-    {
-      auto removeEc = std::error_code{};
-      std::filesystem::remove(tempPath.data(), removeEc);
-      return result;
-    }
-
-    if (auto const result = renameTempFile(tempPath, targetPath); !result)
-    {
-      auto removeEc = std::error_code{};
-      std::filesystem::remove(tempPath.data(), removeEc);
-      return result;
-    }
-
-    syncParentDirectory(parentPath);
-    return {};
+    auto operations = PosixAtomicFileOperations{};
+    return detail::runAtomicReplacement(operations, targetPath, data);
   }
 } // namespace ao::utility

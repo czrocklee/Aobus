@@ -33,7 +33,7 @@ namespace ao::rt
     APP_LOG_INFO("Saving config to: {}", _filePath.string());
 
     auto const yaml = ryml::emitrs_yaml<std::string>(_root);
-    return utility::writeAtomically(_filePath, yaml, utility::AtomicFilePermissions::OwnerReadWrite);
+    return utility::writeAtomically(_filePath, yaml);
   }
 
   Result<bool> ConfigStore::contains(std::string_view const group)

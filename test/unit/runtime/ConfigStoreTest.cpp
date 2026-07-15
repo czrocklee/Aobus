@@ -16,6 +16,7 @@
 #include <numbers>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::rt::test
@@ -443,18 +444,23 @@ namespace ao::rt::test
     SECTION("Malformed YAML is rejected as a format error")
     {
       auto const configPath = std::filesystem::path{tempDir.path()} / "bad.yaml";
+      constexpr auto kOriginalContents = std::string_view{"complex: [unterminated"};
       {
         auto out = std::ofstream{configPath};
-        out << "complex: [unterminated";
+        out << kOriginalContents;
       }
 
-      auto malformedStore = ConfigStore{configPath};
       auto obj = ComplexAggregate{.count = 99};
+      {
+        auto malformedStore = ConfigStore{configPath};
+        auto result = malformedStore.load("complex", obj);
 
-      auto result = malformedStore.load("complex", obj);
-      REQUIRE(!result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+        REQUIRE(!result);
+        CHECK(result.error().code == Error::Code::FormatRejected);
+      }
+
       CHECK(obj.count == 99);
+      CHECK(ao::test::readFile(configPath) == kOriginalContents);
     }
 
     SECTION("Failed file inspection is not cached as loaded")

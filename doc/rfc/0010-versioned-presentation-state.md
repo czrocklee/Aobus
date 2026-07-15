@@ -233,7 +233,7 @@ Unsupported future versions remain untouched and produce a visible diagnostic ra
 - Which current presentation objects are truly independent fallback boundaries: view, layout, preset, or workspace?
 - Should unsupported future documents surface only a diagnostic, or also offer an explicit user-authorized reset/export action?
 - Which component is the long-term owner of stable track-field ids if RFC 0008 is not implemented first?
-- Are the current platform replacement and crash-durability limits sufficient for presentation-state migration, should [RFC 0014](0014-observable-atomic-replacement.md) be required for explicit acknowledgement, or does this payload need a stronger recovery protocol?
+- Are the current platform replacement and crash-durability limits sufficient for presentation-state migration, or does this payload have evidence that justifies a stronger payload-specific recovery protocol?
 
 ## Promotion plan
 

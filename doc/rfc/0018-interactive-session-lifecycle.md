@@ -232,7 +232,7 @@ If workspace commits and playback fails, the receipt says so and playback remain
 Shutdown and switching policy decides which component failures block transition.
 
 RFC 0015 supplies candidate grouped transactions and document generations.
-RFC 0014's lower replacement evidence flows through those receipts when implemented.
+Those receipts inherit the current atomic replacement boundary: a returned error is pre-replacement, while success records an applied platform replacement without stronger power-loss evidence.
 
 ### Degraded state and recovery
 

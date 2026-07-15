@@ -58,11 +58,11 @@ The application has no explicit `NoLibrarySelected` or ephemeral-bootstrap ident
 
 - Hard: [RFC 0015](0015-fail-closed-config-store.md) supplies the result-bearing global selection transaction, and [RFC 0018](0018-interactive-session-lifecycle.md) supplies prepared startup, checkpoint, quiescence, activation, and shutdown receipts for each runtime candidate.
 - Conditional: None.
-- Integration: [RFC 0005](0005-coherent-playback-boundary.md), [RFC 0013](0013-coherent-application-reporting-policy.md), [RFC 0014](0014-observable-atomic-replacement.md).
+- Integration: [RFC 0005](0005-coherent-playback-boundary.md), [RFC 0013](0013-coherent-application-reporting-policy.md).
 
 RFC 0005's playback owner must align session binding and activation so a candidate cannot restore another library's succession state.
 RFC 0013 owns switch progress, rejection, rollback, degraded activation, and checkpoint reporting dispositions.
-RFC 0014 distinguishes a globally applied selection from one whose platform namespace barrier completed; the switch state machine must preserve that evidence when both proposals are implemented.
+The current [atomic replacement contract](../spec/persistence/atomic-replacement.md) makes a returned error pre-replacement and a successful platform replacement applied, without claiming absolute power-loss durability.
 
 ## Goals
 
@@ -72,7 +72,7 @@ RFC 0014 distinguishes a globally applied selection from one whose platform name
 - Reuse the active pair for an equivalent physical location and replace it for a genuinely different selected root.
 - Bind global selection and restorable sessions to the opened library UUID.
 - Make every fallible candidate step occur before one no-fail in-memory activation commit.
-- Commit global selected-library state through a result-bearing transaction and preserve applied-versus-barrier evidence.
+- Commit global selected-library state through a result-bearing generation transaction before activation.
 - Resume the old pair when candidate preparation or pre-activation persistence fails.
 - Prevent stale portal, idle, window, and shutdown callbacks from mutating a newer active selection.
 - Preserve each library's restorable playback intent instead of destructively deleting another library's session.
@@ -209,10 +209,7 @@ The transaction compares the host's captured selection generation before commit.
 A stale request cannot overwrite a newer selection merely because its delayed file operation completes.
 
 Pre-replacement failure keeps the old global selection and resumes the old pair.
-When RFC 0014 returns `VisibilityOnly`, the new global selection is already applied and cannot be treated as failure or rolled back under a false “old bytes remain” assumption.
-The host proceeds with the matching in-memory activation, marks the selection revision dirty for barrier-confirmed retry, and reports according to policy.
-
-`PlatformBarrierCompleted` settles the global selection revision.
+A successful replacement applies the new global selection under the current platform contract, after which the prepared in-memory activation must not fail.
 The host never publishes a new active pair whose persisted selection receipt names a different request/library generation.
 
 ### No-fail activation commit
@@ -347,7 +344,7 @@ Implementation proceeds in phases:
 6. Integrate RFC 0015 global selection transactions and generation receipts, then make the active-slot swap no-fail after selection application.
 7. Bind playback sessions by library UUID with RFC 0005 and remove destructive pre-switch discard.
 8. Introduce explicit `NoLibrary` or ephemeral-bootstrap state and stop persisting the temporary fallback root.
-9. Add RFC 0014 applied/barrier handling and RFC 0013 reporting dispositions.
+9. Add RFC 0013 reporting dispositions.
 10. Remove legacy `handleOpenNewLibrary()`, raw reference captures, string-keyed runtime ownership, and `librarySwitchPrepared` once the host generation makes stale writes impossible.
 
 Existing saved path-only selection may be read once as untrusted legacy input, opened, assigned the actual library UUID, and written through the new transaction on the next explicit successful selection/checkpoint.
@@ -362,7 +359,7 @@ Failure or mismatch never rewrites it implicitly.
 - Candidate preparation never presents, scans, writes global selection, consumes the old playback session, or publishes itself as active.
 - Blocking old-pair checkpoint failure cancels the candidate and resumes the old pair with unchanged global selection.
 - Global selection pre-application failure resumes the old pair and leaves no new active snapshot.
-- `VisibilityOnly` selection application activates the matching new pair, preserves dirty barrier evidence, and never reports that the old selection remains installed.
+- Successful selection replacement activates the matching new pair and never reports that the old selection remains installed.
 - The activation commit performs no fallible allocation, storage, or candidate initialization after global selection application.
 - Rapid requests obey documented supersession/queue rules and no stale request can replace a newer active pair.
 - Portal, idle, hide, destructor, and shutdown callbacks carry a live host/request generation and cannot write stale active selection.
@@ -394,7 +391,7 @@ Add an exact active-library host runtime surface reference if switch states, rec
 
 Update the [application managed-state surface](../reference/persistence/application-config.md) with canonical location, expected library UUID, selection generation, and any legacy path migration after implementation.
 Update the [managed file locations reference](../reference/persistence/location.md) if playback sessions or ephemeral bootstrap paths move.
-Update persistence architecture/specification owners with the global selection transaction and applied/barrier policy from RFC 0015 and RFC 0014.
+Update persistence architecture/specification owners with RFC 0015's global selection transaction and the current atomic replacement boundary.
 
 Update playback architecture, session specifications, and format reference with library-bound session association when implemented with RFC 0005.
 Update RFC 0018's promoted lifecycle specification with candidate preparation, resume, activation, and shutdown gates.
