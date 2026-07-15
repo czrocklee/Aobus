@@ -185,7 +185,8 @@ Platform finish errors are translated once into a typed request failure.
 The request mechanism never logs and reports the same error independently.
 
 The workflow owner decides whether to ignore user cancellation/staleness, log operational detail, post a notification, or return a command failure.
-Unexpected exceptions escaping a root callback go to the structured async diagnostic sink under RFC 0012.
+Unexpected exceptions escaping a coroutine-backed request workflow go to the injected async exception handler under RFC 0012.
+Ordinary platform callbacks retain their frontend-local containment boundary.
 
 Diagnostics include request family/id and bounded generation evidence, not native object addresses or user file contents.
 

@@ -11,7 +11,6 @@
 #include <ao/rt/library/ScanPlan.h>
 
 #include <cstdint>
-#include <exception>
 #include <filesystem>
 #include <optional>
 #include <stop_token>
@@ -72,10 +71,8 @@ namespace ao::gtk::portal
 
     // Presents a Result error: structured log of the error plus an error-severity notification.
     void presentFailure(std::string_view action, std::string const& notificationMessage, Error const& error);
-    // Presents an internal (exception) failure as a critical log plus an error-severity notification.
-    void reportInternalFailure(std::string_view action,
-                               std::string_view notificationMessage,
-                               std::exception_ptr exceptionPtr);
+    // The shared async exception handler owns diagnostics; this helper only presents the UI notification.
+    void presentInternalFailure(std::string_view notificationMessage);
 
     rt::AppRuntime& _runtime;
     ImportExportCallbacks const& _callbacks;

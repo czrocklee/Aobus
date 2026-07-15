@@ -14,23 +14,25 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <exception>
 #include <mutex>
 #include <stop_token>
+#include <string_view>
 #include <thread>
 
 namespace ao::gtk::test
 {
   namespace
   {
+    using rt::test::AsyncExceptionRecorder;
     using rt::test::ManualExecutor;
+    using rt::test::requireSingleRecordedException;
+    constexpr auto kTestExceptionContext = std::string_view{"test UI workflow"};
 
     struct WorkflowOwner final
     {
       std::atomic<bool> bodyEntered{false};
       std::atomic<bool> bodyFinished{false};
       std::atomic<int> handlerCalls{0};
-      std::atomic<bool> sawAoException{false};
       std::atomic<std::thread::id> handlerThread{};
       std::mutex mutex;
       std::condition_variable cv;
@@ -87,7 +89,8 @@ namespace ao::gtk::test
             "[gtk][unit][uiworkflow][concurrency]")
   {
     auto executor = ManualExecutor{};
-    auto runtime = async::Runtime{executor};
+    auto exceptionRecorder = AsyncExceptionRecorder{};
+    auto runtime = async::Runtime{executor, exceptionRecorder.handler()};
     auto scope = async::LifetimeScope{};
     auto owner = WorkflowOwner{};
 
@@ -95,23 +98,12 @@ namespace ao::gtk::test
       runtime,
       scope,
       owner,
+      kTestExceptionContext,
       [&runtime](WorkflowOwner* self, std::stop_token const stopToken)
       { return failingWorkflowBody(&runtime, self, stopToken); },
-      [](WorkflowOwner* self, std::exception_ptr exceptionPtr)
+      [](WorkflowOwner* self)
       {
         self->handlerThread = std::this_thread::get_id();
-
-        // The handler must receive the original failure type. Record it explicitly: a wrong-type rethrow
-        // escapes here and fails the test via pumpUntil rather than silently passing on handlerCalls alone.
-        try
-        {
-          std::rethrow_exception(exceptionPtr);
-        }
-        catch (Exception const&)
-        {
-          self->sawAoException = true;
-        }
-
         ++self->handlerCalls;
       });
 
@@ -119,18 +111,20 @@ namespace ao::gtk::test
 
     CHECK(owner.bodyEntered.load());
     CHECK(owner.handlerCalls.load() == 1);
-    CHECK(owner.sawAoException.load());
     CHECK(owner.handlerThread.load() == std::this_thread::get_id());
 
     runtime.requestStop();
     runtime.join();
+
+    requireSingleRecordedException<Exception>(exceptionRecorder, kTestExceptionContext);
   }
 
   TEST_CASE("UiWorkflow - successful body does not invoke the exception handler",
             "[gtk][unit][uiworkflow][concurrency]")
   {
     auto executor = ManualExecutor{};
-    auto runtime = async::Runtime{executor};
+    auto exceptionRecorder = AsyncExceptionRecorder{};
+    auto runtime = async::Runtime{executor, exceptionRecorder.handler()};
     auto scope = async::LifetimeScope{};
     auto owner = WorkflowOwner{};
 
@@ -138,9 +132,10 @@ namespace ao::gtk::test
       runtime,
       scope,
       owner,
+      kTestExceptionContext,
       [&runtime](WorkflowOwner* self, std::stop_token const stopToken)
       { return succeedingWorkflowBody(&runtime, self, stopToken); },
-      [](WorkflowOwner* self, std::exception_ptr /*exceptionPtr*/) { ++self->handlerCalls; });
+      [](WorkflowOwner* self) { ++self->handlerCalls; });
 
     REQUIRE(executor.waitUntilQueued());
     executor.runUntilIdle();
@@ -151,8 +146,43 @@ namespace ao::gtk::test
 
     CHECK(owner.bodyEntered.load());
     CHECK(owner.handlerCalls.load() == 0);
+    CHECK(exceptionRecorder.snapshot().empty());
 
     runtime.requestStop();
     runtime.join();
+  }
+
+  TEST_CASE("UiWorkflow - cancellation cannot erase a fault captured before presentation",
+            "[gtk][regression][uiworkflow][concurrency]")
+  {
+    auto executor = ManualExecutor{};
+    auto exceptionRecorder = AsyncExceptionRecorder{};
+    auto runtime = async::Runtime{executor, exceptionRecorder.handler()};
+    auto scope = async::LifetimeScope{};
+    auto owner = WorkflowOwner{};
+
+    spawnUiWorkflow(
+      runtime,
+      scope,
+      owner,
+      kTestExceptionContext,
+      [&runtime](WorkflowOwner* self, std::stop_token const stopToken)
+      { return failingWorkflowBody(&runtime, self, stopToken); },
+      [](WorkflowOwner* self) { ++self->handlerCalls; });
+
+    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.runOne());
+    REQUIRE(exceptionRecorder.waitForCount(1));
+    REQUIRE(executor.waitUntilQueued());
+
+    scope.cancelAll();
+    executor.runUntilIdle();
+
+    CHECK(owner.handlerCalls.load() == 0);
+
+    runtime.requestStop();
+    runtime.join();
+
+    requireSingleRecordedException<Exception>(exceptionRecorder, kTestExceptionContext);
   }
 } // namespace ao::gtk::test

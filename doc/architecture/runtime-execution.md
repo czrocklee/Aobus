@@ -60,6 +60,11 @@ The first task in a pending burst owns the wake request, and drain completion re
 `ao::async::Runtime` owns a general-purpose worker pool for asynchronous application tasks.
 Library scans, import/export, identity indexing, delayed checkpoints, and other potentially blocking work run there and explicitly resume on the callback executor before touching executor-affine state or returning UI-facing completion.
 
+Boost.Asio owns coroutine exception transport and passes an escaping exception to the terminal `co_spawn` completion handler as `std::exception_ptr`.
+For fire-and-forget roots, `Runtime` filters expected cancellation and forwards every other exception to an injected thread-safe diagnostic handler.
+Future-returning tasks retain explicit caller ownership and are not also reported by that handler.
+The [outcome channel specification](../spec/failure/outcome-channel.md) owns the exact terminal ordering and fallback behavior.
+
 The worker pool is not a second application-state owner.
 Worker tasks operate on thread-safe/core facilities or isolated values and publish results back through the callback boundary.
 
@@ -75,6 +80,7 @@ The logging backend may also own its own asynchronous worker, but it is infrastr
 
 - Frontends construct the callback executor and transfer exclusive ownership to `CoreRuntime`.
 - `CoreRuntime` owns `async::Runtime`; runtime services borrow it or its callback executor and cannot outlive it.
+- Interactive composition injects an async exception handler from the application logging boundary; `ao_async` does not depend on application logging types.
 - Worker tasks may resume on the callback executor through `Runtime::resumeOnCallbackExecutor`.
 - Frontend code does not post directly into audio engine internals, and audio callbacks do not mutate runtime snapshots from backend threads.
 - UIModel and frontend adapters call executor-affine runtime services only from the owning event-loop thread.
@@ -121,6 +127,10 @@ The current Engine non-realtime queue and Player-to-executor task stream do not 
 Higher-level owners retain that handle or use a lifetime scope so cancellation is requested when the operation or owner ends.
 Cancellation is cooperative and checked at executor switches, timers, and subsystem-specific checkpoints.
 
+`spawnLogged`, `spawnCancellable`, and lifetime-bound completion use the same injected exception handler after their terminal ownership bookkeeping.
+The handler may run concurrently on worker threads and therefore must synchronize its own mutable state.
+A frontend workflow that catches an unexpected exception before a cancellable callback hop reports it immediately, then performs only generic presentation on the callback executor; later cancellation may suppress presentation but cannot erase the diagnostic.
+
 Runtime shutdown proceeds from producers toward dependencies:
 
 1. Interactive runtime owners stop playback-session scheduling and quiesce audio callback producers.
@@ -128,6 +138,8 @@ Runtime shutdown proceeds from producers toward dependencies:
 3. `CoreRuntime` requests worker-pool stop and joins it while storage-backed collaborators still exist.
 4. Library, source, completion, and notification collaborators are destroyed.
 5. The callback executor is released last within `CoreRuntime` ownership.
+
+The application logger and its captured async-exception adapter outlive step 3 and are shut down only after worker completion handlers have quiesced.
 
 Dedicated audio and device owners request stop and join their own threads inside their shutdown or destruction boundary.
 Unexpected coroutine exceptions are reported by the async runtime; expected cancellation is not reported as an unhandled failure.
@@ -137,15 +149,18 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`ao::async::Executor`](../../include/ao/async/Executor.h) defines callback dispatch and deferred-turn semantics.
 - [`QueuedExecutorBase`](../../include/ao/async/QueuedExecutor.h) implements the multi-producer, owner-drained FIFO and wake-coalescing turn boundary used by GTK and TUI.
 - [`ao::async::Runtime`](../../include/ao/async/Runtime.h) owns the worker pool and coroutine switching operations.
+- [`AsyncExceptionHandler`](../../include/ao/async/AsyncExceptionHandler.h) is the injected terminal diagnostic seam.
 - [`Runtime.cpp`](../../lib/async/Runtime.cpp) implements worker spawning, cancellation, timers, and callback resumption.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) owns executor/runtime lifetime and worker shutdown ordering.
+- [`Log.cpp`](../../app/runtime/Log.cpp) adapts terminal exceptions to the retained application logger.
 - [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) orders playback-session and player shutdown ahead of base-runtime teardown.
 - [`GtkMainContextExecutor`](../../app/linux-gtk/app/GtkMainContextExecutor.cpp), [`tui::Executor`](../../app/tui/Executor.cpp), and [`ImmediateExecutor`](../../include/ao/async/ImmediateExecutor.h) adapt the three frontend execution models.
 - [`Engine.cpp`](../../lib/audio/Engine.cpp) and [`StreamingSource.cpp`](../../lib/audio/StreamingSource.cpp) contain the principal dedicated audio-thread boundaries.
 
 ## Test map
 
-- [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) tests executor switching, cancellation, and runtime lifetime.
+- [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) tests executor switching, cancellation, terminal exception ownership, and runtime lifetime.
+- [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) tests lifetime bookkeeping and injected exception delivery.
 - [`QueuedExecutorTest.cpp`](../../test/unit/runtime/QueuedExecutorTest.cpp) protects burst wake coalescing, multi-producer admission, non-reentrant drains, and later-turn delivery.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp) protects the audio control/event thread boundary.
 - [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp) protects callback delivery and teardown constraints.

@@ -1,0 +1,21 @@
+# Aobus ThreadSanitizer suppressions for uninstrumented UI dependencies.
+#
+# These rules ignore only sanitizer interceptor accesses originating in the
+# named shared libraries. Aobus code remains instrumented, including callbacks
+# entered from these libraries. Keep this list limited to dependencies observed
+# in the GTK TSan baseline; never add project binaries or runtime libraries such
+# as libc, libpthread, libstdc++, or libtsan.
+
+# GLib runtime and C++ base wrapper.
+called_from_lib:libglib-2.0.so
+called_from_lib:libgio-2.0.so
+called_from_lib:libgobject-2.0.so
+called_from_lib:libglibmm-2.68.so
+
+# GTK image and text stack.
+called_from_lib:libgtk-4.so
+called_from_lib:libgdk_pixbuf-2.0.so
+called_from_lib:libpango-1.0.so
+called_from_lib:libpangoft2-1.0.so
+called_from_lib:libpangocairo-1.0.so
+called_from_lib:libfontconfig.so

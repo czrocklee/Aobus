@@ -154,27 +154,31 @@ namespace ao::gtk
 
   void ThumbnailLoader::spawnDecode(RequestKey key)
   {
-    // State the coroutine needs is passed by value into the frame; the loader
-    // destruction cancels its decode scope, and the post-dispatch cancellation
-    // check prevents this loader from being touched after destruction.
-    _runtime.spawnWithLifetime(_scopePtr.get(),
-                               [self = this, requestKey = key](std::stop_token const stopToken)
-                               { return self->decode(requestKey, stopToken); });
+    // The worker phase borrows only runtime-owned dependencies, which outlive
+    // this loader. The loader pointer is first dereferenced after the
+    // cancellation-checked callback-executor hop.
+    _runtime.spawnWithLifetime(
+      _scopePtr.get(),
+      [loader = this, reads = &_reads, runtime = &_runtime, requestKey = key](std::stop_token const stopToken)
+      { return decode(loader, reads, runtime, requestKey, stopToken); });
   }
 
-  async::Task<void> ThumbnailLoader::decode(RequestKey const requestKey, std::stop_token const stopToken)
+  async::Task<void> ThumbnailLoader::decode(ThumbnailLoader* const loader,
+                                            rt::Library const* const reads,
+                                            async::Runtime* const runtime,
+                                            RequestKey const requestKey,
+                                            std::stop_token const stopToken)
   {
     auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
-    auto exceptionPtr = std::exception_ptr{};
 
-    co_await _runtime.resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorker(stopToken);
 
     try
     {
       auto optData = std::optional<std::vector<std::byte>>{};
 
       {
-        auto scope = _reads.reader();
+        auto scope = reads->reader();
         optData = scope.loadResource(requestKey.id);
       }
 
@@ -196,26 +200,27 @@ namespace ao::gtk
     catch (...)
     {
       async::rethrowIfOperationCancelled();
-      exceptionPtr = std::current_exception();
+      runtime->reportUnhandledException(std::current_exception(), "thumbnail decode workflow");
     }
 
-    // Throws OperationCancelled (unwinding the frame) if the loader's scope was
-    // cancelled, so this loader is safe to touch past this point.
-    co_await _runtime.resumeOnCallbackExecutor(stopToken);
+    // If loader destruction requested stop, the hop throws before returning.
+    // Once it returns, this coroutine and the destructor are serialized on the
+    // UI thread, so loader-owned state is safe to access.
+    co_await runtime->resumeOnCallbackExecutor(stopToken);
 
     // Salvage: a successful decode populates the shared cache even if every
     // requester has since moved on.
-    if (decodedPtr && !get(requestKey.id, requestKey.physicalPixelSize))
+    if (decodedPtr && !loader->get(requestKey.id, requestKey.physicalPixelSize))
     {
-      _cache.put(ImageCacheKey::thumbnail(requestKey.id, requestKey.physicalPixelSize), decodedPtr);
+      loader->_cache.put(ImageCacheKey::thumbnail(requestKey.id, requestKey.physicalPixelSize), decodedPtr);
     }
 
     auto waiters = std::vector<RequestWaiter>{};
 
-    if (auto const it = _inFlight.find(requestKey); it != _inFlight.end())
+    if (auto const it = loader->_inFlight.find(requestKey); it != loader->_inFlight.end())
     {
       waiters = std::move(it->second);
-      _inFlight.erase(it);
+      loader->_inFlight.erase(it);
     }
 
     for (auto const& waiter : waiters)
@@ -224,11 +229,6 @@ namespace ao::gtk
       {
         waiter.onReady(decodedPtr);
       }
-    }
-
-    if (exceptionPtr)
-    {
-      std::rethrow_exception(exceptionPtr);
     }
   }
 } // namespace ao::gtk

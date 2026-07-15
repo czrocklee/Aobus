@@ -1,31 +1,33 @@
 ---
 id: rfc.0012.structured-async-fault-diagnostics
 type: rfc
-status: draft
+status: implemented
 domain: async
-summary: Proposes one injected structured diagnostic sink for unhandled asynchronous and lifetime-bound faults.
+summary: Introduced one injected exception handler for unobserved coroutine failures without replacing Asio exception transport.
 depends-on: none
 ---
-# RFC 0012: Structured asynchronous fault diagnostics
+# RFC 0012: Injected asynchronous exception diagnostics
+
+## Disposition
+
+Implemented on 2026-07-14 with a narrower design than the original structured-fault proposal.
+
+Boost.Asio already captures exceptions escaping `awaitable` coroutines and gives the terminal `co_spawn` completion handler a `std::exception_ptr`.
+The implemented boundary preserves that mechanism and adds only an injectable `AsyncExceptionHandler` that receives the original exception pointer and a short static context string.
+
+The [outcome channel specification](../spec/failure/outcome-channel.md) owns the terminal diagnostic behavior and ordering invariants.
+The [runtime execution architecture](../architecture/runtime-execution.md) owns completion, concurrency, and teardown placement, while the [failure and reporting architecture](../architecture/failure-and-reporting.md) owns diagnostic versus user-facing reporting responsibilities.
+Those current authorities supersede this proposal; this RFC records why the larger normalized fault model was not adopted.
 
 ## Problem
 
-The core asynchronous runtime correctly distinguishes expected cancellation from unexpected coroutine failure, but its unhandled-fault path bypasses the application's diagnostic system.
+`Runtime::spawnLogged`, `spawnCancellable`, and `LifetimeScope` already received terminal coroutine exceptions from Asio, but formatted them directly to process `stderr`.
+GTK and TUI initialize retained application logs, so an unexpected worker failure could be absent from the only useful production diagnostic file.
+The hard-coded formatter also prevented tests from recording the terminal exception deterministically.
 
-[`Runtime::spawnLogged`](../../lib/async/Runtime.cpp), `spawnCancellable`, and [`LifetimeScope`](../../lib/async/LifetimeScope.cpp) catch completion exceptions and print directly to process `stderr` with `std::println`.
-The current test silences the file descriptor and verifies only that the logging variant does not crash.
-
-This creates several production limitations:
-
-- GTK and TUI initialize rotating structured logs, but root coroutine faults can exist only in an unstructured terminal stream.
-- GUI launches may have no useful terminal attached, so the only retained evidence can be lost.
-- Context is a fixed string such as `root`, `cancellable`, or `lifetime-bound`; there is no task label, source location, owner, correlation identity, or executor phase.
-- `ao::Exception` source location is discarded even though it is available.
-- runtime, lifetime-scope, GTK executor, TUI executor, and frontend leaf catches use different text and severity conventions;
-- tests cannot inject a recorder and assert the structured diagnostic contract deterministically.
-
-The core async layer cannot solve this by directly depending on `ao::rt::Log`, because core libraries do not depend on application runtime.
-The missing boundary is an injected diagnostic sink, not a new application dependency or a user-notification mechanism.
+A second loss path existed in frontend workflows.
+Some code caught an unexpected exception, stored its `exception_ptr`, and then crossed a stop-aware callback-executor hop before reporting it.
+If owner cancellation won that hop, `OperationCancelled` became the exception escaping the coroutine and the earlier unexpected exception was never diagnosed.
 
 ## Dependencies
 
@@ -33,171 +35,135 @@ The missing boundary is an injected diagnostic sink, not a new application depen
 - Conditional: None.
 - Integration: [RFC 0013](0013-coherent-application-reporting-policy.md).
 
-RFC 0013 distinguishes diagnostic-only invariant faults from user-facing reports.
-If both proposals are implemented, the structured sink remains a diagnostic channel and does not become an automatic notification adapter.
+RFC 0013 may use the same distinction between diagnostic-only unexpected exceptions and explicitly owned user-facing reports.
+It does not change this RFC's exception transport or handler lifetime.
 
 ## Goals
 
-- Route every unhandled root, cancellable, and lifetime-bound coroutine fault through one injected structured diagnostic contract.
-- Preserve expected cancellation as silent control flow.
-- Preserve exception category, message, `ao::Exception` source location, task context, and completion domain when available.
-- Keep the core async library independent of runtime logging and notification types.
-- Let application composition adapt diagnostics to rotating logs, tests, CLI stderr, or another operator sink.
-- Make handler failure and pre-initialization behavior explicit and fail-safe.
-- Align GTK/TUI executor and frontend leaf diagnostics with the same structure where their boundary semantics match.
+- Keep Boost.Asio and `std::exception_ptr` as the only coroutine exception transport.
+- Route unobserved root, cancellable, and lifetime-bound failures through one injectable handler.
+- Keep expected cancellation silent.
+- Preserve future-returning task ownership so `future::get()` rethrows without duplicate reporting.
+- Let application composition adapt unexpected exceptions to its retained logger without adding an application dependency to `ao_async`.
+- Diagnose an unexpected workflow failure before a later cancellable presentation hop can erase it.
+- Keep the diagnostic handler alive until worker completions have quiesced.
 
 ## Non-goals
 
-- Convert unexpected exceptions into recoverable `Error` values.
-- Retry, resume, or otherwise recover a failed coroutine automatically.
-- Post a user notification for every invariant fault.
-- Replace domain-specific typed failure events or command results.
-- Standardize complete logging configuration, file locations, retention, or formatting.
-- Capture native crashes, termination, signals, or memory faults outside C++ exception completion.
+- Define a normalized `AsyncFault` value, task taxonomy, phase enum, correlation id, or operation-label registry.
+- Replace `std::exception_ptr`, Asio completion handlers, or normal C++ exception propagation.
+- Add a custom signal-safe or allocation-free emergency writer.
+- Convert unexpected exceptions into recoverable `Error` values or automatic user notifications.
+- Unify every GTK, TUI, CLI, or third-party callback catch in this change.
+- Define logging retention, formatting, or transport as a core-async responsibility.
 
 ## Proposed design
 
-### Core diagnostic value
+### Terminal coroutine ownership
 
-The async core defines a small frontend-neutral value and sink interface equivalent to:
+`co_spawn` remains the terminal exception boundary for unobserved runtime tasks.
+Its completion handler receives `std::exception_ptr`; runtime handling then follows this order:
 
-```text
-AsyncFault
-  task class: root | cancellable | lifetime-bound
-  task label
-  exception category
-  message
-  optional source location
-  optional owner/correlation label
-  completion phase
+1. return when there is no exception;
+2. recognize and silently consume expected cancellation;
+3. invoke the injected handler with the original exception pointer and a short context string;
+4. if no handler exists or it throws, use the existing stderr diagnostic as a non-throwing fallback.
 
-AsyncFaultSink
-  report(AsyncFault) noexcept
+`spawnLogged`, `spawnCancellable`, and `spawnWithLifetime` retain their original call shapes.
+They use fixed contexts for root, cancellable, and lifetime-bound completion, so callers do not acquire a new task-registration API.
+
+`Runtime::spawn(Task<T>)` continues to use `boost::asio::use_future`.
+Its explicit caller owns the returned future and no diagnostic handler also reports the same exception.
+
+### Injection and application logging
+
+The core surface is equivalent to:
+
+```cpp
+using AsyncExceptionHandler =
+  std::function<void(std::exception_ptr, std::string_view context)>;
 ```
 
-The value does not contain `NotificationRequest`, spdlog types, widgets, terminal handles, or application recovery commands.
-An unknown non-standard exception retains an explicit category even when no message is available.
+The handler may be called concurrently from runtime worker threads.
+The application logger adapter therefore captures a stable thread-safe logger handle rather than consulting mutable global logger state during a completion callback.
 
-`ao::Exception` contributes its original file, line, function when available, and message.
-Other `std::exception` values contribute their dynamic category name when portable and their message.
+GTK and TUI composition create this adapter after logging initialization and inject it through `AppRuntimeDependencies` into `CoreRuntime` and `async::Runtime`.
+Logging remains alive until the runtime has stopped and joined its worker producers.
+Bare runtime and CLI compositions may omit the handler and retain stderr fallback behavior.
 
-### Injection and task context
+### Fault-before-presentation ordering
 
-`async::Runtime` receives a sink or reporter callback from its composition root.
-A default emergency reporter remains available for early startup and tests that intentionally construct a bare runtime.
+A frontend workflow may need both an operator diagnostic and a generic user-facing failure notice.
+When its owner can be cancelled, the workflow reports the caught unexpected exception immediately through `Runtime::reportUnhandledException` and only then awaits the stop-aware callback hop used for presentation.
 
-Spawn APIs accept an optional task context containing a stable operation label and source location captured at the spawn call.
-`spawnLogged`, `spawnCancellable`, and `spawnWithLifetime` preserve this context through completion.
-Callers use semantic labels such as `library.scan`, `playback.prepare`, or `gtk.import`, not dynamically assembled user data.
+The diagnostic and presentation remain separate channels:
 
-`LifetimeScope` no longer owns a separate `stderr` formatter.
-Its completion path reports through the runtime that started the task after task bookkeeping is complete.
+- the async handler receives exception detail on the thread that owns the catch;
+- the callback executor receives only the generic presentation action;
+- cancellation after diagnosis may suppress presentation safely, but cannot erase the diagnostic; and
+- the coroutine consumes the original exception after reporting, so lifetime completion does not report it again.
 
-### Cancellation and completion rules
-
-The completion adapter follows one order:
-
-1. retire task/lifetime bookkeeping;
-2. return when there is no exception;
-3. recognize and silently consume `OperationCancelled` only at the owning completion boundary;
-4. translate every other exception into `AsyncFault`;
-5. invoke the sink exactly once.
-
-The sink is diagnostic and `noexcept`.
-If a supplied sink violates that contract or cannot operate because logging is unavailable, the runtime invokes a minimal emergency fallback that is safe during startup/shutdown.
-Emergency `stderr` is permitted only as this last-resort fallback and is separately testable; routine async fault reporting no longer writes directly to it.
-
-### Application adapter
-
-`CoreRuntime` supplies an adapter that maps structured async faults to the application logger at critical/error severity with stable fields.
-The adapter preserves task label, class, exception category, message, and source evidence in one log event.
-
-Interactive application composition initializes logging before starting runtime tasks and keeps the adapter alive until async workers and lifetime-bound completions are quiescent.
-Shutdown resets the sink only after worker join and frontend callback drain.
-
-CLI composition may adapt the same structure to stderr when it intentionally runs without application logging.
-That is a frontend sink choice, not a direct dependency in `ao_async`.
-
-### Leaf-boundary convergence
-
-GTK and TUI executors, workflow helpers, and top-level runners keep their distinct containment responsibility.
-Where they catch an unexpected callback/task exception rather than a command rejection, they construct the same diagnostic structure or use a shared adapter.
-
-Frontend top-level catches may still print a final fatal message to stderr for launch failures or process termination.
-They do not duplicate a routine async fault at several nested leaves; one ownership boundary reports it once.
-
-### Integration with reporting policy
-
-An async fault is diagnostic-only by default.
-A domain owner may separately publish a generic user-facing internal-error state when an operation cannot continue, but that decision uses typed operation context and is not performed by the async sink.
-The diagnostic event and user report may share a correlation id without becoming the same channel.
+Runtime library tasks that previously carried an exception over their own callback hop now queue only callback-affine cleanup and rethrow the original exception before that cancellable hop.
+The owning UI workflow then applies the ordering above.
 
 ## Alternatives
 
+### Rely only on coroutine propagation
+
+This is sufficient for awaited tasks and futures, but not for fire-and-forget roots whose completion handler is the final owner.
+It also cannot recover an earlier exception that application code deliberately caught before a later cancellation exception escaped.
+
+### Normalize every exception into a structured fault value
+
+Rejected as premature.
+It duplicates information already retained by `std::exception_ptr`, adds ownership and allocation policy, forces task-label registration through every spawn call, and stabilizes fields with no current consumer beyond logging and tests.
+A future tracing or correlation requirement can propose a value model from measured consumers rather than embedding it in basic coroutine completion.
+
 ### Call `APP_LOG_ERROR` from `lib/async`
 
-This reverses the core-to-runtime dependency direction and makes the async library unusable without application logging.
+Rejected because it reverses the core-to-application dependency direction and makes the core async library depend on application logging lifetime.
 
-### Keep stderr and improve the message
+### Keep direct stderr as the routine path
 
-More text does not provide retained GUI diagnostics, injection, structured context, deterministic tests, or lifecycle coordination.
+Rejected for interactive composition because GUI launches may not retain a useful terminal stream and tests cannot inject an observer.
+Stderr remains only the existing fallback when the application handler is absent or fails.
 
-### Convert the exception to `Error`
+### Introduce a custom emergency writer
 
-An exception that escaped a root task is an unexpected fault, not a recoverable result retroactively returned to a caller.
-Conversion would erase the channel distinction owned by the failure architecture.
-
-### Post a critical notification
-
-The notification feed is user-facing state and may itself depend on runtime callback execution.
-Using it as the core fault sink risks recursion, teardown use-after-destruction, and noisy internal-detail exposure.
-
-### Adopt a complete tracing framework first
-
-A tracing system may later consume the structured sink, but it is not required to stop losing current fault evidence.
+Rejected from this scope because no demonstrated failure requires a platform-specific writer, recursion gate, signal masking, or bounded write loop.
+Such a facility requires a separate failure model and native-platform evidence.
 
 ## Compatibility and migration
 
-The change is internal C++ API evolution with no persisted format impact.
-Bare `Runtime` construction remains possible through an explicit default emergency sink or test helper.
+The change has no persisted, command, schema, or user-data compatibility effect.
+Existing spawn call sites retain their signatures.
 
-Migration proceeds in stages:
-
-1. Introduce the structured value, sink, task context, and recording tests while keeping current stderr as the default adapter.
-2. Inject the application logging adapter from runtime composition.
-3. Move `Runtime` and `LifetimeScope` routine completions to the injected sink.
-4. Align GTK/TUI executor and workflow fault catches where ownership is equivalent.
-5. Restrict direct async stderr output to tested emergency and top-level frontend fallbacks.
-
-Existing task behavior, cancellation, worker/callback switching, and future exception transport do not change.
+Interactive composition now injects the logging adapter.
+The shared GTK UI workflow passes a static diagnostic context and no longer hands `exception_ptr` to its presentation callback.
+Internal-error presentation remains generic and executor-affine, while detailed logging moves to the shared handler.
 
 ## Validation
 
-- Recording-sink tests assert one structured event for root, cancellable, and lifetime-bound unexpected faults.
-- Cancellation at every completion boundary produces no fault event.
-- `ao::Exception` preserves message and original source location.
-- Standard and unknown exceptions retain distinct categories.
-- Task labels and spawn-site evidence survive worker and callback executor hops.
-- A failing injected sink triggers exactly one emergency fallback without recursive failure or termination.
-- Application tests prove routine async faults reach the rotating app logger rather than direct stderr.
-- Shutdown tests prove the sink outlives all async completions and receives no callback after teardown.
-- Existing future-returning task APIs still rethrow to their explicit caller instead of also reporting as unhandled.
-- GTK/TUI leaf tests prove one owner reports a fault once.
-- The completed implementation passes async concurrency tests, ThreadSanitizer validation, `./ao check`, and the documentation gate.
+- Runtime tests prove root and cancellable failures reach the injected handler with their original exception type.
+- Lifetime tests prove scope-owned task failures reach the same handler after task bookkeeping retires.
+- A future-returning task proves its exception is rethrown to its caller and is not also reported.
+- Cancellation tests prove expected stop completion produces no handler call.
+- A deterministic manual-executor regression proves cancellation after fault capture cannot erase the diagnostic or access the retired UI owner.
+- Logger tests prove the application adapter writes the supplied exception and context into the retained application log.
+- Concurrency and ThreadSanitizer gates validate concurrent completion and teardown behavior.
 
 ## Open questions
 
-- Should the core value store `std::exception_ptr` for advanced sinks or only normalized safe fields?
-- Which task-context fields are stable enough for tests and operational search?
-- Should task labels be free strings, registered identifiers, or compile-time literals?
-- What emergency fallback is safe on every supported platform before and after logging lifetime?
-- Which GTK/TUI leaf catches should converge immediately and which remain platform-specific top-level policy?
+None for the implemented boundary.
+Structured fields, registered task labels, correlation, callback-executor catch convergence, and a stronger emergency transport require separate evidence-backed proposals.
 
 ## Promotion plan
 
-If accepted, update the [runtime execution architecture](../architecture/runtime-execution.md) with diagnostic-sink ownership, injection, and teardown order.
-Update the [failure and reporting architecture](../architecture/failure-and-reporting.md) to distinguish structured invariant diagnostics from optional user-facing internal-error reports.
+The implemented current behavior is owned by:
 
-Add an async fault specification for completion, cancellation exclusion, and sink failure behavior, plus a reference for exact diagnostic fields and task classes if the public core surface remains stable.
-Update development guidance for labeling root tasks, testing fault sinks, and reviewing direct stderr use.
-CLI reporting documentation remains separate because command rejection and top-level process status are not async-fault diagnostics; exact CLI behavior moves to reference when that legacy surface migrates.
+- [Outcome channel specification](../spec/failure/outcome-channel.md)
+- [Runtime execution architecture](../architecture/runtime-execution.md)
+- [Failure and reporting architecture](../architecture/failure-and-reporting.md)
+
+No dedicated reference was created because the change introduces no serialized format, command surface, or externally consumed field inventory.
+The existing outcome-channel specification owns the exact terminal behavior, while its implementation and test maps lock the narrow C++ seam.

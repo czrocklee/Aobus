@@ -10,6 +10,8 @@
 
 #include <exception>
 #include <stop_token>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::gtk
@@ -23,53 +25,56 @@ namespace ao::gtk
   template<typename Owner, typename Workflow, typename ExceptionHandler>
   async::Task<void> runUiWorkflow(async::Runtime* runtime,
                                   Owner* owner,
+                                  std::string exceptionContext,
                                   Workflow workflow,
                                   ExceptionHandler exceptionHandler,
                                   std::stop_token const stopToken)
   {
     co_await runtime->resumeOnCallbackExecutor(stopToken);
 
-    auto exceptionPtr = std::exception_ptr{};
+    bool failed = false;
 
     try
     {
       co_await workflow(owner, stopToken);
     }
-    catch (std::exception const& e)
-    {
-      async::rethrowIfOperationCancelled(e);
-      exceptionPtr = std::current_exception();
-    }
     catch (...)
     {
       async::rethrowIfOperationCancelled();
-      exceptionPtr = std::current_exception();
+      runtime->reportUnhandledException(std::current_exception(), exceptionContext);
+      failed = true;
     }
 
-    if (!exceptionPtr)
+    if (!failed)
     {
       co_return;
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);
-    exceptionHandler(owner, exceptionPtr);
+    exceptionHandler(owner);
   }
 
   template<typename Owner, typename Workflow, typename ExceptionHandler>
   void spawnUiWorkflow(async::Runtime& runtime,
                        async::LifetimeScope& scope,
                        Owner& owner,
+                       std::string_view const exceptionContext,
                        Workflow workflow,
                        ExceptionHandler exceptionHandler)
   {
-    runtime.spawnWithLifetime(
-      &scope,
-      [runtimeHandle = &runtime,
-       ownerHandle = &owner,
-       workflow = std::move(workflow),
-       exceptionHandler = std::move(exceptionHandler)](std::stop_token const stopToken) mutable
-      {
-        return runUiWorkflow(runtimeHandle, ownerHandle, std::move(workflow), std::move(exceptionHandler), stopToken);
-      });
+    runtime.spawnWithLifetime(&scope,
+                              [runtimeHandle = &runtime,
+                               ownerHandle = &owner,
+                               exceptionContext = std::string{exceptionContext},
+                               workflow = std::move(workflow),
+                               exceptionHandler = std::move(exceptionHandler)](std::stop_token const stopToken) mutable
+                              {
+                                return runUiWorkflow(runtimeHandle,
+                                                     ownerHandle,
+                                                     std::move(exceptionContext),
+                                                     std::move(workflow),
+                                                     std::move(exceptionHandler),
+                                                     stopToken);
+                              });
   }
 } // namespace ao::gtk

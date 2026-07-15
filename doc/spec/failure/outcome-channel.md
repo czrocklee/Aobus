@@ -11,6 +11,7 @@ summary: Defines how Aobus represents normal outcomes, recoverable failures, can
 
 This specification owns the behavioral distinction between normal domain values, recoverable `Result` failures, asynchronous failure observations, cancellation control flow, and invariant faults.
 It defines how those channels are preserved or translated at public subsystem and application boundaries.
+It also owns terminal diagnostics for asynchronous invariant faults that have no explicit caller-owned result channel.
 
 It delegates the exact `Error` fields and code inventory to the [error value reference](../../reference/failure/error.md), cross-layer ownership to the [failure and reporting architecture](../../architecture/failure-and-reporting.md), executor and cancellation mechanics to the [runtime execution architecture](../../architecture/runtime-execution.md), and subsystem-specific recovery behavior to the owning subsystem specification.
 
@@ -29,6 +30,7 @@ UIModel and frontends may adapt an already classified outcome for interaction or
 - An **asynchronous failure observation** reports a recoverable failure that occurs after a command has already been accepted.
 - **Cancellation** is lifetime or command control flow that stops work without classifying the stopped operation as failed.
 - An **invariant fault** is a broken internal precondition or impossible in-memory state for which ordinary caller recovery would be unsafe.
+- An **unobserved asynchronous fault** is an exception that escapes a runtime-owned root, cancellable, or lifetime-bound coroutine whose terminal completion is the last exception owner.
 - A **translation boundary** is the narrow public edge that converts a private or third-party failure mechanism into the channel promised by the enclosing operation.
 
 ## Invariants
@@ -43,6 +45,10 @@ UIModel and frontends may adapt an already classified outcome for interaction or
 - A third-party exception is contained at the narrow wrapper boundary and translated to the enclosing operation's declared channel.
 - A private subsystem exception used to reduce local propagation boilerplate is caught only as its domain-specific leaf type and never becomes part of the public failure vocabulary.
 - Acceptance and completion are distinct: a failure after synchronous acceptance uses a typed event or state observation rather than retroactively changing the accepted command result.
+- A future-returning asynchronous task has one explicit caller-owned exception channel and is never also reported as an unobserved asynchronous fault.
+- Expected cancellation never enters the generic asynchronous diagnostic handler or its stderr fallback.
+- Terminal task bookkeeping completes before an unobserved asynchronous fault is delivered to a diagnostic handler.
+- Failure of a diagnostic handler cannot escape the terminal completion boundary or change the completed task's outcome.
 
 ## Commands and transitions
 
@@ -78,6 +84,30 @@ Unrelated exceptions, including allocation and logic faults, are not converted t
 Cancellable coroutines propagate `ao::async::OperationCancelled` until the lifetime boundary that owns completion.
 A broad catch inside cancellable work must preserve cancellation before handling other exceptions, and expected cancellation does not produce a notification or generic error report by default.
 
+### Terminal asynchronous diagnostics
+
+Boost.Asio terminal completion remains the exception transport for runtime-owned coroutines.
+When a root, cancellable, or lifetime-bound coroutine completes, the runtime follows this order:
+
+1. A completion without an exception produces no diagnostic.
+2. An exception classified as expected cancellation is consumed without a diagnostic.
+3. Any terminal bookkeeping owned by that completion path is retired.
+4. Every other exception is passed once, unchanged, to the injected diagnostic handler with a short context that identifies the owning completion boundary.
+5. If no handler is installed, or if the handler throws, the original exception is written through the non-throwing stderr fallback.
+
+The diagnostic handler runs synchronously at the terminal boundary and may be invoked concurrently by different worker threads.
+It must therefore synchronize its own mutable state and must not assume callback-executor affinity.
+The handler is diagnostic-only: it does not acknowledge a command, recover domain state, or publish a user-facing outcome.
+
+For a `LifetimeScope` task, retirement means marking the task complete and removing it from the scope before invoking the handler.
+Scope cancellation from, or concurrently with, the handler must therefore neither find the completed task nor cancel it again.
+
+`Runtime::spawn` retains the exception in its returned future instead of invoking the diagnostic handler.
+Calling `future::get()` rethrows that original exception to the explicit caller.
+
+The stderr fallback distinguishes standard exceptions, whose `what()` detail is available, from unknown exceptions.
+Formatting or stream failure is contained inside the fallback and never escapes an Asio completion callback.
+
 ## Frontend observations
 
 An initiating editor or command adapter may keep a synchronous rejection local when the user can correct it in place.
@@ -86,16 +116,29 @@ A runtime state owner may additionally publish typed state or a notification whe
 UIModel normally converts already-classified runtime values into presentation values.
 Explicit user-input parsing may retain a `Result` long enough to produce validation state, while advisory presentation heuristics may map an invalid suggestion input to “no recommendation” when query execution is not being attempted.
 
+When a frontend workflow catches an unexpected exception before a stop-aware callback-executor hop, it reports the exception through the runtime diagnostic boundary before awaiting that hop.
+Only generic presentation crosses the callback boundary.
+Cancellation after diagnosis may suppress stale presentation, but it cannot erase the diagnostic or cause lifetime completion to report the same exception again.
+
 ## Implementation map
 
 - [`Error.h`](../../../include/ao/Error.h) defines `ao::Error`, `ao::Result<T>`, and `makeError`.
 - [`Exception.h`](../../../include/ao/Exception.h) defines `ao::Exception` and source-location-preserving throw helpers.
+- [`AsyncExceptionHandler.h`](../../../include/ao/async/AsyncExceptionHandler.h) defines the injected terminal diagnostic seam.
+- [`Runtime.h`](../../../include/ao/async/Runtime.h), [`Runtime.cpp`](../../../lib/async/Runtime.cpp), and [`LifetimeScope.cpp`](../../../lib/async/LifetimeScope.cpp) implement terminal ownership, cancellation exclusion, fallback, and bookkeeping order.
 - [`StorageResult.h`](../../../app/include/ao/rt/StorageResult.h) demonstrates the deliberate `NotFound`-to-absence translation used by runtime storage reads.
+- [`UiWorkflow.h`](../../../app/linux-gtk/common/UiWorkflow.h) implements diagnostic-before-presentation ordering for GTK workflows.
 - Domain-private translation helpers live under subsystem `detail/` boundaries such as [`DecoderError.h`](../../../include/ao/audio/detail/DecoderError.h), [`LibraryError.h`](../../../include/ao/library/detail/LibraryError.h), [`QueryError.h`](../../../include/ao/query/detail/QueryError.h), and [`MediaError.h`](../../../include/ao/media/detail/MediaError.h).
 
 ## Test map
 
 - [`ErrorTest.cpp`](../../../test/unit/core/ErrorTest.cpp) and [`ExceptionTest.cpp`](../../../test/unit/core/ExceptionTest.cpp) protect value, inheritance, and diagnostic-location behavior.
+- [`AsyncRuntimeTest.cpp`](../../../test/unit/runtime/AsyncRuntimeTest.cpp) protects future single ownership, injected delivery, cancellation exclusion, and non-throwing stderr fallback.
+- [`LifetimeScopeTest.cpp`](../../../test/unit/runtime/LifetimeScopeTest.cpp) protects task retirement before diagnostic delivery.
+- [`AppRuntimeTest.cpp`](../../../test/unit/runtime/AppRuntimeTest.cpp) protects composition of the injected handler into the core runtime.
+- [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects callback-affine failure cleanup before exception propagation.
+- [`UiWorkflowTest.cpp`](../../../test/unit/linux-gtk/common/UiWorkflowTest.cpp) protects diagnostic-before-presentation ordering when cancellation wins the callback hop.
+- [`LogTest.cpp`](../../../test/unit/utility/LogTest.cpp) protects the retained application logging adapter.
 - [`StorageResultTest.cpp`](../../../test/unit/runtime/StorageResultTest.cpp) protects the declared `NotFound` collapse and preservation of other failures.
 - Subsystem tests under [`test/unit/audio/`](../../../test/unit/audio), [`test/unit/library/`](../../../test/unit/library), [`test/unit/query/`](../../../test/unit/query), and [`test/unit/runtime/`](../../../test/unit/runtime) protect boundary-specific return and translation behavior.
 
@@ -105,3 +148,4 @@ Explicit user-input parsing may retain a `Result` long enough to produce validat
 - [Error value reference](../../reference/failure/error.md)
 - [Runtime execution architecture](../../architecture/runtime-execution.md)
 - [Notification feed specification](../reporting/notification-feed.md)
+- [RFC 0012: injected asynchronous exception diagnostics](../../rfc/0012-structured-async-fault-diagnostics.md)

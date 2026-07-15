@@ -373,9 +373,9 @@ class CliParseTest(unittest.TestCase):
                         with mock.patch.object(check_command.build, "print_summary"):
                             self.assertEqual(check_command.run_command(args), 0)
 
-        do_build.assert_called_once_with(args, targets=["ao_core_test"])
+        do_build.assert_called_once_with(args, targets=["ao_core_test", "ao_gtk_test"])
         run_suites.assert_called_once_with(
-            ("core",),
+            ("core", "gtk"),
             result.build_dir,
             tsan=True,
             log=result.log,
@@ -436,7 +436,7 @@ class CliParseTest(unittest.TestCase):
                 self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core",),
+            ("core", "gtk"),
             Path("/tmp/aobus-test-build"),
             test_filter="",
             list_only=False,
@@ -469,7 +469,7 @@ class CliParseTest(unittest.TestCase):
                 self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core",),
+            ("core", "gtk"),
             Path("/tmp/aobus-test-build"),
             test_filter="[concurrency]",
             list_only=False,
@@ -516,9 +516,75 @@ class CliParseTest(unittest.TestCase):
 
         run.assert_called_once_with(
             [str(binary)],
-            env={"TSAN_OPTIONS": "history_size=7:halt_on_error=1:second_deadlock_stack=1"},
+            env={
+                "TSAN_OPTIONS": (
+                    f"history_size=7:suppressions={test_command._TSAN_SUPP_PATH}:"
+                    "halt_on_error=1:second_deadlock_stack=1"
+                )
+            },
             log=None,
             append=False,
+        )
+
+    def test_tsan_suite_merges_existing_suppressions_with_project_rules(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "build"
+            binary = build_dir / "test" / "ao_core_test"
+            binary.parent.mkdir(parents=True)
+            binary.touch()
+            external_suppressions = root / "external.supp"
+            external_suppressions.write_text("race:external_runtime_symbol\n", encoding="utf-8")
+            merged_suppressions = root / "merged.supp"
+
+            with mock.patch.dict(
+                "os.environ",
+                {"TSAN_OPTIONS": f"history_size=7:suppressions={external_suppressions}"},
+                clear=False,
+            ):
+                with mock.patch.object(test_command, "_TSAN_MERGED_SUPP_PATH", merged_suppressions):
+                    with mock.patch.object(test_command, "run", return_value=0) as run:
+                        self.assertEqual(test_command.run_suite("core", build_dir, tsan=True), 0)
+
+            expected_suppressions = (
+                "race:external_runtime_symbol\n\n"
+                + test_command._TSAN_SUPP_PATH.read_text(encoding="utf-8").rstrip()
+                + "\n"
+            )
+            self.assertEqual(merged_suppressions.read_text(encoding="utf-8"), expected_suppressions)
+
+        run.assert_called_once_with(
+            [str(binary)],
+            env={
+                "TSAN_OPTIONS": (
+                    f"history_size=7:suppressions={merged_suppressions}:halt_on_error=1:second_deadlock_stack=1"
+                )
+            },
+            log=None,
+            append=False,
+        )
+
+    def test_tsan_suppressions_cover_only_uninstrumented_ui_dependencies(self):
+        rules = [
+            line
+            for line in test_command._TSAN_SUPP_PATH.read_text(encoding="utf-8").splitlines()
+            if line and not line.startswith("#")
+        ]
+
+        self.assertEqual(
+            rules,
+            [
+                "called_from_lib:libglib-2.0.so",
+                "called_from_lib:libgio-2.0.so",
+                "called_from_lib:libgobject-2.0.so",
+                "called_from_lib:libglibmm-2.68.so",
+                "called_from_lib:libgtk-4.so",
+                "called_from_lib:libgdk_pixbuf-2.0.so",
+                "called_from_lib:libpango-1.0.so",
+                "called_from_lib:libpangoft2-1.0.so",
+                "called_from_lib:libpangocairo-1.0.so",
+                "called_from_lib:libfontconfig.so",
+            ],
         )
 
     def test_windows_suite_binary_uses_exe_suffix(self):

@@ -99,7 +99,7 @@ An observer-initiated mutation receives the next revision and is delivered only 
 
 Observer exceptions do not escape a command whose state has already committed and do not block later revisions.
 Every still-connected observer runs; failures are reported to an injected diagnostic sink with the notification revision and observer context.
-If RFC 0012 is implemented, this uses its structured fault surface; otherwise the feed provides an equivalent narrow injected reporter.
+The implemented RFC 0012 handler can carry the original exception and a short observer context, while feed-specific revision evidence remains owned by this proposal.
 
 ### Typed mutation outcomes
 
@@ -223,7 +223,7 @@ Reporting-owner migration coordinates with RFC 0013 but does not wait for its co
 - What production bounds apply to history entries, text, actions, and total payload?
 - Does an update to a locally suppressed entry resurface by default, or only when the producer increments an explicit presentation generation?
 - Should detail-only support be mandatory for every interactive frontend or negotiated as a composition capability?
-- Which observer fault reporter is used before RFC 0012 is implemented?
+- Should observer diagnostics use the existing RFC 0012 exception handler directly or a feed-specific adapter that adds revision context?
 
 ## Promotion plan
 

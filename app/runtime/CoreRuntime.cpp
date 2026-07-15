@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/async/AsyncExceptionHandler.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/MusicLibrary.h>
@@ -45,9 +46,10 @@ namespace ao::rt
          std::filesystem::path musicRoot,
          std::filesystem::path databasePath,
          std::size_t musicLibraryMapSize,
-         async::Sleeper* sleeper)
+         async::Sleeper* sleeper,
+         async::AsyncExceptionHandler asyncExceptionHandler)
       : executorPtr{std::move(execPtr)}
-      , asyncRuntime{*executorPtr, sleeper}
+      , asyncRuntime{*executorPtr, std::move(asyncExceptionHandler), sleeper}
       , musicRoot{std::move(musicRoot)}
       , databasePath{std::move(databasePath)}
       , musicLibrary{this->musicRoot,
@@ -80,12 +82,14 @@ namespace ao::rt
                            std::filesystem::path musicRoot,
                            std::filesystem::path databasePath,
                            std::size_t musicLibraryMapSize,
-                           async::Sleeper* sleeper)
+                           async::Sleeper* sleeper,
+                           async::AsyncExceptionHandler asyncExceptionHandler)
     : _implPtr{std::make_unique<Impl>(std::move(executorPtr),
                                       std::move(musicRoot),
                                       std::move(databasePath),
                                       musicLibraryMapSize,
-                                      sleeper)}
+                                      sleeper,
+                                      std::move(asyncExceptionHandler))}
   {
   }
 

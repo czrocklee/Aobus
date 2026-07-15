@@ -37,6 +37,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <deque>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -46,9 +47,56 @@
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace ao::rt::test
 {
+  struct RecordedAsyncException final
+  {
+    std::exception_ptr exceptionPtr;
+    std::string context;
+  };
+
+  class AsyncExceptionRecorder final
+  {
+  public:
+    async::AsyncExceptionHandler handler()
+    {
+      return [this](std::exception_ptr exceptionPtr, std::string_view const context)
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        _exceptions.push_back({.exceptionPtr = std::move(exceptionPtr), .context = std::string{context}});
+        _cv.notify_all();
+      };
+    }
+
+    bool waitForCount(std::size_t const count, std::chrono::milliseconds const timeout = std::chrono::seconds{2}) const
+    {
+      auto lock = std::unique_lock{_mutex};
+      return _cv.wait_for(lock, timeout, [this, count] { return _exceptions.size() >= count; });
+    }
+
+    std::vector<RecordedAsyncException> snapshot() const
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      return _exceptions;
+    }
+
+  private:
+    mutable std::mutex _mutex;
+    mutable std::condition_variable _cv;
+    std::vector<RecordedAsyncException> _exceptions;
+  };
+
+  template<typename ExceptionType>
+  void requireSingleRecordedException(AsyncExceptionRecorder const& recorder, std::string_view const expectedContext)
+  {
+    auto const exceptions = recorder.snapshot();
+    REQUIRE(exceptions.size() == 1);
+    CHECK(exceptions.front().context == expectedContext);
+    CHECK_THROWS_AS(std::rethrow_exception(exceptions.front().exceptionPtr), ExceptionType);
+  }
+
   inline PlaybackService makePlaybackService(async::Executor& executor,
                                              library::MusicLibrary& library,
                                              NotificationService& notifications)

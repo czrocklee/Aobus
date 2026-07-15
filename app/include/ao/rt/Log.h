@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/async/AsyncExceptionHandler.h>
+
 #include <spdlog/common.h>
 #include <spdlog/logger.h>
 
@@ -41,6 +43,7 @@ namespace ao::rt
     static void shutdown();
 
     static bool isInitialized();
+    static async::AsyncExceptionHandler asyncExceptionHandler();
 
     static std::shared_ptr<spdlog::logger> const& appLogger() noexcept { return _appLoggerPtr; }
     static std::shared_ptr<spdlog::logger> const& audioLogger() noexcept { return _audioLoggerPtr; }

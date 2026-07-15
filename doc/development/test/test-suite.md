@@ -49,9 +49,9 @@ interactive test command and the full gate cannot drift apart.
 
 ThreadSanitizer is intentionally different. `ao test --tsan` and
 `ao check --tsan` resolve `default`/`all` to the native `tsan` group. Explicit
-suite selection, such as `ao test --gtk --tsan`, remains available for diagnosis
-but does not claim a clean platform baseline. See
-`concurrency-and-sanitizers.md` for the current GTK limitation.
+suite selection, such as `ao test --gtk --tsan`, remains available for focused diagnosis.
+The Linux TSan group contains core and GTK; reviewed uninstrumented UI dependencies use module-scoped interceptor suppressions.
+See `concurrency-and-sanitizer.md` for the suppression boundary.
 
 `--repeat N` repeats the selected tests and stops on the first failure. It is a
 stress aid; deterministic synchronization remains mandatory for regression

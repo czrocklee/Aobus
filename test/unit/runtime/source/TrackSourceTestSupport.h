@@ -64,7 +64,7 @@ namespace ao::rt::test
 
     void batchInsert(std::span<TrackId const> ids)
     {
-      _ids.insert(_ids.end(), ids.begin(), ids.end());
+      _ids.append_range(ids);
       notifyInserted(ids);
     }
 

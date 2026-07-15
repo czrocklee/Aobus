@@ -14,7 +14,8 @@ namespace ao::async
     char const* what() const noexcept override { return "operation cancelled"; }
   };
 
-  bool isOperationCancelled(std::exception const& exception);
+  bool isOperationCancelled(std::exception const& exception) noexcept;
+  bool isOperationCancelled(std::exception_ptr const& exceptionPtr) noexcept;
   [[noreturn]] void throwOperationCancelled();
   void throwIfStopRequested(std::stop_token stopToken);
   void rethrowIfOperationCancelled(std::exception const& exception);

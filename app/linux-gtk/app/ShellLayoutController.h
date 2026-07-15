@@ -25,7 +25,6 @@
 
 #include <gtkmm/window.h>
 
-#include <exception>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -135,8 +134,7 @@ namespace ao::gtk
                                          std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
                                          std::shared_ptr<AppConfigStore> configStorePtr,
                                          std::stop_token stopToken);
-    void logLayoutLoadFailure(std::exception_ptr exceptionPtr);
-    void applyLoadedLayoutWithFailureLogging(std::string presetId,
+    void applyLoadedLayoutWithFaultReporting(std::string presetId,
                                              uimodel::LayoutDocument document,
                                              uimodel::LayoutComponentStateDocument componentState);
 

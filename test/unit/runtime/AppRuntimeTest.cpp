@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
@@ -7,6 +7,9 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/Exception.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
@@ -101,6 +104,12 @@ namespace ao::rt::test
       std::shared_ptr<AppRuntimeAudioState> _statePtr;
       Status _status;
     };
+
+    async::Task<void> failingAppRuntimeTask(async::Runtime* runtime)
+    {
+      co_await runtime->resumeOnWorker();
+      throwException<Exception>("AppRuntime composition failure");
+    }
   } // namespace
 
   TEST_CASE("AppRuntime - dependencies expose services and empty selection is safe", "[runtime][unit][app-runtime]")
@@ -144,6 +153,29 @@ namespace ao::rt::test
 
     // Cover polymorphic destruction of CoreRuntime
     auto const corePtr = std::unique_ptr<CoreRuntime>{std::move(appPtr)};
+  }
+
+  TEST_CASE("AppRuntime - injected async exception handler reaches the composed Runtime",
+            "[runtime][unit][app-runtime]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto exceptionRecorder = AsyncExceptionRecorder{};
+    auto appPtr = std::make_unique<AppRuntime>(AppRuntimeDependencies{
+      .executorPtr = std::make_unique<MockExecutor>(),
+      .musicRoot = tempDir.path(),
+      .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .workspaceConfigStorePtr =
+        std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
+      .asyncExceptionHandler = exceptionRecorder.handler(),
+    });
+
+    appPtr->async().spawnLogged(failingAppRuntimeTask(&appPtr->async()));
+
+    REQUIRE(exceptionRecorder.waitForCount(1));
+    appPtr.reset();
+
+    requireSingleRecordedException<Exception>(exceptionRecorder, "root coroutine");
   }
 
   TEST_CASE("AppRuntime - teardown is deferred until playback callbacks quiesce",

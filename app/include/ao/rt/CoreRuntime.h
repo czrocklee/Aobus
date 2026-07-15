@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/async/AsyncExceptionHandler.h>
+
 #include <cstddef>
 #include <filesystem>
 #include <memory>
@@ -37,7 +39,8 @@ namespace ao::rt
                 std::filesystem::path musicRoot,
                 std::filesystem::path databasePath,
                 std::size_t musicLibraryMapSize = 0,
-                async::Sleeper* sleeper = nullptr);
+                async::Sleeper* sleeper = nullptr,
+                async::AsyncExceptionHandler asyncExceptionHandler = {});
     virtual ~CoreRuntime();
 
     CoreRuntime(CoreRuntime const&) = delete;

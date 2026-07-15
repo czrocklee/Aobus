@@ -5,10 +5,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <source_location>
+#include <stdexcept>
 #include <string>
 
 namespace ao::rt::test
@@ -38,6 +40,12 @@ namespace ao::rt::test
       APP_LOG_DEBUG("Test app debug log");
       AUDIO_LOG_INFO("Test audio info log");
 
+      {
+        auto exceptionHandler = Log::asyncExceptionHandler();
+        REQUIRE(exceptionHandler);
+        exceptionHandler(std::make_exception_ptr(std::runtime_error{"async boom"}), "test coroutine");
+      }
+
       Log::shutdown();
       CHECK_FALSE(Log::isInitialized());
 
@@ -55,6 +63,7 @@ namespace ao::rt::test
 
       // Audio log writes to the same file sink, let's verify
       CHECK(content.contains("Test audio info log"));
+      CHECK(content.contains("Unhandled exception in test coroutine: async boom"));
       CHECK(content.contains("Shutting down logging"));
     }
 

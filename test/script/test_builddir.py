@@ -79,7 +79,7 @@ class BuildDirTest(unittest.TestCase):
     def test_linux_profile_exposes_only_baselined_tsan_suites(self):
         profile = builddir.platform_profile("posix")
 
-        self.assertEqual(profile.tsan_suites, ("core",))
+        self.assertEqual(profile.tsan_suites, ("core", "gtk"))
 
     def test_tidy_uses_a_dedicated_native_preset_and_tree(self):
         with mock.patch.dict("os.environ", {}, clear=False):

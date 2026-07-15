@@ -38,7 +38,8 @@ Tests that use `ImmediateExecutor` can likewise pass behavior that a real event-
 - Integration: [RFC 0003](0003-library-mutation-pipeline.md), [RFC 0011](0011-executor-affine-reporting-feed.md), [RFC 0012](0012-structured-async-fault-diagnostics.md).
 
 RFC 0003 mutation completion/publication must return through the serialized headless domain.
-RFC 0011 feed delivery and RFC 0012 fault delivery must use the same owner-thread executor so headless consumers do not create a second callback authority.
+RFC 0011 feed delivery must use the same owner-thread executor.
+RFC 0012 diagnostics may run directly at the terminal completion boundary because its injected handler is thread-safe and does not mutate application state; it therefore does not create a second callback authority.
 
 ## Goals
 

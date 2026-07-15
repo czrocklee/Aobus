@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestSupport.h"
+#include <ao/Exception.h>
 #include <ao/async/ImmediateExecutor.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/OperationCancelled.h>
@@ -15,6 +16,7 @@
 #include <barrier>
 #include <cstddef>
 #include <exception>
+#include <mutex>
 #include <stdexcept>
 #include <stop_token>
 #include <thread>
@@ -95,6 +97,12 @@ namespace ao::rt::test
       auto exitObserver = TaskExitObserver{taskExited};
       co_await runtime->sleepFor(std::chrono::hours{1}, stopToken);
     }
+
+    Task<void> failingLifetimeTask(Runtime* runtime, std::stop_token const stopToken)
+    {
+      co_await runtime->resumeOnWorker(stopToken);
+      throwException<Exception>("Test lifetime failure");
+    }
   } // namespace
 
   TEST_CASE("LifetimeScope - task completes while scope remains alive", "[runtime][unit][async][lifetime]")
@@ -132,6 +140,37 @@ namespace ao::rt::test
     CHECK(completed.load());
     runtime.requestStop();
     runtime.join();
+  }
+
+  TEST_CASE("LifetimeScope - retires task before delivering an unexpected failure",
+            "[runtime][unit][lifetime][concurrency]")
+  {
+    auto executor = ImmediateExecutor{};
+    auto scope = LifetimeScope{};
+    auto exceptionRecorder = AsyncExceptionRecorder{};
+    auto bookkeepingRetired = AsyncTestState<bool>::create(false);
+    auto scopeStatePtr = scope.state();
+    auto recorderHandler = exceptionRecorder.handler();
+    auto runtime = Runtime{executor,
+                           [scopeStatePtr, bookkeepingRetired, recorderHandler = std::move(recorderHandler)](
+                             std::exception_ptr exceptionPtr, std::string_view const context)
+                           {
+                             {
+                               auto const lock = std::scoped_lock{scopeStatePtr->mutex};
+                               bookkeepingRetired.set(scopeStatePtr->tasks.empty());
+                             }
+                             recorderHandler(std::move(exceptionPtr), context);
+                           }};
+
+    runtime.spawnWithLifetime(
+      &scope, [&runtime](std::stop_token const stopToken) { return failingLifetimeTask(&runtime, stopToken); });
+
+    REQUIRE(exceptionRecorder.waitForCount(1));
+    CHECK(bookkeepingRetired.load());
+    runtime.requestStop();
+    runtime.join();
+
+    requireSingleRecordedException<Exception>(exceptionRecorder, "lifetime-bound coroutine");
   }
 
   TEST_CASE("LifetimeScope - destruction cancels blocked task before callback resume",
@@ -236,6 +275,17 @@ namespace ao::rt::test
       }());
   }
 
+  TEST_CASE("OperationCancelled - exception pointer classification recognizes only cancellation",
+            "[runtime][unit][async][cancellation]")
+  {
+    CHECK_FALSE(isOperationCancelled(std::exception_ptr{}));
+    CHECK(isOperationCancelled(std::make_exception_ptr(OperationCancelled{})));
+    CHECK(isOperationCancelled(
+      std::make_exception_ptr(boost::system::system_error{boost::asio::error::operation_aborted})));
+    CHECK_FALSE(isOperationCancelled(std::make_exception_ptr(std::runtime_error{"not cancellation"})));
+    CHECK_FALSE(isOperationCancelled(std::make_exception_ptr(42)));
+  }
+
   TEST_CASE("LifetimeScope - member task can complete while owner remains alive", "[runtime][unit][async][lifetime]")
   {
     auto executor = ImmediateExecutor{};
@@ -261,7 +311,7 @@ namespace ao::rt::test
     constexpr std::size_t kIterations = 64;
     auto executor = ManualExecutor{};
     auto sleeper = ControlledSleeper{};
-    auto runtime = Runtime{executor, 4, &sleeper};
+    auto runtime = Runtime{executor, 4, {}, &sleeper};
 
     for (std::size_t iteration = 0; iteration < kIterations; ++iteration)
     {

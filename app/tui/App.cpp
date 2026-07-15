@@ -53,6 +53,7 @@
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
 #include <ftxui/screen/terminal.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -82,6 +83,7 @@ namespace ao::tui
     constexpr std::int32_t kKittyCoverArtColumns = 768;
     constexpr std::int32_t kKittyCoverArtRows = 384;
     constexpr std::int32_t kNotificationCenterPanelRows = 12;
+
     ftxui::Element commandPalettePopover(ShellInteractionModel const& shell,
                                          std::int32_t const terminalColumns,
                                          std::int32_t const terminalRows)
@@ -363,7 +365,8 @@ namespace ao::tui
 
     std::filesystem::create_directories(options.configPath.parent_path());
     rt::Log::initialize(options.logLevel, options.libraryRoot / ".aobus" / "logs", rt::LogConsoleMode::Disabled);
-
+    auto const logShutdown = gsl_lite::finally([] { rt::Log::shutdown(); });
+    auto asyncExceptionHandler = rt::Log::asyncExceptionHandler();
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
     screen.TrackMouse(true);
     auto executorPtr = std::make_unique<Executor>(screen);
@@ -373,6 +376,7 @@ namespace ao::tui
       .musicRoot = options.libraryRoot,
       .databasePath = options.databasePath,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(options.configPath),
+      .asyncExceptionHandler = std::move(asyncExceptionHandler),
     }};
 
     registerPlatformAudioBackends(runtime);
@@ -701,7 +705,6 @@ namespace ao::tui
     runtime.async().requestStop();
     runtime.async().join();
     frameTimer.flush();
-    rt::Log::shutdown();
     return 0;
   }
 } // namespace ao::tui

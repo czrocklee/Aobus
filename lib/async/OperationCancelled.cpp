@@ -14,7 +14,7 @@
 
 namespace ao::async
 {
-  bool isOperationCancelled(std::exception const& exception)
+  bool isOperationCancelled(std::exception const& exception) noexcept
   {
     if (dynamic_cast<OperationCancelled const*>(&exception) != nullptr)
     {
@@ -23,6 +23,27 @@ namespace ao::async
 
     auto const* const systemError = dynamic_cast<boost::system::system_error const*>(&exception);
     return systemError != nullptr && systemError->code() == boost::asio::error::operation_aborted;
+  }
+
+  bool isOperationCancelled(std::exception_ptr const& exceptionPtr) noexcept
+  {
+    if (!exceptionPtr)
+    {
+      return false;
+    }
+
+    try
+    {
+      std::rethrow_exception(exceptionPtr);
+    }
+    catch (std::exception const& exception)
+    {
+      return isOperationCancelled(exception);
+    }
+    catch (...)
+    {
+      return false;
+    }
   }
 
   [[noreturn]] void throwOperationCancelled()
@@ -48,25 +69,9 @@ namespace ao::async
 
   void rethrowIfOperationCancelled()
   {
-    auto const exceptionPtr = std::current_exception();
-
-    if (!exceptionPtr)
+    if (isOperationCancelled(std::current_exception()))
     {
-      return;
-    }
-
-    try
-    {
-      std::rethrow_exception(exceptionPtr);
-    }
-    catch (std::exception const& e)
-    {
-      rethrowIfOperationCancelled(e);
-    }
-    catch (...)
-    {
-      // Non-std exceptions cannot be classified as OperationCancelled.
-      return;
+      throwOperationCancelled();
     }
   }
 } // namespace ao::async

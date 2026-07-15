@@ -118,7 +118,11 @@ namespace ao::gtk
     };
 
     void spawnDecode(RequestKey key);
-    async::Task<void> decode(RequestKey key, std::stop_token stopToken);
+    static async::Task<void> decode(ThumbnailLoader* loader,
+                                    rt::Library const* reads,
+                                    async::Runtime* runtime,
+                                    RequestKey key,
+                                    std::stop_token stopToken);
 
     rt::Library const& _reads;
     ImageCache& _cache;

@@ -484,7 +484,7 @@ namespace ao::gtk
 
     auto& asyncRuntime = _runtime.async();
     auto optResult = std::optional<LayoutLoadResult>{};
-    auto exceptionPtr = std::exception_ptr{};
+    bool failed = false;
 
     try
     {
@@ -496,17 +496,17 @@ namespace ao::gtk
         optResult = loadLayoutOnWorker(*layoutStorePtr, componentStateStorePtr.get(), *configStorePtr);
       }
     }
-    catch (std::exception const& e)
+    catch (...)
     {
-      async::rethrowIfOperationCancelled(e);
-      exceptionPtr = std::current_exception();
+      async::rethrowIfOperationCancelled();
+      asyncRuntime.reportUnhandledException(std::current_exception(), "shell layout load workflow");
+      failed = true;
     }
 
     co_await asyncRuntime.resumeOnCallbackExecutor(stopToken);
 
-    if (exceptionPtr)
+    if (failed)
     {
-      logLayoutLoadFailure(exceptionPtr);
       co_return;
     }
 
@@ -516,30 +516,11 @@ namespace ao::gtk
     }
 
     APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
-    applyLoadedLayoutWithFailureLogging(
+    applyLoadedLayoutWithFaultReporting(
       std::move(optResult->presetId), std::move(optResult->document), std::move(optResult->componentState));
   }
 
-  void ShellLayoutController::logLayoutLoadFailure(std::exception_ptr exceptionPtr)
-  {
-    try
-    {
-      std::rethrow_exception(exceptionPtr);
-    }
-    catch (ao::Exception const& e)
-    {
-      APP_LOG_CRITICAL(
-        "ShellLayoutController: layout load failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
-    }
-    catch (std::exception const& e)
-    {
-      async::rethrowIfOperationCancelled(e);
-
-      APP_LOG_CRITICAL("ShellLayoutController: layout load failed (internal error): {}", e.what());
-    }
-  }
-
-  void ShellLayoutController::applyLoadedLayoutWithFailureLogging(std::string presetId,
+  void ShellLayoutController::applyLoadedLayoutWithFaultReporting(std::string presetId,
                                                                   uimodel::LayoutDocument document,
                                                                   uimodel::LayoutComponentStateDocument componentState)
   {
@@ -547,16 +528,10 @@ namespace ao::gtk
     {
       applyLoadedLayout(std::move(presetId), std::move(document), std::move(componentState));
     }
-    catch (ao::Exception const& e)
+    catch (...)
     {
-      APP_LOG_CRITICAL(
-        "ShellLayoutController: layout apply failed (internal error): {} (at {}:{})", e.what(), e.file(), e.line());
-    }
-    catch (std::exception const& e)
-    {
-      async::rethrowIfOperationCancelled(e);
-
-      APP_LOG_CRITICAL("ShellLayoutController: layout apply failed (internal error): {}", e.what());
+      async::rethrowIfOperationCancelled();
+      _runtime.async().reportUnhandledException(std::current_exception(), "shell layout apply workflow");
     }
   }
 

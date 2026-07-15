@@ -66,8 +66,7 @@ Recommended broad check from the project root:
 ./ao check
 ```
 
-Concurrency-sensitive changes additionally follow
-`concurrency-and-sanitizers.md` and run:
+Concurrency-sensitive changes additionally follow `concurrency-and-sanitizer.md` and run:
 
 ```bash
 ./ao test --concurrency

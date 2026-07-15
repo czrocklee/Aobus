@@ -212,6 +212,8 @@ leak:g_signal_emit
 """
 
 _LSAN_SUPP_PATH = Path("/tmp/aobus-lsan.supp")
+_TSAN_SUPP_PATH = Path(__file__).resolve().parent.parent / "tsan.supp"
+_TSAN_MERGED_SUPP_PATH = Path("/tmp") / f"aobus-tsan-{os.getpid()}.supp"
 
 
 def _lsan_env(build_dir: Path) -> dict[str, str]:
@@ -223,13 +225,40 @@ def _lsan_env(build_dir: Path) -> dict[str, str]:
 
 
 def _tsan_env(build_dir: Path, *, enabled: bool) -> dict[str, str]:
-    """Fail on the first TSan report so dependency noise cannot hide later races."""
+    """Apply dependency suppressions and fail on the first TSan report."""
     if not enabled and "tsan" not in build_dir.name:
         return {}
 
-    required = "halt_on_error=1:second_deadlock_stack=1"
-    existing = os.environ.get("TSAN_OPTIONS", "").strip(":")
-    return {"TSAN_OPTIONS": f"{existing}:{required}" if existing else required}
+    existing_options = [option for option in os.environ.get("TSAN_OPTIONS", "").strip(":").split(":") if option]
+    suppression_paths: list[Path] = []
+    retained_options: list[str] = []
+
+    for option in existing_options:
+        key, separator, value = option.partition("=")
+        if key != "suppressions":
+            retained_options.append(option)
+            continue
+        if not separator or not value:
+            raise die("TSAN_OPTIONS contains an empty suppressions path.")
+        suppression_paths.append(Path(value))
+
+    suppression_path = _TSAN_SUPP_PATH
+    if suppression_paths:
+        contents: list[str] = []
+        for path in (*suppression_paths, _TSAN_SUPP_PATH):
+            try:
+                contents.append(path.read_text(encoding="utf-8").rstrip())
+            except OSError as exc:
+                raise die(f"cannot read TSan suppression file {path}: {exc}") from exc
+
+        try:
+            _TSAN_MERGED_SUPP_PATH.write_text("\n\n".join(contents) + "\n", encoding="utf-8")
+        except OSError as exc:
+            raise die(f"cannot write merged TSan suppression file {_TSAN_MERGED_SUPP_PATH}: {exc}") from exc
+        suppression_path = _TSAN_MERGED_SUPP_PATH
+
+    required_options = [f"suppressions={suppression_path}", "halt_on_error=1", "second_deadlock_stack=1"]
+    return {"TSAN_OPTIONS": ":".join((*retained_options, *required_options))}
 
 
 def run_suite(

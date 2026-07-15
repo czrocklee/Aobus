@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/Exception.h>
+#include <ao/async/AsyncExceptionHandler.h>
 #include <ao/rt/Log.h>
 
 #include <spdlog/async.h>
@@ -13,10 +15,13 @@
 #include <spdlog/spdlog.h>
 
 #include <cstddef>
+#include <exception>
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::rt
@@ -138,5 +143,40 @@ namespace ao::rt
   {
     auto const lock = std::scoped_lock{_lifecycleMutex};
     return _initialized;
+  }
+
+  async::AsyncExceptionHandler Log::asyncExceptionHandler()
+  {
+    auto const lock = std::scoped_lock{_lifecycleMutex};
+
+    if (!_initialized)
+    {
+      return {};
+    }
+
+    auto loggerPtr = _appLoggerPtr;
+    return [loggerPtr = std::move(loggerPtr)](std::exception_ptr exceptionPtr, std::string_view const context)
+    {
+      try
+      {
+        std::rethrow_exception(exceptionPtr);
+      }
+      catch (Exception const& exception)
+      {
+        loggerPtr->log(toSpdlog(exception.location()),
+                       spdlog::level::critical,
+                       "Unhandled exception in {}: {}",
+                       context,
+                       exception.what());
+      }
+      catch (std::exception const& exception)
+      {
+        loggerPtr->critical("Unhandled exception in {}: {}", context, exception.what());
+      }
+      catch (...)
+      {
+        loggerPtr->critical("Unhandled unknown exception in {}", context);
+      }
+    };
   }
 } // namespace ao::rt

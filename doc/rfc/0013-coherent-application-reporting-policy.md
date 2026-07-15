@@ -128,7 +128,7 @@ When a feed report and diagnostic log both apply, the owner emits one structured
 Lower layers do not each log the same propagated failure unless they add unique boundary evidence that would otherwise be lost.
 Logging a recoverable failure does not substitute for returning its typed outcome or publishing its declared feed report.
 
-Unexpected async faults follow RFC 0012 when implemented and remain diagnostic-only by default.
+Unexpected async exceptions use the implemented RFC 0012 handler and remain diagnostic-only by default.
 Expected cancellation remains silent unless a specification deliberately defines a user-visible cancellation completion.
 
 ### Cross-frontend policy

@@ -2,16 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/async/LifetimeScope.h>
-#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 
-#include <cstdio> // NOLINT(misc-include-cleaner) -- directly provides stderr on MSVC
 #include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <print>
 #include <utility>
 #include <vector>
 
@@ -56,37 +53,13 @@ namespace ao::async
 
   namespace
   {
-    void handleCoroutineCompletion(std::shared_ptr<LifetimeScopeState> statePtr,
-                                   std::shared_ptr<LifetimeScopeTask> taskPtr,
-                                   std::exception_ptr exPtr)
+    void retireCoroutine(std::shared_ptr<LifetimeScopeState> const& statePtr,
+                         std::shared_ptr<LifetimeScopeTask> const& taskPtr)
     {
       {
         auto lock = std::scoped_lock{statePtr->mutex};
         taskPtr->completed = true;
         std::erase(statePtr->tasks, taskPtr);
-      }
-
-      if (!exPtr)
-      {
-        return;
-      }
-
-      try
-      {
-        std::rethrow_exception(exPtr);
-      }
-      catch (std::exception const& ex)
-      {
-        if (isOperationCancelled(ex))
-        {
-          return;
-        }
-
-        std::println(stderr, "Unhandled exception in lifetime-bound coroutine: {}", ex.what());
-      }
-      catch (...)
-      {
-        std::println(stderr, "Unhandled unknown exception in lifetime-bound coroutine");
       }
     }
   } // namespace
@@ -95,8 +68,12 @@ namespace ao::async
   {
     auto statePtr = scope->state();
     auto taskPtr = std::make_shared<LifetimeScopeTask>();
-    taskPtr->cancel = startCancellable(
-      std::move(task), [statePtr, taskPtr](auto exPtr) { handleCoroutineCompletion(statePtr, taskPtr, exPtr); });
+    taskPtr->cancel = startCancellable(std::move(task),
+                                       [this, statePtr, taskPtr](std::exception_ptr exceptionPtr)
+                                       {
+                                         retireCoroutine(statePtr, taskPtr);
+                                         handleUnhandledException(std::move(exceptionPtr), "lifetime-bound coroutine");
+                                       });
 
     bool cancelImmediately = false;
 

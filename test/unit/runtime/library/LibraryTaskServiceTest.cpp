@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/Error.h>
+#include <ao/Exception.h>
+#include <ao/async/Executor.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -18,10 +20,18 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
+#include <cstddef>
+#include <deque>
 #include <filesystem>
+#include <functional>
+#include <future>
+#include <mutex>
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -29,6 +39,102 @@ namespace ao::rt::test
 {
   namespace
   {
+    class InjectedLibraryTaskFailure final : public Exception
+    {
+    public:
+      using Exception::Exception;
+    };
+
+    class FaultOrderingExecutor final : public async::Executor
+    {
+    public:
+      bool isCurrent() const noexcept override { return std::this_thread::get_id() == _ownerThreadId; }
+
+      void dispatch(std::move_only_function<void()> task) override
+      {
+        if (_dispatchCount.fetch_add(1) == 0)
+        {
+          task();
+          return;
+        }
+
+        auto const lock = std::scoped_lock{_mutex};
+        _tasks.push_back(std::move(task));
+      }
+
+      void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
+
+      std::size_t dispatchCount() const noexcept { return _dispatchCount.load(); }
+
+      std::size_t queuedCount() const
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        return _tasks.size();
+      }
+
+      bool runOne()
+      {
+        auto task = std::move_only_function<void()>{};
+        {
+          auto const lock = std::scoped_lock{_mutex};
+
+          if (_tasks.empty())
+          {
+            return false;
+          }
+
+          task = std::move(_tasks.front());
+          _tasks.pop_front();
+        }
+
+        task();
+        return true;
+      }
+
+    private:
+      std::thread::id _ownerThreadId = std::this_thread::get_id();
+      std::atomic_size_t _dispatchCount{0};
+      mutable std::mutex _mutex;
+      std::deque<std::move_only_function<void()>> _tasks;
+    };
+
+    template<typename Future>
+    void requireInjectedFailure(Future& future)
+    {
+      bool sawInjectedFailure = false;
+
+      try
+      {
+        std::ignore = future.get();
+      }
+      catch (InjectedLibraryTaskFailure const& error)
+      {
+        sawInjectedFailure = true;
+        CHECK(std::string_view{error.what()} == "injected library task failure");
+      }
+
+      REQUIRE(sawInjectedFailure);
+    }
+
+    template<typename Future>
+    void requireFaultCleanupOrdering(Future& future,
+                                     std::stop_source& stopSource,
+                                     FaultOrderingExecutor& executor,
+                                     std::vector<std::size_t>& completionCounts)
+    {
+      requireInjectedFailure(future);
+
+      CHECK(completionCounts.empty());
+      CHECK(executor.dispatchCount() == 2);
+      REQUIRE(executor.queuedCount() == 1);
+
+      CHECK(stopSource.request_stop());
+      REQUIRE(executor.runOne());
+
+      CHECK(completionCounts == std::vector<std::size_t>{0});
+      CHECK(executor.queuedCount() == 0);
+    }
+
     async::Task<void> applyScanPlanAndRecordCancellation(LibraryTaskService* service,
                                                          ScanPlan plan,
                                                          AsyncTestState<bool> sawCancellation,
@@ -266,6 +372,65 @@ namespace ao::rt::test
     CHECK(trackReader.begin() == trackReader.end());
     CHECK(manifestReader.begin() == manifestReader.end());
 
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("LibraryTaskService - apply fault queues cleanup before preserving the exception",
+            "[runtime][regression][library-task][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = FaultOrderingExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{};
+    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
+    auto completionCounts = std::vector<std::size_t>{};
+    auto completionSubscription =
+      changes.onLibraryTaskCompleted([&](std::size_t const count) { completionCounts.push_back(count); });
+    auto progressSubscription =
+      changes.onLibraryTaskProgress([](LibraryChanges::LibraryTaskProgressUpdated const&)
+                                    { throwException<InjectedLibraryTaskFailure>("injected library task failure"); });
+    auto stopSource = std::stop_source{};
+    auto plan = ScanPlan{};
+    plan.items.push_back(
+      ScanItem{.uri = "file:///missing.flac", .fullPath = "/missing.flac", .classification = ScanClassification::New});
+
+    auto future = runtime.spawn(service.applyScanPlanAsync(std::move(plan), {}, stopSource.get_token()));
+
+    requireFaultCleanupOrdering(future, stopSource, executor, completionCounts);
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("LibraryTaskService - backfill fault queues cleanup before preserving the exception",
+            "[runtime][regression][library-task][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
+    auto scanService = LibraryScan{libraryFixture.library()};
+    auto planResult = scanService.buildPlan();
+    REQUIRE(planResult);
+    auto applyResult = scanService.applyPlan(
+      std::move(*planResult), ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew});
+    REQUIRE(applyResult);
+    REQUIRE(applyResult->insertedIds.size() == 1);
+
+    auto executor = FaultOrderingExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{};
+    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
+    auto completionCounts = std::vector<std::size_t>{};
+    auto completionSubscription =
+      changes.onLibraryTaskCompleted([&](std::size_t const count) { completionCounts.push_back(count); });
+    auto progressSubscription =
+      changes.onLibraryTaskProgress([](LibraryChanges::LibraryTaskProgressUpdated const&)
+                                    { throwException<InjectedLibraryTaskFailure>("injected library task failure"); });
+    auto stopSource = std::stop_source{};
+
+    auto future = runtime.spawn(service.backfillAudioIdentityAsync(stopSource.get_token()));
+
+    requireFaultCleanupOrdering(future, stopSource, executor, completionCounts);
     runtime.requestStop();
     runtime.join();
   }

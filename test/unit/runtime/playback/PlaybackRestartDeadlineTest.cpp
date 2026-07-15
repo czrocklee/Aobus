@@ -21,7 +21,7 @@ namespace ao::rt::test
     {
     public:
       RestartDeadlineFixture()
-        : asyncRuntime{executor, 1, &scheduler}
+        : asyncRuntime{executor, 1, {}, &scheduler}
         , deadline{asyncRuntime,
                    [this]
                    {

@@ -65,6 +65,13 @@ namespace ao::rt
 
   struct LibraryTaskService::Impl final
   {
+    [[noreturn]] void dispatchFailureCompletionAndRethrow(std::exception_ptr const& exceptionPtr)
+    {
+      auto* const changesRaw = &changes;
+      asyncRuntime.callbackExecutor().dispatch([changesRaw] { changesRaw->notifyLibraryTaskCompleted(0); });
+      std::rethrow_exception(exceptionPtr);
+    }
+
     async::Runtime& asyncRuntime;
     library::MusicLibrary& library;
     LibraryChanges& changes;
@@ -224,13 +231,12 @@ namespace ao::rt
       }
     }
 
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
-
     if (exceptionPtr)
     {
-      _implPtr->changes.notifyLibraryTaskCompleted(0);
-      std::rethrow_exception(exceptionPtr);
+      _implPtr->dispatchFailureCompletionAndRethrow(exceptionPtr);
     }
+
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
 
     if (!applyResult)
     {
@@ -312,13 +318,12 @@ namespace ao::rt
       }
     }
 
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
-
     if (exceptionPtr)
     {
-      _implPtr->changes.notifyLibraryTaskCompleted(0);
-      std::rethrow_exception(exceptionPtr);
+      _implPtr->dispatchFailureCompletionAndRethrow(exceptionPtr);
     }
+
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
 
     if (!backfillResult)
     {

@@ -84,7 +84,8 @@ namespace ao::rt
                   std::move(dependencies.musicRoot),
                   std::move(dependencies.databasePath),
                   dependencies.musicLibraryMapSize,
-                  dependencies.sleeper}
+                  dependencies.sleeper,
+                  std::move(dependencies.asyncExceptionHandler)}
     , _implPtr{std::make_unique<Impl>(*this,
                                       std::move(dependencies.workspaceConfigStorePtr),
                                       dependencies.playbackSessionConfigStore)}

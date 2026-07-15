@@ -185,7 +185,7 @@ LINUX_PROFILE = PlatformProfile(
     apps=("cli", "tui", "gtk"),
     default_suites=("core", "gtk"),
     all_suites=("core", "tui", "cli", "gtk", "integration", "council", "tooling", "lint"),
-    tsan_suites=("core",),
+    tsan_suites=("core", "gtk"),
     compiler="gcc",
 )
 

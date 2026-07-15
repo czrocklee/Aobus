@@ -89,6 +89,7 @@ namespace
                                         std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                                         std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
   {
+    auto asyncExceptionHandler = rt::Log::asyncExceptionHandler();
     auto executorPtr = std::make_unique<GtkMainContextExecutor>();
 
     auto const workspaceConfigPath = paths.databasePath / "workspace.yaml";
@@ -99,7 +100,8 @@ namespace
                                  .musicRoot = paths.musicRoot,
                                  .databasePath = paths.databasePath,
                                  .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr),
-                                 .playbackSessionConfigStore = &appConfigStorePtr->playbackSessionStore()});
+                                 .playbackSessionConfigStore = &appConfigStorePtr->playbackSessionStore(),
+                                 .asyncExceptionHandler = std::move(asyncExceptionHandler)});
 
     registerPlatformAudioBackends(*appRuntimePtr);
 

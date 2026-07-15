@@ -6,8 +6,6 @@
 #include "common/UiWorkflow.h"
 #include "portal/ImportExportCallbacks.h"
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/AppRuntime.h>
@@ -20,7 +18,6 @@
 #include <ao/rt/library/ScanPlan.h>
 
 #include <cstdint>
-#include <exception>
 #include <filesystem>
 #include <format>
 #include <optional>
@@ -33,6 +30,11 @@ namespace ao::gtk::portal
 {
   namespace
   {
+    constexpr auto kScanExceptionContext = std::string_view{"library scan workflow"};
+    constexpr auto kImportExceptionContext = std::string_view{"library import workflow"};
+    constexpr auto kExportExceptionContext = std::string_view{"library export workflow"};
+    constexpr auto kAudioIdentityExceptionContext = std::string_view{"audio identity workflow"};
+
     void logStructuredError(std::string_view action, Error const& error)
     {
       APP_LOG_ERROR("{}: code={}, message={}, location={}:{}",
@@ -95,10 +97,10 @@ namespace ao::gtk::portal
       _runtime.async(),
       _tasks,
       *this,
+      kScanExceptionContext,
       [mode](LibraryImportExportWorkflow* self, std::stop_token const stopToken)
       { return self->scanWorkflow(mode, stopToken); },
-      [](LibraryImportExportWorkflow* self, std::exception_ptr exceptionPtr)
-      { self->reportInternalFailure("Scan failed", "Scan failed: Internal error", exceptionPtr); });
+      [](LibraryImportExportWorkflow* self) { self->presentInternalFailure("Scan failed: Internal error"); });
   }
 
   void LibraryImportExportWorkflow::importFrom(std::filesystem::path path)
@@ -108,11 +110,11 @@ namespace ao::gtk::portal
       _runtime.async(),
       _tasks,
       *this,
+      kImportExceptionContext,
       [callbacks = std::move(callbacks), importPath = std::move(path)](
         LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
       { return self->importWorkflow(std::move(callbacks), std::move(importPath), stopToken); },
-      [](LibraryImportExportWorkflow* self, std::exception_ptr exceptionPtr)
-      { self->reportInternalFailure("Import failed", "Import failed: Internal error", exceptionPtr); });
+      [](LibraryImportExportWorkflow* self) { self->presentInternalFailure("Import failed: Internal error"); });
   }
 
   void LibraryImportExportWorkflow::exportTo(std::filesystem::path path, rt::ExportMode mode)
@@ -121,10 +123,10 @@ namespace ao::gtk::portal
       _runtime.async(),
       _tasks,
       *this,
+      kExportExceptionContext,
       [exportPath = std::move(path), mode](LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
       { return self->exportWorkflow(std::move(exportPath), mode, stopToken); },
-      [](LibraryImportExportWorkflow* self, std::exception_ptr exceptionPtr)
-      { self->reportInternalFailure("Export failed", "Export failed: Internal error", exceptionPtr); });
+      [](LibraryImportExportWorkflow* self) { self->presentInternalFailure("Export failed: Internal error"); });
   }
 
   async::Task<void> LibraryImportExportWorkflow::scanWorkflow(ScanRequestMode mode, std::stop_token const stopToken)
@@ -153,38 +155,27 @@ namespace ao::gtk::portal
 
   async::Task<void> LibraryImportExportWorkflow::backfillAudioIdentityWorkflow(std::stop_token const stopToken)
   {
-    try
+    auto result = co_await _runtime.library().taskService().backfillAudioIdentityAsync(stopToken);
+
+    if (!result)
     {
-      auto result = co_await _runtime.library().taskService().backfillAudioIdentityAsync(stopToken);
-
-      if (!result)
-      {
-        logStructuredError("Audio identity indexing failed", result.error());
-        _runtime.notifications().post(rt::NotificationSeverity::Warning, "Audio identity indexing failed");
-        co_return;
-      }
-
-      if (result->cancelled)
-      {
-        co_return;
-      }
-
-      if (result->failureCount > 0)
-      {
-        _runtime.notifications().post(
-          rt::NotificationSeverity::Warning, "Audio identity indexing completed with errors");
-      }
-      else if (result->completedCount > 0)
-      {
-        _runtime.notifications().post(rt::NotificationSeverity::Info, "Audio identity indexing complete");
-      }
+      logStructuredError("Audio identity indexing failed", result.error());
+      _runtime.notifications().post(rt::NotificationSeverity::Warning, "Audio identity indexing failed");
+      co_return;
     }
-    catch (...)
-    {
-      async::rethrowIfOperationCancelled();
 
-      reportInternalFailure(
-        "Audio identity indexing failed", "Audio identity indexing failed: Internal error", std::current_exception());
+    if (result->cancelled)
+    {
+      co_return;
+    }
+
+    if (result->failureCount > 0)
+    {
+      _runtime.notifications().post(rt::NotificationSeverity::Warning, "Audio identity indexing completed with errors");
+    }
+    else if (result->completedCount > 0)
+    {
+      _runtime.notifications().post(rt::NotificationSeverity::Info, "Audio identity indexing complete");
     }
   }
 
@@ -267,65 +258,56 @@ namespace ao::gtk::portal
                                                                            ScanRequestMode mode,
                                                                            std::stop_token const stopToken)
   {
-    try
-    {
-      auto options = rt::ScanApplyOptions{};
+    auto options = rt::ScanApplyOptions{};
 
-      if (mode == ScanRequestMode::FastBootstrap)
+    if (mode == ScanRequestMode::FastBootstrap)
+    {
+      options.audioIdentityPolicy = rt::AudioIdentityPolicy::DeferNew;
+    }
+
+    auto result = co_await _runtime.library().taskService().applyScanPlanAsync(std::move(plan), options, stopToken);
+
+    if (!result)
+    {
+      presentFailure("Scan apply failed", "Scan failed", result.error());
+    }
+    else
+    {
+      if (!result->cancelled &&
+          (!result->insertedIds.empty() || !result->mutatedIds.empty() || !result->relinkedIds.empty()) &&
+          _callbacks.onLibraryDataMutated)
       {
-        options.audioIdentityPolicy = rt::AudioIdentityPolicy::DeferNew;
+        _callbacks.onLibraryDataMutated();
       }
 
-      auto result = co_await _runtime.library().taskService().applyScanPlanAsync(std::move(plan), options, stopToken);
-
-      if (!result)
+      if (result->cancelled)
       {
-        presentFailure("Scan apply failed", "Scan failed", result.error());
+        _runtime.notifications().post(rt::NotificationSeverity::Info, "Scan cancelled");
+      }
+      else if (result->failureCount > 0)
+      {
+        auto message = std::string{"Scan completed with errors"};
+
+        if (result->missingCount > 0 || result->relinkedCount > 0)
+        {
+          message += std::format("; {}", scanCompletionSummary(*result));
+        }
+
+        _runtime.notifications().post(rt::NotificationSeverity::Warning, std::move(message));
+      }
+      else if (result->missingCount > 0)
+      {
+        _runtime.notifications().post(rt::NotificationSeverity::Warning, scanCompletionSummary(*result));
       }
       else
       {
-        if (!result->cancelled &&
-            (!result->insertedIds.empty() || !result->mutatedIds.empty() || !result->relinkedIds.empty()) &&
-            _callbacks.onLibraryDataMutated)
-        {
-          _callbacks.onLibraryDataMutated();
-        }
-
-        if (result->cancelled)
-        {
-          _runtime.notifications().post(rt::NotificationSeverity::Info, "Scan cancelled");
-        }
-        else if (result->failureCount > 0)
-        {
-          auto message = std::string{"Scan completed with errors"};
-
-          if (result->missingCount > 0 || result->relinkedCount > 0)
-          {
-            message += std::format("; {}", scanCompletionSummary(*result));
-          }
-
-          _runtime.notifications().post(rt::NotificationSeverity::Warning, std::move(message));
-        }
-        else if (result->missingCount > 0)
-        {
-          _runtime.notifications().post(rt::NotificationSeverity::Warning, scanCompletionSummary(*result));
-        }
-        else
-        {
-          _runtime.notifications().post(rt::NotificationSeverity::Info, scanCompletionSummary(*result));
-        }
-
-        if (mode == ScanRequestMode::FastBootstrap && !result->cancelled)
-        {
-          startAudioIdentityIndexing();
-        }
+        _runtime.notifications().post(rt::NotificationSeverity::Info, scanCompletionSummary(*result));
       }
-    }
-    catch (...)
-    {
-      async::rethrowIfOperationCancelled();
 
-      reportInternalFailure("Scan failed", "Scan failed: Internal error", std::current_exception());
+      if (mode == ScanRequestMode::FastBootstrap && !result->cancelled)
+      {
+        startAudioIdentityIndexing();
+      }
     }
   }
 
@@ -338,13 +320,11 @@ namespace ao::gtk::portal
       _runtime.async(),
       _tasks,
       *this,
+      kAudioIdentityExceptionContext,
       [](LibraryImportExportWorkflow* self, std::stop_token const stopToken)
       { return self->backfillAudioIdentityWorkflow(stopToken); },
-      [](LibraryImportExportWorkflow* self, std::exception_ptr exceptionPtr)
-      {
-        self->reportInternalFailure(
-          "Audio identity indexing failed", "Audio identity indexing failed: Internal error", exceptionPtr);
-      });
+      [](LibraryImportExportWorkflow* self)
+      { self->presentInternalFailure("Audio identity indexing failed: Internal error"); });
   }
 
   void LibraryImportExportWorkflow::presentFailure(std::string_view action,
@@ -355,35 +335,8 @@ namespace ao::gtk::portal
     _runtime.notifications().post(rt::NotificationSeverity::Error, notificationMessage);
   }
 
-  void LibraryImportExportWorkflow::reportInternalFailure(std::string_view action,
-                                                          std::string_view notificationMessage,
-                                                          std::exception_ptr exceptionPtr)
+  void LibraryImportExportWorkflow::presentInternalFailure(std::string_view notificationMessage)
   {
-    try
-    {
-      std::rethrow_exception(exceptionPtr);
-    }
-    catch (ao::Exception const& e)
-    {
-      APP_LOG_CRITICAL("{} (internal error): {} (at {}:{})", action, e.what(), e.file(), e.line());
-      _runtime.notifications().post(rt::NotificationSeverity::Error, std::string{notificationMessage});
-    }
-    catch (std::exception const& e)
-    {
-      // Defensive: current callers filter cancellation before presentation, but this helper must never turn
-      // cancellation into an internal-error notification if it is reused directly.
-      async::rethrowIfOperationCancelled(e);
-
-      APP_LOG_CRITICAL("{} (internal error): {}", action, e.what());
-      _runtime.notifications().post(rt::NotificationSeverity::Error, std::string{notificationMessage});
-    }
-    catch (...)
-    {
-      // See the std::exception branch above: cancellation stays control-flow, not presentation.
-      async::rethrowIfOperationCancelled();
-
-      APP_LOG_CRITICAL("{} (internal error): unknown exception", action);
-      _runtime.notifications().post(rt::NotificationSeverity::Error, std::string{notificationMessage});
-    }
+    _runtime.notifications().post(rt::NotificationSeverity::Error, std::string{notificationMessage});
   }
 } // namespace ao::gtk::portal

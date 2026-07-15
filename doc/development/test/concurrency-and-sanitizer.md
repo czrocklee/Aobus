@@ -58,17 +58,22 @@ selection and `--repeat` behavior.
 
 ## Sanitizer findings
 
-The green Linux TSan gate currently covers core. Full GTK has baseline GLib/GIO
-reports, so investigate project-owned GTK concurrency with an explicit focused
-run rather than broad library-symbol suppressions:
+The green Linux TSan gate covers core and GTK:
 
 ```bash
-./ao test --gtk --tsan "[concurrency]"
+./ao check --tsan
 ```
 
-Before suppressing a report:
+The Nix GTK dependency closure is not TSan-instrumented, so TSan cannot observe its internal synchronization even though it observes calls into intercepted runtime functions.
+`script/ao/tsan.supp` treats the reviewed UI dependency modules as opaque by using only `called_from_lib` rules.
+Those rules ignore interceptor accesses originating in the named modules while leaving Aobus code instrumented, including Aobus callbacks entered from GTK.
+They are injected for every TSan run but are inert in binaries that do not load the named modules.
+When `TSAN_OPTIONS` already names a suppression file, the test portal merges its contents with the governed project rules and passes one process-local combined file to TSan so neither source silently replaces the other.
+
+Before adding or widening a suppression:
 
 1. Reproduce the narrowest public contract.
 2. Compare with the unmodified base revision in a separate build directory.
 3. Classify relevant frames as project-owned or dependency-owned.
-4. Prefer a clean-suite boundary or focused test over a broad suppression.
+4. Add an exact `called_from_lib` module only for an uninstrumented dependency; never suppress an Aobus binary, libc, libpthread, libstdc++, or libtsan.
+5. Verify the focused report, the full GTK TSan suite, and `./ao check --tsan`.

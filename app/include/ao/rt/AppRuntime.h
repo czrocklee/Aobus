@@ -7,6 +7,7 @@
 #include "Subscription.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/AsyncExceptionHandler.h>
 
 #include <cstddef>
 #include <filesystem>
@@ -40,6 +41,7 @@ namespace ao::rt
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
     ConfigStore* playbackSessionConfigStore = nullptr;
     async::Sleeper* sleeper = nullptr;
+    async::AsyncExceptionHandler asyncExceptionHandler{};
   };
 
   struct PlaybackSessionRestoreResult final

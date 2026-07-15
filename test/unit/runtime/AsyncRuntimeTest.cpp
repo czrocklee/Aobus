@@ -11,18 +11,24 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
-#include <fcntl.h>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 #ifdef _WIN32
 #include <io.h>
 #else
 #include <unistd.h>
 #endif
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <memory>
+#include <stdexcept>
 #include <stop_token>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <tuple>
 #include <utility>
@@ -51,6 +57,12 @@ namespace ao::rt::test
     {
       co_await runtime->resumeOnWorker();
       throwException<Exception>("Test failure");
+    }
+
+    Task<void> failingCancellableTask(Runtime* runtime, std::stop_token const stopToken)
+    {
+      co_await runtime->resumeOnWorker(stopToken);
+      throwException<Exception>("Test cancellable failure");
     }
 
     Task<void> sleepAndRecord(Runtime* runtime,
@@ -94,9 +106,9 @@ namespace ao::rt::test
     }
 
 #ifdef _WIN32
-    std::int32_t stderrFileDescriptor()
+    std::int32_t fileDescriptor(std::FILE* stream)
     {
-      return ::_fileno(stderr);
+      return ::_fileno(stream);
     }
 
     std::int32_t duplicateFileDescriptor(std::int32_t const fd)
@@ -104,14 +116,9 @@ namespace ao::rt::test
       return ::_dup(fd);
     }
 
-    std::int32_t openNullDevice()
+    std::int32_t duplicateFileDescriptorTo(std::int32_t const source, std::int32_t const target)
     {
-      return ::_open("NUL", _O_WRONLY);
-    }
-
-    void duplicateFileDescriptorTo(std::int32_t const source, std::int32_t const target)
-    {
-      std::ignore = ::_dup2(source, target);
+      return ::_dup2(source, target);
     }
 
     void closeFileDescriptor(std::int32_t const fd)
@@ -119,9 +126,9 @@ namespace ao::rt::test
       std::ignore = ::_close(fd);
     }
 #else
-    std::int32_t stderrFileDescriptor()
+    std::int32_t fileDescriptor(std::FILE* stream)
     {
-      return STDERR_FILENO;
+      return ::fileno(stream);
     }
 
     std::int32_t duplicateFileDescriptor(std::int32_t const fd)
@@ -129,14 +136,9 @@ namespace ao::rt::test
       return ::dup(fd);
     }
 
-    std::int32_t openNullDevice()
+    std::int32_t duplicateFileDescriptorTo(std::int32_t const source, std::int32_t const target)
     {
-      return ::open("/dev/null", O_WRONLY);
-    }
-
-    void duplicateFileDescriptorTo(std::int32_t const source, std::int32_t const target)
-    {
-      std::ignore = ::dup2(source, target);
+      return ::dup2(source, target);
     }
 
     void closeFileDescriptor(std::int32_t const fd)
@@ -145,36 +147,98 @@ namespace ao::rt::test
     }
 #endif
 
-    /// RAII guard that redirects stderr to the platform null device for its lifetime.
-    /// Used to silence the intentional "unhandled exception" diagnostic that
-    /// spawnLogged emits when exercising the exception-logging path.
-    class StderrSilencer final
+    struct FileCloser final
+    {
+      void operator()(gsl_lite::owner<std::FILE*> file) const noexcept { std::ignore = std::fclose(file); }
+    };
+
+    class StderrCapture final
     {
     public:
-      StderrSilencer()
-        : _stderrFd{stderrFileDescriptor()}, _savedFd{duplicateFileDescriptor(_stderrFd)}
+      StderrCapture()
+        : _filePtr{std::tmpfile()}
       {
-        std::fflush(stderr);
-        std::int32_t const devNull = openNullDevice();
-        duplicateFileDescriptorTo(devNull, _stderrFd);
-        closeFileDescriptor(devNull);
+        if (_filePtr == nullptr)
+        {
+          throwException<Exception>("Failed to create stderr capture file");
+        }
+
+        _stderrFd = fileDescriptor(stderr);
+        _savedFd = duplicateFileDescriptor(_stderrFd);
+
+        if (_stderrFd < 0 || _savedFd < 0)
+        {
+          closeCaptureFile();
+          throwException<Exception>("Failed to duplicate stderr");
+        }
+
+        std::ignore = std::fflush(stderr);
+
+        if (duplicateFileDescriptorTo(fileDescriptor(_filePtr.get()), _stderrFd) < 0)
+        {
+          closeFileDescriptor(_savedFd);
+          _savedFd = -1;
+          closeCaptureFile();
+          throwException<Exception>("Failed to redirect stderr");
+        }
       }
 
-      ~StderrSilencer()
+      ~StderrCapture()
       {
-        std::fflush(stderr);
-        duplicateFileDescriptorTo(_savedFd, _stderrFd);
-        closeFileDescriptor(_savedFd);
+        std::ignore = std::fflush(stderr);
+
+        if (_savedFd >= 0)
+        {
+          std::ignore = duplicateFileDescriptorTo(_savedFd, _stderrFd);
+          closeFileDescriptor(_savedFd);
+        }
+
+        closeCaptureFile();
       }
 
-      StderrSilencer(StderrSilencer const&) = delete;
-      StderrSilencer(StderrSilencer&&) = delete;
-      StderrSilencer& operator=(StderrSilencer const&) = delete;
-      StderrSilencer& operator=(StderrSilencer&&) = delete;
+      StderrCapture(StderrCapture const&) = delete;
+      StderrCapture& operator=(StderrCapture const&) = delete;
+      StderrCapture(StderrCapture&&) = delete;
+      StderrCapture& operator=(StderrCapture&&) = delete;
+
+      std::string output()
+      {
+        std::ignore = std::fflush(stderr);
+
+        if (std::fseek(_filePtr.get(), 0, SEEK_SET) != 0)
+        {
+          throwException<Exception>("Failed to rewind stderr capture");
+        }
+
+        auto result = std::string{};
+        auto buffer = std::array<char, 256>{};
+
+        while (true)
+        {
+          auto const count = std::fread(buffer.data(), sizeof(char), buffer.size(), _filePtr.get());
+
+          if (count == 0)
+          {
+            break;
+          }
+
+          result.append(buffer.data(), count);
+        }
+
+        if (std::ferror(_filePtr.get()) != 0)
+        {
+          throwException<Exception>("Failed to read stderr capture");
+        }
+
+        return result;
+      }
 
     private:
-      std::int32_t _stderrFd{-1};
-      std::int32_t _savedFd{-1};
+      void closeCaptureFile() noexcept { _filePtr.reset(); }
+
+      std::unique_ptr<std::FILE, FileCloser> _filePtr;
+      std::int32_t _stderrFd = -1;
+      std::int32_t _savedFd = -1;
     };
   } // namespace
 
@@ -194,26 +258,71 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("AsyncRuntime - spawn reports task failures through logging and futures", "[runtime][unit][async]")
+  TEST_CASE("AsyncRuntime - unobserved and future task failures have one owner", "[runtime][unit][async]")
   {
+    auto executor = ImmediateExecutor{};
+    auto exceptionRecorder = AsyncExceptionRecorder{};
+    auto runtime = Runtime{executor, exceptionRecorder.handler()};
+
+    runtime.spawnLogged(failingTask(&runtime));
+
+    auto future = runtime.spawn(failingTask(&runtime));
+    REQUIRE_THROWS_AS(future.get(), Exception);
+    REQUIRE(exceptionRecorder.waitForCount(1));
+
+    runtime.requestStop();
+    runtime.join();
+
+    requireSingleRecordedException<Exception>(exceptionRecorder, "root coroutine");
+  }
+
+  TEST_CASE("AsyncRuntime - missing exception handler uses the stderr fallback", "[runtime][unit][async]")
+  {
+    auto capture = StderrCapture{};
     auto executor = ImmediateExecutor{};
     auto runtime = Runtime{executor};
 
-    {
-      // The logging path intentionally writes a diagnostic to stderr from a
-      // worker thread; silence it until join() guarantees the handler has run.
-      auto const silencer = StderrSilencer{};
+    CHECK_NOTHROW(runtime.reportUnhandledException(
+      std::make_exception_ptr(std::runtime_error{"fallback failure"}), "fallback boundary"));
 
-      // Logging version - should not crash
-      CHECK_NOTHROW(runtime.spawnLogged(failingTask(&runtime)));
+    CHECK_THAT(capture.output(),
+               Catch::Matchers::ContainsSubstring("Unhandled exception in fallback boundary: fallback failure"));
+  }
 
-      // Future version - should throw when getting result
-      auto future = runtime.spawn(failingTask(&runtime));
-      CHECK_THROWS_AS(future.get(), Exception);
+  TEST_CASE("AsyncRuntime - throwing exception handler falls back without escaping", "[runtime][regression][async]")
+  {
+    auto capture = StderrCapture{};
+    auto executor = ImmediateExecutor{};
+    bool handlerCalled = false;
+    auto runtime = Runtime{executor,
+                           [&handlerCalled](std::exception_ptr, std::string_view)
+                           {
+                             handlerCalled = true;
+                             throwException<Exception>("diagnostic handler failure");
+                           }};
 
-      runtime.requestStop();
-      runtime.join();
-    }
+    CHECK_NOTHROW(runtime.reportUnhandledException(std::make_exception_ptr(42), "throwing handler boundary"));
+
+    CHECK(handlerCalled);
+    CHECK_THAT(
+      capture.output(), Catch::Matchers::ContainsSubstring("Unhandled unknown exception in throwing handler boundary"));
+  }
+
+  TEST_CASE("AsyncRuntime - cancellable task failure reaches the injected handler",
+            "[runtime][unit][async][concurrency]")
+  {
+    auto executor = ImmediateExecutor{};
+    auto exceptionRecorder = AsyncExceptionRecorder{};
+    auto runtime = Runtime{executor, exceptionRecorder.handler()};
+
+    auto task = runtime.spawnCancellable([&runtime](std::stop_token const stopToken)
+                                         { return failingCancellableTask(&runtime, stopToken); });
+
+    REQUIRE(exceptionRecorder.waitForCount(1));
+    runtime.requestStop();
+    runtime.join();
+
+    requireSingleRecordedException<Exception>(exceptionRecorder, "cancellable coroutine");
   }
 
   TEST_CASE("ImmediateExecutor - defer is FIFO and never reenters the current task", "[runtime][unit][async]")
@@ -262,7 +371,8 @@ namespace ao::rt::test
   {
     auto executor = ManualExecutor{};
     auto sleeper = ControlledSleeper{};
-    auto runtime = Runtime{executor, 1, &sleeper};
+    auto exceptionRecorder = AsyncExceptionRecorder{};
+    auto runtime = Runtime{executor, 1, exceptionRecorder.handler(), &sleeper};
     auto callbackCount = AsyncTestState<std::uint32_t>::create(0);
     auto ranOnWorker = AsyncTestState<bool>::create(false);
 
@@ -284,6 +394,7 @@ namespace ao::rt::test
     runtime.join();
 
     CHECK(callbackCount.load() == 0);
+    CHECK(exceptionRecorder.snapshot().empty());
   }
 
   TEST_CASE("AsyncRuntime - timer expiry races safely with cancellation",
