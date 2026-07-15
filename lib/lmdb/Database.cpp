@@ -60,6 +60,11 @@ namespace ao::lmdb
 
   Result<Database> Database::open(WriteTransaction& txn, std::string const& name, KeyKind kind)
   {
+    if (!txn.isActive())
+    {
+      return makeError(Error::Code::InvalidState, "Cannot open a database with a finished write transaction");
+    }
+
     DbiHandle dbi = {};
     unsigned int flags = MDB_CREATE;
 
@@ -79,6 +84,11 @@ namespace ao::lmdb
 
   Result<Database> Database::open(ReadTransaction& txn, std::string const& name, KeyKind kind)
   {
+    if (!txn.isActive())
+    {
+      return makeError(Error::Code::InvalidState, "Cannot open a database with an inactive read transaction");
+    }
+
     DbiHandle dbi = {};
     unsigned int flags = 0;
 
@@ -98,6 +108,11 @@ namespace ao::lmdb
 
   Database::Reader Database::reader(ReadTransaction const& txn) const
   {
+    if (!txn.isActive())
+    {
+      throwException<Exception>("Database::Reader created from an inactive transaction");
+    }
+
     return Reader{_dbi, txn._txnPtr.get(), _kind};
   }
 
@@ -251,8 +266,11 @@ namespace ao::lmdb
   }
 
   Database::Writer::Writer(::MDB_dbi dbi, WriteTransaction& txn, Database::KeyKind kind)
-    : _dbi{dbi}, _txn{&txn}, _cursorPtr{Reader::create(txn._txnPtr.get(), _dbi)}, _kind{kind}
+    : _dbi{dbi}, _txn{&txn}, _kind{kind}
   {
+    ensureActive();
+    _cursorPtr = Reader::create(txn._txnPtr.get(), _dbi);
+
     if (_kind == Database::KeyKind::Integer)
     {
       auto key = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
@@ -270,10 +288,41 @@ namespace ao::lmdb
     }
   }
 
+  Database::Writer::Writer(Writer&& other) noexcept
+    : _dbi{other._dbi}
+    , _txn{std::exchange(other._txn, nullptr)}
+    , _cursorPtr{std::move(other._cursorPtr)}
+    , _lastId{other._lastId}
+    , _kind{other._kind}
+  {
+  }
+
+  Database::Writer& Database::Writer::operator=(Writer&& other) noexcept
+  {
+    if (this == &other)
+    {
+      return *this;
+    }
+
+    releaseFinishedCursor();
+    _dbi = other._dbi;
+    _txn = std::exchange(other._txn, nullptr);
+    _cursorPtr = std::move(other._cursorPtr);
+    _lastId = other._lastId;
+    _kind = other._kind;
+    return *this;
+  }
+
   Database::Writer::~Writer() noexcept
   {
-    // When transaction is committed, LMDB automatically closes all cursors - release without closing
-    if (_txn->isCommitted())
+    releaseFinishedCursor();
+  }
+
+  void Database::Writer::releaseFinishedCursor() noexcept
+  {
+    // LMDB frees write-transaction cursors when that transaction commits or
+    // aborts. Relinquish our stale pointer so the deleter cannot close it twice.
+    if (_txn != nullptr && _txn->isFinished())
     {
       std::ignore = _cursorPtr.release();
     }
@@ -281,9 +330,9 @@ namespace ao::lmdb
 
   void Database::Writer::ensureActive() const
   {
-    if (_txn->isCommitted())
+    if (_txn == nullptr || !_txn->isActive())
     {
-      throwException<Exception>("Database::Writer used after its transaction was committed");
+      throwException<Exception>("Database::Writer used after its transaction finished");
     }
   }
 
@@ -346,6 +395,8 @@ namespace ao::lmdb
 
   Result<std::uint32_t> Database::Writer::append(std::span<std::byte const> data)
   {
+    ensureActive();
+
     if (_lastId == std::numeric_limits<std::uint32_t>::max())
     {
       return makeError(Error::Code::ResourceExhausted, "LMDB integer key space exhausted");
@@ -364,6 +415,8 @@ namespace ao::lmdb
 
   Result<std::pair<std::uint32_t, std::span<std::byte>>> Database::Writer::append(std::size_t size)
   {
+    ensureActive();
+
     if (_lastId == std::numeric_limits<std::uint32_t>::max())
     {
       return makeError(Error::Code::ResourceExhausted, "LMDB integer key space exhausted");

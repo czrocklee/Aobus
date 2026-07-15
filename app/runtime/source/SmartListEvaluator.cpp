@@ -6,6 +6,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
+#include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
 #include <ao/rt/ScopedTimer.h>
 #include <ao/rt/StorageResult.h>
@@ -236,6 +237,18 @@ namespace ao::rt
     auto const reader = _ml.tracks().reader(transaction);
     auto const mode = unionMode(std::span<SmartListSource* const>{evaluatableLists});
     auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
+    auto dictionaryCache = library::DictionaryReadCache{_ml.dictionary()};
+    auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
+    auto bindings = std::vector<std::optional<query::PlanBinding>>(works.size());
+
+    for (std::size_t index = 0; index < works.size(); ++index)
+    {
+      if (auto const& work = works[index]; work.active)
+      {
+        bindings[index].emplace(*work.list->_current.planPtr, dictionaryContext);
+      }
+    }
+
     auto updatedTrackIds = std::vector<TrackId>{};
     auto removedTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
     auto insertedTrackIds = std::vector<TrackId>{};
@@ -277,7 +290,9 @@ namespace ao::rt
         {
           if (auto const& work = works[index]; work.active)
           {
-            matches[index] = work.list->_planEvaluator.matches(*work.list->_current.planPtr, *optView);
+            auto const& binding = bindings[index];
+            gsl_Expects(binding);
+            matches[index] = work.list->_planEvaluator.matches(*binding, *optView);
           }
         }
       }
@@ -410,15 +425,25 @@ namespace ao::rt
       auto const mode = unionMode(std::span<SmartListSource* const>{evaluatableLists});
       auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
       auto dictionaryCache = library::DictionaryReadCache{_ml.dictionary()};
+      auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
+      auto bindings = std::vector<std::optional<query::PlanBinding>>(lists.size());
+
+      for (std::size_t index = 0; index < lists.size(); ++index)
+      {
+        if (auto* const list = lists[index];
+            list->state() == TrackSourceState::Live && !list->_current.optError && list->_current.planPtr != nullptr)
+        {
+          bindings[index].emplace(*list->_current.planPtr, dictionaryContext);
+        }
+      }
 
       auto visitTrack = [&](TrackId trackId, library::TrackView const& view)
       {
         for (std::size_t index = 0; index < lists.size(); ++index)
         {
-          if (auto* const list = lists[index];
-              list->state() == TrackSourceState::Live && !list->_current.optError &&
-              list->_current.planPtr != nullptr &&
-              list->_planEvaluator.matches(*list->_current.planPtr, view, &dictionaryCache))
+          if (auto* const list = lists[index]; list->state() == TrackSourceState::Live && !list->_current.optError &&
+                                               list->_current.planPtr != nullptr &&
+                                               list->_planEvaluator.matches(*bindings[index], view))
           {
             nextMembers[index].push_back(trackId);
           }

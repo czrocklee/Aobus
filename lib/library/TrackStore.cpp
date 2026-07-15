@@ -3,10 +3,11 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/ReadTransaction.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Database.h>
-#include <ao/lmdb/Transaction.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -20,19 +21,27 @@
 namespace ao::library
 {
   // TrackStore implementation
-  TrackStore::TrackStore(lmdb::Database hotDb, lmdb::Database coldDb)
-    : _hotDb{std::move(hotDb)}, _coldDb{std::move(coldDb)}
+  TrackStore::TrackStore(lmdb::Database hotDb, lmdb::Database coldDb, detail::LibraryIdentity const& identity)
+    : _hotDb{std::move(hotDb)}, _coldDb{std::move(coldDb)}, _identity{&identity}
   {
   }
 
-  TrackStore::Reader TrackStore::reader(lmdb::ReadTransaction const& transaction) const
+  TrackStore::Reader TrackStore::reader(ReadTransaction const& transaction) const
   {
-    return Reader{_hotDb.reader(transaction), _coldDb.reader(transaction)};
+    auto const& native = transaction.native(*_identity);
+    return Reader{_hotDb.reader(native), _coldDb.reader(native)};
   }
 
-  TrackStore::Writer TrackStore::writer(lmdb::WriteTransaction& transaction)
+  TrackStore::Reader TrackStore::reader(WriteTransaction const& transaction) const
   {
-    return Writer{_hotDb.writer(transaction), _coldDb.writer(transaction)};
+    auto const& native = transaction.native(*_identity);
+    return Reader{_hotDb.reader(native), _coldDb.reader(native)};
+  }
+
+  TrackStore::Writer TrackStore::writer(WriteTransaction& transaction) const
+  {
+    auto& native = transaction.native(*_identity);
+    return Writer{_hotDb.writer(native), _coldDb.writer(native)};
   }
 
   // TrackStore::Reader implementation

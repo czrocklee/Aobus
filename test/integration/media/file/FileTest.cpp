@@ -3,10 +3,10 @@
 
 #include "runtime/library/MediaTrack.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackView.h>
@@ -14,7 +14,6 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-#include <lmdb.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -251,12 +250,9 @@ namespace ao::media::file::test
 
     // Create temp LMDB environment to test cover art serialization
     auto const tempDir = ao::test::TempDir{};
-    auto env = lmdb::test::openEnvironment(tempDir.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dictionary = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
-    auto resources = library::ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
-
-    auto serializeResult = builder.serialize(wtxn, dictionary, resources);
+    auto musicLibrary = library::MusicLibrary{tempDir.path(), tempDir.path() / "db"};
+    auto transaction = musicLibrary.writeTransaction();
+    auto serializeResult = builder.serialize(transaction, musicLibrary.resources());
     REQUIRE(serializeResult);
     auto const [hotData, coldData] = *serializeResult;
 
@@ -276,7 +272,7 @@ namespace ao::media::file::test
     CHECK(optPrimary->type == cover.type);
     CHECK(optPrimary->resourceId == cover.resourceId);
 
-    auto const optStoredBytes = resources.writer(wtxn).get(cover.resourceId);
+    auto const optStoredBytes = musicLibrary.resources().writer(transaction).get(cover.resourceId);
     REQUIRE(optStoredBytes);
     CHECK_FALSE(optStoredBytes->empty());
     checkOnePixelPng(*optStoredBytes);

@@ -2,6 +2,8 @@
 add_library(ao_library STATIC
     MetadataStore.cpp
     MusicLibrary.cpp
+    ReadTransaction.cpp
+    WriteTransaction.cpp
     ResourceStore.cpp
     DictionaryStore.cpp
     FileManifestStore.cpp

@@ -202,7 +202,7 @@ namespace ao::library::test
     auto builder = TrackBuilder::makeEmpty();
     applyTrackSpec(builder, spec);
 
-    auto data = builder.serialize(transaction, library.dictionary(), library.resources());
+    auto data = builder.serialize(transaction, library.resources());
     REQUIRE(data);
     auto createResult = writer.createHotCold(data->first, data->second);
     REQUIRE(createResult);
@@ -222,9 +222,9 @@ namespace ao::library::test
     auto builder = TrackBuilder::fromView(*optView, library.dictionary());
     mutate(builder);
 
-    auto hotData = builder.serializeHot(transaction, library.dictionary());
+    auto hotData = builder.serializeHot(transaction);
     REQUIRE(hotData);
-    auto coldData = builder.serializeCold(transaction, library.dictionary(), library.resources());
+    auto coldData = builder.serializeCold(transaction, library.resources());
     REQUIRE(coldData);
     REQUIRE(writer.updateHot(id, *hotData));
     REQUIRE(writer.updateCold(

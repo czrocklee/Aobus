@@ -4,7 +4,7 @@
 #include "test/unit/library/TrackBuilderTestSupport.h"
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
-#include <ao/library/CoverArt.h>
+#include <ao/PictureType.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
@@ -292,21 +292,21 @@ namespace ao::library::test
     SECTION("conductor")
     {
       checkSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().conductor("Conductor"); },
-                                [](TrackView const& view, DictionaryStore& dictionary)
+                                [](TrackView const& view, DictionaryStore const& dictionary)
                                 { CHECK(view.classical().conductorId() == dictionary.lookupId("Conductor")); });
     }
 
     SECTION("ensemble")
     {
       checkSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().ensemble("Ensemble"); },
-                                [](TrackView const& view, DictionaryStore& dictionary)
+                                [](TrackView const& view, DictionaryStore const& dictionary)
                                 { CHECK(view.classical().ensembleId() == dictionary.lookupId("Ensemble")); });
     }
 
     SECTION("soloist")
     {
       checkSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().soloist("Soloist"); },
-                                [](TrackView const& view, DictionaryStore& dictionary)
+                                [](TrackView const& view, DictionaryStore const& dictionary)
                                 { CHECK(view.classical().soloistId() == dictionary.lookupId("Soloist")); });
     }
   }

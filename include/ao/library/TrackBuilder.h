@@ -7,12 +7,13 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
-#include <ao/lmdb/Transaction.h>
+#include <ao/library/WriteTransaction.h>
 
 #include <array>
 #include <chrono>
@@ -37,7 +38,7 @@ namespace ao::library
    *   // Pattern A: from existing view, modify hot only
    *   auto builder = TrackBuilder::fromView(view, dictionary);
    *   builder.tags().add("rock").remove("jazz");
-   *   auto hotData = builder.serializeHot(transaction, dictionary);
+   *   auto hotData = builder.serializeHot(transaction);
    *   writer.updateHot(trackId, hotData);
    *
    *   // Pattern B: create new track
@@ -46,7 +47,7 @@ namespace ao::library
    *   builder.property().fileSize(fs).bitDepth(BitDepth{16});
    *   builder.tags().add("rock");
    *   builder.customMetadata().add("key", "value");
-   *   auto [hot, cold] = builder.serialize(transaction, dictionary, resources);
+   *   auto [hot, cold] = builder.serialize(transaction, resources);
    *   writer.createHotCold(hot, cold);
    */
   class TrackBuilder final
@@ -54,7 +55,7 @@ namespace ao::library
   public:
     // Factory methods
     static TrackBuilder makeEmpty();
-    static TrackBuilder fromView(TrackView const& view, DictionaryStore& dictionary);
+    static TrackBuilder fromView(TrackView const& view, DictionaryStore const& dictionary);
 
     //=============================================================================
     // Sub-builders - own the data as string_view
@@ -236,15 +237,12 @@ namespace ao::library
     CustomMetadataBuilder const& customMetadata() const;
 
     // Full serialization - resolves all strings to DictionaryIds
-    Result<std::pair<std::vector<std::byte>, std::vector<std::byte>>> serialize(lmdb::WriteTransaction& transaction,
-                                                                                DictionaryStore& dictionary,
-                                                                                ResourceStore& resources) const;
+    Result<std::pair<std::vector<std::byte>, std::vector<std::byte>>> serialize(WriteTransaction& transaction,
+                                                                                ResourceStore const& resources) const;
 
     // Partial serialization for hot-only or cold-only updates
-    Result<std::vector<std::byte>> serializeHot(lmdb::WriteTransaction& transaction, DictionaryStore& dictionary) const;
-    Result<std::vector<std::byte>> serializeCold(lmdb::WriteTransaction& transaction,
-                                                 DictionaryStore& dictionary,
-                                                 ResourceStore& resources) const;
+    Result<std::vector<std::byte>> serializeHot(WriteTransaction& transaction) const;
+    Result<std::vector<std::byte>> serializeCold(WriteTransaction& transaction, ResourceStore const& resources) const;
 
     //=============================================================================
     // Prepared structures for zero-copy serialization
@@ -258,6 +256,11 @@ namespace ao::library
      * emits and freezes the overflow-checked header lengths at prepare time,
      * so mutating or destroying builder inputs after prepare() cannot skew
      * the validated size, header fields, or payload bytes.
+     *
+     * Resolved dictionary IDs belong to the MusicLibrary that owns the
+     * transaction passed to prepareHot()/prepare(). Write the result only
+     * through that library's TrackStore, and commit the originating transaction
+     * before relying on newly interned IDs in later transactions.
      */
     class PreparedHot
     {
@@ -267,9 +270,7 @@ namespace ao::library
 
     private:
       PreparedHot() = default;
-      static PreparedHot make(TrackBuilder const* builder,
-                              lmdb::WriteTransaction& transaction,
-                              DictionaryStore& dictionary);
+      static PreparedHot make(TrackBuilder const* builder, WriteTransaction& transaction);
 
       std::string _title;
       std::vector<DictionaryId> _tagIds;
@@ -297,6 +298,10 @@ namespace ao::library
      * Like PreparedHot, a prepared value is an immutable snapshot that owns
      * every byte writeTo emits - including the URI - with all header fields
      * overflow-checked and frozen at prepare time.
+     *
+     * Resolved dictionary and resource IDs belong to the MusicLibrary that owns
+     * the transaction and ResourceStore passed to prepareCold()/prepare(). The
+     * result is not portable to another library.
      */
     class PreparedCold
     {
@@ -307,18 +312,14 @@ namespace ao::library
     private:
       PreparedCold() = default;
       static PreparedCold make(TrackBuilder const* builder,
-                               lmdb::WriteTransaction& transaction,
-                               DictionaryStore& dictionary,
-                               ResourceStore& resources);
+                               WriteTransaction& transaction,
+                               ResourceStore const& resources);
       static std::vector<std::pair<DictionaryId, std::string_view>> resolveCustomMetadata(
         TrackBuilder const* builder,
-        lmdb::WriteTransaction& transaction,
-        DictionaryStore& dictionary);
+        WriteTransaction& transaction);
 
-      void resolveClassicalIds(TrackBuilder const* builder,
-                               lmdb::WriteTransaction& transaction,
-                               DictionaryStore& dictionary);
-      void resolveCoverArt(TrackBuilder const* builder, lmdb::WriteTransaction& transaction, ResourceStore& resources);
+      void resolveClassicalIds(TrackBuilder const* builder, WriteTransaction& transaction);
+      void resolveCoverArt(TrackBuilder const* builder, WriteTransaction& transaction, ResourceStore const& resources);
       void appendBlock(TrackColdBlockSlot slot, std::vector<std::byte> payload);
       void appendCoverArtBlock();
       void appendClassicalBlock(MetadataBuilder const& metadata);
@@ -356,15 +357,12 @@ namespace ao::library
     };
 
     // Prepare methods - resolve dictionary IDs and compute sizes
-    Result<std::pair<PreparedHot, PreparedCold>> prepare(lmdb::WriteTransaction& transaction,
-                                                         DictionaryStore& dictionary,
-                                                         ResourceStore& resources) const;
+    Result<std::pair<PreparedHot, PreparedCold>> prepare(WriteTransaction& transaction,
+                                                         ResourceStore const& resources) const;
 
-    Result<PreparedHot> prepareHot(lmdb::WriteTransaction& transaction, DictionaryStore& dictionary) const;
+    Result<PreparedHot> prepareHot(WriteTransaction& transaction) const;
 
-    Result<PreparedCold> prepareCold(lmdb::WriteTransaction& transaction,
-                                     DictionaryStore& dictionary,
-                                     ResourceStore& resources) const;
+    Result<PreparedCold> prepareCold(WriteTransaction& transaction, ResourceStore const& resources) const;
 
   private:
     // Private helper methods for serialization

@@ -1,16 +1,45 @@
 ---
 id: rfc.0022.transaction-coherent-library-dictionary
 type: rfc
-status: draft
+status: implemented
 domain: library
-summary: Proposes a transaction-scoped dictionary overlay whose process index changes only after the matching LMDB commit succeeds.
+summary: Introduced transaction-local dictionary interning and atomic committed-index publication through the library write boundary.
 depends-on: none
 ---
 # RFC 0022: Transaction-coherent library dictionary
 
+## Disposition
+
+Implemented on 2026-07-15 together with the pure expression-binding foundation from [RFC 0009](0009-pure-expression-binding.md).
+
+`MusicLibrary` now creates a move-only `WriteTransaction` that owns the native LMDB write transaction, a transaction-local `DictionaryStore::Writer`, and the process writer gate.
+Dictionary interning writes the new row into that same LMDB transaction and records an owned overlay, while ordinary `DictionaryStore` readers continue to expose committed mappings only.
+The wrapper prepares a no-throw in-memory publication under the dictionary's exclusive lock, holds that lock through LMDB commit, and then either advances the dictionary generation and unlocks or rolls the prepared state back before unlocking.
+Library change callbacks therefore observe both the referencing records and their complete dictionary mappings.
+
+The storage facade also exposes a distinct move-only `ReadTransaction` rather than leaking or aliasing the native LMDB type.
+Stores are const handles whose readers accept library read or write capabilities and whose writers require a mutable `WriteTransaction`; raw LMDB access remains an implementation detail.
+Transactions and stores carry one stable `MusicLibrary` identity, and a cross-library pairing is rejected before native DBI access.
+
+Completing a write consumes its native handle but keeps the C++ native transaction and dictionary-writer objects alive until the outer wrapper is destroyed.
+Store writers retained across the commit call therefore see a terminal transaction and destruct without closing an LMDB cursor twice.
+The commit-failure seam is a data-only injected result that terminates the native transaction; it cannot re-enter library code while the writer and publication locks are held.
+
+Dictionary ids are now dense, nonzero, and monotonically appended within committed storage.
+An aborted id may be reused because it never became durable; committed ids are never reclaimed or rebound.
+The implementation deliberately assumes a newly created host-local index.
+It adds neither a schema/version change nor a legacy dictionary migration or integrity-validation path.
+
+Query and format compilation is now pure and plans own their dictionary symbol text.
+`PlanBinding` and `FormatBinding` resolve that text through an explicit bounded `DictionaryReadContext`, normally once per evaluation batch, so no expression path retains a global `getOrIntern()` escape hatch.
+
+No dictionary integrity scan was added to ordinary library open.
+An exhaustive administrative integrity audit remains future work under [RFC 0002](0002-durable-library-storage.md).
+The [library architecture](../architecture/library.md), [library mutation specification](../spec/library/runtime/mutation.md), [database reference](../reference/library/storage/database.md), and query evaluation specifications now own current behavior and supersede the proposal wording below.
+
 ## Problem
 
-`DictionaryStore` currently combines two authorities with different transaction lifetimes:
+Before this implementation, `DictionaryStore` combined two authorities with different transaction lifetimes:
 
 - LMDB rows are durable only when the caller's write transaction commits; and
 - `_idToStringStorage`, `_stringToId`, `_freeIds`, and `_reservedStrings` change immediately inside `put()` or `getOrIntern()`.
@@ -51,7 +80,7 @@ RFC 0009 should remove query compilation's need to allocate durable dictionary i
 - Prevent a committed track, list, tag, or custom-metadata record from referencing a missing dictionary row.
 - Separate durable dictionary identity from process-local query symbols.
 - Preserve concurrent read performance and stable string-view lifetime where the public contract requires it.
-- Give tests deterministic commit, abort, preview, and fault-injection seams.
+- Give tests deterministic commit, abort, preview, and controlled commit-result fault injection.
 
 ## Non-goals
 
@@ -92,13 +121,13 @@ Library serialization APIs that can create dictionary entries accept the session
 ### Id allocation
 
 Id allocation remains library-local and nonzero.
-The write session derives candidates from committed gaps and the transaction's LMDB view, records every allocation in its overlay, and never returns the same id for two different strings in that transaction.
+The implemented writer allocates densely from committed size plus its transaction-local delta, records every allocation in its overlay, and never returns the same id for two different strings in that transaction.
 
 LMDB serializes write transactions, so allocation does not require speculative global reservations between concurrent writers.
 Any future storage adapter that permits concurrent writers must provide equivalent allocation serialization below this contract.
 
 Aborted ids may be reused by a later transaction because they never became durable identity.
-Committed ids are never silently rebound to another string.
+Committed ids are never reclaimed or rebound to another string.
 
 ### Commit protocol
 
@@ -106,15 +135,16 @@ Dictionary publication participates in the caller's transaction outcome:
 
 ```text
 prepare track/list/resource rows and dictionary delta
-  -> prepare a no-fail cache publication or rebuild fallback
-  -> commit the LMDB write transaction
-  -> publish the prepared dictionary delta under the dictionary mutex
+  -> acquire the dictionary publication lock
+  -> prepare a no-fail in-memory delta hidden behind that lock
+  -> commit the LMDB write transaction while readers remain blocked
+  -> advance dictionary generation and release the publication lock
   -> publish the library revision/change receipt
 ```
 
-The post-commit cache step must not leave the store permanently behind LMDB.
-The implementation must either make prepared publication non-throwing or atomically mark the cache invalid and rebuild it from a fresh read transaction before serving another dictionary read.
-It must never publish before the LMDB commit merely to avoid this post-commit concern.
+The selected implementation prepares every potentially throwing allocation before LMDB commit while holding the exclusive dictionary lock.
+No reader can observe that prepared state.
+After commit, generation advance and unlock are non-throwing; after failure, the prepared set/deque delta is rolled back before unlock.
 
 Commit orchestration belongs at the library mutation boundary, not in `DictionaryStore::put()`.
 The transaction owner is the only component that knows whether all related records are ready and whether the commit succeeded.
@@ -156,11 +186,10 @@ Tag/custom-key existence plans use committed lookup or plan-owned text according
 
 ### Recovery and integrity audit
 
-On library open, construct the committed index from one read snapshot as today and verify that no id maps to conflicting text.
-Add an integrity audit that walks every durable dictionary reference used by track and list records and confirms that the referenced row exists.
+On library open, the committed index is constructed from one snapshot under the clean-start invariant established by the current write path.
+The implementation does not add legacy-layout checks or the proposed exhaustive walk of every durable dictionary reference.
 
-The audit is diagnostic and administrative; it does not invent missing strings or rebind ids.
-Existing corruption follows the library/storage recovery policy.
+A future audit would be diagnostic and administrative; it must not invent missing strings or rebind ids.
 
 ## Alternatives
 
@@ -187,51 +216,51 @@ Query symbols are not durable library facts.
 
 ### Allocate ids monotonically and never reuse gaps
 
-Monotonic allocation simplifies abort handling but does not solve pre-commit cache publication or process-local query reservations.
-Gap reuse can remain an implementation detail once it is transaction-scoped.
+Selected together with the transaction overlay and pure expression binding.
+Monotonic allocation alone would not have solved publication or process-local query reservations, but dense committed ids make abort reuse straightforward once those other boundaries exist.
 
 ## Compatibility and migration
 
-The LMDB dictionary row shape and existing committed ids remain unchanged.
-No database migration is required for a library whose references are valid.
+The LMDB dictionary row shape and library database version remain unchanged.
+This implementation starts from a freshly created host-local index and provides no migration or compatibility-validation path for arbitrary prior dictionary contents.
+Dense append-only ids are guaranteed constructively by current writers rather than established by an open-time scan.
 
 API migration affects `TrackBuilder` serialization, library writers/importers/scanners, query/format compilers, and focused tests.
 Callers that currently retain `DictionaryStore&` for mutation move to a committed read view or transaction-scoped write session.
 
-Opening an existing library runs or exposes the new referential-integrity audit before repair tooling is considered.
-The implementation must not silently delete or synthesize rows for an already inconsistent database.
+An exhaustive referential-integrity command remains outside this implemented boundary.
 
 Preview results and committed user behavior remain the same except that previews no longer influence later ids or lookups.
 Querying an absent value remains a valid non-match rather than creating a hidden dictionary reservation.
 
 ## Validation
 
-- A preview that introduces new metadata, custom keys, or tags leaves committed dictionary lookup, size, gaps, and reopen state unchanged.
-- Injected serialization and LMDB commit failures leave the process index byte-for-byte equivalent to the pre-operation committed state.
+- A preview that introduces new metadata, custom keys, or tags leaves committed dictionary lookup, size, generation, and reopen state unchanged.
+- Serialization failures and an injected terminal commit-result failure leave committed lookup contents, size, and generation equivalent to the pre-operation state.
+- Store writers and the transaction-local dictionary writer remain safe to destroy after successful or failed commit while rejecting every post-terminal operation.
+- A transaction from one `MusicLibrary` is rejected by every store owned by another library.
 - A successful mutation commits dictionary rows and referencing track/list rows in one transaction and publishes them before the matching library change event.
 - Reopening after every success fixture resolves every stored dictionary reference to the same text.
 - Repeated strings within one transaction reuse one id; two different strings never share an id.
 - Aborted ids can be reused without rebinding a committed id.
 - Concurrent readers observe either the old committed index or the complete new committed index, never a partial delta.
 - Query and format compilation of absent values performs no durable or process-global dictionary mutation.
-- Integrity tests detect deliberately missing and conflicting dictionary rows.
 - Existing dictionary, TrackBuilder, LibraryWriter, query, scan, import, and CLI preview tests pass with the new API.
 - TSAN-focused dictionary and mutation tests pass, followed by a full `./ao check`.
 
 ## Open questions
 
-- Should the transaction overlay be owned directly by an extended library write-transaction wrapper or by a separate session passed beside it?
-- Which cache publication structure provides the clearest no-fail post-commit guarantee without penalizing read performance?
-- Should referential integrity run on every open, only in explicit verification, or as a cheap sampled/open-time check plus full administrative audit?
-- Can global `getOrIntern()` be removed in the first phase, or is a short-lived compatibility adapter needed while RFC 0009 is implemented?
+None for the implemented boundary.
+Dictionary deletion/reclamation, multi-process live-cache coherence, nested library writes, and exhaustive cross-store integrity verification require separate evidence-backed work.
 
 ## Promotion plan
 
-If accepted and implemented:
+The implemented current behavior is owned by:
 
-- update the [library architecture](../architecture/library.md) with the committed-index/transaction-overlay boundary and commit ordering;
-- update the library mutation and preview specifications with dictionary rollback and publication behavior;
-- update the [predicate evaluation specification](../spec/query/predicate-evaluation.md) and [track expression architecture](../architecture/track-expression.md) with non-mutating binding behavior;
-- update the library storage reference only if a new integrity or administrative surface becomes public;
-- add development guidance for transaction-scoped library serialization and deterministic commit-failure testing; and
-- record the chosen cache publication and query-symbol boundary in a decision if alternatives would be expensive to revisit.
+- [Library architecture](../architecture/library.md)
+- [Library access and mutation](../spec/library/runtime/mutation.md)
+- [Library change publication](../spec/library/runtime/change-publication.md)
+- [Library database](../reference/library/storage/database.md)
+- [Predicate evaluation](../spec/query/predicate-evaluation.md)
+- [Format expression evaluation](../spec/query/format-evaluation.md)
+- [Track expression architecture](../architecture/track-expression.md)

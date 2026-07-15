@@ -59,7 +59,7 @@ namespace ao::rt
     auto transaction = _ml.writeTransaction();
     auto trackWriter = _ml.tracks().writer(transaction);
     auto manifestWriter = _ml.manifest().writer(transaction);
-    auto& dictionary = _ml.dictionary();
+    auto const& dictionary = _ml.dictionary();
 
     for (std::size_t i = 0; i < _plan.items.size(); ++i)
     {
@@ -117,10 +117,10 @@ namespace ao::rt
   }
 
   void ScanApplyOperation::applyScanItem(std::size_t itemIndex,
-                                         ao::lmdb::WriteTransaction& transaction,
+                                         library::WriteTransaction& transaction,
                                          library::TrackStore::Writer& trackWriter,
                                          library::FileManifestStore::Writer& manifestWriter,
-                                         library::DictionaryStore& dictionary,
+                                         library::DictionaryStore const& dictionary,
                                          std::stop_token stopToken)
   {
     auto const& item = _plan.items[itemIndex];
@@ -187,7 +187,7 @@ namespace ao::rt
       return;
     }
 
-    applyNewItem(item, transaction, trackWriter, manifestWriter, dictionary, builder, optFingerprint);
+    applyNewItem(item, transaction, trackWriter, manifestWriter, builder, optFingerprint);
   }
 
   bool ScanApplyOperation::skipNonActionableItem(ScanItem const& item)
@@ -222,7 +222,7 @@ namespace ao::rt
   }
 
   void ScanApplyOperation::applyMissingItem(ScanItem const& item,
-                                            ao::lmdb::WriteTransaction& transaction,
+                                            library::WriteTransaction& transaction,
                                             library::FileManifestStore::Writer& manifestWriter)
   {
     auto manifestResult = _ml.manifest().reader(transaction).get(item.uri);
@@ -334,10 +334,10 @@ namespace ao::rt
   }
 
   bool ScanApplyOperation::tryApplyChangedItem(ScanItem const& item,
-                                               ao::lmdb::WriteTransaction& transaction,
+                                               library::WriteTransaction& transaction,
                                                library::TrackStore::Writer& trackWriter,
                                                library::FileManifestStore::Writer& manifestWriter,
-                                               library::DictionaryStore& dictionary,
+                                               library::DictionaryStore const& dictionary,
                                                library::TrackBuilder& builder,
                                                AudioFingerprint const& fingerprint)
   {
@@ -357,7 +357,7 @@ namespace ao::rt
       .codec(builder.property().codec())
       .bitDepth(builder.property().bitDepth());
 
-    auto optPrepared = prepareTrack(merged, transaction, dictionary, item.uri);
+    auto optPrepared = prepareTrack(merged, transaction, item.uri);
 
     if (!optPrepared)
     {
@@ -383,10 +383,10 @@ namespace ao::rt
   }
 
   bool ScanApplyOperation::applyMovedItem(ScanItem const& item,
-                                          ao::lmdb::WriteTransaction& transaction,
+                                          library::WriteTransaction& transaction,
                                           library::TrackStore::Writer& trackWriter,
                                           library::FileManifestStore::Writer& manifestWriter,
-                                          library::DictionaryStore& dictionary,
+                                          library::DictionaryStore const& dictionary,
                                           library::TrackBuilder& builder,
                                           AudioFingerprint const& fingerprint)
   {
@@ -426,7 +426,7 @@ namespace ao::rt
       .codec(builder.property().codec())
       .bitDepth(builder.property().bitDepth());
 
-    auto optPrepared = prepareTrack(merged, transaction, dictionary, item.uri);
+    auto optPrepared = prepareTrack(merged, transaction, item.uri);
 
     if (!optPrepared)
     {
@@ -459,14 +459,13 @@ namespace ao::rt
   }
 
   void ScanApplyOperation::applyNewItem(ScanItem const& item,
-                                        ao::lmdb::WriteTransaction& transaction,
+                                        library::WriteTransaction& transaction,
                                         library::TrackStore::Writer& trackWriter,
                                         library::FileManifestStore::Writer& manifestWriter,
-                                        library::DictionaryStore& dictionary,
                                         library::TrackBuilder& builder,
                                         std::optional<AudioFingerprint> const& optFingerprint)
   {
-    auto optPrepared = prepareTrack(builder, transaction, dictionary, item.uri);
+    auto optPrepared = prepareTrack(builder, transaction, item.uri);
 
     if (!optPrepared)
     {
@@ -494,11 +493,10 @@ namespace ao::rt
 
   std::optional<std::pair<library::TrackBuilder::PreparedHot, library::TrackBuilder::PreparedCold>>
   ScanApplyOperation::prepareTrack(library::TrackBuilder const& builder,
-                                   ao::lmdb::WriteTransaction& transaction,
-                                   library::DictionaryStore& dictionary,
+                                   library::WriteTransaction& transaction,
                                    std::string const& uri)
   {
-    auto preparedResult = builder.prepare(transaction, dictionary, _ml.resources());
+    auto preparedResult = builder.prepare(transaction, _ml.resources());
 
     if (!preparedResult)
     {

@@ -7,7 +7,6 @@
 #include <ao/Error.h>
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Database.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
 
 #include <concepts>
@@ -25,8 +24,14 @@
 
 namespace ao::library
 {
+  class ReadTransaction;
+  class WriteTransaction;
+  class MusicLibrary;
+
   namespace detail
   {
+    class LibraryIdentity;
+
     inline bool isFourByteAligned(std::span<std::byte const> bytes) noexcept
     {
       return utility::bytes::isAligned(bytes.data(), 4U);
@@ -77,14 +82,18 @@ namespace ao::library
     class Reader;
     class Writer;
 
-    explicit TrackStore(lmdb::Database hotDb, lmdb::Database coldDb);
-
-    Reader reader(lmdb::ReadTransaction const& transaction) const;
-    Writer writer(lmdb::WriteTransaction& transaction);
+    Reader reader(ReadTransaction const& transaction) const;
+    Reader reader(WriteTransaction const& transaction) const;
+    Writer writer(WriteTransaction& transaction) const;
 
   private:
+    TrackStore(lmdb::Database hotDb, lmdb::Database coldDb, detail::LibraryIdentity const& identity);
+
     lmdb::Database _hotDb;
     lmdb::Database _coldDb;
+    detail::LibraryIdentity const* _identity;
+
+    friend class MusicLibrary;
   };
 
   /**
@@ -107,8 +116,6 @@ namespace ao::library
 
     struct EndSentinel
     {};
-
-    explicit Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader);
 
     Iterator begin(LoadMode mode = LoadMode::Both) const;
     Iterator end(LoadMode mode = LoadMode::Both) const;
@@ -138,10 +145,9 @@ namespace ao::library
     auto cold() const;
     auto both() const;
 
-    lmdb::Database::Reader const& hotReader() const noexcept { return _hotReader; }
-    lmdb::Database::Reader const& coldReader() const noexcept { return _coldReader; }
-
   private:
+    explicit Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader);
+
     bool shouldUseCursorScan(std::span<TrackId const> ids, LoadMode mode) const;
 
     lmdb::Database::Reader _hotReader;
@@ -314,9 +320,6 @@ namespace ao::library
      * Clear all tracks.
      */
     Result<> clear();
-
-    lmdb::Database::Writer& hotWriter() noexcept { return _hotWriter; }
-    lmdb::Database::Writer& coldWriter() noexcept { return _coldWriter; }
 
   private:
     explicit Writer(lmdb::Database::Writer&& hotWriter, lmdb::Database::Writer&& coldWriter);

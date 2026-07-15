@@ -22,9 +22,12 @@
 #include <format>
 #include <iterator>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <variant>
+#include <vector>
 
 namespace ao::query
 {
@@ -35,16 +38,27 @@ namespace ao::query
       return field == Field::Tag || field == Field::TagBloom || field == Field::TagCount || field == Field::CoverArtId;
     }
 
+    DictionaryId boundDictionaryId(std::span<DictionaryId const> ids, std::uint32_t symbol)
+    {
+      if (symbol == kNoFormatDictionarySymbol || symbol >= ids.size())
+      {
+        return kInvalidDictionaryId;
+      }
+
+      return ids[symbol];
+    }
+
     std::string_view readDictionaryFieldValue(library::TrackView const& track,
                                               Field field,
-                                              library::DictionaryStore const* dictionary)
+                                              library::DictionaryReadContext* dictionary)
     {
       if (dictionary == nullptr)
       {
         return {};
       }
 
-      return dictionaryFieldValue(track, field, *dictionary);
+      auto const id = dictionaryFieldId(track, field);
+      return id == kInvalidDictionaryId ? std::string_view{} : dictionary->get(id);
     }
 
     template<typename T>
@@ -59,7 +73,8 @@ namespace ao::query
     void appendFieldText(std::string& output,
                          library::TrackView const& track,
                          FormatInstruction const& instr,
-                         library::DictionaryStore const* dictionary)
+                         library::DictionaryReadContext* dictionary,
+                         std::span<DictionaryId const> dictionaryIds)
     {
       auto const field = instr.field;
 
@@ -75,11 +90,11 @@ namespace ao::query
         case Field::Uri: output.append(track.property().uri()); break;
         case Field::Custom:
         {
-          if (instr.constValue > 0)
-          {
-            auto const dictionaryId = DictionaryId{static_cast<std::uint32_t>(instr.constValue)};
+          auto const keyId = boundDictionaryId(dictionaryIds, instr.dictionarySymbol);
 
-            if (auto const optValue = track.customMetadata().get(dictionaryId); optValue)
+          if (keyId != kInvalidDictionaryId)
+          {
+            if (auto const optValue = track.customMetadata().get(keyId); optValue)
             {
               output.append(*optValue);
             }
@@ -111,12 +126,6 @@ namespace ao::query
     }
   } // namespace
 
-  FormatCompiler::FormatCompiler(library::DictionaryStore* dictionary)
-    : _dictionary{dictionary}
-  {
-    gsl_Expects(dictionary != nullptr);
-  }
-
   std::uint32_t FormatCompiler::addLiteral(std::string_view value)
   {
     if (auto const it = std::ranges::find(_plan.literals, value); it != _plan.literals.end())
@@ -126,6 +135,17 @@ namespace ao::query
 
     _plan.literals.emplace_back(value);
     return static_cast<std::uint32_t>(_plan.literals.size() - 1);
+  }
+
+  std::uint32_t FormatCompiler::addDictionarySymbol(std::string_view text)
+  {
+    if (auto const it = std::ranges::find(_plan.dictionarySymbols, text); it != _plan.dictionarySymbols.end())
+    {
+      return static_cast<std::uint32_t>(std::distance(_plan.dictionarySymbols.begin(), it));
+    }
+
+    _plan.dictionarySymbols.emplace_back(text);
+    return static_cast<std::uint32_t>(_plan.dictionarySymbols.size() - 1);
   }
 
   void FormatCompiler::compileExpression(Expression const& expr)
@@ -178,11 +198,6 @@ namespace ao::query
       detail::throwQueryError("field '{}' cannot be formatted as a scalar string", variable.name);
     }
 
-    if (_dictionary == nullptr && (isDictionaryField(field) || variable.type == VariableType::Custom))
-    {
-      detail::throwQueryError("format field '{}' requires a DictionaryStore", variableDisplayName(variable));
-    }
-
     if (isColdField(field))
     {
       _hasColdAccess = true;
@@ -192,19 +207,23 @@ namespace ao::query
       _hasHotAccess = true;
     }
 
-    std::int64_t constValue = 0;
+    auto dictionarySymbol = kNoFormatDictionarySymbol;
 
     if (variable.type == VariableType::Custom)
     {
-      auto const dictionaryId = _dictionary->getOrIntern(variable.name);
-      constValue = static_cast<std::int64_t>(dictionaryId.raw());
+      dictionarySymbol = addDictionarySymbol(variable.name);
+      _hasDictionaryAccess = true;
+    }
+    else if (isDictionaryField(field))
+    {
+      _hasDictionaryAccess = true;
     }
 
     _plan.instructions.push_back(FormatInstruction{
       .op = FormatOpCode::AppendField,
       .field = field,
-      .constValue = constValue,
       .literalIndex = 0,
+      .dictionarySymbol = dictionarySymbol,
     });
   }
 
@@ -219,8 +238,8 @@ namespace ao::query
     _plan.instructions.push_back(FormatInstruction{
       .op = FormatOpCode::AppendLiteral,
       .field = Field::Title,
-      .constValue = 0,
       .literalIndex = addLiteral(literal),
+      .dictionarySymbol = kNoFormatDictionarySymbol,
     });
   }
 
@@ -229,9 +248,9 @@ namespace ao::query
   try
   {
     _plan = FormatPlan{};
-    _plan.dictionary = _dictionary;
     _hasHotAccess = false;
     _hasColdAccess = false;
+    _hasDictionaryAccess = false;
 
     compileExpression(expr);
 
@@ -252,6 +271,7 @@ namespace ao::query
       _plan.accessProfile = AccessProfile::NoTrackData;
     }
 
+    _plan.requiresDictionary = _hasDictionaryAccess;
     return _plan;
   }
   catch (detail::QueryException const& ex)
@@ -259,21 +279,66 @@ namespace ao::query
     return std::unexpected{ex.error()};
   }
 
-  Result<FormatPlan> compileFormat(Expression const& expr, library::DictionaryStore* dictionary)
+  Result<FormatPlan> compileFormat(Expression const& expr)
   {
-    auto compiler = dictionary != nullptr ? FormatCompiler{dictionary} : FormatCompiler{};
-    return compiler.compile(expr);
+    return FormatCompiler{}.compile(expr);
+  }
+
+  struct FormatBinding::Impl final
+  {
+    explicit Impl(FormatPlan const& sourcePlan, library::DictionaryReadContext* readContext)
+      : plan{&sourcePlan}, dictionary{readContext}
+    {
+      gsl_Expects(!sourcePlan.requiresDictionary || readContext != nullptr);
+      dictionaryIds.resize(sourcePlan.dictionarySymbols.size(), kInvalidDictionaryId);
+
+      if (readContext == nullptr)
+      {
+        return;
+      }
+
+      std::ignore = readContext->bind(sourcePlan.dictionarySymbols, dictionaryIds);
+    }
+
+    FormatPlan const* plan;
+    library::DictionaryReadContext* dictionary;
+    std::vector<DictionaryId> dictionaryIds;
+  };
+
+  FormatBinding::FormatBinding(FormatPlan const& plan)
+    : _implPtr{std::make_unique<Impl>(plan, nullptr)}
+  {
+  }
+
+  FormatBinding::FormatBinding(FormatPlan const& plan, library::DictionaryReadContext& dictionary)
+    : _implPtr{std::make_unique<Impl>(plan, &dictionary)}
+  {
+  }
+
+  FormatBinding::~FormatBinding() = default;
+  FormatBinding::FormatBinding(FormatBinding&&) noexcept = default;
+  FormatBinding& FormatBinding::operator=(FormatBinding&&) noexcept = default;
+
+  std::string FormatEvaluator::evaluate(FormatBinding const& binding, library::TrackView const& track) const
+  {
+    auto output = std::string{};
+    evaluate(binding, track, output);
+    return output;
   }
 
   std::string FormatEvaluator::evaluate(FormatPlan const& plan, library::TrackView const& track) const
   {
-    auto output = std::string{};
-    evaluate(plan, track, output);
-    return output;
+    gsl_Expects(!plan.requiresDictionary);
+    auto const binding = FormatBinding{plan};
+    return evaluate(binding, track);
   }
 
-  void FormatEvaluator::evaluate(FormatPlan const& plan, library::TrackView const& track, std::string& output) const
+  void FormatEvaluator::evaluate(FormatBinding const& binding,
+                                 library::TrackView const& track,
+                                 std::string& output) const
   {
+    auto const& state = *binding._implPtr;
+    auto const& plan = *state.plan;
     output.clear();
 
     if (!hasRequiredTrackData(plan.accessProfile, track))
@@ -292,8 +357,17 @@ namespace ao::query
           }
 
           break;
-        case FormatOpCode::AppendField: appendFieldText(output, track, instr, plan.dictionary); break;
+        case FormatOpCode::AppendField:
+          appendFieldText(output, track, instr, state.dictionary, state.dictionaryIds);
+          break;
       }
     }
+  }
+
+  void FormatEvaluator::evaluate(FormatPlan const& plan, library::TrackView const& track, std::string& output) const
+  {
+    gsl_Expects(!plan.requiresDictionary);
+    auto const binding = FormatBinding{plan};
+    evaluate(binding, track, output);
   }
 } // namespace ao::query

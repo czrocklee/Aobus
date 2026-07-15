@@ -56,7 +56,7 @@ namespace ao::rt::test
         auto const spec = makeSpec(index);
         library::test::applyTrackSpec(builder, spec);
 
-        auto data = builder.serialize(transaction, lib.dictionary(), lib.resources());
+        auto data = builder.serialize(transaction, lib.resources());
         REQUIRE(data);
         auto createResult = writer.createHotCold(data->first, data->second);
         REQUIRE(createResult);

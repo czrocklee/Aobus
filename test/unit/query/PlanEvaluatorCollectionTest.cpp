@@ -102,11 +102,11 @@ namespace ao::query::test
       nonEmptyValueSpec.customPairs.emplace_back("rating", "5");
       auto nonEmptyValue = TrackFixture{nonEmptyValueSpec};
 
-      auto plan = compileOk(QueryCompiler{&emptyValue.dictionary()}, parseOk("%rating?"));
+      auto plan = compileOk(QueryCompiler{}, parseOk("%rating?"));
 
-      CHECK_FALSE(evaluator.evaluateFull(plan, absent.view()));
-      CHECK(evaluator.evaluateFull(plan, emptyValue.view()));
-      CHECK(evaluator.evaluateFull(plan, nonEmptyValue.view()));
+      CHECK_FALSE(evaluateWithDictionary(evaluator, plan, absent.view(), absent.dictionary()));
+      CHECK(evaluateWithDictionary(evaluator, plan, emptyValue.view(), emptyValue.dictionary()));
+      CHECK(evaluateWithDictionary(evaluator, plan, nonEmptyValue.view(), nonEmptyValue.dictionary()));
     }
 
     SECTION("TagExistenceMatchesMembership")
@@ -115,10 +115,10 @@ namespace ao::query::test
       auto presentSpec = TrackSpec{};
       presentSpec.tags.emplace_back("favorite");
       auto present = TrackFixture{presentSpec};
-      auto plan = compileOk(QueryCompiler{&present.dictionary()}, parseOk("#favorite?"));
+      auto plan = compileOk(QueryCompiler{}, parseOk("#favorite?"));
 
-      CHECK_FALSE(evaluator.evaluateFull(plan, absent.view()));
-      CHECK(evaluator.evaluateFull(plan, present.view()));
+      CHECK_FALSE(evaluateWithDictionary(evaluator, plan, absent.view(), absent.dictionary()));
+      CHECK(evaluateWithDictionary(evaluator, plan, present.view(), present.dictionary()));
     }
 
     SECTION("NegatedExistenceMatchesMissingFields")
@@ -144,12 +144,12 @@ namespace ao::query::test
     auto track = TrackFixture{spec};
 
     auto evaluator = PlanEvaluator{};
-    auto compiler = QueryCompiler{&track.dictionary()};
+    auto compiler = QueryCompiler{};
 
     SECTION("DictionaryBackedStringMatch")
     {
       auto plan = compileOk(compiler, parseOk(R"($artist in ["Bach", "Mozart"])"));
-      CHECK(evaluator.evaluateFull(plan, track.view()));
+      CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()));
     }
 
     SECTION("NumericNonMatch")
@@ -167,7 +167,7 @@ namespace ao::query::test
     SECTION("CustomStringMatch")
     {
       auto plan = compileOk(compiler, parseOk(R"(%mood in ["study", "focus"])"));
-      CHECK(evaluator.evaluateFull(plan, track.view()));
+      CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()));
     }
 
     SECTION("LargeNumericListMatch")
@@ -184,7 +184,7 @@ namespace ao::query::test
         compiler, parseOk(R"($artist in ["Adams", "Bach", "Chopin", "Debussy", "Elgar", "Faure", "Glass", "Haydn"])"));
 
       CHECK(plan.inSets.size() == 1);
-      CHECK(evaluator.evaluateFull(plan, track.view()));
+      CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()));
     }
 
     SECTION("LargeCustomStringListMatch")
@@ -193,7 +193,7 @@ namespace ao::query::test
         compiler, parseOk(R"(%mood in ["ambient", "deep", "focus", "late", "mix", "quiet", "study", "warm"])"));
 
       CHECK(plan.inSets.size() == 1);
-      CHECK(evaluator.evaluateFull(plan, track.view()));
+      CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()));
     }
 
     SECTION("LargeListNonMatch")
@@ -214,7 +214,7 @@ namespace ao::query::test
     auto track = TrackFixture{spec};
 
     auto evaluator = PlanEvaluator{};
-    auto compiler = QueryCompiler{&track.dictionary()};
+    auto compiler = QueryCompiler{};
 
     SECTION("NumericRangeMatch")
     {
@@ -241,30 +241,30 @@ namespace ao::query::test
 
     auto track = TrackFixture{spec};
     auto evaluator = PlanEvaluator{};
-    auto compiler = QueryCompiler{&track.dictionary()};
+    auto compiler = QueryCompiler{};
 
     SECTION("Custom Field Equality Match")
     {
       auto plan = compileOk(compiler, parseOk("%isrc = 'US-RC1-12-00001'"));
-      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+      CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()) == true);
     }
 
     SECTION("Custom Field Equality NonMatch")
     {
       auto plan = compileOk(compiler, parseOk("%isrc = 'UK-XYZ'"));
-      CHECK(evaluator.evaluateFull(plan, track.view()) == false);
+      CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()) == false);
     }
 
     SECTION("Custom Field Like Match")
     {
       auto plan = compileOk(compiler, parseOk("%label ~ 'Grammophon'"));
-      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+      CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()) == true);
     }
 
     SECTION("Custom Field Missing")
     {
       auto plan = compileOk(compiler, parseOk("%nonexistent = 'val'"));
-      CHECK(evaluator.evaluateFull(plan, track.view()) == false);
+      CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()) == false);
     }
   }
 } // namespace ao::query::test

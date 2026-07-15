@@ -16,7 +16,6 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -74,7 +73,7 @@ namespace ao::gtk::test
         };
         library::test::applyTrackSpec(builder, spec);
 
-        auto data = builder.serialize(transaction, library.dictionary(), library.resources());
+        auto data = builder.serialize(transaction, library.resources());
         REQUIRE(data);
         trackIds.push_back(ao::test::requireValue(writer.createHotCold(data->first, data->second)).first);
       }

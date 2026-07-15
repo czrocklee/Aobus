@@ -12,26 +12,40 @@
 
 namespace ao::library
 {
+  namespace detail
+  {
+    class LibraryIdentity;
+  }
+
+  class ReadTransaction;
+  class WriteTransaction;
+  class MusicLibrary;
   struct MetadataHeader;
 
   class MetadataStore final
   {
   public:
-    explicit MetadataStore(lmdb::Database db)
-      : _database{std::move(db)}
+    Result<MetadataHeader> load(ReadTransaction const& transaction) const;
+    Result<MetadataHeader> load(WriteTransaction const& transaction) const;
+    Result<> update(WriteTransaction& transaction, MetadataHeader const& header) const;
+
+    std::uint64_t revision(ReadTransaction const& transaction) const;
+    std::uint64_t revision(WriteTransaction const& transaction) const;
+
+  private:
+    MetadataStore(lmdb::Database db, detail::LibraryIdentity const& identity)
+      : _database{std::move(db)}, _identity{&identity}
     {
     }
 
     Result<MetadataHeader> load(lmdb::ReadTransaction const& transaction) const;
-    Result<MetadataHeader> load(lmdb::WriteTransaction& transaction) const;
-    Result<> create(lmdb::WriteTransaction& transaction, MetadataHeader const& header);
-    Result<> update(lmdb::WriteTransaction& transaction, MetadataHeader const& header);
-
+    Result<> create(lmdb::WriteTransaction& transaction, MetadataHeader const& header) const;
     std::uint64_t revision(lmdb::ReadTransaction const& transaction) const;
-    std::uint64_t revision(lmdb::WriteTransaction& transaction) const;
     std::uint64_t bumpRevision(lmdb::WriteTransaction& transaction) const;
 
-  private:
     lmdb::Database _database;
+    detail::LibraryIdentity const* _identity;
+
+    friend class MusicLibrary;
   };
 } // namespace ao::library

@@ -35,6 +35,7 @@ namespace ao::library
 
     /** True when the record passed its structural gate. */
     bool isValid() const noexcept { return _header != nullptr; }
+    std::span<std::byte const> rawData() const noexcept { return _payload; }
 
     TrackId trackId() const noexcept;
     std::uint64_t fileSize() const noexcept;
@@ -50,5 +51,6 @@ namespace ao::library
     }
 
     FileManifestHeader const* _header = nullptr;
+    std::span<std::byte const> _payload;
   };
 } // namespace ao::library

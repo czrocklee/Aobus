@@ -3,7 +3,6 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/library/DictionaryStore.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
@@ -15,6 +14,7 @@
 #include <ao/utility/String.h>
 #include <ao/utility/VariantVisitor.h>
 
+#include <boost/unordered/unordered_flat_set.hpp>
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
@@ -33,6 +33,7 @@
 #include <system_error>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -54,8 +55,6 @@ namespace ao::query
 {
   namespace
   {
-    // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
-    constexpr std::uint32_t kBloomBitMask = 31;
     // The Phase 0 Query IN threshold sweep shows the membership plan is faster
     // than repeated field-load/equality expansion even for a one-item list.
     constexpr std::size_t kInSetCompilationThreshold = 1;
@@ -87,85 +86,166 @@ namespace ao::query
       return field == Field::CoverArtId || field == Field::Tag;
     }
 
-    std::uint32_t tagBloomBit(library::DictionaryStore* dictionary, std::string_view tagName)
+    using RequiredTagNames = boost::unordered_flat_set<std::string>;
+
+    RequiredTagNames requiredTagNames(Expression const& expr);
+
+    RequiredTagNames requiredTagNames(BinaryExpression const& binary)
     {
-      if (dictionary == nullptr)
-      {
-        return 0;
-      }
-
-      auto const tagId = dictionary->getOrIntern(tagName);
-      return std::uint32_t{1} << (tagId.raw() & kBloomBitMask);
-    }
-
-    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, library::DictionaryStore* dictionary);
-
-    std::uint32_t computeRequiredTagBloomMask(BinaryExpression const& binary, library::DictionaryStore* dictionary)
-    {
-      auto const lhsMask = computeRequiredTagBloomMask(binary.operand, dictionary);
+      auto names = requiredTagNames(binary.operand);
 
       if (!binary.optOperation)
       {
-        return lhsMask;
+        return names;
       }
 
-      auto const rhsMask = computeRequiredTagBloomMask(binary.optOperation->operand, dictionary);
+      auto const rhsNames = requiredTagNames(binary.optOperation->operand);
 
       switch (binary.optOperation->op)
       {
-        case Operator::And: return lhsMask | rhsMask;
+        case Operator::And: names.insert(rhsNames.begin(), rhsNames.end()); return names;
 
         // OR can only require tags that are shared by every matching branch.
-        case Operator::Or: return lhsMask & rhsMask;
+        case Operator::Or:
+        {
+          auto intersection = RequiredTagNames{};
 
-        default: return 0;
+          auto const& smaller = names.size() <= rhsNames.size() ? names : rhsNames;
+          auto const& larger = names.size() <= rhsNames.size() ? rhsNames : names;
+          intersection.reserve(smaller.size());
+
+          for (auto const& name : smaller)
+          {
+            if (larger.contains(name))
+            {
+              intersection.insert(name);
+            }
+          }
+
+          return intersection;
+        }
+
+        default: return {};
       }
     }
 
-    std::uint32_t computeRequiredTagBloomMask(UnaryExpression const& unary, library::DictionaryStore* dictionary)
+    RequiredTagNames requiredTagNames(UnaryExpression const& unary)
     {
       if (unary.op == Operator::Not)
       {
-        return 0;
+        return {};
       }
 
-      return computeRequiredTagBloomMask(unary.operand, dictionary);
+      return requiredTagNames(unary.operand);
     }
 
-    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, library::DictionaryStore* dictionary)
+    RequiredTagNames requiredTagNames(Expression const& expr)
     {
       return std::visit(utility::makeVisitor(
-                          [dictionary](VariableExpression const& variable)
+                          [](VariableExpression const& variable)
                           {
                             if (variable.type != VariableType::Tag)
                             {
-                              return std::uint32_t{0};
+                              return RequiredTagNames{};
                             }
 
-                            return tagBloomBit(dictionary, variable.name);
+                            auto names = RequiredTagNames{};
+                            names.emplace(variable.name);
+                            return names;
                           },
-                          [](ConstantExpression const&) { return std::uint32_t{0}; },
-                          [](ListExpression const&) { return std::uint32_t{0}; },
-                          [](RangeExpression const&) { return std::uint32_t{0}; },
-                          [dictionary](std::unique_ptr<BinaryExpression> const& binaryPtr)
+                          [](ConstantExpression const&) { return RequiredTagNames{}; },
+                          [](ListExpression const&) { return RequiredTagNames{}; },
+                          [](RangeExpression const&) { return RequiredTagNames{}; },
+                          [](std::unique_ptr<BinaryExpression> const& binaryPtr)
                           {
                             if (!binaryPtr)
                             {
-                              return std::uint32_t{0};
+                              return RequiredTagNames{};
                             }
 
-                            return computeRequiredTagBloomMask(*binaryPtr, dictionary);
+                            return requiredTagNames(*binaryPtr);
                           },
-                          [dictionary](std::unique_ptr<UnaryExpression> const& unaryPtr)
+                          [](std::unique_ptr<UnaryExpression> const& unaryPtr)
                           {
                             if (!unaryPtr)
                             {
-                              return std::uint32_t{0};
+                              return RequiredTagNames{};
                             }
 
-                            return computeRequiredTagBloomMask(*unaryPtr, dictionary);
+                            return requiredTagNames(*unaryPtr);
                           }),
                         expr);
+    }
+
+    void collectTagNamesInSourceOrder(Expression const& expr,
+                                      RequiredTagNames const& required,
+                                      RequiredTagNames& seen,
+                                      std::vector<std::string>& ordered);
+
+    void collectTagNamesInSourceOrder(BinaryExpression const& binary,
+                                      RequiredTagNames const& required,
+                                      RequiredTagNames& seen,
+                                      std::vector<std::string>& ordered)
+    {
+      collectTagNamesInSourceOrder(binary.operand, required, seen, ordered);
+
+      if (binary.optOperation)
+      {
+        collectTagNamesInSourceOrder(binary.optOperation->operand, required, seen, ordered);
+      }
+    }
+
+    void collectTagNamesInSourceOrder(UnaryExpression const& unary,
+                                      RequiredTagNames const& required,
+                                      RequiredTagNames& seen,
+                                      std::vector<std::string>& ordered)
+    {
+      collectTagNamesInSourceOrder(unary.operand, required, seen, ordered);
+    }
+
+    void collectTagNamesInSourceOrder(Expression const& expr,
+                                      RequiredTagNames const& required,
+                                      RequiredTagNames& seen,
+                                      std::vector<std::string>& ordered)
+    {
+      std::visit(utility::makeVisitor(
+                   [&required, &seen, &ordered](VariableExpression const& variable)
+                   {
+                     if (variable.type == VariableType::Tag && required.contains(variable.name) &&
+                         seen.emplace(variable.name).second)
+                     {
+                       ordered.emplace_back(variable.name);
+                     }
+                   },
+                   [](ConstantExpression const&) {},
+                   [](ListExpression const&) {},
+                   [](RangeExpression const&) {},
+                   [&required, &seen, &ordered](std::unique_ptr<BinaryExpression> const& binaryPtr)
+                   {
+                     if (binaryPtr)
+                     {
+                       collectTagNamesInSourceOrder(*binaryPtr, required, seen, ordered);
+                     }
+                   },
+                   [&required, &seen, &ordered](std::unique_ptr<UnaryExpression> const& unaryPtr)
+                   {
+                     if (unaryPtr)
+                     {
+                       collectTagNamesInSourceOrder(*unaryPtr, required, seen, ordered);
+                     }
+                   }),
+                 expr);
+    }
+
+    std::vector<std::string> requiredTagNamesInSourceOrder(Expression const& expr)
+    {
+      auto const required = requiredTagNames(expr);
+      auto seen = RequiredTagNames{};
+      auto ordered = std::vector<std::string>{};
+      seen.reserve(required.size());
+      ordered.reserve(required.size());
+      collectTagNamesInSourceOrder(expr, required, seen, ordered);
+      return ordered;
     }
 
     VariableExpression const* bareNonTagVariableInPredicatePosition(Expression const& expr);
@@ -469,12 +549,6 @@ namespace ao::query
     }
   } // namespace
 
-  QueryCompiler::QueryCompiler(library::DictionaryStore* dictionary)
-    : _dictionary{dictionary}
-  {
-    gsl_Expects(dictionary != nullptr);
-  }
-
   std::uint32_t QueryCompiler::addStringConstant(std::string_view str)
   {
     if (auto const it = std::ranges::find(_plan.stringConstants, str); it != _plan.stringConstants.end())
@@ -487,9 +561,20 @@ namespace ao::query
     return static_cast<std::uint32_t>(_plan.stringConstants.size() - 1);
   }
 
+  std::uint32_t QueryCompiler::addDictionarySymbol(std::string_view text)
+  {
+    if (auto const it = std::ranges::find(_plan.dictionarySymbols, text); it != _plan.dictionarySymbols.end())
+    {
+      return static_cast<std::uint32_t>(std::distance(_plan.dictionarySymbols.begin(), it));
+    }
+
+    _plan.dictionarySymbols.emplace_back(text);
+    return static_cast<std::uint32_t>(_plan.dictionarySymbols.size() - 1);
+  }
+
   std::uint32_t QueryCompiler::addInSet(InSet set)
   {
-    if (set.stringValues)
+    if (set.valueKind == InSetValueKind::String)
     {
       std::ranges::sort(set.strings);
       auto const last = std::ranges::unique(set.strings).begin();
@@ -528,7 +613,7 @@ namespace ao::query
           return compileUnary(*unaryPtr);
         },
         [this](VariableExpression const& var) -> std::uint32_t { return compileVariable(var); },
-        [this](ConstantExpression const& constant) -> std::uint32_t { return compileConstant(constant); },
+        [this](ConstantExpression const& constant) -> std::uint32_t { return compileConstant(constant).reg; },
         [this](ListExpression const& list) -> std::uint32_t { return compileList(list); },
         [this](RangeExpression const& range) -> std::uint32_t { return compileRange(range); }),
       expr);
@@ -591,10 +676,10 @@ namespace ao::query
     // Comparison (Eq/Ne/Lt/Le/Gt/Ge/Like). Compile the left operand first.
     auto const leftReg = compileExpression(binary.operand);
 
-    // Save the left field (and its Custom dictionaryId) before compiling the right operand,
+    // Save the left field (and its Custom symbol) before compiling the right operand,
     // which overwrites _lastField.
     auto const leftField = _lastField;
-    auto const leftCustomId = _lastFieldCustomId;
+    auto const leftCustomSymbol = _lastFieldCustomSymbol;
     auto const opcode = toOpCode(binary.optOperation->op);
 
     if (opcode == OpCode::Like && isUnsupportedLikeField(leftField))
@@ -623,9 +708,28 @@ namespace ao::query
       _resolveStringConstantsToIds = false;
     }
 
-    auto const rightReg = compileExpression(binary.optOperation->operand);
+    std::uint32_t rightReg = 0;
+    auto valueDictionarySymbol = kNoDictionarySymbol;
 
-    // Carry the left field (and its Custom dictionaryId) directly on the comparison so the
+    if (auto const* constant = std::get_if<ConstantExpression>(&binary.optOperation->operand); constant != nullptr)
+    {
+      auto const compiled = compileConstant(*constant);
+      rightReg = compiled.reg;
+      valueDictionarySymbol = compiled.dictionarySymbol;
+    }
+    else
+    {
+      rightReg = compileExpression(binary.optOperation->operand);
+    }
+
+    auto dictionarySymbol = leftCustomSymbol;
+
+    if (isDictionaryField(leftField) && (opcode == OpCode::Eq || opcode == OpCode::Ne))
+    {
+      dictionarySymbol = valueDictionarySymbol;
+    }
+
+    // Carry the left field and relevant dictionary symbol directly on the comparison so the
     // evaluator resolves the operand's type without scanning back for the LoadField. The
     // comparison consumes the top two results and writes the result into the left register.
     gsl_Expects(rightReg == leftReg + 1);
@@ -633,8 +737,9 @@ namespace ao::query
       .op = opcode,
       .field = static_cast<std::uint8_t>(leftField),
       .operand = static_cast<std::int32_t>(rightReg),
-      .constValue = leftCustomId,
+      .constValue = 0,
       .size = 0,
+      .dictionarySymbol = dictionarySymbol,
       .data = nullptr,
     });
     popReg(rightReg);
@@ -695,23 +800,24 @@ namespace ao::query
       _hasHotAccess = true;
     }
 
-    std::int64_t constValue = 0;
+    auto dictionarySymbol = kNoDictionarySymbol;
 
-    if ((var->type == VariableType::Custom || var->type == VariableType::Tag) && _dictionary != nullptr)
+    if (var->type == VariableType::Custom || var->type == VariableType::Tag)
     {
-      auto const dictionaryId = _dictionary->getOrIntern(var->name);
-      constValue = static_cast<std::int64_t>(dictionaryId.raw());
+      dictionarySymbol = addDictionarySymbol(var->name);
+      _hasDictionaryAccess = true;
     }
 
-    _lastFieldCustomId = (var->type == VariableType::Custom) ? constValue : 0;
+    _lastFieldCustomSymbol = var->type == VariableType::Custom ? dictionarySymbol : kNoDictionarySymbol;
 
     auto const reg = pushReg();
     _plan.instructions.push_back(Instruction{
       .op = OpCode::Exists,
       .field = static_cast<std::uint8_t>(field),
       .operand = static_cast<std::int32_t>(reg),
-      .constValue = constValue,
+      .constValue = 0,
       .size = 0,
+      .dictionarySymbol = dictionarySymbol,
       .data = nullptr,
     });
 
@@ -725,49 +831,44 @@ namespace ao::query
     {
       _hasHotAccess = true;
 
-      // Try to resolve tag name to ID via dictionary for bloom filter
-      if (_dictionary != nullptr)
-      {
-        auto const tagId = _dictionary->getOrIntern(var.name);
+      auto const dictionarySymbol = addDictionarySymbol(var.name);
+      _hasDictionaryAccess = true;
+      _lastField = Field::Tag;
+      _lastFieldCustomSymbol = kNoDictionarySymbol;
 
-        // Generate implicit tag comparison: track.tags().has(tagId)
-        // This handles standalone "#tagname" queries like "#rock"
-        // First, load the tag field (for the Eq instruction to detect it's a tag comparison)
-        auto const fieldReg = pushReg();
-        _plan.instructions.push_back(Instruction{
-          .op = OpCode::LoadField,
-          .field = static_cast<std::uint8_t>(Field::Tag),
-          .operand = static_cast<std::int32_t>(fieldReg),
-          .constValue = 0,
-          .size = 0,
-          .data = nullptr,
-        });
+      // Generate implicit tag comparison: track.tags().has(bound tag id).
+      auto const fieldReg = pushReg();
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::LoadField,
+        .field = static_cast<std::uint8_t>(Field::Tag),
+        .operand = static_cast<std::int32_t>(fieldReg),
+        .constValue = 0,
+        .size = 0,
+        .data = nullptr,
+      });
 
-        // Then load the tag ID as constant
-        auto const constReg = pushReg();
-        _plan.instructions.push_back(Instruction{
-          .op = OpCode::LoadConstant,
-          .field = 0,
-          .operand = static_cast<std::int32_t>(constReg),
-          .constValue = static_cast<std::int64_t>(tagId.raw()),
-          .size = 0,
-          .data = nullptr,
-        });
+      auto const constReg = pushReg();
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::LoadConstant,
+        .field = 0,
+        .operand = static_cast<std::int32_t>(constReg),
+        .constValue = 0,
+        .size = 0,
+        .data = nullptr,
+      });
 
-        // Eq instruction - the Tag field is encoded directly so PlanEvaluator uses tags.has().
-        // It consumes the loaded id and writes the result into the tag-field register.
-        _plan.instructions.push_back(Instruction{
-          .op = OpCode::Eq,
-          .field = static_cast<std::uint8_t>(Field::Tag),
-          .operand = static_cast<std::int32_t>(constReg),
-          .constValue = 0,
-          .size = 0,
-          .data = nullptr,
-        });
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::Eq,
+        .field = static_cast<std::uint8_t>(Field::Tag),
+        .operand = static_cast<std::int32_t>(constReg),
+        .constValue = 0,
+        .size = 0,
+        .dictionarySymbol = dictionarySymbol,
+        .data = nullptr,
+      });
 
-        popReg(constReg);
-        return fieldReg;
-      }
+      popReg(constReg);
+      return fieldReg;
     }
 
     auto const fieldResult = detail::resolveVariableField(var);
@@ -790,123 +891,123 @@ namespace ao::query
       _hasHotAccess = true;
     }
 
-    // For custom fields, pre-resolve dictionaryId and store as constant (Option B)
-    // If resolution fails (key not in dictionary), store 0 - evaluator will return empty string
-    std::int64_t constValue = 0;
+    auto dictionarySymbol = kNoDictionarySymbol;
 
     if (var.type == VariableType::Custom)
     {
-      if (_dictionary != nullptr)
-      {
-        auto const dictionaryId = _dictionary->getOrIntern(var.name);
-        constValue = static_cast<std::int64_t>(dictionaryId.raw());
-      }
-      else
-      {
-        constValue = 0;
-      }
+      dictionarySymbol = addDictionarySymbol(var.name);
+      _hasDictionaryAccess = true;
+    }
+    else if (isDictionaryField(field))
+    {
+      _hasDictionaryAccess = true;
     }
 
-    // Remember the Custom key id (0 for non-Custom) so a following comparison carries it.
-    _lastFieldCustomId = constValue;
+    _lastFieldCustomSymbol = dictionarySymbol;
 
     auto const reg = pushReg();
     _plan.instructions.push_back(Instruction{
       .op = OpCode::LoadField,
       .field = static_cast<std::uint8_t>(field),
       .operand = static_cast<std::int32_t>(reg),
-      .constValue = constValue,
+      .constValue = 0,
       .size = 0,
+      .dictionarySymbol = dictionarySymbol,
       .data = nullptr,
     });
 
     return reg;
   }
 
-  std::uint32_t QueryCompiler::compileConstant(ConstantExpression const& constant)
+  QueryCompiler::CompiledConstant QueryCompiler::compileConstant(ConstantExpression const& constant)
   {
-    return std::visit(utility::makeVisitor(
-                        [this](bool val) -> std::uint32_t
-                        {
-                          auto const reg = pushReg();
-                          _plan.instructions.push_back(Instruction{
-                            .op = OpCode::LoadConstant,
-                            .field = 0,
-                            .operand = static_cast<std::int32_t>(reg),
-                            .constValue = val ? 1 : 0,
-                            .size = 0,
-                            .data = nullptr,
-                          });
-                          return reg;
-                        },
-                        [this](std::int64_t val) -> std::uint32_t
-                        {
-                          auto const reg = pushReg();
-                          _plan.instructions.push_back(Instruction{
-                            .op = OpCode::LoadConstant,
-                            .field = 0,
-                            .operand = static_cast<std::int32_t>(reg),
-                            .constValue = val,
-                            .size = 0,
-                            .data = nullptr,
-                          });
-                          return reg;
-                        },
-                        [this](UnitConstantExpression const& val) -> std::uint32_t
-                        {
-                          auto const reg = pushReg();
-                          _plan.instructions.push_back(Instruction{
-                            .op = OpCode::LoadConstant,
-                            .field = 0,
-                            .operand = static_cast<std::int32_t>(reg),
-                            .constValue = scaleUnitConstant(val, _lastField),
-                            .size = 0,
-                            .data = nullptr,
-                          });
-                          return reg;
-                        },
-                        [this](std::string const& val) -> std::uint32_t
-                        {
-                          if (_lastField == Field::Codec)
-                          {
-                            if (auto const optCodec = parseAudioCodecName(val); optCodec)
-                            {
-                              auto const reg = pushReg();
-                              _plan.instructions.push_back(Instruction{
-                                .op = OpCode::LoadConstant,
-                                .field = 0,
-                                .operand = static_cast<std::int32_t>(reg),
-                                .constValue = audioCodecStorageValue(*optCodec),
-                                .size = 0,
-                                .data = nullptr,
-                              });
-                              return reg;
-                            }
+    auto dictionarySymbol = kNoDictionarySymbol;
 
-                            detail::throwQueryError("unknown audio codec '{}'", val);
-                          }
+    auto const reg = std::visit(utility::makeVisitor(
+                                  [this](bool val) -> std::uint32_t
+                                  {
+                                    auto const reg = pushReg();
+                                    _plan.instructions.push_back(Instruction{
+                                      .op = OpCode::LoadConstant,
+                                      .field = 0,
+                                      .operand = static_cast<std::int32_t>(reg),
+                                      .constValue = val ? 1 : 0,
+                                      .size = 0,
+                                      .data = nullptr,
+                                    });
+                                    return reg;
+                                  },
+                                  [this](std::int64_t val) -> std::uint32_t
+                                  {
+                                    auto const reg = pushReg();
+                                    _plan.instructions.push_back(Instruction{
+                                      .op = OpCode::LoadConstant,
+                                      .field = 0,
+                                      .operand = static_cast<std::int32_t>(reg),
+                                      .constValue = val,
+                                      .size = 0,
+                                      .data = nullptr,
+                                    });
+                                    return reg;
+                                  },
+                                  [this](UnitConstantExpression const& val) -> std::uint32_t
+                                  {
+                                    auto const reg = pushReg();
+                                    _plan.instructions.push_back(Instruction{
+                                      .op = OpCode::LoadConstant,
+                                      .field = 0,
+                                      .operand = static_cast<std::int32_t>(reg),
+                                      .constValue = scaleUnitConstant(val, _lastField),
+                                      .size = 0,
+                                      .data = nullptr,
+                                    });
+                                    return reg;
+                                  },
+                                  [this, &dictionarySymbol](std::string const& val) -> std::uint32_t
+                                  {
+                                    if (_lastField == Field::Codec)
+                                    {
+                                      if (auto const optCodec = parseAudioCodecName(val); optCodec)
+                                      {
+                                        auto const reg = pushReg();
+                                        _plan.instructions.push_back(Instruction{
+                                          .op = OpCode::LoadConstant,
+                                          .field = 0,
+                                          .operand = static_cast<std::int32_t>(reg),
+                                          .constValue = audioCodecStorageValue(*optCodec),
+                                          .size = 0,
+                                          .data = nullptr,
+                                        });
+                                        return reg;
+                                      }
 
-                          // Check if we should resolve this string via dictionary
-                          // For metadata ID fields (artist, album, genre), resolve to numeric ID
-                          auto const resolvedId = resolveStringConstant(val, _lastField);
+                                      detail::throwQueryError("unknown audio codec '{}'", val);
+                                    }
 
-                          // Resolved (metadata ID field) stores the numeric ID; otherwise the
-                          // string is interned and the constant holds its index.
-                          auto const constValue =
-                            resolvedId >= 0 ? resolvedId : static_cast<std::int64_t>(addStringConstant(val));
+                                    auto const optDictionarySymbol = dictionarySymbolForStringConstant(val, _lastField);
+                                    auto const constValue = optDictionarySymbol
+                                                              ? std::int64_t{0}
+                                                              : static_cast<std::int64_t>(addStringConstant(val));
 
-                          auto const reg = pushReg();
-                          _plan.instructions.push_back(Instruction{
-                            .op = OpCode::LoadConstant,
-                            .field = 0,
-                            .operand = static_cast<std::int32_t>(reg),
-                            .constValue = constValue,
-                            .size = 0,
-                            .data = nullptr,
-                          });
-                          return reg;
-                        }),
-                      constant);
+                                    if (optDictionarySymbol)
+                                    {
+                                      dictionarySymbol = *optDictionarySymbol;
+                                    }
+
+                                    auto const reg = pushReg();
+                                    _plan.instructions.push_back(Instruction{
+                                      .op = OpCode::LoadConstant,
+                                      .field = 0,
+                                      .operand = static_cast<std::int32_t>(reg),
+                                      .constValue = constValue,
+                                      .size = 0,
+                                      .data = nullptr,
+                                    });
+                                    return reg;
+                                  }),
+                                constant);
+
+    return CompiledConstant{.reg = reg, .dictionarySymbol = dictionarySymbol};
   }
 
   std::uint32_t QueryCompiler::compileList(ListExpression const& /*list*/)
@@ -960,17 +1061,26 @@ namespace ao::query
       auto const leftReg = compileExpression(lhs);
 
       auto const leftField = _lastField;
-      auto const leftCustomId = _lastFieldCustomId;
+      auto const leftCustomSymbol = _lastFieldCustomSymbol;
 
-      auto const rightReg = compileConstant(value);
+      auto const compiledValue = compileConstant(value);
+      auto const rightReg = compiledValue.reg;
+      auto const valueDictionarySymbol = compiledValue.dictionarySymbol;
+      auto dictionarySymbol = leftCustomSymbol;
+
+      if (isDictionaryField(leftField))
+      {
+        dictionarySymbol = valueDictionarySymbol;
+      }
 
       gsl_Expects(rightReg == leftReg + 1);
       _plan.instructions.push_back(Instruction{
         .op = OpCode::Eq,
         .field = static_cast<std::uint8_t>(leftField),
         .operand = static_cast<std::int32_t>(rightReg),
-        .constValue = leftCustomId,
+        .constValue = 0,
         .size = 0,
+        .dictionarySymbol = dictionarySymbol,
         .data = nullptr,
       });
       popReg(rightReg); // Eq result is now in leftReg
@@ -1006,7 +1116,7 @@ namespace ao::query
     // fields those must compare resolved text, so require string bounds and keep
     // them as string constants (see compileBinary / executeComparison).
     auto const leftField = _lastField;
-    auto const leftCustomId = _lastFieldCustomId;
+    auto const leftCustomSymbol = _lastFieldCustomSymbol;
     auto const dictionaryBounds = isDictionaryField(leftField);
 
     if (dictionaryBounds && (!isStringConstant(range.lower) || !isStringConstant(range.upper)))
@@ -1024,15 +1134,16 @@ namespace ao::query
       _resolveStringConstantsToIds = false;
     }
 
-    auto const lowerReg = compileConstant(range.lower);
+    auto const lowerReg = compileConstant(range.lower).reg;
 
     gsl_Expects(lowerReg == lhsLowerReg + 1);
     _plan.instructions.push_back(Instruction{
       .op = OpCode::Ge,
       .field = static_cast<std::uint8_t>(leftField),
       .operand = static_cast<std::int32_t>(lowerReg),
-      .constValue = leftCustomId,
+      .constValue = 0,
       .size = 0,
+      .dictionarySymbol = leftCustomSymbol,
       .data = nullptr,
     });
     popReg(lowerReg); // Ge result is now in lhsLowerReg
@@ -1040,15 +1151,16 @@ namespace ao::query
 
     auto const lhsUpperReg = compileExpression(lhs);
 
-    auto const upperReg = compileConstant(range.upper);
+    auto const upperReg = compileConstant(range.upper).reg;
 
     gsl_Expects(upperReg == lhsUpperReg + 1);
     _plan.instructions.push_back(Instruction{
       .op = OpCode::Le,
       .field = static_cast<std::uint8_t>(leftField),
       .operand = static_cast<std::int32_t>(upperReg),
-      .constValue = leftCustomId,
+      .constValue = 0,
       .size = 0,
+      .dictionarySymbol = leftCustomSymbol,
       .data = nullptr,
     });
     popReg(upperReg); // Le result is now in lhsUpperReg
@@ -1093,7 +1205,15 @@ namespace ao::query
     }
 
     auto set = InSet{};
-    set.stringValues = isStringField(field) || field == Field::Custom;
+
+    if (isDictionaryField(field))
+    {
+      set.valueKind = InSetValueKind::Dictionary;
+    }
+    else if (isStringField(field) || field == Field::Custom)
+    {
+      set.valueKind = InSetValueKind::String;
+    }
 
     for (auto const& value : list.values)
     {
@@ -1105,38 +1225,32 @@ namespace ao::query
 
     auto const leftReg = compileExpression(lhs);
 
-    auto const leftCustomId = _lastFieldCustomId;
+    auto const leftCustomSymbol = _lastFieldCustomSymbol;
     auto const setIndex = addInSet(std::move(set));
     // InSet rewrites its operand in place, so the result stays in the loaded register.
-    // It spends constValue on the set index, so the Custom key id rides in size.
+    // It spends constValue on the set index; the Custom key is a plan-owned symbol.
     _plan.instructions.push_back(Instruction{
       .op = OpCode::InSet,
       .field = static_cast<std::uint8_t>(field),
       .operand = static_cast<std::int32_t>(leftReg),
       .constValue = static_cast<std::int64_t>(setIndex),
-      .size = static_cast<std::uint32_t>(leftCustomId),
+      .size = 0,
+      .dictionarySymbol = leftCustomSymbol,
       .data = nullptr,
     });
 
     return std::optional<std::uint32_t>{leftReg};
   }
 
-  std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field)
+  std::optional<std::uint32_t> QueryCompiler::dictionarySymbolForStringConstant(std::string const& str, Field field)
   {
-    // Only resolve for metadata ID fields and tag fields
     if (!_resolveStringConstantsToIds || (!isDictionaryField(field) && !isTagField(field)))
     {
-      return -1;
+      return std::nullopt;
     }
 
-    if (_dictionary == nullptr)
-    {
-      return -1;
-    }
-
-    // Reserve in memory - if already exists, returns existing ID; if not, adds to memory only
-    auto const id = _dictionary->getOrIntern(str);
-    return static_cast<std::int64_t>(id.raw());
+    _hasDictionaryAccess = true;
+    return addDictionarySymbol(str);
   }
 
   QueryCompiler::InSetValueStatus QueryCompiler::appendInSetValue(InSet& set,
@@ -1146,7 +1260,7 @@ namespace ao::query
     return std::visit(utility::makeVisitor(
                         [&set](bool value) -> InSetValueStatus
                         {
-                          if (set.stringValues)
+                          if (set.valueKind != InSetValueKind::Numeric)
                           {
                             return InSetValueStatus::NotCompatible;
                           }
@@ -1156,7 +1270,7 @@ namespace ao::query
                         },
                         [&set](std::int64_t value) -> InSetValueStatus
                         {
-                          if (set.stringValues)
+                          if (set.valueKind != InSetValueKind::Numeric)
                           {
                             return InSetValueStatus::NotCompatible;
                           }
@@ -1166,7 +1280,7 @@ namespace ao::query
                         },
                         [&set, field](UnitConstantExpression const& value) -> InSetValueStatus
                         {
-                          if (set.stringValues)
+                          if (set.valueKind != InSetValueKind::Numeric)
                           {
                             return InSetValueStatus::NotCompatible;
                           }
@@ -1176,7 +1290,7 @@ namespace ao::query
                         },
                         [this, &set, field](std::string const& value) -> InSetValueStatus
                         {
-                          if (set.stringValues)
+                          if (set.valueKind == InSetValueKind::String)
                           {
                             set.strings.push_back(value);
                             return InSetValueStatus::Appended;
@@ -1193,13 +1307,13 @@ namespace ao::query
                             detail::throwQueryError("unknown audio codec '{}'", value);
                           }
 
-                          if (!isDictionaryField(field) || _dictionary == nullptr)
+                          if (!isDictionaryField(field) || set.valueKind != InSetValueKind::Dictionary)
                           {
                             return InSetValueStatus::NotCompatible;
                           }
 
-                          auto const id = _dictionary->getOrIntern(value);
-                          set.numericValues.insert(static_cast<std::int64_t>(id.raw()));
+                          set.dictionarySymbols.push_back(addDictionarySymbol(value));
+                          _hasDictionaryAccess = true;
                           return InSetValueStatus::Appended;
                         }),
                       constant);
@@ -1210,13 +1324,17 @@ namespace ao::query
   try
   {
     _plan = ExecutionPlan{};
-    _plan.dictionary = _dictionary;
-    _plan.tagBloomMask = computeRequiredTagBloomMask(expr, _dictionary);
     _nextReg = 0;
-    _lastFieldCustomId = 0;
+    _lastFieldCustomSymbol = kNoDictionarySymbol;
     _hasHotAccess = false;
     _hasColdAccess = false;
+    _hasDictionaryAccess = false;
     _resolveStringConstantsToIds = true;
+
+    for (auto const& tagName : requiredTagNamesInSourceOrder(expr))
+    {
+      _plan.requiredTagSymbols.push_back(addDictionarySymbol(tagName));
+    }
 
     // Check if the expression is a constant "true"
     if (auto const* constant = std::get_if<ConstantExpression>(&expr); constant != nullptr)
@@ -1250,6 +1368,8 @@ namespace ao::query
       _plan.accessProfile = AccessProfile::NoTrackData;
     }
 
+    _plan.requiresDictionary = _hasDictionaryAccess;
+
     return _plan;
   }
   catch (detail::QueryException const& ex)
@@ -1257,9 +1377,8 @@ namespace ao::query
     return std::unexpected{ex.error()};
   }
 
-  Result<ExecutionPlan> compileQuery(Expression const& expr, library::DictionaryStore* dictionary)
+  Result<ExecutionPlan> compileQuery(Expression const& expr)
   {
-    auto compiler = dictionary != nullptr ? QueryCompiler{dictionary} : QueryCompiler{};
-    return compiler.compile(expr);
+    return QueryCompiler{}.compile(expr);
   }
 } // namespace ao::query

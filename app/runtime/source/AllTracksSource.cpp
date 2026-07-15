@@ -4,7 +4,6 @@
 #include "runtime/source/TrackSourceDeltaBuilder.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/source/AllTracksSource.h>
 #include <ao/rt/source/TrackSource.h>
 
@@ -19,12 +18,12 @@
 
 namespace ao::rt
 {
-  AllTracksSource::AllTracksSource(library::TrackStore& store)
+  AllTracksSource::AllTracksSource(library::TrackStore const& store)
     : _store{store}
   {
   }
 
-  void AllTracksSource::reloadFromStore(lmdb::ReadTransaction const& transaction)
+  void AllTracksSource::reloadFromStore(library::ReadTransaction const& transaction)
   {
     auto const reader = _store.reader(transaction);
     auto ids = std::vector<TrackId>{};

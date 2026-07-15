@@ -3,6 +3,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
+#include <ao/Exception.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
@@ -114,9 +115,11 @@ namespace ao::lmdb::test
     auto db = openDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
     REQUIRE(writer.create(1, createStringData("test data")));
-    CHECK(wtxn.isCommitted() == false);
+    CHECK(wtxn.isActive());
+    CHECK_FALSE(wtxn.isFinished());
     REQUIRE(wtxn.commit());
-    CHECK(wtxn.isCommitted() == true);
+    CHECK_FALSE(wtxn.isActive());
+    CHECK(wtxn.isFinished());
 
     // Start a new transaction - should work now
     auto wtxn2 = beginWriteTransaction(env);
@@ -148,6 +151,26 @@ namespace ao::lmdb::test
     auto txn = beginReadTransaction(env);
     auto reader = db.reader(txn);
     REQUIRE_FALSE(reader.get(1).has_value());
+  }
+
+  TEST_CASE("WriteTransaction - explicit abort is terminal and idempotent", "[lmdb][unit][transaction]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto transaction = beginWriteTransaction(env);
+    auto db = openDatabase(transaction, "test");
+    auto writer = db.writer(transaction);
+    REQUIRE(writer.create(1, createStringData("aborted")));
+
+    transaction.abort();
+    CHECK_FALSE(transaction.isActive());
+    CHECK(transaction.isFinished());
+    CHECK_NOTHROW(transaction.abort());
+
+    auto const commitResult = transaction.commit();
+    REQUIRE_FALSE(commitResult);
+    CHECK(commitResult.error().code == Error::Code::InvalidState);
+    CHECK_THROWS_AS(writer.get(1), Exception);
   }
 
   TEST_CASE("WriteTransaction - move constructor transfers usable transactions", "[lmdb][unit][transaction]")
@@ -196,6 +219,19 @@ namespace ao::lmdb::test
     auto it = reader.begin();
     REQUIRE(it != reader.end());
     REQUIRE(it->first == 1);
+  }
+
+  TEST_CASE("NestedTransaction - begin rejects a finished parent", "[lmdb][unit][nested]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto parent = beginWriteTransaction(env);
+    REQUIRE(parent.commit());
+
+    auto const childResult = WriteTransaction::begin(parent);
+
+    REQUIRE_FALSE(childResult);
+    CHECK(childResult.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("NestedTransaction - child abort does not affect parent", "[lmdb][unit][nested]")

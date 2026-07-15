@@ -5,7 +5,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/library/CoverArt.h>
+#include <ao/PictureType.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -15,7 +15,6 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/TrackWrite.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 
@@ -39,11 +38,10 @@ namespace ao::rt::test
   namespace
   {
     std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold> prepareTrack(TrackBuilder& builder,
-                                                                                  lmdb::WriteTransaction& transaction,
-                                                                                  DictionaryStore& dictionary,
-                                                                                  ResourceStore& resources)
+                                                                                  WriteTransaction& transaction,
+                                                                                  ResourceStore const& resources)
     {
-      auto result = builder.prepare(transaction, dictionary, resources);
+      auto result = builder.prepare(transaction, resources);
       REQUIRE(result);
       return *result;
     }
@@ -72,8 +70,6 @@ namespace ao::rt::test
     // 1. Setup initial library with shared cover art
     {
       auto transaction = ml1.writeTransaction();
-      auto& dictionary = ml1.dictionary();
-
       auto resIdResult = ml1.resources().writer(transaction).create(coverData);
       REQUIRE(resIdResult);
       resId = *resIdResult;
@@ -94,10 +90,10 @@ namespace ao::rt::test
 
       auto trackWriter = ml1.tracks().writer(transaction);
 
-      auto const [p1h, p1c] = prepareTrack(trackBuilder1, transaction, dictionary, ml1.resources());
+      auto const [p1h, p1c] = prepareTrack(trackBuilder1, transaction, ml1.resources());
       createPreparedTrack(trackWriter, p1h, p1c);
 
-      auto const [p2h, p2c] = prepareTrack(trackBuilder2, transaction, dictionary, ml1.resources());
+      auto const [p2h, p2c] = prepareTrack(trackBuilder2, transaction, ml1.resources());
       createPreparedTrack(trackWriter, p2h, p2c);
 
       REQUIRE(transaction.commit());
@@ -127,7 +123,7 @@ namespace ao::rt::test
     {
       auto transaction = ml2.readTransaction();
       auto reader = ml2.tracks().reader(transaction);
-      auto& resources = ml2.resources();
+      auto const& resources = ml2.resources();
 
       auto tracks = std::unordered_map<std::string, TrackView>{};
 
@@ -168,7 +164,6 @@ namespace ao::rt::test
 
     {
       auto transaction = ml.writeTransaction();
-      auto& dictionary = ml.dictionary();
       auto resWriter = ml.resources().writer(transaction);
       auto frontIdResult = resWriter.create(lmdb::test::createTestData(8));
       REQUIRE(frontIdResult);
@@ -181,7 +176,7 @@ namespace ao::rt::test
       builder.property().uri(uri);
       builder.coverArt().add(PictureType::FrontCover, frontId);
       builder.coverArt().add(PictureType::BackCover, backId);
-      auto const [hot, cold] = prepareTrack(builder, transaction, dictionary, ml.resources());
+      auto const [hot, cold] = prepareTrack(builder, transaction, ml.resources());
       auto trackWriter = ml.tracks().writer(transaction);
       auto const trackId = createPreparedTrack(trackWriter, hot, cold).first;
 

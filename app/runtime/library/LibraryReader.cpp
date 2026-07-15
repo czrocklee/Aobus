@@ -13,7 +13,6 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackField.h>
@@ -92,9 +91,9 @@ namespace ao::rt
     }
 
     TrackRow rowDataFromView(TrackId id,
-                             library::MusicLibrary& library,
+                             library::MusicLibrary const& library,
                              library::TrackView const& view,
-                             lmdb::ReadTransaction const& transaction)
+                             library::ReadTransaction const& transaction)
     {
       auto const& dictionary = library.dictionary();
       auto const metadata = view.metadata();
@@ -172,16 +171,16 @@ namespace ao::rt
 
   struct LibraryReader::Impl final
   {
-    library::MusicLibrary& library;
-    lmdb::ReadTransaction transaction;
+    library::MusicLibrary const& library;
+    library::ReadTransaction transaction;
 
-    explicit Impl(library::MusicLibrary& library)
+    explicit Impl(library::MusicLibrary const& library)
       : library{library}, transaction{library.readTransaction()}
     {
     }
   };
 
-  LibraryReader::LibraryReader(library::MusicLibrary& library)
+  LibraryReader::LibraryReader(library::MusicLibrary const& library)
     : _implPtr{std::make_unique<Impl>(library)}
   {
   }
@@ -197,7 +196,7 @@ namespace ao::rt
 
   std::optional<TrackRow> LibraryReader::trackRow(TrackId id) const
   {
-    auto& library = _implPtr->library;
+    auto const& library = _implPtr->library;
     auto const& transaction = _implPtr->transaction;
     auto const reader = library.tracks().reader(transaction);
     auto const optView =
@@ -238,7 +237,7 @@ namespace ao::rt
 
   std::optional<std::filesystem::path> LibraryReader::trackUriPath(TrackId id) const
   {
-    auto& library = _implPtr->library;
+    auto const& library = _implPtr->library;
     auto const reader = library.tracks().reader(_implPtr->transaction);
     auto const optView =
       storageValueOrNullopt(reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to load track URI");
@@ -253,7 +252,7 @@ namespace ao::rt
 
   TrackFieldRawValue LibraryReader::trackField(TrackId id, TrackField field) const
   {
-    auto& library = _implPtr->library;
+    auto const& library = _implPtr->library;
     auto const& transaction = _implPtr->transaction;
     auto const reader = library.tracks().reader(transaction);
     auto const optView =
@@ -353,7 +352,7 @@ namespace ao::rt
       return {};
     }
 
-    auto& library = _implPtr->library;
+    auto const& library = _implPtr->library;
     auto const reader = library.tracks().reader(_implPtr->transaction);
     auto const& dictionary = library.dictionary();
     auto const selectionCount = trackIds.size();
@@ -405,7 +404,7 @@ namespace ao::rt
 
   std::vector<std::pair<std::string, std::size_t>> LibraryReader::allTagsByFrequency() const
   {
-    auto& library = _implPtr->library;
+    auto const& library = _implPtr->library;
     auto const reader = library.tracks().reader(_implPtr->transaction);
     auto const& dictionary = library.dictionary();
 

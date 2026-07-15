@@ -21,7 +21,6 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
@@ -102,8 +101,7 @@ namespace ao::gtk
                                   {
                                     trackRowCache.clearCache();
                                     runtime.reloadAllTracks();
-                                    auto const transaction = runtime.musicLibrary().readTransaction();
-                                    coordinator->rebuildListPages(transaction);
+                                    coordinator->rebuildListPages();
                                   },
                                   .onTitleChanged = [&window](std::string const& title) { window.set_title(title); }},
                                 themeCoordinator}
@@ -259,8 +257,7 @@ namespace ao::gtk
           _implPtr->trackPresentationPreferences.clearPresentationForList(deletedId);
         }
 
-        auto const transaction = _runtime.musicLibrary().readTransaction();
-        rebuildListPages(transaction);
+        rebuildListPages();
       });
 
     _runtime.notifications().post(rt::NotificationRequest{
@@ -269,8 +266,7 @@ namespace ao::gtk
       .activityPresentation = rt::NotificationActivityPresentation::Hidden,
     });
 
-    auto const transaction = _runtime.musicLibrary().readTransaction();
-    rebuildListPages(transaction);
+    rebuildListPages();
 
     if (auto const restored = _runtime.workspace().restoreSession(_runtime.workspaceConfigStore()); !restored)
     {
@@ -388,10 +384,10 @@ namespace ao::gtk
       { navigationController->createSmartListFromExpression(parentListId, std::move(expression)); }};
   }
 
-  void MainWindowCoordinator::rebuildListPages(lmdb::ReadTransaction const& transaction)
+  void MainWindowCoordinator::rebuildListPages()
   {
     APP_LOG_DEBUG("rebuildListPages called");
-    _implPtr->trackPageHost.rebuild(_implPtr->trackRowCache, transaction);
+    _implPtr->trackPageHost.rebuild(_implPtr->trackRowCache);
 
     _implPtr->listNavigationController.rebuildTree(_implPtr->trackRowCache);
   }

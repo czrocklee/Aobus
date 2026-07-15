@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "LibraryIdentity.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/library/DictionaryStore.h>
@@ -11,6 +12,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
@@ -90,6 +92,7 @@ namespace ao::library
     std::filesystem::path const databasePath;
     lmdb::Environment env;
     lmdb::WriteTransaction initializationTransaction;
+    detail::LibraryIdentity identity;
     MetadataStore metadataStore;
     TrackStore tracks;
     ListStore lists;
@@ -112,12 +115,12 @@ namespace ao::library
       , databasePath{std::move(databasePath)}
       , env{std::move(env)}
       , initializationTransaction{std::move(initializationTransaction)}
-      , metadataStore{std::move(metadataDb)}
-      , tracks{std::move(tracksHotDb), std::move(tracksColdDb)}
-      , lists{std::move(listsDb)}
-      , resources{std::move(resourcesDb)}
-      , dictionary{std::move(dictionaryDb), this->initializationTransaction}
-      , manifest{std::move(manifestDb)}
+      , metadataStore{std::move(metadataDb), identity}
+      , tracks{std::move(tracksHotDb), std::move(tracksColdDb), identity}
+      , lists{std::move(listsDb), identity}
+      , resources{std::move(resourcesDb), identity}
+      , dictionary{std::move(dictionaryDb), this->initializationTransaction, identity}
+      , manifest{std::move(manifestDb), identity}
     {
     }
 
@@ -281,7 +284,6 @@ namespace ao::library
         }
       }
 
-      // Load dictionary entries before first commit
       if (auto result = _implPtr->initializationTransaction.commit(); !result)
       {
         return std::unexpected{result.error()};
@@ -303,7 +305,7 @@ namespace ao::library
     }
   }
 
-  lmdb::ReadTransaction MusicLibrary::readTransaction() const
+  ReadTransaction MusicLibrary::readTransaction() const
   {
     auto transaction = lmdb::ReadTransaction::begin(_implPtr->env);
 
@@ -312,35 +314,31 @@ namespace ao::library
       throwException<Exception>("Failed to begin read transaction: {}", transaction.error().message);
     }
 
-    return std::move(*transaction);
+    return ReadTransaction{std::move(*transaction), _implPtr->identity};
   }
 
-  lmdb::WriteTransaction MusicLibrary::writeTransaction()
+  WriteTransaction MusicLibrary::writeTransaction(WriteTransaction::Options options)
   {
-    auto transaction = lmdb::WriteTransaction::begin(_implPtr->env);
+    auto transaction =
+      WriteTransaction::begin(_implPtr->env, _implPtr->dictionary, _implPtr->identity, std::move(options));
 
     if (!transaction)
     {
       throwException<Exception>("Failed to begin write transaction: {}", transaction.error().message);
     }
 
-    _implPtr->metadataStore.bumpRevision(*transaction);
+    _implPtr->metadataStore.bumpRevision(transaction->native(_implPtr->identity));
     return std::move(*transaction);
   }
 
-  std::uint64_t MusicLibrary::libraryRevision(lmdb::ReadTransaction const& transaction) const
+  std::uint64_t MusicLibrary::libraryRevision(ReadTransaction const& transaction) const
   {
     return _implPtr->metadataStore.revision(transaction);
   }
 
-  std::uint64_t MusicLibrary::libraryRevision(lmdb::WriteTransaction& transaction) const
+  std::uint64_t MusicLibrary::libraryRevision(WriteTransaction const& transaction) const
   {
     return _implPtr->metadataStore.revision(transaction);
-  }
-
-  TrackStore& MusicLibrary::tracks()
-  {
-    return _implPtr->tracks;
   }
 
   TrackStore const& MusicLibrary::tracks() const
@@ -348,19 +346,9 @@ namespace ao::library
     return _implPtr->tracks;
   }
 
-  ListStore& MusicLibrary::lists()
-  {
-    return _implPtr->lists;
-  }
-
   ListStore const& MusicLibrary::lists() const
   {
     return _implPtr->lists;
-  }
-
-  ResourceStore& MusicLibrary::resources()
-  {
-    return _implPtr->resources;
   }
 
   ResourceStore const& MusicLibrary::resources() const
@@ -368,29 +356,14 @@ namespace ao::library
     return _implPtr->resources;
   }
 
-  DictionaryStore& MusicLibrary::dictionary()
-  {
-    return _implPtr->dictionary;
-  }
-
   DictionaryStore const& MusicLibrary::dictionary() const
   {
     return _implPtr->dictionary;
   }
 
-  FileManifestStore& MusicLibrary::manifest()
-  {
-    return _implPtr->manifest;
-  }
-
   FileManifestStore const& MusicLibrary::manifest() const
   {
     return _implPtr->manifest;
-  }
-
-  MetadataStore& MusicLibrary::metadata()
-  {
-    return _implPtr->metadataStore;
   }
 
   MetadataStore const& MusicLibrary::metadata() const

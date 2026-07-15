@@ -17,11 +17,6 @@
 #include <map>
 #include <memory>
 
-namespace ao::lmdb
-{
-  class ReadTransaction;
-}
-
 namespace Gtk
 {
   class Stack;
@@ -68,7 +63,7 @@ namespace ao::gtk
     uimodel::TrackColumnLayoutStore& layoutStore() { return _layoutStore; }
 
     void clear();
-    void rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& transaction);
+    void rebuild(TrackRowCache& dataProvider);
 
     TrackPageEntry* find(rt::ViewId viewId);
     TrackPageEntry const* find(rt::ViewId viewId) const;

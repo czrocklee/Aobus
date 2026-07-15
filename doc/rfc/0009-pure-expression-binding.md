@@ -8,16 +8,31 @@ depends-on: none
 ---
 # RFC 0009: Pure expression binding and evaluation context
 
+## Implementation status
+
+The non-mutating binding foundation was implemented on 2026-07-15 as part of [RFC 0022](0022-transaction-coherent-library-dictionary.md):
+
+- query and format compilation takes no dictionary and owns all symbol text in the resulting plan;
+- plans retain no `DictionaryStore` pointer;
+- `DictionaryReadContext` provides bounded synchronous id/text access and one-lock symbol binding with a process-local committed generation;
+- `PlanBinding` and `FormatBinding` resolve one plan once per evaluation batch;
+- a later committed dictionary delta advances the generation, and a newly created binding can resolve symbols that were unknown when the plan was compiled; and
+- the global mutating `getOrIntern()` expression path was removed.
+
+This RFC remains `draft` because typed insufficient-data/context outcomes, explicit expression resource limits, and immutable worker-valid dictionary snapshots are not implemented.
+Current boolean and string convenience APIs still return `false` or empty output when required track tiers are absent, and the borrowed synchronous context must not outlive its dictionary.
+The [track expression architecture](../architecture/track-expression.md), [predicate evaluation specification](../spec/query/predicate-evaluation.md), and [format evaluation specification](../spec/query/format-evaluation.md) own the implemented subset.
+
 ## Problem
 
-Query and format compilation currently resolve tag names, custom keys, and dictionary-backed constants through `DictionaryStore::getOrIntern()`.
+Before the implemented binding foundation, query and format compilation resolved tag names, custom keys, and dictionary-backed constants through `DictionaryStore::getOrIntern()`.
 Compilation that appears read-only therefore allocates dictionary ids, grows in-memory string storage, and retains `_reservedStrings` that may never be persisted or used by track data.
 Repeated transient expressions can reserve unbounded dictionary entries.
 
 The behavior has one useful property: if a previously unknown value is later written, `DictionaryStore::put()` reuses the reserved id, allowing an existing numeric plan to match it.
 That optimization couples expression lifetime to mutable dictionary allocation and makes a parsing/compilation path an implicit state mutation.
 
-`ExecutionPlan` and `FormatPlan` also retain a raw `DictionaryStore` pointer.
+Those `ExecutionPlan` and `FormatPlan` values also retained a raw `DictionaryStore` pointer.
 The type system does not prove that the dictionary outlives the plan or that an evaluation occurring on another executor has a valid library context.
 This blocks a clean worker-safe implementation for [RFC 0006](0006-coherent-derived-track-views.md).
 
@@ -101,8 +116,8 @@ Expression compilation uses no dictionary mutation and generally needs no dictio
 
 ### Generation-aware binding cache
 
-An evaluator instance may cache `symbol index -> optional DictionaryId` for one `DictionaryGeneration`.
-When the context generation changes, it rebinds or invalidates the cache before evaluating.
+The implemented `PlanBinding` and `FormatBinding` resolve `symbol index -> optional DictionaryId` once for one bounded evaluation batch and record the committed generation used for that resolution.
+Consumers create a new binding for a later batch, so a generation advance is observed without recompiling the immutable plan.
 
 This preserves future matching:
 
@@ -114,7 +129,7 @@ This preserves future matching:
 Unknown custom keys and dictionary constants follow the same rule.
 
 The plan remains immutable and shareable.
-Mutable registers and binding caches remain evaluator-instance state, so each concurrent worker uses its own evaluator.
+Bindings and mutable evaluator registers are not shared implicitly; each concurrent worker needs its own evaluator and worker-valid context/binding.
 
 ### Comparison and tag behavior
 
@@ -207,15 +222,15 @@ Plans are runtime-only and may change representation freely.
 
 Implementation phases are:
 
-1. Add non-mutating optional dictionary lookup and dictionary generation APIs.
-2. Add plan-owned symbols while retaining old numeric bindings for known values; differential tests prove identical results.
-3. Move tag, custom-key, dictionary constant, and format binding to evaluator contexts.
-4. Remove `DictionaryStore*` from plan types and remove compiler calls to `getOrIntern()`.
+1. **Complete:** add non-mutating optional dictionary lookup and dictionary generation APIs.
+2. **Complete:** add plan-owned symbols and differential behavior tests.
+3. **Complete:** move tag, custom-key, dictionary constant, and format binding to explicit batch bindings backed by read contexts.
+4. **Complete:** remove `DictionaryStore*` from plan types and remove compiler calls to `getOrIntern()`.
 5. Introduce typed insufficient-data/context outcomes and migrate runtime/CLI consumers.
 6. Enable RFC 0006 worker evaluation using immutable or task-scoped dictionary contexts.
-7. Restrict `getOrIntern()` to explicit internal reservation use or remove it if no owner remains.
+7. **Complete:** remove `getOrIntern()` because no durable or expression owner remains.
 
-During dual representation, tests must prove that numeric and symbol-bound plans agree across dictionary generations.
+The completed binding phases use differential field/operator coverage and old/new-generation binding tests to protect semantic equivalence.
 
 ## Validation
 
@@ -233,11 +248,9 @@ During dual representation, tests must prove that numeric and symbol-bound plans
 
 ## Open questions
 
-- Should `DictionaryReadContext` be a short borrowed lock/view, an immutable snapshot, or two implementations behind one concept?
-- Which component owns `DictionaryGeneration`: `DictionaryStore`, `MusicLibrary`, or the revisioned runtime facade?
-- Should valid evaluation without any dictionary-using symbol require a context at all?
 - Should typed evaluation outcome replace the current methods directly or be introduced beside preconditioned fast wrappers?
 - What expression symbol-count and byte limits are appropriate for Smart Lists and CLI input?
+- What immutable dictionary snapshot or task-scoped context should worker execution use?
 
 ## Promotion plan
 

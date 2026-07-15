@@ -89,7 +89,7 @@ namespace ao::rt
       return;
     }
 
-    auto plan = query::compileQuery(*parsed, &_ml.dictionary());
+    auto plan = query::compileQuery(*parsed);
 
     if (!plan)
     {

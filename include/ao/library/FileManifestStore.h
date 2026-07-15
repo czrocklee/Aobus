@@ -16,6 +16,15 @@
 
 namespace ao::library
 {
+  namespace detail
+  {
+    class LibraryIdentity;
+  }
+
+  class ReadTransaction;
+  class WriteTransaction;
+  class MusicLibrary;
+
   /**
    * FileManifestStore - Manages the mapping between physical file paths and tracks.
    */
@@ -25,29 +34,26 @@ namespace ao::library
     class Reader;
     class Writer;
 
-    explicit FileManifestStore(lmdb::Database db)
-      : _db{std::move(db)}
+    Reader reader(ReadTransaction const& transaction) const;
+    Reader reader(WriteTransaction const& transaction) const;
+    Writer writer(WriteTransaction& transaction) const;
+
+  private:
+    FileManifestStore(lmdb::Database db, detail::LibraryIdentity const& identity)
+      : _db{std::move(db)}, _identity{&identity}
     {
     }
 
-    Reader reader(lmdb::ReadTransaction const& transaction) const;
-    Writer writer(lmdb::WriteTransaction& transaction) const;
-
-  private:
     lmdb::Database _db;
+    detail::LibraryIdentity const* _identity;
+
+    friend class MusicLibrary;
   };
 
   class FileManifestStore::Reader final
   {
   public:
-    explicit Reader(lmdb::Database::Reader reader)
-      : _reader{std::move(reader)}
-    {
-    }
-
     Result<FileManifestView> get(std::string_view uri) const;
-
-    lmdb::Database::Reader const& databaseReader() const noexcept { return _reader; }
 
     struct EndSentinel
     {};
@@ -65,11 +71,6 @@ namespace ao::library
       using difference_type = std::ptrdiff_t;
       using iterator_category = std::input_iterator_tag;
       Iterator() = default;
-      explicit Iterator(lmdb::Database::Reader::Iterator it)
-        : _it{std::move(it)}
-      {
-      }
-
       bool operator==(Iterator const& other) const { return _it == other._it; }
       bool operator==(EndSentinel /*unused*/) const { return _it == lmdb::Database::Reader::Iterator{}; }
       bool operator!=(Iterator const& other) const { return _it != other._it; }
@@ -84,30 +85,46 @@ namespace ao::library
       std::pair<std::string_view, FileManifestView> operator*() const;
 
     private:
+      explicit Iterator(lmdb::Database::Reader::Iterator it)
+        : _it{std::move(it)}
+      {
+      }
+
       lmdb::Database::Reader::Iterator _it;
+
+      friend class Reader;
     };
 
     Iterator begin() const;
     EndSentinel end() const { return {}; }
 
   private:
+    explicit Reader(lmdb::Database::Reader reader)
+      : _reader{std::move(reader)}
+    {
+    }
+
     lmdb::Database::Reader _reader;
+
+    friend class FileManifestStore;
   };
 
   class FileManifestStore::Writer final
   {
   public:
-    explicit Writer(lmdb::Database::Writer writer)
-      : _writer{std::move(writer)}
-    {
-    }
-
     Result<FileManifestView> get(std::string_view uri) const;
     Result<> put(std::string_view uri, std::span<std::byte const> payload);
     Result<> remove(std::string_view uri);
     Result<> clear();
 
   private:
+    explicit Writer(lmdb::Database::Writer writer)
+      : _writer{std::move(writer)}
+    {
+    }
+
     lmdb::Database::Writer _writer;
+
+    friend class FileManifestStore;
   };
 } // namespace ao::library

@@ -17,11 +17,6 @@
 #include <memory>
 #include <stop_token>
 
-namespace ao::library
-{
-  class MusicLibrary;
-}
-
 namespace ao::rt
 {
   class ConfigStore;
@@ -42,7 +37,6 @@ namespace ao::rt
   public:
     PlaybackSessionPersistence(ConfigStore& config,
                                Library& library,
-                               library::MusicLibrary& storage,
                                PlaybackSequenceService& sequence,
                                PlaybackService& playback,
                                async::Runtime& asyncRuntime);
@@ -97,7 +91,6 @@ namespace ao::rt
 
     ConfigStore& _config;
     Library& _library;
-    library::MusicLibrary& _storage;
     PlaybackSequenceService& _sequence;
     PlaybackService& _playback;
     async::Runtime& _asyncRuntime;

@@ -9,7 +9,6 @@
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Transport.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompiler.h>
 #include <ao/rt/ConfigStore.h>
@@ -115,7 +114,7 @@ namespace ao::rt
       return false;
     }
 
-    Result<> validatePlaybackSession(PlaybackSessionState const& session, library::MusicLibrary& storage)
+    Result<> validatePlaybackSession(PlaybackSessionState const& session)
     {
       if (session.schemaVersion != kPlaybackSessionSchemaVersion)
       {
@@ -165,7 +164,7 @@ namespace ao::rt
         return std::unexpected{parsed.error()};
       }
 
-      if (auto compiled = query::compileQuery(*parsed, &storage.dictionary()); !compiled)
+      if (auto compiled = query::compileQuery(*parsed); !compiled)
       {
         return std::unexpected{compiled.error()};
       }
@@ -196,13 +195,11 @@ namespace ao::rt
 
   PlaybackSessionPersistence::PlaybackSessionPersistence(ConfigStore& config,
                                                          Library& library,
-                                                         library::MusicLibrary& storage,
                                                          PlaybackSequenceService& sequence,
                                                          PlaybackService& playback,
                                                          async::Runtime& asyncRuntime)
     : _config{config}
     , _library{library}
-    , _storage{storage}
     , _sequence{sequence}
     , _playback{playback}
     , _asyncRuntime{asyncRuntime}
@@ -558,7 +555,7 @@ namespace ao::rt
       return std::unexpected{result.error()};
     }
 
-    if (auto const valid = validatePlaybackSession(loaded, _storage); !valid)
+    if (auto const valid = validatePlaybackSession(loaded); !valid)
     {
       return std::unexpected{valid.error()};
     }

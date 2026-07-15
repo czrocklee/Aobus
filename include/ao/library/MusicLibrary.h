@@ -4,7 +4,8 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/lmdb/Transaction.h>
+#include <ao/library/ReadTransaction.h>
+#include <ao/library/WriteTransaction.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -48,27 +49,21 @@ namespace ao::library
     MusicLibrary(MusicLibrary&&) noexcept;
     MusicLibrary& operator=(MusicLibrary&&) noexcept;
 
-    lmdb::ReadTransaction readTransaction() const;
-    lmdb::WriteTransaction writeTransaction();
-    std::uint64_t libraryRevision(lmdb::ReadTransaction const& transaction) const;
-    std::uint64_t libraryRevision(lmdb::WriteTransaction& transaction) const;
+    ReadTransaction readTransaction() const;
+    WriteTransaction writeTransaction(WriteTransaction::Options options = {});
+    std::uint64_t libraryRevision(ReadTransaction const& transaction) const;
+    std::uint64_t libraryRevision(WriteTransaction const& transaction) const;
 
-    TrackStore& tracks();
     TrackStore const& tracks() const;
 
-    ListStore& lists();
     ListStore const& lists() const;
 
-    ResourceStore& resources();
     ResourceStore const& resources() const;
 
-    DictionaryStore& dictionary();
     DictionaryStore const& dictionary() const;
 
-    FileManifestStore& manifest();
     FileManifestStore const& manifest() const;
 
-    MetadataStore& metadata();
     MetadataStore const& metadata() const;
     MetadataHeader metadataHeader() const;
 

@@ -4,17 +4,13 @@
 #pragma once
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -26,30 +22,19 @@
 
 namespace ao::library::test
 {
-  using namespace ao::lmdb;
-  using namespace ao::lmdb::test;
-
   constexpr std::size_t alignToWord(std::size_t size) noexcept
   {
     return ((size + 3U) / 4U) * 4U;
   }
 
-  inline TrackStore openTrackStore(Environment& env)
-  {
-    auto wtxn = beginWriteTransaction(env);
-    auto store = TrackStore{openDatabase(wtxn, "tracks_hot"), openDatabase(wtxn, "tracks_cold")};
-    REQUIRE(wtxn.commit());
-    return store;
-  }
-
   struct TrackStoreFixture final
   {
     ao::test::TempDir temp;
-    Environment env;
-    TrackStore store;
+    MusicLibrary library;
+    TrackStore const& store;
 
     TrackStoreFixture()
-      : temp{}, env{openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20})}, store{openTrackStore(env)}
+      : temp{}, library{temp.path(), temp.path() / "db"}, store{library.tracks()}
     {
     }
   };
@@ -90,12 +75,12 @@ namespace ao::library::test
     return *result;
   }
 
-  inline TrackId createCommittedTrack(TrackStore& store,
-                                      Environment& env,
+  inline TrackId createCommittedTrack(TrackStore const& store,
+                                      MusicLibrary& library,
                                       std::span<std::byte const> hotData,
                                       std::span<std::byte const> coldData)
   {
-    auto wtxn = beginWriteTransaction(env);
+    auto wtxn = library.writeTransaction();
     auto created = requireCreate(store.writer(wtxn), hotData, coldData);
     REQUIRE(wtxn.commit());
     return created.first;

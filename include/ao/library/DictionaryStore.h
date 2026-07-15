@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -16,13 +16,23 @@
 #include <deque>
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <shared_mutex>
+#include <span>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace ao::library
 {
+  namespace detail
+  {
+    class LibraryIdentity;
+  }
+
+  class WriteTransaction;
+  class MusicLibrary;
+
   /**
    * DictionaryStore - Stores id → string mappings with in-memory string → id index.
    *
@@ -32,27 +42,13 @@ namespace ao::library
   class DictionaryStore final
   {
   public:
-    /**
-     * Construct and load existing entries from the database.
-     * Builds in-memory string → id index from existing data.
-     * @param transaction Write transaction for loading existing entries (must remain alive)
-     * @param db Database handle
-     */
-    DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& transaction);
+    class Writer;
 
     DictionaryStore(DictionaryStore&&) = delete;
     DictionaryStore& operator=(DictionaryStore&&) = delete;
     DictionaryStore(DictionaryStore const&) = delete;
     DictionaryStore& operator=(DictionaryStore const&) = delete;
     ~DictionaryStore() = default;
-
-    /**
-     * Store a string and auto-generate a unique ID.
-     * @param transaction Write transaction that must remain alive
-     * @param value The string to store
-     * @return The generated ID, or a storage error if the LMDB write fails.
-     */
-    Result<DictionaryId> put(lmdb::WriteTransaction& transaction, std::string_view value);
 
     /**
      * Look up a string by its ID using in-memory index.
@@ -81,11 +77,23 @@ namespace ao::library
     DictionaryId lookupId(std::string_view str) const;
 
     /**
+     * Look up a committed ID by text.
+     * @return The committed ID, or std::nullopt when the text is absent.
+     */
+    std::optional<DictionaryId> findId(std::string_view str) const;
+
+    /**
      * Check if a string exists.
      * @param str The string to look up
      * @return true if the string exists
      */
     bool contains(std::string_view str) const;
+
+    /**
+     * Return the process-local committed dictionary generation.
+     * The generation advances once for each published transaction delta.
+     */
+    std::uint64_t generation() const;
 
     /**
      * Get the total number of dictionary entries.
@@ -94,17 +102,14 @@ namespace ao::library
     std::size_t size() const
     {
       auto const lock = std::shared_lock{_mutex};
-      return _idToStringStorage.size() - _freeIds.size();
+      return _idToStringStorage.size();
     }
 
-    /**
-     * Get the ID for a string, or intern it if it doesn't exist.
-     * Unlike put(), this does not immediately persist to the database.
-     * The ID remains valid for the lifetime of the DictionaryStore.
-     */
-    DictionaryId getOrIntern(std::string_view str);
-
   private:
+    DictionaryStore(lmdb::Database db,
+                    lmdb::ReadTransaction const& transaction,
+                    detail::LibraryIdentity const& identity);
+
     struct DictHash final
     {
       using is_transparent = void;
@@ -120,50 +125,75 @@ namespace ao::library
       using is_transparent = void;
       std::deque<std::string> const* storage;
 
-      bool operator()(DictionaryId lhs, DictionaryId rhs) const { return lhs == rhs; }
+      bool operator()(DictionaryId lhs, DictionaryId rhs) const
+      {
+        return (*storage)[lhs.raw() - 1] == (*storage)[rhs.raw() - 1];
+      }
 
       bool operator()(DictionaryId id, std::string_view str) const { return (*storage)[id.raw() - 1] == str; }
 
       bool operator()(std::string_view str, DictionaryId id) const { return (*storage)[id.raw() - 1] == str; }
     };
 
-    struct PlainDictionaryHash final
-    {
-      std::size_t operator()(DictionaryId id) const { return std::hash<std::uint32_t>{}(id.raw()); }
-    };
-
-    DictionaryId popFreeId()
-    {
-      if (_freeIds.empty())
-      {
-        return kInvalidDictionaryId;
-      }
-
-      auto id = _freeIds.back();
-      _freeIds.pop_back();
-      return id;
-    }
+    std::uint64_t bindSymbols(std::span<std::string const> symbols, std::span<DictionaryId> ids) const;
 
     lmdb::Database _database;
+    detail::LibraryIdentity const* _identity;
 
-    // Guards the in-memory indices below. A shared_mutex lets the read-mostly
-    // lookups (get/lookupId/contains) run concurrently while put/getOrIntern take
-    // exclusive ownership during mutation.
+    // Serializes the complete native-write/publish boundary. LMDB itself has one
+    // writer, but this gate begins before the native transaction so allocation and
+    // in-process publication share the same order.
+    mutable std::mutex _writerMutex;
+
+    // Guards the in-memory indices below. A shared_mutex lets read-mostly
+    // lookups run concurrently while committed transaction deltas are published
+    // under exclusive ownership.
     mutable std::shared_mutex _mutex;
 
     // In-memory index: id → string (owner of all strings). A deque keeps element
-    // addresses stable across growth, so a string_view returned by get() stays
-    // valid even after a later put()/getOrIntern() grows the storage.
+    // addresses stable across publication, so a string_view returned by get()
+    // remains valid until the store is destroyed.
     std::deque<std::string> _idToStringStorage;
 
     // In-memory index: string_view → id (transparent lookup)
     boost::unordered_flat_set<DictionaryId, DictHash, DictEqual> _stringToId;
 
-    // Track strings that were reserved but not yet persisted to DB
-    boost::unordered_flat_set<DictionaryId, PlainDictionaryHash> _reservedStrings;
+    std::uint64_t _generation = 1;
 
-    // Track previously freed/skipped IDs to recycle them and prevent gap accumulation
-    std::vector<DictionaryId> _freeIds;
+    friend class DictionaryReadContext;
+    friend class WriteTransaction;
+    friend class MusicLibrary;
+  };
+
+  /**
+   * Transaction-local dictionary interning port.
+   *
+   * New mappings are written into the owning LMDB transaction and remain hidden
+   * from DictionaryStore readers until WriteTransaction::commit succeeds.
+   */
+  class [[nodiscard]] DictionaryStore::Writer final
+  {
+  public:
+    ~Writer();
+
+    Writer(Writer const&) = delete;
+    Writer& operator=(Writer const&) = delete;
+    Writer(Writer&&) noexcept;
+    Writer& operator=(Writer&&) noexcept;
+
+    Result<DictionaryId> intern(std::string_view value);
+
+  private:
+    Writer(DictionaryStore& dictionary, lmdb::WriteTransaction& transaction);
+
+    void preparePublication();
+    void publish() noexcept;
+    void rollbackPublication() noexcept;
+
+    struct Impl;
+    std::unique_ptr<Impl> _implPtr;
+
+    friend class WriteTransaction;
   };
 
   /**
@@ -172,8 +202,8 @@ namespace ao::library
    * The cache is not thread-safe. It borrows values from the DictionaryStore
    * and must not outlive that store. Its collision-replacing table has bounded
    * memory; eviction only causes a later store read and never changes results.
-   * Empty slots are deliberately not cached, because DictionaryStore may later
-   * recycle them.
+   * Empty values are deliberately not cached; a later read simply consults the
+   * store again.
    */
   class DictionaryReadCache final
   {
@@ -194,5 +224,28 @@ namespace ao::library
 
     DictionaryStore const* _dictionary;
     std::unique_ptr<std::array<Entry, kCapacity>> _entriesPtr;
+  };
+
+  /**
+   * Bounded synchronous dictionary context for query and format evaluation.
+   *
+   * The context borrows the store and optional batch cache. It must not outlive
+   * either owner and does not provide a multi-call dictionary snapshot.
+   */
+  class DictionaryReadContext final
+  {
+  public:
+    explicit DictionaryReadContext(DictionaryStore const& dictionary);
+    explicit DictionaryReadContext(DictionaryReadCache& cache);
+
+    std::optional<DictionaryId> findId(std::string_view text) const;
+    std::uint64_t bind(std::span<std::string const> symbols, std::span<DictionaryId> ids) const;
+    std::string_view get(DictionaryId id);
+    DictionaryStore const& dictionary() const noexcept;
+    std::uint64_t generation() const;
+
+  private:
+    DictionaryStore const* _dictionary;
+    DictionaryReadCache* _cache = nullptr;
   };
 } // namespace ao::library

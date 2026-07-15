@@ -1,648 +1,359 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/library/DictionaryStore.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
-#include <ao/utility/ByteView.h>
+#include <ao/library/FileManifestStore.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/library/TrackStore.h>
+#include <ao/library/WriteTransaction.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <barrier>
 #include <cstddef>
 #include <cstdint>
-#include <stop_token>
+#include <filesystem>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
-#include <tuple>
 #include <utility>
 #include <vector>
 
 namespace ao::library::test
 {
-  using namespace ao::lmdb;
-  using namespace ao::lmdb::test;
-
   namespace
   {
-    DictionaryId requirePut(DictionaryStore& dictionary, WriteTransaction& transaction, std::string_view value)
+    MusicLibrary openTestLibrary(ao::test::TempDir const& temp)
     {
-      return ao::test::requireValue(dictionary.put(transaction, value));
+      return MusicLibrary{temp.path(), temp.path() / "db"};
+    }
+
+    DictionaryId requireIntern(WriteTransaction& transaction, std::string_view value)
+    {
+      return ao::test::requireValue(transaction.dictionary().intern(value));
     }
   } // namespace
 
-  TEST_CASE("DictionaryStore - put stores values retrievable by ID", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - publishes a transaction delta only after commit", "[library][unit][dictionary]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto library = openTestLibrary(temp);
+    auto const& dictionary = library.dictionary();
+    auto const initialGeneration = dictionary.generation();
+    auto transaction = library.writeTransaction();
+    auto trackWriter = library.tracks().writer(transaction);
+    auto listWriter = library.lists().writer(transaction);
+    auto resourceWriter = library.resources().writer(transaction);
+    auto manifestWriter = library.manifest().writer(transaction);
+    auto& dictionaryWriter = transaction.dictionary();
+    auto const id = requireIntern(transaction, "Bach");
 
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
+    CHECK(id == DictionaryId{1});
+    CHECK_FALSE(dictionary.contains("Bach"));
+    CHECK_FALSE(dictionary.findId("Bach"));
+    CHECK(dictionary.size() == 0);
+    CHECK(dictionary.generation() == initialGeneration);
 
-    // Store a value
-    auto wtxn2 = beginWriteTransaction(env);
-    auto const id = requirePut(dictionary, wtxn2, "test value");
-    REQUIRE(wtxn2.commit());
+    REQUIRE(transaction.commit());
 
-    // Get by ID (using in-memory index)
-    auto const result = dictionary.get(id);
-    CHECK(result == "test value");
+    CHECK(dictionary.get(id) == "Bach");
+    CHECK(dictionary.lookupId("Bach") == id);
+    CHECK(dictionary.findId("Bach") == id);
+    CHECK(dictionary.size() == 1);
+    CHECK(dictionary.generation() == initialGeneration + 1);
+
+    CHECK_THROWS_AS(trackWriter.clear(), Exception);
+    CHECK_THROWS_AS(listWriter.clear(), Exception);
+    CHECK_THROWS_AS(resourceWriter.clear(), Exception);
+    CHECK_THROWS_AS(manifestWriter.clear(), Exception);
+    auto const lateIntern = dictionaryWriter.intern("after-commit");
+    REQUIRE_FALSE(lateIntern);
+    CHECK(lateIntern.error().code == Error::Code::InvalidState);
+    CHECK_THROWS_AS(transaction.dictionary(), Exception);
   }
 
-  TEST_CASE("DictionaryStore - lookupId returns IDs for existing strings", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - discards an uncommitted overlay and reuses its ID", "[library][unit][dictionary]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    requirePut(dictionary, wtxn, "artist1");
-    REQUIRE(wtxn.commit());
-
-    // Get ID by string
-    [[maybe_unused]] auto const id = dictionary.lookupId("artist1");
-    // If lookupId() failed, it would throw
-  }
-
-  TEST_CASE("DictionaryStore - contains reports whether strings exist", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    requirePut(dictionary, wtxn, "exists");
-    REQUIRE(wtxn.commit());
-
-    CHECK(dictionary.contains("exists"));
-    CHECK(!dictionary.contains("not exists"));
-  }
-
-  TEST_CASE("DictionaryStore - put returns existing ID for duplicate strings", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
-
-    // Store a value
-    auto wtxn2 = beginWriteTransaction(env);
-    auto const id1 = requirePut(dictionary, wtxn2, "first");
-    REQUIRE(wtxn2.commit());
-
-    // Try to store same string again - returns existing ID
-    auto wtxn3 = beginWriteTransaction(env);
-    auto const id2 = requirePut(dictionary, wtxn3, "first");
-    CHECK(id2 == id1);
-
-    // Original value should still exist (using in-memory index)
-    auto const result = dictionary.get(id1);
-    CHECK(result == "first");
-  }
-
-  TEST_CASE("DictionaryStore - get throws on invalid IDs", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    requirePut(dictionary, wtxn, "first");
-    REQUIRE(wtxn.commit());
-
-    // ID 999 doesn't exist - should throw
-    CHECK_THROWS(dictionary.get(DictionaryId{999}));
-  }
-
-  TEST_CASE("DictionaryStore - lookupId throws for missing strings", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    requirePut(dictionary, wtxn, "exists");
-    REQUIRE(wtxn.commit());
-
-    // Non-existent string should throw
-    CHECK_THROWS(dictionary.lookupId("not exists"));
-  }
-
-  TEST_CASE("DictionaryStore - get returns the first valid ID", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    auto const id = requirePut(dictionary, wtxn, "first");
-    REQUIRE(wtxn.commit());
-
-    CHECK(id.raw() == 1);
-    auto const result = dictionary.get(id);
-    CHECK(result == "first");
-  }
-
-  TEST_CASE("DictionaryStore - get throws on out-of-bounds IDs", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    requirePut(dictionary, wtxn, "only one");
-    REQUIRE(wtxn.commit());
-
-    // ID 2 is out of bounds (only 1 is valid)
-    CHECK_THROWS(dictionary.get(DictionaryId{2}));
-  }
-
-  TEST_CASE("DictionaryStore - getOrIntern returns new IDs for missing strings", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
-
-    // Reserve a non-existent string
-    auto const id = dictionary.getOrIntern("new artist");
-    CHECK(id.raw() == 1); // First getOrInternd ID is 0 (same as put)
-
-    // contains should now return true (in-memory)
-    CHECK(dictionary.contains("new artist"));
-  }
-
-  TEST_CASE("DictionaryStore - getOrIntern returns existing IDs for existing strings", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    requirePut(dictionary, wtxn, "existing");
-    REQUIRE(wtxn.commit());
-
-    // Reserve an existing string - should return the existing ID
-    auto const id = dictionary.getOrIntern("existing");
-    CHECK(id.raw() == 1); // First put uses ID 0
-
-    CHECK(dictionary.contains("existing"));
-  }
-
-  TEST_CASE("DictionaryStore - put reuses IDs reserved by getOrIntern", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
-
-    // Reserve a string (not persisted)
-    auto const internedId = dictionary.getOrIntern("Bach");
-
-    // put() should return the same ID
-    auto wtxn2 = beginWriteTransaction(env);
-    auto const putId = requirePut(dictionary, wtxn2, "Bach");
-    CHECK(putId == internedId);
-  }
-
-  TEST_CASE("DictionaryStore - getOrIntern assigns distinct IDs to multiple strings", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
-
-    auto const id1 = dictionary.getOrIntern("artist1");
-    auto const id2 = dictionary.getOrIntern("artist2");
-    auto const id3 = dictionary.getOrIntern("artist3");
-
-    CHECK(id1 != id2);
-    CHECK(id2 != id3);
-    CHECK(id3 != id1);
-
-    CHECK(dictionary.contains("artist1"));
-    CHECK(dictionary.contains("artist2"));
-    CHECK(dictionary.contains("artist3"));
-  }
-
-  TEST_CASE("DictionaryStore - put avoids IDs reserved for other strings", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
-
-    // Simulate scan populating some entries first
-    auto wtxn2 = beginWriteTransaction(env);
-    requirePut(dictionary, wtxn2, "artist_one");
-    requirePut(dictionary, wtxn2, "album_one");
-    REQUIRE(wtxn2.commit());
-
-    // getOrIntern reserves "fav" (like query compiler does for "#fav" smart list)
-    auto const reservedId = dictionary.getOrIntern("fav");
-    CHECK(reservedId.raw() == 3); // after 2 puts, next is 3
-
-    // put a DIFFERENT string "#fav" — must NOT collide with reserved "fav"
-    auto wtxn3 = beginWriteTransaction(env);
-    auto const putId = requirePut(dictionary, wtxn3, "#fav");
-    REQUIRE(wtxn3.commit());
-
-    CHECK(putId.raw() != reservedId.raw());
-    CHECK(putId.raw() == 4); // must skip over reserved ID 3
-
-    // Both strings should be independently resolvable
-    CHECK(dictionary.get(reservedId) == "fav");
-    CHECK(dictionary.get(putId) == "#fav");
-    CHECK(dictionary.lookupId("fav").raw() == 3);
-    CHECK(dictionary.lookupId("#fav").raw() == 4);
-  }
-
-  TEST_CASE("DictionaryStore - put persists IDs reserved for the same string", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
-
-    // Reserve a string
-    auto const reservedId = dictionary.getOrIntern("fav");
-    CHECK(reservedId.raw() == 1);
-
-    // Put the SAME string — should reuse the reserved ID and persist it
-    auto wtxn2 = beginWriteTransaction(env);
-    auto const putId = requirePut(dictionary, wtxn2, "fav");
-    REQUIRE(wtxn2.commit());
-
-    CHECK(putId.raw() == reservedId.raw());
-    CHECK(dictionary.get(putId) == "fav");
-
-    // After restart simulation: reload dictionary from DB
-    auto rtxn = beginReadTransaction(env);
-    auto dict2 = DictionaryStore{openDatabase(rtxn, "dictionary"), rtxn};
-    CHECK(dict2.get(putId) == "fav");
-  }
-
-  TEST_CASE("DictionaryStore - getOrDefault returns values for valid IDs", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    auto const id = requirePut(dictionary, wtxn, "hello");
-    REQUIRE(wtxn.commit());
-
-    CHECK(dictionary.getOrDefault(id) == "hello");
-    CHECK(dictionary.getOrDefault(id, "fallback") == "hello");
-  }
-
-  TEST_CASE("DictionaryStore - getOrDefault returns defaults for invalid IDs", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
-
-    CHECK(dictionary.getOrDefault(kInvalidDictionaryId).empty());
-    CHECK(dictionary.getOrDefault(kInvalidDictionaryId, "fallback") == "fallback");
-    CHECK(dictionary.getOrDefault(DictionaryId{999}).empty());
-  }
-
-  TEST_CASE("DictionaryStore - loads dense database lookups", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto library = openTestLibrary(temp);
+    auto const& dictionary = library.dictionary();
 
     {
-      auto wtxn = beginWriteTransaction(env);
-      auto db = openDatabase(wtxn, "dictionary");
-      auto writer = db.writer(wtxn);
-
-      REQUIRE(writer.create(1, utility::bytes::view(std::string_view{"first"})));
-      REQUIRE(writer.create(2, utility::bytes::view(std::string_view{"second"})));
-      REQUIRE(writer.create(3, utility::bytes::view(std::string_view{"third"})));
-      REQUIRE(wtxn.commit());
+      auto preview = library.writeTransaction();
+      CHECK(requireIntern(preview, "preview-only") == DictionaryId{1});
+      CHECK(requireIntern(preview, "preview-only") == DictionaryId{1});
     }
 
-    auto rtxn = beginReadTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(rtxn, "dictionary"), rtxn};
+    CHECK_FALSE(dictionary.contains("preview-only"));
+    CHECK(dictionary.size() == 0);
 
-    CHECK(dictionary.size() == 3);
-    CHECK(dictionary.get(DictionaryId{1}) == "first");
-    CHECK(dictionary.get(DictionaryId{2}) == "second");
-    CHECK(dictionary.get(DictionaryId{3}) == "third");
-    CHECK(dictionary.lookupId("first") == DictionaryId{1});
-    CHECK(dictionary.lookupId("second") == DictionaryId{2});
-    CHECK(dictionary.lookupId("third") == DictionaryId{3});
+    auto committed = library.writeTransaction();
+    auto const id = requireIntern(committed, "committed");
+    CHECK(id == DictionaryId{1});
+    REQUIRE(committed.commit());
+    CHECK(dictionary.get(id) == "committed");
   }
 
-  TEST_CASE("DictionaryStore - loads databases with gapped IDs", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - rolls back prepared publication when commit fails", "[library][unit][dictionary]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto library = openTestLibrary(temp);
+    auto const& dictionary = library.dictionary();
+    auto const initialGeneration = dictionary.generation();
+    auto transaction = library.writeTransaction(WriteTransaction::Options{
+      .optInjectedCommitFailure = Error{.code = Error::Code::IoError, .message = "injected commit failure"},
+    });
+    auto trackWriter = library.tracks().writer(transaction);
+    auto listWriter = library.lists().writer(transaction);
+    auto resourceWriter = library.resources().writer(transaction);
+    auto manifestWriter = library.manifest().writer(transaction);
+    auto& dictionaryWriter = transaction.dictionary();
 
-    // Manually create a gap in the database
-    {
-      auto wtxn = beginWriteTransaction(env);
-      auto db = openDatabase(wtxn, "dictionary");
-      auto writer = db.writer(wtxn);
+    auto const failedId = requireIntern(transaction, "failed");
+    auto result = transaction.commit();
+    REQUIRE_FALSE(result);
+    CHECK(result.error().message == "injected commit failure");
+    CHECK_FALSE(dictionary.contains("failed"));
+    CHECK(dictionary.size() == 0);
+    CHECK(dictionary.generation() == initialGeneration);
 
-      REQUIRE(writer.create(1, utility::bytes::view(std::string_view{"first"})));
-      // SKIP ID 2
-      REQUIRE(writer.create(3, utility::bytes::view(std::string_view{"third"})));
-      // SKIP ID 4
-      REQUIRE(writer.create(5, utility::bytes::view(std::string_view{"fifth"})));
+    CHECK_THROWS_AS(trackWriter.clear(), Exception);
+    CHECK_THROWS_AS(listWriter.clear(), Exception);
+    CHECK_THROWS_AS(resourceWriter.clear(), Exception);
+    CHECK_THROWS_AS(manifestWriter.clear(), Exception);
+    auto const lateIntern = dictionaryWriter.intern("after-failure");
+    REQUIRE_FALSE(lateIntern);
+    CHECK(lateIntern.error().code == Error::Code::InvalidState);
+    CHECK_THROWS_AS(transaction.dictionary(), Exception);
 
-      REQUIRE(wtxn.commit());
-    }
-
-    // Load DictionaryStore which should correctly handle the gaps via resize()
-    auto rtxn = beginReadTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(rtxn, "dictionary"), rtxn};
-
-    CHECK(dictionary.size() == 3);
-
-    // Valid entries
-    CHECK(dictionary.get(DictionaryId{1}) == "first");
-    CHECK(dictionary.get(DictionaryId{3}) == "third");
-    CHECK(dictionary.get(DictionaryId{5}) == "fifth");
-
-    // Gapped entries should return empty strings but NOT throw out-of-bounds
-    CHECK(dictionary.get(DictionaryId{2}).empty());
-    CHECK(dictionary.get(DictionaryId{4}).empty());
-
-    // Transparent index should also resolve correctly
-    CHECK(dictionary.lookupId("first").raw() == 1);
-    CHECK(dictionary.lookupId("fifth").raw() == 5);
+    auto retry = library.writeTransaction();
+    CHECK(requireIntern(retry, "retry") == failedId);
+    REQUIRE(retry.commit());
+    CHECK(dictionary.get(failedId) == "retry");
   }
 
-  TEST_CASE("DictionaryStore - recycles gapped IDs across restarts", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - commits repeated and distinct transaction symbols exactly once",
+            "[library][unit][dictionary]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto library = openTestLibrary(temp);
+    auto transaction = library.writeTransaction();
+    auto const first = requireIntern(transaction, "first");
+    auto const duplicate = requireIntern(transaction, "first");
+    auto const second = requireIntern(transaction, "second");
 
-    // Manually create a gap in the database
-    {
-      auto wtxn = beginWriteTransaction(env);
-      auto db = openDatabase(wtxn, "dictionary");
-      auto writer = db.writer(wtxn);
-
-      REQUIRE(writer.create(1, utility::bytes::view(std::string_view{"first"})));
-      // SKIP ID 2
-      REQUIRE(writer.create(3, utility::bytes::view(std::string_view{"third"})));
-
-      REQUIRE(wtxn.commit());
-    }
-
-    // Load DictionaryStore which should discover ID 2 as a gap
-    auto wtxn2 = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn2, "dictionary"), wtxn2};
-
-    // Inserting a new string should RECYCLE ID 2 instead of appending to 4
-    auto const newId1 = requirePut(dictionary, wtxn2, "recycled_id_2");
-    CHECK(newId1.raw() == 2);
-
-    // Inserting another new string should go to 4 since gaps are exhausted
-    auto const newId2 = dictionary.getOrIntern("appended_id_4");
-    CHECK(newId2.raw() == 4);
-
-    // Inserting another should go to 5
-    auto const newId3 = requirePut(dictionary, wtxn2, "appended_id_5");
-    CHECK(newId3.raw() == 5);
-
-    REQUIRE(wtxn2.commit());
+    CHECK(first == duplicate);
+    CHECK(first == DictionaryId{1});
+    CHECK(second == DictionaryId{2});
+    REQUIRE(transaction.commit());
+    CHECK(library.dictionary().size() == 2);
   }
 
-  TEST_CASE("DictionaryStore - keeps lookup indices valid after heavy reallocation", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - committed rows survive reopening", "[library][unit][dictionary]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
-
-    // Store the first string, capturing its ID
-    auto wtxn2 = beginWriteTransaction(env);
-    auto const firstId = requirePut(dictionary, wtxn2, "very_first_string");
-    REQUIRE(wtxn2.commit());
-
-    // Insert 10,000 unique short strings to force vector reallocation multiple times
-    auto wtxn3 = beginWriteTransaction(env);
-
-    for (std::int32_t i = 0; i < 10000; ++i)
-    {
-      requirePut(dictionary, wtxn3, "string_" + std::to_string(i));
-    }
-
-    REQUIRE(wtxn3.commit());
-
-    // After massive reallocation, the old string_view in the transparent index should NOT dangle,
-    // because we use DictionaryId in the hash set and vector element direct lookup.
-    // So looking up "very_first_string" should succeed and return the correct ID.
-    REQUIRE_NOTHROW(dictionary.lookupId("very_first_string"));
-    CHECK(dictionary.lookupId("very_first_string") == firstId);
-
-    // And get() should resolve correctly
-    CHECK(dictionary.get(firstId) == "very_first_string");
-  }
-
-  TEST_CASE("DictionaryReadCache - observes dictionary slots filled after an empty read", "[library][unit][dictionary]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto const databasePath = temp.path() / "db";
+    auto id = kInvalidDictionaryId;
 
     {
-      auto wtxn = beginWriteTransaction(env);
-      auto db = openDatabase(wtxn, "dictionary");
-      auto writer = db.writer(wtxn);
-      REQUIRE(writer.create(1, utility::bytes::view(std::string_view{"first"})));
-      REQUIRE(writer.create(3, utility::bytes::view(std::string_view{"third"})));
-      REQUIRE(wtxn.commit());
+      auto library = MusicLibrary{temp.path(), databasePath};
+      auto transaction = library.writeTransaction();
+      id = requireIntern(transaction, "persistent");
+      REQUIRE(transaction.commit());
     }
 
-    auto rtxn = beginReadTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(rtxn, "dictionary"), rtxn};
-    auto cache = DictionaryReadCache{dictionary};
-
-    CHECK(cache.get(DictionaryId{2}).empty());
-    CHECK(dictionary.getOrIntern("second") == DictionaryId{2});
-    CHECK(cache.get(DictionaryId{2}) == "second");
+    auto reopened = MusicLibrary{temp.path(), databasePath};
+    CHECK(reopened.dictionary().get(id) == "persistent");
+    CHECK(reopened.dictionary().lookupId("persistent") == id);
   }
 
-  TEST_CASE("DictionaryReadCache - resolves values after bounded cache collisions", "[library][unit][dictionary]")
+  TEST_CASE("DictionaryStore - validates invalid lookups and defaults", "[library][unit][dictionary]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
+    auto library = openTestLibrary(temp);
+    auto transaction = library.writeTransaction();
+    auto const id = requireIntern(transaction, "value");
+    REQUIRE(transaction.commit());
 
+    CHECK(library.dictionary().getOrDefault(id) == "value");
+    CHECK(library.dictionary().getOrDefault(kInvalidDictionaryId, "fallback") == "fallback");
+    CHECK(library.dictionary().getOrDefault(DictionaryId{999}).empty());
+    CHECK_THROWS_AS(library.dictionary().get(kInvalidDictionaryId), Exception);
+    CHECK_THROWS_AS(library.dictionary().get(DictionaryId{999}), Exception);
+    CHECK_THROWS_AS(library.dictionary().lookupId("missing"), Exception);
+  }
+
+  TEST_CASE("DictionaryStore - keeps borrowed values stable across ten thousand committed inserts",
+            "[library][unit][dictionary]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = openTestLibrary(temp);
+
+    auto seed = library.writeTransaction();
+    auto const stableId = requireIntern(seed, "stable");
+    REQUIRE(seed.commit());
+    auto const stableView = library.dictionary().get(stableId);
+
+    auto growth = library.writeTransaction();
+
+    for (std::int32_t index = 0; index < 10000; ++index)
+    {
+      std::ignore = requireIntern(growth, "growth_" + std::to_string(index));
+    }
+
+    REQUIRE(growth.commit());
+    CHECK(stableView == "stable");
+    CHECK(library.dictionary().lookupId("stable") == stableId);
+  }
+
+  TEST_CASE("DictionaryReadCache - resolves values after bounded collisions", "[library][unit][dictionary]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = openTestLibrary(temp);
+    auto transaction = library.writeTransaction();
     constexpr std::int32_t kValueCount = 5000;
     auto ids = std::vector<DictionaryId>{};
     ids.reserve(kValueCount);
 
     for (std::int32_t index = 0; index < kValueCount; ++index)
     {
-      ids.push_back(dictionary.getOrIntern("value_" + std::to_string(index)));
+      ids.push_back(requireIntern(transaction, "value_" + std::to_string(index)));
     }
 
-    auto cache = DictionaryReadCache{dictionary};
+    REQUIRE(transaction.commit());
+    auto cache = DictionaryReadCache{library.dictionary()};
 
     for (std::int32_t index = 0; index < kValueCount; ++index)
     {
       CHECK(cache.get(ids[static_cast<std::size_t>(index)]) == "value_" + std::to_string(index));
     }
-
-    for (std::int32_t index = kValueCount - 1; index >= 0; --index)
-    {
-      CHECK(cache.get(ids[static_cast<std::size_t>(index)]) == "value_" + std::to_string(index));
-    }
   }
 
-  TEST_CASE("DictionaryReadCache - retained values survive concurrent dictionary growth",
+  TEST_CASE("DictionaryReadContext - binds symbols with one committed generation", "[library][unit][dictionary]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = openTestLibrary(temp);
+    auto transaction = library.writeTransaction();
+    auto const firstId = requireIntern(transaction, "first");
+    REQUIRE(transaction.commit());
+
+    auto context = DictionaryReadContext{library.dictionary()};
+    auto const symbols = std::vector<std::string>{"first", "missing"};
+    auto ids = std::vector<DictionaryId>(symbols.size());
+    auto const generation = context.bind(symbols, ids);
+
+    CHECK(generation == library.dictionary().generation());
+    CHECK(ids == std::vector{firstId, kInvalidDictionaryId});
+  }
+
+  TEST_CASE("DictionaryStore - readers observe complete committed publications",
             "[library][unit][dictionary][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
+    auto library = openTestLibrary(temp);
+    auto seed = library.writeTransaction();
+    auto const stableId = requireIntern(seed, "stable");
+    REQUIRE(seed.commit());
 
-    auto const stableId = dictionary.getOrIntern("stable");
-    auto cache = DictionaryReadCache{dictionary};
-    REQUIRE(cache.get(stableId) == "stable");
+    auto start = std::barrier{4};
+    auto failed = std::atomic{false};
+    auto writerDone = std::atomic{false};
 
-    auto start = std::barrier{2};
     auto writer = std::jthread{[&]
                                {
                                  start.arrive_and_wait();
 
-                                 for (std::int32_t index = 0; index < 10000; ++index)
+                                 for (std::int32_t batch = 0; batch < 128; ++batch)
                                  {
-                                   dictionary.getOrIntern("growth_" + std::to_string(index));
+                                   auto transaction = library.writeTransaction();
+
+                                   for (std::int32_t index = 0; index < 8; ++index)
+                                   {
+                                     auto const result = transaction.dictionary().intern(
+                                       "batch_" + std::to_string(batch) + "_" + std::to_string(index));
+
+                                     if (!result)
+                                     {
+                                       failed.store(true, std::memory_order_relaxed);
+                                       break;
+                                     }
+                                   }
+
+                                   if (failed.load(std::memory_order_relaxed) || !transaction.commit())
+                                   {
+                                     failed.store(true, std::memory_order_relaxed);
+                                     break;
+                                   }
                                  }
+
+                                 writerDone.store(true, std::memory_order_release);
                                }};
 
-    start.arrive_and_wait();
-    bool retainedValueStayedValid = true;
-
-    for (std::int32_t index = 0; index < 50000; ++index)
-    {
-      retainedValueStayedValid = retainedValueStayedValid && cache.get(stableId) == "stable";
-    }
-
-    writer.join();
-    CHECK(retainedValueStayedValid);
-  }
-
-  // Run under TSan (./ao test --tsan) to verify the shared_mutex guards every
-  // index, and under ASan to verify the deque keeps get()'s string_view valid
-  // while a concurrent writer grows the backing storage.
-  TEST_CASE("DictionaryStore - concurrent read and write access is race-free",
-            "[library][unit][dictionary][concurrency]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    REQUIRE(wtxn.commit());
-
-    // Seed a stable set of entries that readers can always resolve. getOrIntern
-    // stays in memory (no write transaction), so it is safe to call concurrently.
-    constexpr std::int32_t kSeed = 256;
-    auto seededIds = std::vector<DictionaryId>{};
-    seededIds.reserve(kSeed);
-
-    for (std::int32_t i = 0; i < kSeed; ++i)
-    {
-      seededIds.push_back(dictionary.getOrIntern("seed_" + std::to_string(i)));
-    }
-
-    auto failed = std::atomic{false};
-
-    // Writer: keep interning fresh strings to force storage growth underneath
-    // the readers.
-    auto writer = std::jthread{[&](std::stop_token const& st)
-                               {
-                                 for (std::int32_t i = 0; !st.stop_requested(); ++i)
-                                 {
-                                   dictionary.getOrIntern("grow_" + std::to_string(i));
-                                 }
-                               }};
-
-    // Readers: resolve seeded IDs/strings concurrently with the writer. The
-    // returned string_view must stay valid across the writer's growth.
     auto reader = [&]
     {
-      for (std::int32_t iter = 0; iter < 20000 && !failed.load(std::memory_order_relaxed); ++iter)
-      {
-        auto const index = static_cast<std::size_t>(iter) % seededIds.size();
-        auto const id = seededIds[index];
+      start.arrive_and_wait();
+      auto context = DictionaryReadContext{library.dictionary()};
+      std::int32_t probeBatch = 0;
 
-        if (auto const expected = "seed_" + std::to_string(index);
-            dictionary.get(id) != expected || !dictionary.contains(expected) || dictionary.lookupId(expected) != id)
+      while (true)
+      {
+        if (library.dictionary().get(stableId) != "stable" || library.dictionary().lookupId("stable") != stableId)
         {
           failed.store(true, std::memory_order_relaxed);
         }
 
-        std::ignore = dictionary.size();
+        auto const size = library.dictionary().size();
+
+        if (auto const generation = library.dictionary().generation(); size < 1 || generation < 2)
+        {
+          failed.store(true, std::memory_order_relaxed);
+        }
+
+        auto symbols = std::array<std::string, 8>{};
+        auto ids = std::array<DictionaryId, 8>{};
+
+        for (std::int32_t index = 0; index < 8; ++index)
+        {
+          symbols[static_cast<std::size_t>(index)] =
+            "batch_" + std::to_string(probeBatch) + "_" + std::to_string(index);
+        }
+
+        std::ignore = context.bind(symbols, ids);
+        auto const resolved = std::ranges::count_if(ids, [](DictionaryId id) { return id != kInvalidDictionaryId; });
+
+        if (resolved != 0 && std::cmp_not_equal(resolved, ids.size()))
+        {
+          failed.store(true, std::memory_order_relaxed);
+        }
+
+        probeBatch = (probeBatch + 1) % 128;
+
+        if (writerDone.load(std::memory_order_acquire) || failed.load(std::memory_order_relaxed))
+        {
+          break;
+        }
       }
     };
 
-    auto r1 = std::jthread{reader};
-    auto r2 = std::jthread{reader};
-    auto r3 = std::jthread{reader};
+    auto reader1 = std::jthread{reader};
+    auto reader2 = std::jthread{reader};
+    auto reader3 = std::jthread{reader};
 
-    r1.request_stop();
-    r2.request_stop();
-    r3.request_stop();
-
-    if (r1.joinable())
-    {
-      r1.join();
-    }
-
-    if (r2.joinable())
-    {
-      r2.join();
-    }
-
-    if (r3.joinable())
-    {
-      r3.join();
-    }
-
-    writer.request_stop();
-
-    if (writer.joinable())
-    {
-      writer.join();
-    }
-
-    CHECK(!failed.load());
+    writer.join();
+    reader1.join();
+    reader2.join();
+    reader3.join();
+    CHECK_FALSE(failed.load(std::memory_order_relaxed));
+    CHECK(library.dictionary().size() == 1025);
   }
 } // namespace ao::library::test

@@ -22,6 +22,7 @@ The compiler and evaluator are public under `include/ao/query/` and implemented 
 ## Terminology
 
 - **Format plan** is an ordered runtime-only sequence of append-literal and append-field instructions.
+- **Format binding** resolves one plan's owned dictionary symbols for one bounded evaluation batch.
 - **Scalar field** is a field with one string, numeric, codec, or custom value per track.
 - **Missing value** is a supported scalar field whose stored value is absent or its numeric sentinel is zero.
 
@@ -31,18 +32,18 @@ The compiler and evaluator are public under `include/ao/query/` and implemented 
 - Evaluation appends instructions from left to right without implicit separators.
 - Constants append their canonical or literal text.
 - Missing supported fields append an empty string.
-- Dictionary fields and custom keys are resolved through the dictionary captured by the plan.
+- A plan owns custom-key symbol text and captures no dictionary or library pointer.
+- Dictionary fields and custom keys are resolved through an explicit bounded dictionary context/binding.
 - A plan reports the union of hot and cold track data it requires.
 - Evaluation does not mutate track, dictionary, library, runtime, or frontend state.
 
 ## Compilation
 
-`compileFormat(ast, dictionary)` and `FormatCompiler::compile(ast)` return `Result<FormatPlan>`.
+`compileFormat(ast)` and `FormatCompiler::compile(ast)` return `Result<FormatPlan>` without reading or mutating a dictionary.
 Compilation flattens grouping and concatenation into ordered append instructions and deduplicates repeated literal storage without changing output order.
 
-Dictionary-backed fields require a non-null `DictionaryStore`.
-Custom key names are interned during compilation and retained as dictionary ids in field instructions.
-Literal-only and non-dictionary plans may compile without a dictionary.
+Custom key names are retained as deduplicated plan-owned symbols.
+Dictionary-backed fields mark the plan as requiring a dictionary context for evaluation.
 
 The plan access profile is:
 
@@ -53,14 +54,19 @@ The plan access profile is:
 
 ## Evaluation
 
-`FormatEvaluator::evaluate(plan, track)` first verifies that the supplied `TrackView` contains every tier required by the plan.
+For a dictionary-using plan, `FormatBinding(plan, context)` resolves all custom-key symbols under one committed dictionary lock and retains the context for id-to-text reads.
+Callers normally create one binding per output batch and reuse it for the tracks in that batch.
+A later binding can resolve a custom key introduced by a newer committed dictionary generation without recompiling the plan.
+When the batch evaluates transaction-backed track views, the caller opens the read transaction before creating the binding so the binding cannot be older than the evaluated storage snapshot.
+
+`FormatEvaluator::evaluate(binding, track)` first verifies that the supplied `TrackView` contains every tier required by the plan.
 If a required tier is missing, evaluation returns an empty result for the entire expression rather than partially formatting available fields.
 
 Otherwise, it appends each instruction:
 
 - literal instructions append the indexed literal when the index is valid;
 - dictionary fields append resolved text or empty text when unresolved;
-- title and custom fields append their stored text;
+- title and custom fields append their stored text, while an unresolved or absent custom key appends empty text;
 - numeric fields append decimal text or empty text for zero;
 - codec appends its canonical name or empty text for `UNKNOWN`.
 
@@ -69,12 +75,16 @@ For example, an absent album artist in `"[" + $albumArtist + "]"` produces `[]`.
 
 ## Failure and cancellation
 
-Invalid subset shapes, unknown fields, non-scalar fields, and missing dictionary requirements return `Error::Code::FormatRejected` from the public compile boundary.
+Invalid subset shapes, unknown fields, and non-scalar fields return `Error::Code::FormatRejected` from the public compile boundary.
 Private compiler recursion may use an internal exception, but no exception escapes for user input.
+
+Plans with no dictionary access may use the context-free evaluation overloads.
+Supplying an explicit `DictionaryReadContext` or `FormatBinding` is a precondition for a plan whose `requiresDictionary` flag is true.
 
 Evaluation is synchronous and non-throwing for ordinary missing track values.
 It has no cancellation point.
 Malformed internal instruction indices are ignored defensively rather than exposing user input as memory access.
+Typed insufficient-data and invalid-context outcomes remain proposed by [RFC 0009](../../rfc/0009-pure-expression-binding.md).
 
 ## Persistence and versioning
 

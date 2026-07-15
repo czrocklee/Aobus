@@ -5,7 +5,8 @@
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/FileManifestView.h>
-#include <ao/lmdb/Transaction.h>
+#include <ao/library/ReadTransaction.h>
+#include <ao/library/WriteTransaction.h>
 #include <ao/utility/ByteView.h>
 
 #include <array>
@@ -67,14 +68,19 @@ namespace ao::library
     };
   } // namespace
 
-  FileManifestStore::Reader FileManifestStore::reader(lmdb::ReadTransaction const& transaction) const
+  FileManifestStore::Reader FileManifestStore::reader(ReadTransaction const& transaction) const
   {
-    return Reader{_db.reader(transaction)};
+    return Reader{_db.reader(transaction.native(*_identity))};
   }
 
-  FileManifestStore::Writer FileManifestStore::writer(lmdb::WriteTransaction& transaction) const
+  FileManifestStore::Reader FileManifestStore::reader(WriteTransaction const& transaction) const
   {
-    return Writer{_db.writer(transaction)};
+    return Reader{_db.reader(transaction.native(*_identity))};
+  }
+
+  FileManifestStore::Writer FileManifestStore::writer(WriteTransaction& transaction) const
+  {
+    return Writer{_db.writer(transaction.native(*_identity))};
   }
 
   Result<FileManifestView> FileManifestStore::Reader::get(std::string_view uri) const

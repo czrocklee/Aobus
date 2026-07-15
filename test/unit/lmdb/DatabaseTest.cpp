@@ -4,11 +4,14 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
+
+#include <utility>
 
 namespace ao::lmdb::test
 {
@@ -48,5 +51,54 @@ namespace ao::lmdb::test
 
     CHECK_FALSE(db);
     CHECK(db.error().code == Error::Code::NotFound);
+  }
+
+  TEST_CASE("Database - write open rejects a finished transaction", "[lmdb][unit][database]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto transaction = beginWriteTransaction(env);
+    REQUIRE(transaction.commit());
+
+    auto const result = Database::open(transaction, "finished");
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidState);
+  }
+
+  TEST_CASE("Database - read-only open rejects a moved-from transaction", "[lmdb][unit][database]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto setup = beginWriteTransaction(env);
+    auto db = openDatabase(setup, "test");
+    REQUIRE(setup.commit());
+
+    auto source = beginReadTransaction(env);
+    auto destination = ReadTransaction{std::move(source)};
+    // ReadTransaction specifies an inactive moved-from state.
+    // NOLINTNEXTLINE(bugprone-use-after-move)
+    auto const result = Database::open(source, "test");
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidState);
+    CHECK(db.reader(destination).begin() == db.reader(destination).end());
+  }
+
+  TEST_CASE("Database - reader rejects a moved-from transaction", "[lmdb][unit][database]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto setup = beginWriteTransaction(env);
+    auto db = openDatabase(setup, "test");
+    REQUIRE(setup.commit());
+
+    auto source = beginReadTransaction(env);
+    auto destination = ReadTransaction{std::move(source)};
+
+    // ReadTransaction specifies an inactive moved-from state.
+    // NOLINTNEXTLINE(bugprone-use-after-move)
+    CHECK_THROWS_AS(db.reader(source), Exception);
+    CHECK(db.reader(destination).begin() == db.reader(destination).end());
   }
 } // namespace ao::lmdb::test

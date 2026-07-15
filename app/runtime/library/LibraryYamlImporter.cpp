@@ -17,7 +17,6 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWrite.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
@@ -335,40 +334,40 @@ namespace ao::rt
 
     Result<ImportReport> applyImportFromYaml(std::filesystem::path const& path, ImportMode mode, ImportRunMode runMode);
 
-    void populateDeletionStats(ValidatedImport const& val, ImportReport& rep);
-    Result<> clearDatabase(ValidatedImport const& val, lmdb::WriteTransaction& writeTransaction);
+    void populateDeletionStats(ValidatedImport const& val, ImportReport& rep) const;
+    Result<> clearDatabase(ValidatedImport const& val, library::WriteTransaction& writeTransaction) const;
 
     Result<ValidatedImport> validate(ryml::ConstNodeRef const& root) const;
     Result<> validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const;
     Result<> validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const;
 
     Result<> importTracks(std::vector<ValidatedTrack> const& tracks,
-                          lmdb::WriteTransaction& transaction,
+                          library::WriteTransaction& transaction,
                           std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
                           ImportMode strategy,
                           ExportMode payloadMode,
-                          ImportReport& report);
+                          ImportReport& report) const;
     Result<> importTrackRecord(ValidatedTrack const& validatedTrack,
-                               lmdb::WriteTransaction& transaction,
+                               library::WriteTransaction& transaction,
                                library::TrackStore::Writer& trackWriter,
                                library::FileManifestStore::Writer& manifestWriter,
                                library::FileManifestStore::Reader const& manifestReader,
                                ImportMode strategy,
                                ExportMode payloadMode,
                                std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
-                               ImportReport& report);
+                               ImportReport& report) const;
     Result<> loadTrackBaseline(std::string_view uriStr,
                                std::optional<TrackId> const& optExistingTrackId,
                                ExportMode payloadMode,
                                std::optional<library::TrackBuilder>& optBuilder,
                                std::optional<MediaTrack>& optMediaTrack,
-                               library::TrackStore::Writer& trackWriter);
+                               library::TrackStore::Writer& trackWriter) const;
 
     Result<> importLists(std::vector<ValidatedList> const& lists,
-                         lmdb::WriteTransaction& transaction,
+                         library::WriteTransaction& transaction,
                          std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
                          ImportMode strategy,
-                         ImportReport& report);
+                         ImportReport& report) const;
 
     Result<std::vector<std::vector<std::byte>>> importCovers(ryml::ConstNodeRef const& trackNode,
                                                              library::TrackBuilder& builder) const;
@@ -600,7 +599,7 @@ namespace ao::rt
     return report;
   }
 
-  void LibraryYamlImporter::Impl::populateDeletionStats(ValidatedImport const& val, ImportReport& rep)
+  void LibraryYamlImporter::Impl::populateDeletionStats(ValidatedImport const& val, ImportReport& rep) const
   {
     auto readTransaction = ml.readTransaction();
 
@@ -619,7 +618,7 @@ namespace ao::rt
   }
 
   Result<> LibraryYamlImporter::Impl::clearDatabase(ValidatedImport const& val,
-                                                    lmdb::WriteTransaction& writeTransaction)
+                                                    library::WriteTransaction& writeTransaction) const
   {
     if (val.payloadMode != ExportMode::ListOnly)
     {
@@ -957,11 +956,11 @@ namespace ao::rt
   }
 
   Result<> LibraryYamlImporter::Impl::importTracks(std::vector<ValidatedTrack> const& tracks,
-                                                   lmdb::WriteTransaction& transaction,
+                                                   library::WriteTransaction& transaction,
                                                    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
                                                    ImportMode strategy,
                                                    ExportMode payloadMode,
-                                                   ImportReport& report)
+                                                   ImportReport& report) const
   {
     auto trackWriter = ml.tracks().writer(transaction);
     auto manifestWriter = ml.manifest().writer(transaction);
@@ -989,17 +988,16 @@ namespace ao::rt
 
   Result<> LibraryYamlImporter::Impl::importTrackRecord(
     ValidatedTrack const& validatedTrack,
-    lmdb::WriteTransaction& transaction,
+    library::WriteTransaction& transaction,
     library::TrackStore::Writer& trackWriter,
     library::FileManifestStore::Writer& manifestWriter,
     library::FileManifestStore::Reader const& manifestReader,
     ImportMode strategy,
     ExportMode payloadMode,
     std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
-    ImportReport& report)
+    ImportReport& report) const
   {
-    auto& dictionary = ml.dictionary();
-    auto& resources = ml.resources();
+    auto const& resources = ml.resources();
 
     auto const& trackNode = validatedTrack.node;
     std::string_view const& uriStr = validatedTrack.uri;
@@ -1055,7 +1053,7 @@ namespace ao::rt
 
     auto decodedCoverBlobs = std::move(*decodedCoverBlobsResult);
 
-    auto preparedResult = builder.prepare(transaction, dictionary, resources);
+    auto preparedResult = builder.prepare(transaction, resources);
 
     if (!preparedResult)
     {
@@ -1266,7 +1264,7 @@ namespace ao::rt
                                                         ExportMode payloadMode,
                                                         std::optional<library::TrackBuilder>& optBuilder,
                                                         std::optional<MediaTrack>& optMediaTrack,
-                                                        library::TrackStore::Writer& trackWriter)
+                                                        library::TrackStore::Writer& trackWriter) const
   {
     if (optExistingTrackId)
     {
@@ -1584,10 +1582,10 @@ namespace ao::rt
 
   Result<> LibraryYamlImporter::Impl::importLists(
     std::vector<ValidatedList> const& lists,
-    lmdb::WriteTransaction& transaction,
+    library::WriteTransaction& transaction,
     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
     ImportMode /*strategy*/,
-    ImportReport& report)
+    ImportReport& report) const
   {
     auto listWriter = ml.lists().writer(transaction);
     auto manifestReader = ml.manifest().reader(transaction);

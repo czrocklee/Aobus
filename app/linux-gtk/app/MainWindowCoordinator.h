@@ -11,11 +11,6 @@
 #include <memory>
 #include <optional>
 
-namespace ao::lmdb
-{
-  class ReadTransaction;
-}
-
 namespace ao::rt
 {
   class PlaybackSequenceService;
@@ -66,7 +61,7 @@ namespace ao::gtk
 
     GtkUiDependencies uiDependencies();
 
-    void rebuildListPages(lmdb::ReadTransaction const& transaction);
+    void rebuildListPages();
 
     TrackRowCache* trackRowCache();
     ImageCache* imageCache();

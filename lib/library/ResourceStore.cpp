@@ -3,8 +3,9 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/ReadTransaction.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/lmdb/Transaction.h>
+#include <ao/library/WriteTransaction.h>
 #include <ao/utility/Xxh3.h>
 
 #include <algorithm>
@@ -19,9 +20,19 @@ namespace ao::library
 {
   using Writer = ResourceStore::Writer;
 
-  Writer ResourceStore::writer(lmdb::WriteTransaction& transaction)
+  ResourceStore::Reader ResourceStore::reader(ReadTransaction const& transaction) const
   {
-    return Writer{_database.writer(transaction)};
+    return Reader{_database.reader(transaction.native(*_identity))};
+  }
+
+  ResourceStore::Reader ResourceStore::reader(WriteTransaction const& transaction) const
+  {
+    return Reader{_database.reader(transaction.native(*_identity))};
+  }
+
+  Writer ResourceStore::writer(WriteTransaction& transaction) const
+  {
+    return Writer{_database.writer(transaction.native(*_identity))};
   }
 
   Result<ResourceId> Writer::create(std::span<std::byte const> data)

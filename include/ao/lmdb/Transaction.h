@@ -32,6 +32,8 @@ namespace ao::lmdb
     ReadTransaction(ReadTransaction&&) = default;
     ReadTransaction& operator=(ReadTransaction&&) = default;
 
+    bool isActive() const noexcept { return handle() != nullptr; }
+
   protected:
     struct MdbTxnDeleter
     {
@@ -70,8 +72,12 @@ namespace ao::lmdb
 
     Result<> commit();
 
-    // Check if transaction was committed (cursors are now invalid)
-    bool isCommitted() const { return _cursorClosed; }
+    // Explicitly abort an active transaction. Repeated calls are harmless.
+    void abort() noexcept;
+
+    // A finished transaction has no native handle. This includes successful
+    // commit, failed commit, explicit abort, and the moved-from state.
+    bool isFinished() const noexcept { return !isActive(); }
 
   private:
     explicit WriteTransaction(TxnPtr txnPtr)
@@ -79,7 +85,6 @@ namespace ao::lmdb
     {
     }
 
-    bool _cursorClosed = false;
     friend class Database;
   };
 } // namespace ao::lmdb

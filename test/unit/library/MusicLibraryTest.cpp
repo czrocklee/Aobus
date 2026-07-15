@@ -5,11 +5,17 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
+#include <ao/Exception.h>
+#include <ao/library/FileManifestStore.h>
+#include <ao/library/ListStore.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/library/TrackStore.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
@@ -17,6 +23,8 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <type_traits>
+#include <utility>
 
 namespace ao::library::test
 {
@@ -29,12 +37,12 @@ namespace ao::library::test
     {
       auto env = lmdb::test::openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
       auto transaction = lmdb::test::beginWriteTransaction(env);
-      auto metadataStore = MetadataStore{lmdb::test::openDatabase(transaction, "meta")};
+      auto metadataDatabase = lmdb::test::openDatabase(transaction, "meta");
       auto header = MetadataHeader{.magic = kMetadataMagic,
                                    .libraryVersion = libraryVersion,
                                    .flags = 0,
                                    .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1}}};
-      REQUIRE(metadataStore.create(transaction, header));
+      REQUIRE(metadataDatabase.writer(transaction).create(kMetadataHeaderRecordId, utility::bytes::view(header)));
       REQUIRE(transaction.commit());
     }
   } // namespace
@@ -108,6 +116,13 @@ namespace ao::library::test
     CHECK_NOTHROW(ml.dictionary());
     CHECK_NOTHROW(ml.manifest());
     CHECK(ml.rootPath() == temp.path());
+
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().tracks()), TrackStore const&>);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().lists()), ListStore const&>);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().resources()), ResourceStore const&>);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().dictionary()), DictionaryStore const&>);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().manifest()), FileManifestStore const&>);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().metadata()), MetadataStore const&>);
   }
 
   TEST_CASE("MusicLibrary - read and write transactions work", "[library][unit][music-library]")
@@ -119,5 +134,81 @@ namespace ao::library::test
     CHECK_NOTHROW(wtxn.commit());
 
     auto rtxn = ml.readTransaction(); // validates read access to the database
+  }
+
+  TEST_CASE("MusicLibrary - moved-from write transactions are inactive", "[library][unit][music-library]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path());
+    auto source = library.writeTransaction();
+    auto destination = std::move(source);
+
+    // The wrapper specifies an inactive moved-from state that is safe to query.
+    // NOLINTNEXTLINE(bugprone-use-after-move)
+    CHECK_THROWS_AS(source.dictionary(), Exception);
+    // NOLINTNEXTLINE(bugprone-use-after-move)
+    auto const sourceCommit = source.commit();
+    REQUIRE_FALSE(sourceCommit);
+    CHECK(sourceCommit.error().code == Error::Code::InvalidState);
+    REQUIRE(destination.commit());
+  }
+
+  TEST_CASE("MusicLibrary - write transaction commit is terminal", "[library][unit][music-library]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path());
+    auto transaction = library.writeTransaction();
+
+    REQUIRE(transaction.commit());
+    auto const repeatedCommit = transaction.commit();
+    REQUIRE_FALSE(repeatedCommit);
+    CHECK(repeatedCommit.error().code == Error::Code::InvalidState);
+    CHECK_THROWS_AS(transaction.dictionary(), Exception);
+  }
+
+  TEST_CASE("MusicLibrary - moved-from read transactions are inactive", "[library][unit][music-library]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path());
+    auto source = library.readTransaction();
+    auto destination = std::move(source);
+
+    // The wrapper specifies an inactive moved-from state that is safe to query.
+    // NOLINTNEXTLINE(bugprone-use-after-move)
+    CHECK_THROWS_AS(library.tracks().reader(source), Exception);
+    CHECK_NOTHROW(library.tracks().reader(destination));
+  }
+
+  TEST_CASE("MusicLibrary - rejects transactions from another library", "[library][unit][music-library]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto libraryA = MusicLibrary{temp.path() / "music-a", temp.path() / "db-a"};
+    auto libraryB = MusicLibrary{temp.path() / "music-b", temp.path() / "db-b"};
+    auto const libraryBHeader = libraryB.metadataHeader();
+
+    {
+      auto const transaction = libraryA.readTransaction();
+      CHECK_THROWS_AS(libraryB.tracks().reader(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.lists().reader(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.resources().reader(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.manifest().reader(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.metadata().load(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.libraryRevision(transaction), Exception);
+    }
+
+    {
+      auto transaction = libraryA.writeTransaction();
+      CHECK_THROWS_AS(libraryB.tracks().reader(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.tracks().writer(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.lists().reader(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.lists().writer(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.resources().reader(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.resources().writer(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.manifest().reader(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.manifest().writer(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.metadata().load(transaction), Exception);
+      CHECK_THROWS_AS(libraryB.metadata().update(transaction, libraryBHeader), Exception);
+      CHECK_THROWS_AS(libraryB.libraryRevision(transaction), Exception);
+    }
   }
 } // namespace ao::library::test

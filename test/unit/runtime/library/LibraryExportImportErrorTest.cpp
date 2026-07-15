@@ -5,6 +5,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
@@ -13,8 +14,11 @@
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -302,5 +306,67 @@ library:
       REQUIRE(optList);
       CHECK(optList->tracks().empty());
     }
+  }
+
+  TEST_CASE("LibraryYaml - restore rolls back every mutation when a later track fails",
+            "[runtime][workflow][import-export][regression]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const originalTrackId = library::test::addTrack(
+      library,
+      library::test::TrackSpec{.title = "Original Track", .artist = "Original Artist", .uri = "original.flac"});
+    auto const originalDictionaryGeneration = library.dictionary().generation();
+    std::uint64_t originalRevision = 0;
+
+    {
+      auto transaction = library.readTransaction();
+      originalRevision = library.libraryRevision(transaction);
+    }
+
+    constexpr auto kUint16Overflow = std::size_t{std::numeric_limits<std::uint16_t>::max()} + 1;
+    auto const oversizedTitle = std::string(kUint16Overflow, 'x');
+    auto const yamlPath = temp.path() / "rollback.yaml";
+
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << R"(version: 1
+export_mode: full
+library:
+  tracks:
+    - id: 1
+      uri: "transient.flac"
+      title: "Transient Track"
+      artist: "Transient Artist"
+    - id: 2
+      uri: "oversized.flac"
+      title: ")"
+           << oversizedTitle << R"("
+  lists: []
+)";
+    }
+
+    auto importer = LibraryYamlImporter{library};
+    auto const result = importer.importFromYaml(yamlPath, ImportMode::Restore);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::ValueTooLarge);
+    CHECK(library.dictionary().generation() == originalDictionaryGeneration);
+    CHECK_FALSE(library.dictionary().findId("Transient Artist"));
+
+    auto transaction = library.readTransaction();
+    CHECK(library.libraryRevision(transaction) == originalRevision);
+    std::size_t trackCount = 0;
+
+    for (auto const& [trackId, view] : library.tracks().reader(transaction))
+    {
+      ++trackCount;
+      CHECK(trackId == originalTrackId);
+      CHECK(view.metadata().title() == "Original Track");
+      CHECK(view.property().uri() == "original.flac");
+    }
+
+    CHECK(trackCount == 1);
+    CHECK_FALSE(library.manifest().reader(transaction).get("transient.flac"));
   }
 } // namespace ao::rt::test

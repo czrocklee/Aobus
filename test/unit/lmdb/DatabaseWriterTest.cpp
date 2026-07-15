@@ -321,4 +321,34 @@ namespace ao::lmdb::test
     REQUIRE_THROWS_AS(writer.get(1), Exception);
     REQUIRE_THROWS_AS(writer.clear(), Exception);
   }
+
+  TEST_CASE("Database::Writer - construction rejects a finished transaction", "[lmdb][unit][database][writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+    auto transaction = beginWriteTransaction(env);
+    auto db = openDatabase(transaction, "test");
+    REQUIRE(transaction.commit());
+
+    CHECK_THROWS_AS(db.writer(transaction), Exception);
+  }
+
+  TEST_CASE("Database::Writer - move assignment releases a finished cursor without closing it",
+            "[lmdb][unit][database][writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
+
+    auto firstTransaction = beginWriteTransaction(env);
+    auto db = openDatabase(firstTransaction, "test");
+    auto writer = db.writer(firstTransaction);
+    REQUIRE(writer.create(1, createStringData("first")));
+    REQUIRE(firstTransaction.commit());
+
+    auto secondTransaction = beginWriteTransaction(env);
+    auto replacement = db.writer(secondTransaction);
+    writer = std::move(replacement);
+    REQUIRE(writer.create(2, createStringData("second")));
+    REQUIRE(secondTransaction.commit());
+  }
 } // namespace ao::lmdb::test

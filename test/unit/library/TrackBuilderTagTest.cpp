@@ -94,7 +94,7 @@ namespace ao::library::test
     builder.tags().add("tag10").add("tag20");
 
     auto context = TrackSerializationFixture{};
-    auto hotDataResult = builder.serializeHot(context.transaction(), context.dictionary());
+    auto hotDataResult = builder.serializeHot(context.transaction());
     REQUIRE(hotDataResult);
     auto const& hotData = *hotDataResult;
 

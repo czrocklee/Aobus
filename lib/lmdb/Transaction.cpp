@@ -57,6 +57,11 @@ namespace ao::lmdb
 
   Result<WriteTransaction> WriteTransaction::begin(WriteTransaction& parent)
   {
+    if (!parent.isActive())
+    {
+      return makeError(Error::Code::InvalidState, "Cannot begin a child transaction from a finished parent");
+    }
+
     auto txnPtr = create(::mdb_txn_env(parent.handle()), parent.handle(), 0);
 
     if (!txnPtr)
@@ -69,8 +74,17 @@ namespace ao::lmdb
 
   Result<> WriteTransaction::commit()
   {
+    if (!isActive())
+    {
+      return makeError(Error::Code::InvalidState, "LMDB write transaction is already finished");
+    }
+
     int const rc = ::mdb_txn_commit(releaseHandle());
-    _cursorClosed = true;
     return resultFromCode("mdb_txn_commit", rc);
+  }
+
+  void WriteTransaction::abort() noexcept
+  {
+    auto transactionPtr = TxnPtr{releaseHandle()};
   }
 } // namespace ao::lmdb

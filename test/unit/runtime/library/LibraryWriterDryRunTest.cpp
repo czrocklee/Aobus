@@ -187,6 +187,40 @@ namespace ao::rt::test
     CHECK(recorder.tracksMutated == 1);
   }
 
+  TEST_CASE("LibraryWriter - metadata preview does not publish dictionary symbols", "[runtime][unit][library][dry-run]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Track");
+    auto const& dictionary = libraryFixture.library().dictionary();
+    auto const initialSize = dictionary.size();
+    auto const initialGeneration = dictionary.generation();
+    auto changes = LibraryChanges{};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    bool callbackSawDictionary = false;
+    [[maybe_unused]] auto subscription = changes.onChanged(
+      [&](LibraryChangeSet const&)
+      { callbackSawDictionary = dictionary.contains("Preview Artist") && dictionary.contains("Preview Key"); });
+    auto patch = MetadataPatch{.optArtist = "Preview Artist"};
+    patch.customUpdates.emplace("Preview Key", "Preview Value");
+
+    auto const preview = writer.previewUpdateMetadata(std::array{trackId}, patch);
+
+    REQUIRE(preview);
+    CHECK(dictionary.size() == initialSize);
+    CHECK(dictionary.generation() == initialGeneration);
+    CHECK_FALSE(dictionary.findId("Preview Artist"));
+    CHECK_FALSE(dictionary.findId("Preview Key"));
+    CHECK_FALSE(callbackSawDictionary);
+
+    auto const commit = writer.updateMetadata(std::array{trackId}, patch);
+
+    REQUIRE(commit);
+    CHECK(*commit == *preview);
+    CHECK(dictionary.size() == initialSize + 2);
+    CHECK(dictionary.generation() == initialGeneration + 1);
+    CHECK(callbackSawDictionary);
+  }
+
   TEST_CASE("LibraryWriter - dry-run previews tag edits without committing", "[runtime][unit][library][dry-run]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -195,6 +229,9 @@ namespace ao::rt::test
     auto writer = LibraryWriter{libraryFixture.library(), changes};
     auto recorder = ChangeRecorder{changes};
     auto const tags = std::array{std::string{"Favorite"}};
+    auto const& dictionary = libraryFixture.library().dictionary();
+    auto const initialSize = dictionary.size();
+    auto const initialGeneration = dictionary.generation();
 
     auto const dryRun = writer.previewEditTags(std::array{trackId}, tags, {});
 
@@ -202,12 +239,18 @@ namespace ao::rt::test
     REQUIRE(dryRun->changes.size() == 1);
     CHECK(dryRun->changes[0].addedTags == std::vector<std::string>{"Favorite"});
     CHECK_FALSE(trackHasTag(libraryFixture, trackId, "Favorite"));
+    CHECK_FALSE(dictionary.findId("Favorite"));
+    CHECK(dictionary.size() == initialSize);
+    CHECK(dictionary.generation() == initialGeneration);
     CHECK(recorder.tracksMutated == 0);
 
     auto const commit = writer.editTags(std::array{trackId}, tags, {});
     REQUIRE(commit);
     CHECK(*commit == *dryRun);
     CHECK(trackHasTag(libraryFixture, trackId, "Favorite"));
+    CHECK(dictionary.findId("Favorite"));
+    CHECK(dictionary.size() == initialSize + 1);
+    CHECK(dictionary.generation() == initialGeneration + 1);
     CHECK(recorder.tracksMutated == 1);
   }
 

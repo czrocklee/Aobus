@@ -3,20 +3,15 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/LibraryBinaryTestSupport.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
-#include <ao/query/QueryCompiler.h>
 #include <ao/query/detail/Bytecode.h>
-#include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <array>
 #include <cstddef>
@@ -28,69 +23,58 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator - keeps OR candidates when only one branch uses tag bloom filtering",
+  TEST_CASE("PlanEvaluator - keeps OR candidates when only one branch requires a tag", "[query][unit][plan-evaluator]")
+  {
+    auto dictionaryFixture = DictionaryFixture{};
+    auto const aimerId = dictionaryFixture.intern("Aimer");
+    auto const& dictionary = dictionaryFixture.dictionary();
+
+    auto const plan = compileOk(QueryCompiler{}, parseOk(R"($artist ~ "Aimer" or #Aimer)"));
+    CHECK(plan.requiredTagSymbols.empty());
+
+    auto cache = library::DictionaryReadCache{dictionary};
+    auto context = library::DictionaryReadContext{cache};
+    auto const binding = PlanBinding{plan, context};
+    auto const evaluator = PlanEvaluator{};
+
+    auto artistMatchData = makeHotOnlyTrack(aimerId);
+    auto artistMatch = library::TrackView{artistMatchData, std::span<std::byte const>{}};
+    CHECK(evaluator.matches(binding, artistMatch));
+
+    auto const tagIds = std::array{aimerId};
+    auto tagMatchData =
+      makeHotOnlyTrack(kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, tagIds);
+    auto tagMatch = library::TrackView{tagMatchData, std::span<std::byte const>{}};
+    CHECK(evaluator.matches(binding, tagMatch));
+
+    auto noMatchData = makeHotOnlyTrack();
+    auto noMatch = library::TrackView{noMatchData, std::span<std::byte const>{}};
+    CHECK_FALSE(evaluator.matches(binding, noMatch));
+  }
+
+  TEST_CASE("PlanEvaluator - unresolved tag symbols are false and do not mutate the dictionary",
             "[query][unit][plan-evaluator]")
   {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    auto aimerId = ao::test::requireValue(dictionary.put(wtxn, "Aimer"));
-    REQUIRE(wtxn.commit());
+    auto dictionaryFixture = DictionaryFixture{};
+    auto const& dictionary = dictionaryFixture.dictionary();
+    auto const plan = compileOk(QueryCompiler{}, parseOk("#future"));
+    auto noTagsData = makeHotOnlyTrack();
+    auto noTags = library::TrackView{noTagsData, std::span<std::byte const>{}};
 
-    auto expr = parseOk(R"($artist ~ "Aimer" or #Aimer)");
-    auto compiler = QueryCompiler{&dictionary};
-    auto plan = compileOk(compiler, expr);
-    auto evaluator = PlanEvaluator{};
-
-    CHECK(plan.tagBloomMask == 0);
-
-    auto artistMatchHotData = makeHotOnlyTrack(aimerId);
-    auto artistMatchTrack = library::TrackView{artistMatchHotData, std::span<std::byte const>{}};
-    CHECK(evaluator.matches(plan, artistMatchTrack) == true);
-
-    auto tagIds = std::array<DictionaryId, 1>{aimerId};
-    auto tagMatchHotData =
-      makeHotOnlyTrack(kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, tagIds);
-    auto tagMatchTrack = library::TrackView{tagMatchHotData, std::span<std::byte const>{}};
-    CHECK(evaluator.matches(plan, tagMatchTrack) == true);
-
-    auto noMatchHotData = makeHotOnlyTrack();
-    auto noMatchTrack = library::TrackView{noMatchHotData, std::span<std::byte const>{}};
-    CHECK(evaluator.matches(plan, noMatchTrack) == false);
+    CHECK_FALSE(matchesWithDictionary(PlanEvaluator{}, plan, noTags, dictionary));
+    CHECK(dictionary.size() == 0);
+    CHECK_FALSE(dictionary.findId("future"));
   }
 
-  TEST_CASE("PlanEvaluator - rejects tag queries when tracks have no tags", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches present tags and rejects absent tags", "[query][unit][plan-evaluator]")
   {
-    auto expr = parseOk("#rock");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
-    auto evaluator = PlanEvaluator{};
+    auto present = TrackFixture{TrackSpec{.tags = {"rock"}}};
+    auto absent = TrackFixture{TrackSpec{.tags = {"jazz"}}};
+    auto const plan = compileOk(QueryCompiler{}, parseOk("#rock"));
+    auto const evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}};
-    auto result = evaluator.matches(plan, track1.view());
-    CHECK(result == false);
-  }
-
-  TEST_CASE("PlanEvaluator - matches tag queries when the tag is present", "[query][unit][plan-evaluator]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{openDatabase(wtxn, "dictionary"), wtxn};
-    CHECK(dictionary.put(wtxn, "rock"));
-    REQUIRE(wtxn.commit());
-
-    auto expr = parseOk("#rock");
-    auto compiler = QueryCompiler{&dictionary};
-    auto plan = compileOk(compiler, expr);
-    auto evaluator = PlanEvaluator{};
-
-    auto trackWithTag =
-      TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {0}};
-    auto result = evaluator.matches(plan, trackWithTag.view());
-    CHECK(result == true);
+    CHECK(matchesWithDictionary(evaluator, plan, present.view(), present.dictionary()));
+    CHECK_FALSE(matchesWithDictionary(evaluator, plan, absent.view(), absent.dictionary()));
   }
 
   TEST_CASE("PlanEvaluator - matches numeric tag names and quoted custom keys", "[query][unit][plan-evaluator]")
@@ -98,100 +82,47 @@ namespace ao::query::test
     auto spec = TrackSpec{};
     spec.tags.emplace_back("123");
     spec.customPairs.emplace_back("Replay Gain", "high");
-    auto track = TestTrack{spec};
+    auto track = TrackFixture{spec};
+    auto const plan = compileOk(QueryCompiler{}, parseOk(R"(#123 and %"Replay Gain" = "high")"));
 
-    auto const expression = parseOk(R"(#123 and %"Replay Gain" = "high")");
-    auto const plan = compileOk(QueryCompiler{&track.dictionary()}, expression);
-
-    CHECK(PlanEvaluator{}.evaluateFull(plan, track.view()));
+    CHECK(evaluateWithDictionary(PlanEvaluator{}, plan, track.view(), track.dictionary()));
   }
 
-  TEST_CASE("PlanEvaluator - rejects tag queries when the tag is absent", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - compiles tag fields into bindable field loads", "[query][unit][plan-evaluator]")
   {
-    auto expr = parseOk("#rock");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
-    auto evaluator = PlanEvaluator{};
+    auto const plan = compileOk(QueryCompiler{}, parseOk("#tagname"));
 
-    auto trackWithTag =
-      TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {20}};
-    auto result = evaluator.matches(plan, trackWithTag.view());
-    CHECK(result == false);
-  }
-
-  TEST_CASE("PlanEvaluator - compiles tag fields into field loads", "[query][unit][plan-evaluator]")
-  {
-    auto expr = parseOk("#tagname");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
-
-    CHECK(!plan.instructions.empty());
+    REQUIRE(plan.instructions.size() >= 3);
     CHECK(plan.instructions[0].op == OpCode::LoadField);
-  }
-
-  TEST_CASE("PlanEvaluator - leaves tag bloom mask empty without a dictionary", "[query][unit][plan-evaluator]")
-  {
-    auto expr = parseOk("#mytag");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
-
-    CHECK(plan.tagBloomMask == 0);
-  }
-
-  TEST_CASE("PlanEvaluator - leaves tag bloom mask empty when dictionary lookup misses",
-            "[query][unit][plan-evaluator]")
-  {
-    auto expr = parseOk("#jazz");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
-
-    CHECK(plan.tagBloomMask == 0);
-  }
-
-  TEST_CASE("PlanEvaluator - leaves tag bloom mask empty without interned compiler dictionary ids",
-            "[query][unit][plan-evaluator]")
-  {
-    auto expr = parseOk("#rock");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
-
-    CHECK(plan.tagBloomMask == 0);
-  }
-
-  TEST_CASE("PlanEvaluator - leaves multi-tag bloom mask empty without interned compiler dictionary ids",
-            "[query][unit][plan-evaluator]")
-  {
-    auto expr = parseOk("#rock && #jazz");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
-
-    CHECK(plan.tagBloomMask == 0);
+    CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::Tag));
+    CHECK(plan.instructions.back().dictionarySymbol == 0);
+    CHECK(plan.dictionarySymbols == std::vector<std::string>{"tagname"});
   }
 
   TEST_CASE("PlanEvaluator - reads track tag bloom bits from hot data", "[query][unit][plan-evaluator]")
   {
     {
-      auto h = library::TrackHotHeader{};
-      h.tagBloom = (1U << (10 & 31));
-      auto data = serializeHeader(h);
+      auto header = library::TrackHotHeader{};
+      header.tagBloom = (1U << (10 & 31));
+      auto data = serializeHeader(header);
       data.push_back(static_cast<std::byte>('\0'));
       auto view = library::TrackView{data, std::span<std::byte const>{}};
       CHECK(view.tags().bloom() == (1U << 10));
     }
 
     {
-      auto h = library::TrackHotHeader{};
-      h.tagBloom = (1U << (32 & 31));
-      auto data = serializeHeader(h);
+      auto header = library::TrackHotHeader{};
+      header.tagBloom = (1U << (32 & 31));
+      auto data = serializeHeader(header);
       data.push_back(static_cast<std::byte>('\0'));
       auto view = library::TrackView{data, std::span<std::byte const>{}};
       CHECK(view.tags().bloom() == 1U);
     }
 
     {
-      auto h = library::TrackHotHeader{};
-      h.tagBloom = (1U << (5 & 31)) | (1U << (20 & 31));
-      auto data = serializeHeader(h);
+      auto header = library::TrackHotHeader{};
+      header.tagBloom = (1U << (5 & 31)) | (1U << (20 & 31));
+      auto data = serializeHeader(header);
       data.push_back(static_cast<std::byte>('\0'));
       auto view = library::TrackView{data, std::span<std::byte const>{}};
       CHECK((view.tags().bloom() & (1U << 5)) != 0);
@@ -199,99 +130,91 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator - rejects tag bloom fast-path misses", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - verifies exact membership after a tag bloom collision", "[query][unit][plan-evaluator]")
   {
-    auto expr = parseOk("#mytag");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
-    auto evaluator = PlanEvaluator{};
+    auto dictionaryFixture = DictionaryFixture{};
+    auto transaction = dictionaryFixture.writeTransaction();
+    auto const targetId = ao::test::requireValue(transaction.dictionary().intern("target"));
 
-    auto h = library::TrackHotHeader{};
-    h.tagBloom = 0x00000001U;
+    for (std::int32_t index = 0; index < 31; ++index)
+    {
+      auto const filler = std::format("filler-{}", index);
+      REQUIRE(transaction.dictionary().intern(filler));
+    }
 
-    auto data = std::vector<std::byte>{};
-    data.insert_range(data.end(), utility::bytes::view(h));
+    auto const collisionId = ao::test::requireValue(transaction.dictionary().intern("collision"));
+    REQUIRE(transaction.commit());
+    REQUIRE(targetId != collisionId);
+    REQUIRE((targetId.raw() & 31U) == (collisionId.raw() & 31U));
 
-    data.push_back(static_cast<std::byte>('\0'));
-    data.push_back(static_cast<std::byte>('\0'));
+    auto const tagIds = std::array{collisionId};
+    auto collisionData =
+      makeHotOnlyTrack(kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, tagIds);
+    auto collisionTrack = library::TrackView{collisionData, std::span<std::byte const>{}};
+    auto const plan = compileOk(QueryCompiler{}, parseOk("#target"));
 
-    auto view = library::TrackView{data, std::span<std::byte const>{}};
-
-    auto result = evaluator.matches(plan, view);
-    CHECK(result == false);
+    CHECK_FALSE(matchesWithDictionary(PlanEvaluator{}, plan, collisionTrack, dictionaryFixture.dictionary()));
   }
 
-  TEST_CASE("PlanEvaluator - still verifies tag membership after bloom fast-path hits", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - tag bloom rejects before full bytecode evaluation",
+            "[query][unit][plan-evaluator][regression]")
   {
-    auto expr = parseOk("#mytag");
-    auto compiler = QueryCompiler{};
-    auto plan = compileOk(compiler, expr);
-    auto evaluator = PlanEvaluator{};
-
-    auto h = library::TrackHotHeader{};
-    h.tagBloom = 0xFFFFFFFFU;
-
-    auto data = std::vector<std::byte>{};
-    data.insert_range(data.end(), utility::bytes::view(h));
-
-    data.push_back(static_cast<std::byte>('\0'));
-    data.push_back(static_cast<std::byte>('\0'));
-
-    auto view = library::TrackView{data, std::span<std::byte const>{}};
-
-    auto result = evaluator.matches(plan, view);
-    CHECK(result == false);
-  }
-
-  TEST_CASE("PlanEvaluator - verifies multi-tag bloom matches and collision candidates",
-            "[query][unit][plan-evaluator]")
-  {
-    auto const spec = TrackSpec{.tags = {"rock", "jazz", "blues"}};
-    auto track = TrackFixture{spec};
+    auto dictionaryFixture = DictionaryFixture{};
+    auto const requiredId = dictionaryFixture.intern("required");
+    REQUIRE(requiredId != kInvalidDictionaryId);
+    auto plan = ExecutionPlan{
+      .instructions = {{.op = OpCode::LoadConstant, .operand = 0, .constValue = 1}},
+      .stringConstants = {},
+      .inSets = {},
+      .dictionarySymbols = {"required"},
+      .requiredTagSymbols = {0},
+      .matchesAll = false,
+      .requiresDictionary = true,
+      .accessProfile = AccessProfile::HotOnly,
+    };
+    auto context = library::DictionaryReadContext{dictionaryFixture.dictionary()};
+    auto const binding = PlanBinding{plan, context};
+    auto data = makeHotOnlyTrack();
+    auto track = library::TrackView{data, std::span<std::byte const>{}};
     auto const evaluator = PlanEvaluator{};
-    auto compiler = QueryCompiler{&track.dictionary()};
 
-    SECTION("Multi-Tag AND Requires All Bits")
-    {
-      auto const plan = compileOk(compiler, parseOk("#rock and #jazz"));
-      CHECK(plan.tagBloomMask != 0);
+    CHECK(evaluator.evaluateFull(binding, track));
+    CHECK_FALSE(evaluator.matches(binding, track));
+  }
 
-      CHECK(evaluator.matches(plan, track.view()) == true);
+  TEST_CASE("PlanEvaluator - requires every tag in an AND expression", "[query][unit][plan-evaluator]")
+  {
+    auto allTags = TrackFixture{TrackSpec{.tags = {"rock", "jazz", "blues"}}};
+    auto rockOnly = TrackFixture{TrackSpec{.tags = {"rock"}}};
+    auto const plan = compileOk(QueryCompiler{}, parseOk("#rock and #jazz"));
+    auto const evaluator = PlanEvaluator{};
 
-      auto const spec2 = TrackSpec{.tags = {"rock"}};
-      auto track2 = TrackFixture{spec2, &track.dictionary()};
-      CHECK(evaluator.matches(plan, track2.view()) == false);
-    }
+    CHECK(matchesWithDictionary(evaluator, plan, allTags.view(), allTags.dictionary()));
+    CHECK_FALSE(matchesWithDictionary(evaluator, plan, rockOnly.view(), rockOnly.dictionary()));
+  }
 
-    SECTION("Bloom Filter Collision - False Positive Mitigation")
-    {
-      auto& dictionary = track.dictionary();
+  TEST_CASE("PlanEvaluator - a new dictionary generation requires a new binding", "[query][unit][plan-evaluator]")
+  {
+    auto dictionaryFixture = DictionaryFixture{};
+    auto const& dictionary = dictionaryFixture.dictionary();
+    auto const plan = compileOk(QueryCompiler{}, parseOk("#future"));
+    auto oldContext = library::DictionaryReadContext{dictionary};
+    auto const oldBinding = PlanBinding{plan, oldContext};
 
-      auto const* tagA = "rock";
-      auto idA = dictionary.getOrIntern(tagA).raw();
-      auto bitIndex = idA % 32;
+    auto transaction = dictionaryFixture.writeTransaction();
+    auto const futureId = ao::test::requireValue(transaction.dictionary().intern("future"));
+    REQUIRE(transaction.commit());
 
-      auto tagB = std::string{};
+    auto const tagIds = std::array{futureId};
+    auto data =
+      makeHotOnlyTrack(kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, kInvalidDictionaryId, tagIds);
+    auto track = library::TrackView{data, std::span<std::byte const>{}};
+    auto const evaluator = PlanEvaluator{};
 
-      for (std::int32_t i = 0; i < 1000; ++i)
-      {
-        auto const candidate = std::format("collision_tag_{}", i);
+    CHECK_FALSE(evaluator.matches(oldBinding, track));
 
-        if (auto const idB = dictionary.getOrIntern(candidate).raw(); idB != idA && (idB % 32) == bitIndex)
-        {
-          tagB = candidate;
-          break;
-        }
-      }
-
-      REQUIRE(!tagB.empty());
-
-      auto const collisionSpec = TrackSpec{.tags = {tagA}};
-      auto trackA = TrackFixture{collisionSpec, &dictionary};
-
-      auto planB = compileOk(compiler, parseOk("#" + tagB));
-
-      CHECK(evaluator.matches(planB, trackA.view()) == false);
-    }
+    auto newContext = library::DictionaryReadContext{dictionary};
+    auto const newBinding = PlanBinding{plan, newContext};
+    CHECK(evaluator.matches(newBinding, track));
   }
 } // namespace ao::query::test

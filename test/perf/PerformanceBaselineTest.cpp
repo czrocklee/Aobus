@@ -1178,6 +1178,8 @@ namespace ao::rt::test
     {
       auto expandedPlan = makeExpandedYearInPlan(listSize);
       auto setPlan = makeSetYearInPlan(listSize);
+      auto expandedBinding = query::PlanBinding{expandedPlan};
+      auto setBinding = query::PlanBinding{setPlan};
       auto evaluator = query::PlanEvaluator{};
       auto& lib = bench.libraryFixture.library();
       auto transaction = lib.readTransaction();
@@ -1191,7 +1193,7 @@ namespace ao::rt::test
       {
         auto optView = reader.get(id, library::TrackStore::Reader::LoadMode::Hot);
 
-        if (optView && evaluator.evaluateFull(expandedPlan, *optView))
+        if (optView && evaluator.evaluateFull(expandedBinding, *optView))
         {
           ++timing.expandedMatches;
         }
@@ -1204,7 +1206,7 @@ namespace ao::rt::test
       {
         auto optView = reader.get(id, library::TrackStore::Reader::LoadMode::Hot);
 
-        if (optView && evaluator.evaluateFull(setPlan, *optView))
+        if (optView && evaluator.evaluateFull(setBinding, *optView))
         {
           ++timing.setMatches;
         }
@@ -1364,7 +1366,7 @@ namespace ao::rt::test
       {
         auto builder = library::TrackBuilder::makeEmpty();
         library::test::applyTrackSpec(builder, pipelineTrackSpec(firstIndex + offset));
-        auto data = builder.serialize(transaction, library.dictionary(), library.resources());
+        auto data = builder.serialize(transaction, library.resources());
         REQUIRE(data);
         auto created = writer.createHotCold(data->first, data->second);
         REQUIRE(created);
@@ -1504,7 +1506,7 @@ namespace ao::rt::test
           auto const index = startIndex + offset;
           auto builder = library::TrackBuilder::makeEmpty();
           library::test::applyTrackSpec(builder, pipelineTrackSpec(index, true));
-          auto data = builder.serializeHot(transaction, _libraryFixture.library().dictionary());
+          auto data = builder.serializeHot(transaction);
           REQUIRE(data);
           REQUIRE(writer.updateHot(_ids[index], *data));
         }

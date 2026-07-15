@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/Error.h>
@@ -113,5 +114,33 @@ namespace ao::rt::test
     CHECK_FALSE(invalidList.hasError());
     CHECK_FALSE(invalidList.error().has_value());
     CHECK(invalidList.size() == 1); // Only 'first' is in source at this point
+  }
+
+  TEST_CASE("SmartListEvaluator - existing plan binds dictionary symbols introduced by a later commit",
+            "[runtime][unit][smart-list][regression]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack(makeSmartListSpec("future metadata", 2026));
+    auto sourcePtr = makeMutableTrackSource({trackId});
+    auto& source = *sourcePtr;
+
+    auto engine = SmartListEvaluator{libraryFixture.library()};
+    auto filtered = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    filtered.setExpression("#future and %rating = '5'");
+    filtered.reload();
+
+    CHECK_FALSE(filtered.hasError());
+    CHECK(filtered.size() == 0);
+
+    libraryFixture.updateTrack(trackId,
+                               [](library::test::TrackSpec& spec)
+                               {
+                                 spec.tags.emplace_back("future");
+                                 spec.customMetadata.emplace_back("rating", "5");
+                               });
+    source.update(trackId);
+
+    REQUIRE(filtered.size() == 1);
+    CHECK(filtered.trackIdAt(0) == trackId);
   }
 } // namespace ao::rt::test

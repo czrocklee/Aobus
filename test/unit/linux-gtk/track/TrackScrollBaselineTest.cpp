@@ -19,7 +19,6 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 
@@ -88,7 +87,7 @@ namespace ao::gtk::test
           .channels(Channels{2})
           .bitDepth(BitDepth{16});
 
-        auto serializeResult = builder.serialize(transaction, library.dictionary(), library.resources());
+        auto serializeResult = builder.serialize(transaction, library.resources());
         REQUIRE(serializeResult);
         auto const [hot, cold] = *serializeResult;
         ids.push_back(ao::test::requireValue(writer.createHotCold(hot, cold)).first);

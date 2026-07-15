@@ -12,7 +12,6 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWrite.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompiler.h>
 #include <ao/rt/TrackMutation.h>
@@ -384,7 +383,7 @@ namespace ao::rt
       return ImportTarget{.fullPath = std::move(*optFullPath), .uri = rel.generic_string()};
     }
 
-    Result<> validateSmartExpression(library::MusicLibrary& library, std::string const& expression)
+    Result<> validateSmartExpression(std::string const& expression)
     {
       if (expression.empty())
       {
@@ -398,9 +397,7 @@ namespace ao::rt
         return prefixError("invalid list filter", expr.error());
       }
 
-      auto plan = query::compileQuery(*expr, &library.dictionary());
-
-      if (!plan)
+      if (auto plan = query::compileQuery(*expr); !plan)
       {
         return prefixError("invalid list filter", plan.error());
       }
@@ -435,15 +432,14 @@ namespace ao::rt
       return PreparedListPayload{.payload = builder.serialize(), .canonicalTrackIds = std::move(canonicalTrackIds)};
     }
 
-    Result<> validateListDraft(library::MusicLibrary& library,
-                               library::ListStore::Writer const& listWriter,
+    Result<> validateListDraft(library::ListStore::Writer const& listWriter,
                                library::TrackStore::Writer const& trackWriter,
                                LibraryWriter::ListDraft const& draft,
                                std::span<TrackId const> canonicalTrackIds)
     {
       if (draft.kind == LibraryWriter::ListKind::Smart)
       {
-        if (auto result = validateSmartExpression(library, draft.expression); !result)
+        if (auto result = validateSmartExpression(draft.expression); !result)
         {
           return result;
         }
@@ -586,7 +582,7 @@ namespace ao::rt
     };
 
     Result<ManualListRemovalResult> removeTrackFromManualLists(library::MusicLibrary& library,
-                                                               lmdb::WriteTransaction& transaction,
+                                                               library::WriteTransaction& transaction,
                                                                TrackId trackId)
     {
       auto updates = std::vector<PendingManualListRemoval>{};
@@ -900,7 +896,7 @@ namespace ao::rt
 
       if (patchResult.changedHot)
       {
-        auto hotDataResult = builder.serializeHot(transaction, library.dictionary());
+        auto hotDataResult = builder.serializeHot(transaction);
 
         if (!hotDataResult)
         {
@@ -915,7 +911,7 @@ namespace ao::rt
 
       if (patchResult.changedCold)
       {
-        auto coldDataResult = builder.serializeCold(transaction, library.dictionary(), library.resources());
+        auto coldDataResult = builder.serializeCold(transaction, library.resources());
 
         if (!coldDataResult)
         {
@@ -1005,7 +1001,7 @@ namespace ao::rt
         continue;
       }
 
-      auto hotDataResult = builder.serializeHot(transaction, library.dictionary());
+      auto hotDataResult = builder.serializeHot(transaction);
 
       if (!hotDataResult)
       {
@@ -1048,7 +1044,7 @@ namespace ao::rt
     auto trackWriter = library.tracks().writer(transaction);
     auto prepared = payloadForDraft(draft);
 
-    if (auto result = validateListDraft(library, listWriter, trackWriter, draft, prepared.canonicalTrackIds); !result)
+    if (auto result = validateListDraft(listWriter, trackWriter, draft, prepared.canonicalTrackIds); !result)
     {
       return std::unexpected{result.error()};
     }
@@ -1094,7 +1090,7 @@ namespace ao::rt
     auto const existingWasManual = !optExisting->isSmart();
     auto prepared = payloadForDraft(draft);
 
-    if (auto result = validateListDraft(library, listWriter, trackWriter, draft, prepared.canonicalTrackIds); !result)
+    if (auto result = validateListDraft(listWriter, trackWriter, draft, prepared.canonicalTrackIds); !result)
     {
       return std::unexpected{result.error()};
     }
@@ -1546,7 +1542,7 @@ namespace ao::rt
     auto const title = std::string{builder.metadata().title()};
     auto const artist = std::string{builder.metadata().artist()};
 
-    auto preparedResult = builder.prepare(transaction, library.dictionary(), library.resources());
+    auto preparedResult = builder.prepare(transaction, library.resources());
 
     if (!preparedResult)
     {

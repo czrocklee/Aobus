@@ -1,42 +1,32 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
+#include "test/unit/library/LibraryStoreTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
+#include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 #include <type_traits>
 
 namespace ao::library::test
 {
-  using namespace ao::lmdb;
-  using namespace ao::lmdb::test;
-
   TEST_CASE("ResourceStore - creates and reads resources", "[library][unit][resource]")
   {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto store = ResourceStore{openDatabase(wtxn, "resources")};
-    REQUIRE(wtxn.commit());
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.resources();
 
     // Create a resource
-    auto const data = createStringData("hello");
-    auto const& buffer = data;
+    auto const buffer = utility::bytes::view(std::string_view{"hello"});
 
-    auto wtxn2 = beginWriteTransaction(env);
+    auto wtxn2 = library.writeTransaction();
     auto idResult = store.writer(wtxn2).create(buffer);
     REQUIRE(idResult);
     auto const id = *idResult;
@@ -44,7 +34,7 @@ namespace ao::library::test
     REQUIRE(wtxn2.commit());
 
     // Read the resource
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto reader = store.reader(rtxn);
     STATIC_REQUIRE(std::is_same_v<decltype(reader.maxKey()), ResourceId>);
     CHECK(reader.maxKey() == id);
@@ -61,30 +51,26 @@ namespace ao::library::test
 
   TEST_CASE("ResourceStore - deletes resources", "[library][unit][resource]")
   {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto store = ResourceStore{openDatabase(wtxn, "resources")};
-    REQUIRE(wtxn.commit());
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.resources();
 
     // Create a resource
-    auto const data = createStringData("test");
-    auto const& buffer = data;
+    auto const buffer = utility::bytes::view(std::string_view{"test"});
 
-    auto wtxn2 = beginWriteTransaction(env);
+    auto wtxn2 = library.writeTransaction();
     auto idResult = store.writer(wtxn2).create(buffer);
     REQUIRE(idResult);
     auto const id = *idResult;
     REQUIRE(wtxn2.commit());
 
     // Delete it
-    auto wtxn3 = beginWriteTransaction(env);
+    auto wtxn3 = library.writeTransaction();
     REQUIRE(store.writer(wtxn3).remove(id));
     REQUIRE(wtxn3.commit());
 
     // Verify it's gone
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto reader = store.reader(rtxn);
     auto it = reader.begin();
     CHECK(it == reader.end());
@@ -92,25 +78,21 @@ namespace ao::library::test
 
   TEST_CASE("ResourceStore - deduplicates matching resource data", "[library][unit][resource]")
   {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto store = ResourceStore{openDatabase(wtxn, "resources")};
-    REQUIRE(wtxn.commit());
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.resources();
 
     // Create first resource
-    auto const data = createStringData("samedata");
-    auto const& buffer = data;
+    auto const buffer = utility::bytes::view(std::string_view{"samedata"});
 
-    auto wtxn2 = beginWriteTransaction(env);
+    auto wtxn2 = library.writeTransaction();
     auto id1Result = store.writer(wtxn2).create(buffer);
     REQUIRE(id1Result);
     auto const id1 = *id1Result;
     REQUIRE(wtxn2.commit());
 
     // Create same content again - should return same ID (deduplication)
-    auto wtxn3 = beginWriteTransaction(env);
+    auto wtxn3 = library.writeTransaction();
     auto id2Result = store.writer(wtxn3).create(buffer);
     REQUIRE(id2Result);
     auto const id2 = *id2Result;
@@ -118,7 +100,7 @@ namespace ao::library::test
     REQUIRE(wtxn3.commit());
 
     // Verify only one resource exists
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto reader = store.reader(rtxn);
     std::int32_t count = 0;
 
@@ -132,18 +114,15 @@ namespace ao::library::test
 
   TEST_CASE("ResourceStore - zero hash uses a valid ID", "[library][unit][resource]")
   {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto store = ResourceStore{openDatabase(wtxn, "resources")};
-    REQUIRE(wtxn.commit());
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.resources();
 
     // XXH3-64 hashes these bytes to 0xf91404d400000000; the low 32 bits used
     // as the resource key are zero, which is reserved as the invalid ID.
     constexpr auto kData = std::array{std::byte{0xee}, std::byte{0xdc}, std::byte{0xc8}, std::byte{0xbf}};
 
-    auto wtxn2 = beginWriteTransaction(env);
+    auto wtxn2 = library.writeTransaction();
     auto writer = store.writer(wtxn2);
     auto idResult = writer.create(kData);
     REQUIRE(idResult);
@@ -155,7 +134,7 @@ namespace ao::library::test
     CHECK(duplicateId == id);
     REQUIRE(wtxn2.commit());
 
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto reader = store.reader(rtxn);
     auto const optStored = reader.get(id);
     REQUIRE(optStored);

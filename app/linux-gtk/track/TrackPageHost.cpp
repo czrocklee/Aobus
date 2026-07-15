@@ -201,7 +201,7 @@ namespace ao::gtk
     }
   }
 
-  void TrackPageHost::rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& /*transaction*/)
+  void TrackPageHost::rebuild(TrackRowCache& dataProvider)
   {
     APP_LOG_DEBUG("TrackPageHost::rebuild called");
     clear();

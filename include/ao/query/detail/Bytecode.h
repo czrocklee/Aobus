@@ -4,17 +4,17 @@
 #pragma once
 
 // Internal query-engine bytecode layout. This header carries the heavy
-// dependencies (boost flat_set, DictionaryStore) and the concrete ExecutionPlan
+// dependencies (boost flat_set) and the concrete ExecutionPlan
 // fields; the public <ao/query/ExecutionPlan.h> only forward-declares the plan
 // as an opaque handle. Include this header only from the query engine internals
 // (compiler/evaluator) and white-box tests that inspect compiled bytecode.
 
-#include <ao/library/DictionaryStore.h>
 #include <ao/query/Field.h>
 
 #include <boost/unordered/unordered_flat_set.hpp>
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -50,11 +50,21 @@ namespace ao::query
     return op == OpCode::Lt || op == OpCode::Le || op == OpCode::Gt || op == OpCode::Ge;
   }
 
+  inline constexpr std::uint32_t kNoDictionarySymbol = std::numeric_limits<std::uint32_t>::max();
+
+  enum class InSetValueKind : std::uint8_t
+  {
+    Numeric,
+    String,
+    Dictionary,
+  };
+
   struct InSet final
   {
-    bool stringValues = false;
+    InSetValueKind valueKind = InSetValueKind::Numeric;
     boost::unordered_flat_set<std::int64_t> numericValues;
     std::vector<std::string> strings;
+    std::vector<std::uint32_t> dictionarySymbols;
   };
 
   /**
@@ -76,15 +86,16 @@ namespace ao::query
     // operand - 1). Load/Exists/InSet: target register.
     std::int32_t operand = 0;
 
-    // LoadConstant: the constant value (or the string-constant index). Exists:
-    // the custom/tag dictionaryId. InSet: the index into ExecutionPlan::inSets.
-    // Comparisons/Like: the left field's interned dictionaryId when it is Field::Custom
-    // (0 otherwise).
+    // LoadConstant: the constant value (or the string-constant index). InSet:
+    // the index into ExecutionPlan::inSets. Unused by other field-bearing ops.
     std::int64_t constValue = 0;
 
-    // InSet only: the left field's interned dictionaryId when it is Field::Custom. InSet
-    // spends constValue on the set index, so the Custom id rides here instead.
+    // Reserved for bytecode payloads that require an additional 32-bit value.
     std::uint32_t size = 0;
+
+    // Plan-owned dictionary symbol used by tag/custom operations or dictionary-backed
+    // equality. kNoDictionarySymbol means the instruction has no dictionary operand.
+    std::uint32_t dictionarySymbol = kNoDictionarySymbol;
     char const* data = nullptr;
   };
 
@@ -99,15 +110,14 @@ namespace ao::query
     std::vector<Instruction> instructions;
     std::vector<std::string> stringConstants;
     std::vector<InSet> inSets;
-
-    // Dictionary used to resolve DictionaryId-backed metadata during evaluation.
-    library::DictionaryStore const* dictionary = nullptr;
-
-    // Bloom filter for tag fast-path rejection
-    std::uint32_t tagBloomMask = 0;
+    std::vector<std::string> dictionarySymbols;
+    std::vector<std::uint32_t> requiredTagSymbols;
 
     // If true, the query matches all tracks (no conditions)
     bool matchesAll = false;
+
+    // True when evaluation needs a DictionaryReadContext for symbol or id-to-text lookup.
+    bool requiresDictionary = false;
 
     // Access profile for the query
     AccessProfile accessProfile = AccessProfile::HotOnly;

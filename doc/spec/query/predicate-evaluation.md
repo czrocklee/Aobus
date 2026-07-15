@@ -24,6 +24,8 @@ Its public compiler and evaluator interfaces live under `include/ao/query/` and 
 
 - **Predicate** is an expression whose result is boolean.
 - **Execution plan** is the runtime-only compiled instruction and constant set.
+- **Plan binding** resolves one plan's owned dictionary symbols for one bounded evaluation batch.
+- **Dictionary read context** is the synchronous committed lookup/text port borrowed by a binding and evaluator.
 - **Access profile** is the minimum `TrackView` storage tier required by a plan.
 - **Dictionary field** stores an interned id whose text is resolved through `DictionaryStore` where an operation requires text.
 - **Existence** is the field-specific presence rule below, not merely successful field lookup.
@@ -38,6 +40,8 @@ Its public compiler and evaluator interfaces live under `include/ao/query/` and 
 - `in [a, b]` is equivalent to equality against one listed constant.
 - `in lower..upper` is an inclusive closed range.
 - Predicate evaluation never changes the track, dictionary, source, or presentation state.
+- Parsing and compilation do not read or mutate a library dictionary; a plan owns all symbol text required for later binding.
+- An execution plan contains no library or dictionary pointer.
 - A plan is runtime-only; persisted Smart Lists retain their expression text and recompile it.
 
 ## Field semantics
@@ -63,6 +67,12 @@ The canonical missing-value form is a negated existence predicate such as `!$yea
 Plain text and custom metadata comparisons use the stored string.
 Equality and `in` lists over dictionary metadata resolve the expression constant to its dictionary id and compare ids.
 Substring and ordered comparisons over dictionary metadata resolve the track id back to text.
+Only a direct string-constant operand contributes a dictionary symbol to its comparison; a nested comparison contributes its scalar boolean result and cannot leak an inner literal into the parent instruction.
+
+An unresolved tag never matches membership or existence.
+When a current binding cannot resolve a custom key or dictionary equality constant, equality and membership do not match while inequality matches.
+An unresolved custom key also makes existence, ordered, and substring comparisons non-matching rather than treating the missing key as an empty stored value.
+A later binding may resolve the same plan-owned symbol after a committed dictionary generation advance.
 
 `~` performs case-sensitive substring containment.
 Ordered text comparison is case-sensitive lexicographic order.
@@ -97,11 +107,14 @@ Constant true and false predicates require no track data.
 The public stages are:
 
 1. `parse(text)` produces an AST or `FormatRejected`.
-2. `compileQuery(ast, dictionary)` produces an `ExecutionPlan` or `FormatRejected`.
-3. `PlanEvaluator::matches(plan, track)` returns one membership decision.
+2. `compileQuery(ast)` produces a dictionary-independent `ExecutionPlan` or `FormatRejected`.
+3. For a dictionary-using plan, `PlanBinding(plan, context)` resolves its symbols under one committed dictionary lock and records that generation.
+4. `PlanEvaluator::matches(binding, track)` returns one membership decision.
 
 `QueryCompiler::compile()` has the same non-throwing result contract as `compileQuery()`.
 Unknown `$` or `@` fields are rejected with a diagnostic generated from the shared field catalog and may include a close-name suggestion.
+Plans with no dictionary access may use the context-free convenience overloads.
+Supplying an explicit `DictionaryReadContext` or bound plan is a precondition for plans whose `requiresDictionary` flag is true.
 
 `SmartListSource` parses an empty expression as the constant `true` for source evaluation.
 `LibraryWriter` treats an empty Smart List expression as no smart expression at the list-definition boundary, so list kind semantics remain owned by the library contracts.
@@ -117,6 +130,9 @@ Presence-only field probes used by completion return absence rather than a user-
 
 Predicate compilation and evaluation are synchronous and have no cancellation point.
 Longer-running source rebuild cancellation and atomic publication belong to the consuming runtime source contract.
+
+The current boolean convenience API returns false when required hot/cold track data is absent.
+Typed insufficient-data and invalid-context outcomes remain proposed by [RFC 0009](../../rfc/0009-pure-expression-binding.md); callers that choose load mode must use the plan access profile.
 
 ## Persistence and versioning
 
@@ -146,6 +162,7 @@ Presentation consumes resulting membership but cannot reinterpret predicate trut
 
 - [`QueryCompiler.h`](../../../include/ao/query/QueryCompiler.h) and [`ExecutionPlan.h`](../../../include/ao/query/ExecutionPlan.h) define compilation and the opaque plan boundary.
 - [`PlanEvaluator.h`](../../../include/ao/query/PlanEvaluator.h) defines evaluation.
+- [`DictionaryStore.h`](../../../include/ao/library/DictionaryStore.h) defines bounded dictionary contexts, caches, and committed generation.
 - [`ExecutionPlan.cpp`](../../../lib/query/ExecutionPlan.cpp) owns semantic compilation and access profiles.
 - [`PlanEvaluator.cpp`](../../../lib/query/PlanEvaluator.cpp) owns track evaluation.
 - [`SmartListSource.cpp`](../../../app/runtime/source/SmartListSource.cpp) adapts expressions into runtime source state.
@@ -154,8 +171,8 @@ Presentation consumes resulting membership but cannot reinterpret predicate trut
 ## Test map
 
 - Execution-plan tests under [`test/unit/query/`](../../../test/unit/query/) prove semantic compilation, field resolution, lists, ranges, units, access profiles, and failures.
-- Plan-evaluator tests under the same directory prove field truth, existence, comparison, tag, custom metadata, and dictionary behavior.
-- Smart-list evaluator tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source/) prove profile-aware batch consumption and membership publication.
+- Plan-evaluator tests under the same directory prove field truth, existence, comparison, nested-comparison symbol isolation, tag, custom metadata, and dictionary behavior.
+- Smart-list evaluator tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source/) prove profile-aware batch consumption, membership publication, and rebinding of plan symbols introduced by a later dictionary commit.
 
 ## Related documents
 

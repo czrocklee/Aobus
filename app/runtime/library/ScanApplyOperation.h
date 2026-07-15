@@ -10,7 +10,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/lmdb/Transaction.h>
+#include <ao/library/WriteTransaction.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
@@ -68,10 +68,10 @@ namespace ao::rt
     };
 
     void applyScanItem(std::size_t itemIndex,
-                       lmdb::WriteTransaction& transaction,
+                       library::WriteTransaction& transaction,
                        library::TrackStore::Writer& trackWriter,
                        library::FileManifestStore::Writer& manifestWriter,
-                       library::DictionaryStore& dictionary,
+                       library::DictionaryStore const& dictionary,
                        std::stop_token stopToken);
 
     bool skipNonActionableItem(ScanItem const& item);
@@ -81,30 +81,29 @@ namespace ao::rt
     void reportFailure(std::string_view uri, std::string_view stage, std::string_view message);
 
     void applyMissingItem(ScanItem const& item,
-                          lmdb::WriteTransaction& transaction,
+                          library::WriteTransaction& transaction,
                           library::FileManifestStore::Writer& manifestWriter);
 
     bool tryApplyChangedItem(ScanItem const& item,
-                             lmdb::WriteTransaction& transaction,
+                             library::WriteTransaction& transaction,
                              library::TrackStore::Writer& trackWriter,
                              library::FileManifestStore::Writer& manifestWriter,
-                             library::DictionaryStore& dictionary,
+                             library::DictionaryStore const& dictionary,
                              library::TrackBuilder& builder,
                              AudioFingerprint const& fingerprint);
 
     bool applyMovedItem(ScanItem const& item,
-                        lmdb::WriteTransaction& transaction,
+                        library::WriteTransaction& transaction,
                         library::TrackStore::Writer& trackWriter,
                         library::FileManifestStore::Writer& manifestWriter,
-                        library::DictionaryStore& dictionary,
+                        library::DictionaryStore const& dictionary,
                         library::TrackBuilder& builder,
                         AudioFingerprint const& fingerprint);
 
     void applyNewItem(ScanItem const& item,
-                      lmdb::WriteTransaction& transaction,
+                      library::WriteTransaction& transaction,
                       library::TrackStore::Writer& trackWriter,
                       library::FileManifestStore::Writer& manifestWriter,
-                      library::DictionaryStore& dictionary,
                       library::TrackBuilder& builder,
                       std::optional<AudioFingerprint> const& optFingerprint);
 
@@ -121,11 +120,8 @@ namespace ao::rt
                                                             std::size_t itemIndex,
                                                             std::stop_token stopToken);
 
-    std::optional<std::pair<library::TrackBuilder::PreparedHot, library::TrackBuilder::PreparedCold>> prepareTrack(
-      library::TrackBuilder const& builder,
-      lmdb::WriteTransaction& transaction,
-      library::DictionaryStore& dictionary,
-      std::string const& uri);
+    std::optional<std::pair<library::TrackBuilder::PreparedHot, library::TrackBuilder::PreparedCold>>
+    prepareTrack(library::TrackBuilder const& builder, library::WriteTransaction& transaction, std::string const& uri);
 
     static library::FileManifestBuilder makeAvailableManifest(ScanItem const& item,
                                                               TrackId trackId,

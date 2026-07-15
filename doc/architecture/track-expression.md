@@ -46,13 +46,15 @@ The parser accepts the common syntactic superset while the predicate and format 
 An `ExecutionPlan` answers whether one track matches.
 A `FormatPlan` produces one string from one track.
 Neither plan owns source membership, presentation shape, or frontend state.
+Compilation is observationally pure: both plan types own their dictionary symbol text and retain no library or dictionary pointer.
+Evaluation that needs dictionary data receives an explicit bounded read context and a plan-specific binding.
 
 ### Library and runtime consumers
 
 `LibraryWriter` validates a smart-list expression before committing its text as part of a list definition.
 `TrackSourceCache`, `SmartListSource`, and `SmartListEvaluator` compile that text and maintain the resulting ordered membership over an upstream source.
 The same source machinery materializes transient `ViewService` filters without persisting a new list.
-During one membership rebuild, `SmartListEvaluator` may share a library-owned dictionary read cache across plan evaluations; cache presence and eviction do not change predicate results.
+During one membership rebuild, `SmartListEvaluator` creates one dictionary read cache/context, binds each plan once, and reuses those bindings across track evaluations; cache presence and eviction do not change predicate results.
 
 `CompletionService` owns live library vocabularies and `QueryExpressionCompleter` combines them with the core completion analysis.
 The runtime does not redefine expression grammar or field aliases.
@@ -153,6 +155,7 @@ CLI --format text
   -> shared parser
   -> FormatCompiler
   -> FormatPlan
+  -> FormatBinding + bounded DictionaryReadContext
   -> FormatEvaluator + TrackView
   -> plain output line
 ```
@@ -164,6 +167,9 @@ This path does not create `TrackPresentationSpec`, projection rows, or frontend 
 - Expression text is persistence-facing; changing the storable predicate surface or altering whether retained text parses, what it binds to, or which tracks it matches is incompatible for every containing persistence or automation contract that retains that text.
 - Smart List compatibility is gated by the library database version; the library YAML, playback-session, workspace, and CLI surfaces retain their own independent compatibility owners.
 - `ExecutionPlan` and `FormatPlan` are runtime-only and are never persisted as compatibility surfaces.
+- Plans own every expression symbol needed for later dictionary binding and can outlive the library against which they were first evaluated.
+- A dictionary-using plan is bound explicitly for one bounded batch; a later batch creates a new binding and can observe a newer committed dictionary generation.
+- Transaction-backed evaluation opens its read snapshot before binding, so batch dictionary resolution is not older than the tracks being evaluated.
 - Parser, compiler, completion, serializer, generated CLI help, and diagnostics use the same core variable catalog.
 - Smart and transient filters use the same predicate compiler and source evaluation path after authoring policy resolves their input.
 - Quick search expansion is UIModel policy, not grammar; direct query entry points receive expression text.
@@ -180,15 +186,18 @@ View filtering publishes the accepted expression, replacement projection, revisi
 Completion is synchronous and tolerant of incomplete text.
 `CompletionService` caches are owner-thread confined and are invalidated by library changes before their next lazy rebuild.
 
-Execution and format plans borrow dictionary state when required and cannot outlive the library composition that owns that dictionary.
-An evaluator dictionary cache is an optional batch-local acceleration over stable borrowed values, not plan state or a dictionary snapshot.
+Execution and format plans own no dictionary state.
+`PlanBinding` and `FormatBinding` borrow their plan and a synchronous `DictionaryReadContext`; those bindings and the context cannot outlive the backing `MusicLibrary`.
+The optional dictionary read cache is batch-local acceleration over stable borrowed values, not plan state or a transaction snapshot.
+Current evaluation still reports a missing required track tier as `false` or empty output; typed insufficient-data/context outcomes and worker-valid immutable contexts remain proposed by [RFC 0009](../rfc/0009-pure-expression-binding.md).
 Source leases and projections retain their ordinary lifetime rules from the [library architecture](library.md).
 
 ## Implementation map
 
 - [`lib/query/CMakeLists.txt`](../../lib/query/CMakeLists.txt) defines the core expression module and its dependency on `ao_library`.
 - [`Parser.h`](../../include/ao/query/Parser.h), [`QueryCompiler.h`](../../include/ao/query/QueryCompiler.h), and [`FormatExpression.h`](../../include/ao/query/FormatExpression.h) define the public parse and compile paths.
-- [`PlanEvaluator`](../../include/ao/query/PlanEvaluator.h) evaluates predicates and optionally consumes a matching batch-local dictionary read cache.
+- [`PlanEvaluator`](../../include/ao/query/PlanEvaluator.h) and `PlanBinding` evaluate predicates against explicit batch dictionary state.
+- [`FormatExpression.h`](../../include/ao/query/FormatExpression.h) defines pure format compilation, `FormatBinding`, and scalar evaluation.
 - [`Completion.h`](../../include/ao/query/Completion.h) defines tolerant core completion analysis.
 - [`LibraryWriter.cpp`](../../app/runtime/library/LibraryWriter.cpp) validates persisted Smart List definitions.
 - [`SmartListSource`](../../app/include/ao/rt/source/SmartListSource.h), [`SmartListEvaluator`](../../app/include/ao/rt/source/SmartListEvaluator.h), and [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h) materialize predicate membership.
@@ -217,4 +226,5 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - [Predicate language](../reference/query/predicate-language.md)
 - [Format evaluation](../spec/query/format-evaluation.md)
 - [Format language](../reference/query/format-language.md)
+- [RFC 0009: pure expression binding and evaluation context](../rfc/0009-pure-expression-binding.md)
 - [RFC 0024: versioned predicate dialect](../rfc/0024-versioned-predicate-dialect.md), rejected in favor of containing-surface version ownership

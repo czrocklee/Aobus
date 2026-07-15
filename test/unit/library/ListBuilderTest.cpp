@@ -1,20 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
+#include "test/unit/library/LibraryStoreTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <array>
 #include <cstddef>
@@ -25,9 +20,6 @@
 
 namespace ao::library::test
 {
-  using namespace ao::lmdb;
-  using namespace ao::lmdb::test;
-
   namespace
   {
     std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, std::span<std::byte const> data)
@@ -166,23 +158,20 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - manual list round-trip through ListStore", "[library][unit][list]")
   {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto store = ListStore{openDatabase(wtxn, "lists")};
-    REQUIRE(wtxn.commit());
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.lists();
 
     auto builder = ListBuilder::makeEmpty().name("RoundTrip Test").description("Testing round-trip");
     builder.tracks().add(TrackId{42});
     builder.tracks().add(TrackId{99});
     auto const payload = builder.serialize();
 
-    auto wtxn2 = beginWriteTransaction(env);
+    auto wtxn2 = library.writeTransaction();
     auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
     REQUIRE(wtxn2.commit());
 
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto const optFoundResult = store.reader(rtxn).get(id);
     REQUIRE(optFoundResult);
 
@@ -196,12 +185,9 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - smart list round-trip through ListStore", "[library][unit][list]")
   {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto store = ListStore{openDatabase(wtxn, "lists")};
-    REQUIRE(wtxn.commit());
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.lists();
 
     auto const payload = ListBuilder::makeEmpty()
                            .name("Smart RoundTrip")
@@ -209,11 +195,11 @@ namespace ao::library::test
                            .filter("@year > 2020")
                            .serialize();
 
-    auto wtxn2 = beginWriteTransaction(env);
+    auto wtxn2 = library.writeTransaction();
     auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
     REQUIRE(wtxn2.commit());
 
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto const optFoundResult = store.reader(rtxn).get(id);
     REQUIRE(optFoundResult);
 

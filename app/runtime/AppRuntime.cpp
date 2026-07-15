@@ -59,7 +59,6 @@ namespace ao::rt
                                                                               : workspaceConfigStorePtr.get()}
       , playbackSessionPersistencePtr{std::make_shared<PlaybackSessionPersistence>(*playbackSessionConfigStore,
                                                                                    runtime.library(),
-                                                                                   runtime.musicLibrary(),
                                                                                    playbackSequenceService,
                                                                                    playbackService,
                                                                                    runtime.async())}

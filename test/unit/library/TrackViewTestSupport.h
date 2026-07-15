@@ -5,18 +5,17 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/LibraryBinaryTestSupport.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -81,11 +80,9 @@ namespace ao::library::test
     }
 
     auto temp = ao::test::TempDir{};
-    auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
-    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
-    auto result = builder.serializeCold(wtxn, dictionary, resources);
+    auto library = MusicLibrary{temp.path(), temp.path() / "db"};
+    auto transaction = library.writeTransaction();
+    auto result = builder.serializeCold(transaction, library.resources());
     REQUIRE(result);
     return *result;
   }

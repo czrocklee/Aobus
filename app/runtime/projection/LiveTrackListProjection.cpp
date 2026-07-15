@@ -286,7 +286,7 @@ namespace ao::rt
     CachedDictionaryText dictionaryTextCached(DictionaryTextCache& textCache,
                                               utility::StringArena& arena,
                                               std::string& scratch,
-                                              library::DictionaryStore& dictionary,
+                                              library::DictionaryStore const& dictionary,
                                               DictionaryId id)
     {
       if (auto const it = textCache.find(id); it != textCache.end())
@@ -308,7 +308,7 @@ namespace ao::rt
 
     void fillSortKeys(SortKeys& keys,
                       library::TrackView const& view,
-                      library::DictionaryStore& dictionary,
+                      library::DictionaryStore const& dictionary,
                       std::vector<TrackSortTerm> const& sortBy,
                       DictionaryTextCache& textCache,
                       utility::StringArena& arena,
@@ -347,7 +347,7 @@ namespace ao::rt
 
     void ensureGroupSortKeys(SortKeys& keys,
                              library::TrackView const& view,
-                             library::DictionaryStore& dictionary,
+                             library::DictionaryStore const& dictionary,
                              TrackGroupKey groupBy,
                              DictionaryTextCache& textCache,
                              utility::StringArena& arena,
@@ -458,7 +458,7 @@ namespace ao::rt
 
     void fillGroupMetadata(OrderEntry& entry,
                            library::TrackView const& view,
-                           library::DictionaryStore& dictionary,
+                           library::DictionaryStore const& dictionary,
                            TrackGroupKey groupBy,
                            DictionaryTextCache& textCache,
                            utility::StringArena& arena,
@@ -629,7 +629,7 @@ namespace ao::rt
     bool sourceInvalidated = false;
     Subscription sourceSubscription;
 
-    OrderEntry buildOrderEntry(TrackId id, library::TrackView const& view, library::DictionaryStore& dictionary)
+    OrderEntry buildOrderEntry(TrackId id, library::TrackView const& view, library::DictionaryStore const& dictionary)
     {
       auto entry = OrderEntry{.trackId = id};
       fillSortKeys(entry.keys, view, dictionary, sortBy, dictionaryTextCache, stringArena, normScratch);
@@ -730,7 +730,7 @@ namespace ao::rt
 
       auto const transaction = library.readTransaction();
       auto const reader = library.tracks().reader(transaction);
-      auto& dictionary = library.dictionary();
+      auto const& dictionary = library.dictionary();
 
       for (std::size_t index = 0; index < source.size(); ++index)
       {
@@ -923,7 +923,7 @@ namespace ao::rt
       {
         auto const transaction = library.readTransaction();
         auto const reader = library.tracks().reader(transaction);
-        auto& dictionary = library.dictionary();
+        auto const& dictionary = library.dictionary();
 
         for (auto const trackId : finalSourceOrder)
         {

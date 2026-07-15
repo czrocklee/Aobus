@@ -555,7 +555,6 @@ namespace ao::gtk::layout::test
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto& library = runtime.musicLibrary();
     auto cache = TrackRowCache{runtime.library()};
     auto window = Gtk::Window{};
     auto stack = Gtk::Stack{};
@@ -570,8 +569,7 @@ namespace ao::gtk::layout::test
     REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
     drainGtkEvents();
 
-    auto transaction = library.readTransaction();
-    pageHost.rebuild(cache, transaction);
+    pageHost.rebuild(cache);
     drainGtkEvents();
 
     auto registry = ComponentRegistry{};

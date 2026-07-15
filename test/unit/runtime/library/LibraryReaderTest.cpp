@@ -110,9 +110,9 @@ namespace ao::rt::test
       trackBuilder.tags().add("Favorite").add("Live");
       trackBuilder.coverArt().add(PictureType::FrontCover, resourceId);
 
-      auto hotData = trackBuilder.serializeHot(transaction, library.dictionary());
+      auto hotData = trackBuilder.serializeHot(transaction);
       REQUIRE(hotData);
-      auto coldData = trackBuilder.serializeCold(transaction, library.dictionary(), library.resources());
+      auto coldData = trackBuilder.serializeCold(transaction, library.resources());
       REQUIRE(coldData);
       auto trackWriter = library.tracks().writer(transaction);
       [[maybe_unused]] auto [trackId, trackView] =
@@ -121,7 +121,7 @@ namespace ao::rt::test
       auto otherTrackBuilder = library::TrackBuilder::makeEmpty();
       otherTrackBuilder.metadata().title("Another Song");
       otherTrackBuilder.tags().add("Favorite").add("Jazz");
-      auto otherSerializeResult = otherTrackBuilder.serialize(transaction, library.dictionary(), library.resources());
+      auto otherSerializeResult = otherTrackBuilder.serialize(transaction, library.resources());
       REQUIRE(otherSerializeResult);
       auto const [otherHot, otherCold] = *otherSerializeResult;
       [[maybe_unused]] auto [otherTrackId, otherTrackView] =
@@ -145,10 +145,9 @@ namespace ao::rt::test
       [[maybe_unused]] auto [smartListId, smartListView] =
         ao::test::requireValue(library.lists().writer(transaction).create(smartListBuilder.serialize()));
 
+      REQUIRE(transaction.commit());
       auto const artistId = library.dictionary().lookupId("An Artist");
       auto const albumId = library.dictionary().lookupId("The Album");
-
-      REQUIRE(transaction.commit());
 
       return SeededReadModelLibrary{.trackId = trackId,
                                     .otherTrackId = otherTrackId,

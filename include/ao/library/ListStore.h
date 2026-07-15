@@ -7,7 +7,6 @@
 #include <ao/Error.h>
 #include <ao/library/ListView.h>
 #include <ao/lmdb/Database.h>
-#include <ao/lmdb/Transaction.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +17,15 @@
 
 namespace ao::library
 {
+  namespace detail
+  {
+    class LibraryIdentity;
+  }
+
+  class ReadTransaction;
+  class WriteTransaction;
+  class MusicLibrary;
+
   /**
    * ListStore - Binary storage for lists using ListLayout.
    */
@@ -27,13 +35,17 @@ namespace ao::library
     class Reader;
     class Writer;
 
-    explicit ListStore(lmdb::Database db);
-
-    Reader reader(lmdb::ReadTransaction const& transaction) const;
-    Writer writer(lmdb::WriteTransaction& transaction);
+    Reader reader(ReadTransaction const& transaction) const;
+    Reader reader(WriteTransaction const& transaction) const;
+    Writer writer(WriteTransaction& transaction) const;
 
   private:
+    ListStore(lmdb::Database db, detail::LibraryIdentity const& identity);
+
     lmdb::Database _database;
+    detail::LibraryIdentity const* _identity;
+
+    friend class MusicLibrary;
   };
 
   /**

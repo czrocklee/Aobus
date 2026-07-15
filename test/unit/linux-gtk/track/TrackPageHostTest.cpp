@@ -11,7 +11,6 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
-#include <ao/library/MusicLibrary.h>
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewState.h>
@@ -57,8 +56,7 @@ namespace ao::gtk::test
       REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
       drainGtkEvents();
 
-      auto transaction = library.readTransaction();
-      host.rebuild(cache, transaction);
+      host.rebuild(cache);
       drainGtkEvents();
 
       // Should have created a page for All Tracks
@@ -75,8 +73,7 @@ namespace ao::gtk::test
       auto const viewId = runtime.workspace().layoutState().activeViewId;
       REQUIRE(viewId != rt::kInvalidViewId);
 
-      auto transaction = library.readTransaction();
-      host.rebuild(cache, transaction);
+      host.rebuild(cache);
       drainGtkEvents();
 
       auto* const context = host.currentVisible();

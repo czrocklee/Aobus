@@ -94,8 +94,9 @@ Tag variables are rejected because tag membership is not one scalar field value.
 - Unary operations, comparisons, logical operations, postfix existence, lists, and ranges are rejected.
 - `$coverArt` and every `#tag` variable are rejected as non-scalar fields.
 - Unknown system fields are rejected through the shared query field catalog.
-- Dictionary-backed and custom fields require a `DictionaryStore` at compile time.
-- Literal-only plans do not require a dictionary or track data.
+- Compilation is dictionary-independent; custom names are stored as plan-owned symbols.
+- Dictionary-backed and custom fields require an explicit dictionary context/binding at evaluation time.
+- Literal-only plans require neither a dictionary context nor track data.
 - The language has no functions, fallback operator, padding helper, path joiner, or path sanitization primitive.
 
 ## Compatibility and versioning
@@ -137,7 +138,7 @@ Representative invalid forms are:
 
 ## Test authority
 
-- [`FormatExpressionTest.cpp`](../../../test/unit/query/FormatExpressionTest.cpp) locks supported fields, concatenation, literals, missing values, access profiles, dictionary requirements, and rejected forms.
+- [`FormatExpressionTest.cpp`](../../../test/unit/query/FormatExpressionTest.cpp) locks supported fields, concatenation, literals, missing values, pure compilation, explicit binding, access profiles, and rejected forms.
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) locks the `track show --format` workflow.
 
 ## Related documents

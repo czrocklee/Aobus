@@ -4,7 +4,7 @@
 #include "test/unit/library/TrackBuilderTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/library/CoverArt.h>
+#include <ao/PictureType.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 
@@ -29,11 +29,12 @@ namespace ao::library::test
     {
       auto builder = TrackBuilder::makeEmpty();
       auto const title = std::string(kUint16Max + 1, 't');
-      builder.metadata().title(title);
+      builder.metadata().title(title).artist("staged artist");
 
       auto const result = context.trySerializeHot(builder);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::ValueTooLarge);
+      CHECK_FALSE(context.dictionary().findId("staged artist"));
     }
 
     SECTION("Tag payload length")

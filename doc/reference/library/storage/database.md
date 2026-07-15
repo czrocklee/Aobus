@@ -28,6 +28,15 @@ The library is one LMDB environment at the database path passed to `MusicLibrary
 The database is a host-local rebuildable index rather than an interchange format.
 Integer keys use LMDB native word order and record structs are host-endian; [library YAML](../format/yaml.md) is the portable interchange surface.
 
+## Transaction access
+
+`MusicLibrary::readTransaction()` returns a move-only `ReadTransaction` that directly owns one native LMDB read snapshot.
+`MusicLibrary::writeTransaction()` returns a move-only `WriteTransaction` that owns one native write transaction and its transaction-local dictionary writer.
+
+The specialized stores are const service handles.
+Their readers accept either library transaction type, while their writers require a mutable `WriteTransaction`.
+Native LMDB transaction handles remain private implementation details of `MusicLibrary` and the stores; the wrappers add semantic capability boundaries but no additional storage transaction or heap allocation on the read path.
+
 ## Named databases
 
 | Database | Key | Value |
@@ -49,6 +58,8 @@ All integer identifiers are 32-bit values and reserve `0` as invalid.
 - Track and list writers allocate `maxKey + 1`; the first id is `1`, and exhaustion returns `ResourceExhausted`.
 - A track is appended to `tracks_hot` first and written to `tracks_cold` under the same id.
 - A resource key starts from the low 32 bits of XXH3-64, remaps zero to one, and linearly probes with full-content comparison; identical bytes reuse the existing id.
+- Dictionary ids produced by current writers are the dense committed range `1..entryCount`; new text receives the next id, repeated text reuses its existing id, and committed ids are never deleted or rebound.
+- An aborted transaction-local dictionary tail has no durable identity and its ids may be reused by a later transaction.
 - The dictionary persists id-to-string rows and rebuilds its string-to-id index in memory when opened.
 - Manifest keys are normalized root-relative URI bytes, limited to 500 bytes, then zero-padded to a four-byte multiple; an oversized key returns `ValueTooLarge`.
 
@@ -96,6 +107,7 @@ The track-id array immediately follows the header; string offsets are relative t
 
 Resource values are raw blob bytes with no header.
 Dictionary values are raw UTF-8 bytes with no header or terminator.
+Dictionary rows created for a referencing record are written in the same LMDB transaction.
 
 ## Manifest records
 
@@ -136,12 +148,14 @@ The exact accepted surface belongs to the [predicate language reference](../../q
 Any incompatible key, record, enum encoding, slot meaning, signature-algorithm, or stored Smart List predicate change must increment `kLibraryVersion`.
 A predicate change is incompatible when it expands the storable surface beyond what an existing same-version reader accepts, or when it can alter whether existing filter text parses or compiles, what it binds to, or which tracks it matches, even if `ListHeader` and its stored bytes do not change.
 An explicitly tested future migration may replace reset-and-rescan recovery for an old version only when it reads the old predicate contract, converts or validates every affected filter atomically, and updates the metadata version after the converted data is valid; the target still has an incremented `kLibraryVersion`, and no such migration exists today.
+Transaction-local dictionary publication does not change the row shape or library version; it assumes a freshly created host-local index and adds no legacy-layout migration or validation path.
 
 ## Implementation authority
 
 - [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) owns magic, version, and metadata sizes.
 - [`TrackLayout.h`](../../../../include/ao/library/TrackLayout.h), [`ListLayout.h`](../../../../include/ao/library/ListLayout.h), and [`FileManifestLayout.h`](../../../../include/ao/library/FileManifestLayout.h) own binary structs and static size checks.
 - [`MusicLibrary.cpp`](../../../../lib/library/MusicLibrary.cpp) owns environment and named-database creation.
+- [`ReadTransaction.h`](../../../../include/ao/library/ReadTransaction.h) and [`WriteTransaction.h`](../../../../include/ao/library/WriteTransaction.h) own the public transaction capabilities.
 - Store and builder implementations under [`lib/library/`](../../../../lib/library/) own key allocation and write validation.
 
 ## Test authority

@@ -5,8 +5,9 @@
 #include <ao/Error.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
+#include <ao/library/ReadTransaction.h>
+#include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Database.h>
-#include <ao/lmdb/Transaction.h>
 
 #include <cstddef>
 #include <expected>
@@ -16,19 +17,24 @@
 
 namespace ao::library
 {
-  ListStore::ListStore(lmdb::Database db)
-    : _database{std::move(db)}
+  ListStore::ListStore(lmdb::Database db, detail::LibraryIdentity const& identity)
+    : _database{std::move(db)}, _identity{&identity}
   {
   }
 
-  ListStore::Reader ListStore::reader(lmdb::ReadTransaction const& transaction) const
+  ListStore::Reader ListStore::reader(ReadTransaction const& transaction) const
   {
-    return Reader{_database.reader(transaction)};
+    return Reader{_database.reader(transaction.native(*_identity))};
   }
 
-  ListStore::Writer ListStore::writer(lmdb::WriteTransaction& transaction)
+  ListStore::Reader ListStore::reader(WriteTransaction const& transaction) const
   {
-    return Writer{_database.writer(transaction)};
+    return Reader{_database.reader(transaction.native(*_identity))};
+  }
+
+  ListStore::Writer ListStore::writer(WriteTransaction& transaction) const
+  {
+    return Writer{_database.writer(transaction.native(*_identity))};
   }
 
   // Reader implementation

@@ -1,18 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
+#include "test/unit/library/LibraryStoreTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <cstddef>
 #include <cstring>
@@ -22,9 +17,6 @@
 
 namespace ao::library::test
 {
-  using namespace ao::lmdb;
-  using namespace ao::lmdb::test;
-
   namespace
   {
     std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, std::span<std::byte const> data)
@@ -37,12 +29,9 @@ namespace ao::library::test
 
   TEST_CASE("ListStore - create and read", "[library][unit][list]")
   {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto store = ListStore{openDatabase(wtxn, "lists")};
-    REQUIRE(wtxn.commit());
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.lists();
 
     // Create a list
     auto header = ListHeader{.trackIdCount = 5, .nameOffset = 0};
@@ -50,12 +39,12 @@ namespace ao::library::test
     auto data = std::vector<std::byte>(sizeof(ListHeader));
     std::memcpy(data.data(), &header, sizeof(ListHeader));
 
-    auto wtxn2 = beginWriteTransaction(env);
+    auto wtxn2 = library.writeTransaction();
     auto const [id, view] = requireCreate(store.writer(wtxn2), data);
     REQUIRE(wtxn2.commit());
 
     // Read the list
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto reader = store.reader(rtxn);
     auto it = reader.begin();
     REQUIRE(it != reader.end());
@@ -64,12 +53,9 @@ namespace ao::library::test
 
   TEST_CASE("ListStore - read by id", "[library][unit][list]")
   {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto store = ListStore{openDatabase(wtxn, "lists")};
-    REQUIRE(wtxn.commit());
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.lists();
 
     // Create a list
     auto header = ListHeader{.trackIdCount = 10, .nameOffset = 0};
@@ -78,12 +64,12 @@ namespace ao::library::test
     auto data = std::vector<std::byte>(sizeof(ListHeader) + trackIdsSize);
     std::memcpy(data.data(), &header, sizeof(ListHeader));
 
-    auto wtxn2 = beginWriteTransaction(env);
+    auto wtxn2 = library.writeTransaction();
     auto const [id, view] = requireCreate(store.writer(wtxn2), data);
     REQUIRE(wtxn2.commit());
 
     // Read by ID
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto const optFound = store.reader(rtxn).get(id);
     REQUIRE(optFound);
     CHECK(optFound->tracks().size() == 10);
@@ -91,12 +77,9 @@ namespace ao::library::test
 
   TEST_CASE("ListStore - delete", "[library][unit][list]")
   {
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-
-    auto wtxn = beginWriteTransaction(env);
-    auto store = ListStore{openDatabase(wtxn, "lists")};
-    REQUIRE(wtxn.commit());
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.lists();
 
     // Create a list
     auto header = ListHeader{};
@@ -104,17 +87,17 @@ namespace ao::library::test
     auto data = std::vector<std::byte>(sizeof(ListHeader));
     std::memcpy(data.data(), &header, sizeof(ListHeader));
 
-    auto wtxn2 = beginWriteTransaction(env);
+    auto wtxn2 = library.writeTransaction();
     auto const [id, view] = requireCreate(store.writer(wtxn2), data);
     REQUIRE(wtxn2.commit());
 
     // Delete it
-    auto wtxn3 = beginWriteTransaction(env);
+    auto wtxn3 = library.writeTransaction();
     REQUIRE(store.writer(wtxn3).remove(id));
     REQUIRE(wtxn3.commit());
 
     // Verify it's gone
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto reader = store.reader(rtxn);
     auto it = reader.begin();
     CHECK(it == reader.end());

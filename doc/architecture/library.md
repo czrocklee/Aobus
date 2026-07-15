@@ -59,15 +59,31 @@ UIModel and frontends begin above these stages and consume runtime values rather
 It creates read and write transactions and owns the physical library metadata header and revision source.
 The core [LMDB operation specification](../spec/storage/lmdb-operation.md) owns environment, transaction, cursor, and raw read/write behavior below these library-specific stores.
 
-The current `DictionaryStore` process index changes during `put()` and `getOrIntern()` before the surrounding LMDB transaction outcome is known.
-[RFC 0022](../rfc/0022-transaction-coherent-library-dictionary.md) proposes a transaction-local overlay and post-commit cache publication; that proposal is not current behavior.
+Every `MusicLibrary` read uses one move-only `ReadTransaction` that directly owns a native LMDB read transaction.
+The wrapper is the library-level snapshot capability: store readers accept it, while its native handle remains private to `MusicLibrary` and the stores.
+The wrapper and every store carry the same stable implementation-owned library identity, so a snapshot from one `MusicLibrary` is rejected before it can be mixed with another library's DBI.
+This adds no allocation, locking, or another transaction layer to each operation.
 
-`DictionaryStore` serializes index mutation and lookup with its internal shared mutex.
-Published non-empty strings are immutable and use stable storage, so a borrowed view remains valid until the store is destroyed even when later mutations grow the dictionary.
+Every `MusicLibrary` write uses one move-only `WriteTransaction` that owns the native LMDB transaction, the process writer gate, and a transaction-local dictionary writer.
+Interning first consults committed mappings and then the transaction overlay; new id/text rows are written into the same native transaction as the track or other record that references them.
+Dropping or failing the wrapper aborts both authorities.
+Commit or abort consumes the native handle but retains the native transaction object and dictionary writer until the outer wrapper is destroyed.
+Store writers that remain in ordinary scope across `commit()` therefore observe a terminal transaction and can be destroyed safely; any post-terminal operation fails before touching an LMDB cursor.
+
+Before native commit, the wrapper acquires the dictionary's exclusive lock and prepares every potentially throwing in-memory insertion.
+It holds that lock through commit, then either advances the dictionary generation and unlocks or rolls the prepared delta back before unlocking.
+Readers therefore observe either the complete old mapping or the complete new mapping, and application change publication happens only after the latter is visible.
+
+Committed dictionary ids form a dense, append-only range beginning at one; aborted tail ids may be reused, while committed ids are never reclaimed or rebound.
+`DictionaryStore` serializes committed index publication and lookup with its internal shared mutex.
+Published strings are immutable and use stable storage, so a borrowed view remains valid until the store is destroyed even when later commits grow the dictionary.
 `DictionaryReadCache` is a bounded, owner-thread batch accelerator over those views rather than a snapshot or a wider lock scope.
-Its collision replacement may cause another store lookup but cannot change a result, and empty nonzero slots are not retained because a later dictionary mutation may recycle them.
+Its collision replacement may cause another store lookup but cannot change a result; empty values are simply not retained.
+`DictionaryReadContext` is the bounded synchronous read/binding port used by query and format evaluation.
 
 Store types own physical representation and transaction-scoped access.
+`MusicLibrary` exposes stores as const service handles; read capability comes from `ReadTransaction` or `WriteTransaction`, and mutation additionally requires a mutable `WriteTransaction`.
+Raw LMDB transactions are not part of the public store operation surface.
 They do not publish application events or construct frontend projections.
 
 `TrackStore` owns both point reads and ordered batch reads of track records.
@@ -95,8 +111,8 @@ It groups roles and lifetime; it does not introduce another database or transact
 `TrackSource` is the runtime boundary for an ordered, observable set of track identities.
 `TrackSourceCache` owns the all-tracks source, cached list sources, smart-list evaluation, dependency links between lists, and reusable ad-hoc filtered sources.
 
-One `SmartListEvaluator` bucket rebuild creates one batch-local dictionary read cache and shares it across the plans and tracks evaluated in that batch.
-This removes repeated dictionary locks for reused IDs without holding a shared lock across track visitation or delaying dictionary writers for a whole scan.
+One `SmartListEvaluator` bucket rebuild creates one batch-local dictionary read cache/context, binds each immutable plan once, and shares those bindings across the tracks evaluated in that batch.
+Binding resolves all plan symbols under one shared dictionary lock; later id-to-text cache misses take bounded point-read locks rather than delaying dictionary writers for a whole scan.
 
 Callers acquire leases rather than taking raw ownership of cached sources.
 The cache observes `LibraryChanges` and turns committed storage changes into source refreshes or incremental source deltas.
@@ -136,8 +152,9 @@ A synchronous mutation follows this path:
 ```text
 runtime command
   -> LibraryWriter
-  -> MusicLibrary write transaction
-  -> commit with new library revision
+  -> WriteTransaction + transaction-local dictionary overlay
+  -> one LMDB commit with records, dictionary rows, and new library revision
+  -> complete dictionary-index publication
   -> LibraryChanges publication
   -> TrackSourceCache refresh/delta
   -> live projections
@@ -168,6 +185,8 @@ Changing presentation reshapes the projection without changing base-list or filt
 ## Structural constraints
 
 - One `MusicLibrary` instance and its runtime facade belong to one `CoreRuntime` and one music root.
+- A library transaction is accepted only by stores carrying the same stable `MusicLibrary` identity.
+- Library write transactions are process-serialized and non-nested; dictionary mappings are append-only within one open library.
 - A mutation becomes observable through the revisioned change bus only after its write transaction commits.
 - Consumers use published track and list identities to refresh state; they do not retain transaction-bound core views beyond their scope.
 - `LibraryChanges` serializes revision delivery onto the callback executor even when producers finish out of order.
@@ -196,8 +215,9 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 
 ## Implementation map
 
-- [`MusicLibrary`](../../include/ao/library/MusicLibrary.h) owns the physical library environment and store access.
-- [`DictionaryStore`](../../include/ao/library/DictionaryStore.h) owns synchronized dictionary access, stable published values, and the bounded batch read cache.
+- [`MusicLibrary`](../../include/ao/library/MusicLibrary.h) owns the physical library environment and creates coherent library write transactions.
+- [`WriteTransaction`](../../include/ao/library/WriteTransaction.h) owns native write lifetime, transaction-local dictionary interning, commit, rollback, and publication ordering.
+- [`DictionaryStore`](../../include/ao/library/DictionaryStore.h) owns committed synchronized dictionary access, stable published values, generation, and bounded read contexts/caches.
 - [`TrackStore`](../../include/ao/library/TrackStore.h) owns transaction-scoped point and ordered batch access to hot/cold track records.
 - [`Library`](../../app/include/ao/rt/library/Library.h) composes the runtime reader, writer, task, and change roles.
 - [`LibraryReader`](../../app/include/ao/rt/library/LibraryReader.h) and [`LibraryWriter`](../../app/include/ao/rt/library/LibraryWriter.h) define scoped read and synchronous mutation boundaries.
@@ -209,10 +229,10 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 
 ## Test map
 
-- [`MusicLibraryTest.cpp`](../../test/unit/library/MusicLibraryTest.cpp) protects physical environment and store composition.
+- [`MusicLibraryTest.cpp`](../../test/unit/library/MusicLibraryTest.cpp) protects physical environment, store composition, and cross-library transaction rejection.
 - [`TrackStoreTest.cpp`](../../test/unit/library/TrackStoreTest.cpp) and [`TrackStoreRawLayoutTest.cpp`](../../test/unit/library/TrackStoreRawLayoutTest.cpp) protect batch order, missing-row behavior, and coordinated hot/cold traversal.
-- [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects stable borrowed views, bounded-cache collision behavior, empty-slot recycling, and concurrent growth.
-- [`PlanEvaluatorDictionaryTest.cpp`](../../test/unit/query/PlanEvaluatorDictionaryTest.cpp) protects cached and uncached dictionary predicate equivalence.
+- [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects overlay rollback, terminal commit-failure recovery, writer lifetime across transaction completion, stable borrowed views, bounded-cache behavior, batch binding, and all-or-none concurrent publication.
+- [`PlanEvaluatorDictionaryTest.cpp`](../../test/unit/query/PlanEvaluatorDictionaryTest.cpp) protects bound dictionary predicates and explicit unresolved-symbol semantics.
 - [`LibraryReaderTest.cpp`](../../test/unit/runtime/library/LibraryReaderTest.cpp) and [`LibraryWriterTest.cpp`](../../test/unit/runtime/library/LibraryWriterTest.cpp) protect runtime access roles.
 - [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protects revision ordering and callback publication.
 - [`LibraryTaskServiceTest.cpp`](../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects worker/callback task boundaries.

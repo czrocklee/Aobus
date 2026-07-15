@@ -690,7 +690,7 @@ namespace ao::cli
           throwCommandError(error, "format error: {}{}", error.message, formatExpressionUsageHint());
         }
 
-        auto plan = query::compileFormat(*expr, &ml.dictionary());
+        auto plan = query::compileFormat(*expr);
 
         if (!plan)
         {
@@ -705,9 +705,12 @@ namespace ao::cli
 
         auto evaluator = query::FormatEvaluator{};
         auto formattedTrack = std::string{};
-        std::size_t const end = (limit == 0) ? trackIds.size() : std::min(offset + limit, trackIds.size());
         auto const transaction = ml.readTransaction();
         auto const reader = ml.tracks().reader(transaction);
+        auto dictionaryCache = library::DictionaryReadCache{ml.dictionary()};
+        auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
+        auto binding = query::FormatBinding{*plan, dictionaryContext};
+        std::size_t const end = (limit == 0) ? trackIds.size() : std::min(offset + limit, trackIds.size());
 
         for (std::size_t i = offset; i < end; ++i)
         {
@@ -717,7 +720,7 @@ namespace ao::cli
 
           if (optView)
           {
-            evaluator.evaluate(*plan, *optView, formattedTrack);
+            evaluator.evaluate(binding, *optView, formattedTrack);
             std::println(os, "{}", formattedTrack);
           }
         }

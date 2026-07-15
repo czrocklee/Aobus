@@ -298,7 +298,7 @@ namespace ao::rt::test
     {
       auto lock = std::unique_lock{_mutex};
       _cv.wait(lock, [this] { return std::ranges::any_of(_entries, &Entry::published); });
-      auto const it = std::ranges::find_if(std::views::reverse(_entries), &Entry::published);
+      auto const it = std::ranges::find_if(_entries | std::views::reverse, &Entry::published);
       return it->id;
     }
 

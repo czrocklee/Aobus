@@ -6,15 +6,14 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
 #include <cstddef>
+#include <filesystem>
 #include <utility>
 #include <vector>
 
@@ -24,28 +23,40 @@ namespace ao::library::test
   {
   public:
     TrackSerializationFixture()
-      : _env{lmdb::test::openEnvironment(_temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20})}
-      , _transaction{lmdb::test::beginWriteTransaction(_env)}
-      , _dictionary{lmdb::test::openDatabase(_transaction, "dictionary"), _transaction}
-      , _resources{lmdb::test::openDatabase(_transaction, "resources")}
+      : _library{_temp.path(), _temp.path() / "db"}, _transaction{_library.writeTransaction()}
     {
     }
 
     std::pair<std::vector<std::byte>, std::vector<std::byte>> serialize(TrackBuilder& builder)
     {
-      auto result = builder.serialize(_transaction, _dictionary, _resources);
+      auto result = builder.serialize(_transaction, _library.resources());
       REQUIRE(result);
+      commitAndRenew();
       return *result;
     }
 
     Result<std::vector<std::byte>> trySerializeHot(TrackBuilder& builder)
     {
-      return builder.serializeHot(_transaction, _dictionary);
+      auto result = builder.serializeHot(_transaction);
+
+      if (result)
+      {
+        commitAndRenew();
+      }
+
+      return result;
     }
 
     Result<std::vector<std::byte>> trySerializeCold(TrackBuilder& builder)
     {
-      return builder.serializeCold(_transaction, _dictionary, _resources);
+      auto result = builder.serializeCold(_transaction, _library.resources());
+
+      if (result)
+      {
+        commitAndRenew();
+      }
+
+      return result;
     }
 
     std::vector<std::byte> serializeCold(TrackBuilder& builder)
@@ -55,18 +66,22 @@ namespace ao::library::test
       return *result;
     }
 
-    lmdb::WriteTransaction& transaction() { return _transaction; }
+    WriteTransaction& transaction() { return _transaction; }
 
-    DictionaryStore& dictionary() { return _dictionary; }
+    DictionaryStore const& dictionary() { return _library.dictionary(); }
 
-    ResourceStore& resources() { return _resources; }
+    ResourceStore const& resources() { return _library.resources(); }
 
   private:
+    void commitAndRenew()
+    {
+      REQUIRE(_transaction.commit());
+      _transaction = _library.writeTransaction();
+    }
+
     ao::test::TempDir _temp;
-    lmdb::Environment _env;
-    lmdb::WriteTransaction _transaction;
-    DictionaryStore _dictionary;
-    ResourceStore _resources;
+    MusicLibrary _library;
+    WriteTransaction _transaction;
   };
 
   inline std::pair<std::vector<std::byte>, std::vector<std::byte>> serializeTestTrack(TrackBuilder& builder)

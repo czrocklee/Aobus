@@ -188,8 +188,8 @@ namespace ao::lmdb
     Writer& operator=(Writer const&) = delete;
 
     // Movable
-    Writer(Writer&&) noexcept = default;
-    Writer& operator=(Writer&&) noexcept = default;
+    Writer(Writer&& other) noexcept;
+    Writer& operator=(Writer&& other) noexcept;
 
     Result<> create(std::uint32_t id, std::span<std::byte const> data);
     Result<> create(std::span<std::byte const> key, std::span<std::byte const> data);
@@ -226,6 +226,7 @@ namespace ao::lmdb
     // LMDB has closed every cursor, so reusing this writer would dereference a
     // dangling cursor. Always-on (not gsl-gated) since release strips contracts.
     void ensureActive() const;
+    void releaseFinishedCursor() noexcept;
 
     DbiHandle _dbi;
     WriteTransaction* _txn;

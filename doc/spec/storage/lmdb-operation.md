@@ -38,7 +38,7 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 
 - Environments, transactions, iterators, writers, and their native handles follow RAII ownership and are movable but not copyable unless their public type explicitly provides copying.
 - A byte span, key view, iterator value, reader, or writer obtained from a transaction does not outlive the transaction that supplies its storage or cursor state.
-- Destroying an uncommitted write transaction aborts all of its staged changes.
+- Explicitly aborting or destroying an uncommitted write transaction aborts all of its staged changes.
 - Calling `commit()` consumes the native write transaction whether commit succeeds or fails; the transaction and every writer created from it are terminal afterward.
 - A writer operation after its transaction's commit attempt throws before touching the cursor.
 - A read point miss, write-transaction point miss, delete miss, empty-database maximum, and iterator end are normal values rather than recoverable errors.
@@ -62,11 +62,11 @@ Successful `Environment::open` produces the owned state; destruction closes the 
 | State | Read behavior | Write behavior | Transition |
 |---|---|---|---|
 | Active read | Snapshot reads and iteration are available. | Not available. | Destruction aborts/releases the native read transaction. |
-| Active write | Snapshot reads and staged writes are available. | Create, update, append, delete, clear, child begin, and commit are available. | `commit()` or destruction makes the transaction terminal. |
+| Active write | Snapshot reads and staged writes are available. | Create, update, append, delete, clear, child begin, commit, and abort are available. | `commit()`, `abort()`, or destruction makes the transaction terminal. |
 | Terminal write | No transaction handle remains. | Writer use is invalid. | No transition back to active. |
 
-`WriteTransaction::isCommitted()` reports the adapter's terminal cursor-closed state after `commit()` is called.
-It becomes true even when native commit returns an error, so it does not independently prove durable success; callers inspect the `Result` returned by `commit()`.
+`ReadTransaction::isActive()` reports whether a native handle remains.
+`WriteTransaction::isFinished()` is its inverse and becomes true after successful commit, failed commit, explicit abort, or move-out, so it does not independently prove durable success; callers inspect the `Result` returned by `commit()`.
 
 ### Iterator
 
@@ -107,6 +107,8 @@ The parent remains responsible for the final commit or abort.
 
 A successful outer commit publishes all staged changes atomically.
 Destruction without commit aborts the complete transaction.
+Explicit `abort()` consumes the native handle immediately and is idempotent.
+Beginning a child, opening a database, or creating a reader/writer from an inactive transaction fails before calling LMDB.
 
 ### Reads and iteration
 

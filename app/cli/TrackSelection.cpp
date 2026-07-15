@@ -46,7 +46,7 @@ namespace ao::cli
       throwCommandError(error, "filter error: {}{}", error.message, queryFilterUsageHint());
     }
 
-    auto const plan = query::compileQuery(*expr, &library.dictionary());
+    auto const plan = query::compileQuery(*expr);
 
     if (!plan)
     {
@@ -55,10 +55,13 @@ namespace ao::cli
     }
 
     auto evaluator = query::PlanEvaluator{};
+    auto dictionaryCache = library::DictionaryReadCache{library.dictionary()};
+    auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
+    auto binding = query::PlanBinding{*plan, dictionaryContext};
 
     for (auto const& [id, view] : reader)
     {
-      if (evaluator.matches(*plan, view))
+      if (evaluator.matches(binding, view))
       {
         ids.push_back(id);
       }

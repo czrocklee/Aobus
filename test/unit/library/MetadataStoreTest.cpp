@@ -6,6 +6,8 @@
 #include <ao/Error.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ReadTransaction.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
@@ -13,9 +15,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
-#include <chrono>
 #include <cstddef>
 #include <span>
+#include <type_traits>
 #include <vector>
 
 namespace ao::library::test
@@ -30,84 +32,50 @@ namespace ao::library::test
     auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
     auto wtxn = beginWriteTransaction(env);
     auto db = openDatabase(wtxn, "meta");
-    auto store = MetadataStore{db};
-
-    // Write an invalid sized struct (e.g. 1 byte) directly to the DB to simulate corruption or older version
+    // Seed an invalid physical record; public reads still enter through MusicLibrary.
     auto writer = db.writer(wtxn);
     auto invalidData = std::vector{std::byte{0x42}};
     REQUIRE(writer.create(kMetadataHeaderRecordId, std::span<std::byte const>{invalidData}));
     REQUIRE(wtxn.commit());
 
-    auto rtxn = beginReadTransaction(env);
-    auto const result = store.load(rtxn);
+    auto const result = MusicLibrary::open(temp.path(), temp.path());
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("MetadataStore - creates and loads metadata header", "[library][unit][metadata-store]")
+  TEST_CASE("MetadataStore - loads the initialized header through a library snapshot",
+            "[library][unit][metadata-store]")
   {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "meta");
-    auto store = MetadataStore{db};
+    auto const temp = ao::test::TempDir{};
+    auto library = MusicLibrary{temp.path(), temp.path() / "db"};
+    auto transaction = library.readTransaction();
+    auto const loadedResult = library.metadata().load(transaction);
 
-    auto header = MetadataHeader{.magic = 0xDEADBEEF,
-                                 .libraryVersion = 42,
-                                 .flags = 0,
-                                 .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1234567890}}};
-    REQUIRE(store.create(wtxn, header));
-    REQUIRE(wtxn.commit());
-
-    auto rtxn = beginReadTransaction(env);
-    auto const loadedResult = store.load(rtxn);
     REQUIRE(loadedResult);
-    CHECK(loadedResult->magic == 0xDEADBEEF);
-    CHECK(loadedResult->libraryVersion == 42);
-    CHECK(loadedResult->createdTime.time_since_epoch().count() == 1234567890);
-  }
-
-  TEST_CASE("MetadataStore - load returns NotFound for missing header", "[library][unit][metadata-store]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "meta");
-    auto store = MetadataStore{db};
-    REQUIRE(wtxn.commit());
-
-    auto rtxn = beginReadTransaction(env);
-    auto const result = store.load(rtxn);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    CHECK(loadedResult->magic == kMetadataMagic);
+    CHECK(loadedResult->libraryVersion == kLibraryVersion);
+    STATIC_REQUIRE_FALSE(std::is_same_v<ReadTransaction, lmdb::ReadTransaction>);
+    STATIC_REQUIRE(std::is_move_constructible_v<ReadTransaction>);
+    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ReadTransaction>);
   }
 
   TEST_CASE("MetadataStore - update overwrites previous header values", "[library][unit][metadata-store]")
   {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "meta");
-    auto store = MetadataStore{db};
+    auto const temp = ao::test::TempDir{};
+    auto library = MusicLibrary{temp.path(), temp.path() / "db"};
+    auto header = library.metadataHeader();
+    auto transaction = library.writeTransaction();
+    header.flags = 42;
 
-    auto header = MetadataHeader{.magic = 0xAAAAAAAA,
-                                 .libraryVersion = 1,
-                                 .flags = 0,
-                                 .createdTime = std::chrono::sys_time{std::chrono::milliseconds{100}}};
-    REQUIRE(store.create(wtxn, header));
-    REQUIRE(wtxn.commit());
-
-    auto wtxn2 = beginWriteTransaction(env);
-    header.libraryVersion = 2;
-    REQUIRE(store.update(wtxn2, header));
-    auto const stagedResult = store.load(wtxn2);
+    REQUIRE(library.metadata().update(transaction, header));
+    auto const stagedResult = library.metadata().load(transaction);
     REQUIRE(stagedResult);
-    CHECK(stagedResult->libraryVersion == 2);
-    REQUIRE(wtxn2.commit());
+    CHECK(stagedResult->flags == 42);
+    REQUIRE(transaction.commit());
 
-    auto rtxn = beginReadTransaction(env);
-    auto const loadedResult = store.load(rtxn);
+    auto readTransaction = library.readTransaction();
+    auto const loadedResult = library.metadata().load(readTransaction);
     REQUIRE(loadedResult);
-    CHECK(loadedResult->libraryVersion == 2);
+    CHECK(loadedResult->flags == 42);
   }
 } // namespace ao::library::test

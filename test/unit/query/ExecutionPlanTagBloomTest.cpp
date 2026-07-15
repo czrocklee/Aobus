@@ -1,59 +1,50 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
 #include "test/unit/query/ExecutionPlanTestSupport.h"
-#include <ao/library/DictionaryStore.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
+#include <ao/query/detail/Bytecode.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace ao::query::test
 {
-  using namespace ao::lmdb::test;
-
-  TEST_CASE("ExecutionPlan - compiles tag bloom masks", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - records exact required tag symbols", "[query][unit][execution-plan]")
   {
-    auto temp = ao::test::TempDir{};
-    auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dictionary = library::DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
-
-    auto rockId = ao::test::requireValue(dictionary.put(wtxn, "rock"));
-    auto jazzId = ao::test::requireValue(dictionary.put(wtxn, "jazz"));
-    REQUIRE(wtxn.commit());
-
-    std::uint32_t const rockBit = std::uint32_t{1} << (rockId.raw() & 31);
-    std::uint32_t const jazzBit = std::uint32_t{1} << (jazzId.raw() & 31);
-
-    SECTION("Tag Bloom Mask For SingleTagWithDictionary")
+    SECTION("Single tag")
     {
-      auto plan = compileOk(QueryCompiler{&dictionary}, parseOk("#rock"));
-      CHECK(plan.tagBloomMask == rockBit);
+      auto const plan = compileOk(QueryCompiler{}, parseOk("#rock"));
+      CHECK(plan.dictionarySymbols == std::vector<std::string>{"rock"});
+      CHECK(plan.requiredTagSymbols == std::vector<std::uint32_t>{0});
     }
 
-    SECTION("Tag Bloom Mask Ors Tags Across And")
+    SECTION("AND requires both tags")
     {
-      auto plan = compileOk(QueryCompiler{&dictionary}, parseOk("#rock and #jazz"));
-      CHECK(plan.tagBloomMask == (rockBit | jazzBit));
+      auto const plan = compileOk(QueryCompiler{}, parseOk("#rock and #jazz"));
+      CHECK(plan.dictionarySymbols == std::vector<std::string>{"rock", "jazz"});
+      CHECK(plan.requiredTagSymbols == std::vector<std::uint32_t>{0, 1});
     }
 
-    SECTION("Tag Bloom Mask Intersects Tags Across Or")
+    SECTION("OR has no tag required by every branch")
     {
-      auto plan = compileOk(QueryCompiler{&dictionary}, parseOk("#rock or #jazz"));
-      CHECK(plan.tagBloomMask == (rockBit & jazzBit));
+      auto const plan = compileOk(QueryCompiler{}, parseOk("#rock or #jazz"));
+      CHECK(plan.requiredTagSymbols.empty());
     }
 
-    SECTION("Tag Bloom Mask Clears Under Not")
+    SECTION("OR retains a tag shared by every branch")
     {
-      auto plan = compileOk(QueryCompiler{&dictionary}, parseOk("not #rock"));
-      CHECK(plan.tagBloomMask == 0);
+      auto const plan = compileOk(QueryCompiler{}, parseOk("(#rock and #jazz) or (#rock and #blues)"));
+      REQUIRE_FALSE(plan.requiredTagSymbols.empty());
+      CHECK(plan.dictionarySymbols[plan.requiredTagSymbols.front()] == "rock");
+    }
+
+    SECTION("NOT has no positive required tag")
+    {
+      auto const plan = compileOk(QueryCompiler{}, parseOk("not #rock"));
+      CHECK(plan.requiredTagSymbols.empty());
     }
   }
 } // namespace ao::query::test

@@ -78,6 +78,6 @@ namespace ao::rt
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
 
-    explicit LibraryReader(library::MusicLibrary& library);
+    explicit LibraryReader(library::MusicLibrary const& library);
   };
 } // namespace ao::rt

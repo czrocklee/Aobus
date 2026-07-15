@@ -14,7 +14,7 @@
 namespace ao::library
 {
   FileManifestView::FileManifestView(std::span<std::byte const> data) noexcept
-    : _header{utility::bytes::tryLayout<FileManifestHeader>(data)}
+    : _header{utility::bytes::tryLayout<FileManifestHeader>(data)}, _payload{data}
   {
   }
 

@@ -4,23 +4,21 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/LibraryBinaryTestSupport.h"
 #include "test/unit/library/TrackViewTestSupport.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
-#include <ao/library/CoverArt.h>
+#include <ao/PictureType.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <chrono>
 #include <cstddef>
 #include <span>
-#include <string>
 #include <string_view>
 #include <vector>
 
@@ -31,8 +29,6 @@ namespace ao::library::test
 #if defined(__GNUC__) && !defined(__clang__)
     static_assert(std::ranges::view<CoverArtProxy>);
 #endif
-
-    using namespace ao::lmdb::test;
   } // namespace
 
   // === Metadata Tests ===
@@ -99,22 +95,21 @@ namespace ao::library::test
       .movementTotal(4);
 
     auto temp = ao::test::TempDir{};
-    auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
-    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
-    auto coldDataResult = builder.serializeCold(wtxn, dictionary, resources);
+    auto library = MusicLibrary{temp.path(), temp.path() / "db"};
+    auto transaction = library.writeTransaction();
+    auto coldDataResult = builder.serializeCold(transaction, library.resources());
     REQUIRE(coldDataResult);
     auto const& coldData = *coldDataResult;
+    REQUIRE(transaction.commit());
     auto const view = makeColdTrackView(coldData);
 
     CHECK(view.classical().workId().raw() > 0);
     CHECK(view.classical().movementId().raw() > 0);
-    CHECK(dictionary.get(view.classical().workId()) == "Symphony No. 9 in D minor, Op. 125");
-    CHECK(dictionary.get(view.classical().movementId()) == "II. Molto vivace");
-    CHECK(dictionary.get(view.classical().conductorId()) == "Carlos Kleiber");
-    CHECK(dictionary.get(view.classical().ensembleId()) == "Vienna Philharmonic");
-    CHECK(dictionary.get(view.classical().soloistId()) == "Yo-Yo Ma");
+    CHECK(library.dictionary().get(view.classical().workId()) == "Symphony No. 9 in D minor, Op. 125");
+    CHECK(library.dictionary().get(view.classical().movementId()) == "II. Molto vivace");
+    CHECK(library.dictionary().get(view.classical().conductorId()) == "Carlos Kleiber");
+    CHECK(library.dictionary().get(view.classical().ensembleId()) == "Vienna Philharmonic");
+    CHECK(library.dictionary().get(view.classical().soloistId()) == "Yo-Yo Ma");
     CHECK(view.classical().movementNumber() == 2);
     CHECK(view.classical().movementTotal() == 4);
   }
@@ -125,11 +120,9 @@ namespace ao::library::test
     builder.coverArt().add(PictureType::BackCover, ResourceId{42});
 
     auto temp = ao::test::TempDir{};
-    auto env = lmdb::test::openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = lmdb::test::beginWriteTransaction(env);
-    auto dictionary = DictionaryStore{lmdb::test::openDatabase(wtxn, "dictionary"), wtxn};
-    auto resources = ResourceStore{lmdb::test::openDatabase(wtxn, "resources")};
-    auto coldDataResult = builder.serializeCold(wtxn, dictionary, resources);
+    auto library = MusicLibrary{temp.path(), temp.path() / "db"};
+    auto transaction = library.writeTransaction();
+    auto coldDataResult = builder.serializeCold(transaction, library.resources());
     REQUIRE(coldDataResult);
     auto const& coldData = *coldDataResult;
 

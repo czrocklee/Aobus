@@ -13,12 +13,8 @@
 
 namespace ao::library
 {
-  class TrackStore;
-}
-
-namespace ao::lmdb
-{
   class ReadTransaction;
+  class TrackStore;
 }
 
 namespace ao::rt
@@ -32,11 +28,11 @@ namespace ao::rt
   class AllTracksSource final : public TrackSource
   {
   public:
-    explicit AllTracksSource(library::TrackStore& store);
+    explicit AllTracksSource(library::TrackStore const& store);
 
     using TrackSource::notifyInserted;
 
-    void reloadFromStore(lmdb::ReadTransaction const& transaction);
+    void reloadFromStore(library::ReadTransaction const& transaction);
     void applyCollectionChange(std::span<TrackId const> inserted, std::span<TrackId const> removed);
     void notifyInserted(TrackId id);
     void notifyRemoved(TrackId id);
@@ -48,7 +44,7 @@ namespace ao::rt
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
   private:
-    library::TrackStore& _store;
+    library::TrackStore const& _store;
     std::vector<TrackId> _trackIds;
   };
 } // namespace ao::rt

@@ -1,20 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/TestUtils.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
+#include "test/unit/library/LibraryStoreTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
-#include <ao/lmdb/Database.h>
-#include <ao/lmdb/Environment.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <span>
@@ -23,16 +19,12 @@
 
 namespace ao::library::test
 {
-  using namespace ao::lmdb;
-  using namespace ao::lmdb::test;
-
   TEST_CASE("FileManifestStore - create returns ValueTooLarge for invalid URI length", "[library][unit][manifest]")
   {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "manifests");
-    auto store = FileManifestStore{db};
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.manifest();
+    auto wtxn = library.writeTransaction();
     auto writer = store.writer(wtxn);
 
     auto const longUri = std::string(501, 'a');
@@ -44,11 +36,10 @@ namespace ao::library::test
 
   TEST_CASE("FileManifestStore - writes and reads back manifests", "[library][unit][manifest]")
   {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "manifests");
-    auto store = FileManifestStore{db};
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.manifest();
+    auto wtxn = library.writeTransaction();
 
     auto const signature = utility::xxh3Hash128("stored payload");
     auto builder = FileManifestBuilder::makeEmpty();
@@ -63,7 +54,7 @@ namespace ao::library::test
     REQUIRE(store.writer(wtxn).put("song.flac", payload));
     REQUIRE(wtxn.commit());
 
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto const viewResult = store.reader(rtxn).get("song.flac");
     REQUIRE(viewResult);
     CHECK(viewResult->trackId() == TrackId{42});
@@ -72,6 +63,7 @@ namespace ao::library::test
     CHECK(viewResult->audioPayloadLength() == 55555);
     CHECK(viewResult->audioSignature() == signature);
     CHECK(viewResult->status() == FileStatus::Available);
+    CHECK(std::ranges::equal(viewResult->rawData(), payload));
   }
 
   TEST_CASE("FileManifestStore - URI padding boundaries preserve read, write, and remove behavior",
@@ -79,11 +71,10 @@ namespace ao::library::test
   {
     constexpr auto kUriLengths = std::array<std::size_t, 13>{1, 2, 3, 4, 5, 6, 7, 8, 9, 497, 498, 499, 500};
 
-    auto const temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "manifests", Database::KeyKind::Blob);
-    auto store = FileManifestStore{db};
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.manifest();
+    auto wtxn = library.writeTransaction();
 
     auto builder = FileManifestBuilder::makeEmpty();
     builder.trackId(TrackId{42}).fileSize(12345).mtime(67890).status(FileStatus::Available);
@@ -106,7 +97,7 @@ namespace ao::library::test
     REQUIRE(wtxn.commit());
 
     {
-      auto const rtxn = beginReadTransaction(env);
+      auto const rtxn = library.readTransaction();
       auto const reader = store.reader(rtxn);
 
       for (auto const uriLength : kUriLengths)
@@ -118,7 +109,7 @@ namespace ao::library::test
     }
 
     {
-      auto removeTxn = beginWriteTransaction(env);
+      auto removeTxn = library.writeTransaction();
       auto writer = store.writer(removeTxn);
 
       for (auto const uriLength : kUriLengths)
@@ -134,7 +125,7 @@ namespace ao::library::test
       REQUIRE(removeTxn.commit());
     }
 
-    auto const rtxn = beginReadTransaction(env);
+    auto const rtxn = library.readTransaction();
     auto const reader = store.reader(rtxn);
 
     for (auto const uriLength : kUriLengths)
@@ -147,14 +138,11 @@ namespace ao::library::test
 
   TEST_CASE("FileManifestStore - get returns NotFound for missing URI", "[library][unit][manifest]")
   {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "manifests");
-    auto store = FileManifestStore{db};
-    REQUIRE(wtxn.commit());
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.manifest();
 
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto const viewResult = store.reader(rtxn).get("nonexistent.flac");
     REQUIRE_FALSE(viewResult);
     CHECK(viewResult.error().code == Error::Code::NotFound);
@@ -162,11 +150,10 @@ namespace ao::library::test
 
   TEST_CASE("FileManifestStore - remove is idempotent", "[library][unit][manifest]")
   {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "manifests");
-    auto store = FileManifestStore{db};
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.manifest();
+    auto wtxn = library.writeTransaction();
 
     auto builder = FileManifestBuilder::makeEmpty();
     builder.trackId(TrackId{42}).fileSize(12345).mtime(67890).status(FileStatus::Available);
@@ -177,7 +164,7 @@ namespace ao::library::test
     REQUIRE(writer.remove("song.flac"));
     REQUIRE(wtxn.commit());
 
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto const viewResult = store.reader(rtxn).get("song.flac");
     REQUIRE_FALSE(viewResult);
     CHECK(viewResult.error().code == Error::Code::NotFound);
@@ -185,17 +172,16 @@ namespace ao::library::test
 
   TEST_CASE("FileManifestStore - read returns CorruptData for corrupt entries", "[library][unit][manifest]")
   {
-    auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20});
-    auto wtxn = beginWriteTransaction(env);
-    auto db = openDatabase(wtxn, "manifests");
-    auto store = FileManifestStore{db};
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.manifest();
+    auto wtxn = library.writeTransaction();
     auto invalidPayload = std::vector{std::byte{0x42}};
 
     REQUIRE(store.writer(wtxn).put("song.flac", invalidPayload));
     REQUIRE(wtxn.commit());
 
-    auto rtxn = beginReadTransaction(env);
+    auto rtxn = library.readTransaction();
     auto const result = store.reader(rtxn).get("song.flac");
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::CorruptData);

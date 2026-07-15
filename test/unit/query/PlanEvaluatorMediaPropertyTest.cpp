@@ -87,7 +87,7 @@ namespace ao::query::test
     spec.codec = AudioCodec::Aac;
     auto track = TestTrack{spec};
 
-    auto compiler = QueryCompiler{&track.dictionary()};
+    auto compiler = QueryCompiler{};
     auto evaluator = PlanEvaluator{};
     auto plan = compileOk(compiler, parseOk("@codec = AAC"));
 

@@ -1220,11 +1220,10 @@ namespace ao::cli
 
       if (raw)
       {
-        for (auto const& [key, val] : reader.databaseReader())
+        for (auto const& [uri, view] : reader)
         {
-          auto const uri = utility::bytes::stringView(key);
           std::println(os, "URI: {}", uri);
-          hexDump(val, os);
+          hexDump(view.rawData(), os);
         }
 
         return;

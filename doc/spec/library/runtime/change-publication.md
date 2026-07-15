@@ -33,7 +33,7 @@ This contract belongs to the **application runtime** layer in the [system archit
 - An aborted or preview transaction does not advance the revision.
 - A producer submits a changeset only after the corresponding transaction commits.
 - Observers receive committed changesets in strictly increasing contiguous revision order even when producers submit out of order.
-- A callback observes the complete committed library state described by its changeset.
+- A callback observes the complete committed library state described by its changeset, including every dictionary mapping referenced by changed records.
 - Task progress and completion are operational notifications and do not consume library revisions.
 - Releasing a subscription prevents later delivery to that subscriber.
 
@@ -89,6 +89,7 @@ Changesets are in-process values and have no persisted or compatibility format.
 - [`LibraryChanges.h`](../../../../app/include/ao/rt/library/LibraryChanges.h) defines changesets and subscriptions.
 - [`LibraryChanges.cpp`](../../../../app/runtime/library/LibraryChanges.cpp) owns holdback and executor delivery.
 - [`MetadataStore`](../../../../include/ao/library/MetadataStore.h) owns in-transaction revision reads and bumps.
+- [`WriteTransaction`](../../../../include/ao/library/WriteTransaction.h) completes dictionary-index publication before the producer can submit a changeset.
 
 ## Test map
 

@@ -17,7 +17,6 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/lmdb/Transaction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/utility/Base64.h>
@@ -60,7 +59,7 @@ namespace ao::rt
       return "unknown";
     }
 
-    using MetadataStringGetter = std::string_view (*)(library::TrackView const&, library::DictionaryStore&);
+    using MetadataStringGetter = std::string_view (*)(library::TrackView const&, library::DictionaryStore const&);
     using MetadataStringBaseGetter = std::string_view (*)(library::TrackBuilder::MetadataBuilder const&);
     using MetadataNumberGetter = std::uint16_t (*)(library::TrackView const&);
     using MetadataNumberBaseGetter = std::uint16_t (*)(library::TrackBuilder::MetadataBuilder const&);
@@ -190,7 +189,7 @@ namespace ao::rt
 
     void emitTrackMetadata(ryml::NodeRef& node,
                            library::TrackView const& view,
-                           library::DictionaryStore& dictionary,
+                           library::DictionaryStore const& dictionary,
                            std::optional<library::TrackBuilder> const& optBaseline)
     {
       auto const optBaselineMetadata = optBaseline ? std::optional{optBaseline->metadata()} : std::nullopt;
@@ -396,12 +395,12 @@ namespace ao::rt
     }
 
     void emitTrackCover(ryml::NodeRef& node,
-                        lmdb::ReadTransaction const& transaction,
+                        library::ReadTransaction const& transaction,
                         library::TrackView const& view,
                         std::optional<library::TrackBuilder> const& optBaseline,
                         ExportMode mode,
                         std::unordered_map<ResourceId, std::string>& exportedCovers,
-                        library::ResourceStore& resources)
+                        library::ResourceStore const& resources)
     {
       auto const resReader = resources.reader(transaction);
 
@@ -428,7 +427,7 @@ namespace ao::rt
 
     void emitTrackCommon(ryml::NodeRef& node,
                          library::TrackView::TagProxy const& tags,
-                         library::DictionaryStore& dictionary)
+                         library::DictionaryStore const& dictionary)
     {
       if (tags.count() != 0)
       {
@@ -452,17 +451,17 @@ namespace ao::rt
     }
 
     Result<> exportToYaml(std::filesystem::path const& path, ExportMode mode) const;
-    Result<> exportTracks(ryml::NodeRef& node, lmdb::ReadTransaction const& transaction, ExportMode mode) const;
+    Result<> exportTracks(ryml::NodeRef& node, library::ReadTransaction const& transaction, ExportMode mode) const;
     Result<> exportTrack(ryml::NodeRef& node,
-                         lmdb::ReadTransaction const& transaction,
+                         library::ReadTransaction const& transaction,
                          TrackId id,
                          library::TrackView const& view,
                          ExportMode mode,
                          std::unordered_map<ResourceId, std::string>& exportedCovers,
-                         library::ResourceStore& resources,
-                         library::DictionaryStore& dictionary,
+                         library::ResourceStore const& resources,
+                         library::DictionaryStore const& dictionary,
                          library::FileManifestStore::Reader const& manifestReader) const;
-    Result<> exportLists(ryml::NodeRef& node, lmdb::ReadTransaction const& transaction, ExportMode mode) const;
+    Result<> exportLists(ryml::NodeRef& node, library::ReadTransaction const& transaction, ExportMode mode) const;
 
     library::MusicLibrary& ml;
   };
@@ -533,13 +532,13 @@ namespace ao::rt
   }
 
   Result<> LibraryYamlExporter::Impl::exportTracks(ryml::NodeRef& node,
-                                                   lmdb::ReadTransaction const& transaction,
+                                                   library::ReadTransaction const& transaction,
                                                    ExportMode mode) const
   {
     auto const trackReader = ml.tracks().reader(transaction);
     auto const manifestReader = ml.manifest().reader(transaction);
-    auto& resources = ml.resources();
-    auto& dictionary = ml.dictionary();
+    auto const& resources = ml.resources();
+    auto const& dictionary = ml.dictionary();
     auto exportedCovers = std::unordered_map<ResourceId, std::string>{};
 
     auto tracksNode = node.append_child();
@@ -560,13 +559,13 @@ namespace ao::rt
   }
 
   Result<> LibraryYamlExporter::Impl::exportTrack(ryml::NodeRef& node,
-                                                  lmdb::ReadTransaction const& transaction,
+                                                  library::ReadTransaction const& transaction,
                                                   TrackId id,
                                                   library::TrackView const& view,
                                                   ExportMode mode,
                                                   std::unordered_map<ResourceId, std::string>& exportedCovers,
-                                                  library::ResourceStore& resources,
-                                                  library::DictionaryStore& dictionary,
+                                                  library::ResourceStore const& resources,
+                                                  library::DictionaryStore const& dictionary,
                                                   library::FileManifestStore::Reader const& manifestReader) const
   {
     auto trackNode = node.append_child();
@@ -619,7 +618,7 @@ namespace ao::rt
   }
 
   Result<> LibraryYamlExporter::Impl::exportLists(ryml::NodeRef& node,
-                                                  lmdb::ReadTransaction const& transaction,
+                                                  library::ReadTransaction const& transaction,
                                                   ExportMode mode) const
   {
     auto listsNode = node.append_child();

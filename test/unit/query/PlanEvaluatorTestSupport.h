@@ -5,25 +5,24 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/LibraryBinaryTestSupport.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
-#include <ao/lmdb/Environment.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
+#include <ao/query/PlanEvaluator.h>
 #include <ao/query/QueryCompiler.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <chrono>
 #include <cstddef>
@@ -40,8 +39,6 @@ namespace ao::query::test
 {
   using namespace ao::library;
   using namespace ao::library::test;
-  using namespace ao::lmdb;
-  using namespace ao::lmdb::test;
 
   inline Expression parseOk(std::string_view text)
   {
@@ -62,6 +59,53 @@ namespace ao::query::test
     auto local = std::move(compiler);
     return compileOk(local, expr);
   }
+
+  inline bool evaluateWithDictionary(PlanEvaluator const& evaluator,
+                                     ExecutionPlan const& plan,
+                                     TrackView const& track,
+                                     DictionaryStore const& dictionary)
+  {
+    auto cache = DictionaryReadCache{dictionary};
+    auto context = DictionaryReadContext{cache};
+    auto const binding = PlanBinding{plan, context};
+    return evaluator.evaluateFull(binding, track);
+  }
+
+  inline bool matchesWithDictionary(PlanEvaluator const& evaluator,
+                                    ExecutionPlan const& plan,
+                                    TrackView const& track,
+                                    DictionaryStore const& dictionary)
+  {
+    auto cache = DictionaryReadCache{dictionary};
+    auto context = DictionaryReadContext{cache};
+    auto const binding = PlanBinding{plan, context};
+    return evaluator.matches(binding, track);
+  }
+
+  class DictionaryFixture final
+  {
+  public:
+    DictionaryFixture()
+      : _library{_temp.path(), _temp.path() / "db"}
+    {
+    }
+
+    DictionaryStore const& dictionary() { return _library.dictionary(); }
+    WriteTransaction writeTransaction() { return _library.writeTransaction(); }
+
+    DictionaryId intern(std::string_view text)
+    {
+      auto transaction = writeTransaction();
+      auto const id = ao::test::requireValue(transaction.dictionary().intern(text));
+      REQUIRE(transaction.commit());
+      return id;
+    }
+
+  private:
+    // The library must be destroyed before its backing directory on Windows.
+    ao::test::TempDir _temp;
+    MusicLibrary _library;
+  };
 
   struct TrackSpec final
   {
@@ -108,9 +152,17 @@ namespace ao::query::test
   class TrackFixture final
   {
   public:
-    TrackFixture() { setup(TrackSpec{}, nullptr); }
+    TrackFixture()
+      : _library{_temp.path(), _temp.path() / "db"}, _transaction{_library.writeTransaction()}
+    {
+      setup(TrackSpec{}, nullptr);
+    }
 
-    explicit TrackFixture(TrackSpec const& spec, DictionaryStore* dictionary = nullptr) { setup(spec, dictionary); }
+    explicit TrackFixture(TrackSpec const& spec, DictionaryStore const* dictionary = nullptr)
+      : _library{_temp.path(), _temp.path() / "db"}, _transaction{_library.writeTransaction()}
+    {
+      setup(spec, dictionary);
+    }
 
     TrackFixture(std::string title,
                  std::string artist = "Test Artist",
@@ -129,6 +181,7 @@ namespace ao::query::test
                  std::vector<std::uint32_t> const& tagIds = {},
                  std::string composer = "",
                  std::string work = "")
+      : _library{_temp.path(), _temp.path() / "db"}, _transaction{_library.writeTransaction()}
     {
       auto spec = TrackSpec{};
       spec.title = std::move(title);
@@ -159,22 +212,12 @@ namespace ao::query::test
     TrackView view() const { return TrackView{_hotData, _coldData}; }
     TrackView hotOnlyView() const { return TrackView{_hotData, std::span<std::byte const>{}}; }
     TrackView coldOnlyView() const { return TrackView{std::span<std::byte const>{}, _coldData}; }
-    DictionaryStore& dictionary() { return *_optDictionary; }
+    DictionaryStore const& dictionary() { return *_dictionary; }
 
   private:
-    void setup(TrackSpec const& spec, DictionaryStore* dictionary)
+    void setup(TrackSpec const& spec, DictionaryStore const* dictionary)
     {
-      auto envOpts = Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
-      _optEnv.emplace(openEnvironment(_temp.path(), envOpts));
-      auto wtxn = beginWriteTransaction(*_optEnv);
-
-      if (dictionary == nullptr)
-      {
-        _optDictionary.emplace(openDatabase(wtxn, "dictionary"), wtxn);
-        dictionary = &*_optDictionary;
-      }
-
-      _optResources.emplace(openDatabase(wtxn, "resources"));
+      _dictionary = dictionary != nullptr ? dictionary : &_library.dictionary();
 
       TrackBuilder builder = TrackBuilder::makeEmpty();
       builder.metadata().title(spec.title);
@@ -219,14 +262,29 @@ namespace ao::query::test
         builder.customMetadata().add(k, v);
       }
 
-      auto hotDataResult = builder.serializeHot(wtxn, *dictionary);
+      auto hotDataResult = builder.serializeHot(_transaction);
       REQUIRE(hotDataResult);
-      auto coldDataResult = builder.serializeCold(wtxn, *dictionary, *_optResources);
+      auto coldDataResult = builder.serializeCold(_transaction, _library.resources());
       REQUIRE(coldDataResult);
       _hotData = *hotDataResult;
       _coldData = *coldDataResult;
+      REQUIRE(_transaction.commit());
 
       auto* header = utility::layout::asMutablePtr<library::TrackHotHeader>(_hotData);
+
+      if (dictionary != nullptr && !spec.tags.empty())
+      {
+        auto const tagByteCount = spec.tags.size() * sizeof(DictionaryId);
+        auto tagBytes = std::span<std::byte>{_hotData}.subspan(sizeof(library::TrackHotHeader), tagByteCount);
+        auto tagIds = std::span<DictionaryId>{utility::layout::asMutablePtr<DictionaryId>(tagBytes), spec.tags.size()};
+        header->tagBloom = 0;
+
+        for (std::size_t index = 0; index < spec.tags.size(); ++index)
+        {
+          tagIds[index] = dictionary->lookupId(spec.tags[index]);
+          header->tagBloom |= std::uint32_t{1} << (tagIds[index].raw() & 31U);
+        }
+      }
 
       if (spec.artistId != 0)
       {
@@ -257,9 +315,9 @@ namespace ao::query::test
     // Declared before the LMDB-backed members so their mappings are closed
     // before the temporary directory is removed on Windows.
     ao::test::TempDir _temp;
-    std::optional<Environment> _optEnv;
-    std::optional<DictionaryStore> _optDictionary;
-    std::optional<ResourceStore> _optResources;
+    MusicLibrary _library;
+    WriteTransaction _transaction;
+    DictionaryStore const* _dictionary = nullptr;
     std::vector<std::byte> _hotData;
     std::vector<std::byte> _coldData;
   };
