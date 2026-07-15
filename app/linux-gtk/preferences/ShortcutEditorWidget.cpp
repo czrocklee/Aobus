@@ -128,7 +128,7 @@ namespace ao::gtk
 
   ShortcutEditorWidget::~ShortcutEditorWidget()
   {
-    *_aliveTokenPtr = false;
+    _callbackScope.close();
 
     // Cancel a still-pending capture teardown and mark delayed conflict responses as stale.
     _captureCloseConn.disconnect();
@@ -195,13 +195,14 @@ namespace ao::gtk
 
     _conflictConfirmer(labelFor(*optOwner),
                        chord.toString(),
-                       [this, aliveTokenPtr = _aliveTokenPtr, actionId, chord](bool accepted)
-                       {
-                         if (accepted && *aliveTokenPtr)
+                       _callbackScope.guard(
+                         [this, actionId, chord](bool accepted)
                          {
-                           bindChord(actionId, chord);
-                         }
-                       });
+                           if (accepted)
+                           {
+                             bindChord(actionId, chord);
+                           }
+                         }));
   }
 
   std::string ShortcutEditorWidget::labelFor(std::string const& actionId) const

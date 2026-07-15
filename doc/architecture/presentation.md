@@ -154,13 +154,17 @@ Frontends decide how and where to render an error and own cancellation tied to w
 GTK main-window teardown releases controllers, widgets, view models, and subscriptions before the window-owned `AppRuntime` is destroyed.
 TUI releases its event/render collaborators before leaving the runtime scope.
 Platform callbacks that can outlive a widget or controller use scoped subscriptions, cancellation handles, or weak ownership rather than raw lifetime assumptions.
-The current `ImportExportCoordinator` file-dialog callbacks are a known exception because they capture the coordinator directly and carry no runtime/library generation; [RFC 0026](../rfc/0026-generation-bound-platform-requests.md) proposes the shared correction.
+`MainContextCallbackScope` provides the GTK-local weak lifetime boundary for void callbacks retained outside their owner.
+`ImportExportCoordinator` uses that scope for its export-mode response and every native file-dialog completion, and supplies the native operations with a shared cancellation handle, while `ShortcutEditorWidget` uses it for delayed conflict responses.
+Coordinator teardown closes the guard before requesting native cancellation, so every late callback is harmless even when cancellation loses the race.
+The owner, teardown, and guarded callbacks are confined to one GLib main context; the scope does not provide cross-thread synchronization.
 
 ## Implementation map
 
 - [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines and guards the runtime-to-UIModel dependency edge.
 - [`app/include/ao/uimodel/`](../../app/include/ao/uimodel) and [`app/uimodel/`](../../app/uimodel) contain platform-neutral presentation capsules.
 - [`MainWindow`](../../app/linux-gtk/app/MainWindow.h), [`MainWindowCoordinator`](../../app/linux-gtk/app/MainWindowCoordinator.h), and [`GtkUiDependencies`](../../app/linux-gtk/app/GtkUiDependencies.h) define GTK composition boundaries.
+- [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) bounds GTK-main-context callbacks to their owner lifetime.
 - [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h) and [`LayoutBuildContext`](../../app/linux-gtk/layout/runtime/LayoutBuildContext.h) build GTK layout values into widgets.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) composes runtime, selected UIModel objects, terminal controllers, and rendering.
 - [`CliRuntime`](../../app/cli/CliRuntime.h) is the non-interactive adapter boundary.
@@ -170,6 +174,9 @@ The current `ImportExportCoordinator` file-dialog callbacks are a known exceptio
 
 - [`test/unit/uimodel/`](../../test/unit/uimodel) mirrors UIModel feature capsules and protects platform-neutral policy.
 - [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) and [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protect GTK composition.
+- [`MainContextCallbackScopeTest.cpp`](../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation and teardown ordering.
+- [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy, handoff, and export-mode response invalidation.
+- [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preferences/ShortcutEditorWidgetTest.cpp) protects delayed conflict-response invalidation.
 - [`LayoutRuntimeBuildTest.cpp`](../../test/unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp) protects the UIModel-layout to GTK-widget boundary.
 - [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) and [`TuiHitRegionsTest.cpp`](../../test/unit/tui/TuiHitRegionsTest.cpp) protect TUI runtime adaptation and terminal-only policy.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects non-interactive runtime adaptation.
@@ -200,5 +207,5 @@ The current `ImportExportCoordinator` file-dialog callbacks are a known exceptio
 - [Application-layer review](../development/application-layer-review.md) and [UIModel organization](../development/uimodel-organization.md)
 - [GTK style guide](../development/gtk-style.md)
 - [RFC 0023: revision-bound metadata authoring](../rfc/0023-revision-bound-metadata-authoring.md)
-- [RFC 0026: generation-bound platform requests](../rfc/0026-generation-bound-platform-requests.md)
+- [RFC 0026: lifetime-safe GTK file-dialog callbacks](../rfc/0026-lifetime-safe-file-dialog-callbacks.md)
 - [RFC 0029: versioned CLI automation protocol](../rfc/0029-versioned-cli-automation-protocol.md)

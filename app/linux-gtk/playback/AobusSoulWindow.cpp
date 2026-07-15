@@ -22,6 +22,7 @@
 #include <gtkmm/shortcutcontroller.h>
 #include <gtkmm/shortcuttrigger.h>
 #include <gtkmm/window.h>
+#include <sigc++/adaptors/track_obj.h>
 
 #include <cmath>
 #include <cstdint>
@@ -80,14 +81,7 @@ namespace ao::gtk
     auto const gesturePtr = Gtk::GestureClick::create();
     gesturePtr->signal_released().connect(
       [this](std::int32_t, double, double)
-      {
-        Glib::signal_idle().connect(
-          [this]
-          {
-            hide();
-            return false;
-          });
-      });
+      { Glib::signal_idle().connect_once(sigc::track_object([this] { hide(); }, *this)); });
 
     add_controller(gesturePtr);
 
@@ -96,12 +90,7 @@ namespace ao::gtk
     auto const actionPtr = Gtk::CallbackAction::create(
       [this](Gtk::Widget&, Glib::VariantBase const&) -> bool
       {
-        Glib::signal_idle().connect(
-          [this]
-          {
-            hide();
-            return false;
-          });
+        Glib::signal_idle().connect_once(sigc::track_object([this] { hide(); }, *this));
         return true;
       });
 

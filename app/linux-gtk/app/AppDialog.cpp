@@ -85,6 +85,7 @@ namespace ao::gtk
   void AppDialog::configureForParent(Gtk::Window& parent)
   {
     set_transient_for(parent);
+    set_destroy_with_parent(true);
     set_modal(true);
   }
 

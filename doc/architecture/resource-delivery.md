@@ -183,4 +183,3 @@ RFC 0021 proposes that missing operational boundary.
 - [Resource blob reference](../reference/resource/blob.md)
 - [Track model reference](../reference/library/model/track.md)
 - [RFC 0021: bounded asynchronous resource delivery](../rfc/0021-bounded-resource-delivery.md)
-- [RFC 0026: generation-bound platform requests](../rfc/0026-generation-bound-platform-requests.md), for the proposed completion-lifetime protocol used by asynchronous MPRIS artifacts

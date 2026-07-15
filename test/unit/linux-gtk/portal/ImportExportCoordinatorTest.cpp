@@ -3,6 +3,7 @@
 
 #include "portal/ImportExportCoordinator.h"
 
+#include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/ImportExportCoordinatorPolicy.h"
@@ -11,11 +12,13 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/dialog.h>
 #include <gtkmm/window.h>
 
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 
 namespace ao::gtk::test
 {
@@ -91,5 +94,41 @@ namespace ao::gtk::test
       CHECK(receivedPath == target);
       CHECK(receivedScanAfterOpen);
     }
+  }
+
+  TEST_CASE("ImportExportCoordinator - export mode response is ignored after coordinator teardown",
+            "[gtk][regression][import-export][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto parent = Gtk::Window{};
+    auto theme = ThemeCoordinator{};
+    auto coordinatorPtr = std::make_unique<portal::ImportExportCoordinator>(
+      parent, fixture.runtime(), portal::ImportExportCallbacks{}, theme);
+
+    coordinatorPtr->exportLibrary();
+
+    AppDialog* exportModeDialog = nullptr;
+
+    for (auto* const window : Gtk::Window::list_toplevels())
+    {
+      if (auto* const dialog = dynamic_cast<AppDialog*>(window);
+          dialog != nullptr && dialog->get_title() == "Select Export Mode")
+      {
+        exportModeDialog = dialog;
+        break;
+      }
+    }
+
+    REQUIRE(exportModeDialog != nullptr);
+    REQUIRE(exportModeDialog->get_visible());
+
+    coordinatorPtr.reset();
+    exportModeDialog->response(Gtk::ResponseType::CANCEL);
+    drainGtkEvents();
+
+    CHECK(exportModeDialog->get_visible());
+    exportModeDialog->close();
+    drainGtkEvents();
   }
 } // namespace ao::gtk::test

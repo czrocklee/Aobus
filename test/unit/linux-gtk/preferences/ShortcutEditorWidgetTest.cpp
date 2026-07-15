@@ -262,7 +262,8 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ShortcutEditorWidget - ignores conflict responses after destruction", "[gtk][unit][preferences][shortcut]")
+  TEST_CASE("ShortcutEditorWidget - ignores conflict responses after destruction",
+            "[gtk][regression][shortcut][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

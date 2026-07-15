@@ -180,6 +180,5 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
 - [Audio execution and concurrency specification](../spec/playback/audio-execution.md)
 - [Concurrency and sanitizer guidance](../development/test/concurrency-and-sanitizer.md) for contributor validation workflow
-- [RFC 0026: generation-bound platform requests](../rfc/0026-generation-bound-platform-requests.md)
 - [RFC 0027: serialized headless callback executor](../rfc/0027-serialized-headless-callback-executor.md)
 - [RFC 0028: bounded audio observation delivery](../rfc/0028-bounded-audio-observation-delivery.md)

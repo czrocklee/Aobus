@@ -50,6 +50,7 @@
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
+#include <sigc++/adaptors/track_obj.h>
 
 #include <algorithm>
 #include <array>
@@ -307,7 +308,7 @@ namespace ao::gtk
     Gtk::Box::on_map();
     _layoutStore.setActiveListId(_listId);
 
-    Glib::signal_idle().connect_once(
+    Glib::signal_idle().connect_once(sigc::track_object(
       [this]
       {
         if (auto const primaryId = _viewHostPtr->selectionController().primarySelectedTrackId();
@@ -315,7 +316,8 @@ namespace ao::gtk
         {
           _viewHostPtr->selectionController().scrollToTrack(primaryId);
         }
-      });
+      },
+      *this));
   }
 
   void TrackViewPage::configureHeaderFactory()
@@ -453,7 +455,7 @@ namespace ao::gtk
     _contextPopover.set_parent(newView);
 
     // 8. Restore scroll position to selection if possible (Deferred to idle for stability)
-    Glib::signal_idle().connect_once(
+    Glib::signal_idle().connect_once(sigc::track_object(
       [this]
       {
         if (auto const primaryId = _viewHostPtr->selectionController().primarySelectedTrackId();
@@ -461,7 +463,8 @@ namespace ao::gtk
         {
           _viewHostPtr->selectionController().scrollToTrack(primaryId);
         }
-      });
+      },
+      *this));
 
     _viewHostPtr->configureSelectionActivation();
   }

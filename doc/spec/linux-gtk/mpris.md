@@ -106,4 +106,3 @@ Later instances continue as ordinary GTK applications without MPRIS.
 - [Resource delivery architecture](../../architecture/resource-delivery.md)
 - [MPRIS reference](../../reference/linux-gtk/mpris.md)
 - [Cover-art resource delivery](../resource/cover-art-delivery.md)
-- [RFC 0026: generation-bound platform requests](../../rfc/0026-generation-bound-platform-requests.md), for the proposed lifetime evidence if MPRIS artifact delivery becomes asynchronous

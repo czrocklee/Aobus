@@ -42,6 +42,7 @@ It cannot redefine runtime workspace, playback, library, or persistence payload 
 - The globally stored restorable playback session is discarded before a different library becomes active, preventing old library identities from being restored against the new root.
 - Frontend observers and GTK objects are released before the window-owned runtime.
 - Opening a selected root whose normalized requested path equals the current runtime root reuses the pair rather than creating a duplicate runtime.
+- A native Open Library completion cannot request replacement after its owning coordinator has been destroyed.
 
 ## State model
 
@@ -120,9 +121,10 @@ Current global, workspace, layout, and several other save wrappers contain void 
 Playback checkpoint failure is logged by the coordinator.
 [RFC 0018](../../rfc/0018-interactive-session-lifecycle.md) proposes a shared result-bearing runtime lifecycle, and [RFC 0019](../../rfc/0019-transactional-active-library-switch.md) proposes candidate preparation, global selection receipts, and rollback-safe activation.
 
-The file-dialog callback catches `Glib::Error` and logs it; dialog cancellation or selection failure creates no replacement.
+The file-dialog callback silently consumes expected cancellation or dismissal; other `Glib::Error` values are logged and create no replacement.
+Every native completion must enter the callback scope owned by its `ImportExportCoordinator` before it can hand a path to this lifecycle.
+Coordinator teardown closes that scope before requesting native cancellation, so a late completion performs no handoff.
 The idle replacement callback has no explicit cancellation token and relies on GTK application/window lifetime.
-[RFC 0026](../../rfc/0026-generation-bound-platform-requests.md) proposes binding chooser completion to explicit window/runtime/library generations before this lifecycle handoff.
 
 Unexpected exceptions during final release save are caught and logged so window release can continue.
 Runtime-internal worker and audio quiescence belong to the [runtime execution](../../architecture/runtime-execution.md) and [playback](../../architecture/playback.md) architectures.
@@ -159,7 +161,7 @@ Bootstrap scanning reports through the runtime library task and notification sur
 - [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) proves hide and explicit save triggers, successful switch preparation, playback-session discard, and prevention of stale path writes.
 - [`MainWindowCoordinatorTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) proves global session preservation, workspace/playback initialization, and checkpoint composition.
 - [`AppConfigStoreTest.cpp`](../../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) proves global session storage behavior.
-- [`ImportExportCoordinatorTest.cpp`](../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects default database paths, bootstrap-scan policy, and open-callback forwarding.
+- [`ImportExportCoordinatorTest.cpp`](../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects callback-scope teardown, native cancellation, default database paths, bootstrap-scan policy, and open-callback forwarding.
 - [`AppRuntimeTest.cpp`](../../../test/unit/runtime/AppRuntimeTest.cpp) protects runtime service and teardown lifetime below the GTK pair.
 
 The internal `main.cpp` replacement sequence does not currently have a focused end-to-end test; the window preparation and component policies above protect its principal state boundaries.
@@ -176,4 +178,4 @@ The internal `main.cpp` replacement sequence does not currently have a focused e
 - [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
 - [Application managed-state surface](../../reference/persistence/application-config.md)
 - [Managed file locations](../../reference/persistence/location.md)
-- [RFC 0026: generation-bound platform requests](../../rfc/0026-generation-bound-platform-requests.md)
+- [RFC 0026: lifetime-safe GTK file-dialog callbacks](../../rfc/0026-lifetime-safe-file-dialog-callbacks.md)

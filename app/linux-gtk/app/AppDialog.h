@@ -62,7 +62,7 @@ namespace ao::gtk
     sigc::signal<void(std::int32_t)> signal_response();
 
     /**
-     * Applies standard modal parent behavior used by all Aobus child dialogs.
+     * Applies standard modal parent and destruction behavior used by all Aobus child dialogs.
      */
     void configureForParent(Gtk::Window& parent);
 

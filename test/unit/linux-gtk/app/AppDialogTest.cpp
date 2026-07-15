@@ -40,6 +40,7 @@ namespace ao::gtk::test
 
     dialog.configureForParent(parent);
     CHECK(dialog.get_transient_for() == &parent);
+    CHECK(dialog.get_destroy_with_parent());
     CHECK(dialog.get_modal());
 
     dialog.setDefaultResponse(-3);

@@ -158,4 +158,3 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [Library mutation](../library/runtime/mutation.md)
 - [GTK MPRIS specification](../linux-gtk/mpris.md) and [surface reference](../../reference/linux-gtk/mpris.md)
 - [RFC 0021: bounded asynchronous resource delivery](../../rfc/0021-bounded-resource-delivery.md)
-- [RFC 0026: generation-bound platform requests](../../rfc/0026-generation-bound-platform-requests.md)

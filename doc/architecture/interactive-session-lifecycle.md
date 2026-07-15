@@ -131,7 +131,9 @@ Several current checkpoint paths remain best-effort or log-only, so successful p
 
 GTK defers replacement until after the portal callback returns so a dialog callback does not synchronously destroy its own window and coordinator.
 A prepared old window cannot later overwrite the new global selection during hide or destruction.
-Current native chooser callbacks carry no explicit window/runtime/library generation and some capture their coordinator directly; [RFC 0026](../rfc/0026-generation-bound-platform-requests.md) proposes a lifetime-safe request handoff before lifecycle effects.
+Before a native Open Library completion can request replacement, it must enter the callback scope owned by its `ImportExportCoordinator`.
+Replacing the pair destroys that coordinator; a completion delivered afterward cannot enter the closed scope or reach the old pair.
+Native cancellation is requested during teardown but is not the lifetime proof.
 
 [RFC 0018](../rfc/0018-interactive-session-lifecycle.md) proposes one frontend-neutral lifecycle state machine.
 [RFC 0019](../rfc/0019-transactional-active-library-switch.md) proposes prepared runtime candidates and rollback-safe activation.
@@ -141,6 +143,7 @@ Neither proposal is current, and both update this owner only after implementatio
 
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) and [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) own interactive composition and playback-first teardown.
 - [`MainWindow.cpp`](../../app/linux-gtk/app/MainWindow.cpp), [`MainWindowCoordinator.cpp`](../../app/linux-gtk/app/MainWindowCoordinator.cpp), and [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp) own GTK startup, checkpoint, replacement, and pair lifetime.
+- [`ImportExportCoordinator`](../../app/linux-gtk/portal/ImportExportCoordinator.h) and [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) own the guarded native chooser handoff into that lifecycle.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) and [`LibraryController.cpp`](../../app/tui/LibraryController.cpp) own the current TUI process composition.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) owns the lower non-interactive composition and async shutdown boundary.
 
@@ -149,6 +152,8 @@ Neither proposal is current, and both update this owner only after implementatio
 - [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects interactive composition and callback-producer teardown.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects final checkpoints and the stale-write guard.
 - [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) protects GTK restoration and checkpoint ordering.
+- [`MainContextCallbackScopeTest.cpp`](../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects completion invalidation and teardown ordering.
+- [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy and handoff.
 - [`HeadlessShellTest.cpp`](../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral reconstruction primitives without asserting a common lifecycle owner.
 - [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects the current TUI composition path.
 
@@ -163,4 +168,4 @@ Neither proposal is current, and both update this owner only after implementatio
 - [Presentation architecture](presentation.md)
 - [GTK active-library lifecycle specification](../spec/linux-gtk/active-library-lifecycle.md)
 - [Workspace session specification](../spec/workspace/session.md)
-- [RFC 0026: generation-bound platform requests](../rfc/0026-generation-bound-platform-requests.md)
+- [RFC 0026: lifetime-safe GTK file-dialog callbacks](../rfc/0026-lifetime-safe-file-dialog-callbacks.md)

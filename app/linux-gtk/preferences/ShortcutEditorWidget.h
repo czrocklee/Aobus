@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "common/MainContextCallbackScope.h"
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
 
@@ -101,6 +102,6 @@ namespace ao::gtk
     std::unique_ptr<Gtk::Window> _captureWindowPtr;
     sigc::connection _captureCloseConn;
     sigc::connection _unmapConn;
-    std::shared_ptr<bool> _aliveTokenPtr = std::make_shared<bool>(true);
+    MainContextCallbackScope _callbackScope;
   };
 } // namespace ao::gtk

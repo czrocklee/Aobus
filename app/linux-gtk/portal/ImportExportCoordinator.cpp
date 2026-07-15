@@ -21,6 +21,7 @@
 #include <gtkmm/dialog.h>
 #include <gtkmm/dropdown.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/error.h>
 #include <gtkmm/filedialog.h>
 #include <gtkmm/filefilter.h>
 #include <gtkmm/label.h>
@@ -35,6 +36,14 @@
 
 namespace ao::gtk::portal
 {
+  namespace
+  {
+    bool isExpectedDialogCancellation(Gtk::DialogError const& error) noexcept
+    {
+      return error.code() == Gtk::DialogError::CANCELLED || error.code() == Gtk::DialogError::DISMISSED;
+    }
+  } // namespace
+
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
                                                    rt::AppRuntime& runtime,
                                                    ImportExportCallbacks callbacks,
@@ -43,6 +52,8 @@ namespace ao::gtk::portal
     , _callbacks{std::move(callbacks)}
     , _themeCoordinator{themeCoordinator}
     , _workflow{runtime, _callbacks}
+    , _fileDialogCancellablePtr{Gio::Cancellable::create()}
+    , _callbackScope{[cancellablePtr = _fileDialogCancellablePtr] { cancellablePtr->cancel(); }}
   {
   }
 
@@ -52,22 +63,31 @@ namespace ao::gtk::portal
     dialogPtr->set_title("Open Music Library");
 
     dialogPtr->select_folder(_parent,
-                             [this, dialogPtr](Glib::RefPtr<Gio::AsyncResult>& resultPtr)
-                             {
-                               try
+                             _callbackScope.guard(
+                               [this, dialogPtr](Glib::RefPtr<Gio::AsyncResult>& resultPtr)
                                {
-                                 if (auto const folderPtr = dialogPtr->select_folder_finish(resultPtr); folderPtr)
+                                 try
                                  {
-                                   auto const path = std::filesystem::path{folderPtr->get_path()};
+                                   if (auto const folderPtr = dialogPtr->select_folder_finish(resultPtr); folderPtr)
+                                   {
+                                     auto const path = std::filesystem::path{folderPtr->get_path()};
 
-                                   openMusicLibrary(path, shouldScanAfterOpen(path));
+                                     openMusicLibrary(path, shouldScanAfterOpen(path));
+                                   }
                                  }
-                               }
-                               catch (Glib::Error const& e)
-                               {
-                                 APP_LOG_ERROR("Error selecting folder: {}", e.what());
-                               }
-                             });
+                                 catch (Gtk::DialogError const& e)
+                                 {
+                                   if (!isExpectedDialogCancellation(e))
+                                   {
+                                     APP_LOG_ERROR("Error selecting folder: {}", e.what());
+                                   }
+                                 }
+                                 catch (Glib::Error const& e)
+                                 {
+                                   APP_LOG_ERROR("Error selecting folder: {}", e.what());
+                                 }
+                               }),
+                             _fileDialogCancellablePtr);
   }
 
   void ImportExportCoordinator::scanLibrary()
@@ -118,8 +138,9 @@ namespace ao::gtk::portal
 
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
 
-    dialog->signal_response().connect([this, modeCombo, dialog, tokenPtr](std::int32_t responseId)
-                                      { handleExportModeConfirmed(responseId, modeCombo, dialog); });
+    dialog->signal_response().connect(
+      _callbackScope.guard([this, modeCombo, dialog, tokenPtr](std::int32_t responseId)
+                           { handleExportModeConfirmed(responseId, modeCombo, dialog); }));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
   }
@@ -151,8 +172,9 @@ namespace ao::gtk::portal
     fileDialogPtr->set_filters(filtersPtr);
 
     fileDialogPtr->save(_parent,
-                        [this, mode, fileDialogPtr](Glib::RefPtr<Gio::AsyncResult>& resultPtr)
-                        { handleExportFileSelected(resultPtr, mode, fileDialogPtr); });
+                        _callbackScope.guard([this, mode, fileDialogPtr](Glib::RefPtr<Gio::AsyncResult>& resultPtr)
+                                             { handleExportFileSelected(resultPtr, mode, fileDialogPtr); }),
+                        _fileDialogCancellablePtr);
   }
 
   void ImportExportCoordinator::handleExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& resultPtr,
@@ -164,6 +186,13 @@ namespace ao::gtk::portal
       if (auto const filePtr = fileDialogPtr->save_finish(resultPtr); filePtr)
       {
         exportLibraryTo(filePtr->get_path(), mode);
+      }
+    }
+    catch (Gtk::DialogError const& e)
+    {
+      if (!isExpectedDialogCancellation(e))
+      {
+        APP_LOG_ERROR("Error selecting export file: {}", e.what());
       }
     }
     catch (Glib::Error const& e)
@@ -191,8 +220,9 @@ namespace ao::gtk::portal
     fileDialogPtr->set_filters(filtersPtr);
 
     fileDialogPtr->open(_parent,
-                        [this, fileDialogPtr](Glib::RefPtr<Gio::AsyncResult>& resultPtr)
-                        { handleLibraryImportSelected(resultPtr, fileDialogPtr); });
+                        _callbackScope.guard([this, fileDialogPtr](Glib::RefPtr<Gio::AsyncResult>& resultPtr)
+                                             { handleLibraryImportSelected(resultPtr, fileDialogPtr); }),
+                        _fileDialogCancellablePtr);
   }
 
   void ImportExportCoordinator::importLibraryFrom(std::filesystem::path path)
@@ -208,6 +238,13 @@ namespace ao::gtk::portal
       if (auto const filePtr = dialogPtr->open_finish(resultPtr); filePtr)
       {
         importLibraryFrom(filePtr->get_path());
+      }
+    }
+    catch (Gtk::DialogError const& e)
+    {
+      if (!isExpectedDialogCancellation(e))
+      {
+        APP_LOG_ERROR("Error selecting import file: {}", e.what());
       }
     }
     catch (Glib::Error const& e)

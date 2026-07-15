@@ -32,9 +32,11 @@ No dialog directly replaces `AppRuntime` or mutates a shell layout store outside
 ## Invariants
 
 - Custom dialogs place visible cancel/close/apply/save actions in their `AppDialog` header bar and hide window-manager title buttons.
+- Application-owned modal child dialogs are transient for and destroyed with their parent window.
 - Preferences has one application-owned instance and is non-modal.
 - Object editors do not commit a draft on cancel or ordinary close.
 - Native chooser cancellation is a no-op.
+- The export-mode response and native folder, open, and save completions can access `ImportExportCoordinator` only while its callback scope remains live.
 - Open Library selecting the active normalized root reuses and presents the current window; selecting a different valid root replaces the active library/window pair.
 - The Open Library dialog does not create an additional independent main-window/library pair.
 - A new library root starts bootstrap scan after successful activation when the open policy requests it.
@@ -44,7 +46,8 @@ No dialog directly replaces `AppRuntime` or mutates a shell layout store outside
 
 Preferences retains current application preference models while visible and applies supported settings through their owners.
 The layout editor retains a document draft, preview state, and the theme that was active when it opened.
-The native folder chooser retains only GTK async operation state until completion.
+The native folder chooser retains GTK async operation state until completion.
+`ImportExportCoordinator` retains one callback scope for its export-mode response and native folder, open, and save completions, plus one cancellable shared by the native operations.
 
 ## Commands and transitions
 
@@ -68,13 +71,16 @@ Its theme selector is preview-only; theme persistence belongs to Preferences.
 
 ## Failure and cancellation
 
-Native file-dialog `Glib::Error` is logged and creates no replacement.
+Native file-dialog cancellation or dismissal is silent and creates no replacement.
+Other native file-dialog `Glib::Error` values are logged by the frontend owner.
 Active-library preparation failure leaves the old pair visible, as specified by the active-library lifecycle.
 Dialog validation failure retains the draft and keeps the editor open.
 
-Destroying or closing an application-owned dialog releases its signal connections; a native file dialog retains its GTK-owned async state until the toolkit completion runs.
+Destroying a parent window also destroys its application-owned child dialogs and releases their signal connections; a native file dialog can retain its GTK-owned async state until the toolkit completion runs.
 Object-editor cancellation is explicit draft abandonment, not runtime cancellation of an already committed command.
-The current `ImportExportCoordinator` native file-dialog callbacks capture the coordinator directly and carry no frontend/runtime/library generation; [RFC 0026](../../rfc/0026-generation-bound-platform-requests.md) proposes an exactly-once, lifetime-safe completion boundary.
+Destroying `ImportExportCoordinator` first invalidates its callback scope and then requests cancellation through its shared `Gio::Cancellable`.
+A custom export-mode response or native completion delivered after invalidation is a no-op and cannot launch, finish, or hand a selected path through the destroyed coordinator.
+Cancellation is best-effort cleanup rather than the memory-safety proof.
 
 ## Persistence and versioning
 
@@ -89,16 +95,18 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 
 ## Implementation map
 
-- [`AppDialog.cpp`](../../../app/linux-gtk/app/AppDialog.cpp) owns custom-dialog chrome and actions.
+- [`AppDialog.cpp`](../../../app/linux-gtk/app/AppDialog.cpp) owns custom-dialog chrome, actions, and parent-bound destruction.
 - [`PreferencesWindow.cpp`](../../../app/linux-gtk/preferences/PreferencesWindow.cpp) owns the non-modal preferences surface.
 - [`ImportExportCoordinator.cpp`](../../../app/linux-gtk/portal/ImportExportCoordinator.cpp) owns native chooser handoff.
+- [`MainContextCallbackScope.h`](../../../app/linux-gtk/common/MainContextCallbackScope.h) owns main-context callback-lifetime validation; `ImportExportCoordinator` supplies native cancellation as its close action.
 - [`main.cpp`](../../../app/linux-gtk/main.cpp) owns active-library replacement.
 - [`LayoutEditorDialog.cpp`](../../../app/linux-gtk/layout/editor/LayoutEditorDialog.cpp) owns editor preview and commit interaction.
 
 ## Test map
 
-- GTK app/dialog tests under [`test/unit/linux-gtk/app/`](../../../test/unit/linux-gtk/app/) protect common window composition and messages.
-- [`ImportExportCoordinatorTest.cpp`](../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects chooser callback and scan policy.
+- [`AppDialogTest.cpp`](../../../test/unit/linux-gtk/app/AppDialogTest.cpp) protects common window composition, parent-bound destruction configuration, and messages.
+- [`MainContextCallbackScopeTest.cpp`](../../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation before the configured close action.
+- [`ImportExportCoordinatorTest.cpp`](../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects chooser handoff, scan policy, and export-mode response invalidation.
 - Layout-editor tests under [`test/unit/linux-gtk/layout/editor/`](../../../test/unit/linux-gtk/layout/editor/) protect draft, preview, and action behavior.
 
 ## Related documents
@@ -108,4 +116,4 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 - [GTK active-library lifecycle](active-library-lifecycle.md)
 - [Shell layout lifecycle](../shell/layout-lifecycle.md)
 - [Application managed-state reference](../../reference/persistence/application-config.md)
-- [RFC 0026: generation-bound platform requests](../../rfc/0026-generation-bound-platform-requests.md)
+- [RFC 0026: lifetime-safe GTK file-dialog callbacks](../../rfc/0026-lifetime-safe-file-dialog-callbacks.md)
