@@ -178,14 +178,15 @@ namespace ao::media::file::mpeg::id3v2
       }
 
       auto const encoding = static_cast<Encoding>(rawEncoding);
-      auto const mimeEnd = std::ranges::find(content.subspan(1), std::byte{});
+      auto const mime = content.subspan(1);
+      auto const mimeEnd = std::ranges::find(mime, std::byte{});
 
-      if (mimeEnd == content.end())
+      if (mimeEnd == mime.end())
       {
         return;
       }
 
-      auto const typeOffset = static_cast<std::size_t>(mimeEnd - content.begin()) + 1;
+      auto const typeOffset = static_cast<std::size_t>(mimeEnd - mime.begin()) + 2;
 
       if (typeOffset >= content.size())
       {

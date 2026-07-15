@@ -141,19 +141,37 @@ namespace ao::rt::test
                           std::chrono::milliseconds const timeout = std::chrono::seconds{2}) const
     {
       auto lock = std::unique_lock{_mutex};
-      return _cv.wait_for(lock, timeout, [this, count] { return _entries.size() >= count; });
+      return _cv.wait_for(lock,
+                          timeout,
+                          [this, count]
+                          {
+                            if (_entries.size() < count)
+                            {
+                              return false;
+                            }
+
+                            for (std::size_t index = 0; index < count; ++index)
+                            {
+                              if (!_entries[index].published)
+                              {
+                                return false;
+                              }
+                            }
+
+                            return true;
+                          });
     }
 
     std::size_t callCount() const
     {
       auto const lock = std::scoped_lock{_mutex};
-      return _entries.size();
+      return static_cast<std::size_t>(std::ranges::count(_entries, true, &Entry::published));
     }
 
     Call call(std::size_t const index) const
     {
       auto lock = std::unique_lock{_mutex};
-      _cv.wait(lock, [this, index] { return _entries.size() > index; });
+      _cv.wait(lock, [this, index] { return _entries.size() > index && _entries[index].published; });
       auto const& entryValue = _entries[index];
       return {.id = entryValue.id,
               .delay = entryValue.delay,
@@ -167,7 +185,9 @@ namespace ao::rt::test
     {
       auto lock = std::unique_lock{_mutex};
       return _cv.wait_for(
-        lock, timeout, [this, index] { return _entries.size() > index && _entries[index].cancelled; });
+        lock,
+        timeout,
+        [this, index] { return _entries.size() > index && _entries[index].published && _entries[index].cancelled; });
     }
 
     bool fire(std::size_t const index)
@@ -177,7 +197,7 @@ namespace ao::rt::test
       {
         auto const lock = std::scoped_lock{_mutex};
 
-        if (index >= _entries.size() || !_entries[index].active)
+        if (index >= _entries.size() || !_entries[index].published || !_entries[index].active)
         {
           return false;
         }
@@ -204,13 +224,20 @@ namespace ao::rt::test
       {
         auto lock = std::unique_lock{_mutex};
 
-        if (!_cv.wait_for(
-              lock, std::chrono::seconds{2}, [this] { return std::ranges::any_of(_entries, &Entry::active); }))
+        if (!_cv.wait_for(lock,
+                          std::chrono::seconds{2},
+                          [this]
+                          {
+                            return std::ranges::any_of(
+                              _entries, [](Entry const& candidate) { return candidate.published && candidate.active; });
+                          }))
         {
           return false;
         }
 
-        index = static_cast<std::size_t>(std::ranges::find(_entries, true, &Entry::active) - _entries.begin());
+        auto const it = std::ranges::find_if(
+          _entries, [](Entry const& candidate) { return candidate.published && candidate.active; });
+        index = static_cast<std::size_t>(it - _entries.begin());
       }
 
       return fire(index);
@@ -227,16 +254,19 @@ namespace ao::rt::test
                           std::chrono::seconds{2},
                           [this, delay]
                           {
-                            return std::ranges::any_of(_entries,
-                                                       [delay](Entry const& candidate)
-                                                       { return candidate.active && candidate.delay == delay; });
+                            return std::ranges::any_of(
+                              _entries,
+                              [delay](Entry const& candidate)
+                              { return candidate.published && candidate.active && candidate.delay == delay; });
                           }))
         {
           return false;
         }
 
-        auto const it = std::ranges::find_if(
-          _entries, [delay](Entry const& candidate) { return candidate.active && candidate.delay == delay; });
+        auto const it =
+          std::ranges::find_if(_entries,
+                               [delay](Entry const& candidate)
+                               { return candidate.published && candidate.active && candidate.delay == delay; });
         index = static_cast<std::size_t>(it - _entries.begin());
       }
 
@@ -265,8 +295,10 @@ namespace ao::rt::test
     std::uint64_t lastScheduledId() const
     {
       auto lock = std::unique_lock{_mutex};
-      _cv.wait(lock, [this] { return !_entries.empty(); });
-      return _entries.back().id;
+      _cv.wait(lock, [this] { return std::ranges::any_of(_entries, &Entry::published); });
+      auto const it =
+        std::find_if(_entries.rbegin(), _entries.rend(), [](Entry const& candidate) { return candidate.published; });
+      return it->id;
     }
 
     std::vector<Delay> pendingDelays() const
@@ -276,7 +308,7 @@ namespace ao::rt::test
 
       for (auto const& candidate : _entries)
       {
-        if (candidate.active)
+        if (candidate.published && candidate.active)
         {
           delays.push_back(candidate.delay);
         }
@@ -299,9 +331,10 @@ namespace ao::rt::test
                           timeout,
                           [this, delay]
                           {
-                            return std::ranges::any_of(_entries,
-                                                       [delay](Entry const& candidate)
-                                                       { return candidate.active && candidate.delay == delay; });
+                            return std::ranges::any_of(
+                              _entries,
+                              [delay](Entry const& candidate)
+                              { return candidate.published && candidate.active && candidate.delay == delay; });
                           });
     }
 
@@ -320,8 +353,6 @@ namespace ao::rt::test
         _entries.push_back(Entry{
           .id = id, .delay = delay, .timerPtr = timerPtr, .active = true, .startedOn = std::this_thread::get_id()});
       }
-
-      _cv.notify_all();
 
       auto stopCallback = StopCallback{
         stopToken,
@@ -349,6 +380,13 @@ namespace ao::rt::test
           }
         }};
 
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        entry(id)->published = true;
+      }
+
+      _cv.notify_all();
+
       if (stopToken.stop_requested())
       {
         co_return;
@@ -373,6 +411,9 @@ namespace ao::rt::test
       Delay delay{};
       std::weak_ptr<boost::asio::steady_timer> timerPtr;
       bool active = false;
+      // Public test-driver methods observe an entry only after its stop callback
+      // is registered, so cancellation cannot race the helper's publication.
+      bool published = false;
       bool cancelled = false;
       std::thread::id startedOn = {};
       std::thread::id cancelledOn = {};
@@ -386,7 +427,7 @@ namespace ao::rt::test
 
       for (auto const& candidate : _entries)
       {
-        if (candidate.active)
+        if (candidate.published && candidate.active)
         {
           delays.push_back(candidate.delay);
         }

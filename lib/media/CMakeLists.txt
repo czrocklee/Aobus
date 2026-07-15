@@ -45,15 +45,20 @@ target_link_libraries(ao_media PUBLIC ao_utility)
 set(AO_MEDIA_FORBIDDEN_INCLUDE_REGEX
     "#[ \t]*include[ \t]*[<\"](ao/(audio|library|rt|uimodel)/|runtime/|gtkmm/|gdkmm/|giomm/|glibmm/)"
 )
+ao_write_guardrail_regex(
+  AO_MEDIA_FORBIDDEN_INCLUDE_REGEX_FILE
+  "media"
+  "${AO_MEDIA_FORBIDDEN_INCLUDE_REGEX}"
+)
 add_custom_target(ao_media_boundary_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${AO_PUBLIC_INCLUDE_DIR}/ao/media"
-          "-DFORBIDDEN_REGEX=${AO_MEDIA_FORBIDDEN_INCLUDE_REGEX}"
+          "-DFORBIDDEN_REGEX_FILE=${AO_MEDIA_FORBIDDEN_INCLUDE_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_CURRENT_SOURCE_DIR}"
-          "-DFORBIDDEN_REGEX=${AO_MEDIA_FORBIDDEN_INCLUDE_REGEX}"
+          "-DFORBIDDEN_REGEX_FILE=${AO_MEDIA_FORBIDDEN_INCLUDE_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
   COMMENT "Checking ao_media dependency direction"

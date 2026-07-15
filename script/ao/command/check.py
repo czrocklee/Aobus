@@ -16,7 +16,7 @@ EPILOG = """\
 examples:
   ./ao check                # debug build + every registered test suite
   ./ao check release        # same against the release tree
-  ./ao check --asan         # debug + address/undefined sanitizers
+  ./ao check --asan         # debug + address sanitizer, plus undefined sanitizer where available
   ./ao check --tsan         # debug + ThreadSanitizer-safe suites
   ./ao check --clang        # clang build tree
 """

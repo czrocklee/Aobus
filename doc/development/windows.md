@@ -20,8 +20,9 @@ filesystem.
 
 ## Prerequisites
 
-- Visual Studio Build Tools with the **Desktop development with C++** workload
-  and x64 compiler toolset.
+- Visual Studio Build Tools with the **Desktop development with C++** workload,
+  x64 compiler toolset, and **C++ AddressSanitizer** component. The Visual
+  Studio Clang component is not required.
 - Git with long-path support, recommended for vcpkg build trees.
 - Network access for the first managed Python and dependency bootstrap. A valid
   local state directory is reused on later runs.
@@ -78,7 +79,8 @@ worktrees from sharing CMake and vcpkg state. LLVM downloads and verified SDKs
 are intentionally shared. The tool fingerprint changes when the managed Python
 or locked requirements change, allowing a new virtual environment to be built
 before the portal switches to it. Build, run, test, and check commands share the
-`windows-debug` or `windows-release` flavor directory. Tests and their vcpkg
+`windows-debug` or `windows-release` flavor directory. MSVC AddressSanitizer
+uses the separate `windows-debug-asan` directory. Tests and their vcpkg
 dependencies are part of the normal development graph; selecting a CMake target
 limits what is compiled without changing presets. `tidy` uses the separate
 `windows-tidy` directory.
@@ -126,6 +128,7 @@ ao.bat run tui               rem incrementally build and run the TUI
 ao.bat test                  rem core and TUI tests
 ao.bat test --all            rem all Windows suites, including tooling
 ao.bat check                 rem full Windows gate
+ao.bat check --asan          rem full Windows gate with MSVC AddressSanitizer
 ao.bat deps report           rem show governed versions and vcpkg identities
 ao.bat deps verify           rem reject stale or mismatched dependency evidence
 ao.bat format --check        rem check changed C++/Python formatting
@@ -153,6 +156,17 @@ executables are resolved with the `.exe` suffix automatically. The managed
 checkout environment supplies the pinned Ruff and mypy tools used by formatting,
 tidy, hygiene, and tooling tests; these commands do not depend on ambient
 `PATH` tools.
+
+`ao.bat check --asan` builds and runs the same native suite group under MSVC
+AddressSanitizer. It instruments Aobus translation units; dependencies from the
+normal vcpkg triplet remain uninstrumented, so MSVC STL container annotations
+are disabled across that binary boundary. MSVC provides neither
+UndefinedBehaviorSanitizer nor ThreadSanitizer, and resumable coroutine bodies
+are not fully instrumented; the Linux ASan/UBSan and TSan gates remain
+complementary coverage. Windows `--tsan` and application-build `--clang`
+selections fail before configuration instead of depending on an ambient Visual
+Studio component. The independently managed LLVM SDK described below remains
+available for format and tidy.
 
 ## LLVM SDK and native lint tools
 

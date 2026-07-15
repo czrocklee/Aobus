@@ -69,7 +69,7 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def run_command(args: argparse.Namespace) -> int:
-    profile = builddir.platform_profile()
+    profile = build.validate_build_options(args)
     if args.app not in profile.apps:
         available = ", ".join(profile.apps)
         raise die(f"application '{args.app}' is unavailable on {profile.name}. Available applications: {available}.")

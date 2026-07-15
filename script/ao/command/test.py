@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import re
 import subprocess
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -11,6 +12,7 @@ from typing import Literal
 
 from ..core import builddir, linttest, tooltest
 from ..core.proc import die, run
+from . import build
 
 HELP = "Build incrementally and run C++ and tooling test suites with optional Catch2 filters"
 NAME = "test"
@@ -79,15 +81,17 @@ def suite_groups() -> dict[str, tuple[str, ...]]:
 
 
 def suites_for(selection: str, *, tsan: bool = False) -> tuple[str, ...]:
+    profile = builddir.platform_profile()
+    if tsan and not profile.tsan_suites:
+        raise die("ThreadSanitizer is unavailable on this platform.")
+
     if tsan and selection in ("default", "all", "concurrency"):
         selection = "tsan"
     groups = suite_groups()
     suites = groups.get(selection, (selection,))
-    if not suites:
-        raise die("ThreadSanitizer suites are unavailable on this platform.")
-    unavailable = [suite for suite in suites if suite not in builddir.platform_profile().all_suites]
+    unavailable = [suite for suite in suites if suite not in profile.all_suites]
     if unavailable:
-        available = ", ".join(builddir.platform_profile().all_suites)
+        available = ", ".join(profile.all_suites)
         raise die(f"suite '{unavailable[0]}' is unavailable on this platform. Available suites: {available}.")
     return suites
 
@@ -164,7 +168,9 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     parser.add_argument("-p", "--path", metavar="<dir>", help="override the native test build directory")
     parser.add_argument("--clang", action="store_true", help="test the clang build tree")
     sanitizers = parser.add_mutually_exclusive_group()
-    sanitizers.add_argument("--asan", action="store_true", help="test the ASan/UBSan build tree")
+    sanitizers.add_argument(
+        "--asan", action="store_true", help="test the AddressSanitizer build tree (plus UBSan where available)"
+    )
     sanitizers.add_argument("--tsan", action="store_true", help="test the TSan build tree")
     parser.add_argument("-l", "--list", action="store_true", help="list matching tests instead of running them")
     parser.add_argument("-n", "--no-build", action="store_true", help="skip the incremental build")
@@ -214,14 +220,19 @@ leak:g_signal_emit
 _LSAN_SUPP_PATH = Path("/tmp/aobus-lsan.supp")
 _TSAN_SUPP_PATH = Path(__file__).resolve().parent.parent / "tsan.supp"
 _TSAN_MERGED_SUPP_PATH = Path("/tmp") / f"aobus-tsan-{os.getpid()}.supp"
+_SANITIZER_OPTION_SEPARATOR = re.compile(r":(?=[A-Za-z_][A-Za-z0-9_]*=)")
 
 
 def _lsan_env(build_dir: Path) -> dict[str, str]:
-    """Return LSAN_OPTIONS env when *build_dir* is an ASan tree."""
-    if "asan" not in build_dir.name:
+    """Return Linux LeakSanitizer options when *build_dir* is an ASan tree."""
+    if builddir.platform_profile().name != "linux" or "asan" not in build_dir.name:
         return {}
     _LSAN_SUPP_PATH.write_text(_LSAN_SUPPRESSIONS)
     return {"LSAN_OPTIONS": f"suppressions={_LSAN_SUPP_PATH}"}
+
+
+def _split_sanitizer_options(value: str) -> list[str]:
+    return [option for option in _SANITIZER_OPTION_SEPARATOR.split(value.strip(":")) if option]
 
 
 def _tsan_env(build_dir: Path, *, enabled: bool) -> dict[str, str]:
@@ -229,7 +240,7 @@ def _tsan_env(build_dir: Path, *, enabled: bool) -> dict[str, str]:
     if not enabled and "tsan" not in build_dir.name:
         return {}
 
-    existing_options = [option for option in os.environ.get("TSAN_OPTIONS", "").strip(":").split(":") if option]
+    existing_options = _split_sanitizer_options(os.environ.get("TSAN_OPTIONS", ""))
     suppression_paths: list[Path] = []
     retained_options: list[str] = []
 
@@ -361,6 +372,7 @@ def run_suites(
 
 
 def run_command(args: argparse.Namespace) -> int:
+    build.validate_build_options(args)
     build_dir = (
         Path(args.path) if args.path else builddir.build_dir("debug", clang=args.clang, asan=args.asan, tsan=args.tsan)
     )

@@ -162,6 +162,35 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(result.preset, "windows-debug")
         self.assertEqual(result.compiler, "msvc")
 
+    def test_windows_asan_build_enables_instrumentation(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "--asan", "-p", temp_dir])
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+                with mock.patch.object(build_command, "run", return_value=0) as run:
+                    build_command.do_build(args, [])
+
+        self.assertIn("-DAOBUS_ENABLE_ASAN=ON", run.call_args_list[0].args[0])
+
+    def test_windows_tsan_build_is_rejected_before_configure(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "--tsan", "-p", temp_dir])
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+                with mock.patch.object(build_command, "run") as run:
+                    with self.assertRaisesRegex(SystemExit, "1"):
+                        build_command.do_build(args, [])
+
+        run.assert_not_called()
+
+    def test_windows_clang_build_is_rejected_before_configure(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "--clang", "-p", temp_dir])
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+                with mock.patch.object(build_command, "run") as run:
+                    with self.assertRaisesRegex(SystemExit, "1"):
+                        build_command.do_build(args, [])
+
+        run.assert_not_called()
+
     def test_council_forwards_subcommand_arguments(self):
         args = self.parse(
             ["council", "-p", "/tmp/aobus-test-build", "-n", "validate-config", "--registry", "config.yaml"]
@@ -444,6 +473,24 @@ class CliParseTest(unittest.TestCase):
             tsan=True,
         )
 
+    def test_windows_explicit_tsan_suite_is_rejected(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+            with self.assertRaisesRegex(SystemExit, "1"):
+                test_command.suites_for("core", tsan=True)
+
+    def test_windows_asan_does_not_configure_linux_leak_suppressions(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+            self.assertEqual(test_command._lsan_env(Path("windows-debug-asan")), {})
+
+    def test_windows_clang_test_is_rejected_before_build_or_run(self):
+        args = self.parse(["test", "--core", "--clang", "-n", "-p", "/tmp/aobus-test-build"])
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+            with mock.patch.object(test_command, "run_suites") as run_suites:
+                with self.assertRaisesRegex(SystemExit, "1"):
+                    test_command.run_command(args)
+
+        run_suites.assert_not_called()
+
     def test_concurrency_group_runs_tagged_tests_across_native_catch2_suites(self):
         args = self.parse(["test", "--concurrency", "--repeat", "3", "-n", "-p", "/tmp/aobus-test-build"])
 
@@ -481,7 +528,7 @@ class CliParseTest(unittest.TestCase):
     def test_cross_suite_filter_allows_suites_without_matching_cases(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = build_dir / "test" / "ao_cli_test"
+            binary = builddir.executable(build_dir / "test" / "ao_cli_test")
             binary.parent.mkdir()
             binary.touch()
 
@@ -506,7 +553,7 @@ class CliParseTest(unittest.TestCase):
     def test_tsan_suite_enforces_fail_fast_runtime_options(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
-            binary = build_dir / "test" / "ao_core_test"
+            binary = builddir.executable(build_dir / "test" / "ao_core_test")
             binary.parent.mkdir()
             binary.touch()
 
@@ -526,11 +573,19 @@ class CliParseTest(unittest.TestCase):
             append=False,
         )
 
+    def test_tsan_options_preserve_windows_drive_colons(self):
+        value = r"history_size=7:suppressions=C:\temp\external.supp:halt_on_error=0"
+
+        self.assertEqual(
+            test_command._split_sanitizer_options(value),
+            ["history_size=7", r"suppressions=C:\temp\external.supp", "halt_on_error=0"],
+        )
+
     def test_tsan_suite_merges_existing_suppressions_with_project_rules(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             build_dir = root / "build"
-            binary = build_dir / "test" / "ao_core_test"
+            binary = builddir.executable(build_dir / "test" / "ao_core_test")
             binary.parent.mkdir(parents=True)
             binary.touch()
             external_suppressions = root / "external.supp"

@@ -8,7 +8,7 @@ if(NOT WIN32 AND NOT LINUX)
     "development profile exists for this platform.")
 endif()
 
-option(AOBUS_ENABLE_ASAN "Enable address/undefined sanitizers (debug builds only)" OFF)
+option(AOBUS_ENABLE_ASAN "Enable AddressSanitizer and UndefinedBehaviorSanitizer where available (debug builds only)" OFF)
 option(AOBUS_ENABLE_TSAN "Enable thread sanitizer (debug builds only)" OFF)
 
 set(AOBUS_DEFAULT_BUILD_GTK OFF)
@@ -31,6 +31,14 @@ option(AOBUS_BUILD_TUI "Build the terminal frontend" ON)
 include(cmake/CompilerOptions.cmake)
 include(cmake/Dependencies.cmake)
 include(cmake/Gperf.cmake)
+
+set(AO_GUARDRAIL_REGEX_DIR "${CMAKE_CURRENT_BINARY_DIR}/guardrail-regex")
+file(MAKE_DIRECTORY "${AO_GUARDRAIL_REGEX_DIR}")
+function(ao_write_guardrail_regex out_var name pattern)
+  set(_path "${AO_GUARDRAIL_REGEX_DIR}/${name}.regex")
+  file(WRITE "${_path}" "${pattern}")
+  set(${out_var} "${_path}" PARENT_SCOPE)
+endfunction()
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/ao")
 configure_file(cmake/AppVersion.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/ao/AppVersion.h" @ONLY)

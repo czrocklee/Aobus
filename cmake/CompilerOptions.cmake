@@ -32,8 +32,25 @@ if(MSVC)
     WINVER=0x0A00
   )
 
-  if(AOBUS_ENABLE_ASAN OR AOBUS_ENABLE_TSAN)
-    message(WARNING "AOBUS_ENABLE_ASAN/AOBUS_ENABLE_TSAN are not wired up for MSVC; ignoring")
+  if(AOBUS_ENABLE_TSAN)
+    message(FATAL_ERROR "ThreadSanitizer is not supported by the MSVC Windows toolchain")
+  endif()
+
+  if(AOBUS_ENABLE_ASAN)
+    # MSVC AddressSanitizer is incompatible with the /RTC options that CMake
+    # adds to Debug flags by default and with incremental linking.
+    foreach(flags_var CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG)
+      string(REGEX REPLACE "(^| )[/-]RTC[1su]*($| )" " " ${flags_var} "${${flags_var}}")
+    endforeach()
+    foreach(flags_var CMAKE_EXE_LINKER_FLAGS_DEBUG CMAKE_SHARED_LINKER_FLAGS_DEBUG CMAKE_MODULE_LINKER_FLAGS_DEBUG)
+      string(REGEX REPLACE "(^| )[/-]INCREMENTAL(:YES)?($| )" " " ${flags_var} "${${flags_var}}")
+    endforeach()
+    # The normal vcpkg triplet is not ASan-instrumented. Keep MSVC STL's
+    # detect_mismatch records compatible across that binary boundary while
+    # retaining AddressSanitizer instrumentation in Aobus translation units.
+    add_compile_definitions(_DISABLE_STL_ANNOTATION)
+    add_compile_options(/fsanitize=address)
+    add_link_options(/INCREMENTAL:NO)
   endif()
 else()
   # Sanitizers

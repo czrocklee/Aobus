@@ -40,7 +40,11 @@ def add_build_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--clean", action="store_true", help="remove the build directory first")
     parser.add_argument("--clang", action="store_true", help="build with clang in a dedicated build tree")
     sanitizers = parser.add_mutually_exclusive_group()
-    sanitizers.add_argument("--asan", action="store_true", help="enable address/undefined sanitizers (debug only)")
+    sanitizers.add_argument(
+        "--asan",
+        action="store_true",
+        help="enable AddressSanitizer and UndefinedBehaviorSanitizer where available (debug only)",
+    )
     sanitizers.add_argument("--tsan", action="store_true", help="enable thread sanitizer (debug only)")
     parser.add_argument("--verbose", action="store_true", help="show full build command lines")
     parser.add_argument("-p", "--path", metavar="<dir>", help="override the build directory")
@@ -69,8 +73,22 @@ class BuildResult:
     preset: str = ""
 
 
+def validate_build_options(args: argparse.Namespace) -> builddir.PlatformProfile:
+    """Reject build modes that the native platform cannot provide."""
+    profile = builddir.platform_profile()
+    if args.clang and profile.name == "windows":
+        raise die(
+            "Clang application builds are unavailable on Windows; the managed LLVM SDK is reserved for format and tidy."
+        )
+    if args.tsan and not profile.tsan_suites:
+        raise die("ThreadSanitizer is unavailable on the Windows MSVC toolchain.")
+    return profile
+
+
 def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
     """Shared by `ao build` and `ao check`. Raises SystemExit on failure."""
+    profile = validate_build_options(args)
+
     preset = builddir.preset(args.flavor)
     build_dir = (
         Path(args.path)
@@ -99,7 +117,8 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
     configure = ["cmake", "-S", str(PROJECT_ROOT), "--preset", preset, "-B", str(build_dir)]
     configure.append(f"-DCMAKE_VERBOSE_MAKEFILE={'ON' if args.verbose else 'OFF'}")
     if args.asan:
-        print("ASan/UBSan enabled for this build.")
+        sanitizer_name = "ASan" if profile.name == "windows" else "ASan/UBSan"
+        print(f"{sanitizer_name} enabled for this build.")
         configure.append("-DAOBUS_ENABLE_ASAN=ON")
     if args.tsan:
         print("TSan enabled for this build.")
@@ -124,7 +143,7 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
     if run(build, env=env, log=log, append=True) != 0:
         raise die("build failed.")
 
-    compiler = "clang" if args.clang else builddir.platform_profile().compiler
+    compiler = "clang" if args.clang else profile.compiler
     return BuildResult(build_dir=build_dir, log=log, compiler=compiler, preset=preset)
 
 

@@ -58,6 +58,24 @@ selection and `--repeat` behavior.
 
 ## Sanitizer findings
 
+Run the full native AddressSanitizer gate on both supported hosts:
+
+```bash
+./ao check --asan
+```
+
+```bat
+ao.bat check --asan
+```
+
+Linux combines AddressSanitizer and UndefinedBehaviorSanitizer. Windows uses
+MSVC AddressSanitizer for Aobus translation units. Dependencies from the normal
+vcpkg triplet remain uninstrumented, so the Windows build disables MSVC STL
+container annotations at that binary boundary. MSVC provides neither
+UndefinedBehaviorSanitizer nor ThreadSanitizer, and resumable coroutine bodies
+are not fully instrumented. Windows `--tsan` therefore fails before
+configuration rather than silently running an unsanitized gate.
+
 The green Linux TSan gate covers core and GTK:
 
 ```bash

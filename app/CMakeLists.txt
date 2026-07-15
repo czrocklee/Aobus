@@ -156,14 +156,6 @@ set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](ao/lmdb
 set(AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView))")
 set(AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX [=[/platform/|/MainWindowCoordinator\.cpp|/AudioBackendBootstrap\.]=])
 
-set(AO_GUARDRAIL_REGEX_DIR "${CMAKE_CURRENT_BINARY_DIR}/guardrail-regex")
-file(MAKE_DIRECTORY "${AO_GUARDRAIL_REGEX_DIR}")
-function(ao_write_guardrail_regex out_var name pattern)
-  set(_path "${AO_GUARDRAIL_REGEX_DIR}/${name}.regex")
-  file(WRITE "${_path}" "${pattern}")
-  set(${out_var} "${_path}" PARENT_SCOPE)
-endfunction()
-
 ao_write_guardrail_regex(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX_FILE "rt-public" "${AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX}")
 ao_write_guardrail_regex(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX_FILE "uimodel-core" "${AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX}")
 ao_write_guardrail_regex(AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX_FILE "gtk-core" "${AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX}")

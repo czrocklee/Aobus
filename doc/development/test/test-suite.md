@@ -51,6 +51,10 @@ ThreadSanitizer is intentionally different. `ao test --tsan` and
 `ao check --tsan` resolve `default`/`all` to the native `tsan` group. Explicit
 suite selection, such as `ao test --gtk --tsan`, remains available for focused diagnosis.
 The Linux TSan group contains core and GTK; reviewed uninstrumented UI dependencies use module-scoped interceptor suppressions.
+Windows has no TSan suite group because the MSVC toolchain does not provide
+ThreadSanitizer; requesting `--tsan` is an error. `ao.bat check --asan` runs the
+entire native Windows `all` group with MSVC AddressSanitizer in its own build
+tree.
 See `concurrency-and-sanitizer.md` for the suppression boundary.
 
 `--repeat N` repeats the selected tests and stops on the first failure. It is a
