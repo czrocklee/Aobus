@@ -9,7 +9,7 @@
 #include "council/Substrate.h"
 #include "council/YamlEmit.h"
 #include <ao/Error.h>
-#include <ao/async/ImmediateExecutor.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 
@@ -1423,7 +1423,9 @@ namespace ao::council
     auto completed = std::map<std::string, bool, std::less<>>{};
     auto launched = std::set<std::string>{};
     auto engine = Engine{};
-    auto callbackExecutor = async::ImmediateExecutor{};
+    // Council tasks currently use only Runtime's worker pool. Any future
+    // callback-executor hop at this composition boundary also needs an owner pump.
+    auto callbackExecutor = async::LoopExecutor{};
     auto asyncRuntime = async::Runtime{callbackExecutor, 16};
     auto context = EngineContext{.realRepo = paths->repo,
                                  .immutableBase = *immutableBase,

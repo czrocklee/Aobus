@@ -11,7 +11,6 @@
 #include "ScanOutput.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/async/Runtime.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
@@ -950,8 +949,7 @@ namespace ao::cli
         os, "fingerprinted {}  skipped {}  failed {}", result.completedCount, result.skippedCount, result.failureCount);
     }
 
-    void fingerprintPending(rt::CoreRuntime& runtime,
-                            library::MusicLibrary& ml,
+    void fingerprintPending(CliRuntime& cli,
                             bool pending,
                             bool verbose,
                             OutputFormat format,
@@ -963,12 +961,16 @@ namespace ao::cli
         throwCommandError(Error::Code::InvalidInput, "lib fingerprint requires --pending");
       }
 
-      // indexPending fingerprints concurrently on the runtime worker pool; the
-      // CLI blocks its own (non-pool) thread on the future. The indexer
-      // serializes callbacks, so printing from them is safe.
+      auto& runtime = cli.core();
+      auto& ml = cli.musicLibrary();
+
+      // indexPending fingerprints concurrently on the runtime worker pool. The
+      // CLI drives its callback loop until the operation reaches a terminal
+      // result, so future callback hops retain owner-thread affinity. Progress
+      // and item-failure callbacks remain worker-produced and indexer-serialized.
       auto mutationMutex = std::mutex{};
       auto indexer = rt::AudioIdentityIndexer{runtime.async(), ml, mutationMutex};
-      auto future = runtime.async().spawn(indexer.indexPending(
+      auto result = cli.runTask(indexer.indexPending(
         {},
         verbose ? rt::AudioIdentityIndexer::ProgressCallback{[&err](rt::AudioIdentityIndexProgress const& progress)
                                                              {
@@ -981,7 +983,6 @@ namespace ao::cli
                                                              }}
                 : nullptr,
         [&err](rt::AudioIdentityIndexFailure const& failure) { printBackfillFailure(failure, err); }));
-      auto result = future.get();
 
       if (!result)
       {
@@ -1378,8 +1379,7 @@ namespace ao::cli
     fingerprintCmd->callback(
       [&cli, fingerprintPendingFlag, fingerprintVerbose]
       {
-        fingerprintPending(cli.core(),
-                           cli.musicLibrary(),
+        fingerprintPending(cli,
                            fingerprintPendingFlag->count() > 0,
                            fingerprintVerbose->count() > 0,
                            cli.options().format,

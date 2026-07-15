@@ -117,7 +117,7 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
 
     auto appPtr = std::make_unique<AppRuntime>(AppRuntimeDependencies{
-      .executorPtr = std::make_unique<MockExecutor>(),
+      .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
@@ -161,7 +161,7 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto exceptionRecorder = AsyncExceptionRecorder{};
     auto appPtr = std::make_unique<AppRuntime>(AppRuntimeDependencies{
-      .executorPtr = std::make_unique<MockExecutor>(),
+      .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,

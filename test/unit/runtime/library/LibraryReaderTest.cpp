@@ -63,7 +63,7 @@ namespace ao::rt::test
 
     CoreRuntime makeCoreRuntime(ao::test::TempDir const& tempDir)
     {
-      return CoreRuntime{std::make_unique<MockExecutor>(),
+      return CoreRuntime{std::make_unique<InlineExecutor>(),
                          tempDir.path(),
                          std::filesystem::path{tempDir.path()} / ".aobus" / "library",
                          library::test::kTestMusicLibraryMapSize};

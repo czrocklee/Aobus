@@ -95,7 +95,7 @@ namespace ao::rt::test
       }
 
       MusicLibraryFixture libraryFixture;
-      MockExecutor executor;
+      InlineExecutor executor;
       async::Runtime asyncRuntime;
       LibraryChanges changes;
       LibraryWriter writer;

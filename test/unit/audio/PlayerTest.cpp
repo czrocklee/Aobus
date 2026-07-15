@@ -8,7 +8,7 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/async/ImmediateExecutor.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/DecodedStreamInfo.h>
@@ -598,7 +598,7 @@ namespace ao::audio::test
                                                            .description = "PipeWire Provider",
                                                            .iconName = "audio-card-symbolic"}});
 
-    auto executor = async::ImmediateExecutor{};
+    auto executor = rt::test::InlineExecutor{};
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
@@ -648,7 +648,7 @@ namespace ao::audio::test
       .AlwaysDo([](BackendProvider::OnDevicesChangedCallback const&) { return Subscription{}; });
     When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
 
-    auto executor = async::ImmediateExecutor{};
+    auto executor = rt::test::InlineExecutor{};
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
@@ -935,32 +935,29 @@ namespace ao::audio::test
   {
     auto const fixturePath = requireAudioFixture("basic_metadata.flac");
     auto probePtr = std::make_shared<SynchronousGraphProbe>();
-    auto executor = async::ImmediateExecutor{};
+    auto executor = async::LoopExecutor{};
     auto player = Player{executor};
-    auto firstRouteSettled = std::binary_semaphore{0};
-    auto secondRouteSettled = std::binary_semaphore{0};
-    auto firstSignaled = std::atomic{false};
-    auto secondSignaled = std::atomic{false};
+    bool firstRouteSettled = false;
+    bool secondRouteSettled = false;
     player.setOnQualityChanged(
       [&](QualityResult const&, bool)
       {
         auto const subscriptions = probePtr->subscriptionCount();
 
-        if (subscriptions >= 1 && !firstSignaled.exchange(true, std::memory_order_acq_rel))
+        if (subscriptions >= 1)
         {
-          firstRouteSettled.release();
+          firstRouteSettled = true;
         }
 
-        if (subscriptions >= 2 && !secondSignaled.exchange(true, std::memory_order_acq_rel))
+        if (subscriptions >= 2)
         {
-          secondRouteSettled.release();
+          secondRouteSettled = true;
         }
       });
     player.addProvider(std::make_unique<SynchronousGraphProvider>(probePtr));
     REQUIRE(player.setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-a"}, kProfileShared));
     REQUIRE(player.play(Engine::PlaybackItem{.input = PlaybackInput{.filePath = fixturePath}}));
-    REQUIRE(probePtr->graphSubscribed.try_acquire_for(std::chrono::seconds{5}));
-    REQUIRE(firstRouteSettled.try_acquire_for(std::chrono::seconds{5}));
+    REQUIRE(rt::test::runLoopUntil(executor, [&] { return probePtr->subscriptionCount() >= 1 && firstRouteSettled; }));
 
     auto staleRouteCallback = BackendProvider::OnGraphChangedCallback{};
     {
@@ -970,8 +967,7 @@ namespace ao::audio::test
     REQUIRE(staleRouteCallback);
 
     REQUIRE(player.setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-b"}, kProfileShared));
-    REQUIRE(probePtr->graphSubscribed.try_acquire_for(std::chrono::seconds{5}));
-    REQUIRE(secondRouteSettled.try_acquire_for(std::chrono::seconds{5}));
+    REQUIRE(rt::test::runLoopUntil(executor, [&] { return probePtr->subscriptionCount() >= 2 && secondRouteSettled; }));
 
     {
       auto const lock = std::scoped_lock{probePtr->mutex};
@@ -981,26 +977,24 @@ namespace ao::audio::test
       CHECK(probePtr->activeRoute == "route-b");
     }
 
-    auto graphUpdated = std::binary_semaphore{0};
-    auto graphUpdateCount = std::atomic{std::size_t{0}};
-    auto currentRouteSignaled = std::atomic{false};
+    std::size_t graphUpdateCount = 0;
+    bool currentRouteUpdated = false;
     player.setOnQualityChanged(
       [&](QualityResult const&, bool)
       {
-        graphUpdateCount.fetch_add(1, std::memory_order_relaxed);
+        ++graphUpdateCount;
 
         if (auto const status = player.status();
             std::ranges::find(status.flow.nodes, std::string_view{"route-b-sink"}, &flow::Node::id) !=
-              status.flow.nodes.end() &&
-            !currentRouteSignaled.exchange(true, std::memory_order_acq_rel))
+            status.flow.nodes.end())
         {
-          graphUpdated.release();
+          currentRouteUpdated = true;
         }
       });
     staleRouteCallback(flow::Graph{.nodes = {flow::Node{.id = "route-a-stale", .type = flow::NodeType::Sink}}});
     probePtr->publish("route-b");
-    REQUIRE(graphUpdated.try_acquire_for(std::chrono::seconds{5}));
-    CHECK(graphUpdateCount.load(std::memory_order_relaxed) == 1);
+    REQUIRE(rt::test::runLoopUntil(executor, [&] { return currentRouteUpdated; }));
+    CHECK(graphUpdateCount == 1);
 
     auto const status = player.status();
     CHECK(std::ranges::find(status.flow.nodes, std::string_view{"route-b-sink"}, &flow::Node::id) !=
@@ -1397,7 +1391,7 @@ namespace ao::audio::test
 
   TEST_CASE("Player - controls update engine-backed status", "[audio][unit][player][control]")
   {
-    auto executor = async::ImmediateExecutor{};
+    auto executor = rt::test::InlineExecutor{};
     auto player = Player{executor};
 
     SECTION("addProvider(nullptr) is safe")
@@ -1553,7 +1547,7 @@ namespace ao::audio::test
     auto events = Events{};
 
     {
-      auto executor = async::ImmediateExecutor{};
+      auto executor = rt::test::InlineExecutor{};
       auto player = Player{executor};
       player.addProvider(std::make_unique<LifetimeProvider>(events));
       CHECK(player.setOutputDevice(kBackendAlsa, DeviceId{"alsa-device"}, kProfileExclusive));

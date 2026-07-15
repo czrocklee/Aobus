@@ -79,7 +79,7 @@ namespace ao::rt::test
 
   // Shared wiring for the PlaybackService tests: a music library, a spy backend,
   // and a mocked BackendProvider that hands out that backend.
-  // ExecutorT selects the dispatch model (MockExecutor runs inline; QueuedExecutor
+  // ExecutorT selects the dispatch model (InlineExecutor runs inline; QueuedExecutor
   // defers until drain()). The provider's devices/graph callbacks and the render
   // target are captured into public members so a test can drive them.
   //

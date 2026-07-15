@@ -734,8 +734,8 @@ namespace ao::rt
     // data race that would silently corrupt `state` (and risk a use-after-free on
     // the subscription lists) in a release build, so we fail fast with a logged
     // abort rather than press on. isCurrent() is a cheap thread-id comparison.
-    // ImmediateExecutor reports isCurrent()==true unconditionally, so CLI/test
-    // hosts must remain effectively single-threaded for control.
+    // Test doubles that report every caller current deliberately disable this
+    // guard and are valid only when affinity is outside the test's scope.
     void ensureOnExecutor(std::source_location loc = std::source_location::current()) const
     {
       if (!executor.isCurrent()) [[unlikely]]

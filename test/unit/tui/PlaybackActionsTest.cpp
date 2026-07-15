@@ -21,7 +21,7 @@ namespace ao::tui::test
 {
   namespace
   {
-    void primeOutput(rt::test::PlaybackFixture<rt::test::MockExecutor>& fixture)
+    void primeOutput(rt::test::PlaybackFixture<rt::test::InlineExecutor>& fixture)
     {
       fixture.onDevicesChangedCb(fixture.status.devices);
     }
@@ -78,7 +78,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackActions - seekBy clamps negative relative seeks", "[tui][unit][playback]")
   {
-    auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
+    auto fixture = rt::test::PlaybackFixture<rt::test::InlineExecutor>{};
     auto seekEvents = std::vector<std::chrono::milliseconds>{};
     auto sub = fixture.playbackService.onSeekUpdate([&](rt::PlaybackService::SeekUpdate const& event)
                                                     { seekEvents.push_back(event.elapsed); });
@@ -95,7 +95,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackActions - changeVolume clamps the resulting volume", "[tui][unit][playback]")
   {
-    auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
+    auto fixture = rt::test::PlaybackFixture<rt::test::InlineExecutor>{};
     primeOutput(fixture);
 
     fixture.playbackService.setVolume(0.4F);

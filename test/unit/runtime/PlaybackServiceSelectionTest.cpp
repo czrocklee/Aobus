@@ -18,7 +18,7 @@ namespace ao::rt::test
 {
   TEST_CASE("PlaybackService selection - reveal track requests", "[runtime][unit][playback][selection]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
 
     auto revealRequests = std::vector<PlaybackService::RevealTrackRequested>{};
     auto sub = fixture.playbackService.onRevealTrackRequested([&](auto const& ev) { revealRequests.push_back(ev); });
@@ -62,7 +62,7 @@ namespace ao::rt::test
 
   TEST_CASE("PlaybackService selection - revealPlayingTrack works", "[runtime][unit][playback][selection]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
 
     auto revealRequests = std::vector<PlaybackService::RevealTrackRequested>{};
     auto sub = fixture.playbackService.onRevealTrackRequested([&](PlaybackService::RevealTrackRequested const& ev)

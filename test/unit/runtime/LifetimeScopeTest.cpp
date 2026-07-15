@@ -3,7 +3,6 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include <ao/Exception.h>
-#include <ao/async/ImmediateExecutor.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
@@ -145,7 +144,7 @@ namespace ao::rt::test
   TEST_CASE("LifetimeScope - retires task before delivering an unexpected failure",
             "[runtime][unit][lifetime][concurrency]")
   {
-    auto executor = ImmediateExecutor{};
+    auto executor = InlineExecutor{};
     auto scope = LifetimeScope{};
     auto exceptionRecorder = AsyncExceptionRecorder{};
     auto bookkeepingRetired = AsyncTestState<bool>::create(false);
@@ -288,7 +287,7 @@ namespace ao::rt::test
 
   TEST_CASE("LifetimeScope - member task can complete while owner remains alive", "[runtime][unit][async][lifetime]")
   {
-    auto executor = ImmediateExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = Runtime{executor};
     auto completed = AsyncTestState<int>::create(0);
 

@@ -20,7 +20,7 @@ namespace ao::rt::test
 {
   TEST_CASE("PlaybackService control - initial state is correct", "[runtime][unit][playback][control]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
 
     auto const& state = fixture.playbackService.state();
     CHECK(state.nowPlaying == NowPlayingInfo{});
@@ -30,7 +30,7 @@ namespace ao::rt::test
 
   TEST_CASE("PlaybackService control - play pause resume and stop", "[runtime][unit][playback][control]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
 
     // Prime the device list. The first notification auto-selects the default
     // output; the duplicate exercises the "already selected" early return, and the
@@ -104,7 +104,7 @@ namespace ao::rt::test
 
   TEST_CASE("PlaybackService control - seek updates state and fires event", "[runtime][unit][playback][control]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
 
     bool seekFired = false;
     auto sub = fixture.playbackService.onSeekUpdate(
@@ -121,7 +121,7 @@ namespace ao::rt::test
 
   TEST_CASE("PlaybackService control - volume and muted controls update state", "[runtime][unit][playback][control]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
 
     // Prime the device list. The first notification auto-selects the default
     // output; the duplicate exercises the "already selected" early return, and the
@@ -195,7 +195,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService control - rejected play does not emit success", "[runtime][unit][playback][control]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto notificationService = NotificationService{};
     auto playbackService = makePlaybackService(executor, libraryFixture.library(), notificationService);
 

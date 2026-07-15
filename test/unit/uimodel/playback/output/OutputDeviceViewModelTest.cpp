@@ -24,7 +24,7 @@ namespace ao::uimodel::test
   TEST_CASE("OutputDeviceViewModel - state generation", "[uimodel][unit][playback][output]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto notificationService = NotificationService{};
     auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
 
@@ -51,7 +51,7 @@ namespace ao::uimodel::test
   TEST_CASE("OutputDeviceViewModel - refresh with fake provider", "[uimodel][unit][playback][output]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto notificationService = NotificationService{};
     auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
 

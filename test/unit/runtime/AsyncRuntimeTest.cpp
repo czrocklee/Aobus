@@ -3,7 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include <ao/Exception.h>
-#include <ao/async/ImmediateExecutor.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/Signal.h>
@@ -47,7 +47,7 @@ namespace ao::rt::test
       counter.increment();
 
       co_await runtime->resumeOnCallbackExecutor();
-      // Now back on UI (ImmediateExecutor for tests)
+      // Now back on the callback executor's owner thread.
       counter.increment();
 
       co_return std::this_thread::get_id();
@@ -242,16 +242,19 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("AsyncRuntime - spawn switches to worker and returns through callback executor", "[runtime][unit][async]")
+  TEST_CASE("AsyncRuntime - spawn switches to worker and returns through callback executor",
+            "[runtime][unit][async][concurrency]")
   {
-    auto executor = ImmediateExecutor{};
+    auto executor = LoopExecutor{};
     auto runtime = Runtime{executor};
     auto counter = AsyncTestState<int>::create(0);
+    auto const ownerThread = std::this_thread::get_id();
 
     auto future = runtime.spawn(pingPongTask(&runtime, counter));
+    executor.runOneTurn();
     auto const result = future.get();
 
-    CHECK(result != std::this_thread::get_id());
+    CHECK(result == ownerThread);
     CHECK(counter.load() == 2);
 
     runtime.requestStop();
@@ -260,7 +263,7 @@ namespace ao::rt::test
 
   TEST_CASE("AsyncRuntime - unobserved and future task failures have one owner", "[runtime][unit][async]")
   {
-    auto executor = ImmediateExecutor{};
+    auto executor = InlineExecutor{};
     auto exceptionRecorder = AsyncExceptionRecorder{};
     auto runtime = Runtime{executor, exceptionRecorder.handler()};
 
@@ -279,7 +282,7 @@ namespace ao::rt::test
   TEST_CASE("AsyncRuntime - missing exception handler uses the stderr fallback", "[runtime][unit][async]")
   {
     auto capture = StderrCapture{};
-    auto executor = ImmediateExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = Runtime{executor};
 
     CHECK_NOTHROW(runtime.reportUnhandledException(
@@ -292,7 +295,7 @@ namespace ao::rt::test
   TEST_CASE("AsyncRuntime - throwing exception handler falls back without escaping", "[runtime][regression][async]")
   {
     auto capture = StderrCapture{};
-    auto executor = ImmediateExecutor{};
+    auto executor = InlineExecutor{};
     bool handlerCalled = false;
     auto runtime = Runtime{executor,
                            [&handlerCalled](std::exception_ptr, std::string_view)
@@ -311,7 +314,7 @@ namespace ao::rt::test
   TEST_CASE("AsyncRuntime - cancellable task failure reaches the injected handler",
             "[runtime][unit][async][concurrency]")
   {
-    auto executor = ImmediateExecutor{};
+    auto executor = InlineExecutor{};
     auto exceptionRecorder = AsyncExceptionRecorder{};
     auto runtime = Runtime{executor, exceptionRecorder.handler()};
 
@@ -323,31 +326,6 @@ namespace ao::rt::test
     runtime.join();
 
     requireSingleRecordedException<Exception>(exceptionRecorder, "cancellable coroutine");
-  }
-
-  TEST_CASE("ImmediateExecutor - defer is FIFO and never reenters the current task", "[runtime][unit][async]")
-  {
-    auto executor = ImmediateExecutor{};
-    auto order = std::vector<int>{};
-
-    executor.defer(
-      [&]
-      {
-        order.push_back(1);
-        executor.defer(
-          [&]
-          {
-            order.push_back(3);
-            executor.defer([&] { order.push_back(5); });
-          });
-        executor.defer([&] { order.push_back(4); });
-        order.push_back(2);
-      });
-
-    CHECK(order == std::vector<int>{1, 2, 3, 4, 5});
-
-    executor.dispatch([&] { order.push_back(6); });
-    CHECK(order.back() == 6);
   }
 
   TEST_CASE("AsyncRuntime - sleep resumes its coroutine on the worker executor", "[runtime][unit][async]")
@@ -427,29 +405,10 @@ namespace ao::rt::test
     CHECK(exitCount.load() == kIterationCount);
   }
 
-  TEST_CASE("ImmediateExecutor - a throwing task does not wedge the queue", "[runtime][unit][async]")
-  {
-    auto executor = ImmediateExecutor{};
-    auto order = std::vector<int>{};
-
-    CHECK_THROWS_AS(executor.defer(
-                      [&]
-                      {
-                        executor.defer([&] { order.push_back(1); });
-                        throwException<Exception>("boom");
-                      }),
-                    Exception);
-
-    // The task deferred before the throw stayed queued and runs in the next turn.
-    CHECK(order.empty());
-    executor.defer([&] { order.push_back(2); });
-    CHECK(order == std::vector<int>{1, 2});
-  }
-
   TEST_CASE("Signal - re-posting during a posted emission runs after the current emission",
             "[runtime][unit][async][signal]")
   {
-    auto executor = ImmediateExecutor{};
+    auto executor = LoopExecutor{};
     auto signal = Signal<std::int32_t>{};
     auto order = std::vector<std::int32_t>{};
 
@@ -467,6 +426,10 @@ namespace ao::rt::test
       });
 
     signal.post(executor, 1);
+
+    while (executor.runReadyTurn())
+    {
+    }
 
     CHECK(order == std::vector<std::int32_t>{1, -1, 2});
   }

@@ -5,6 +5,7 @@
 
 #include "Executor.h"
 
+#include <cstddef>
 #include <functional>
 #include <mutex>
 #include <thread>
@@ -41,6 +42,7 @@ namespace ao::async
     std::mutex _mutex;
     std::vector<std::move_only_function<void()>> _pendingTasks;
     std::vector<std::move_only_function<void()>> _drainTasks;
+    std::size_t _nextDrainTaskIndex = 0;
     bool _draining = false;
   };
 } // namespace ao::async

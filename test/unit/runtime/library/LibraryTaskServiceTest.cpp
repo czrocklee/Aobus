@@ -156,7 +156,7 @@ namespace ao::rt::test
             "[runtime][unit][library][task]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
     auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
@@ -174,7 +174,7 @@ namespace ao::rt::test
             "[runtime][unit][library][task]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
     auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
@@ -189,7 +189,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryTaskService - buildScanPlanAsync succeeds", "[runtime][unit][library-task][scan]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
     auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
@@ -203,7 +203,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryTaskService - applyScanPlanAsync succeeds with empty plan", "[runtime][unit][library-task][scan]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
     auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
@@ -225,7 +225,7 @@ namespace ao::rt::test
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
 
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
     auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
@@ -252,7 +252,7 @@ namespace ao::rt::test
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
 
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
     auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
@@ -282,7 +282,7 @@ namespace ao::rt::test
             "[runtime][unit][library-task][scan]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
     auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
@@ -337,7 +337,7 @@ namespace ao::rt::test
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
 
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
     auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};

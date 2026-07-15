@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/async/QueuedExecutor.h>
+#include <ao/async/QueuedExecutorBase.h>
 
 #include <ftxui/component/screen_interactive.hpp>
 

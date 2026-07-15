@@ -50,7 +50,7 @@ namespace ao::rt::test
     struct TrackDetailProjectionFixture final
     {
       MusicLibraryFixture libraryFixture;
-      MockExecutor executor;
+      InlineExecutor executor;
       async::Runtime runtime;
       LibraryChanges changes;
       LibraryWriter writer;

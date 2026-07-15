@@ -1,8 +1,9 @@
 # ao_async: coroutine runtime primitives shared by app services and tools.
 add_library(ao_async STATIC
+    LoopExecutor.cpp
     OperationCancelled.cpp
     Parallel.cpp
-    QueuedExecutor.cpp
+    QueuedExecutorBase.cpp
     Runtime.cpp
     LifetimeScope.cpp
 )

@@ -46,11 +46,11 @@ Subscription registration, event delivery, and subscription teardown follow the 
 
 GTK supplies `GtkMainContextExecutor`, which wakes and drains work through `Glib::Dispatcher` on the GTK main context.
 TUI supplies its `Executor`, which posts work into the FTXUI screen loop.
-CLI supplies `ImmediateExecutor`, which executes dispatch inline and preserves deferred-turn ordering with a local FIFO queue.
-`ImmediateExecutor` reports every calling thread as current and does not synchronize that queue, so the current CLI/test host is safe only while no foreign producer reaches it; [RFC 0027](../rfc/0027-serialized-headless-callback-executor.md) proposes a thread-safe owner-thread pump.
+CLI supplies `LoopExecutor`, which uses the invocation thread as owner and exposes explicit blocking and non-blocking turn operations.
+`CliRuntime::runTask()` drives those turns until a terminal marker returns through the callback executor, so a worker continuation never becomes a second CLI state owner.
 
-The GTK and TUI adapters share `QueuedExecutorBase`.
-Producer threads admit foreign dispatches and deferred tasks into one mutex-protected FIFO, while only the constructing event-loop thread drains and executes it.
+The GTK, TUI, and loop adapters share `QueuedExecutorBase`.
+Producer threads admit foreign dispatches and deferred tasks into one mutex-protected FIFO, while only the constructing owner thread drains and executes it.
 An owner drain is non-reentrant: it extracts the entry snapshot, releases the queue mutex, and then executes that snapshot.
 Tasks admitted while it runs remain pending for a later executor turn.
 The first task in a pending burst owns the wake request, and drain completion requests one follow-up wake when later work remains; this coalesces redundant event-loop notifications without losing the final wake.
@@ -82,6 +82,7 @@ The logging backend may also own its own asynchronous worker, but it is infrastr
 - `CoreRuntime` owns `async::Runtime`; runtime services borrow it or its callback executor and cannot outlive it.
 - Interactive composition injects an async exception handler from the application logging boundary; `ao_async` does not depend on application logging types.
 - Worker tasks may resume on the callback executor through `Runtime::resumeOnCallbackExecutor`.
+- A synchronous non-toolkit adapter that starts such a task drives its owner loop rather than blocking on a future whose completion may require that loop.
 - Frontend code does not post directly into audio engine internals, and audio callbacks do not mutate runtime snapshots from backend threads.
 - UIModel and frontend adapters call executor-affine runtime services only from the owning event-loop thread.
 - Dedicated subsystem threads remain implementation details below the runtime service that translates them into application state.
@@ -97,6 +98,10 @@ callback executor
   -> resume on callback executor
   -> update runtime state and notify observers
 ```
+
+For CLI, the callback executor is the invocation thread's `LoopExecutor` and the synchronous command boundary pumps it through `CliRuntime::runTask()` until terminal completion.
+If a callback throws while pumping, CLI retains the first exception and continues to the terminal marker before consuming the spawned future; command-owned task inputs therefore cannot unwind while worker work still uses them.
+A task failure remains the primary command exception and the retained callback failure is reported; otherwise the retained callback failure is rethrown on the invocation thread.
 
 An audio observation uses a separate bridge:
 
@@ -140,6 +145,7 @@ Runtime shutdown proceeds from producers toward dependencies:
 5. The callback executor is released last within `CoreRuntime` ownership.
 
 The application logger and its captured async-exception adapter outlive step 3 and are shut down only after worker completion handlers have quiesced.
+CLI follows the same producer-first order, then drains already-ready loop turns while `CoreRuntime` callback targets remain alive before releasing that runtime and executor.
 
 Dedicated audio and device owners request stop and join their own threads inside their shutdown or destruction boundary.
 Unexpected coroutine exceptions are reported by the async runtime; expected cancellation is not reported as an unhandled failure.
@@ -147,21 +153,23 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 ## Implementation map
 
 - [`ao::async::Executor`](../../include/ao/async/Executor.h) defines callback dispatch and deferred-turn semantics.
-- [`QueuedExecutorBase`](../../include/ao/async/QueuedExecutor.h) implements the multi-producer, owner-drained FIFO and wake-coalescing turn boundary used by GTK and TUI.
+- [`QueuedExecutorBase`](../../include/ao/async/QueuedExecutorBase.h) implements the multi-producer, owner-drained FIFO and wake-coalescing turn boundary used by GTK, TUI, and explicit loops.
+- [`LoopExecutor`](../../include/ao/async/LoopExecutor.h) adds the binary wake signal and owner-driven blocking/non-blocking turn operations.
 - [`ao::async::Runtime`](../../include/ao/async/Runtime.h) owns the worker pool and coroutine switching operations.
 - [`AsyncExceptionHandler`](../../include/ao/async/AsyncExceptionHandler.h) is the injected terminal diagnostic seam.
 - [`Runtime.cpp`](../../lib/async/Runtime.cpp) implements worker spawning, cancellation, timers, and callback resumption.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) owns executor/runtime lifetime and worker shutdown ordering.
 - [`Log.cpp`](../../app/runtime/Log.cpp) adapts terminal exceptions to the retained application logger.
 - [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) orders playback-session and player shutdown ahead of base-runtime teardown.
-- [`GtkMainContextExecutor`](../../app/linux-gtk/app/GtkMainContextExecutor.cpp), [`tui::Executor`](../../app/tui/Executor.cpp), and [`ImmediateExecutor`](../../include/ao/async/ImmediateExecutor.h) adapt the three frontend execution models.
+- [`GtkMainContextExecutor`](../../app/linux-gtk/app/GtkMainContextExecutor.cpp), [`tui::Executor`](../../app/tui/Executor.cpp), and [`CliRuntime`](../../app/cli/CliRuntime.cpp) adapt the three frontend execution models.
 - [`Engine.cpp`](../../lib/audio/Engine.cpp) and [`StreamingSource.cpp`](../../lib/audio/StreamingSource.cpp) contain the principal dedicated audio-thread boundaries.
 
 ## Test map
 
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) tests executor switching, cancellation, terminal exception ownership, and runtime lifetime.
 - [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) tests lifetime bookkeeping and injected exception delivery.
-- [`QueuedExecutorTest.cpp`](../../test/unit/runtime/QueuedExecutorTest.cpp) protects burst wake coalescing, multi-producer admission, non-reentrant drains, and later-turn delivery.
+- [`LoopExecutorTest.cpp`](../../test/unit/runtime/LoopExecutorTest.cpp) protects owner affinity, burst wake coalescing, multi-producer admission, non-reentrant turns, and later-turn delivery.
+- [`CliRuntimeTest.cpp`](../../test/unit/cli/CliRuntimeTest.cpp) protects CLI worker round trips, callback-failure task completion, terminal exception propagation, and producer-first callback draining.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp) protects the audio control/event thread boundary.
 - [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp) protects callback delivery and teardown constraints.
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects marshalling from engine/provider events to the callback executor.
@@ -180,5 +188,5 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
 - [Audio execution and concurrency specification](../spec/playback/audio-execution.md)
 - [Concurrency and sanitizer guidance](../development/test/concurrency-and-sanitizer.md) for contributor validation workflow
-- [RFC 0027: serialized headless callback executor](../rfc/0027-serialized-headless-callback-executor.md)
+- [RFC 0027: loop executor for non-toolkit hosts](../rfc/0027-loop-executor.md)
 - [RFC 0028: bounded audio observation delivery](../rfc/0028-bounded-audio-observation-delivery.md)

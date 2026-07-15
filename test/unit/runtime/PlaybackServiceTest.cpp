@@ -25,7 +25,7 @@ namespace ao::rt::test
 {
   TEST_CASE("PlaybackService playback - playTrack fails when track does not exist", "[runtime][unit][playback][play]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
 
     auto const result = fixture.playbackService.playTrack(TrackId{99999}, ListId{7});
 
@@ -35,7 +35,7 @@ namespace ao::rt::test
 
   TEST_CASE("PlaybackService playback - playTrack resolves track metadata", "[runtime][unit][playback][play]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
 
     // Prime the device list. The first notification auto-selects the default
     // output; the duplicate exercises the "already selected" early return, and the
@@ -68,7 +68,7 @@ namespace ao::rt::test
 
   TEST_CASE("PlaybackService playback - prepareNext does not replace current state", "[runtime][unit][playback]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
 
@@ -325,7 +325,7 @@ namespace ao::rt::test
 
   TEST_CASE("PlaybackService playback - route activation failures dedupe by kind", "[runtime][unit][playback][error]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
 
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const track1 = fixture.libraryFixture.addTrack({.title = "Track 1", .uri = flacPath});

@@ -218,12 +218,12 @@ add_executable(ao_core_test
     unit/runtime/AppPrefsStateTest.cpp
     unit/runtime/AsyncParallelTest.cpp
     unit/runtime/AsyncRuntimeTest.cpp
-    unit/runtime/QueuedExecutorTest.cpp
     unit/runtime/library/LibraryReaderTest.cpp
     unit/runtime/library/MediaTrackTest.cpp
     unit/runtime/StorageResultTest.cpp
     unit/runtime/completion/CompletionServiceTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
+    unit/runtime/LoopExecutorTest.cpp
     unit/runtime/source/SmartListEvaluatorBatchTest.cpp
     unit/runtime/source/SmartListEvaluatorExpressionTest.cpp
     unit/runtime/source/SmartListEvaluatorIncrementalTest.cpp
@@ -370,6 +370,7 @@ if(AOBUS_BUILD_CLI)
 # ao_cli_test: command-line frontend tests
 add_executable(ao_cli_test
     unit/cli/CommandErrorTest.cpp
+    unit/cli/CliRuntimeTest.cpp
     unit/cli/CliSmokeTest.cpp
     unit/cli/OutputTest.cpp
 )

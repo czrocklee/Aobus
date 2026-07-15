@@ -116,7 +116,7 @@ namespace ao::uimodel::test
     };
 
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    auto executor = rt::test::MockExecutor{};
+    auto executor = rt::test::InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto taskService = rt::LibraryTaskService{runtime, libraryFixture.library(), changes};
     auto applyTask = [](rt::LibraryTaskService* service) -> async::Task<Result<rt::ScanApplyResult>>

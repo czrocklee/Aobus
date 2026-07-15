@@ -19,7 +19,7 @@ namespace ao::tui::test
 {
   TEST_CASE("OutputDeviceController - tracks selectable output rows", "[tui][unit][output]")
   {
-    auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
+    auto fixture = rt::test::PlaybackFixture<rt::test::InlineExecutor>{};
     fixture.status.descriptor.supportedProfiles.push_back(audio::BackendProvider::ProfileDescriptor{
       .id = audio::kProfileExclusive, .name = "Exclusive", .description = "Exclusive profile"});
     fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);
@@ -50,7 +50,7 @@ namespace ao::tui::test
 
   TEST_CASE("OutputDeviceController - selecting a row updates playback output", "[tui][unit][output]")
   {
-    auto fixture = rt::test::PlaybackFixture<rt::test::MockExecutor>{};
+    auto fixture = rt::test::PlaybackFixture<rt::test::InlineExecutor>{};
     fixture.status.descriptor.supportedProfiles.push_back(audio::BackendProvider::ProfileDescriptor{
       .id = audio::kProfileExclusive, .name = "Exclusive", .description = "Exclusive profile"});
     fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);

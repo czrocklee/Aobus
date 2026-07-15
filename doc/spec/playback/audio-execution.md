@@ -181,8 +181,8 @@ Control commands call Player, refresh `PlaybackState`, and emit command-specific
 Asynchronous Player events arrive on a later executor turn.
 Signal handlers defer service destruction until publication returns.
 
-`ImmediateExecutor` reports current unconditionally and dispatches inline.
-Hosts using it must remain effectively single-threaded; it supplies no confinement.
+Production hosts supply a real owner-thread executor.
+GTK and TUI marshal through their toolkit loops, while CLI drives `LoopExecutor`; a foreign Player callback therefore cannot enter executor-affine service state inline on its producer thread.
 
 ### Backend lifetime and properties
 
@@ -260,5 +260,5 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [Playback succession cursor](cursor.md)
 - [Decoder session](decoder-session.md)
 - [Audio quality analysis](quality-analysis.md)
-- [RFC 0027: serialized headless callback executor](../../rfc/0027-serialized-headless-callback-executor.md)
+- [RFC 0027: loop executor for non-toolkit hosts](../../rfc/0027-loop-executor.md)
 - [RFC 0028: bounded audio observation delivery](../../rfc/0028-bounded-audio-observation-delivery.md)

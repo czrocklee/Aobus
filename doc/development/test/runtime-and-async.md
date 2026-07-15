@@ -13,8 +13,10 @@ Async tests must be deterministic.
 
 Prefer:
 
-- Immediate or queued executors controlled by the test.
-- Explicit `runOne()` / `runUntilIdle()` progression.
+- `InlineExecutor` only when callback turns and cross-thread behavior are explicitly out of scope.
+- Production `LoopExecutor` when owner affinity and real turn semantics are the behavior under test.
+- `ManualExecutor` or the Loop-backed test `QueuedExecutor` when a test needs one-step control, forced queuing, bounded waiting, or queue observations.
+- Explicit `runOne()` / `runUntilIdle()` or `runOneTurn()` / `runReadyTurn()` progression.
 - Barriers or captured callbacks to create known ordering points.
 - `AsyncTestState` only as a bounded observation aid, not as the primary scheduler.
 
@@ -26,6 +28,7 @@ Avoid or minimize:
 - Wall-clock time as proof of correctness.
 
 If a timeout helper is necessary, keep it centralized and make failure diagnostics useful.
+`runLoopUntil()` provides the bounded test-only driver for a production `LoopExecutor`; do not add local polling loops for the same job.
 
 Example shape:
 
@@ -55,7 +58,7 @@ Both accept a task factory rather than an already-created coroutine. Pass its
 operations. This lets cancellation be observed before the factory body starts
 and after every suspension point that can outlive the owner.
 
-A better common executor API should expose operations like:
+Controlled test executors expose operations like:
 
 ```cpp
 executor.expectQueued();
@@ -117,4 +120,4 @@ For cancellation/lifetime tests, assert both sides:
 - Queued callbacks after scope destruction are ignored safely.
 
 For cross-thread and cancellation-race coverage, use
-`concurrency-and-sanitizers.md`.
+`concurrency-and-sanitizer.md`.

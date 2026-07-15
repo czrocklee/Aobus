@@ -47,7 +47,7 @@ namespace ao::rt::test
 
   TEST_CASE("whenAll - completes after all tasks ran", "[runtime][unit][async]")
   {
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = Runtime{executor, 4};
     auto counter = std::atomic<std::int32_t>{0};
 
@@ -65,7 +65,7 @@ namespace ao::rt::test
 
   TEST_CASE("whenAll - empty task list completes immediately", "[runtime][unit][async]")
   {
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = Runtime{executor, 1};
 
     runtime.spawn(awaitAllTask(&runtime, {})).get();
@@ -73,7 +73,7 @@ namespace ao::rt::test
 
   TEST_CASE("whenAll - rethrows a task exception after all tasks finished", "[runtime][unit][async]")
   {
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = Runtime{executor, 2};
     auto counter = std::atomic<std::int32_t>{0};
 
@@ -89,7 +89,7 @@ namespace ao::rt::test
 
   TEST_CASE("whenAll - tasks run concurrently on the worker pool", "[runtime][unit][async][concurrency]")
   {
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = Runtime{executor, 2};
     auto started = AsyncTestState<std::int32_t>::create(0);
     auto release = AsyncBarrier{};
@@ -111,7 +111,7 @@ namespace ao::rt::test
     // With a single-thread pool the coordinator must release its thread while
     // suspended in whenAll; a blocking wait would deadlock here instead of
     // letting the tasks run sequentially.
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = Runtime{executor, 1};
     auto counter = std::atomic<std::int32_t>{0};
 

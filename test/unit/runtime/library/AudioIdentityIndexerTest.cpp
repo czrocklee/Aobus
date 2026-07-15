@@ -108,7 +108,7 @@ namespace ao::rt::test
                                                      std::stop_token stopToken = {},
                                                      std::mutex* optMutationMutex = nullptr)
     {
-      auto executor = MockExecutor{};
+      auto executor = InlineExecutor{};
       auto runtime = async::Runtime{executor, 4};
       auto fallbackMutationMutex = std::mutex{};
       auto& mutationMutex = optMutationMutex == nullptr ? fallbackMutationMutex : *optMutationMutex;
@@ -199,7 +199,7 @@ namespace ao::rt::test
         return std::optional{fakeIdentity()};
       }};
 
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor, 4};
     auto mutationMutex = std::mutex{};
     auto indexer = AudioIdentityIndexer{runtime, ml, mutationMutex};

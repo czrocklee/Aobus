@@ -7,6 +7,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Executor.h>
+#include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Sleeper.h>
 #include <ao/audio/Backend.h>
@@ -41,6 +42,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <ranges>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -296,8 +298,7 @@ namespace ao::rt::test
     {
       auto lock = std::unique_lock{_mutex};
       _cv.wait(lock, [this] { return std::ranges::any_of(_entries, &Entry::published); });
-      auto const it =
-        std::find_if(_entries.rbegin(), _entries.rend(), [](Entry const& candidate) { return candidate.published; });
+      auto const it = std::ranges::find_if(std::views::reverse(_entries), &Entry::published);
       return it->id;
     }
 
@@ -682,7 +683,7 @@ namespace ao::rt::test
     std::condition_variable _cv;
   };
 
-  class ManualExecutor : public async::Executor
+  class ManualExecutor final : public async::Executor
   {
   public:
     bool isCurrent() const noexcept override { return true; }
@@ -750,10 +751,9 @@ namespace ao::rt::test
     mutable std::condition_variable _cv;
   };
 
-  /**
-   * @brief Immediate executor for tests — runs tasks synchronously on the calling thread.
-   */
-  class MockExecutor final : public async::Executor
+  // Test-only executor that collapses dispatch and defer onto the calling
+  // stack. Use it only when turn and cross-thread behavior are out of scope.
+  class InlineExecutor final : public async::Executor
   {
   public:
     bool isCurrent() const noexcept override { return true; }
@@ -761,14 +761,22 @@ namespace ao::rt::test
     void defer(std::move_only_function<void()> task) override { task(); }
   };
 
-  class QueuedExecutor final : public ManualExecutor
+  // Deterministic test adapter over the production loop executor. Dispatch is
+  // deliberately queued so tests can inspect state before delivering a turn.
+  class QueuedExecutor final : public async::Executor
   {
   public:
-    bool isCurrent() const noexcept override { return std::this_thread::get_id() == _ownerThreadId; }
+    bool isCurrent() const noexcept override { return _loopExecutor.isCurrent(); }
 
-    void dispatch(std::move_only_function<void()> task) override { ManualExecutor::dispatch(std::move(task)); }
+    void dispatch(std::move_only_function<void()> task) override { enqueue(std::move(task)); }
+    void defer(std::move_only_function<void()> task) override { enqueue(std::move(task)); }
 
-    void drain() { runUntilIdle(); }
+    void drain()
+    {
+      while (_loopExecutor.runReadyTurn())
+      {
+      }
+    }
 
     template<typename Predicate>
     bool drainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{2})
@@ -777,7 +785,7 @@ namespace ao::rt::test
 
       while (!predicate())
       {
-        if (runOne())
+        if (_loopExecutor.runReadyTurn())
         {
           continue;
         }
@@ -800,9 +808,82 @@ namespace ao::rt::test
       return true;
     }
 
+    std::size_t queuedCount() const
+    {
+      auto const lock = std::scoped_lock{_mutex};
+      return _queuedCount;
+    }
+
+    bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
+    {
+      auto lock = std::unique_lock{_mutex};
+      return _cv.wait_for(lock, timeout, [this] { return _queuedCount != 0; });
+    }
+
+    void checkQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
+    {
+      INFO("Timed out waiting for queued executor task");
+      REQUIRE(waitUntilQueued(timeout));
+    }
+
   private:
-    std::thread::id _ownerThreadId = std::this_thread::get_id();
+    void enqueue(std::move_only_function<void()> task)
+    {
+      if (!task)
+      {
+        return;
+      }
+
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        ++_queuedCount;
+
+        try
+        {
+          _loopExecutor.defer(
+            [this, task = std::move(task)] mutable
+            {
+              {
+                auto const taskLock = std::scoped_lock{_mutex};
+                --_queuedCount;
+              }
+
+              task();
+            });
+        }
+        catch (...)
+        {
+          --_queuedCount;
+          throw;
+        }
+      }
+
+      _cv.notify_all();
+    }
+
+    mutable std::mutex _mutex;
+    mutable std::condition_variable _cv;
+    std::size_t _queuedCount = 0;
+    async::LoopExecutor _loopExecutor;
   };
+
+  template<typename Predicate>
+  bool runLoopUntil(async::LoopExecutor& executor,
+                    Predicate predicate,
+                    std::chrono::milliseconds timeout = std::chrono::seconds{5})
+  {
+    auto const deadline = std::chrono::steady_clock::now() + timeout;
+
+    while (!predicate() && std::chrono::steady_clock::now() < deadline)
+    {
+      if (!executor.runReadyTurn())
+      {
+        std::this_thread::yield();
+      }
+    }
+
+    return predicate();
+  }
 
   inline bool driveRenderUntilTaskQueued(audio::RenderTarget& renderTarget,
                                          QueuedExecutor& executor,
@@ -851,12 +932,12 @@ namespace ao::rt::test
   }
 
   /**
-   * @brief Creates an AppRuntime backed by a temporary directory with a MockExecutor.
+   * @brief Creates an AppRuntime backed by a temporary directory with an InlineExecutor.
    */
   inline auto makeRuntime(ao::test::TempDir const& tempDir,
                           ConfigStore* playbackSessionConfigStore = nullptr,
                           async::Sleeper* sleeper = nullptr)
   {
-    return makeRuntime(tempDir, std::make_unique<MockExecutor>(), playbackSessionConfigStore, sleeper);
+    return makeRuntime(tempDir, std::make_unique<InlineExecutor>(), playbackSessionConfigStore, sleeper);
   }
 } // namespace ao::rt::test

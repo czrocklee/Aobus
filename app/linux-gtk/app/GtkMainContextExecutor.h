@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/async/QueuedExecutor.h>
+#include <ao/async/QueuedExecutorBase.h>
 
 #include <glibmm/dispatcher.h>
 

@@ -21,7 +21,7 @@ namespace ao::uimodel::test
   TEST_CASE("SeekViewModel - reactive updates", "[uimodel][unit][playback]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto notificationService = NotificationService{};
     auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
     addReadyAudioProvider(playback);

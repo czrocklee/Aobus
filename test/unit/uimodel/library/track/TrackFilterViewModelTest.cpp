@@ -29,7 +29,7 @@ namespace ao::uimodel::test
     struct TrackFilterFixture final
     {
       MusicLibraryFixture libraryFixture;
-      MockExecutor executor;
+      InlineExecutor executor;
       LibraryChanges changes;
       TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
       ViewService viewService{executor, libraryFixture.library(), trackSourceCache};

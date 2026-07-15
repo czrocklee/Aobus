@@ -17,7 +17,7 @@ namespace ao::rt::test
   struct ViewServiceFixture final
   {
     MusicLibraryFixture libraryFixture;
-    MockExecutor executor;
+    InlineExecutor executor;
     async::Runtime runtime;
     LibraryChanges changes;
     LibraryWriter writer;

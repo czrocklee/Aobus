@@ -42,7 +42,7 @@ namespace ao::uimodel::test
   TEST_CASE("NowPlayingViewModel - view state generation", "[uimodel][unit][playback]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto notificationService = NotificationService{};
     auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
     addReadyAudioProvider(playback);
@@ -160,7 +160,7 @@ namespace ao::uimodel::test
             "[uimodel][unit][playback]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto notificationService = NotificationService{};
     auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
 
@@ -174,7 +174,7 @@ namespace ao::uimodel::test
   TEST_CASE("NowPlayingViewModel - refreshes from playback events until destroyed", "[uimodel][unit][playback]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = MockExecutor{};
+    auto executor = InlineExecutor{};
     auto notificationService = NotificationService{};
     auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
     addReadyAudioProvider(playback);

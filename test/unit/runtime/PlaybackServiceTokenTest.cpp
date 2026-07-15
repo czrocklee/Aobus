@@ -266,7 +266,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService token - same track receives service-lifetime unique tokens and exact disarm",
             "[runtime][unit][playback][token]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
     makeReady(fixture);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const current = request(TrackId{1}, fixturePath, "Current");
@@ -301,7 +301,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService token - missing replacement preserves the active token identity",
             "[runtime][unit][playback][token]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
     makeReady(fixture);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const currentTrackId = fixture.libraryFixture.addTrack({.title = "Current", .uri = fixturePath});
@@ -322,7 +322,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService token - rejected stage and stale commit preserve current and lookahead",
             "[runtime][unit][playback][token]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
     makeReady(fixture);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const current = request(TrackId{1}, fixturePath, "Current");
@@ -419,7 +419,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService token - drain fallback returns exact disarm acknowledgement",
             "[runtime][unit][playback][token]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
     makeReady(fixture);
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const mp3Path = audio::test::requireAudioFixture("basic_metadata.mp3").string();
@@ -439,7 +439,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService token - repeated drain fallback reprepare does not retain request metadata",
             "[runtime][regression][playback][token]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
     makeReady(fixture);
     auto const flacPath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const mp3Path = audio::test::requireAudioFixture("basic_metadata.mp3").string();
@@ -466,7 +466,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService token - stop barrier covers and removes an armed commitment",
             "[runtime][unit][playback][token]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
     makeReady(fixture);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const current = request(TrackId{1}, fixturePath, "Current");
@@ -537,7 +537,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService token - accepted start contains reentrant transport mutation and observer throws",
             "[runtime][regression][playback][token]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
     makeReady(fixture);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const current = request(TrackId{1}, fixturePath, "Current");

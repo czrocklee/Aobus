@@ -22,7 +22,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService output device - devices output and quality signal subscriptions",
             "[runtime][unit][playback][output]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
 
     // Prime the device list. The first notification auto-selects the default
     // output; the duplicate exercises the "already selected" early return, and the
@@ -97,7 +97,7 @@ namespace ao::rt::test
   {
     // A harness receives its first device notification just before the play
     // request; the notification auto-selects the first available output device.
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
@@ -110,7 +110,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService output device - auto-select notifies device list subscribers",
             "[runtime][unit][playback][output]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
     bool devicesChangedFired = false;
     auto sub = fixture.playbackService.onOutputDevicesChanged([&] { devicesChangedFired = true; });
 
@@ -125,7 +125,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService output device - auto-select skips unsupported default exclusive profile",
             "[runtime][unit][playback][output]")
   {
-    auto fixture = PlaybackFixture<MockExecutor>{};
+    auto fixture = PlaybackFixture<InlineExecutor>{};
     fixture.status.devices = {
       audio::Device{.id = audio::DeviceId{},
                     .displayName = "System Default",

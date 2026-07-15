@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/async/QueuedExecutor.h>
+#include <ao/async/QueuedExecutorBase.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -58,15 +58,22 @@ namespace ao::async
       }
 
       _draining = true;
-      _drainTasks.swap(_pendingTasks);
+
+      if (_drainTasks.empty())
+      {
+        _drainTasks.swap(_pendingTasks);
+      }
     }
 
     auto taskException = std::exception_ptr{};
 
     try
     {
-      for (auto& task : _drainTasks)
+      while (_nextDrainTaskIndex < _drainTasks.size())
       {
+        auto task = std::move(_drainTasks[_nextDrainTaskIndex]);
+        ++_nextDrainTaskIndex;
+
         if (task)
         {
           executeTask(task);
@@ -78,13 +85,18 @@ namespace ao::async
       taskException = std::current_exception();
     }
 
-    _drainTasks.clear();
-
     bool shouldWake = false;
     {
       auto const lock = std::scoped_lock{_mutex};
+
+      if (_nextDrainTaskIndex == _drainTasks.size())
+      {
+        _drainTasks.clear();
+        _nextDrainTaskIndex = 0;
+      }
+
       _draining = false;
-      shouldWake = !_pendingTasks.empty();
+      shouldWake = _nextDrainTaskIndex < _drainTasks.size() || !_pendingTasks.empty();
     }
 
     if (shouldWake)
@@ -108,7 +120,7 @@ namespace ao::async
     bool shouldWake = false;
     {
       auto const lock = std::scoped_lock{_mutex};
-      shouldWake = _pendingTasks.empty() && !_draining;
+      shouldWake = _pendingTasks.empty() && _drainTasks.empty() && !_draining;
       _pendingTasks.push_back(std::move(task));
     }
 

@@ -18,7 +18,7 @@ namespace ao::uimodel::test
   struct TrackPresentationFixture final
   {
     rt::test::MusicLibraryFixture libraryFixture{};
-    rt::test::MockExecutor executor{};
+    rt::test::InlineExecutor executor{};
     rt::LibraryChanges changes{};
     rt::TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
     rt::ViewService viewService{executor, libraryFixture.library(), trackSourceCache};

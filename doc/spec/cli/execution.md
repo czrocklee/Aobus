@@ -17,6 +17,7 @@ Exact command and DTO fields belong to the [CLI command reference](../../referen
 The CLI is a non-interactive application adapter.
 `CliRuntime` composes `CoreRuntime` and exposes runtime `LibraryReader`/`LibraryWriter`, scan, transfer, and low-level administrative surfaces needed by commands.
 It bypasses UIModel because it owns no reusable interactive state.
+It also owns the synchronous boundary for asynchronous runtime tasks: `LoopExecutor` keeps callback delivery on the invocation thread, and `runTask()` drives that loop to terminal completion.
 
 Command files under `app/cli/` parse CLI11 values, invoke runtime/core owners, and encode output.
 They do not reimplement list membership, scan planning, query evaluation, mutation atomicity, or YAML transfer.
@@ -45,6 +46,7 @@ They do not reimplement list membership, scan planning, query evaluation, mutati
 
 Global CLI options select one normalized music root and one output format for the command invocation.
 `CliRuntime` owns one `CoreRuntime`/library environment for that invocation.
+The invocation thread owns its callback executor and remains the only CLI application-control thread.
 There is no workspace, interactive playback session, or persistent frontend state.
 
 Mutation reports carry `dryRun`, affected identities when committed/known, and operation-specific diffs.
@@ -68,6 +70,8 @@ The writer performs normal validation and mutation logic inside the write transa
 Scan dry-run uses the scan plan without apply.
 Library import dry-run decodes and applies through the import transaction, then aborts and does not update restore metadata.
 `lib fingerprint --pending` is bounded maintenance with no dry-run mode because completed identity batches are its unit of progress.
+It runs worker work through `CliRuntime::runTask()` so callback-executor continuations and terminal completion return through the invocation-thread executor without deadlocking a future wait.
+Its current progress and item-failure callbacks remain worker-produced and are serialized by the indexer.
 
 ### Scan and verify
 
@@ -91,6 +95,12 @@ Unexpected Aobus invariant exceptions are labeled internal errors; other excepti
 
 The CLI command invocation is synchronous at its adapter boundary.
 Runtime operations that internally use bounded workers follow their own cancellation/lifetime contracts; the CLI does not invent a second partial-commit policy.
+An asynchronous command is not complete until its terminal marker has run on the callback executor.
+Its result or escaping exception is then returned or rethrown on the invocation thread.
+If a callback throws during pumping, `runTask()` retains the first callback exception and continues until the terminal marker before consuming the spawned future.
+A task failure remains primary and the callback failure is reported; if the task succeeds, the callback failure is rethrown on the invocation thread.
+
+During teardown, CLI stops and joins runtime workers before draining already-ready callback turns while their `CoreRuntime` targets remain alive.
 
 ## Persistence and versioning
 
@@ -108,13 +118,15 @@ YAML/JSON are intended for parsed automation.
 ## Implementation map
 
 - [`Run.cpp`](../../../app/cli/Run.cpp) owns global parsing, help, exception leaves, and exit status.
-- [`CliRuntime.cpp`](../../../app/cli/CliRuntime.cpp) owns non-interactive composition.
+- [`CliRuntime.cpp`](../../../app/cli/CliRuntime.cpp) owns non-interactive composition, loop driving, terminal task handoff, and producer-first teardown.
+- [`LoopExecutor`](../../../include/ao/async/LoopExecutor.h) supplies the owner-thread queue wake and turn operations.
 - [`Output.h`](../../../app/cli/Output.h) owns reflected YAML/JSON emission.
 - Command implementations under [`app/cli/`](../../../app/cli/) own adapter-specific parsing and DTOs.
 
 ## Test map
 
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects end-to-end parsing, commands, output, dry-run, and failures.
+- [`CliRuntimeTest.cpp`](../../../test/unit/cli/CliRuntimeTest.cpp) protects worker-to-owner completion, callback-failure task completion, exception propagation, and teardown draining.
 - [`OutputTest.cpp`](../../../test/unit/cli/OutputTest.cpp) protects structured scalar/container/optional encoding.
 - [`CommandErrorTest.cpp`](../../../test/unit/cli/CommandErrorTest.cpp) protects domain error adaptation.
 
@@ -126,5 +138,5 @@ YAML/JSON are intended for parsed automation.
 - [Track expression architecture](../../architecture/track-expression.md)
 - [CLI command reference](../../reference/cli/command.md)
 - [Library YAML transfer](../library/runtime/yaml-transfer.md)
-- [RFC 0027: serialized headless callback executor](../../rfc/0027-serialized-headless-callback-executor.md)
+- [RFC 0027: loop executor for non-toolkit hosts](../../rfc/0027-loop-executor.md)
 - [RFC 0029: versioned CLI automation protocol](../../rfc/0029-versioned-cli-automation-protocol.md)
