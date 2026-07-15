@@ -121,6 +121,7 @@ Consequently:
 - missing newer fields fall back to current C++ defaults;
 - unknown older fields are ignored on load and are not retained when the `workspace` group is rewritten;
 - malformed vector elements can disappear during permissive load rather than rejecting the complete session;
+- a predicate change can reject or reinterpret retained `filterExpression` text because the expression has no nested language version and the workspace payload has no containing schema version;
 - `activeListId` cannot distinguish two restored views over the same base list beyond the current focus-selection heuristic.
 
 [RFC 0010](../../rfc/0010-versioned-presentation-state.md) proposes a versioned presentation-state codec and migration boundary.
@@ -200,5 +201,6 @@ The C++ aggregate declarations and shared codec therefore remain the exact imple
 - [Application managed-state surface](../persistence/application-config.md)
 - [Managed file locations](../persistence/location.md)
 - [Grouped configuration store](../../spec/persistence/config-store.md)
+- [Predicate language](../query/predicate-language.md)
 - [Runtime track field catalog](../library/model/track-field.md)
 - [Track presentation presets](../presentation/track-preset.md)

@@ -131,7 +131,7 @@ Each list is a map.
 | `parentId` | No. | Unsigned 32-bit payload list identity; omission or `0` means root. |
 | `name` | Yes. | Scalar string. |
 | `description` | No. | Scalar string. |
-| `filter` | No. | Scalar string; presence selects a smart list. |
+| `filter` | No. | Scalar string governed by the YAML format version; presence selects a smart list. |
 | `tracks` | No. | Sequence of manual-list track references; considered only when `filter` is absent. |
 
 The producer always emits `id`, `parentId`, and `name`.
@@ -191,6 +191,9 @@ Version 1 has these explicit compatibility behaviors:
 - YAML anchors and aliases are accepted after resolution.
 
 Changing a field name, node kind, scalar width, omission meaning, or compatibility rule requires a new format version or an explicitly tested backward-compatible extension.
+Version 1 also includes the accepted predicate grammar, field binding, and membership meaning of a list `filter`.
+A predicate change that expands the emitted surface beyond what a version-1 importer accepts or can reinterpret version-1 filter text requires a new YAML format version; its importer may explicitly support the old version only with compatibility behavior and regression fixtures.
+This gate is independent of the host-local database's `kLibraryVersion`; a predicate carries no nested language version.
 
 ## Examples
 
@@ -261,6 +264,7 @@ library:
 - [Library YAML transfer specification](../../../spec/library/runtime/yaml-transfer.md)
 - [Reusable YAML adapter specification](../../../spec/persistence/yaml-adapter.md)
 - [Library architecture](../../../architecture/library.md)
+- [Predicate language](../../query/predicate-language.md)
 - [Track model](../model/track.md) for codec, technical-property, and cover behavior
 - [Runtime track field catalog](../model/track-field.md) for application field ids and capabilities
 - [Supported audio files](../../media/audio-file.md) for imported codec and cover sources

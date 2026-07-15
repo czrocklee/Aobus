@@ -67,6 +67,9 @@ The payload contains none of these:
 
 Only version `3` is accepted.
 There is no migration or seeded missing-field fallback for another/malformed version.
+Version `3` includes the accepted predicate grammar, field binding, and evaluation meaning of `quickFilterExpression`.
+A predicate change that can emit quick-filter text an existing version-3 reader rejects, or can reject or reinterpret retained quick-filter text, requires a new playback schema version; the owner may then reject version `3` or provide an explicit tested migration.
+The expression carries no separate language version.
 
 List and track ids are scoped to one library, but version 3 stores no library UUID.
 The current GTK lifecycle prevents cross-library interpretation by discarding the group before replacement; RFC 0019 proposes a durable library binding.
@@ -107,4 +110,5 @@ Enum and strong-id scalar encoding follows the application YAML codec; semantic 
 - [Playback architecture](../../architecture/playback.md)
 - [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
 - [Application managed-state surface](../persistence/application-config.md)
+- [Predicate language](../query/predicate-language.md)
 - [Track presentation preset reference](../presentation/track-preset.md)

@@ -51,7 +51,7 @@ Each row records the outgoing direct edges of one RFC; sequence numbers alone im
 | [0026](0026-generation-bound-platform-requests.md) | None | [0019](0019-transactional-active-library-switch.md), [0021](0021-bounded-resource-delivery.md) | [0012](0012-structured-async-fault-diagnostics.md), [0018](0018-interactive-session-lifecycle.md) |
 | [0027](0027-serialized-headless-callback-executor.md) | None | None | [0003](0003-library-mutation-pipeline.md), [0011](0011-executor-affine-reporting-feed.md), [0012](0012-structured-async-fault-diagnostics.md) |
 | [0028](0028-bounded-audio-observation-delivery.md) | None | None | [0005](0005-coherent-playback-boundary.md), [0011](0011-executor-affine-reporting-feed.md), [0012](0012-structured-async-fault-diagnostics.md) |
-| [0029](0029-versioned-cli-automation-protocol.md) | None | [0024](0024-versioned-predicate-dialect.md) | [0003](0003-library-mutation-pipeline.md), [0013](0013-coherent-application-reporting-policy.md) |
+| [0029](0029-versioned-cli-automation-protocol.md) | None | None | [0003](0003-library-mutation-pipeline.md), [0013](0013-coherent-application-reporting-policy.md) |
 
 ## Proposal inventory
 
@@ -81,7 +81,7 @@ The front-matter lifecycle state is authoritative; `in-review` identifies active
 - [RFC 0021: Bounded asynchronous resource delivery](0021-bounded-resource-delivery.md) proposes shared asynchronous byte reads, bounded transforms, typed request lifetimes, and non-blocking GTK, TUI, and MPRIS delivery.
 - [RFC 0022: Transaction-coherent library dictionary](0022-transaction-coherent-library-dictionary.md) proposes transaction-local interning and post-commit publication for the process dictionary index.
 - [RFC 0023: Revision-bound metadata authoring](0023-revision-bound-metadata-authoring.md) proposes generation- and baseline-bound metadata/tag commands, typed conflicts, atomic multi-target edits, and compare-and-restore undo.
-- [RFC 0024: Versioned predicate dialect](0024-versioned-predicate-dialect.md) proposes explicit language identity and semantic versions for persisted and automation-relevant predicate text.
+- [RFC 0024: Versioned predicate dialect](0024-versioned-predicate-dialect.md) rejects per-expression language identity in favor of the existing compatibility version or policy owned by each containing format and protocol.
 - [RFC 0025: Bounded shell layout documents](0025-bounded-shell-layout-documents.md) proposes strict layout version gates, bounded candidate decoding and template expansion, and preservation on rejection.
 - [RFC 0026: Generation-bound platform requests](0026-generation-bound-platform-requests.md) proposes exactly-once request lifetimes and generation checks before asynchronous platform completions can cause side effects.
 - [RFC 0027: Serialized headless callback executor](0027-serialized-headless-callback-executor.md) proposes a thread-safe owner-thread executor and explicit pump contract for CLI and headless runtime hosts.

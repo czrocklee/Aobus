@@ -1,37 +1,47 @@
 ---
 id: rfc.0024.versioned-predicate-dialect
 type: rfc
-status: draft
+status: rejected
 domain: query
-summary: Proposes an explicitly versioned predicate-text dialect across Smart Lists, workspace filters, CLI input, parsing, and semantic compilation.
+summary: Rejects a per-expression predicate dialect and assigns retained-text compatibility to each containing format or protocol version.
 depends-on: none
 ---
 # RFC 0024: Versioned predicate dialect
 
+## Disposition
+
+Rejected on 2026-07-15.
+
+The semantic-drift risk is real, but the proposed per-expression dialect id, versioned compiler registry, mixed-version evaluation, and unknown-dialect round trip are not justified by a current product requirement.
+Aobus has one predicate implementation, no retained expression that must select between two supported meanings, and no demonstrated need to keep multiple predicate versions live in one library.
+
+The proposal would nevertheless add language identity to Smart List records, library YAML, workspace and playback state, CLI input, completion, diagnostics, and most query APIs.
+It would also require old parser/catalog/evaluator behavior to remain executable without a concrete incompatible language change to migrate.
+
+The adopted policy uses the compatibility version already owned by each containing surface:
+
+- Smart List filter text is part of the host-local library database contract governed by `ao::library::kLibraryVersion`.
+- Library YAML `filter` text is part of the root YAML format version.
+- Playback quick-filter text is part of the playback state's `schemaVersion` contract.
+- Workspace filter text remains subject to the workspace payload's documented unversioned compatibility limit; RFC 0017 owns the proposal to introduce that schema boundary.
+- Predicate text accepted by CLI automation is command behavior governed by the CLI contract and, if RFC 0029 is implemented, by the selected protocol major.
+
+No retained expression carries a separate dialect id or version.
+The current authorities are the [track expression architecture](../architecture/track-expression.md), [predicate evaluation specification](../spec/query/predicate-evaluation.md), [predicate language reference](../reference/query/predicate-language.md), and the exact references for each containing format.
+They supersede this proposal; this RFC remains as the record of the rejected larger design.
+
 ## Problem
 
-Predicate expressions are durable product data without a durable language identity.
-Smart Lists store expression text in the library, workspace/session state can retain filters, and CLI scripts submit the same text surface.
-At materialization time Aobus reparses and recompiles that text against the currently installed parser, field catalog, unit rules, dictionary binding, and evaluator semantics.
-
-The current reference explicitly records that there is no language version.
-Consequently, all of these changes can silently reinterpret existing data:
+Predicate expressions are retained as text and reparsed against the installed parser, field catalog, unit rules, dictionary binding, and evaluator semantics.
+The following changes can therefore reject or silently reinterpret retained data:
 
 - changing operator precedence, tokenization, escaping, aliases, or accepted literals;
 - renaming or removing a field, unit, codec constant, or shorthand;
 - changing missing-value, comparison, list, range, or dictionary truth semantics; and
-- fixing a parser/evaluator bug on which a stored expression happened to rely.
+- fixing a parser or evaluator defect on which retained text relied.
 
-Syntax rejection is visible, but semantic drift is more dangerous: a Smart List can continue compiling and select a different set of tracks with no storage migration or diagnostic.
-Workspace filters can restore with changed meaning, while a CLI script cannot state which grammar/semantics it expects.
-
-Persisting only text is otherwise a strong boundary.
-AST nodes, opcodes, access profiles, and dictionary ids are implementation details and should remain regenerable.
-The missing piece is not persisted bytecode; it is a versioned dialect contract around the text.
-
-There is also no single dispatch point.
-Consumers call the current parser/compiler directly and own local empty-expression and error policies.
-Adding compatibility branches independently in Smart Lists, workspace restore, and CLI would create several partial language authorities.
+Syntax rejection is visible, while semantic drift can leave a Smart List valid but change which tracks it selects.
+That compatibility risk needs an explicit owner even though the durable value remains plain text and AST nodes, opcodes, access profiles, and execution plans remain transient.
 
 ## Dependencies
 
@@ -39,35 +49,33 @@ Adding compatibility branches independently in Smart Lists, workspace restore, a
 - Conditional: None.
 - Integration: [RFC 0006](0006-coherent-derived-track-views.md), [RFC 0008](0008-declarative-track-capability-bridge.md), [RFC 0009](0009-pure-expression-binding.md).
 
-RFC 0006 should carry one dialect-bound filter request through asynchronous view replacement.
-RFC 0008 must version capability/catalog changes that alter language fields or aliases.
-RFC 0009 must bind and evaluate a selected dialect without mutating the library dictionary or confusing dialect version with dictionary generation.
+The rejected proposal would have carried a dialect-bound value through RFC 0006, versioned the RFC 0008 catalog by dialect, and selected that dialect during RFC 0009 binding.
+The adopted container-version policy requires none of those integrations.
 
 ## Goals
 
-- Give every persisted or automation-relevant predicate text an explicit dialect id and semantic version.
-- Freeze the current accepted grammar and truth behavior as a testable initial dialect.
-- Dispatch parse, semantic compilation, diagnostics, and serialization through one core language boundary.
-- Preserve text as the durable representation and keep AST/bytecode/runtime plans transient.
-- Load existing unversioned Smart Lists and managed filters deterministically.
-- Reject or preserve unsupported future dialects without silently evaluating them as current.
-- Define when a migration may rewrite expression text and how semantic equivalence is demonstrated.
-- Keep quick-search authoring policy and presentation outside the core predicate language owner.
+The proposal sought to:
+
+- give retained and automation-relevant predicate text an explicit language identity;
+- freeze the current grammar, catalog, compilation, and truth behavior as an initial version;
+- preserve text while keeping AST and execution artifacts transient;
+- dispatch old and new predicate meanings through one compiler boundary; and
+- migrate or preserve unsupported expression versions without silent reinterpretation.
+
+The compatibility-owner and transient-artifact goals are retained.
+Per-expression identity, mixed-version dispatch, and unknown-dialect preservation are deliberately not adopted.
 
 ## Non-goals
 
 - Persist AST nodes, execution plans, dictionary ids, or access-profile opcodes.
-- Version scalar format expressions in this RFC; they share parser primitives but have a different executable surface and compatibility risk.
-- Add new predicate syntax or change existing truth semantics merely to exercise versioning.
-- Make a dialect version equal to the application, database, YAML transfer, workspace, or CLI protocol version.
-- Guarantee that arbitrary future dialects can be down-converted to old clients.
+- Change current predicate syntax or truth semantics.
+- Treat the application build version as a persistence schema.
+- Version scalar format expressions through this RFC.
 - Move Smart List membership or view lifecycle into the query library.
 
-## Proposed design
+## Rejected design
 
-### Predicate text value
-
-Introduce a core value at persistence and application boundaries:
+The rejected design introduced a value such as:
 
 ```text
 PredicateText {
@@ -77,172 +85,101 @@ PredicateText {
 }
 ```
 
-The initial id is a stable product identifier such as `aobus-predicate`; its initial version freezes the current documented grammar and semantics.
-The exact serialized spellings belong to the relevant library/workspace/CLI reference documents.
+Every retention and automation boundary would carry that complete value.
+A central registry would select a versioned grammar, field/alias/unit catalog, semantic compiler, evaluator rules, diagnostics, and optional migration serializer.
+Existing unversioned text would acquire an initial identity, unsupported future identities would fail closed or round-trip opaquely, and multiple versions could remain executable in one process and library.
 
-The type is not optional metadata attached after parsing.
-Every API that can retain an expression or promise automation semantics accepts or returns the complete value.
-Convenience APIs for current interactive input may fill the current dialect explicitly at the boundary.
+This solves hypothetical mixed-version coexistence, but that is not a current Aobus requirement.
+It multiplies serialization fields, API types, compatibility fixtures, completion catalogs, migration states, and retained old semantics before there is one concrete incompatible predicate change to drive their shape.
 
-### Central dialect registry and compiler
+## Adopted compatibility policy
 
-Provide one core registry/dispatch boundary:
+### Containing surface owns the contract
 
-```text
-compilePredicate(PredicateText, PredicateBindingContext)
-  -> ExecutionPlan
-  -> UnsupportedDialect
-  -> FormatRejected
-  -> BindingFailure
-```
+| Retained or automated text | Compatibility owner |
+|---|---|
+| Smart List `filter` in LMDB | Library database version, `kLibraryVersion` |
+| Smart List `filter` in library YAML | YAML root `version` |
+| Playback `quickFilterExpression` | Playback `schemaVersion` |
+| Workspace `filterExpression` | Workspace schema policy; currently unversioned |
+| CLI predicate input | CLI command/protocol compatibility policy |
 
-Each registered dialect owns:
+The owner covers more than byte layout.
+For predicate text, its contract includes accepted grammar, field and alias catalog, literal and unit meanings, binding behavior, and evaluation truth rules.
 
-- lexical and grammar acceptance;
-- canonical field/alias/unit/constant catalog for that version;
-- semantic compilation and truth rules;
-- diagnostics required for rejected text; and
-- an optional canonical serializer used only by proven migrations or authoring tools.
+A change is incompatible when it permits retained text that an existing same-version consumer cannot handle, or when it can alter whether previously retained text parses or compiles, what it binds to, or which tracks it matches.
+Such a change must either:
 
-Consumers no longer select the unversioned global parser and then infer semantics from the current build.
-They pass the retained `PredicateText` to the registry and keep their existing ownership of source/view/result publication.
+1. increment the containing version and follow that surface's rejection or migration policy; or
+2. provide an explicitly tested backward-compatible implementation that preserves the old observable result.
 
-Parser implementation can be shared across versions when behavior is identical.
-A version is a semantic contract, not a demand to copy all code.
-Compatibility adapters and immutable tables may parameterize one parser/compiler while golden tests prove each registered version.
+Adding an optimization or refactoring parser/compiler internals does not require a version change when accepted text and observable results remain unchanged.
 
-### Initial version freeze
+### Library behavior
 
-Define the current predicate reference and evaluation specification at the implementation commit that accepts this RFC as the initial dialect baseline.
-Freeze at least:
+Physical library format version `4` includes the current Smart List predicate contract even though list records store only filter bytes.
+The current implementation accepts only an exact `kLibraryVersion` match and has no in-place migration path; a mismatch returns `CorruptData`, and recovery requires resetting and rescanning the host-local index.
 
-- token forms, escaping, keyword boundaries, and precedence;
-- system fields, aliases, tag/custom variable syntax, units, and codec constants;
-- existence, missing-value, string, numeric, list, and range behavior;
-- case-sensitivity rules;
-- empty-expression policy at each consuming boundary; and
-- failure classification for syntax, semantic, unsupported-field, and unit errors.
+If a future incompatible predicate change needs to preserve Smart Lists rather than rebuild them, that concrete change must introduce a library-format migration.
+The target format still increments `kLibraryVersion`; the migration replaces reset-and-rescan recovery, not the version boundary.
+It must interpret old filters under the old contract, rewrite or validate them for the new contract, commit list changes atomically, and publish the new metadata version only after the converted data is valid.
+No generic dialect registry is introduced in advance.
 
-Tests use durable golden inputs and expected compile/evaluation outcomes rather than only round-tripping the current implementation.
+### Other retained surfaces
 
-### Storage surfaces
+The library YAML and playback-session versions independently govern predicate text they contain; neither derives its version from `kLibraryVersion`.
+Their version must change when a predicate change would reinterpret retained text; an importer may then provide an explicit tested path from the old version instead of rejecting it.
 
-Smart List records store dialect id, version, and text as one logical value.
-Library YAML transfer includes the same identity when it transfers a Smart List.
-
-Workspace/session filters store the complete predicate value rather than assuming the application current dialect on restore.
-Transient in-memory filters may use the current version but retain it once captured in a view request.
-
-CLI query options default to a documented protocol-selected dialect for human convenience.
-Versioned automation under RFC 0029 can request or include a predicate dialect explicitly.
-
-No surface stores the AST or execution plan.
-Every process rebuilds those artifacts through the selected registered dialect.
-
-### Legacy and future input
-
-Existing unversioned persisted expressions are decoded as one explicitly named legacy baseline, which is the frozen initial dialect when compatibility is verified.
-The decoder marks that provenance so a successful later save can add explicit version fields without changing text.
-
-An unsupported future dialect is not reparsed as the current dialect.
-The owning loader preserves its raw id/version/text when the persistence format supports round trip and exposes a typed unsupported outcome.
-Smart List membership does not silently become `true`; source behavior for an invalid/unsupported expression remains explicitly specified and reported.
-
-Older applications must preserve unknown version fields when they promise lossless round trip, or fail closed before rewriting the containing object.
-That rule must align with the library and managed-state store contracts.
-
-### Language evolution and migration
-
-A change requires a new dialect version when it can alter whether accepted persisted text parses, what it binds to, or which tracks it matches.
-Additive implementation optimizations that preserve all observable outcomes remain within a version.
-
-A migration from version A to B may occur only when one of these is true:
-
-- the text is unchanged and B formally retains A behavior for that input class; or
-- a version-A parser and serializer produce version-B text whose evaluation is proven equivalent over the relevant typed domain.
-
-The migration retains the original text/version until the containing library or managed-state transaction commits.
-Failure leaves the old value readable by its registered dialect.
-
-Do not use the current parser to rewrite unknown-version text.
-
-### Diagnostics and authoring
-
-Diagnostics include the dialect id/version that produced them.
-Completion and editor capability surfaces select the same versioned catalog as the expression being edited.
-They may offer an explicit "upgrade expression" action, but cannot silently substitute the current catalog while editing a legacy dialect.
-
-Quick-search remains UIModel authoring policy.
-It emits a complete current `PredicateText`; it does not become an alternate predicate dialect unless its generated syntax itself is persisted as a separately governed language.
+The current workspace payload has no version or migration layer, so it cannot make the same compatibility promise.
+That is an existing workspace-schema limitation rather than a reason to put a language version inside every expression.
 
 ## Alternatives
 
+### Promise that the language never changes
+
+Rejected because necessary corrections may be incompatible and accidental semantic drift still needs a review gate.
+The container version and compatibility tests supply that gate without a second version axis.
+
 ### Treat the application version as the language version
 
-Most releases do not change predicate semantics, and a language change should not require retaining every application build's parser.
-An independent dialect evolves only when its contract changes.
-
-### Version only the library database
-
-Predicates also live in workspace/session state and CLI automation, and two dialects can coexist during migration inside one database version.
-Storage version does not identify language semantics precisely enough.
+Rejected because application releases and persisted formats evolve at different rates, and one application can read several independently governed surfaces.
 
 ### Persist AST or bytecode
 
-Internal shapes couple data to implementation layout, compiler optimizations, endianness, and opcode evolution.
-Text plus dialect identity is smaller, inspectable, and recompilable.
-
-### Promise that the grammar will never change
-
-This forbids necessary corrections and still does not mechanically detect accidental semantic drift.
-A frozen registered version makes compatibility executable.
-
-### Migrate all expressions eagerly on startup
-
-Startup-wide rewriting increases failure and durability risk and can make a library unreadable by an older client in one step.
-Version dispatch permits deliberate transactional migration.
+Rejected because internal shapes would couple durable data to compiler layout, opcode evolution, and implementation details.
+Text remains the durable representation.
 
 ## Compatibility and migration
 
-The first implementation preserves current expression text and behavior.
-Existing unversioned Smart Lists and filters decode to the frozen initial version and gain explicit identity only on a governed write.
+Rejecting this proposal changes no serialized field and requires no data migration.
+Existing expressions remain plain text and continue to use the current parser/compiler/evaluator.
 
-Adding fields to the library record or YAML transfer may require their existing version/migration mechanisms.
-The storage proposal must specify how an older client handles the added identity before acceptance.
-
-Public C++ call sites migrate from `std::string` plus implicit current parser to `PredicateText` at retention boundaries.
-Low-level parser tests may continue to exercise one selected dialect directly.
-
-CLI compatibility is staged with RFC 0029: existing unversioned invocations keep the documented default, while versioned automation can pin the language.
+Future incompatible changes are reviewed against every containing surface that retains or promises automation behavior for predicate text.
+The change supplies the specific version bump, adapter, migration, and regression fixtures needed by those affected surfaces rather than activating a permanent multi-dialect subsystem.
 
 ## Validation
 
-- A golden corpus freezes parse success/failure, AST meaning, compile outcomes, diagnostics, access profiles, and evaluation truth for the initial dialect.
-- Legacy unversioned Smart Lists and workspace filters load with the same membership as before the change.
-- Unsupported future ids/versions are never evaluated through the current compiler and survive any promised lossless round trip.
-- Mixed-version Smart Lists can materialize in one library through their registered dialects.
-- Version dispatch covers empty expressions, aliases, quoted names, units, lists, ranges, missing fields, tags, custom metadata, and dictionary-backed comparisons.
-- Migration tests prove commit/abort behavior and preserve the old value on parse, validation, or storage failure.
-- Completion/editor tests use the catalog belonging to the edited dialect.
-- CLI and library YAML fixtures prove that their own protocol/format versions remain independent from predicate dialect.
-- Performance tests prevent version dispatch from materially regressing plan compilation or evaluation.
-- A full `./ao check` passes after migration.
+Current grammar, compilation, and truth behavior remain protected by query tests.
+Smart List persistence and exact version rejection remain protected by library layout and `MusicLibrary` tests.
+Library YAML, playback, workspace, and CLI tests own their containing-surface behavior.
+
+Any future incompatible predicate change must add fixtures proving the selected behavior for old retained text: rejection before reinterpretation, a version-specific adapter, or an atomic migration.
+A full `./ao check` remains the implementation gate for such a change.
 
 ## Open questions
 
-- What exact stable dialect id and numeric/string version representation should serialized surfaces use?
-- Does the initial version freeze today's implementation exactly, or should known defects be separated into a legacy version and corrected current version during rollout?
-- Which persisted workspace/filter surfaces require lossless preservation of unsupported future dialects?
-- Should format expressions adopt a sibling versioned dialect in a follow-up RFC or one broader expression envelope with distinct language ids?
-- What equivalence evidence is sufficient before an automatic text-rewriting migration is allowed?
+None.
+A concrete requirement for simultaneous predicate meanings or lossless unknown-language round trip would require a new evidence-backed RFC rather than reopening this design implicitly.
 
 ## Promotion plan
 
-If accepted and implemented:
+No proposal promotion remains.
+The adopted policy is current in:
 
-- update the [track expression architecture](../architecture/track-expression.md) with dialect ownership, dispatch, and consumer boundaries;
-- update the [predicate language reference](../reference/query/predicate-language.md) and [predicate evaluation specification](../spec/query/predicate-evaluation.md) with the initial stable version;
-- update Smart List, track-source, workspace-session, and track-filter specifications with complete predicate values and unsupported-version behavior;
-- update library YAML, library model, workspace state, and CLI references with exact serialized dialect fields where applicable;
-- update contributor guidance for classifying compatible versus version-requiring language changes; and
-- record the initial dialect baseline and migration policy in a decision when accepted.
+- [Track expression architecture](../architecture/track-expression.md)
+- [Predicate evaluation specification](../spec/query/predicate-evaluation.md)
+- [Predicate language reference](../reference/query/predicate-language.md)
+- [Library database reference](../reference/library/storage/database.md)
+- [Library YAML format](../reference/library/format/yaml.md)
+- [Playback session state](../reference/playback/session-state.md)
+- [Workspace session state](../reference/workspace/session-state.md)

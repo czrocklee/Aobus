@@ -123,9 +123,13 @@ Longer-running source rebuild cancellation and atomic publication belong to the 
 Execution plans and internal field opcodes are not persisted.
 Smart List records store local expression text, while runtime view filters retain expression text in view/session state according to their owning contracts.
 
-A language or semantic change must consider existing stored expressions even when no storage-version change is required.
-Removing accepted text or changing its truth result requires coordinated reference, source, persistence, and behavior tests.
-[RFC 0024](../../rfc/0024-versioned-predicate-dialect.md) proposes an explicit dialect dispatch and migration boundary; current expressions remain unversioned.
+A predicate change must consider retained expressions even when no record byte changes.
+For Smart Lists, accepted grammar, field binding, and the truth behavior in this specification are part of the library database contract gated by `ao::library::kLibraryVersion`.
+A change that expands the storable predicate surface beyond what an existing same-version reader accepts, or that can alter whether stored text parses or compiles, what it binds to, or which tracks it matches, must increment that version.
+The old version is then rejected or explicitly migrated; the current database accepts only an exact version match and provides no in-place migration.
+
+Runtime view filters use the compatibility policy of the workspace, playback-session, or CLI surface that retains or accepts them.
+Expressions carry no independent dialect id or version; [RFC 0024](../../rfc/0024-versioned-predicate-dialect.md) rejected that design in favor of containing-surface ownership.
 
 ## Frontend observations
 
@@ -160,4 +164,5 @@ Presentation consumes resulting membership but cannot reinterpret predicate trut
 - [Track sources](../library/source/track-source.md)
 - [Track filtering](../presentation/track-filter.md)
 - [Track model](../../reference/library/model/track.md)
-- [RFC 0024: versioned predicate dialect](../../rfc/0024-versioned-predicate-dialect.md)
+- [Library database](../../reference/library/storage/database.md)
+- [RFC 0024: versioned predicate dialect](../../rfc/0024-versioned-predicate-dialect.md), rejected in favor of containing-surface version ownership

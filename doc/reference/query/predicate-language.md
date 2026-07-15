@@ -14,6 +14,8 @@ Predicate evaluation behavior belongs to the [predicate evaluation specification
 
 Expressions are persisted as Smart List text without a separate language version number.
 The in-memory AST and execution bytecode are not persisted surfaces.
+For Smart Lists, this language surface participates in the library database compatibility contract governed by `ao::library::kLibraryVersion`.
+Other retained or automated expressions use the compatibility policy of their containing surface.
 
 ## Code boundary
 
@@ -174,12 +176,17 @@ A fractional literal is accepted only when scaling produces an integer, so `44.1
 
 Smart Lists persist expression text and recompile it when materialized.
 Removing or renaming a variable, alias, operator, literal form, or unit can invalidate stored lists.
-Changing truth semantics can change their membership without changing the library database format.
+Changing binding or truth semantics can change their membership without changing the list-record byte layout.
+
+The grammar and catalog in this reference, together with the truth behavior in the [predicate evaluation specification](../../spec/query/predicate-evaluation.md), are part of the Smart List contract gated by `kLibraryVersion`.
+A change that expands the storable predicate surface beyond what an existing same-version reader accepts, or that can alter whether stored text parses or compiles, what it binds to, or which tracks it matches, must increment the library version.
+The old version is then rejected or explicitly migrated; the current database implementation accepts only an exact version match and has no in-place migration path.
+
+Library YAML, playback-session state, workspace state, and CLI automation independently own the compatibility of predicate text they contain or accept.
+An expression carries no nested dialect id or version; [RFC 0024](../../rfc/0024-versioned-predicate-dialect.md) rejected that additional version axis.
 
 The core variable catalog is also used by completion, generated CLI help, and unknown-field diagnostics.
 Those consumers must change with this surface rather than maintaining parallel inventories.
-
-[RFC 0024](../../rfc/0024-versioned-predicate-dialect.md) proposes attaching an explicit dialect id/version to retained predicate text; it is not part of the current surface.
 
 ## Examples
 
@@ -230,4 +237,5 @@ Representative invalid forms are:
 - [Expression completion](../../spec/query/expression-completion.md)
 - [Format language](format-language.md)
 - [Track field catalog](../library/model/track-field.md)
-- [RFC 0024: versioned predicate dialect](../../rfc/0024-versioned-predicate-dialect.md)
+- [Library database](../library/storage/database.md)
+- [RFC 0024: versioned predicate dialect](../../rfc/0024-versioned-predicate-dialect.md), rejected in favor of containing-surface version ownership

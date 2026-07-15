@@ -130,7 +130,12 @@ It cannot turn an underlying mapped-file fault into a recoverable record-validat
 Opening a database whose metadata magic or stored library version is invalid returns `CorruptData`.
 There is no in-place migration path; reset and rescan rebuild the host-local index.
 
-Any incompatible key, record, enum encoding, slot meaning, or signature-algorithm change must increment `kLibraryVersion`.
+Version `4` also gates the interpretation of Smart List `filter` text.
+The exact accepted surface belongs to the [predicate language reference](../../query/predicate-language.md), and membership meaning belongs to the [predicate evaluation specification](../../../spec/query/predicate-evaluation.md).
+
+Any incompatible key, record, enum encoding, slot meaning, signature-algorithm, or stored Smart List predicate change must increment `kLibraryVersion`.
+A predicate change is incompatible when it expands the storable surface beyond what an existing same-version reader accepts, or when it can alter whether existing filter text parses or compiles, what it binds to, or which tracks it matches, even if `ListHeader` and its stored bytes do not change.
+An explicitly tested future migration may replace reset-and-rescan recovery for an old version only when it reads the old predicate contract, converts or validates every affected filter atomically, and updates the metadata version after the converted data is valid; the target still has an incremented `kLibraryVersion`, and no such migration exists today.
 
 ## Implementation authority
 
@@ -152,4 +157,6 @@ Any incompatible key, record, enum encoding, slot meaning, or signature-algorith
 - [LMDB operation specification](../../../spec/storage/lmdb-operation.md)
 - [Library access and mutation](../../../spec/library/runtime/mutation.md)
 - [Library scan and audio identity](../../../spec/library/runtime/scan-and-identity.md)
+- [List model](../model/list.md)
+- [Predicate language](../../query/predicate-language.md)
 - [Persistence and managed-state architecture](../../../architecture/persistence-and-managed-state.md)

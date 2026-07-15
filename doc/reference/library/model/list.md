@@ -25,7 +25,7 @@ The persisted list model belongs to the **core libraries** layer in the [system 
 | `parentId` | `ListId` | Parent list; zero means the All Tracks root. |
 | `name` | UTF-8 text | User-visible list name. |
 | `description` | UTF-8 text | Optional description. |
-| `filter` | UTF-8 text | Local smart-list expression; non-empty selects smart kind. |
+| `filter` | UTF-8 text | Local smart-list expression under the containing library format contract; non-empty selects smart kind. |
 | `trackIds` | Ordered `TrackId` sequence | Stored manual membership; ignored by smart lists. |
 
 The All Tracks root uses the reserved runtime identity `kAllTracksListId` and is not a normal stored list row.
@@ -50,7 +50,8 @@ Full manual drafts contain unique existing track ids after canonicalization.
 ## Compatibility and versioning
 
 The physical version is owned by the [library database reference](../storage/database.md).
-Changing kind detection, hierarchy meaning, or stored membership semantics is a behavioral and storage compatibility change.
+The database version also gates how stored `filter` text parses, binds, and selects membership; the expression carries no separate language version.
+Changing kind detection, hierarchy meaning, stored membership semantics, or predicate behavior for existing filter text is a behavioral and storage compatibility change.
 
 ## Implementation authority
 

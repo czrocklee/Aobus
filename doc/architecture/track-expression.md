@@ -114,7 +114,9 @@ frontend editor or CLI command
 
 The stored value is expression text, not an AST or execution bytecode.
 Opening or refreshing the Smart List recompiles it against the current implementation.
-The text has no separate dialect/version identity, so compatible evolution is currently governed only by reference and tests; [RFC 0024](../rfc/0024-versioned-predicate-dialect.md) proposes an explicit versioned text boundary.
+The text has no separate language identity or version.
+For a persisted Smart List, the accepted grammar, field catalog, binding behavior, and evaluation meaning are part of the library database contract gated by `ao::library::kLibraryVersion`, even when the list-record byte layout is unchanged.
+Other retained expression surfaces use the compatibility version or policy owned by their containing format rather than introducing a per-expression dialect.
 
 ### Transient track filter
 
@@ -159,7 +161,8 @@ This path does not create `TrackPresentationSpec`, projection rows, or frontend 
 
 ## Structural constraints
 
-- Expression text is persistence-facing; changing accepted syntax or evaluation meaning can change existing Smart Lists even when the database layout is unchanged.
+- Expression text is persistence-facing; changing the storable predicate surface or altering whether retained text parses, what it binds to, or which tracks it matches is incompatible for every containing persistence or automation contract that retains that text.
+- Smart List compatibility is gated by the library database version; the library YAML, playback-session, workspace, and CLI surfaces retain their own independent compatibility owners.
 - `ExecutionPlan` and `FormatPlan` are runtime-only and are never persisted as compatibility surfaces.
 - Parser, compiler, completion, serializer, generated CLI help, and diagnostics use the same core variable catalog.
 - Smart and transient filters use the same predicate compiler and source evaluation path after authoring policy resolves their input.
@@ -214,4 +217,4 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - [Predicate language](../reference/query/predicate-language.md)
 - [Format evaluation](../spec/query/format-evaluation.md)
 - [Format language](../reference/query/format-language.md)
-- [RFC 0024: versioned predicate dialect](../rfc/0024-versioned-predicate-dialect.md)
+- [RFC 0024: versioned predicate dialect](../rfc/0024-versioned-predicate-dialect.md), rejected in favor of containing-surface version ownership

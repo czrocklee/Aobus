@@ -26,12 +26,11 @@ Several independent versions can affect a CLI invocation:
 
 - the CLI automation schema;
 - the library database and YAML transfer formats;
-- a predicate language dialect;
 - command behavior/mutation receipts; and
 - the application build version.
 
 Without explicit identities, callers can confuse one for another.
-For example, adding a predicate dialect must not require a new CLI output major version unless the automation schema itself changes.
+For example, a change to persisted Smart List predicate meaning belongs to the library format version, while a change to the predicate behavior promised by a versioned CLI command belongs to that protocol command contract.
 
 The command/DTO inventory is also maintained manually in code, reference tables, and representative smoke assertions.
 There is no executable schema catalog from which complete compatibility fixtures or reference fragments can be checked.
@@ -39,10 +38,9 @@ There is no executable schema catalog from which complete compatibility fixtures
 ## Dependencies
 
 - Hard: None.
-- Conditional: [RFC 0024](0024-versioned-predicate-dialect.md).
+- Conditional: None.
 - Integration: [RFC 0003](0003-library-mutation-pipeline.md), [RFC 0013](0013-coherent-application-reporting-policy.md).
 
-Predicate-bearing automation conditionally depends on RFC 0024 to accept or report an explicit language dialect independently of the CLI protocol version.
 RFC 0003 should supply stable mutation receipt data rather than CLI-reconstructed commit evidence.
 RFC 0013 should align domain dispositions and stable error categories across CLI and interactive frontends.
 
@@ -54,7 +52,7 @@ RFC 0013 should align domain dispositions and stable error categories across CLI
 - Preserve stdout/stderr discipline and deterministic exit classification.
 - Define additive versus breaking schema changes, unknown-field behavior, deprecation, and supported-version discovery.
 - Keep plain output human-oriented and outside the structured compatibility guarantee.
-- Keep CLI protocol, predicate dialect, library transfer, database, and application versions independent.
+- Keep CLI protocol, library transfer, database, and application versions independent, while governing predicate input as command behavior rather than a nested language version.
 - Generate or mechanically validate command/result schema inventory from code-owned descriptors.
 - Provide complete golden compatibility fixtures rather than representative field assertions only.
 
@@ -174,8 +172,9 @@ Exact exit values are frozen in the protocol reference rather than inherited acc
 
 ### Independent embedded versions
 
-When a command accepts predicate text, its input options and any echoed typed details carry a `PredicateDialect` only if RFC 0024 is implemented.
-That dialect is not derived from protocol major.
+When a versioned command accepts predicate text, it carries the text without a nested dialect id or version.
+The selected protocol major owns the accepted-input and command-result behavior promised to automation.
+An incompatible change to whether that command accepts predicate text or to what the command does with it requires a new protocol major or a protocol-specific compatibility adapter.
 
 Library database version, library YAML format version, and application version appear only in command data whose semantics call for them.
 They never replace the envelope protocol version.
@@ -260,7 +259,8 @@ Encoder adapters translate current typed results to supported old shapes or reje
 - Same-major additive-field fixtures remain readable by a reference client that ignores unknown fields.
 - Breaking-change tests require an explicit new major rather than silently updating a version-1 fixture.
 - stdout contains exactly one payload document; progress/logs remain on stderr; exit codes match outcome classes.
-- Protocol, predicate dialect, application, library database, and YAML transfer versions vary independently in fixtures.
+- Protocol, application, library database, and YAML transfer versions vary independently in fixtures.
+- Predicate-bearing command fixtures prove that one supported protocol major does not silently change accepted text or its command meaning.
 - Schema/catalog tooling detects an unregistered command, missing DTO mapping, undocumented field, or undocumented error code.
 - Legacy structured and plain compatibility tests remain during the deprecation window.
 - A full `./ao check` passes after implementation.
