@@ -84,6 +84,7 @@ When a mocked interface must be returned as `std::unique_ptr`, use existing test
 - Use `ao::test::TempDir` for unit tests needing files or LMDB storage.
 - Use integration test data only for integration-style behavior such as real codecs or scanned audio files.
 - Keep malformed fixtures tiny and locally explained by the test name/setup.
+- Open test files in binary mode whenever assertions compare exact bytes or preserve existing bytes; Windows text mode translates line endings and invalidates byte-for-byte evidence.
 - Restore permissions in RAII helpers when testing filesystem permission errors.
 - Avoid relying on host services, real user config, network, or global machine state.
 

@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "WriterSessionLease.h"
+#include <ao/Error.h>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -11,10 +12,12 @@
 #endif
 #include <windows.h>
 
-#include <expected>
+#include <array>
+#include <cstddef>
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace ao::library::detail
@@ -22,16 +25,17 @@ namespace ao::library::detail
   namespace
   {
     constexpr auto kWriterLeaseFileName = L".aobus-writer.lock";
+    constexpr std::size_t kSystemMessageBufferSize = 512;
 
     std::string systemMessage(DWORD errorCode)
     {
-      char buffer[512]{};
+      auto buffer = std::array<char, kSystemMessageBufferSize>{};
       auto const size = ::FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                                          nullptr,
                                          errorCode,
                                          MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                                         buffer,
-                                         static_cast<DWORD>(std::size(buffer)),
+                                         buffer.data(),
+                                         static_cast<DWORD>(buffer.size()),
                                          nullptr);
 
       if (size == 0)
@@ -39,7 +43,7 @@ namespace ao::library::detail
         return std::format("Windows error {}", errorCode);
       }
 
-      auto message = std::string{buffer, size};
+      auto message = std::string{buffer.data(), size};
 
       while (!message.empty() && (message.back() == '\r' || message.back() == '\n'))
       {
@@ -76,13 +80,13 @@ namespace ao::library::detail
   Result<WriterSessionLease> WriterSessionLease::acquire(std::filesystem::path const& databasePath)
   {
     auto const leasePath = databasePath / kWriterLeaseFileName;
-    auto const handle = ::CreateFileW(leasePath.c_str(),
-                                      GENERIC_READ | GENERIC_WRITE,
-                                      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                                      nullptr,
-                                      OPEN_ALWAYS,
-                                      FILE_ATTRIBUTE_NORMAL,
-                                      nullptr);
+    auto* const handle = ::CreateFileW(leasePath.c_str(),
+                                       GENERIC_READ | GENERIC_WRITE,
+                                       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                       nullptr,
+                                       OPEN_ALWAYS,
+                                       FILE_ATTRIBUTE_NORMAL,
+                                       nullptr);
 
     if (handle == INVALID_HANDLE_VALUE)
     {
@@ -92,9 +96,9 @@ namespace ao::library::detail
     }
 
     auto implPtr = std::make_unique<Impl>(handle);
-    auto overlapped = OVERLAPPED{};
 
-    if (::LockFileEx(handle, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, MAXDWORD, MAXDWORD, &overlapped) ==
+    if (auto overlapped = OVERLAPPED{};
+        ::LockFileEx(handle, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, MAXDWORD, MAXDWORD, &overlapped) ==
         0)
     {
       auto const errorCode = ::GetLastError();

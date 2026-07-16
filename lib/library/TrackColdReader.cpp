@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
-#include <ao/library/CoverArt.h>
+#include <ao/PictureType.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/detail/TrackColdReader.h>
 #include <ao/utility/ByteView.h>

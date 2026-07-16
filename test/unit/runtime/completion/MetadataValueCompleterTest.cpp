@@ -8,7 +8,6 @@
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 

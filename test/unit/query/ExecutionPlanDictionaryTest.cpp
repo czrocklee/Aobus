@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -17,16 +18,9 @@ namespace ao::query::test
   {
     Instruction const& findInstruction(ExecutionPlan const& plan, OpCode op)
     {
-      for (auto const& instruction : plan.instructions)
-      {
-        if (instruction.op == op)
-        {
-          return instruction;
-        }
-      }
-
-      FAIL("expected instruction was not compiled");
-      return plan.instructions.front();
+      auto const instruction = std::ranges::find(plan.instructions, op, &Instruction::op);
+      REQUIRE(instruction != plan.instructions.end());
+      return *instruction;
     }
   } // namespace
 

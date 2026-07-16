@@ -15,7 +15,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <string>
 #include <string_view>
 
 namespace clang::tidy::aobus
@@ -23,8 +22,8 @@ namespace clang::tidy::aobus
   namespace detail
   {
     inline constexpr std::string_view kRaiiSuffixPattern =
-      "::.*(Guard|Subscription|Scope|Session|Lock|Transaction|Timer|Writer|Reader|Changes|Tasks|Handle|TempDir|"
-      "TempFile|Token|Raii|Blocker)$";
+      "::.*(Guard|Subscription|Scope|Session|Lock|Transaction|Timer|Writer|Reader|Changes|Tasks|Future|Handle|"
+      "TempDir|TempFile|Token|Raii|Blocker)$";
 
     inline constexpr auto kRaiiSuffixes = std::to_array<std::string_view>({"Guard",
                                                                            "Subscription",
@@ -37,12 +36,16 @@ namespace clang::tidy::aobus
                                                                            "Reader",
                                                                            "Changes",
                                                                            "Tasks",
+                                                                           "Future",
                                                                            "Handle",
                                                                            "TempDir",
                                                                            "TempFile",
                                                                            "Token",
                                                                            "Raii",
                                                                            "Blocker"});
+
+    bool isScopedOrRaiiType(QualType type, ASTContext& context);
+    bool ownsScopedOrRaiiType(QualType type, ASTContext& context);
 
     struct IsRAIIMatcher final : public ast_matchers::internal::MatcherInterface<CXXRecordDecl>
     {
@@ -55,12 +58,9 @@ namespace clang::tidy::aobus
 
         for (auto const* method : node.methods())
         {
-          if (auto const* dtor = llvm::dyn_cast<CXXDestructorDecl>(method); dtor != nullptr)
+          if (auto const* dtor = llvm::dyn_cast<CXXDestructorDecl>(method); dtor != nullptr && dtor->isUserProvided())
           {
-            if (dtor->isUserProvided())
-            {
-              hasUserProvidedDtor = true;
-            }
+            hasUserProvidedDtor = true;
           }
         }
 
@@ -72,7 +72,13 @@ namespace clang::tidy::aobus
           }
         }
 
-        return hasUserProvidedDtor && hasDeletedCopyCtor;
+        auto const hasRaiiMember = std::ranges::any_of(
+          node.fields(),
+          [&node](FieldDecl const* field) { return ownsScopedOrRaiiType(field->getType(), node.getASTContext()); });
+        auto const hasRaiiBase = std::ranges::any_of(
+          node.bases(),
+          [&node](CXXBaseSpecifier const& base) { return ownsScopedOrRaiiType(base.getType(), node.getASTContext()); });
+        return (hasUserProvidedDtor || hasRaiiMember || hasRaiiBase) && hasDeletedCopyCtor;
       }
     };
   } // namespace detail
@@ -88,67 +94,101 @@ namespace clang::tidy::aobus
       ast_matchers::matchesName(detail::kRaiiSuffixPattern), ast_matchers::hasName("::ao::media::file::File"));
   }
 
-  inline bool isScopedOrRaiiType(QualType type, ASTContext& context)
+  namespace detail
   {
-    if (type.isNull())
+    inline bool isRaiiName(llvm::StringRef name)
     {
-      return false;
-    }
-
-    // Strip raw pointers and references
-    while (type->isPointerType() || type->isReferenceType())
-    {
-      type = type->getPointeeType();
-    }
-
-    auto const desugared = type.getDesugaredType(context);
-    auto const* underlyingType = desugared.getTypePtr();
-
-    auto const* recordDecl = underlyingType->getAsCXXRecordDecl();
-
-    if (recordDecl == nullptr)
-    {
-      return false;
-    }
-
-    // 1. Recursively check all template arguments.
-    // This elegantly and automatically protects wrappers like std::optional<T>, std::unique_ptr<T>, std::shared_ptr<T>.
-    if (auto const* specDecl = llvm::dyn_cast<ClassTemplateSpecializationDecl>(recordDecl); specDecl != nullptr)
-    {
-      auto const& args = specDecl->getTemplateArgs();
-
-      for (std::uint32_t i = 0; i < args.size(); ++i)
+      if (name == "std::unique_ptr" || name == "std::shared_ptr" || name == "std::future" ||
+          name == "ao::media::file::File")
       {
-        if (args[i].getKind() == TemplateArgument::Type)
+        return true;
+      }
+
+      if (name.starts_with("std::") && (name.contains("lock_guard") || name.contains("unique_lock") ||
+                                        name.contains("shared_lock") || name.contains("scoped_lock")))
+      {
+        return true;
+      }
+
+      return std::ranges::any_of(kRaiiSuffixes, [&name](std::string_view suffix) { return name.ends_with(suffix); });
+    }
+
+    inline bool isScopedOrRaiiType(QualType type, ASTContext& context)
+    {
+      if (type.isNull())
+      {
+        return false;
+      }
+
+      // Strip raw pointers and references
+      while (type->isPointerType() || type->isReferenceType())
+      {
+        type = type->getPointeeType();
+      }
+
+      auto const desugared = type.getDesugaredType(context);
+      auto const* underlyingType = desugared.getTypePtr();
+
+      if (auto const* specializationType = underlyingType->getAs<TemplateSpecializationType>();
+          specializationType != nullptr)
+      {
+        for (auto const& argument : specializationType->template_arguments())
         {
-          if (isScopedOrRaiiType(args[i].getAsType(), context))
+          if (argument.getKind() == TemplateArgument::Type && isScopedOrRaiiType(argument.getAsType(), context))
           {
             return true;
           }
         }
+
+        if (auto const* templateDecl = specializationType->getTemplateName().getAsTemplateDecl();
+            templateDecl != nullptr && isRaiiName(templateDecl->getQualifiedNameAsString()))
+        {
+          return true;
+        }
       }
-    }
 
-    auto const name = recordDecl->getQualifiedNameAsString();
+      auto const* recordDecl = underlyingType->getAsCXXRecordDecl();
 
-    // 2. Check if it is the mapped media File owner.
-    if (name == "ao::media::file::File")
-    {
-      return true;
-    }
-
-    // 3. Check for standard library locks
-    if (llvm::StringRef{name}.starts_with("std::"))
-    {
-      if (name.contains("lock_guard") || name.contains("unique_lock") || name.contains("shared_lock") ||
-          name.contains("scoped_lock"))
+      if (recordDecl == nullptr)
       {
-        return true;
+        return false;
       }
+
+      // 1. Recursively check all template arguments.
+      // This elegantly and automatically protects wrappers like std::optional<T>, std::unique_ptr<T>,
+      // std::shared_ptr<T>.
+      if (auto const* specDecl = llvm::dyn_cast<ClassTemplateSpecializationDecl>(recordDecl); specDecl != nullptr)
+      {
+        auto const& args = specDecl->getTemplateArgs();
+
+        for (std::uint32_t i = 0; i < args.size(); ++i)
+        {
+          if (args[i].getKind() == TemplateArgument::Type)
+          {
+            if (isScopedOrRaiiType(args[i].getAsType(), context))
+            {
+              return true;
+            }
+          }
+        }
+      }
+
+      return isRaiiName(recordDecl->getQualifiedNameAsString());
     }
 
-    // 4. Check naming heuristic suffixes
-    return std::ranges::any_of(
-      detail::kRaiiSuffixes, [&name](std::string_view suffix) { return llvm::StringRef{name}.ends_with(suffix); });
+    inline bool ownsScopedOrRaiiType(QualType type, ASTContext& context)
+    {
+      if (type.isNull() || type->isPointerType() || type->isReferenceType())
+      {
+        return false;
+      }
+
+      return isScopedOrRaiiType(type, context);
+    }
+  } // namespace detail
+
+  inline bool isScopedOrRaiiType(QualType type, ASTContext& context)
+  {
+    return detail::isScopedOrRaiiType(type, context);
   }
 } // namespace clang::tidy::aobus

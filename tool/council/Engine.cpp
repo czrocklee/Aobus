@@ -12,6 +12,7 @@
 #include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/async/TaskFuture.h>
 
 #include <algorithm>
 #include <cctype>
@@ -23,7 +24,6 @@
 #include <filesystem>
 #include <format>
 #include <functional>
-#include <future>
 #include <initializer_list>
 #include <iterator>
 #include <map>
@@ -676,7 +676,7 @@ namespace ao::council
     }
 
     template<typename T>
-    Result<T> awaitOutcome(std::future<T>& future)
+    Result<T> awaitOutcome(async::TaskFuture<T>& future)
     {
       try
       {
@@ -689,7 +689,7 @@ namespace ao::council
     }
 
     template<typename T>
-    std::vector<Result<T>> awaitAll(std::vector<std::future<T>>& futures)
+    std::vector<Result<T>> awaitAll(std::vector<async::TaskFuture<T>>& futures)
     {
       auto outcomes = std::vector<Result<T>>{};
       outcomes.reserve(futures.size());
@@ -941,7 +941,7 @@ namespace ao::council
                                                std::string const& roundLabel,
                                                CouncilContexts const& memberContexts)
     {
-      auto memberFutures = std::vector<std::future<MemberRun>>{};
+      auto memberFutures = std::vector<async::TaskFuture<MemberRun>>{};
       memberFutures.reserve(roster.size());
       auto launches = std::vector<MemberLaunchSpec>{};
       launches.reserve(roster.size());

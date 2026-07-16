@@ -40,6 +40,7 @@ namespace ao::audio
 
     ::FLAC__StreamMetadata_StreamInfo const& streamInfoFor(::FLAC__StreamMetadata const* metadata)
     {
+      // libFLAC exposes stream-specific metadata through this tagged C union.
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
       return metadata->data.stream_info;
     }

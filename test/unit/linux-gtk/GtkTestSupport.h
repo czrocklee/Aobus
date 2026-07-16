@@ -499,7 +499,7 @@ namespace ao::gtk::test
     bool _mounted = false;
   };
 
-  class AllocationHost final : public Gtk::Widget // NOLINT(misc-multiple-inheritance)
+  class AllocationHost final : public Gtk::Widget
   {
   public:
     explicit AllocationHost(Gtk::Widget& child)

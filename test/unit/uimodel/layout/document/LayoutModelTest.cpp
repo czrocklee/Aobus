@@ -4,7 +4,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
-#include <ao/uimodel/layout/document/LayoutYaml.h> // NOLINT(misc-include-cleaner)
+#include <ao/uimodel/layout/document/LayoutYaml.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>

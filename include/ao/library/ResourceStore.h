@@ -122,7 +122,7 @@ namespace ao::library
     return Iterator{_reader.begin()};
   }
 
-  class ResourceStore::Writer
+  class [[nodiscard]] ResourceStore::Writer
   {
   public:
     std::optional<std::span<std::byte const>> get(ResourceId id) const { return _writer.get(id.raw()); }

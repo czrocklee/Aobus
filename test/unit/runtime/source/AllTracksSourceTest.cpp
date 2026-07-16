@@ -23,7 +23,7 @@ namespace ao::rt::test
             "[runtime][unit][source][all-tracks]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto& store = libraryFixture.library().tracks();
+    auto const& store = libraryFixture.library().tracks();
 
     auto source = AllTracksSource{store};
     auto listener = TrackSourceBatchSpy{source};

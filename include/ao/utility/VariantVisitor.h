@@ -12,7 +12,6 @@ namespace ao::utility
   {
     template<typename... Ts>
     // Multiple inheritance is the canonical overload-set adapter for std::visit.
-    // NOLINTNEXTLINE(misc-multiple-inheritance)
     struct Overload : Ts...
     {
       using Ts::operator()...;

@@ -168,12 +168,9 @@ namespace clang::tidy::aobus
         }
       }
 
-      bool shouldVisitTemplateInstantiations() const // NOLINT(bugprone-derived-method-shadowing-base-method)
-      {
-        return false;
-      }
+      bool shouldVisitTemplateInstantiations() const { return false; }
 
-      bool VisitFieldDecl(FieldDecl* decl) // NOLINT(bugprone-derived-method-shadowing-base-method)
+      bool VisitFieldDecl(FieldDecl* decl)
       {
         if (!isHeader(decl->getLocation()))
         {
@@ -194,7 +191,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitParmVarDecl(ParmVarDecl* decl) // NOLINT(bugprone-derived-method-shadowing-base-method)
+      bool VisitParmVarDecl(ParmVarDecl* decl)
       {
         if (!isHeader(decl->getLocation()))
         {
@@ -213,7 +210,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitFunctionDecl(FunctionDecl* decl) // NOLINT(bugprone-derived-method-shadowing-base-method)
+      bool VisitFunctionDecl(FunctionDecl* decl)
       {
         if (!isHeader(decl->getLocation()))
         {
@@ -228,7 +225,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitCXXRecordDecl(CXXRecordDecl* decl) // NOLINT(bugprone-derived-method-shadowing-base-method)
+      bool VisitCXXRecordDecl(CXXRecordDecl* decl)
       {
         if (decl->hasDefinition())
         {
@@ -244,7 +241,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitMemberExpr(MemberExpr* expr) // NOLINT(bugprone-derived-method-shadowing-base-method)
+      bool VisitMemberExpr(MemberExpr* expr)
       {
         if (auto const* md = dyn_cast<CXXMethodDecl>(expr->getMemberDecl()); md != nullptr)
         {
@@ -264,7 +261,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitDeclRefExpr(DeclRefExpr* expr) // NOLINT(bugprone-derived-method-shadowing-base-method)
+      bool VisitDeclRefExpr(DeclRefExpr* expr)
       {
         if (auto const* md = dyn_cast<CXXMethodDecl>(expr->getDecl()); md != nullptr)
         {
@@ -287,7 +284,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitCXXConstructExpr(CXXConstructExpr* expr) // NOLINT(bugprone-derived-method-shadowing-base-method)
+      bool VisitCXXConstructExpr(CXXConstructExpr* expr)
       {
         if (auto const* md = expr->getConstructor(); md != nullptr)
         {
@@ -300,7 +297,7 @@ namespace clang::tidy::aobus
         return true;
       }
 
-      bool VisitCXXDeleteExpr(CXXDeleteExpr* expr) // NOLINT(bugprone-derived-method-shadowing-base-method)
+      bool VisitCXXDeleteExpr(CXXDeleteExpr* expr)
       {
         if (auto const* crd = getRecordDeclFromType(expr->getDestroyedType()); crd != nullptr)
         {

@@ -335,6 +335,198 @@ namespace ao::rt
 
       return result;
     }
+
+    Result<> validateListIdentity(ryml::ConstNodeRef const& listNode,
+                                  std::unordered_set<std::uint32_t>& seenYamlIds,
+                                  ValidatedList& list)
+    {
+      auto yamlId = requireScalarFieldAs<std::uint32_t>(listNode, "id", "List record");
+
+      if (!yamlId)
+      {
+        return std::unexpected{yamlId.error()};
+      }
+
+      list.yamlId = *yamlId;
+
+      if (list.yamlId == 0)
+      {
+        return makeError(Error::Code::FormatRejected, "List id 0 is reserved for the root");
+      }
+
+      if (!seenYamlIds.insert(list.yamlId).second)
+      {
+        return makeError(Error::Code::FormatRejected, std::format("Duplicate list YAML id {} in payload", list.yamlId));
+      }
+
+      auto name = requireScalarField(listNode, "name", "List record");
+
+      if (!name)
+      {
+        return std::unexpected{name.error()};
+      }
+
+      list.name = *name;
+      return {};
+    }
+
+    Result<> validateListMetadata(ryml::ConstNodeRef const& listNode, ValidatedList& list)
+    {
+      if (auto const parentIdNode = yaml::findChild(listNode, "parentId"); parentIdNode.readable())
+      {
+        auto parentId = requireScalarAs<std::uint32_t>(parentIdNode, "List record.parentId");
+
+        if (!parentId)
+        {
+          return std::unexpected{parentId.error()};
+        }
+
+        list.yamlParentId = *parentId;
+      }
+
+      if (auto const descriptionNode = yaml::findChild(listNode, "description"); descriptionNode.readable())
+      {
+        auto description = requireScalar(descriptionNode, "List record.description");
+
+        if (!description)
+        {
+          return std::unexpected{description.error()};
+        }
+
+        list.description = *description;
+      }
+
+      return {};
+    }
+
+    Result<ValidatedListTrackReference> validateListTrackReference(ryml::ConstNodeRef const& trackRef)
+    {
+      if (trackRef.is_val())
+      {
+        auto trackId = requireScalarAs<std::uint32_t>(trackRef, "List record.tracks[]");
+
+        if (!trackId)
+        {
+          return std::unexpected{trackId.error()};
+        }
+
+        return ValidatedListTrackIdReference{.yamlId = *trackId};
+      }
+
+      if (!trackRef.is_map())
+      {
+        return makeError(Error::Code::FormatRejected, "List track reference must be a scalar or map");
+      }
+
+      if (auto const trackIdNode = yaml::findChild(trackRef, "id"); trackIdNode.readable())
+      {
+        auto trackId = requireScalarAs<std::uint32_t>(trackIdNode, "List record.tracks[].id");
+
+        if (!trackId)
+        {
+          return std::unexpected{trackId.error()};
+        }
+
+        return ValidatedListTrackIdReference{.yamlId = *trackId};
+      }
+
+      auto const uriNode = yaml::findChild(trackRef, "uri");
+
+      if (!uriNode.readable())
+      {
+        return makeError(Error::Code::FormatRejected, "List track reference missing 'id' or 'uri'");
+      }
+
+      auto uri = requireScalar(uriNode, "List record.tracks[].uri");
+
+      if (!uri)
+      {
+        return std::unexpected{uri.error()};
+      }
+
+      auto normalized = normalizedUri(*uri);
+
+      if (normalized.empty())
+      {
+        return makeError(Error::Code::FormatRejected, "List track reference has empty 'uri'");
+      }
+
+      return ValidatedListTrackUriReference{.uri = std::move(normalized)};
+    }
+
+    Result<> validateManualListTracks(ryml::ConstNodeRef const& tracksNode, ValidatedList& list)
+    {
+      if (auto result = requireSequence(tracksNode, "List record.tracks"); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      for (auto const& trackRef : tracksNode.children())
+      {
+        auto reference = validateListTrackReference(trackRef);
+
+        if (!reference)
+        {
+          return std::unexpected{reference.error()};
+        }
+
+        list.trackReferences.push_back(std::move(*reference));
+      }
+
+      return {};
+    }
+
+    Result<> validateListContents(ryml::ConstNodeRef const& listNode, ValidatedList& list)
+    {
+      if (auto const filterNode = yaml::findChild(listNode, "filter"); filterNode.readable())
+      {
+        auto filter = requireScalar(filterNode, "List record.filter");
+
+        if (!filter)
+        {
+          return std::unexpected{filter.error()};
+        }
+
+        list.isSmart = true;
+        list.filter = *filter;
+        return {};
+      }
+
+      if (auto const tracksNode = yaml::findChild(listNode, "tracks"); tracksNode.readable())
+      {
+        return validateManualListTracks(tracksNode, list);
+      }
+
+      return {};
+    }
+
+    Result<ValidatedList> validateListRecord(ryml::ConstNodeRef const& listNode,
+                                             std::unordered_set<std::uint32_t>& seenYamlIds)
+    {
+      if (auto result = requireMap(listNode, "List record"); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      auto list = ValidatedList{};
+
+      if (auto result = validateListIdentity(listNode, seenYamlIds, list); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      if (auto result = validateListMetadata(listNode, list); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      if (auto result = validateListContents(listNode, list); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      return list;
+    }
   } // namespace
 
   struct LibraryYamlImportOperation::PreparedImport::Impl final
@@ -386,6 +578,8 @@ namespace ao::rt
     Result<> clearDatabase(ValidatedImport const& val, library::WriteTransaction& writeTransaction) const;
 
     Result<ValidatedImport> validate(ryml::ConstNodeRef const& root) const;
+    Result<> validateHeader(ryml::ConstNodeRef const& root, ValidatedImport& validated) const;
+    Result<> validateLibrary(ryml::ConstNodeRef const& root, ValidatedImport& validated) const;
     Result<> validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const;
     Result<> validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const;
 
@@ -783,16 +977,30 @@ namespace ao::rt
     return ml.lists().writer(writeTransaction).clear();
   }
 
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   Result<ValidatedImport> LibraryYamlImporter::Impl::validate(ryml::ConstNodeRef const& root) const
   {
-    auto validated = ValidatedImport{};
-
     if (auto result = requireMap(root, "YAML root"); !result)
     {
       return std::unexpected{result.error()};
     }
 
+    auto validated = ValidatedImport{};
+
+    if (auto result = validateHeader(root, validated); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    if (auto result = validateLibrary(root, validated); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    return validated;
+  }
+
+  Result<> LibraryYamlImporter::Impl::validateHeader(ryml::ConstNodeRef const& root, ValidatedImport& validated) const
+  {
     auto const versionNode = yaml::findChild(root, "version");
 
     if (!versionNode.readable())
@@ -800,19 +1008,19 @@ namespace ao::rt
       return makeError(Error::Code::FormatRejected, "Missing 'version' field in YAML");
     }
 
-    auto versionResult = requireScalarAs<std::uint32_t>(versionNode, "version");
+    auto version = requireScalarAs<std::uint32_t>(versionNode, "version");
 
-    if (!versionResult)
+    if (!version)
     {
-      return std::unexpected{versionResult.error()};
+      return std::unexpected{version.error()};
     }
 
-    validated.version = *versionResult;
-
-    if (validated.version != 1)
+    if (*version != 1)
     {
-      return makeError(Error::Code::FormatRejected, std::format("Unsupported YAML version {}", validated.version));
+      return makeError(Error::Code::FormatRejected, std::format("Unsupported YAML version {}", *version));
     }
+
+    validated.version = *version;
 
     if (auto const exportModeNode = yaml::findChild(root, "export_mode"); exportModeNode.readable())
     {
@@ -854,6 +1062,11 @@ namespace ao::rt
       validated.optLibraryId = *libraryId;
     }
 
+    return {};
+  }
+
+  Result<> LibraryYamlImporter::Impl::validateLibrary(ryml::ConstNodeRef const& root, ValidatedImport& validated) const
+  {
     auto const library = yaml::findChild(root, "library");
 
     if (!library.readable())
@@ -895,7 +1108,7 @@ namespace ao::rt
       }
     }
 
-    return validated;
+    return {};
   }
 
   Result<> LibraryYamlImporter::Impl::validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const
@@ -954,149 +1167,20 @@ namespace ao::rt
     return {};
   }
 
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   Result<> LibraryYamlImporter::Impl::validateLists(ryml::ConstNodeRef const& lists, ValidatedImport& validated) const
   {
     auto seenYamlIds = std::unordered_set<std::uint32_t>{};
 
     for (auto const& listNode : lists.children())
     {
-      if (auto result = requireMap(listNode, "List record"); !result)
+      auto list = validateListRecord(listNode, seenYamlIds);
+
+      if (!list)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{list.error()};
       }
 
-      auto list = ValidatedList{};
-      auto yamlId = requireScalarFieldAs<std::uint32_t>(listNode, "id", "List record");
-
-      if (!yamlId)
-      {
-        return std::unexpected{yamlId.error()};
-      }
-
-      list.yamlId = *yamlId;
-
-      if (list.yamlId == 0)
-      {
-        return makeError(Error::Code::FormatRejected, "List id 0 is reserved for the root");
-      }
-
-      if (seenYamlIds.contains(list.yamlId))
-      {
-        return makeError(Error::Code::FormatRejected, std::format("Duplicate list YAML id {} in payload", list.yamlId));
-      }
-
-      seenYamlIds.insert(list.yamlId);
-
-      auto name = requireScalarField(listNode, "name", "List record");
-
-      if (!name)
-      {
-        return std::unexpected{name.error()};
-      }
-
-      list.name = *name;
-
-      if (auto const parentIdNode = yaml::findChild(listNode, "parentId"); parentIdNode.readable())
-      {
-        auto parentId = requireScalarAs<std::uint32_t>(parentIdNode, "List record.parentId");
-
-        if (!parentId)
-        {
-          return std::unexpected{parentId.error()};
-        }
-
-        list.yamlParentId = *parentId;
-      }
-
-      if (auto const descriptionNode = yaml::findChild(listNode, "description"); descriptionNode.readable())
-      {
-        auto description = requireScalar(descriptionNode, "List record.description");
-
-        if (!description)
-        {
-          return std::unexpected{description.error()};
-        }
-
-        list.description = *description;
-      }
-
-      if (auto const filterNode = yaml::findChild(listNode, "filter"); filterNode.readable())
-      {
-        auto filter = requireScalar(filterNode, "List record.filter");
-
-        if (!filter)
-        {
-          return std::unexpected{filter.error()};
-        }
-
-        list.isSmart = true;
-        list.filter = *filter;
-      }
-      else if (auto const tracksNode = yaml::findChild(listNode, "tracks"); tracksNode.readable())
-      {
-        if (auto result = requireSequence(tracksNode, "List record.tracks"); !result)
-        {
-          return std::unexpected{result.error()};
-        }
-
-        for (auto const& trackRef : tracksNode.children())
-        {
-          if (trackRef.is_val())
-          {
-            auto trackId = requireScalarAs<std::uint32_t>(trackRef, "List record.tracks[]");
-
-            if (!trackId)
-            {
-              return std::unexpected{trackId.error()};
-            }
-
-            list.trackReferences.emplace_back(ValidatedListTrackIdReference{.yamlId = *trackId});
-          }
-          else if (trackRef.is_map())
-          {
-            if (auto const trackIdNode = yaml::findChild(trackRef, "id"); trackIdNode.readable())
-            {
-              auto trackId = requireScalarAs<std::uint32_t>(trackIdNode, "List record.tracks[].id");
-
-              if (!trackId)
-              {
-                return std::unexpected{trackId.error()};
-              }
-
-              list.trackReferences.emplace_back(ValidatedListTrackIdReference{.yamlId = *trackId});
-            }
-            else if (auto const uriNode = yaml::findChild(trackRef, "uri"); uriNode.readable())
-            {
-              auto uri = requireScalar(uriNode, "List record.tracks[].uri");
-
-              if (!uri)
-              {
-                return std::unexpected{uri.error()};
-              }
-
-              auto normalized = normalizedUri(*uri);
-
-              if (normalized.empty())
-              {
-                return makeError(Error::Code::FormatRejected, "List track reference has empty 'uri'");
-              }
-
-              list.trackReferences.emplace_back(ValidatedListTrackUriReference{.uri = std::move(normalized)});
-            }
-            else
-            {
-              return makeError(Error::Code::FormatRejected, "List track reference missing 'id' or 'uri'");
-            }
-          }
-          else
-          {
-            return makeError(Error::Code::FormatRejected, "List track reference must be a scalar or map");
-          }
-        }
-      }
-
-      validated.lists.push_back(std::move(list));
+      validated.lists.push_back(std::move(*list));
     }
 
     return {};

@@ -51,7 +51,7 @@ namespace ao::media::file
 
     Creator const* findCreator(std::string_view extension)
     {
-      // NOLINTNEXTLINE(readability-qualified-auto)
+      // NOLINTNEXTLINE(readability-qualified-auto) -- std::array iterator representations differ across libraries.
       auto const iterator =
         std::ranges::find(kCreatorsByExtension, extension, &std::pair<std::string_view, Creator>::first);
       return iterator != kCreatorsByExtension.end() ? &iterator->second : nullptr;

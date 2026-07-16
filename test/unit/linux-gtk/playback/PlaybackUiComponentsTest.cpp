@@ -15,8 +15,6 @@
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <gtkmm/adjustment.h>  // NOLINT(misc-include-cleaner)
-#include <gtkmm/application.h> // NOLINT(misc-include-cleaner)
 #include <gtkmm/label.h>
 #include <gtkmm/scale.h>
 

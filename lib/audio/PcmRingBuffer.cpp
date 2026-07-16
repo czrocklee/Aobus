@@ -5,11 +5,12 @@
 
 #ifndef NDEBUG
 #include <gsl-lite/gsl-lite.hpp>
-#endif
 
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
+#endif
+
+#include <cstddef>
 #include <memory>
 #include <span>
 

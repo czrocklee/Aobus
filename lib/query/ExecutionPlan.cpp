@@ -322,7 +322,6 @@ namespace ao::query
 
     std::optional<std::uint64_t> parseUnsigned(std::string_view value)
     {
-      // NOLINTNEXTLINE(misc-const-correctness): std::from_chars writes through this out parameter.
       std::uint64_t parsedValue = 0;
       auto const [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsedValue);
 
@@ -489,7 +488,7 @@ namespace ao::query
 
       while (!lexeme.empty())
       {
-        // NOLINTNEXTLINE(readability-qualified-auto)
+        // NOLINTNEXTLINE(readability-qualified-auto) -- string_view iterator representation is library-specific.
         auto const suffixStart = std::ranges::find_if(lexeme, [](unsigned char ch) { return std::isalpha(ch) != 0; });
 
         if (suffixStart == lexeme.end())
@@ -500,7 +499,7 @@ namespace ao::query
         auto const suffixOffset = static_cast<std::size_t>(std::distance(lexeme.begin(), suffixStart));
         auto const numberPart = lexeme.substr(0, suffixOffset);
         auto const suffixAndRest = lexeme.substr(suffixOffset);
-        // NOLINTNEXTLINE(readability-qualified-auto)
+        // NOLINTNEXTLINE(readability-qualified-auto) -- string_view iterator representation is library-specific.
         auto const nextNumber =
           std::ranges::find_if(suffixAndRest, [](unsigned char ch) { return std::isdigit(ch) != 0; });
         auto const suffixSize = static_cast<std::size_t>(std::distance(suffixAndRest.begin(), nextNumber));

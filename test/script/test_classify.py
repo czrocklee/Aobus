@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from ao.command import analyze, tidy
+from ao.core import tidyconfig
 
 
 class TidyClassifyTest(unittest.TestCase):
@@ -57,12 +58,64 @@ class TidyChecksTest(unittest.TestCase):
 
     def test_clang_22_policy_exclusions_are_mode_specific(self):
         self.assertIn("-misc-multiple-inheritance", tidy.STRICT_CHECKS.split(","))
+        self.assertIn("-bugprone-derived-method-shadowing-base-method", tidy.STRICT_CHECKS.split(","))
         self.assertIn("-bugprone-exception-escape", tidy.STRICT_CHECKS.split(","))
         self.assertIn("-bugprone-throwing-static-initialization", tidy.STRICT_CHECKS.split(","))
         self.assertNotIn("-modernize-use-designated-initializers", tidy.STRICT_CHECKS.split(","))
         self.assertIn("-modernize-use-designated-initializers", tidy.RELAXED_CHECKS.split(","))
         self.assertIn("-bugprone-exception-escape", tidy.RELAXED_CHECKS.split(","))
         self.assertIn("-bugprone-throwing-static-initialization", tidy.RELAXED_CHECKS.split(","))
+
+    def test_cognitive_complexity_ignores_macro_expansions(self):
+        self.assertIn(
+            "{key: 'readability-function-cognitive-complexity.IgnoreMacros', value: true}",
+            tidyconfig.CONFIG_BASE,
+        )
+
+
+class StaleNolintAuditTest(unittest.TestCase):
+    def test_reports_only_checks_disabled_for_the_file_mode(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "Example.cpp"
+            source.write_text(
+                "// NOLINTNEXTLINE(misc-multiple-inheritance,readability-qualified-auto)\nint value;\n",
+                encoding="utf-8",
+            )
+
+            issues = tidy.find_stale_nolint_suppressions({"STRICT": [source], "RELAXED": []})
+
+        self.assertEqual([(issue.line, issue.check) for issue in issues], [(1, "misc-multiple-inheritance")])
+
+    def test_applies_relaxed_only_disables_to_test_sources(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "ExampleTest.cpp"
+            source.write_text(
+                "// NOLINT(readability-function-cognitive-complexity)\nint value;\n",
+                encoding="utf-8",
+            )
+
+            issues = tidy.find_stale_nolint_suppressions({"STRICT": [], "RELAXED": [source]})
+
+        self.assertEqual(
+            [(issue.line, issue.check) for issue in issues],
+            [(1, "readability-function-cognitive-complexity")],
+        )
+
+    def test_reports_nolintbegin_once_without_repeating_nolintend(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "Example.cpp"
+            source.write_text(
+                "// NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)\n"
+                "int value;\n"
+                "// NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)\n",
+                encoding="utf-8",
+            )
+
+            issues = tidy.find_stale_nolint_suppressions({"STRICT": [source], "RELAXED": []})
+
+        self.assertEqual(
+            [(issue.line, issue.check) for issue in issues], [(1, "cppcoreguidelines-pro-bounds-constant-array-index")]
+        )
 
 
 class TidySplitExistingTest(unittest.TestCase):

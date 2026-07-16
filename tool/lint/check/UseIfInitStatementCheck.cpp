@@ -39,7 +39,7 @@ namespace clang::tidy::readability
       {
       }
 
-      bool VisitDeclRefExpr(DeclRefExpr* declRefExpr) // NOLINT(bugprone-derived-method-shadowing-base-method)
+      bool VisitDeclRefExpr(DeclRefExpr* declRefExpr)
       {
         if (declRefExpr->getDecl() == _varDecl)
         {
@@ -60,6 +60,7 @@ namespace clang::tidy::readability
     bool isUsedInside(VarDecl const* varDecl, Stmt const* target)
     {
       auto visitor = UsageVisitor{varDecl};
+      // RecursiveASTVisitor's traversal API predates const AST traversal.
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
       visitor.TraverseStmt(const_cast<Stmt*>(target));
       return visitor.hasFoundMatch();
@@ -78,7 +79,6 @@ namespace clang::tidy::readability
       for (auto const* nextIt = std::next(it); nextIt != body.end(); ++nextIt)
       {
         auto visitor = UsageVisitor{varDecl};
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
         visitor.TraverseStmt(const_cast<Stmt*>(*nextIt));
 
         if (visitor.hasFoundMatch())

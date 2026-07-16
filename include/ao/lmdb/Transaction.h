@@ -19,7 +19,7 @@ namespace ao::lmdb
   class WriteTransaction; // Forward declaration
 
   // Read-only transaction
-  class ReadTransaction
+  class [[nodiscard]] ReadTransaction
   {
   public:
     static Result<ReadTransaction> begin(Environment const& env);
@@ -58,7 +58,7 @@ namespace ao::lmdb
   };
 
   // Read-write transaction (inherits from ReadTransaction for read capabilities)
-  class WriteTransaction final : public ReadTransaction
+  class [[nodiscard]] WriteTransaction final : public ReadTransaction
   {
   public:
     static Result<WriteTransaction> begin(Environment& env);

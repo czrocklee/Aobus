@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <ios>
 #include <limits>
 #include <map>
 #include <numbers>
@@ -638,7 +639,7 @@ namespace ao::rt::test
     {
       constexpr auto kOriginalContents = std::string_view{"- existing\n- values\n"};
       {
-        auto output = std::ofstream{configPath};
+        auto output = std::ofstream{configPath, std::ios::binary | std::ios::trunc};
         output << kOriginalContents;
       }
 

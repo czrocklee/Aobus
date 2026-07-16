@@ -96,10 +96,15 @@ namespace ao::rt::test
       co_return NonDefaultTaskResult{42};
     }
 
+    [[noreturn]] NonDefaultTaskResult throwNonDefaultResultFailure()
+    {
+      throwException<Exception>("Non-default result failure");
+    }
+
     Task<NonDefaultTaskResult> failingNonDefaultResultTask(Runtime* runtime)
     {
       co_await runtime->resumeOnWorker();
-      throwException<Exception>("Non-default result failure");
+      co_return throwNonDefaultResultFailure();
     }
 
     Task<ThrowingDefaultTaskResult> throwingDefaultResultTask(Runtime* runtime, bool fail)

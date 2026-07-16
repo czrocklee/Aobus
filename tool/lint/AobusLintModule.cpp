@@ -99,6 +99,7 @@ namespace clang::tidy::readability
 
 namespace
 {
+  // LLVM's loadable-plugin contract requires an externally observable mutable anchor.
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables,aobus-threading-policy)
   [[maybe_unused]] int volatile AobusLintModuleAnchorSource = 0;
 } // namespace

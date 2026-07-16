@@ -160,6 +160,39 @@ at an API boundary, unavoidable `reinterpret_cast` in tests, framework-required
 method names, and `clang-tidy` false positives around framework or template
 code.
 
+`./ao tidy` rejects a named `NOLINT` when that check is disabled for the file's
+`STRICT` or `RELAXED` mode. Such a directive cannot suppress a diagnostic and
+is stale by definition. When a check is disabled or moved out of a mode, remove
+the corresponding local suppressions in the same change.
+
+## Repository-wide suppression governance
+
+Classify every suppression in this order:
+
+1. **Stale:** the configured mode cannot emit the diagnostic, or the current
+   code no longer triggers it. Delete the directive without changing code.
+2. **Code issue:** a local, behavior-preserving edit expresses the contract more
+   clearly. Fix the code and remove the directive.
+3. **Aobus checker mismatch:** an `aobus-*` rule misunderstands a reusable
+   project pattern. Refine the checker and add a lint integration fixture that
+   proves both the positive and negative boundary.
+4. **Upstream policy mismatch:** an upstream check is systematically wrong for
+   a project-wide pattern. Prefer the narrowest supported check option. Disable
+   the check only when the whole diagnostic class conflicts with Aobus design;
+   add a configuration test and rationale.
+5. **Necessary local boundary:** an external ABI, platform API, framework macro,
+   implementation-dependent standard-library type, or deliberate contract test
+   requires the construct. Keep the smallest named suppression and explain the
+   boundary when it is not evident.
+
+Current policy examples follow this split. Cognitive-complexity analysis ignores
+macro expansions because the caller does not own the macro's control flow, while
+ordinary function bodies remain checked. The derived-method-shadowing diagnostic
+is disabled because Aobus uses CRTP customization points from LLVM
+`RecursiveASTVisitor` and standard range view interfaces; those methods refine a
+non-virtual fallback by design. Neither policy should be represented by repeated
+local suppressions.
+
 ## Things to avoid
 
 - Do not disable checks directory-wide or file-wide.

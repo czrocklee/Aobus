@@ -5,7 +5,7 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 
-#include <boost/asio/co_spawn.hpp> // NOLINT(misc-include-cleaner) -- public Boost.Asio API header
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/deferred.hpp>
 #include <boost/asio/experimental/parallel_group.hpp>
 #include <boost/asio/post.hpp>
@@ -44,26 +44,20 @@ namespace ao::async
       co_return;
     }
 
-    using SpawnOperation = decltype(boost::asio::co_spawn( // NOLINT(misc-include-cleaner) -- public API provider
-      runtime->workerPool(),
-      deferTaskStart(runtime, std::move(tasks.front())),
-      boost::asio::deferred));
+    using SpawnOperation = decltype(boost::asio::co_spawn(
+      runtime->workerPool(), deferTaskStart(runtime, std::move(tasks.front())), boost::asio::deferred));
     auto operations = std::vector<SpawnOperation>{};
     operations.reserve(tasks.size());
 
     for (auto& task : tasks)
     {
       operations.push_back(
-        boost::asio::co_spawn( // NOLINT(misc-include-cleaner) -- declared by the public co_spawn header
-          runtime->workerPool(),
-          deferTaskStart(runtime, std::move(task)),
-          boost::asio::deferred));
+        boost::asio::co_spawn(runtime->workerPool(), deferTaskStart(runtime, std::move(task)), boost::asio::deferred));
     }
 
     auto [completionOrder, exceptions] =
       co_await boost::asio::experimental::make_parallel_group(std::move(operations))
-        .async_wait(boost::asio::experimental::wait_for_all{}, // NOLINT(misc-include-cleaner) -- public API provider
-                    boost::asio::use_awaitable);
+        .async_wait(boost::asio::experimental::wait_for_all{}, boost::asio::use_awaitable);
 
     for (auto const& exceptionPtr : exceptions)
     {

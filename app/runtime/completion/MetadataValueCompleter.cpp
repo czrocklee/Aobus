@@ -6,6 +6,7 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/completion/CompletionText.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>
 
 #include <algorithm>

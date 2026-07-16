@@ -88,9 +88,7 @@ namespace ao::library
       TrackId const* begin() const noexcept { return _trackIds.data(); }
       TrackId const* end() const noexcept { return _trackIds.data() + _trackIds.size(); }
       // These O(1) members intentionally refine view_interface's CRTP fallback.
-      // NOLINTNEXTLINE(bugprone-derived-method-shadowing-base-method)
       bool empty() const noexcept { return _trackIds.empty(); }
-      // NOLINTNEXTLINE(bugprone-derived-method-shadowing-base-method)
       std::size_t size() const noexcept { return _trackIds.size(); }
 
     private:

@@ -3,6 +3,7 @@
 
 #include "runtime/library/LibraryMutationService.h"
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/library/DictionaryStore.h>

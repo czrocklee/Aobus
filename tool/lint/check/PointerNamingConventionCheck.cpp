@@ -23,12 +23,12 @@ namespace clang::tidy::readability
     auto const managedPointerType =
       hasType(qualType(anyOf(hasUnqualifiedDesugaredType(managedPointerRecord), references(managedPointerObjectType))));
 
-    finder->addMatcher(declaratorDecl(managedPointerType).bind("managed"), this);
+    finder->addMatcher(declaratorDecl(unless(isInstantiated()), managedPointerType).bind("managed"), this);
 
     auto const rawPointerObjectType = qualType(hasUnqualifiedDesugaredType(pointerType()));
     auto const rawPointerType =
       hasType(qualType(anyOf(hasUnqualifiedDesugaredType(pointerType()), references(rawPointerObjectType))));
-    finder->addMatcher(declaratorDecl(rawPointerType).bind("raw"), this);
+    finder->addMatcher(declaratorDecl(unless(isInstantiated()), rawPointerType).bind("raw"), this);
   }
 
   void PointerNamingConventionCheck::check(MatchFinder::MatchResult const& result)

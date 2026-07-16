@@ -14,7 +14,9 @@
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/preferences/PreferencesEditorModel.h>
 
-#include <gtkmm/application.h> // NOLINT(misc-include-cleaner)
+// Gtk::Window forward-declares Application, but remove_window requires the complete type.
+// NOLINTNEXTLINE(misc-include-cleaner)
+#include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/comboboxtext.h>

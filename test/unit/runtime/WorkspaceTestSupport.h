@@ -16,9 +16,8 @@
 
 namespace ao::rt::test
 {
-  class WorkspaceRuntimeFixture final
+  struct WorkspaceRuntimeFixture final
   {
-  public:
     WorkspaceRuntimeFixture()
       : runtime{makeRuntime(tempDir)}
       , firstListId{createList("First")}
@@ -35,14 +34,12 @@ namespace ao::rt::test
     }
 
     // These fixture values are intentionally public as the tests' assertion surface.
-    // NOLINTBEGIN(aobus-readability-identifier-naming-extensions)
     ao::test::TempDir tempDir;
     AppRuntime runtime;
     ListId firstListId;
     ListId secondListId;
     ListId thirdListId;
     ListId fourthListId;
-    // NOLINTEND(aobus-readability-identifier-naming-extensions)
   };
 
   inline ViewId requireNavigation(AppRuntime& runtime,

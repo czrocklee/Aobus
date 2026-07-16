@@ -18,6 +18,7 @@
 #include <gtkmm/stacksidebar.h>
 #include <gtkmm/window.h>
 #include <sigc++/connection.h>
+#include <sigc++/scoped_connection.h>
 
 #include <functional>
 #include <memory>
@@ -88,7 +89,7 @@ namespace ao::gtk
 
     Callbacks _callbacks;
     std::unique_ptr<uimodel::PreferencesEditorModel> _modelPtr;
-    sigc::scoped_connection _targetHideConn; // NOLINT(misc-include-cleaner)
+    sigc::scoped_connection _targetHideConn;
     sigc::connection _themeComboConn;
     sigc::connection _layoutPresetComboConn;
 

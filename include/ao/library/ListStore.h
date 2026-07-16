@@ -104,7 +104,7 @@ namespace ao::library
   /**
    * ListStore::Writer - Write access to lists.
    */
-  class ListStore::Writer final
+  class [[nodiscard]] ListStore::Writer final
   {
   public:
     Result<std::pair<ListId, ListView>> create(std::span<std::byte const> data);

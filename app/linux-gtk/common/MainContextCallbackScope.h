@@ -36,8 +36,6 @@ namespace ao::gtk
     auto guard(Callback callback) const
     {
       auto const weakStatePtr = std::weak_ptr<State>{_statePtr};
-      // Generic callback arguments can be values or managed pointers.
-      // NOLINTNEXTLINE(aobus-readability-pointer-naming-convention)
       return [weakStatePtr, callback = std::move(callback)](auto&&... arguments) mutable
       {
         static_assert(std::is_void_v<std::invoke_result_t<Callback&, decltype(arguments)...>>,

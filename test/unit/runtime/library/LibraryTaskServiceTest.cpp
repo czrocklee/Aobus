@@ -30,7 +30,6 @@
 #include <deque>
 #include <filesystem>
 #include <functional>
-#include <future>
 #include <mutex>
 #include <stop_token>
 #include <string>

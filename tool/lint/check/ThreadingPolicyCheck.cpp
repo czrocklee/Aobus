@@ -86,7 +86,7 @@ namespace clang::tidy::readability
       VarDecl const* target{};
       bool found = false;
 
-      bool VisitCXXMemberCallExpr(CXXMemberCallExpr* call) // NOLINT(bugprone-derived-method-shadowing-base-method)
+      bool VisitCXXMemberCallExpr(CXXMemberCallExpr* call)
       {
         if (auto const* method = call->getMethodDecl(); method != nullptr)
         {
@@ -115,10 +115,7 @@ namespace clang::tidy::readability
         return checkCallArgs(call);
       }
 
-      bool VisitCallExpr(CallExpr* call) // NOLINT(bugprone-derived-method-shadowing-base-method)
-      {
-        return checkCallArgs(call);
-      }
+      bool VisitCallExpr(CallExpr* call) { return checkCallArgs(call); }
 
     private:
       bool isConditionVariableWait(CallExpr const* call)
@@ -231,6 +228,7 @@ namespace clang::tidy::readability
 
           auto finder = UseFinder{};
           finder.target = lockVar;
+          // RecursiveASTVisitor's traversal API predates const AST traversal.
           finder.TraverseStmt(const_cast<Stmt*>(body)); // NOLINT(cppcoreguidelines-pro-type-const-cast)
 
           return finder.found;

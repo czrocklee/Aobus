@@ -9,9 +9,11 @@
 #include <ao/rt/Subscription.h>
 
 #include <boost/container/small_vector.hpp>
+#include <boost/unordered/unordered_flat_map.hpp>
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <vector>
@@ -88,10 +90,24 @@ namespace ao::rt
       bool active = false;
     };
 
+    using TrackMatches = boost::unordered_flat_map<TrackId, std::vector<bool>, std::hash<TrackId>>;
+
     void handleSourceBatch(TrackSource& source, TrackSourceDeltaBatch const& batch);
     void handleSourceReset(SourceBucket& bucket);
     void handleRegularBatch(SourceBucket& bucket, TrackSourceDeltaBatch const& batch, bool verifyFinalSnapshot = true);
     void handleSourceInvalidated(SourceBucket& bucket);
+
+    std::vector<DerivedWork> buildDerivedWorks(SourceBucket const& bucket,
+                                               std::vector<SmartListSource*>& evaluatableLists) const;
+    TrackMatches evaluateTouchedTracks(std::span<DerivedWork const> works,
+                                       std::span<SmartListSource* const> evaluatableLists,
+                                       std::span<TrackId const> touchedTrackIds) const;
+    static void updateDerivedWorks(std::span<DerivedWork> works,
+                                   IndexedTrackSequence const& upstreamTracks,
+                                   TrackMatches const& matchesByTrackId,
+                                   std::span<TrackId const> updatedTrackIds,
+                                   std::span<TrackId const> preferredMovedIds);
+    void commitDerivedWorks(SourceBucket& bucket, IndexedTrackSequence upstreamTracks, std::vector<DerivedWork>& works);
 
     void evaluateDirtyLists(SourceBucket& bucket);
     void rebuildLists(SourceBucket& bucket, std::span<SmartListSource*> lists);

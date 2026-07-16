@@ -17,9 +17,8 @@ namespace ao::rt::test
   {
     using Elapsed = PlaybackRestartDeadline::Elapsed;
 
-    class RestartDeadlineFixture final
+    struct RestartDeadlineFixture final
     {
-    public:
       RestartDeadlineFixture()
         : asyncRuntime{executor, 1, {}, &scheduler}
         , deadline{asyncRuntime,
@@ -33,7 +32,6 @@ namespace ao::rt::test
       }
 
       // These fixture values are intentionally public as the tests' assertion surface.
-      // NOLINTBEGIN(aobus-readability-identifier-naming-extensions)
       ManualExecutor executor;
       // The sleeper is declared before asyncRuntime so it outlives the Runtime that borrows it.
       ControlledSleeper scheduler;
@@ -42,7 +40,6 @@ namespace ao::rt::test
       std::size_t liveElapsedReadCount = 0;
       std::vector<bool> availabilityEvents;
       PlaybackRestartDeadline deadline;
-      // NOLINTEND(aobus-readability-identifier-naming-extensions)
     };
   } // namespace
 

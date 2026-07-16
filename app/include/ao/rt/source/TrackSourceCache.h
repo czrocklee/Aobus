@@ -42,6 +42,7 @@ namespace ao::rt
   };
 
   class LibraryChanges;
+  struct LibraryChangeSet;
   class CachedListSource;
 
   class TrackSourceCache final
@@ -69,6 +70,11 @@ namespace ao::rt
 
   private:
     Result<TrackSourceLease> acquire(ListId listId, std::vector<ListId> ancestry);
+    void handleLibraryChange(LibraryChangeSet const& event);
+    void handleLibraryReset();
+    void handleIncrementalLibraryChange(LibraryChangeSet const& event);
+    std::vector<ListId> applyManualContentChanges(LibraryChangeSet const& event);
+    void notifyMetadataUpdates(LibraryChangeSet const& event);
     void applyListMutation(std::move_only_function<void()> mutation);
     void drainPendingRefreshes();
     void refreshListNow(ListId listId);

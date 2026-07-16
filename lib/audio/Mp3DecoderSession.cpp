@@ -166,6 +166,7 @@ namespace ao::audio
         {
           if (requestedOutput.bitDepth == 0 || requestedOutput.bitDepth == kFloat32BitDepth)
           {
+            // mpg123.h owns this C macro; include-cleaner cannot map its provider.
             return MPG123_ENC_FLOAT_32; // NOLINT(misc-include-cleaner)
           }
 
@@ -174,6 +175,7 @@ namespace ao::audio
 
         if (requestedOutput.bitDepth == 0 || requestedOutput.bitDepth == kMp3PcmBitDepth)
         {
+          // mpg123.h owns this C macro; include-cleaner cannot map its provider.
           return MPG123_ENC_SIGNED_16; // NOLINT(misc-include-cleaner)
         }
 
@@ -213,6 +215,7 @@ namespace ao::audio
         .sampleRate = static_cast<std::uint32_t>(rate),
         .channels = channelCountFromMpg123(channels),
         .bitDepth = bitDepthFromEncoding(encoding),
+        // mpg123.h owns this C macro; include-cleaner cannot map its provider.
         .isFloat = (encoding & MPG123_ENC_FLOAT) != 0, // NOLINT(misc-include-cleaner)
         .isInterleaved = true,
       };

@@ -63,6 +63,8 @@ Library scans, import/export, identity indexing, delayed checkpoints, and other 
 Boost.Asio owns coroutine exception transport and passes an escaping exception to the terminal `co_spawn` completion handler as `std::exception_ptr`.
 For fire-and-forget roots, `Runtime` filters expected cancellation and forwards every other exception to an injected thread-safe diagnostic handler.
 Future-returning tasks retain explicit caller ownership and are not also reported by that handler.
+`Runtime::spawn` exposes that ownership as `TaskFuture<T>`.
+For non-void tasks, its private standard future carries `std::optional<T>`, separating transport readiness from domain construction so result types do not need an invalid default state.
 The [outcome channel specification](../spec/failure/outcome-channel.md) owns the exact terminal ordering and fallback behavior.
 
 The worker pool is not a second application-state owner.
@@ -176,6 +178,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`QueuedExecutorBase`](../../include/ao/async/QueuedExecutorBase.h) implements the multi-producer, owner-drained FIFO and wake-coalescing turn boundary used by GTK, TUI, and explicit loops.
 - [`LoopExecutor`](../../include/ao/async/LoopExecutor.h) adds the binary wake signal and owner-driven blocking/non-blocking turn operations.
 - [`ao::async::Runtime`](../../include/ao/async/Runtime.h) owns the worker pool and coroutine switching operations.
+- [`TaskFuture`](../../include/ao/async/TaskFuture.h) owns explicit future result and exception transport without default-constructing domain values.
 - [`AsyncExceptionHandler`](../../include/ao/async/AsyncExceptionHandler.h) is the injected terminal diagnostic seam.
 - [`Runtime.cpp`](../../lib/async/Runtime.cpp) implements worker spawning, cancellation, timers, and callback resumption.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) owns executor/runtime lifetime and worker shutdown ordering.
@@ -186,7 +189,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 
 ## Test map
 
-- [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) tests executor switching, cancellation, terminal exception ownership, and runtime lifetime.
+- [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) tests executor switching, cancellation, terminal exception ownership, non-default-constructible result transport, and runtime lifetime.
 - [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) tests lifetime bookkeeping and injected exception delivery.
 - [`LoopExecutorTest.cpp`](../../test/unit/runtime/LoopExecutorTest.cpp) protects owner affinity, burst wake coalescing, multi-producer admission, non-reentrant turns, and later-turn delivery.
 - [`CliRuntimeTest.cpp`](../../test/unit/cli/CliRuntimeTest.cpp) protects CLI worker round trips, callback-failure task completion, terminal exception propagation, and producer-first callback draining.

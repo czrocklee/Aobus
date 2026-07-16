@@ -3,6 +3,7 @@
 
 #include "test/unit/library/TrackBuilderTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackView.h>

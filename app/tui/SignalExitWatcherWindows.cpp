@@ -65,6 +65,7 @@ namespace ao::tui
       std::shared_ptr<std::move_only_function<void()>> _callbackPtr;
     };
 
+    // The Windows console-control C callback requires process-reachable state.
     std::atomic<std::shared_ptr<ExitCallbackState>>
       gActiveStatePtr{}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 

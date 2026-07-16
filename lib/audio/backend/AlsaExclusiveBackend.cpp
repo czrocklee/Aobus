@@ -290,7 +290,7 @@ namespace ao::audio::backend
       return true;
     }
 
-    class AlsaMixerSession final
+    class [[nodiscard]] AlsaMixerSession final
     {
     public:
       AlsaMixerSession() = default;

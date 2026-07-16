@@ -31,7 +31,7 @@
 
 namespace ao::gtk::layout::test
 {
-  class FakeTrackDetailScope final : public TrackDetailScope
+  class [[nodiscard]] FakeTrackDetailScope final : public TrackDetailScope
   {
   public:
     explicit FakeTrackDetailScope(rt::TrackDetailSnapshot snap = {})

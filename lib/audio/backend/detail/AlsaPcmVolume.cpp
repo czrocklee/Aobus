@@ -79,8 +79,7 @@ namespace ao::audio::backend::detail
         }
 
         auto sample = static_cast<std::int32_t>(uSample);
-        // NOLINTNEXTLINE(bugprone-narrowing-conversions,cppcoreguidelines-narrowing-conversions) — intentional int64
-        // from double round
+        // Round the scaled sample before clamping it to the signed 24-bit range.
         std::int64_t const scaled =
           static_cast<std::int64_t>(std::round(static_cast<double>(sample) * static_cast<double>(gain)));
         std::int32_t const finalSample = static_cast<std::int32_t>(std::clamp<std::int64_t>(scaled, kS24Min, kS24Max));

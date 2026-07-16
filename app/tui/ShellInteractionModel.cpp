@@ -208,9 +208,9 @@ namespace ao::tui
 
     std::string trim(std::string_view value)
     {
-      // NOLINTNEXTLINE(readability-qualified-auto)
+      // NOLINTNEXTLINE(readability-qualified-auto) -- string_view iterator representation is library-specific.
       auto begin = value.begin();
-      // NOLINTNEXTLINE(readability-qualified-auto)
+      // NOLINTNEXTLINE(readability-qualified-auto) -- string_view iterator representation is library-specific.
       auto end = value.end();
 
       while (begin != end && std::isspace(static_cast<unsigned char>(*begin)) != 0)
@@ -264,7 +264,7 @@ namespace ao::tui
       }
     }
 
-    // NOLINTNEXTLINE(readability-qualified-auto)
+    // NOLINTNEXTLINE(readability-qualified-auto) -- std::array iterator representations differ across libraries.
     auto const aliasIt = std::ranges::find_if(
       kAliasCommands, [&](CommandAliasSpec const& aliasCommand) { return command == aliasCommand.alias; });
 

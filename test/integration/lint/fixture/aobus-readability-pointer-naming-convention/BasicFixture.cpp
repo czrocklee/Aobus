@@ -172,3 +172,30 @@ void testFunctionEmptyParam(std::shared_ptr<MyClass>)
   // NEGATIVE
   auto myAutoLambda = [](auto, auto, auto) {};
 }
+
+template<typename Callback>
+auto guardGenericCallback(Callback callback)
+{
+  // NEGATIVE: a dependent generic parameter can be instantiated as either a value or a pointer.
+  return [callback](auto&&... arguments) { callback(static_cast<decltype(arguments)>(arguments)...); };
+}
+
+void instantiateGenericCallback()
+{
+  auto guarded = guardGenericCallback([](MyClass*) {});
+  auto value = MyClass{};
+  guarded(&value);
+
+  auto guardedManaged = guardGenericCallback([](std::shared_ptr<MyClass>) {});
+  guardedManaged(std::make_shared<MyClass>());
+}
+
+template<typename T>
+struct GenericHolder
+{
+  // NEGATIVE: a dependent member can be instantiated as either a value or a pointer.
+  T value;
+};
+
+GenericHolder<MyClass> valueHolder;
+GenericHolder<std::shared_ptr<MyClass>> pointerHolder;

@@ -37,6 +37,7 @@ CONFIG_BASE = """
   {key: 'readability-magic-numbers.IgnoredIntegerValues', value: '0;1;2;3;4;8;8U;16;16U;24;32;32U;64;64U;60;100;1000;1000U'},
   {key: 'readability-qualified-auto.AllowedTypes', value: 'std::array<.*>::(const_)?iterator;std::string_view::(const_)?iterator;.*::iterator;.*Iterator'},
   {key: 'readability-function-cognitive-complexity.Threshold', value: 30},
+  {key: 'readability-function-cognitive-complexity.IgnoreMacros', value: true},
   {key: 'cppcoreguidelines-macro-usage.AllowedRegexp', value: '^DEBUG_*|^[A-Z_]+_LOG_[A-Z_]+$'},
   {key: 'misc-use-internal-linkage.AnalyzeTypes', value: false},
   {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*;.*ryml.*;.*c4[/\\\\].*;.*boost[/\\\\]asio[/\\\\].*;.*boost[/\\\\]interprocess[/\\\\].*;.*boost[/\\\\]system[/\\\\].*;.*boost[/\\\\]unordered[/\\\\].*;.*boost[/\\\\]pfr.*;.*[/\\\\]flat_(set|map);.*[/\\\\]errno.h;.*glib.*;.*Windows Kits.*;.*windows\\.h'}

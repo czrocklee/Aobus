@@ -3,12 +3,12 @@
 
 #include "TrackFieldGridRows.h"
 
-#include "gtkmm/enums.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
 #include "track/TrackFieldUi.h"
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
 
+#include <gtkmm/enums.h>
 #include <pangomm/layout.h>
 
 #include <cstdint>

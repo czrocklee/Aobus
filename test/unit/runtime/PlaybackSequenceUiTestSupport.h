@@ -17,9 +17,8 @@
 
 namespace ao::rt::test
 {
-  class PlaybackSequenceUiFixture final
+  struct PlaybackSequenceUiFixture final
   {
-  public:
     PlaybackSequenceUiFixture()
       : runtime{makeRuntime(tempDir)}
       , viewId{ao::test::requireValue(runtime.workspace().navigateTo(GlobalViewKind::AllTracks)).activeViewId}
@@ -39,10 +38,8 @@ namespace ao::rt::test
     Result<> playFromView(TrackId trackId) { return runtime.playbackSequence().playFromView(viewId, trackId); }
 
     // These fixture values are intentionally public as the tests' assertion surface.
-    // NOLINTBEGIN(aobus-readability-identifier-naming-extensions)
     ao::test::TempDir tempDir;
     AppRuntime runtime;
     ViewId viewId{kInvalidViewId};
-    // NOLINTEND(aobus-readability-identifier-naming-extensions)
   };
 } // namespace ao::rt::test

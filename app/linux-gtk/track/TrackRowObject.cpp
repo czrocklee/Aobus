@@ -63,7 +63,6 @@ namespace ao::gtk
     {
       auto const objPtr = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{});
       // G_OBJECT_TYPE is a GLib function-like macro with an unavoidable C cast.
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
       return G_OBJECT_TYPE(objPtr->gobj());
     }();
     return type;

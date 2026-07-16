@@ -109,7 +109,7 @@ namespace ao::library
     friend class FileManifestStore;
   };
 
-  class FileManifestStore::Writer final
+  class [[nodiscard]] FileManifestStore::Writer final
   {
   public:
     Result<FileManifestView> get(std::string_view uri) const;

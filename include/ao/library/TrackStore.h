@@ -251,7 +251,7 @@ namespace ao::library
   /**
    * TrackStore::Writer - Write access to tracks.
    */
-  class TrackStore::Writer final
+  class [[nodiscard]] TrackStore::Writer final
   {
   public:
     /**

@@ -103,6 +103,7 @@ namespace ao::rt::test
         .movementTotal(2);
       trackBuilder.property()
         .uri(kTrackUri)
+        // <chrono> owns this literal; include-cleaner cannot map the using-directive provider.
         .duration(245s) // NOLINT(misc-include-cleaner)
         .bitrate(Bitrate{960000})
         .sampleRate(SampleRate{48000})
@@ -191,7 +192,7 @@ namespace ao::rt::test
     CHECK(row.movement == "Movement");
     CHECK(row.soloist == "Soloist");
     CHECK(row.tags == "Favorite, Live");
-    CHECK(row.duration == 245s); // NOLINT(misc-include-cleaner)
+    CHECK(row.duration == 245s);
     CHECK(row.year == 2026);
     CHECK(row.discNumber == 2);
     CHECK(row.discTotal == 3);

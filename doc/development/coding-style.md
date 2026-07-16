@@ -95,7 +95,10 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
     - 3.2.4. Use `if constexpr` to remove compile-time branches
     - 3.2.5. Use structured bindings when they improve clarity: `for (auto& [key, value] : map)`
     - 3.2.6. Use init-statements in `if` and `switch` when they keep temporary scope local: `if (auto var = get(); condition)`
-    - 3.2.7. Do not use `[[nodiscard]]`; rely on `clang-tidy` to catch ignored return values
+    - 3.2.7. Use `[[nodiscard]]` on RAII owner types when discarding a temporary would immediately release a resource or undo a scoped effect; do not use it on functions.
+      - `aobus-modernize-nodiscard-usage` requires the attribute when both the domain name signals a lifecycle or resource owner, such as `*Session`, `*Scope`, `*Transaction`, or `*Future`, and the type structurally owns cleanup through a user-provided destructor, an owning RAII member, or an RAII base, with copy construction disabled.
+      - Raw pointers and references are observers and do not establish RAII ownership. Abstract lifecycle interfaces are not annotated merely for their name; annotate the concrete owning implementation.
+      - Structurally RAII types with another clear domain name may opt in. `ao::Result` is the explicit non-RAII exception because discarding it loses the recoverable failure channel.
     - 3.2.8. Do not use casts to suppress unused warnings.
       - 3.2.8.1. Never-used function parameters: use `Type /*name*/` (anonymous parameter).
       - 3.2.8.2. Conditionally-used parameters, local variables, and structured bindings: use `[[maybe_unused]]`.

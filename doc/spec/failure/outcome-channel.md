@@ -102,8 +102,9 @@ The handler is diagnostic-only: it does not acknowledge a command, recover domai
 For a `LifetimeScope` task, retirement means marking the task complete and removing it from the scope before invoking the handler.
 Scope cancellation from, or concurrently with, the handler must therefore neither find the completed task nor cancel it again.
 
-`Runtime::spawn` retains the exception in its returned future instead of invoking the diagnostic handler.
-Calling `future::get()` rethrows that original exception to the explicit caller.
+`Runtime::spawn` returns a caller-owned `TaskFuture<T>` and retains an escaping task exception there instead of invoking the diagnostic handler.
+For non-void tasks, its private future carries `std::optional<T>` so neither Boost.Asio nor the standard-library future needs to default-construct the domain result before completion.
+`TaskFuture<T>::get()` returns the produced value or rethrows the original task exception; a successful terminal state without the required value is an invariant fault.
 
 The stderr fallback distinguishes standard exceptions, whose `what()` detail is available, from unknown exceptions.
 Formatting or stream failure is contained inside the fallback and never escapes an Asio completion callback.
@@ -125,6 +126,7 @@ Cancellation after diagnosis may suppress stale presentation, but it cannot eras
 - [`Error.h`](../../../include/ao/Error.h) defines `ao::Error`, `ao::Result<T>`, and `makeError`.
 - [`Exception.h`](../../../include/ao/Exception.h) defines `ao::Exception` and source-location-preserving throw helpers.
 - [`AsyncExceptionHandler.h`](../../../include/ao/async/AsyncExceptionHandler.h) defines the injected terminal diagnostic seam.
+- [`TaskFuture.h`](../../../include/ao/async/TaskFuture.h) defines explicit caller-owned result and exception transport without requiring default-constructible task values.
 - [`Runtime.h`](../../../include/ao/async/Runtime.h), [`Runtime.cpp`](../../../lib/async/Runtime.cpp), and [`LifetimeScope.cpp`](../../../lib/async/LifetimeScope.cpp) implement terminal ownership, cancellation exclusion, fallback, and bookkeeping order.
 - [`StorageResult.h`](../../../app/include/ao/rt/StorageResult.h) demonstrates the deliberate `NotFound`-to-absence translation used by runtime storage reads.
 - [`UiWorkflow.h`](../../../app/linux-gtk/common/UiWorkflow.h) implements diagnostic-before-presentation ordering for GTK workflows.
@@ -133,7 +135,7 @@ Cancellation after diagnosis may suppress stale presentation, but it cannot eras
 ## Test map
 
 - [`ErrorTest.cpp`](../../../test/unit/core/ErrorTest.cpp) and [`ExceptionTest.cpp`](../../../test/unit/core/ExceptionTest.cpp) protect value, inheritance, and diagnostic-location behavior.
-- [`AsyncRuntimeTest.cpp`](../../../test/unit/runtime/AsyncRuntimeTest.cpp) protects future single ownership, injected delivery, cancellation exclusion, and non-throwing stderr fallback.
+- [`AsyncRuntimeTest.cpp`](../../../test/unit/runtime/AsyncRuntimeTest.cpp) protects future single ownership, non-default-constructible value transport, injected delivery, cancellation exclusion, and non-throwing stderr fallback.
 - [`LifetimeScopeTest.cpp`](../../../test/unit/runtime/LifetimeScopeTest.cpp) protects task retirement before diagnostic delivery.
 - [`AppRuntimeTest.cpp`](../../../test/unit/runtime/AppRuntimeTest.cpp) protects composition of the injected handler into the core runtime.
 - [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects callback-affine failure cleanup before exception propagation.

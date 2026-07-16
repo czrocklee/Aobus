@@ -249,7 +249,6 @@ namespace ao::library::test
     // The wrapper specifies an inactive moved-from state that is safe to query.
     // NOLINTNEXTLINE(bugprone-use-after-move)
     CHECK_THROWS_AS(source.dictionary(), Exception);
-    // NOLINTNEXTLINE(bugprone-use-after-move)
     auto const sourceCommit = source.commit();
     REQUIRE_FALSE(sourceCommit);
     CHECK(sourceCommit.error().code == Error::Code::InvalidState);

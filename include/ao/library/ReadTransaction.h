@@ -25,7 +25,7 @@ namespace ao::library
    * The native LMDB transaction is intentionally hidden so library consumers
    * cannot use this capability with an unrelated storage surface.
    */
-  class ReadTransaction final
+  class [[nodiscard]] ReadTransaction final
   {
   public:
     ~ReadTransaction() = default;

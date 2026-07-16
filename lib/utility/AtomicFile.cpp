@@ -179,6 +179,7 @@ namespace ao::utility
       {
         // The replacement is already visible. A directory-barrier failure must
         // not be reported as a conventional "not applied" error.
+        // POSIX declares open as variadic even when O_CREAT is absent.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
         std::int32_t const parentFd = ::open(parentPath.c_str(), O_RDONLY | O_DIRECTORY);
 

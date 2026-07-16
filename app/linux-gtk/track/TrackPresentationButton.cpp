@@ -176,7 +176,6 @@ namespace ao::gtk
 
     auto const label = std::string{_button.get_label()} + " Copy";
     auto dialog = TrackCustomViewDialog{*parentWindow, spec, label};
-    // NOLINTNEXTLINE(aobus-readability-use-if-init-statement) — RAII: must outlive if-block to keep dialog themed
     auto optToken = std::optional<ThemeRegistrationToken>{};
 
     if (_themeCoordinator != nullptr)

@@ -801,6 +801,17 @@ namespace ao::rt
 
     using TrackIdSet = boost::unordered_flat_set<TrackId, std::hash<TrackId>>;
 
+    struct SourceOrderResolution final
+    {
+      bool hasStructuralChanges = false;
+      std::vector<TrackId> finalTrackIds{};
+
+      std::span<TrackId const> trackIds(std::span<TrackId const> currentTrackIds) const
+      {
+        return hasStructuralChanges ? std::span<TrackId const>{finalTrackIds} : currentTrackIds;
+      }
+    };
+
     bool sourceMatches(std::span<TrackId const> expected) const
     {
       auto const& source = sourceLease.source();
@@ -828,26 +839,26 @@ namespace ao::rt
       return rowsTouchedSinceRebuild >= churnThreshold || stringArena.allocatedBytes() >= arenaRebaseThresholdBytes;
     }
 
-    // NOLINTNEXTLINE(readability-function-cognitive-complexity) -- one pass keeps batch invariants visible together.
-    bool applyIncrementalBatch(TrackSourceDeltaBatch const& sourceBatch, delta::RegularTrackEditScript const& script)
+    std::optional<SourceOrderResolution> resolveFinalSourceOrder(TrackSourceDeltaBatch const& sourceBatch,
+                                                                 delta::RegularTrackEditScript const& script) const
     {
-      bool const hasStructuralChanges = std::ranges::any_of(
-        sourceBatch.deltas,
-        [](TrackSourceDelta const& sourceDelta) { return !std::holds_alternative<SourceUpdateRange>(sourceDelta); });
-      auto finalSourceOrderStorage = std::vector<TrackId>{};
+      auto resolution = SourceOrderResolution{.hasStructuralChanges = std::ranges::any_of(
+                                                sourceBatch.deltas,
+                                                [](TrackSourceDelta const& sourceDelta)
+                                                { return !std::holds_alternative<SourceUpdateRange>(sourceDelta); })};
       auto finalSourceOrder = std::span<TrackId const>{sourceOrder};
 
-      if (hasStructuralChanges)
+      if (resolution.hasStructuralChanges)
       {
         auto result = delta::apply(sourceOrder, script);
 
         if (!result)
         {
-          return false;
+          return std::nullopt;
         }
 
-        finalSourceOrderStorage = std::move(*result);
-        finalSourceOrder = finalSourceOrderStorage;
+        resolution.finalTrackIds = std::move(*result);
+        finalSourceOrder = resolution.finalTrackIds;
       }
       else
       {
@@ -858,21 +869,25 @@ namespace ao::rt
           if (update.start > sourceOrder.size() || update.trackIds.size() > sourceOrder.size() - update.start ||
               !std::ranges::equal(update.trackIds, finalSourceOrder.subspan(update.start, update.trackIds.size())))
           {
-            return false;
+            return std::nullopt;
           }
         }
       }
 
       if (!sourceMatches(finalSourceOrder))
       {
-        return false;
+        return std::nullopt;
       }
 
-      auto replacementIds = TrackIdSet{};
-      auto excludedIds = TrackIdSet{};
-      auto changedIds = TrackIdSet{};
-      bool const entriesDependOnTrackData = comparator || groupBy != TrackGroupKey::None;
+      return resolution;
+    }
 
+    static void collectChangedTrackIds(TrackSourceDeltaBatch const& sourceBatch,
+                                       bool const entriesDependOnTrackData,
+                                       TrackIdSet& replacementIds,
+                                       TrackIdSet& excludedIds,
+                                       TrackIdSet& changedIds)
+    {
       for (auto const& sourceDelta : sourceBatch.deltas)
       {
         std::visit(
@@ -904,7 +919,10 @@ namespace ao::rt
           },
           sourceDelta);
       }
+    }
 
+    std::vector<OrderEntry> retainOrderEntries(TrackIdSet const& excludedIds) const
+    {
       auto retainedEntries = std::vector<OrderEntry>{};
       retainedEntries.reserve(orderIndex.size());
 
@@ -916,40 +934,51 @@ namespace ao::rt
         }
       }
 
+      return retainedEntries;
+    }
+
+    std::optional<std::vector<OrderEntry>> buildReplacementEntries(TrackIdSet const& replacementIds,
+                                                                   std::span<TrackId const> finalSourceOrder,
+                                                                   bool const entriesDependOnTrackData)
+    {
       auto replacementEntries = std::vector<OrderEntry>{};
       replacementEntries.reserve(replacementIds.size());
 
-      if (!replacementIds.empty())
+      if (replacementIds.empty())
       {
-        auto const transaction = library.readTransaction();
-        auto const reader = library.tracks().reader(transaction);
-        auto const& dictionary = library.dictionary();
+        return replacementEntries;
+      }
 
-        for (auto const trackId : finalSourceOrder)
+      auto const transaction = library.readTransaction();
+      auto const reader = library.tracks().reader(transaction);
+      auto const& dictionary = library.dictionary();
+
+      for (auto const trackId : finalSourceOrder)
+      {
+        if (!replacementIds.contains(trackId))
         {
-          if (!replacementIds.contains(trackId))
-          {
-            continue;
-          }
-
-          auto const optView =
-            storageValueOrNullopt(reader.get(trackId, loadMode), "Failed to incrementally rebuild track order");
-
-          if (!optView)
-          {
-            return false;
-          }
-
-          replacementEntries.push_back(entriesDependOnTrackData ? buildOrderEntry(trackId, *optView, dictionary)
-                                                                : OrderEntry{.trackId = trackId});
+          continue;
         }
+
+        auto const optView =
+          storageValueOrNullopt(reader.get(trackId, loadMode), "Failed to incrementally rebuild track order");
+
+        if (!optView)
+        {
+          return std::nullopt;
+        }
+
+        replacementEntries.push_back(entriesDependOnTrackData ? buildOrderEntry(trackId, *optView, dictionary)
+                                                              : OrderEntry{.trackId = trackId});
       }
 
-      if (retainedEntries.size() + replacementEntries.size() != finalSourceOrder.size())
-      {
-        return false;
-      }
+      return replacementEntries;
+    }
 
+    std::optional<std::vector<OrderEntry>> mergeIncrementalOrder(std::span<TrackId const> finalSourceOrder,
+                                                                 std::vector<OrderEntry> retainedEntries,
+                                                                 std::vector<OrderEntry> replacementEntries)
+    {
       auto updatedOrder = std::vector<OrderEntry>{};
       updatedOrder.reserve(finalSourceOrder.size());
 
@@ -957,41 +986,48 @@ namespace ao::rt
       {
         std::ranges::sort(replacementEntries, std::ref(comparator));
         std::ranges::merge(retainedEntries, replacementEntries, std::back_inserter(updatedOrder), std::ref(comparator));
+        return updatedOrder;
       }
-      else
+
+      auto retainedIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
+      auto replacementIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
+      retainedIndex.reserve(retainedEntries.size());
+      replacementIndex.reserve(replacementEntries.size());
+
+      for (std::size_t index = 0; index < retainedEntries.size(); ++index)
       {
-        auto retainedIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
-        auto replacementIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
-        retainedIndex.reserve(retainedEntries.size());
-        replacementIndex.reserve(replacementEntries.size());
+        retainedIndex.emplace(retainedEntries[index].trackId, index);
+      }
 
-        for (std::size_t index = 0; index < retainedEntries.size(); ++index)
+      for (std::size_t index = 0; index < replacementEntries.size(); ++index)
+      {
+        replacementIndex.emplace(replacementEntries[index].trackId, index);
+      }
+
+      for (auto const trackId : finalSourceOrder)
+      {
+        if (auto const replacementIt = replacementIndex.find(trackId); replacementIt != replacementIndex.end())
         {
-          retainedIndex.emplace(retainedEntries[index].trackId, index);
+          updatedOrder.push_back(replacementEntries[replacementIt->second]);
         }
-
-        for (std::size_t index = 0; index < replacementEntries.size(); ++index)
+        else if (auto const retainedIt = retainedIndex.find(trackId); retainedIt != retainedIndex.end())
         {
-          replacementIndex.emplace(replacementEntries[index].trackId, index);
+          updatedOrder.push_back(retainedEntries[retainedIt->second]);
         }
-
-        for (auto const trackId : finalSourceOrder)
+        else
         {
-          if (auto const replacementIt = replacementIndex.find(trackId); replacementIt != replacementIndex.end())
-          {
-            updatedOrder.push_back(replacementEntries[replacementIt->second]);
-          }
-          else if (auto const retainedIt = retainedIndex.find(trackId); retainedIt != retainedIndex.end())
-          {
-            updatedOrder.push_back(retainedEntries[retainedIt->second]);
-          }
-          else
-          {
-            return false;
-          }
+          return std::nullopt;
         }
       }
 
+      return updatedOrder;
+    }
+
+    void finishIncrementalBatch(bool const hasStructuralChanges,
+                                std::vector<TrackId> finalSourceOrderStorage,
+                                std::vector<OrderEntry> updatedOrder,
+                                std::size_t const changedCount)
+    {
       if (hasStructuralChanges)
       {
         sourceOrder = std::move(finalSourceOrderStorage);
@@ -1000,13 +1036,13 @@ namespace ao::rt
       orderIndex = std::move(updatedOrder);
       ++operationCounts.incrementalProjectionUpdates;
 
-      if (changedIds.size() > std::numeric_limits<std::size_t>::max() - rowsTouchedSinceRebuild)
+      if (changedCount > std::numeric_limits<std::size_t>::max() - rowsTouchedSinceRebuild)
       {
         rowsTouchedSinceRebuild = std::numeric_limits<std::size_t>::max();
       }
       else
       {
-        rowsTouchedSinceRebuild += changedIds.size();
+        rowsTouchedSinceRebuild += changedCount;
       }
 
       if (shouldRebase())
@@ -1019,7 +1055,44 @@ namespace ao::rt
         rebuildRowIndex();
         buildGroupSections();
       }
+    }
 
+    bool applyIncrementalBatch(TrackSourceDeltaBatch const& sourceBatch, delta::RegularTrackEditScript const& script)
+    {
+      auto optSourceOrderResolution = resolveFinalSourceOrder(sourceBatch, script);
+
+      if (!optSourceOrderResolution)
+      {
+        return false;
+      }
+
+      auto sourceOrderResolution = std::move(*optSourceOrderResolution);
+      auto const finalSourceOrder = sourceOrderResolution.trackIds(sourceOrder);
+      auto replacementIds = TrackIdSet{};
+      auto excludedIds = TrackIdSet{};
+      auto changedIds = TrackIdSet{};
+      bool const entriesDependOnTrackData = comparator || groupBy != TrackGroupKey::None;
+      collectChangedTrackIds(sourceBatch, entriesDependOnTrackData, replacementIds, excludedIds, changedIds);
+      auto retainedEntries = retainOrderEntries(excludedIds);
+      auto optReplacementEntries = buildReplacementEntries(replacementIds, finalSourceOrder, entriesDependOnTrackData);
+
+      if (!optReplacementEntries || retainedEntries.size() + optReplacementEntries->size() != finalSourceOrder.size())
+      {
+        return false;
+      }
+
+      auto optUpdatedOrder =
+        mergeIncrementalOrder(finalSourceOrder, std::move(retainedEntries), std::move(*optReplacementEntries));
+
+      if (!optUpdatedOrder)
+      {
+        return false;
+      }
+
+      finishIncrementalBatch(sourceOrderResolution.hasStructuralChanges,
+                             std::move(sourceOrderResolution.finalTrackIds),
+                             std::move(*optUpdatedOrder),
+                             changedIds.size());
       return true;
     }
 

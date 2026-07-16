@@ -3,7 +3,6 @@
 
 #include "track/TrackQuickFilter.h"
 
-#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>

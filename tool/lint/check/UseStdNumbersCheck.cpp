@@ -133,7 +133,6 @@ namespace clang::tidy::readability
       {
       }
 
-      // NOLINTNEXTLINE(bugprone-derived-method-shadowing-base-method,readability-identifier-naming)
       bool VisitCallExpr(CallExpr* call)
       {
         if (auto const* calleeDecl = call->getDirectCallee(); calleeDecl != nullptr)

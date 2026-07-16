@@ -77,7 +77,6 @@ namespace ao::lmdb::test
     auto source = beginReadTransaction(env);
     auto destination = ReadTransaction{std::move(source)};
     // ReadTransaction specifies an inactive moved-from state.
-    // NOLINTNEXTLINE(bugprone-use-after-move)
     auto const result = Database::open(source, "test");
 
     REQUIRE_FALSE(result);

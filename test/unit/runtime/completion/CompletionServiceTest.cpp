@@ -50,7 +50,8 @@ namespace ao::rt::test
       auto executor = InlineExecutor{};
       auto mutationService = LibraryMutationService{executor, library::test::requireWritableLibrary(library), changes};
       auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-      REQUIRE(mutation.commit(std::move(changeSet)));
+      auto const commitResult = mutation.commit(std::move(changeSet));
+      REQUIRE(commitResult);
     }
   } // namespace
 

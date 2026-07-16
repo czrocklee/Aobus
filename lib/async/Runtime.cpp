@@ -10,7 +10,7 @@
 
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/co_spawn.hpp> // NOLINT(misc-include-cleaner) -- public Boost.Asio API header
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/post.hpp>
@@ -238,20 +238,19 @@ namespace ao::async
 
   void Runtime::spawnLogged(Task<void> task)
   {
-    boost::asio::co_spawn( // NOLINT(misc-include-cleaner) -- declared by the public co_spawn header
-      workerPool(),
-      std::move(task),
-      [this](std::exception_ptr exceptionPtr) { handleUnhandledException(std::move(exceptionPtr), "root coroutine"); });
+    boost::asio::co_spawn(workerPool(),
+                          std::move(task),
+                          [this](std::exception_ptr exceptionPtr)
+                          { handleUnhandledException(std::move(exceptionPtr), "root coroutine"); });
   }
 
   std::move_only_function<void()> Runtime::startCancellable(CancellableTask task,
                                                             std::function<void(std::exception_ptr)> completion)
   {
     auto stopSourcePtr = std::make_shared<std::stop_source>();
-    boost::asio::co_spawn( // NOLINT(misc-include-cleaner) -- declared by the public co_spawn header
-      workerPool(),
-      runCancellable(std::move(task), stopSourcePtr->get_token()),
-      [completion = std::move(completion)](std::exception_ptr exPtr) { completion(exPtr); });
+    boost::asio::co_spawn(workerPool(),
+                          runCancellable(std::move(task), stopSourcePtr->get_token()),
+                          [completion = std::move(completion)](std::exception_ptr exPtr) { completion(exPtr); });
     return [stopSourcePtr] { std::ignore = stopSourcePtr->request_stop(); };
   }
 

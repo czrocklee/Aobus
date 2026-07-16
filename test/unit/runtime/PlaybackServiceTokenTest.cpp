@@ -93,7 +93,7 @@ namespace ao::rt::test
       bool _armed = true;
     };
 
-    class GatedDecoderSession final : public audio::DecoderSession
+    class [[nodiscard]] GatedDecoderSession final : public audio::DecoderSession
     {
     public:
       explicit GatedDecoderSession(std::binary_semaphore* failureRelease)

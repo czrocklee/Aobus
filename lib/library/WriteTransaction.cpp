@@ -21,7 +21,6 @@ namespace ao::library
   {
     // A unique_lock is required because commit and failure paths release the
     // process-wide writer gate before this object is destroyed.
-    // NOLINTNEXTLINE(aobus-threading-policy)
     Impl(std::unique_lock<std::mutex> writerLock,
          lmdb::WriteTransaction transactionValue,
          DictionaryStore& dictionary,

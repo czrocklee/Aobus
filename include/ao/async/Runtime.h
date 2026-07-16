@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Task.h"
+#include "TaskFuture.h"
 #include <ao/async/AsyncExceptionHandler.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -15,10 +16,7 @@
 #include <cstddef>
 #include <exception>
 #include <functional>
-#include <future>
-#include <memory>
 #include <optional>
-#include <stdexcept>
 #include <stop_token>
 #include <string_view>
 #include <type_traits>
@@ -71,65 +69,19 @@ namespace ao::async
     TaskHandle spawnCancellable(CancellableTask task);
 
     template<typename T>
-    std::future<T> spawn(Task<T> task)
+    TaskFuture<T> spawn(Task<T> task)
     {
       if constexpr (std::is_void_v<T>)
       {
-        return boost::asio::co_spawn(workerPool(), std::move(task), boost::asio::use_future);
+        return TaskFuture<void>{boost::asio::co_spawn(workerPool(), std::move(task), boost::asio::use_future)};
       }
       else
       {
-        // Boost.Asio supplies T{} to a completion handler when the coroutine
-        // fails. Keep that transport detail local instead of forcing domain
-        // result types to expose an invalid default state.
+        // Boost.Asio supplies an empty optional to its completion token when
+        // the source fails, while use_future preserves the source exception.
         auto transport = [](Task<T> source) -> Task<std::optional<T>>
         { co_return std::optional<T>{co_await std::move(source)}; }(std::move(task));
-        auto promise = std::make_shared<std::promise<T>>();
-        auto future = promise->get_future();
-
-        boost::asio::co_spawn(
-          workerPool(),
-          std::move(transport),
-          [promise = std::move(promise)](std::exception_ptr exceptionPtr, std::optional<T> value) noexcept
-          {
-            auto setException = [&promise](std::exception_ptr completionException) noexcept
-            {
-              try
-              {
-                promise->set_exception(std::move(completionException));
-              }
-              catch (...)
-              {
-                // A completion callback must not unwind into Boost.Asio.
-                return;
-              }
-            };
-
-            if (exceptionPtr)
-            {
-              setException(std::move(exceptionPtr));
-              return;
-            }
-
-            if (!value)
-            {
-              setException(
-                std::make_exception_ptr(std::logic_error{"Async task completed without its required result value"}));
-
-              return;
-            }
-
-            try
-            {
-              promise->set_value(std::move(*value));
-            }
-            catch (...)
-            {
-              setException(std::current_exception());
-            }
-          });
-
-        return future;
+        return TaskFuture{boost::asio::co_spawn(workerPool(), std::move(transport), boost::asio::use_future)};
       }
     }
 

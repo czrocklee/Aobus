@@ -246,7 +246,7 @@ namespace ao::audio::test
     bool _armed = true;
   };
 
-  class StagedFailureDecoderSession final : public DecoderSession
+  class [[nodiscard]] StagedFailureDecoderSession final : public DecoderSession
   {
   public:
     explicit StagedFailureDecoderSession(StagedFailureGate* failureGate)

@@ -33,6 +33,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -420,29 +421,8 @@ namespace ao::tui
     _seekSlider.reset();
   }
 
-  // TUI mouse dispatch is intentionally flat so hit-test ordering remains explicit.
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-  bool EventController::handleMouse(ftxui::Mouse const& mouse)
+  std::optional<bool> EventController::handleActiveMouseDrag(ftxui::Mouse const& mouse)
   {
-    auto const modalInputActive = _shell.isCommandActive() || isOverlayActive(_shell.overlay());
-
-    if (modalInputActive && _optSeekRailDrag)
-    {
-      cancelSeekInteraction();
-      return false;
-    }
-
-    if (_shell.isCommandActive())
-    {
-      _optTrackScrollbarDrag.reset();
-      _optTrackColumnResizeDrag.reset();
-
-      if (mouse.motion != ftxui::Mouse::Moved)
-      {
-        return false;
-      }
-    }
-
     if (_optSeekRailDrag)
     {
       if (mouse.motion == ftxui::Mouse::Moved || mouse.motion == ftxui::Mouse::Released)
@@ -503,6 +483,11 @@ namespace ao::tui
       _optTrackColumnResizeDrag.reset();
     }
 
+    return std::nullopt;
+  }
+
+  std::optional<bool> EventController::handleMouseWheel(ftxui::Mouse const& mouse)
+  {
     if ((mouse.button == ftxui::Mouse::WheelUp || mouse.button == ftxui::Mouse::WheelDown) &&
         mouse.motion == ftxui::Mouse::Pressed)
     {
@@ -518,99 +503,123 @@ namespace ao::tui
       return false;
     }
 
-    if (mouse.motion == ftxui::Mouse::Moved)
+    return std::nullopt;
+  }
+
+  bool EventController::handleMouseMove(ftxui::Mouse const& mouse)
+  {
+    auto const buttonHit =
+      _hitRegions == nullptr
+        ? ButtonHitTestResult{}
+        : _hitRegions->hitTestButton(mouse.x,
+                                     mouse.y,
+                                     HitTestContext{.isCommandActive = _shell.isCommandActive(),
+                                                    .isOverlayActive = isOverlayActive(_shell.overlay())});
+    bool handled = false;
+
+    if (_hoveredButton != buttonHit.hoveredButton)
     {
-      auto const buttonHit =
-        _hitRegions == nullptr
-          ? ButtonHitTestResult{}
-          : _hitRegions->hitTestButton(mouse.x,
-                                       mouse.y,
-                                       HitTestContext{.isCommandActive = _shell.isCommandActive(),
-                                                      .isOverlayActive = isOverlayActive(_shell.overlay())});
-      bool handled = false;
-
-      if (_hoveredButton != buttonHit.hoveredButton)
-      {
-        _hoveredButton = buttonHit.hoveredButton;
-        handled = true;
-      }
-
-      if (_qualityHoverVisible != buttonHit.isQualityHoverVisible)
-      {
-        _qualityHoverVisible = buttonHit.isQualityHoverVisible;
-        handled = true;
-      }
-
-      return handled;
+      _hoveredButton = buttonHit.hoveredButton;
+      handled = true;
     }
 
-    if (mouse.button != ftxui::Mouse::Left || mouse.motion != ftxui::Mouse::Pressed)
+    if (_qualityHoverVisible != buttonHit.isQualityHoverVisible)
+    {
+      _qualityHoverVisible = buttonHit.isQualityHoverVisible;
+      handled = true;
+    }
+
+    return handled;
+  }
+
+  std::optional<bool> EventController::handleSeekRailPress(ftxui::Mouse const& mouse, bool const modalInputActive)
+  {
+    if (modalInputActive || _hitRegions == nullptr || !contains(_hitRegions->seekRailBox, mouse.x, mouse.y))
+    {
+      return std::nullopt;
+    }
+
+    syncSeekSlider();
+
+    if (!_seekSlider.beginPointerInteraction())
     {
       return false;
     }
 
-    if (!modalInputActive && _hitRegions != nullptr && contains(_hitRegions->seekRailBox, mouse.x, mouse.y))
+    _optSeekRailDrag = SeekRailDrag{};
+    applySeekDecision(_seekSlider.valueChanged(seekRailElapsed(mouse.x)));
+    return true;
+  }
+
+  std::optional<bool> EventController::handleColumnResizePress(ftxui::Mouse const& mouse)
+  {
+    if (_shell.overlay() != Overlay::None || _hitRegions == nullptr || _trackColumnWidthOverrides == nullptr)
     {
-      syncSeekSlider();
+      return std::nullopt;
+    }
 
-      if (!_seekSlider.beginPointerInteraction())
-      {
-        return false;
-      }
+    auto const handleIt = std::ranges::find_if(_hitRegions->trackColumnResizeHandles,
+                                               [&](TrackColumnResizeHandle const& handle)
+                                               { return containsTrackColumnResizeEdge(handle, mouse.x, mouse.y); });
 
-      _optSeekRailDrag = SeekRailDrag{};
-      applySeekDecision(_seekSlider.valueChanged(seekRailElapsed(mouse.x)));
+    if (handleIt == _hitRegions->trackColumnResizeHandles.end())
+    {
+      return std::nullopt;
+    }
+
+    _optTrackColumnResizeDrag =
+      TrackColumnResizeDrag{.field = handleIt->field, .startX = mouse.x, .startColumns = handleIt->columns};
+    return true;
+  }
+
+  std::optional<bool> EventController::handleScrollbarPress(ftxui::Mouse const& mouse)
+  {
+    if (_shell.overlay() != Overlay::None || _hitRegions == nullptr ||
+        !containsTrackScrollbar(_hitRegions->trackTableBox, mouse.x, mouse.y))
+    {
+      return std::nullopt;
+    }
+
+    _optTrackScrollbarDrag = TrackScrollbarDrag{};
+
+    if (!selectTrackFromScrollbar(mouse.y))
+    {
+      _optTrackScrollbarDrag.reset();
+      return false;
+    }
+
+    return true;
+  }
+
+  std::optional<bool> EventController::handleSectionPress(ftxui::Mouse const& mouse)
+  {
+    if (_shell.overlay() != Overlay::None || _hitRegions == nullptr)
+    {
+      return std::nullopt;
+    }
+
+    auto const hitRegionIt = std::ranges::find_if(_hitRegions->trackSectionRows,
+                                                  [&](TrackSectionRowHitRegion const& hitRegion)
+                                                  { return contains(hitRegion.box, mouse.x, mouse.y); });
+
+    if (hitRegionIt == _hitRegions->trackSectionRows.end())
+    {
+      return std::nullopt;
+    }
+
+    if (hitRegionIt->sectionIndex < 0 ||
+        static_cast<std::size_t>(hitRegionIt->sectionIndex) >= _library.sections().size())
+    {
+      postActivityNotification(rt::NotificationSeverity::Warning, "Section is no longer available");
       return true;
     }
 
-    if (_shell.overlay() == Overlay::None && _hitRegions != nullptr && _trackColumnWidthOverrides != nullptr)
-    {
-      auto const handleIt = std::ranges::find_if(_hitRegions->trackColumnResizeHandles,
-                                                 [&](TrackColumnResizeHandle const& handle)
-                                                 { return containsTrackColumnResizeEdge(handle, mouse.x, mouse.y); });
+    _library.selectSection(hitRegionIt->sectionIndex);
+    return true;
+  }
 
-      if (handleIt != _hitRegions->trackColumnResizeHandles.end())
-      {
-        _optTrackColumnResizeDrag =
-          TrackColumnResizeDrag{.field = handleIt->field, .startX = mouse.x, .startColumns = handleIt->columns};
-        return true;
-      }
-    }
-
-    if (_shell.overlay() == Overlay::None && _hitRegions != nullptr &&
-        containsTrackScrollbar(_hitRegions->trackTableBox, mouse.x, mouse.y))
-    {
-      _optTrackScrollbarDrag = TrackScrollbarDrag{};
-
-      if (!selectTrackFromScrollbar(mouse.y))
-      {
-        _optTrackScrollbarDrag.reset();
-        return false;
-      }
-
-      return true;
-    }
-
-    if (_shell.overlay() == Overlay::None && _hitRegions != nullptr)
-    {
-      auto const hitRegionIt = std::ranges::find_if(_hitRegions->trackSectionRows,
-                                                    [&](TrackSectionRowHitRegion const& hitRegion)
-                                                    { return contains(hitRegion.box, mouse.x, mouse.y); });
-
-      if (hitRegionIt != _hitRegions->trackSectionRows.end())
-      {
-        if (hitRegionIt->sectionIndex < 0 ||
-            static_cast<std::size_t>(hitRegionIt->sectionIndex) >= _library.sections().size())
-        {
-          postActivityNotification(rt::NotificationSeverity::Warning, "Section is no longer available");
-          return true;
-        }
-
-        _library.selectSection(hitRegionIt->sectionIndex);
-        return true;
-      }
-    }
-
+  std::optional<bool> EventController::handleButtonPress(ftxui::Mouse const& mouse)
+  {
     if (_hitRegions != nullptr && contains(_hitRegions->outputDeviceButtonBox, mouse.x, mouse.y))
     {
       toggleOutputDevices();
@@ -659,6 +668,11 @@ namespace ao::tui
       return true;
     }
 
+    return std::nullopt;
+  }
+
+  bool EventController::handleOverlayPress(ftxui::Mouse const& mouse)
+  {
     if (_shell.overlay() == Overlay::PresentationPanel && _hitRegions != nullptr)
     {
       auto const hitRegionIt = std::ranges::find_if(_hitRegions->presentationRows,
@@ -733,181 +747,225 @@ namespace ao::tui
     return false;
   }
 
-  // TUI key dispatch is intentionally flat so shortcuts stay visible in one place.
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-  bool EventController::handleEvent(ftxui::Event const& event)
+  bool EventController::handleMouse(ftxui::Mouse const& mouse)
   {
-    if (event.is_mouse())
+    auto const modalInputActive = _shell.isCommandActive() || isOverlayActive(_shell.overlay());
+
+    if (modalInputActive && _optSeekRailDrag)
     {
-      auto mouseEvent = event;
-      return handleMouse(mouseEvent.mouse());
+      cancelSeekInteraction();
+      return false;
     }
 
     if (_shell.isCommandActive())
     {
-      if (event == ftxui::Event::Escape)
+      _optTrackScrollbarDrag.reset();
+      _optTrackColumnResizeDrag.reset();
+
+      if (mouse.motion != ftxui::Mouse::Moved)
       {
-        _shell.cancelCommand();
-        return true;
+        return false;
+      }
+    }
+
+    if (auto const optHandled = handleActiveMouseDrag(mouse); optHandled)
+    {
+      return *optHandled;
+    }
+
+    if (auto const optHandled = handleMouseWheel(mouse); optHandled)
+    {
+      return *optHandled;
+    }
+
+    if (mouse.motion == ftxui::Mouse::Moved)
+    {
+      return handleMouseMove(mouse);
+    }
+
+    if (mouse.button != ftxui::Mouse::Left || mouse.motion != ftxui::Mouse::Pressed)
+    {
+      return false;
+    }
+
+    if (auto const optHandled = handleSeekRailPress(mouse, modalInputActive); optHandled)
+    {
+      return *optHandled;
+    }
+
+    if (auto const optHandled = handleColumnResizePress(mouse); optHandled)
+    {
+      return *optHandled;
+    }
+
+    if (auto const optHandled = handleScrollbarPress(mouse); optHandled)
+    {
+      return *optHandled;
+    }
+
+    if (auto const optHandled = handleSectionPress(mouse); optHandled)
+    {
+      return *optHandled;
+    }
+
+    if (auto const optHandled = handleButtonPress(mouse); optHandled)
+    {
+      return *optHandled;
+    }
+
+    return handleOverlayPress(mouse);
+  }
+
+  bool EventController::handleCommandEvent(ftxui::Event const& event)
+  {
+    if (event == ftxui::Event::Escape)
+    {
+      _shell.cancelCommand();
+      return true;
+    }
+
+    if (event == ftxui::Event::Return)
+    {
+      runCommand(_shell.submitCommand());
+      return true;
+    }
+
+    if (event == ftxui::Event::Tab)
+    {
+      if (_shell.applyCommandCompletion())
+      {
+        refreshCommandCompletion();
       }
 
-      if (event == ftxui::Event::Return)
-      {
-        runCommand(_shell.submitCommand());
-        return true;
-      }
+      return true;
+    }
 
-      if (event == ftxui::Event::Tab)
-      {
-        if (_shell.applyCommandCompletion())
+    if (event == ftxui::Event::ArrowUp)
+    {
+      _shell.moveCommandCompletion(-1);
+      return true;
+    }
+
+    if (event == ftxui::Event::ArrowDown)
+    {
+      _shell.moveCommandCompletion(1);
+      return true;
+    }
+
+    if (event == ftxui::Event::Backspace)
+    {
+      _shell.backspaceCommand();
+      refreshCommandCompletion();
+      return true;
+    }
+
+    if (event.is_character())
+    {
+      _shell.appendCommandText(event.character());
+      refreshCommandCompletion();
+    }
+
+    return true;
+  }
+
+  bool EventController::handleOverlayEvent(ftxui::Event const& event)
+  {
+    switch (_shell.overlay())
+    {
+      case Overlay::ListChooser:
+        if (event == ftxui::Event::Character("l"))
         {
-          refreshCommandCompletion();
+          toggleListChooser();
+          return true;
+        }
+
+        if (handleListNavigation(
+              event, [this](std::int32_t const delta) { _library.moveFocusedSelection(true, delta); }))
+        {
+          return true;
+        }
+
+        if (event == ftxui::Event::Return)
+        {
+          openSelectedList();
         }
 
         return true;
-      }
+      case Overlay::DetailPanel:
+        if (event == ftxui::Event::Character("d"))
+        {
+          toggleDetailPanel();
+        }
 
-      if (event == ftxui::Event::ArrowUp)
-      {
-        _shell.moveCommandCompletion(-1);
         return true;
-      }
+      case Overlay::QualityPanel:
+        if (event == ftxui::Event::Character("a"))
+        {
+          toggleQualityPanel();
+        }
 
-      if (event == ftxui::Event::ArrowDown)
-      {
-        _shell.moveCommandCompletion(1);
         return true;
-      }
+      case Overlay::OutputDevices:
+        if (event == ftxui::Event::Character("o"))
+        {
+          toggleOutputDevices();
+          return true;
+        }
 
-      if (event == ftxui::Event::Backspace)
-      {
-        _shell.backspaceCommand();
-        refreshCommandCompletion();
+        if (_outputDevices != nullptr &&
+            handleListNavigation(event, [this](std::int32_t const delta) { _outputDevices->moveSelection(delta); }))
+        {
+          return true;
+        }
+
+        if (event == ftxui::Event::Return)
+        {
+          selectOutputDevice();
+        }
+
         return true;
-      }
+      case Overlay::PresentationPanel:
+        if (event == ftxui::Event::Character("v"))
+        {
+          togglePresentationPanel();
+          return true;
+        }
 
-      if (event.is_character())
-      {
-        _shell.appendCommandText(event.character());
-        refreshCommandCompletion();
+        if (handleListNavigation(
+              event, [this](std::int32_t const delta) { _library.movePresentationSelection(delta); }))
+        {
+          return true;
+        }
+
+        if (event == ftxui::Event::Return)
+        {
+          selectPresentation();
+        }
+
         return true;
-      }
+      case Overlay::Notifications:
+        if (event == ftxui::Event::Character("n"))
+        {
+          toggleNotificationCenter();
+          return true;
+        }
 
-      return true;
+        if (event == ftxui::Event::Character("x") && _activityStatusViewModel != nullptr &&
+            _activityStatusViewModel->viewState().compact.dismissible)
+        {
+          _activityStatusViewModel->dismissCompact();
+        }
+
+        return true;
+      case Overlay::Help: return true;
+      case Overlay::None: return false;
     }
 
-    if (event == ftxui::Event::CtrlC)
-    {
-      _playback.stop();
-      _screen.ExitLoopClosure()();
-      return true;
-    }
+    return false;
+  }
 
-    if (event == ftxui::Event::Escape)
-    {
-      _shell.closeOverlay();
-      postActivityNotification(rt::NotificationSeverity::Info, "Overlay closed");
-      return true;
-    }
-
-    if (isOverlayActive(_shell.overlay()))
-    {
-      switch (_shell.overlay())
-      {
-        case Overlay::ListChooser:
-          if (event == ftxui::Event::Character("l"))
-          {
-            toggleListChooser();
-            return true;
-          }
-
-          if (handleListNavigation(
-                event, [this](std::int32_t const delta) { _library.moveFocusedSelection(true, delta); }))
-          {
-            return true;
-          }
-
-          if (event == ftxui::Event::Return)
-          {
-            openSelectedList();
-            return true;
-          }
-
-          return true;
-        case Overlay::DetailPanel:
-          if (event == ftxui::Event::Character("d"))
-          {
-            toggleDetailPanel();
-          }
-
-          return true;
-        case Overlay::QualityPanel:
-          if (event == ftxui::Event::Character("a"))
-          {
-            toggleQualityPanel();
-          }
-
-          return true;
-        case Overlay::OutputDevices:
-          if (event == ftxui::Event::Character("o"))
-          {
-            toggleOutputDevices();
-            return true;
-          }
-
-          if (_outputDevices != nullptr &&
-              handleListNavigation(event, [this](std::int32_t const delta) { _outputDevices->moveSelection(delta); }))
-          {
-            return true;
-          }
-
-          if (event == ftxui::Event::Return)
-          {
-            selectOutputDevice();
-            return true;
-          }
-
-          return true;
-        case Overlay::PresentationPanel:
-          if (event == ftxui::Event::Character("v"))
-          {
-            togglePresentationPanel();
-            return true;
-          }
-
-          if (handleListNavigation(
-                event, [this](std::int32_t const delta) { _library.movePresentationSelection(delta); }))
-          {
-            return true;
-          }
-
-          if (event == ftxui::Event::Return)
-          {
-            selectPresentation();
-            return true;
-          }
-
-          return true;
-        case Overlay::Notifications:
-          if (event == ftxui::Event::Character("n"))
-          {
-            toggleNotificationCenter();
-            return true;
-          }
-
-          if (event == ftxui::Event::Character("x") && _activityStatusViewModel != nullptr &&
-              _activityStatusViewModel->viewState().compact.dismissible)
-          {
-            _activityStatusViewModel->dismissCompact();
-            return true;
-          }
-
-          return true;
-        case Overlay::Help: return true;
-        case Overlay::None: break;
-      }
-    }
-
+  bool EventController::handleRootEvent(ftxui::Event const& event)
+  {
     if (event == ftxui::Event::Character("q"))
     {
       _playback.stop();
@@ -989,18 +1047,7 @@ namespace ao::tui
       return true;
     }
 
-    if (event == ftxui::Event::Return)
-    {
-      if (!playSelected(_playbackSequence, _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
-      {
-        postActivityNotification(
-          rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
-      }
-
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("p"))
+    if (event == ftxui::Event::Return || event == ftxui::Event::Character("p"))
     {
       if (!playSelected(_playbackSequence, _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
       {
@@ -1060,5 +1107,40 @@ namespace ao::tui
     }
 
     return false;
+  }
+
+  bool EventController::handleEvent(ftxui::Event const& event)
+  {
+    if (event.is_mouse())
+    {
+      auto mouseEvent = event;
+      return handleMouse(mouseEvent.mouse());
+    }
+
+    if (_shell.isCommandActive())
+    {
+      return handleCommandEvent(event);
+    }
+
+    if (event == ftxui::Event::CtrlC)
+    {
+      _playback.stop();
+      _screen.ExitLoopClosure()();
+      return true;
+    }
+
+    if (event == ftxui::Event::Escape)
+    {
+      _shell.closeOverlay();
+      postActivityNotification(rt::NotificationSeverity::Info, "Overlay closed");
+      return true;
+    }
+
+    if (isOverlayActive(_shell.overlay()))
+    {
+      return handleOverlayEvent(event);
+    }
+
+    return handleRootEvent(event);
   }
 } // namespace ao::tui

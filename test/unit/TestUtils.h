@@ -134,7 +134,6 @@ namespace ao::test
   };
 
   // TempDir owns cleanup even though TempFile's destructor can remain defaulted.
-  // NOLINTNEXTLINE(aobus-modernize-nodiscard-usage)
   struct [[nodiscard]] TempFile final
   {
   public:

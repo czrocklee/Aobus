@@ -7,7 +7,8 @@
 #include "layout/LayoutConstants.h"
 
 #include <gdkmm/pixbuf.h>
-#include <gdkmm/surface.h> // NOLINT(misc-include-cleaner)
+// Gtk::Native returns Gdk::Surface, whose scale API requires this complete public type.
+#include <gdkmm/surface.h> // NOLINT(misc-include-cleaner): include-cleaner attributes it to gtkmm/native.h.
 #include <gdkmm/texture.h>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>

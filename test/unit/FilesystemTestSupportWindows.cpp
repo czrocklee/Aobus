@@ -150,11 +150,11 @@ namespace ao::test
   bool hasPrivateManagedFileAccess(std::filesystem::path const& path)
   {
     auto token = currentUserToken();
-    auto* const tokenUser = static_cast<TOKEN_USER*>(static_cast<void*>(token.data()));
+    auto* const tokenUser = reinterpret_cast<TOKEN_USER*>(token.data());
     auto systemSid = std::array<std::byte, SECURITY_MAX_SID_SIZE>{};
-    DWORD systemSidSize = static_cast<DWORD>(systemSid.size());
 
-    if (::CreateWellKnownSid(WinLocalSystemSid, nullptr, systemSid.data(), &systemSidSize) == FALSE)
+    if (DWORD systemSidSize = static_cast<DWORD>(systemSid.size());
+        ::CreateWellKnownSid(WinLocalSystemSid, nullptr, systemSid.data(), &systemSidSize) == FALSE)
     {
       throw windowsError(::GetLastError(), "CreateWellKnownSid failed");
     }
@@ -172,9 +172,8 @@ namespace ao::test
 
     auto descriptor = LocalSecurityDescriptor{rawDescriptor};
     SECURITY_DESCRIPTOR_CONTROL control = 0;
-    DWORD revision = 0;
 
-    if (::GetSecurityDescriptorControl(rawDescriptor, &control, &revision) == FALSE)
+    if (DWORD revision = 0; ::GetSecurityDescriptorControl(rawDescriptor, &control, &revision) == FALSE)
     {
       throw windowsError(::GetLastError(), "GetSecurityDescriptorControl failed");
     }
@@ -204,14 +203,14 @@ namespace ao::test
         return false;
       }
 
-      auto const* accessEntry = static_cast<ACCESS_ALLOWED_ACE const*>(rawAccessEntry);
+      auto* const accessEntry = static_cast<ACCESS_ALLOWED_ACE*>(rawAccessEntry);
 
       if ((accessEntry->Mask & FILE_ALL_ACCESS) != FILE_ALL_ACCESS)
       {
         return false;
       }
 
-      PSID const sid = const_cast<DWORD*>(&accessEntry->SidStart);
+      PSID const sid = &accessEntry->SidStart;
       auto const currentUser = ::EqualSid(sid, tokenUser->User.Sid) != FALSE;
       auto const localSystem = ::EqualSid(sid, systemSid.data()) != FALSE;
 

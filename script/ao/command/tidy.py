@@ -6,6 +6,7 @@ are de-duplicated across translation units before being printed or written to a 
 
 import argparse
 import contextlib
+import fnmatch
 import json
 import re
 import shutil
@@ -60,6 +61,9 @@ STRICT_CHECKS = ",".join(
         "google-readability-namespace-comments",
         # === disabled: false positives or project preference ===
         "-bugprone-easily-swappable-parameters",  # frequent false positives
+        # CRTP customization deliberately refines non-virtual fallback methods
+        # (RecursiveASTVisitor and std::ranges::view_interface).
+        "-bugprone-derived-method-shadowing-base-method",
         "-bugprone-exception-escape",  # dominated by allocation paths and MSVC container moves
         "-bugprone-throwing-static-initialization",  # dominated by STL startup-allocation details
         "-cppcoreguidelines-avoid-magic-numbers",  # handled by aobus readability check
@@ -209,6 +213,35 @@ def checks_for(mode: str, selected: str | None) -> str:
     if selected:
         return ",".join(["-*", selected, *mode_disabled_checks(mode)])
     return RELAXED_CHECKS if mode == "RELAXED" else STRICT_CHECKS
+
+
+_NOLINT_OPEN_RE = re.compile(r"\bNOLINT(?:NEXTLINE|BEGIN)?\(([^)]*)\)")
+
+
+@dataclass(frozen=True)
+class StaleNolintSuppression:
+    path: Path
+    line: int
+    check: str
+
+
+def find_stale_nolint_suppressions(buckets: dict[str, list[Path]]) -> list[StaleNolintSuppression]:
+    """Find NOLINT entries naming checks that the file's tidy mode never enables."""
+    issues: list[StaleNolintSuppression] = []
+    for mode, paths in buckets.items():
+        disabled_patterns = [token.removeprefix("-") for token in mode_disabled_checks(mode)]
+        for path in paths:
+            try:
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                continue
+            for line_number, line in enumerate(lines, start=1):
+                for match in _NOLINT_OPEN_RE.finditer(line):
+                    checks = (check.strip() for check in match.group(1).split(","))
+                    for check in checks:
+                        if check and any(fnmatch.fnmatchcase(check, pattern) for pattern in disabled_patterns):
+                            issues.append(StaleNolintSuppression(path=path, line=line_number, check=check))
+    return issues
 
 
 FIX_REPLACEMENT_RE = re.compile(r"^\s+- FilePath:")
@@ -635,6 +668,18 @@ def run_command(args: argparse.Namespace) -> int:
         buckets = classify_existing(cpp_files, explicit)
         if not buckets["STRICT"] and not buckets["RELAXED"]:
             return 1 if overall_failed else 0
+
+        stale_suppressions = find_stale_nolint_suppressions(buckets)
+        if stale_suppressions:
+            print("ERROR: stale NOLINT suppressions name checks disabled for their file mode:", file=sys.stderr)
+            for issue in stale_suppressions:
+                try:
+                    display_path = issue.path.relative_to(absolute_path(PROJECT_ROOT)).as_posix()
+                except ValueError:
+                    display_path = issue.path.as_posix()
+                print(f"  {display_path}:{issue.line}: {issue.check}", file=sys.stderr)
+            print("Remove these suppressions; the configured check cannot emit there.", file=sys.stderr)
+            return 1
 
         selected = [*buckets["STRICT"], *buckets["RELAXED"]]
         coverage_plan = tidyengine.compile_command_plan(build_dir, selected)

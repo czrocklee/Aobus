@@ -22,6 +22,7 @@ namespace ao::tui
 {
   namespace
   {
+    // Async-signal-safe process state must be reachable from the C signal handler.
     std::atomic<std::int32_t> gSignalWriteFd{-1};        // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
     std::atomic<std::uint32_t> gActiveSignalHandlers{0}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
@@ -49,6 +50,17 @@ namespace ao::tui
 
   class SignalExitWatcher::Impl final
   {
+  public:
+    explicit Impl(std::move_only_function<void()> onExit);
+    ~Impl();
+
+    Impl(Impl const&) = delete;
+    Impl& operator=(Impl const&) = delete;
+    Impl(Impl&&) = delete;
+    Impl& operator=(Impl&&) = delete;
+
+    void requestExit();
+
   private:
     class State final
     {
@@ -130,6 +142,7 @@ namespace ao::tui
       {
         if (auto const flags = ::fcntl(_pipe[1], F_GETFL, 0); flags >= 0)
         {
+          // fcntl is a variadic POSIX API even when this command consumes one integer argument.
           auto const result =
             ::fcntl(_pipe[1], F_SETFL, flags | O_NONBLOCK); // NOLINT(cppcoreguidelines-pro-type-vararg)
           return result == 0;
@@ -175,72 +188,6 @@ namespace ao::tui
       std::array<int, 2> _pipe{-1, -1};
       std::atomic_bool _running{true};
     };
-
-  public: // NOLINT(aobus-readability-member-order): State must be complete before the inline constructor uses it.
-    explicit Impl(std::move_only_function<void()> onExit)
-      : _statePtr{std::make_shared<State>(std::move(onExit))}
-    {
-      if (!_statePtr->hasPipe())
-      {
-        return;
-      }
-
-      _thread = std::thread{[statePtr = _statePtr] { statePtr->run(); }};
-
-      std::int32_t expected = -1;
-      _ownsSignalHandlers = gSignalWriteFd.compare_exchange_strong(expected, _statePtr->writeFd());
-
-      if (_ownsSignalHandlers)
-      {
-        _termInstalled = install(SIGTERM, _oldTerm);
-        _hupInstalled = install(SIGHUP, _oldHup);
-      }
-    }
-
-    ~Impl()
-    {
-      if (_ownsSignalHandlers)
-      {
-        restore(SIGTERM, _oldTerm, _termInstalled);
-        restore(SIGHUP, _oldHup, _hupInstalled);
-        auto expected = _statePtr->writeFd();
-        std::ignore = gSignalWriteFd.compare_exchange_strong(expected, -1);
-
-        while (gActiveSignalHandlers.load() != 0)
-        {
-          std::this_thread::yield();
-        }
-      }
-
-      _statePtr->stop();
-
-      if (!_thread.joinable())
-      {
-        return;
-      }
-
-      if (_thread.get_id() == std::this_thread::get_id())
-      {
-        _thread.detach();
-      }
-      else
-      {
-        _thread.join();
-      }
-    }
-
-    Impl(Impl const&) = delete;
-    Impl& operator=(Impl const&) = delete;
-    Impl(Impl&&) = delete;
-    Impl& operator=(Impl&&) = delete;
-
-    void requestExit()
-    {
-      auto statePtr = _statePtr;
-      statePtr->requestExit();
-    }
-
-  private:
     using SignalAction = struct sigaction;
 
     static bool install(int const signal, SignalAction& oldAction)
@@ -268,6 +215,64 @@ namespace ao::tui
     bool _ownsSignalHandlers = false;
     std::thread _thread{};
   };
+
+  SignalExitWatcher::Impl::Impl(std::move_only_function<void()> onExit)
+    : _statePtr{std::make_shared<State>(std::move(onExit))}
+  {
+    if (!_statePtr->hasPipe())
+    {
+      return;
+    }
+
+    _thread = std::thread{[statePtr = _statePtr] { statePtr->run(); }};
+
+    std::int32_t expected = -1;
+    _ownsSignalHandlers = gSignalWriteFd.compare_exchange_strong(expected, _statePtr->writeFd());
+
+    if (_ownsSignalHandlers)
+    {
+      _termInstalled = install(SIGTERM, _oldTerm);
+      _hupInstalled = install(SIGHUP, _oldHup);
+    }
+  }
+
+  SignalExitWatcher::Impl::~Impl()
+  {
+    if (_ownsSignalHandlers)
+    {
+      restore(SIGTERM, _oldTerm, _termInstalled);
+      restore(SIGHUP, _oldHup, _hupInstalled);
+      auto expected = _statePtr->writeFd();
+      std::ignore = gSignalWriteFd.compare_exchange_strong(expected, -1);
+
+      while (gActiveSignalHandlers.load() != 0)
+      {
+        std::this_thread::yield();
+      }
+    }
+
+    _statePtr->stop();
+
+    if (!_thread.joinable())
+    {
+      return;
+    }
+
+    if (_thread.get_id() == std::this_thread::get_id())
+    {
+      _thread.detach();
+    }
+    else
+    {
+      _thread.join();
+    }
+  }
+
+  void SignalExitWatcher::Impl::requestExit()
+  {
+    auto statePtr = _statePtr;
+    statePtr->requestExit();
+  }
 
   SignalExitWatcher::SignalExitWatcher(std::move_only_function<void()> onExit)
     : _implPtr{std::make_unique<Impl>(std::move(onExit))}

@@ -642,7 +642,6 @@ namespace ao::gtk
     dialogRaw->present();
   }
 
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   void ShellLayoutController::handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result)
   {
     if (_layoutStorePtr)

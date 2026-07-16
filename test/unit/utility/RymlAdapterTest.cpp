@@ -17,7 +17,6 @@ namespace ao::test
 {
   namespace
   {
-    // NOLINTNEXTLINE(misc-include-cleaner) -- <ryml.hpp> is RapidYaml's public Tree provider.
     ryml::Tree parseYaml(std::string_view text)
     {
       auto state = yaml::ErrorCallbackState{};

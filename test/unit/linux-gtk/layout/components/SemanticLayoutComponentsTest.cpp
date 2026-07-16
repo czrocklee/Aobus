@@ -25,6 +25,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>

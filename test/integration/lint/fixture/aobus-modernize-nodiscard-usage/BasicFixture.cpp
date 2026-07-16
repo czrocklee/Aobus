@@ -2,6 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <cstdint>
+#include <future>
+#include <memory>
+#include <optional>
 
 // POSITIVE: FIX-TO: std::int32_t getForbiddenVal()
 [[nodiscard]] std::int32_t getForbiddenVal()
@@ -54,6 +57,99 @@ public:
 };
 
 inline ExplicitlyDefaultedOwner::~ExplicitlyDefaultedOwner() = default;
+
+class [[nodiscard]] ComposedGuard
+{
+public:
+  ~ComposedGuard() {}
+  ComposedGuard(ComposedGuard const&) = delete;
+};
+
+// NEGATIVE: a defaulted destructor still owns cleanup through an RAII member.
+class [[nodiscard]] ComposedTempFile
+{
+public:
+  ~ComposedTempFile() = default;
+  ComposedTempFile(ComposedTempFile const&) = delete;
+
+private:
+  ComposedGuard _guard;
+};
+
+class [[nodiscard]] ReadTransaction
+{
+public:
+  ~ReadTransaction() = default;
+  ReadTransaction(ReadTransaction const&) = delete;
+
+private:
+  ComposedGuard _guard;
+};
+
+// NEGATIVE: an inherited RAII base still owns cleanup for the derived value.
+class [[nodiscard]] AnnotatedWriteTransaction : public ReadTransaction
+{
+public:
+  AnnotatedWriteTransaction(AnnotatedWriteTransaction const&) = delete;
+};
+
+// POSITIVE: FIX-TO: class [[nodiscard]] DerivedWriteTransaction : public ReadTransaction
+class DerivedWriteTransaction : public ReadTransaction
+{
+public:
+  DerivedWriteTransaction(DerivedWriteTransaction const&) = delete;
+};
+
+// NEGATIVE: an abstract lifecycle interface cannot itself be constructed as a discarded value.
+class DecoderSession
+{
+public:
+  virtual ~DecoderSession() = default;
+  DecoderSession(DecoderSession const&) = delete;
+};
+
+// POSITIVE: FIX-TO: class [[nodiscard]] TestDecoderSession : public DecoderSession
+class TestDecoderSession : public DecoderSession
+{
+public:
+  TestDecoderSession(TestDecoderSession const&) = delete;
+};
+
+// NEGATIVE: a raw pointer observes an RAII object but does not own its cleanup.
+class BorrowedPointerGuard
+{
+public:
+  ~BorrowedPointerGuard() = default;
+  BorrowedPointerGuard(BorrowedPointerGuard const&) = delete;
+
+private:
+  ComposedGuard* _guard = nullptr;
+};
+
+class OwnedPayload
+{};
+
+// POSITIVE: FIX-TO: class [[nodiscard]] UniqueOwnerSession
+class UniqueOwnerSession
+{
+public:
+  ~UniqueOwnerSession() = default;
+  UniqueOwnerSession(UniqueOwnerSession const&) = delete;
+
+private:
+  std::unique_ptr<OwnedPayload> _payloadPtr;
+};
+
+template<typename T>
+// POSITIVE: FIX-TO: class [[nodiscard]] TaskFuture
+class TaskFuture
+{
+public:
+  TaskFuture(TaskFuture const&) = delete;
+
+private:
+  std::future<std::optional<T>> _future;
+};
 
 // POSITIVE: FIX-TO: class [[nodiscard]] ExplicitlyDefaultedTransaction
 class ExplicitlyDefaultedTransaction

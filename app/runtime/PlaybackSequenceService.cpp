@@ -738,8 +738,82 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    // The bounded recovery walk is one state machine across sequential and shuffle origins.
-    // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+    std::optional<TrackId> nextShuffleFailureCandidate(ShuffleHistory::TransitionOrigin const origin,
+                                                       NavigationDirection const direction,
+                                                       std::span<TrackId const> attemptedTrackIds) const
+    {
+      if (!sessionPtr)
+      {
+        return std::nullopt;
+      }
+
+      if (origin == ShuffleHistory::TransitionOrigin::HistoryPrevious)
+      {
+        for (std::size_t retryCount = 0; retryCount < ShuffleHistory::kHistoryCapacity; ++retryCount)
+        {
+          auto const retry = sessionPtr->resolvePrevious();
+
+          if (retry.action != PlaybackCursor::CommandAction::StartTrack)
+          {
+            break;
+          }
+
+          if (!std::ranges::contains(attemptedTrackIds, retry.trackId))
+          {
+            return retry.trackId;
+          }
+        }
+
+        return std::nullopt;
+      }
+
+      if (direction != NavigationDirection::Forward)
+      {
+        return std::nullopt;
+      }
+
+      std::ignore = sessionPtr->rerollShuffleForward(attemptedTrackIds);
+      std::ignore = sessionPtr->refreshSemanticState();
+
+      if (auto const retry = sessionPtr->cursor().resolveNext();
+          retry.action == PlaybackCursor::CommandAction::StartTrack &&
+          !std::ranges::contains(attemptedTrackIds, retry.trackId))
+      {
+        return retry.trackId;
+      }
+
+      return std::nullopt;
+    }
+
+    std::optional<TrackId> nextNavigationFailureCandidate(TrackId const failedTrackId,
+                                                          ShuffleHistory::TransitionOrigin const origin,
+                                                          NavigationDirection const direction,
+                                                          std::span<TrackId const> attemptedTrackIds) const
+    {
+      if (sessionPtr && sessionPtr->cursor().shuffleMode() == ShuffleMode::On)
+      {
+        return nextShuffleFailureCandidate(origin, direction, attemptedTrackIds);
+      }
+
+      return nextFailureCandidate(failedTrackId, direction, attemptedTrackIds);
+    }
+
+    void settleExhaustedNavigation(bool const stopWhenExhausted)
+    {
+      if (sessionPtr)
+      {
+        if (auto const effect = sessionPtr->refreshSemanticState(); effect.semanticChanged)
+        {
+          synchronizeState();
+        }
+      }
+
+      if (stopWhenExhausted)
+      {
+        stopTerminal(false);
+      }
+    }
+
     bool attemptNavigation(PlaybackCursor::CommandResolution resolution,
                            ShuffleHistory::TransitionOrigin const origin,
                            NavigationDirection const direction,
@@ -789,61 +863,12 @@ namespace ao::rt
           return true;
         }
 
-        auto optCandidate = std::optional<TrackId>{};
-
-        if (sessionPtr && sessionPtr->cursor().shuffleMode() == ShuffleMode::On)
-        {
-          if (candidateOrigin == ShuffleHistory::TransitionOrigin::HistoryPrevious)
-          {
-            for (std::size_t retryCount = 0; retryCount < ShuffleHistory::kHistoryCapacity; ++retryCount)
-            {
-              auto const retry = sessionPtr->resolvePrevious();
-
-              if (retry.action != PlaybackCursor::CommandAction::StartTrack)
-              {
-                break;
-              }
-
-              if (!std::ranges::contains(attemptedTrackIds, retry.trackId))
-              {
-                optCandidate = retry.trackId;
-                break;
-              }
-            }
-          }
-          else if (direction == NavigationDirection::Forward)
-          {
-            std::ignore = sessionPtr->rerollShuffleForward(attemptedTrackIds);
-            std::ignore = sessionPtr->refreshSemanticState();
-
-            if (auto const retry = sessionPtr->cursor().resolveNext();
-                retry.action == PlaybackCursor::CommandAction::StartTrack &&
-                !std::ranges::contains(attemptedTrackIds, retry.trackId))
-            {
-              optCandidate = retry.trackId;
-            }
-          }
-        }
-        else
-        {
-          optCandidate = nextFailureCandidate(candidate, direction, attemptedTrackIds);
-        }
+        auto const optCandidate =
+          nextNavigationFailureCandidate(candidate, candidateOrigin, direction, attemptedTrackIds);
 
         if (!optCandidate)
         {
-          if (sessionPtr)
-          {
-            if (auto const effect = sessionPtr->refreshSemanticState(); effect.semanticChanged)
-            {
-              synchronizeState();
-            }
-          }
-
-          if (stopWhenExhausted)
-          {
-            stopTerminal(false);
-          }
-
+          settleExhaustedNavigation(stopWhenExhausted);
           return false;
         }
 

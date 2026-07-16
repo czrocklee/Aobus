@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "AtomicFileTransaction.h"
+#include <ao/Error.h>
 #include <ao/utility/AtomicFile.h>
 
 #ifndef NOMINMAX
@@ -34,15 +35,15 @@ namespace ao::utility
 {
   namespace
   {
-    class LocalAllocation final
+    class [[nodiscard]] LocalAllocationHandle final
     {
     public:
-      explicit LocalAllocation(HLOCAL value)
+      explicit LocalAllocationHandle(HLOCAL value)
         : _value{value}
       {
       }
 
-      ~LocalAllocation() noexcept
+      ~LocalAllocationHandle() noexcept
       {
         if (_value != nullptr)
         {
@@ -50,15 +51,15 @@ namespace ao::utility
         }
       }
 
-      LocalAllocation(LocalAllocation const&) = delete;
-      LocalAllocation& operator=(LocalAllocation const&) = delete;
+      LocalAllocationHandle(LocalAllocationHandle const&) = delete;
+      LocalAllocationHandle& operator=(LocalAllocationHandle const&) = delete;
 
-      LocalAllocation(LocalAllocation&& other) noexcept
+      LocalAllocationHandle(LocalAllocationHandle&& other) noexcept
         : _value{std::exchange(other._value, nullptr)}
       {
       }
 
-      LocalAllocation& operator=(LocalAllocation&&) = delete;
+      LocalAllocationHandle& operator=(LocalAllocationHandle&&) = delete;
 
       HLOCAL get() const noexcept { return _value; }
 
@@ -66,7 +67,7 @@ namespace ao::utility
       HLOCAL _value = nullptr;
     };
 
-    class KernelHandle final
+    class [[nodiscard]] KernelHandle final
     {
     public:
       explicit KernelHandle(HANDLE value)
@@ -93,7 +94,7 @@ namespace ao::utility
       {
         if (_value != nullptr && _value != INVALID_HANDLE_VALUE)
         {
-          HANDLE const handle = release();
+          auto* const handle = release();
           std::ignore = ::CloseHandle(handle);
         }
       }
@@ -120,7 +121,7 @@ namespace ao::utility
         return std::format("Windows error {}", errorCode);
       }
 
-      auto allocation = LocalAllocation{rawBuffer};
+      auto allocation = LocalAllocationHandle{rawBuffer};
       auto message = std::string{rawBuffer, size};
 
       while (!message.empty() && (message.back() == '\r' || message.back() == '\n'))
@@ -179,7 +180,9 @@ namespace ao::utility
           Error::Code::IoError, std::format("Failed to read process token information: {}", systemMessage(errorCode)));
       }
 
-      auto const* tokenUser = static_cast<TOKEN_USER const*>(static_cast<void const*>(tokenInfo.data()));
+      // GetTokenInformation materializes TOKEN_USER in the caller-provided byte buffer.
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+      auto const* tokenUser = reinterpret_cast<TOKEN_USER const*>(tokenInfo.data());
       LPWSTR rawSidString = nullptr;
 
       if (::ConvertSidToStringSidW(tokenUser->User.Sid, &rawSidString) == FALSE)
@@ -189,11 +192,11 @@ namespace ao::utility
           Error::Code::IoError, std::format("Failed to encode process SID: {}", systemMessage(errorCode)));
       }
 
-      auto sidAllocation = LocalAllocation{rawSidString};
+      auto sidAllocation = LocalAllocationHandle{rawSidString};
       return std::wstring{rawSidString};
     }
 
-    Result<LocalAllocation> createPrivateSecurityDescriptor()
+    Result<LocalAllocationHandle> createPrivateSecurityDescriptor()
     {
       auto sidResult = currentUserSidString();
 
@@ -216,10 +219,10 @@ namespace ao::utility
           Error::Code::IoError, std::format("Failed to create private file ACL: {}", systemMessage(errorCode)));
       }
 
-      return LocalAllocation{rawDescriptor};
+      return LocalAllocationHandle{rawDescriptor};
     }
 
-    class WindowsTemporaryFile final
+    class [[nodiscard]] WindowsTemporaryFile final
     {
     public:
       WindowsTemporaryFile(std::filesystem::path path, HANDLE handle)
@@ -289,9 +292,7 @@ namespace ao::utility
 
       Result<> closeForReplacement()
       {
-        HANDLE const handle = _file.release();
-
-        if (::CloseHandle(handle) == FALSE)
+        if (auto* const handle = _file.release(); ::CloseHandle(handle) == FALSE)
         {
           auto const errorCode = ::GetLastError();
           return makeError(Error::Code::IoError,
@@ -376,7 +377,7 @@ namespace ao::utility
           auto const fileName =
             std::format(L".ao.tmp.{:08x}.{:016x}.{:016x}", ::GetCurrentProcessId(), ::GetTickCount64(), id);
           auto candidate = parentPath / fileName;
-          HANDLE const handle = ::CreateFileW(
+          auto* const handle = ::CreateFileW(
             candidate.c_str(), GENERIC_WRITE, 0, &securityAttributes, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
 
           if (handle != INVALID_HANDLE_VALUE)
@@ -384,9 +385,8 @@ namespace ao::utility
             return WindowsTemporaryFile{std::move(candidate), handle};
           }
 
-          auto const errorCode = ::GetLastError();
-
-          if (errorCode != ERROR_FILE_EXISTS && errorCode != ERROR_ALREADY_EXISTS)
+          if (auto const errorCode = ::GetLastError();
+              errorCode != ERROR_FILE_EXISTS && errorCode != ERROR_ALREADY_EXISTS)
           {
             return makeError(
               Error::Code::IoError, std::format("Failed to create temp file: {}", systemMessage(errorCode)));

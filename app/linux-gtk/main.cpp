@@ -496,6 +496,7 @@ namespace
     }
   }
 
+  // CLI11 and GTK both expose the process entry-point's mutable C argv array.
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
   std::vector<char*> buildGtkArgv(std::int32_t argc, char* argv[])
   {

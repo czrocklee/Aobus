@@ -49,6 +49,51 @@ namespace ao::rt
 
       return result;
     }
+
+    struct RegularBatchTrackChanges final
+    {
+      std::vector<TrackId> updatedTrackIds;
+      std::vector<TrackId> touchedTrackIds;
+      std::vector<TrackId> preferredMovedIds;
+    };
+
+    RegularBatchTrackChanges summarizeTrackChanges(delta::RegularTrackEditScript const& script)
+    {
+      auto result = RegularBatchTrackChanges{};
+      auto removedTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
+      auto insertedTrackIds = std::vector<TrackId>{};
+
+      for (auto const& edit : script.edits)
+      {
+        if (auto const* insertion = std::get_if<delta::InsertRange>(&edit); insertion != nullptr)
+        {
+          insertedTrackIds.append_range(insertion->trackIds);
+          result.touchedTrackIds.append_range(insertion->trackIds);
+        }
+        else if (auto const* removal = std::get_if<delta::RemoveRange>(&edit); removal != nullptr)
+        {
+          removedTrackIds.insert(removal->trackIds.begin(), removal->trackIds.end());
+        }
+        else if (auto const* update = std::get_if<delta::UpdateRange>(&edit); update != nullptr)
+        {
+          result.updatedTrackIds.append_range(update->trackIds);
+          result.touchedTrackIds.append_range(update->trackIds);
+        }
+      }
+
+      std::ranges::sort(result.touchedTrackIds);
+      result.touchedTrackIds.erase(std::ranges::unique(result.touchedTrackIds).begin(), result.touchedTrackIds.end());
+
+      for (auto const trackId : insertedTrackIds)
+      {
+        if (removedTrackIds.contains(trackId))
+        {
+          result.preferredMovedIds.push_back(trackId);
+        }
+      }
+
+      return result;
+    }
   } // namespace
 
   SmartListEvaluator::SmartListEvaluator(library::MusicLibrary const& ml)
@@ -196,23 +241,12 @@ namespace ao::rt
     rebuildLists(bucket, bucket.lists);
   }
 
-  // One transaction-local reducer keeps every derived list aligned to the same upstream batch.
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-  void SmartListEvaluator::handleRegularBatch(SourceBucket& bucket,
-                                              TrackSourceDeltaBatch const& batch,
-                                              bool const verifyFinalSnapshot)
+  std::vector<SmartListEvaluator::DerivedWork> SmartListEvaluator::buildDerivedWorks(
+    SourceBucket const& bucket,
+    std::vector<SmartListSource*>& evaluatableLists) const
   {
-    auto const timer = rt::ScopedTimer{"SmartListEvaluator::handleRegularBatch"};
-    auto scriptResult = regularTrackEditScriptOf(batch);
-    gsl_Assert(scriptResult);
-    auto upstreamTracks = bucket.upstreamTracks;
-    upstreamTracks.applyScript(*scriptResult);
-    ++_operationCounts.upstreamIndexRebuilds;
-    gsl_Assert(!verifyFinalSnapshot || upstreamTracks.vector() == snapshotSource(*bucket.source));
-
     auto works = std::vector<DerivedWork>{};
     works.reserve(bucket.lists.size());
-    auto evaluatableLists = std::vector<SmartListSource*>{};
     evaluatableLists.reserve(bucket.lists.size());
 
     for (auto* const list : bucket.lists)
@@ -233,9 +267,17 @@ namespace ao::rt
       works.push_back(std::move(work));
     }
 
+    return works;
+  }
+
+  SmartListEvaluator::TrackMatches SmartListEvaluator::evaluateTouchedTracks(
+    std::span<DerivedWork const> const works,
+    std::span<SmartListSource* const> const evaluatableLists,
+    std::span<TrackId const> const touchedTrackIds) const
+  {
     auto const transaction = _ml.readTransaction();
     auto const reader = _ml.tracks().reader(transaction);
-    auto const mode = unionMode(std::span<SmartListSource* const>{evaluatableLists});
+    auto const mode = unionMode(evaluatableLists);
     auto const storeMode = static_cast<library::TrackStore::Reader::LoadMode>(mode);
     auto dictionaryCache = library::DictionaryReadCache{_ml.dictionary()};
     auto dictionaryContext = library::DictionaryReadContext{dictionaryCache};
@@ -249,33 +291,7 @@ namespace ao::rt
       }
     }
 
-    auto updatedTrackIds = std::vector<TrackId>{};
-    auto removedTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
-    auto insertedTrackIds = std::vector<TrackId>{};
-    auto touchedTrackIds = std::vector<TrackId>{};
-
-    for (auto const& edit : scriptResult->edits)
-    {
-      if (auto const* insertion = std::get_if<delta::InsertRange>(&edit); insertion != nullptr)
-      {
-        insertedTrackIds.append_range(insertion->trackIds);
-        touchedTrackIds.append_range(insertion->trackIds);
-      }
-      else if (auto const* removal = std::get_if<delta::RemoveRange>(&edit); removal != nullptr)
-      {
-        removedTrackIds.insert(removal->trackIds.begin(), removal->trackIds.end());
-      }
-      else if (auto const* update = std::get_if<delta::UpdateRange>(&edit); update != nullptr)
-      {
-        updatedTrackIds.append_range(update->trackIds);
-        touchedTrackIds.append_range(update->trackIds);
-      }
-    }
-
-    std::ranges::sort(touchedTrackIds);
-    touchedTrackIds.erase(std::ranges::unique(touchedTrackIds).begin(), touchedTrackIds.end());
-
-    auto matchesByTrackId = boost::unordered_flat_map<TrackId, std::vector<bool>, std::hash<TrackId>>{};
+    auto matchesByTrackId = TrackMatches{};
     matchesByTrackId.reserve(touchedTrackIds.size());
 
     for (auto const trackId : touchedTrackIds)
@@ -300,16 +316,15 @@ namespace ao::rt
       matchesByTrackId.emplace(trackId, std::move(matches));
     }
 
-    auto preferredMovedIds = std::vector<TrackId>{};
+    return matchesByTrackId;
+  }
 
-    for (auto const trackId : insertedTrackIds)
-    {
-      if (removedTrackIds.contains(trackId))
-      {
-        preferredMovedIds.push_back(trackId);
-      }
-    }
-
+  void SmartListEvaluator::updateDerivedWorks(std::span<DerivedWork> const works,
+                                              IndexedTrackSequence const& upstreamTracks,
+                                              TrackMatches const& matchesByTrackId,
+                                              std::span<TrackId const> const updatedTrackIds,
+                                              std::span<TrackId const> const preferredMovedIds)
+  {
     for (std::size_t workIndex = 0; workIndex < works.size(); ++workIndex)
     {
       auto& work = works[workIndex];
@@ -343,7 +358,12 @@ namespace ao::rt
         }()));
       work.deltas = std::move(sourceBatchOf(script).deltas);
     }
+  }
 
+  void SmartListEvaluator::commitDerivedWorks(SourceBucket& bucket,
+                                              IndexedTrackSequence upstreamTracks,
+                                              std::vector<DerivedWork>& works)
+  {
     bucket.upstreamTracks = std::move(upstreamTracks);
 
     for (auto& work : works)
@@ -365,6 +385,27 @@ namespace ao::rt
       std::ignore =
         work.list->publishDeltaBatch(TrackSourceDeltaBatch{.deltas = std::move(work.deltas)}, work.oldMembers.size());
     }
+  }
+
+  void SmartListEvaluator::handleRegularBatch(SourceBucket& bucket,
+                                              TrackSourceDeltaBatch const& batch,
+                                              bool const verifyFinalSnapshot)
+  {
+    auto const timer = rt::ScopedTimer{"SmartListEvaluator::handleRegularBatch"};
+    auto scriptResult = regularTrackEditScriptOf(batch);
+    gsl_Assert(scriptResult);
+    auto upstreamTracks = bucket.upstreamTracks;
+    upstreamTracks.applyScript(*scriptResult);
+    ++_operationCounts.upstreamIndexRebuilds;
+    gsl_Assert(!verifyFinalSnapshot || upstreamTracks.vector() == snapshotSource(*bucket.source));
+
+    auto evaluatableLists = std::vector<SmartListSource*>{};
+    auto works = buildDerivedWorks(bucket, evaluatableLists);
+    auto changes = summarizeTrackChanges(*scriptResult);
+    auto const matchesByTrackId =
+      evaluateTouchedTracks(works, std::span<SmartListSource* const>{evaluatableLists}, changes.touchedTrackIds);
+    updateDerivedWorks(works, upstreamTracks, matchesByTrackId, changes.updatedTrackIds, changes.preferredMovedIds);
+    commitDerivedWorks(bucket, std::move(upstreamTracks), works);
   }
 
   void SmartListEvaluator::handleSourceInvalidated(SourceBucket& bucket)

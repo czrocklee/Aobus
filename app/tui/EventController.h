@@ -79,6 +79,18 @@ namespace ao::tui
     void postActivityNotification(rt::NotificationSeverity severity, std::string message);
     void refreshCommandCompletion();
     bool handleMouse(ftxui::Mouse const& mouse);
+    std::optional<bool> handleActiveMouseDrag(ftxui::Mouse const& mouse);
+    std::optional<bool> handleMouseWheel(ftxui::Mouse const& mouse);
+    bool handleMouseMove(ftxui::Mouse const& mouse);
+    std::optional<bool> handleSeekRailPress(ftxui::Mouse const& mouse, bool modalInputActive);
+    std::optional<bool> handleColumnResizePress(ftxui::Mouse const& mouse);
+    std::optional<bool> handleScrollbarPress(ftxui::Mouse const& mouse);
+    std::optional<bool> handleSectionPress(ftxui::Mouse const& mouse);
+    std::optional<bool> handleButtonPress(ftxui::Mouse const& mouse);
+    bool handleOverlayPress(ftxui::Mouse const& mouse);
+    bool handleCommandEvent(ftxui::Event const& event);
+    bool handleOverlayEvent(ftxui::Event const& event);
+    bool handleRootEvent(ftxui::Event const& event);
     bool selectTrackFromScrollbar(std::int32_t row);
     void syncSeekSlider();
     std::chrono::milliseconds seekRailElapsed(std::int32_t column) const;

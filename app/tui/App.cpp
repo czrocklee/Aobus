@@ -354,114 +354,34 @@ namespace ao::tui
         state.paintedCoverBox = {};
       }
     }
-  } // namespace
 
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-  std::int32_t run(AppOptions const& options)
-  {
-    auto const coverArtMode = parseCoverArtMode(options.coverArtMode);
-    auto const kittyCoverArt = shouldUseKittyCoverArt(coverArtMode);
-    auto const blockCoverArt = shouldUseBlockCoverArt(coverArtMode);
+    struct AppFrameRenderer final
+    {
+      FrameTimer& frameTimer;
+      LibraryController& library;
+      ShellInteractionModel& shell;
+      rt::AppRuntime& runtime;
+      rt::PlaybackService& playback;
+      OutputDeviceController& outputDevices;
+      uimodel::ActivityStatusViewModel& activityStatusViewModel;
+      EventController& events;
+      TuiHitRegions& hitRegions;
+      std::vector<TrackColumnWidthOverride>& trackColumnWidthOverrides;
+      uimodel::PlaybackPositionInterpolator& playbackClock;
+      std::optional<std::chrono::milliseconds>& optPreviewElapsed;
+      ResourceId& cachedCoverArtId;
+      std::optional<CoverArtRows>& optCoverArtPreview;
+      std::optional<std::vector<std::byte>>& optKittyCoverArtPng;
+      bool kittyCoverArt = false;
+      bool blockCoverArt = false;
 
-    std::filesystem::create_directories(options.configPath.parent_path());
-    rt::Log::initialize(options.logLevel, options.libraryRoot / ".aobus" / "logs", rt::LogConsoleMode::Disabled);
-    auto const logShutdown = gsl_lite::finally([] { rt::Log::shutdown(); });
-    auto asyncExceptionHandler = rt::Log::asyncExceptionHandler();
-    auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
-    screen.TrackMouse(true);
-    auto executorPtr = std::make_unique<Executor>(screen);
-    auto* const executor = executorPtr.get();
-    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
-      .executorPtr = std::move(executorPtr),
-      .musicRoot = options.libraryRoot,
-      .databasePath = options.databasePath,
-      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(options.configPath),
-      .asyncExceptionHandler = std::move(asyncExceptionHandler),
-    }};
-
-    registerPlatformAudioBackends(runtime);
-
-    auto library = LibraryController{runtime};
-    auto shell = ShellInteractionModel{};
-    auto cachedCoverArtId = kInvalidResourceId;
-    auto optCoverArtPreview = std::optional<CoverArtRows>{};
-    auto optKittyCoverArtPng = std::optional<std::vector<std::byte>>{};
-    auto hitRegions = TuiHitRegions{};
-    auto trackColumnWidthOverrides = std::vector<TrackColumnWidthOverride>{};
-    auto kittyPaintState = KittyPaintState{};
-
-    auto& playback = runtime.playback();
-    auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
-    auto clockTickActive = std::atomic_bool{shouldTickTransportClock(playback.state().transport)};
-    auto activityAutoDismissActive = std::atomic_bool{false};
-    auto playbackClock = uimodel::PlaybackPositionInterpolator{};
-    auto optPreviewElapsed = std::optional<std::chrono::milliseconds>{};
-    auto playbackTime =
-      uimodel::PlaybackTimeViewModel{playback,
-                                     [&](uimodel::PlaybackTimeViewState const& view)
-                                     {
-                                       clockTickActive.store(shouldTickTransportClock(playback.state().transport));
-
-                                       if (view.duration == std::chrono::milliseconds{0})
-                                       {
-                                         optPreviewElapsed.reset();
-                                         playbackClock.reset();
-                                         requestRefresh();
-                                         return;
-                                       }
-
-                                       if (view.isPreviewing)
-                                       {
-                                         optPreviewElapsed = view.elapsed;
-                                         requestRefresh();
-                                         return;
-                                       }
-
-                                       optPreviewElapsed.reset();
-                                       playbackClock.updateState(view.elapsed, view.duration, view.isPlaying);
-                                       requestRefresh();
-                                     }};
-    auto activityStatusViewModel = uimodel::ActivityStatusViewModel{
-      runtime.notifications(),
-      [&](uimodel::ActivityStatusViewState const& view)
-      {
-        activityAutoDismissActive.store(view.compact.optAutoDismissTimeout.has_value());
-        requestRefresh();
-      },
-      uimodel::ActivityStatusViewModelOptions{.libraryChanges = &runtime.library().changes()}};
-    runtime.notifications().post(rt::NotificationSeverity::Info, "Ready");
-
-    auto nowPlayingSub = playback.onNowPlayingChanged([requestRefresh](auto const&) { requestRefresh(); });
-    auto qualitySub = playback.onQualityChanged([requestRefresh](auto const&) { requestRefresh(); });
-    auto volumeSub = playback.onVolumeChanged([requestRefresh](float) { requestRefresh(); });
-    auto mutedSub = playback.onMutedChanged([requestRefresh](bool) { requestRefresh(); });
-    auto outputDevices = OutputDeviceController{playback, requestRefresh};
-    auto commandCompletions = CommandCompletionProvider{runtime.completion(), runtime.workspace()};
-    auto events = EventController{screen,
-                                  shell,
-                                  library,
-                                  runtime,
-                                  EventControllerBindings{
-                                    .outputDevices = &outputDevices,
-                                    .hitRegions = &hitRegions,
-                                    .trackColumnWidthOverrides = &trackColumnWidthOverrides,
-                                    .activityStatusViewModel = &activityStatusViewModel,
-                                    .notifications = &runtime.notifications(),
-                                    .commandCompletionCallback = [&commandCompletions](std::string_view const draft)
-                                    { return commandCompletions.complete(draft); },
-                                  }};
-
-    auto frameTimer = FrameTimer{};
-
-    auto rendererPtr = ftxui::Renderer(
-      [&]
+      ftxui::Element operator()()
       {
         using namespace ftxui;
 
         auto const frameBuildScope = frameTimer.measureBuild();
         auto const selectedTrackView = library.selectedTrackView();
         auto const selectedCoverArtId = selectedTrackView.coverArtId;
-
         auto const detailVisible = shell.overlay() == Overlay::DetailPanel;
 
         if (detailVisible && selectedCoverArtId != cachedCoverArtId)
@@ -479,7 +399,6 @@ namespace ao::tui
         auto coverElementPtr = kittyCoverArt ? renderKittyCoverArtPlaceholder(optKittyCoverArtPng != std::nullopt) |
                                                  reflect(hitRegions.coverBox)
                                              : renderCoverArtPreview(optCoverArtPreview) | reflect(hitRegions.coverBox);
-
         auto const currentListTitle = library.currentListTitle();
         auto const state = playback.state();
         hitRegions.clearFrameLocalRows();
@@ -614,7 +533,6 @@ namespace ao::tui
                                                              std::move(mainContentPtr),
                                                              std::move(popoverElementPtr),
                                                            });
-
         auto rootPtr = vbox({
           playbackBar(PlaybackBarViewState{.playbackState = &state,
                                            .displayElapsed = displayElapsed,
@@ -668,7 +586,125 @@ namespace ao::tui
         }
 
         return rootPtr;
-      });
+      }
+    };
+  } // namespace
+
+  std::int32_t run(AppOptions const& options)
+  {
+    auto const coverArtMode = parseCoverArtMode(options.coverArtMode);
+    auto const kittyCoverArt = shouldUseKittyCoverArt(coverArtMode);
+    auto const blockCoverArt = shouldUseBlockCoverArt(coverArtMode);
+
+    std::filesystem::create_directories(options.configPath.parent_path());
+    rt::Log::initialize(options.logLevel, options.libraryRoot / ".aobus" / "logs", rt::LogConsoleMode::Disabled);
+    auto const logShutdown = gsl_lite::finally([] { rt::Log::shutdown(); });
+    auto asyncExceptionHandler = rt::Log::asyncExceptionHandler();
+    auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
+    screen.TrackMouse(true);
+    auto executorPtr = std::make_unique<Executor>(screen);
+    auto* const executor = executorPtr.get();
+    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+      .executorPtr = std::move(executorPtr),
+      .musicRoot = options.libraryRoot,
+      .databasePath = options.databasePath,
+      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(options.configPath),
+      .asyncExceptionHandler = std::move(asyncExceptionHandler),
+    }};
+
+    registerPlatformAudioBackends(runtime);
+
+    auto library = LibraryController{runtime};
+    auto shell = ShellInteractionModel{};
+    auto cachedCoverArtId = kInvalidResourceId;
+    auto optCoverArtPreview = std::optional<CoverArtRows>{};
+    auto optKittyCoverArtPng = std::optional<std::vector<std::byte>>{};
+    auto hitRegions = TuiHitRegions{};
+    auto trackColumnWidthOverrides = std::vector<TrackColumnWidthOverride>{};
+    auto kittyPaintState = KittyPaintState{};
+
+    auto& playback = runtime.playback();
+    auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
+    auto clockTickActive = std::atomic_bool{shouldTickTransportClock(playback.state().transport)};
+    auto activityAutoDismissActive = std::atomic_bool{false};
+    auto playbackClock = uimodel::PlaybackPositionInterpolator{};
+    auto optPreviewElapsed = std::optional<std::chrono::milliseconds>{};
+    auto playbackTime =
+      uimodel::PlaybackTimeViewModel{playback,
+                                     [&](uimodel::PlaybackTimeViewState const& view)
+                                     {
+                                       clockTickActive.store(shouldTickTransportClock(playback.state().transport));
+
+                                       if (view.duration == std::chrono::milliseconds{0})
+                                       {
+                                         optPreviewElapsed.reset();
+                                         playbackClock.reset();
+                                         requestRefresh();
+                                         return;
+                                       }
+
+                                       if (view.isPreviewing)
+                                       {
+                                         optPreviewElapsed = view.elapsed;
+                                         requestRefresh();
+                                         return;
+                                       }
+
+                                       optPreviewElapsed.reset();
+                                       playbackClock.updateState(view.elapsed, view.duration, view.isPlaying);
+                                       requestRefresh();
+                                     }};
+    auto activityStatusViewModel = uimodel::ActivityStatusViewModel{
+      runtime.notifications(),
+      [&](uimodel::ActivityStatusViewState const& view)
+      {
+        activityAutoDismissActive.store(view.compact.optAutoDismissTimeout.has_value());
+        requestRefresh();
+      },
+      uimodel::ActivityStatusViewModelOptions{.libraryChanges = &runtime.library().changes()}};
+    runtime.notifications().post(rt::NotificationSeverity::Info, "Ready");
+
+    auto nowPlayingSub = playback.onNowPlayingChanged([requestRefresh](auto const&) { requestRefresh(); });
+    auto qualitySub = playback.onQualityChanged([requestRefresh](auto const&) { requestRefresh(); });
+    auto volumeSub = playback.onVolumeChanged([requestRefresh](float) { requestRefresh(); });
+    auto mutedSub = playback.onMutedChanged([requestRefresh](bool) { requestRefresh(); });
+    auto outputDevices = OutputDeviceController{playback, requestRefresh};
+    auto commandCompletions = CommandCompletionProvider{runtime.completion(), runtime.workspace()};
+    auto events = EventController{screen,
+                                  shell,
+                                  library,
+                                  runtime,
+                                  EventControllerBindings{
+                                    .outputDevices = &outputDevices,
+                                    .hitRegions = &hitRegions,
+                                    .trackColumnWidthOverrides = &trackColumnWidthOverrides,
+                                    .activityStatusViewModel = &activityStatusViewModel,
+                                    .notifications = &runtime.notifications(),
+                                    .commandCompletionCallback = [&commandCompletions](std::string_view const draft)
+                                    { return commandCompletions.complete(draft); },
+                                  }};
+
+    auto frameTimer = FrameTimer{};
+    auto frameRenderer = AppFrameRenderer{
+      .frameTimer = frameTimer,
+      .library = library,
+      .shell = shell,
+      .runtime = runtime,
+      .playback = playback,
+      .outputDevices = outputDevices,
+      .activityStatusViewModel = activityStatusViewModel,
+      .events = events,
+      .hitRegions = hitRegions,
+      .trackColumnWidthOverrides = trackColumnWidthOverrides,
+      .playbackClock = playbackClock,
+      .optPreviewElapsed = optPreviewElapsed,
+      .cachedCoverArtId = cachedCoverArtId,
+      .optCoverArtPreview = optCoverArtPreview,
+      .optKittyCoverArtPng = optKittyCoverArtPng,
+      .kittyCoverArt = kittyCoverArt,
+      .blockCoverArt = blockCoverArt,
+    };
+    auto rendererPtr = ftxui::Renderer([&frameRenderer] { return frameRenderer(); });
 
     auto componentPtr =
       ftxui::CatchEvent(rendererPtr, [&](ftxui::Event const& event) { return events.handleEvent(event); });

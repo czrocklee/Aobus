@@ -66,119 +66,132 @@ namespace ao::rt
     }
   } // namespace
 
-  // Subscription lambdas form separate event reducers but share one mutation-depth gate.
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   TrackSourceCache::TrackSourceCache(library::MusicLibrary const& library, LibraryChanges const& changes)
     : _library{library}, _allTracksPtr{std::make_shared<AllTracksSource>(_library.tracks())}, _smartEvaluator{_library}
   {
-    _changesSubscription = changes.onChanged(
-      // A changeset is routed to several source kinds in one ordered callback.
-      // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-      [this](LibraryChangeSet const& event)
+    _changesSubscription = changes.onChanged([this](LibraryChangeSet const& event) { handleLibraryChange(event); });
+  }
+
+  void TrackSourceCache::handleLibraryChange(LibraryChangeSet const& event)
+  {
+    if (event.libraryReset)
+    {
+      handleLibraryReset();
+      return;
+    }
+
+    applyListMutation([this, &event] { handleIncrementalLibraryChange(event); });
+  }
+
+  void TrackSourceCache::handleLibraryReset()
+  {
+    reloadAllTracks();
+    auto liveListIds = std::vector<ListId>{};
+    liveListIds.reserve(_liveSources.size());
+
+    for (auto const& [listId, sourcePtr] : _liveSources)
+    {
+      std::ignore = sourcePtr;
+      liveListIds.push_back(listId);
+    }
+
+    applyListMutation(
+      [this, &liveListIds]
       {
-        if (event.libraryReset)
+        for (auto const listId : liveListIds)
         {
-          reloadAllTracks();
-          auto liveListIds = std::vector<ListId>{};
-          liveListIds.reserve(_liveSources.size());
-
-          for (auto const& [listId, sourcePtr] : _liveSources)
-          {
-            std::ignore = sourcePtr;
-            liveListIds.push_back(listId);
-          }
-
-          applyListMutation(
-            [this, &liveListIds]
-            {
-              for (auto const listId : liveListIds)
-              {
-                refreshList(listId);
-              }
-            });
-          return;
+          refreshList(listId);
         }
-
-        applyListMutation(
-          [this, &event]
-          {
-            for (auto const id : event.listsDeleted)
-            {
-              eraseList(id);
-            }
-
-            _allTracksPtr->applyCollectionChange(event.tracksInserted, event.tracksDeleted);
-
-            auto detailedListIds = std::vector<ListId>{};
-            detailedListIds.reserve(event.manualContentChanges.size());
-
-            for (auto const& contentChange : event.manualContentChanges)
-            {
-              if (std::ranges::contains(event.listsDeleted, contentChange.listId))
-              {
-                continue;
-              }
-
-              if (!std::ranges::contains(detailedListIds, contentChange.listId))
-              {
-                detailedListIds.push_back(contentChange.listId);
-              }
-
-              auto sourcePtr = liveSource(contentChange.listId);
-
-              if (sourcePtr == nullptr)
-              {
-                continue;
-              }
-
-              std::visit(
-                [&sourcePtr, listId = contentChange.listId, this](auto const& operation)
-                {
-                  using Operation = std::remove_cvref_t<decltype(operation)>;
-
-                  if constexpr (std::same_as<Operation, ManualTracksInsert>)
-                  {
-                    sourcePtr->applyManualTracksInsert(operation);
-                  }
-                  else if constexpr (std::same_as<Operation, ManualTracksRemove>)
-                  {
-                    sourcePtr->applyManualTracksRemove(operation);
-                  }
-                  else if constexpr (std::same_as<Operation, ManualTracksMove>)
-                  {
-                    sourcePtr->applyManualTracksMove(operation);
-                  }
-                  else
-                  {
-                    refreshList(listId);
-                  }
-                },
-                contentChange.operation);
-            }
-
-            for (auto const id : event.listsUpserted)
-            {
-              if (!std::ranges::contains(detailedListIds, id))
-              {
-                refreshList(id);
-              }
-            }
-
-            auto metadataTrackIds = std::vector<TrackId>{};
-            metadataTrackIds.reserve(event.tracksMutated.size());
-
-            for (auto const trackId : event.tracksMutated)
-            {
-              if (!std::ranges::contains(event.tracksInserted, trackId) &&
-                  !std::ranges::contains(event.tracksDeleted, trackId))
-              {
-                metadataTrackIds.push_back(trackId);
-              }
-            }
-
-            _allTracksPtr->notifyUpdated(metadataTrackIds);
-          });
       });
+  }
+
+  void TrackSourceCache::handleIncrementalLibraryChange(LibraryChangeSet const& event)
+  {
+    for (auto const id : event.listsDeleted)
+    {
+      eraseList(id);
+    }
+
+    _allTracksPtr->applyCollectionChange(event.tracksInserted, event.tracksDeleted);
+    auto const detailedListIds = applyManualContentChanges(event);
+
+    for (auto const id : event.listsUpserted)
+    {
+      if (!std::ranges::contains(detailedListIds, id))
+      {
+        refreshList(id);
+      }
+    }
+
+    notifyMetadataUpdates(event);
+  }
+
+  std::vector<ListId> TrackSourceCache::applyManualContentChanges(LibraryChangeSet const& event)
+  {
+    auto detailedListIds = std::vector<ListId>{};
+    detailedListIds.reserve(event.manualContentChanges.size());
+
+    for (auto const& contentChange : event.manualContentChanges)
+    {
+      if (std::ranges::contains(event.listsDeleted, contentChange.listId))
+      {
+        continue;
+      }
+
+      if (!std::ranges::contains(detailedListIds, contentChange.listId))
+      {
+        detailedListIds.push_back(contentChange.listId);
+      }
+
+      auto sourcePtr = liveSource(contentChange.listId);
+
+      if (sourcePtr == nullptr)
+      {
+        continue;
+      }
+
+      std::visit(
+        [&sourcePtr, listId = contentChange.listId, this](auto const& operation)
+        {
+          using Operation = std::remove_cvref_t<decltype(operation)>;
+
+          if constexpr (std::same_as<Operation, ManualTracksInsert>)
+          {
+            sourcePtr->applyManualTracksInsert(operation);
+          }
+          else if constexpr (std::same_as<Operation, ManualTracksRemove>)
+          {
+            sourcePtr->applyManualTracksRemove(operation);
+          }
+          else if constexpr (std::same_as<Operation, ManualTracksMove>)
+          {
+            sourcePtr->applyManualTracksMove(operation);
+          }
+          else
+          {
+            refreshList(listId);
+          }
+        },
+        contentChange.operation);
+    }
+
+    return detailedListIds;
+  }
+
+  void TrackSourceCache::notifyMetadataUpdates(LibraryChangeSet const& event)
+  {
+    auto metadataTrackIds = std::vector<TrackId>{};
+    metadataTrackIds.reserve(event.tracksMutated.size());
+
+    for (auto const trackId : event.tracksMutated)
+    {
+      if (!std::ranges::contains(event.tracksInserted, trackId) && !std::ranges::contains(event.tracksDeleted, trackId))
+      {
+        metadataTrackIds.push_back(trackId);
+      }
+    }
+
+    _allTracksPtr->notifyUpdated(metadataTrackIds);
   }
 
   TrackSource& TrackSourceCache::allTracks()

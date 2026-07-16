@@ -51,7 +51,6 @@ namespace ao::gtk
     return loadUnlocked(presetId);
   }
 
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   std::optional<uimodel::LayoutComponentStateDocument> ShellLayoutComponentStateStore::loadUnlocked(
     std::string_view presetId) const
   {

@@ -92,7 +92,6 @@ namespace ao::query::detail
   constexpr auto kStringEscape = dsl::backslash_escape.symbol<kStringEscapeSymbols>(
     dsl::lit_c<'"'> / dsl::lit_c<'\\'> / dsl::lit_c<'\''> / dsl::lit_c<'n'> / dsl::lit_c<'t'> / dsl::lit_c<'r'>);
 
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity) -- lexy macros expand into synthetic branches.
   constexpr auto kBarewordIdentifier = []
   {
     auto const id = dsl::identifier(dsl::ascii::alpha_digit_underscore);

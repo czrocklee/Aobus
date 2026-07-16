@@ -186,7 +186,7 @@ namespace ao::utility
     template<typename T>
     inline T* asLegacyPtr(std::span<std::byte const> span) noexcept
     {
-      return const_cast<T*>(asPtr<T>(span)); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+      return const_cast<T*>(asPtr<T>(span));
     }
 
     /**
@@ -280,13 +280,13 @@ namespace ao::utility
   {
     static_assert(std::is_void_v<U> || std::is_base_of_v<U, T>, "T must be derived from U for unsafeDowncast");
     gsl_Expects(ptr != nullptr);
-    return static_cast<T*>(ptr); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+    return static_cast<T*>(ptr);
   }
 
   template<typename T, typename U>
   inline T& unsafeDowncast(U& ref) noexcept
   {
     static_assert(std::is_base_of_v<U, T>, "T must be derived from U for unsafeDowncast");
-    return static_cast<T&>(ref); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+    return static_cast<T&>(ref);
   }
 } // namespace ao::utility
