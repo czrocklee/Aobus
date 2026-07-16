@@ -15,17 +15,17 @@ It persists only `activeListId`, even though `openViews` may contain several vie
 Restore scans matching views and currently lets the first matching filtered view win over an unfiltered match.
 The focused view after restart can therefore differ from the view that was focused when the session was saved while the file remains completely valid.
 
-The root payload has no document kind, schema version, or library identity.
+The root payload has no document kind, complete workspace schema version, or library identity.
+Its `presentationVersion` gates only the stable nested presentation vocabulary implemented by RFC 0010.
 It is stored under a per-library path in GTK, but every persisted `ListId` is interpreted directly against whichever `MusicLibrary` opens that path.
 A copied, mismatched, stale, or incorrectly selected workspace file can resolve numeric ids against the wrong library; coincidental id reuse can produce a plausible but semantically unrelated view instead of a rejection.
 The library already has a durable UUID, but workspace persistence does not bind to it.
 
-The format is reflected directly from C++ aggregate member names and numeric enum values.
-Renaming a member changes a key, changing an enum ordinal changes persisted meaning, and there is no version gate through which to migrate either change.
-Nested presentation values share the numeric stability problem tracked by RFC 0010.
+The current private document codec now owns exact root field names and stable nested presentation values.
+That closes the numeric enum hazard but does not version root workspace semantics, list identity, filter dialect, or active-view interpretation.
 
-Generic decoding is permissive in places where workspace identity needs a fail-closed boundary.
-Malformed vector entries may be skipped, absent fields retain C++ defaults, unknown fields are discarded on a later save, and enum integers are not checked against their declared domains.
+Structural decoding is strict and nested presentation values are validated before view creation.
+Workspace identity and resource validation remain incomplete, however.
 There is no codec-level bound on view count, preset count, filter length, collection size, or nested presentation size.
 A small managed-state file can therefore trigger unbounded view, source, projection, and query construction during startup.
 
@@ -36,19 +36,18 @@ After permissive decode, first-match lookup order rather than a declared identit
 
 Restore has good candidate cleanup for view-creation failure, but its public operation does not declare an empty-workspace precondition.
 Calling it on a non-empty workspace appends restored views and replaces presets instead of replacing or rejecting the existing aggregate.
-It emits ordinary focus and preset observations during commit and has no result distinguishing first run, restored state, incompatible library, unsupported future schema, recovered legacy state, or intentionally empty state.
+It emits ordinary focus and preset observations during commit and has no result distinguishing first run, restored state, incompatible library, unsupported future schema, rejected predecessor state, or intentionally empty state.
 
-There is also no complete golden fixture locking the workspace schema and numeric legacy meanings.
-The aggregate declarations and shared codec are currently the only exact authority, so accidental persistence changes can compile and pass behavior tests without a format-level review signal.
+Focused tests lock the stable presentation vocabulary and strict root membership, but there is still no complete golden fixture for a library-bound workspace envelope, exact active identity, limits, and outcomes because that envelope does not yet exist.
 
 ## Dependencies
 
 - Hard: [RFC 0016](0016-coherent-workspace-transactions.md) supplies the validated candidate-install boundary required for one atomic restored workspace revision.
-- Conditional: [RFC 0010](0010-versioned-presentation-state.md) blocks canonical version-1 emission of nested stable presentation identifiers.
-- Integration: [RFC 0013](0013-coherent-application-reporting-policy.md) defines user-visible dispositions for incompatible, corrupt, recovered, and unsaved workspace sessions.
+- Conditional: None.
+- Integration: [RFC 0010](0010-versioned-presentation-state.md) supplies the implemented stable nested presentation vocabulary; [RFC 0013](0013-coherent-application-reporting-policy.md) defines user-visible dispositions for incompatible, corrupt, recovered, and unsaved workspace sessions.
 
-The semantic envelope, library binding, exact active-view reference, limits, and validation can be implemented before the conditional phases.
-Version-1 writes must not claim stable nested presentation encoding until RFC 0010's codec is available.
+The stable nested presentation prerequisite is complete.
+The remaining work is the semantic envelope, library binding, exact active-view reference, limits, preset identity, outcomes, and recovery ownership.
 The current grouped store already provides candidate reads and result-bearing whole-document commits.
 This RFC's workspace owner must retain unresolved schema state and suppress ordinary checkpoints because the generic store cannot infer that a syntactically valid group has an unsupported semantic version.
 
@@ -58,14 +57,14 @@ This RFC's workspace owner must retain unresolved schema state and suppress ordi
 - Give the root payload an explicit document kind and schema version.
 - Persist an exact session-local reference to the active open-view entry.
 - Give every persisted view entry a unique identity within the session document without persisting runtime `ViewId`.
-- Define stable field names and use stable textual identifiers for nested presentation choices.
+- Retain RFC 0010's stable nested presentation identifiers inside a fully versioned workspace envelope.
 - Decode into an isolated semantic candidate and reject ambiguous or malformed identity-bearing state.
 - Apply explicit bounds before allocating runtime views, sources, projections, expressions, or presets.
 - Validate custom preset identity, built-in collisions, references, and complete nested presentation values.
 - Install one complete candidate through one workspace revision or leave the live workspace unchanged.
 - Distinguish first run, restored, intentionally empty, incompatible, unsupported, and recovered outcomes.
 - Preserve unsupported future input until an explicit user or policy-authorized recovery commit.
-- Lock legacy interpretation and current canonical output with golden fixtures.
+- Lock predecessor rejection and current canonical output with golden fixtures.
 
 ## Non-goals
 
@@ -208,7 +207,6 @@ WorkspaceRestoreOutcome
   FirstRun
   Restored(revision, viewCount)
   RestoredEmpty(revision)
-  MigratedLegacy(revision, diagnostics)
   RejectedIncompatibleLibrary(expected, actual)
   RejectedUnsupportedVersion(version)
   RejectedInvalid(diagnosticId)
@@ -226,19 +224,11 @@ The codec and store never post notifications directly.
 
 ### Legacy input policy
 
-Unversioned input is recognized only in the known `workspace` group and only by a frozen legacy decoder.
-Because legacy `activeListId` cannot identify one of several same-list views exactly, migration cannot claim perfect focus preservation.
+Unversioned development snapshots are rejected rather than migrated.
+The presentation-only transitional document introduced by RFC 0010 is likewise not a supported predecessor for the future root version 1 unless implementation evidence establishes a concrete compatibility requirement before this RFC is accepted.
 
-The project may choose one of two explicit rollout policies without changing version 1:
-
-- reject unversioned development snapshots and start from an empty session;
-- import them once using the frozen current heuristic, return `MigratedLegacy` with ambiguity evidence when several views match, and write version 1 only on the next explicit successful checkpoint.
-
-The implementation must select one policy before acceptance and lock it with fixtures.
-It cannot silently switch based on current C++ defaults or enum declarations.
-
-Legacy import never rewrites merely because load succeeded.
-Unsupported future input is not legacy and is never routed through the legacy decoder.
+This clean-start policy avoids freezing ambiguous `activeListId` focus heuristics, development-era root names, and unbounded documents as a permanent decoder.
+Unsupported future input is rejected through its explicit version path, not treated as legacy.
 
 ### Recovery ownership
 
@@ -299,17 +289,18 @@ Version 1 is designed without preserving reflected aggregate layout or numeric p
 
 Implementation proceeds in phases:
 
-1. Freeze the exact unversioned schema and current enum mappings in read-only golden fixtures, then choose reject-versus-one-time-import policy.
+1. Lock rejection of unversioned and presentation-only transitional documents with read-only fixtures.
 2. Add stable session view keys, exact active-view capture, library UUID binding, explicit limits, and domain validation in an isolated codec.
 3. Add successful outcome variants and rejected-session suppression so startup defaults cannot overwrite unresolved input.
 4. Implement candidate restore through RFC 0016 and remove implicit append behavior.
-5. Integrate RFC 0010's nested stable presentation codec and enable canonical version-1 encoding.
+5. Reuse RFC 0010's nested stable presentation codec in the new envelope without duplicating its token catalog.
 6. Integrate the current candidate read/save boundary with workspace revision acknowledgement and explicit owner-controlled recovery before enabling ordinary version-1 checkpoints.
-7. Migrate preset mutation to stable-id identity and remove reflected workspace aggregate encoding.
+7. Migrate preset mutation to stable-id identity and remove the transitional presentation-only workspace document.
 8. Add reporting dispositions and reset/export workflows, then remove temporary compatibility adapters.
 
 No automatic rewrite happens on inspection or rejected restore.
-The first explicit successful checkpoint after an accepted legacy import writes only canonical version 1.
+Rejected predecessor input is never rewritten as a side effect of inspection.
+The first explicit successful checkpoint after an owner-authorized reset writes only canonical version 1.
 
 ## Validation
 
@@ -328,8 +319,8 @@ The first explicit successful checkpoint after an accepted legacy import writes 
 - One successful restore publishes exactly one workspace observation after the complete aggregate is valid.
 - A save receipt acknowledges the captured workspace revision only, and a newer revision remains dirty.
 - Unsupported future versions and incompatible-library sessions remain byte-for-byte unchanged until explicit recovery.
-- Golden fixtures lock every accepted legacy numeric value and every canonical version-1 field and stable id.
-- Repository searches reject production use of generic reflected encoding for the workspace root after migration.
+- Golden fixtures lock predecessor rejection and every canonical version-1 root field and stable id.
+- Repository searches reject production use of generic reflected encoding for the workspace root after implementation.
 - Completed implementation passes `./ao check` and the documentation gate.
 
 ## Open questions
@@ -339,16 +330,16 @@ The first explicit successful checkpoint after an accepted legacy import writes 
 - Which initial resource limits fit production libraries and custom preset workflows without making startup memory proportional to attacker-controlled input?
 - Should list deletion mark the next session checkpoint dirty immediately, or is ordinary workspace closure sufficient evidence?
 - Does a library restore that adopts a different `libraryId` offer an explicit option to rebind and validate the previous workspace, or always require reset/export?
-- Should legacy ambiguity select the current filtered-first heuristic, the first serialized match, or reject import whenever several candidates share the active list?
 
 ## Promotion plan
 
 If accepted and implemented, update the [workspace architecture](../architecture/workspace.md) with library binding, semantic session candidates, restore outcomes, and rejected-session ownership.
 Replace current snapshot, restore, fallback, failure, observation, and versioning behavior in the [workspace session specification](../spec/workspace/session.md) phase by phase.
-Replace the unversioned field inventory in the [workspace session state reference](../reference/workspace/session-state.md) with the implemented versioned envelope, stable keys, UUID binding, limits, validation, canonical encoding, and any frozen legacy mapping.
+Replace the transitional field inventory in the [workspace session state reference](../reference/workspace/session-state.md) with the implemented versioned envelope, stable keys, UUID binding, limits, validation, canonical encoding, and explicit predecessor rejection.
 
 Update the [persistence and managed-state architecture](../architecture/persistence-and-managed-state.md), [grouped configuration store specification](../spec/persistence/config-store.md), and [application managed-state surface](../reference/persistence/application-config.md) only if workspace recovery adds a new generic persistence contract; otherwise keep unresolved-session state and revision acknowledgement with the workspace owner.
-Update presentation architecture/spec/reference owners when RFC 0010's stable nested codec is integrated; do not duplicate its field catalog in the workspace reference.
+RFC 0010's presentation architecture/spec/reference promotion is complete.
+Reuse that stable vocabulary and do not duplicate its field catalog in the future workspace envelope reference.
 Update library metadata reference only if workspace consumers need a new public library-identity accessor, not to redefine the UUID format.
 
 Update the GTK active-library lifecycle and future frontend-neutral session lifecycle specifications with incompatible-library, unsupported-version, first-run, and explicit-reset dispositions.

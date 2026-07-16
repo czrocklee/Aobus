@@ -41,6 +41,7 @@
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <gtkmm/stack.h>
 
@@ -198,9 +199,9 @@ namespace ao::gtk
     _implPtr = std::make_unique<Impl>(this, window, runtime);
 
     _trackPresentationChangedSubscription = _implPtr->trackPresentationPreferences.signalChanged().connect(
-      [this](ao::ListId /*listId*/) { saveColumnLayout(); });
-    _trackColumnLayoutChangedSubscription =
-      _implPtr->trackColumnLayouts.signalChanged().connect([this](ao::ListId /*listId*/) { saveColumnLayout(); });
+      [this](ao::ListId /*listId*/) { saveColumnLayoutIfNotRestoring(); });
+    _trackColumnLayoutChangedSubscription = _implPtr->trackColumnLayouts.signalChanged().connect(
+      [this](ao::ListId /*listId*/) { saveColumnLayoutIfNotRestoring(); });
   }
 
   MainWindowCoordinator::~MainWindowCoordinator()
@@ -271,7 +272,9 @@ namespace ao::gtk
       .activityPresentation = rt::NotificationActivityPresentation::Hidden,
     });
 
-    if (auto const restored = _runtime.workspace().restoreSession(_runtime.workspaceConfigStore()); !restored)
+    auto const restored = _runtime.workspace().restoreSession(_runtime.workspaceConfigStore());
+
+    if (!restored)
     {
       APP_LOG_WARN("MainWindowCoordinator: Failed to restore workspace session - {}", restored.error().message);
     }
@@ -281,8 +284,12 @@ namespace ao::gtk
     if (_runtime.workspace().snapshot().openViews.empty())
     {
       auto const spec = _implPtr->presentationForList(rt::kAllTracksListId, _runtime);
-      std::ignore = _runtime.workspace().navigateTo(rt::kAllTracksListId, {.optPresentation = spec});
-      _runtime.workspace().saveSession(_runtime.workspaceConfigStore());
+      auto const navigated = _runtime.workspace().navigateTo(rt::kAllTracksListId, {.optPresentation = spec});
+
+      if (restored && navigated)
+      {
+        _runtime.workspace().saveSession(_runtime.workspaceConfigStore());
+      }
     }
 
     rebuildListPages();
@@ -345,6 +352,8 @@ namespace ao::gtk
     auto columnState = ao::uimodel::TrackColumnLayoutState{};
     auto prefState = ao::uimodel::ListPresentationPreferenceState{};
     _implPtr->layoutStateStore.load(columnState, prefState);
+    _restoringLayoutState = true;
+    auto const restoreGuard = utility::ScopedRegistration{[this] { _restoringLayoutState = false; }};
     _implPtr->trackColumnLayouts.setListLayouts(columnState.listLayouts);
     _implPtr->trackPresentationPreferences.setListPresentations(prefState.presentations);
 
@@ -405,6 +414,14 @@ namespace ao::gtk
     prefState.presentations = _implPtr->trackPresentationPreferences.listPresentations();
 
     _implPtr->layoutStateStore.save(columnState, prefState);
+  }
+
+  void MainWindowCoordinator::saveColumnLayoutIfNotRestoring()
+  {
+    if (!_restoringLayoutState)
+    {
+      saveColumnLayout();
+    }
   }
 
   TrackRowCache* MainWindowCoordinator::trackRowCache()

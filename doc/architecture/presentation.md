@@ -49,6 +49,9 @@ For track-list views, runtime keeps content and shape as separate state axes.
 `listId` and `filterExpression` select a source, while `TrackPresentationSpec` selects sorting, grouping, visible fields, and redundant-field suppression.
 `LiveTrackListProjection` is their composition point, not a second authority for either concern.
 
+Runtime also owns the stable textual vocabulary for persisted `TrackField`, `TrackSortField`, and `TrackGroupKey` choices.
+That vocabulary is shared by runtime workspace persistence and UIModel presentation codecs without making either layer own the other's document shape.
+
 ### UIModel
 
 UIModel owns deterministic platform-neutral presentation behavior.
@@ -59,6 +62,9 @@ It does not own storage transactions, playback succession, audio control, runtim
 
 UIModel may resolve and complete quick-search text through runtime vocabulary ports, and may inspect a valid Smart List expression to recommend a presentation.
 Those are authoring and recommendation policies: UIModel does not evaluate membership or redefine query grammar.
+
+UIModel owns versioned semantic codecs for its per-library column-layout and list-presentation preference state.
+The codecs produce and validate platform-neutral documents; they do not choose paths or perform GTK lifecycle saves.
 
 Metadata and tag editors use a platform-neutral `TrackAuthoringSession`.
 Session creation asks runtime to bind one exact target order to the current runtime instance and committed library revision.
@@ -158,6 +164,8 @@ A quick filter narrows the active membership while retaining the active presenta
 - Frontends retain subscriptions and view models for no longer than the runtime services they observe.
 - Runtime snapshots remain the source of truth after a frontend rebuilds its widget tree or terminal frame.
 - UI-local persisted preferences influence presentation but do not replace canonical runtime state.
+- Persisted presentation documents use explicit version gates and runtime-owned stable tokens rather than C++ enum ordinals.
+- Runtime workspace, UIModel layout/preference, and GTK file ownership stay separate; sharing token conversion does not justify a universal cross-layer document codec.
 - Layout component factories receive an explicit dependency bundle and runtime-state carrier rather than reaching through global frontend singletons.
 - Narrow GTK evaluator composition may borrow the const core-library view; committing authority remains inaccessible to GTK and UIModel.
 - An open authoring session never retargets when GTK recycles a row, selection changes, or a detail projection refreshes.
@@ -185,6 +193,8 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines and guards the runtime-to-UIModel dependency edge.
 - [`app/include/ao/uimodel/`](../../app/include/ao/uimodel) and [`app/uimodel/`](../../app/uimodel) contain platform-neutral presentation capsules.
 - [`TrackAuthoringSession`](../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns revision-bound metadata/tag interaction lifetime.
+- [`TrackField`](../../app/include/ao/rt/TrackField.h) owns stable field, sort, and group token conversion.
+- [`TrackColumnLayoutCodec`](../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutCodec.h) and [`ListPresentationPreferenceCodec`](../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceCodec.h) own versioned UIModel presentation documents.
 - [`MainWindow`](../../app/linux-gtk/app/MainWindow.h), [`MainWindowCoordinator`](../../app/linux-gtk/app/MainWindowCoordinator.h), and [`GtkUiDependencies`](../../app/linux-gtk/app/GtkUiDependencies.h) define GTK composition boundaries.
 - [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) bounds GTK-main-context callbacks to their owner lifetime.
 - [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h) and [`LayoutBuildContext`](../../app/linux-gtk/layout/runtime/LayoutBuildContext.h) build GTK layout values into widgets.
@@ -196,6 +206,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 
 - [`test/unit/uimodel/`](../../test/unit/uimodel) mirrors UIModel feature capsules and protects platform-neutral policy.
 - [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding, stale-state, all-or-none outcomes, and guarded follow-up submissions.
+- [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation codec tests protect stable persistence vocabulary and semantic document validation.
 - [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) and [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protect GTK composition.
 - [`MainContextCallbackScopeTest.cpp`](../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation and teardown ordering.
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy, handoff, and export-mode response invalidation.
@@ -219,6 +230,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [Activity-status specification](../spec/presentation/activity-status.md) and [surface reference](../reference/presentation/activity-status.md)
 - [Track-list presentation](../spec/presentation/track-presentation.md)
 - [Track-column layout](../spec/presentation/track-column-layout.md)
+- [Persisted presentation state](../reference/presentation/persisted-state.md)
 - [Selection summary](../spec/presentation/selection-summary.md)
 - [Volume control](../spec/presentation/volume-control.md)
 - [Track filter](../spec/presentation/track-filter.md)

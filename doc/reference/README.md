@@ -51,11 +51,12 @@ Use the [reference template](../template/reference.md).
 ## Presentation
 
 - [Activity-status surface](presentation/activity-status.md) enumerates shared UIModel state, kinds, helpers, defaults, and commands.
+- [Persisted presentation state](presentation/persisted-state.md) enumerates versioned GTK presentation documents, stable token authorities, validation, and compatibility behavior.
 - [Track presentation presets](presentation/track-preset.md) enumerates built-in ids, labels, menu order, and intent.
 
 ## Workspace
 
-- [Workspace session state](workspace/session-state.md) enumerates the unversioned `workspace` group, nested view and presentation fields, defaults, and compatibility limits.
+- [Workspace session state](workspace/session-state.md) enumerates the strict `workspace` group, versioned presentation vocabulary, exact fields, and remaining compatibility limits.
 
 ## Application shell
 

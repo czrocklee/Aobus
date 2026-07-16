@@ -18,11 +18,76 @@
 
 namespace
 {
+  constexpr auto kPersistedTrackFieldIds = std::to_array<std::string_view>({
+    "title",
+    "artist",
+    "album",
+    "album-artist",
+    "genre",
+    "composer",
+    "conductor",
+    "ensemble",
+    "work",
+    "movement",
+    "soloist",
+    "year",
+    "disc-number",
+    "disc-total",
+    "track-number",
+    "track-total",
+    "movement-number",
+    "movement-total",
+    "duration",
+    "tags",
+    "file-path",
+    "codec",
+    "sample-rate",
+    "channels",
+    "bit-depth",
+    "bitrate",
+    "file-size",
+    "modified-time",
+    "display-track-number",
+    "technical-summary",
+    "quality",
+  });
+
+  constexpr auto kPersistedTrackSortFieldIds = std::to_array<std::string_view>({
+    "artist",
+    "album",
+    "album-artist",
+    "genre",
+    "composer",
+    "conductor",
+    "ensemble",
+    "work",
+    "movement",
+    "soloist",
+    "year",
+    "disc-number",
+    "track-number",
+    "title",
+    "duration",
+  });
+
+  constexpr auto kPersistedTrackGroupKeyIds = std::to_array<std::string_view>({
+    "none",
+    "artist",
+    "album",
+    "album-artist",
+    "genre",
+    "composer",
+    "conductor",
+    "ensemble",
+    "work",
+    "year",
+  });
+
   std::size_t countIf(auto const& range, auto const& predicate)
   {
     return static_cast<std::size_t>(std::ranges::count_if(range, predicate));
   }
-}
+} // namespace
 
 namespace ao::rt::test
 {
@@ -74,17 +139,60 @@ namespace ao::rt::test
 
   TEST_CASE("trackFieldId round-trips through trackFieldFromId for all fields", "[runtime][unit][trackfield]")
   {
-    auto const defs = trackFieldDefinitions();
+    static_assert(kPersistedTrackFieldIds.size() == kTrackFieldCount);
 
-    for (auto const& def : defs)
+    for (std::size_t index = 0; index < kPersistedTrackFieldIds.size(); ++index)
     {
-      auto const id = trackFieldId(def.field);
+      auto const field = static_cast<TrackField>(index);
+      auto const id = trackFieldId(field);
       auto const optParsed = trackFieldFromId(id);
 
-      INFO("Field: " << def.id);
+      INFO("Field: " << kPersistedTrackFieldIds[index]);
+      CHECK(id == kPersistedTrackFieldIds[index]);
       REQUIRE(optParsed);
-      CHECK(*optParsed == def.field);
+      CHECK(*optParsed == field);
     }
+  }
+
+  TEST_CASE("TrackField - persisted sort and group ids round-trip exhaustively", "[runtime][unit][trackfield]")
+  {
+    static_assert(kPersistedTrackSortFieldIds.size() == kTrackSortFieldCount);
+    static_assert(kPersistedTrackGroupKeyIds.size() == kTrackGroupKeyCount);
+
+    auto sortIds = std::unordered_set<std::string_view>{};
+
+    for (std::size_t index = 0; index < kPersistedTrackSortFieldIds.size(); ++index)
+    {
+      auto const field = static_cast<TrackSortField>(index);
+      auto const id = trackSortFieldId(field);
+      auto const optParsed = trackSortFieldFromId(id);
+
+      INFO("Sort field: " << kPersistedTrackSortFieldIds[index]);
+      CHECK(id == kPersistedTrackSortFieldIds[index]);
+      CHECK(sortIds.insert(id).second);
+      REQUIRE(optParsed);
+      CHECK(*optParsed == field);
+    }
+
+    auto groupIds = std::unordered_set<std::string_view>{};
+
+    for (std::size_t index = 0; index < kPersistedTrackGroupKeyIds.size(); ++index)
+    {
+      auto const key = static_cast<TrackGroupKey>(index);
+      auto const id = trackGroupKeyId(key);
+      auto const optParsed = trackGroupKeyFromId(id);
+
+      INFO("Group key: " << kPersistedTrackGroupKeyIds[index]);
+      CHECK(id == kPersistedTrackGroupKeyIds[index]);
+      CHECK(groupIds.insert(id).second);
+      REQUIRE(optParsed);
+      CHECK(*optParsed == key);
+    }
+
+    CHECK_FALSE(trackSortFieldFromId("AlbumArtist"));
+    CHECK_FALSE(trackGroupKeyFromId("flat"));
+    CHECK(trackSortFieldId(static_cast<TrackSortField>(255)).empty());
+    CHECK(trackGroupKeyId(static_cast<TrackGroupKey>(255)).empty());
   }
 
   TEST_CASE("trackFieldDefinition returns non-null for all registered fields", "[runtime][unit][trackfield]")

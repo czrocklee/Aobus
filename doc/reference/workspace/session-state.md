@@ -3,205 +3,190 @@ id: workspace.session-state
 type: reference
 status: current
 domain: workspace
-summary: Enumerates the unversioned workspace configuration group, reflected fields, nested view and presentation values, defaults, and compatibility limits.
+summary: Enumerates the strict workspace group, versioned presentation vocabulary, exact fields, validation, and remaining compatibility limits.
 ---
 # Workspace session state
 
 ## Scope and version
 
 This reference owns the exact current payload of the `workspace` configuration group.
-It enumerates `WorkspaceSessionState`, its nested view configurations and custom presentation presets, their reflected field names, YAML shapes, defaults, and current compatibility limits.
+It enumerates the private persistence document, nested view presentations and custom presets, stable values, strict validation, and compatibility behavior.
 
-The payload has no schema-version field and no migration layer.
-The [application managed-state surface](../persistence/application-config.md) owns the registry that associates this payload with a logical document and writer; the [workspace session specification](../../spec/workspace/session.md) owns save, restore, fallback, and failure behavior.
+The required `presentationVersion` is currently `1`.
+It versions the nested presentation vocabulary, not the complete workspace document.
+The payload still has no root workspace schema version or migration registry; [RFC 0017](../../rfc/0017-versioned-workspace-session.md) owns that broader proposal.
+
+The [workspace session specification](../../spec/workspace/session.md) owns capture, candidate creation, focus fallback, commit, and failures after decoding.
+The [application managed-state surface](../persistence/application-config.md) owns document and writer registration.
 
 ## Code boundary
 
-The payload belongs to the **application runtime** layer in the [system architecture](../../architecture/system-overview.md), under the [workspace](../../architecture/workspace.md) and [persistence and managed-state](../../architecture/persistence-and-managed-state.md) architectures.
+This surface belongs to the application runtime layer from the [system architecture](../../architecture/system-overview.md), as refined by the [workspace architecture](../../architecture/workspace.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
+`WorkspaceSessionState` remains the runtime semantic candidate.
+The private `WorkspaceSessionDocument` and nested stored DTOs in `app/runtime/WorkspaceSessionCodec.h` are the exact YAML model.
+`WorkspaceSessionCodec.cpp` converts between that document and runtime `TrackListViewConfig`, `TrackPresentationSpec`, and custom-preset values.
 
-The model is public under `app/include/ao/rt/WorkspaceSessionState.h`, `ViewState.h`, `TrackPresentation.h`, and `TrackField.h`.
-The runtime `ConfigStore` and `app/include/ao/yaml/ConfigTraits.h` encode it as one ordinary reflected aggregate; frontends select the containing file but do not redefine the payload.
+`WorkspaceService` selects the literal `workspace` group and uses `ConfigStore::loadExact` before semantic conversion.
+Frontends select the containing path but do not decode or redefine fields.
 
 ## Surface
 
-### Group and root
+### Group root
 
-The literal top-level group name is `workspace`.
-Its value is one mapping with these reflected fields in current emitted order:
+The literal top-level group is `workspace`.
+Its value is one mapping with these required fields in canonical emitted order:
 
-| Field | YAML shape | C++ type | Default |
-|---|---|---|---|
-| `openViews` | Sequence of mappings. | `std::vector<TrackListViewConfig>` | Empty sequence. |
-| `activeListId` | Unsigned 32-bit scalar. | `ListId` | `0`, the invalid list id. |
-| `customPresets` | Sequence of mappings. | `std::vector<CustomTrackPresentationPreset>` | Empty sequence. |
+| Field | YAML shape | Meaning |
+|---|---|---|
+| `presentationVersion` | Unsigned 32-bit scalar. | Required and exactly `1`. |
+| `openViews` | Sequence of view mappings. | Ordered semantic view reconstruction records. |
+| `activeListId` | Unsigned 32-bit scalar. | Advisory focus hint; `0` is invalid/no hint. |
+| `customPresets` | Sequence of custom-preset mappings. | Complete workspace custom-preset collection. |
 
-The session stores no view id.
-`activeListId` is a focus hint interpreted against the restored `openViews` sequence rather than a unique serialized view identity.
+The session stores no `ViewId`.
+`activeListId` cannot uniquely identify two views over the same base list and follows the focus heuristic in the workspace session specification.
 
-### Track-list view configuration
+### Track-list view entry
 
-Every `openViews` entry is a mapping with these reflected fields:
+Every `openViews` entry contains:
 
-| Field | YAML shape | C++ type | Default and meaning |
-|---|---|---|---|
-| `listId` | Unsigned 32-bit scalar. | `ListId` | `4294967295`, the All Tracks virtual list id. |
-| `filterExpression` | Scalar string. | `std::string` | Empty; no transient filter. |
-| `groupBy` | Signed 32-bit scalar. | `TrackGroupKey` | `0`, `None`. |
-| `sortBy` | Sequence of `TrackSortTerm` mappings. | `std::vector<TrackSortTerm>` | Empty. |
-| `optPresentation` | `TrackPresentationSpec` mapping or YAML null. | `std::optional<TrackPresentationSpec>` | Null. |
+| Field | YAML shape | Requirement and meaning |
+|---|---|---|
+| `listId` | Unsigned 32-bit scalar. | Required and nonzero; identifies the base library or virtual list. |
+| `filterExpression` | String. | Required; empty means no transient filter. |
+| `presentation` | Presentation mapping. | Required exact presentation used to reconstruct the view. |
 
-Current save always supplies `optPresentation` from the live view while also writing `groupBy` and `sortBy`.
-During restore, a present presentation is normalized and takes precedence over the legacy top-level group/sort fields.
-When `optPresentation` is absent or null, view construction derives presentation from `groupBy`, `sortBy`, list kind, and built-in defaults.
+Legacy top-level `groupBy`, `sortBy`, and optional presentation fields are not part of version 1.
+Grouping and sorting occur only inside the required exact presentation.
+
+### Presentation mapping
+
+Each view `presentation` and custom-preset `spec` contains:
+
+| Field | YAML shape | Requirement |
+|---|---|---|
+| `id` | String. | Required and nonempty; opaque presentation identity. |
+| `group` | Stable group-key string. | Required and known. |
+| `sort` | Sequence of sort-term mappings. | Required; sort fields must be unique. |
+| `visibleFields` | Sequence of stable track-field strings. | Required, nonempty, known, and unique. |
+| `redundantFields` | Sequence of stable track-field strings. | Required, known, and unique. |
+
+The stable token catalogs are owned by the [runtime track-field catalog](../library/model/track-field.md) and routed through the [persisted presentation-state reference](../presentation/persisted-state.md).
+Presentation ids are not resolved against the current catalog during decoding.
 
 ### Sort term
 
-Every `sortBy` entry is a mapping:
+Every `sort` entry contains:
 
-| Field | YAML shape | C++ type | Default |
-|---|---|---|---|
-| `field` | Signed 32-bit scalar. | `TrackSortField` | `13`, `Title`. |
-| `ascending` | Boolean scalar. | `bool` | `true`. |
-
-The exact raw values for `TrackSortField` and `TrackGroupKey` are owned by the [sort-field](../library/model/track-field.md#sort-fields) and [group-key](../library/model/track-field.md#group-keys) tables in the runtime track field catalog.
-
-### Track presentation
-
-`optPresentation` and each custom preset's `spec` use this mapping:
-
-| Field | YAML shape | C++ type | Default |
-|---|---|---|---|
-| `id` | Scalar string. | `std::string` | Empty. |
-| `groupBy` | Signed 32-bit scalar. | `TrackGroupKey` | `0`, `None`. |
-| `sortBy` | Sequence of `TrackSortTerm` mappings. | `std::vector<TrackSortTerm>` | Empty. |
-| `visibleFields` | Sequence of signed 32-bit scalars. | `std::vector<TrackField>` | Empty. |
-| `redundantFields` | Sequence of signed 32-bit scalars. | `std::vector<TrackField>` | Empty. |
-
-The exact raw `TrackField` values belong to the [runtime track field catalog](../library/model/track-field.md).
-Built-in presentation ids and their current semantic defaults belong to the [track presentation preset reference](../presentation/track-preset.md).
+| Field | YAML shape | Requirement |
+|---|---|---|
+| `field` | Stable sort-field string. | Required, known, and unique within the presentation. |
+| `direction` | String. | Required; exactly `ascending` or `descending`. |
 
 ### Custom presentation preset
 
-Every `customPresets` entry is a mapping:
+Every `customPresets` entry contains:
 
-| Field | YAML shape | C++ type | Default |
-|---|---|---|---|
-| `label` | Scalar string. | `std::string` | Empty. |
-| `basePresetId` | Scalar string. | `std::string` | Empty. |
-| `spec` | `TrackPresentationSpec` mapping. | `TrackPresentationSpec` | Default-constructed mapping. |
-
-The codec accepts strings independently of the current built-in or custom presentation catalog.
-Workspace behavior later resolves ids and applies presentation normalization.
+| Field | YAML shape | Meaning |
+|---|---|---|
+| `label` | String. | User-visible label. |
+| `basePresetId` | String. | Opaque source/base preset identity; may be empty. |
+| `spec` | Presentation mapping. | Complete version-1 presentation spec. |
 
 ## Validation rules
 
-- The group value must be a mapping when present.
-- `openViews`, `customPresets`, every `sortBy`, and both field collections must be YAML sequences when present.
-- Strong list ids must parse within the unsigned 32-bit range.
-- Enum values must parse as signed 32-bit integers; the generic codec does not reject values outside the declared enum domains.
-- Boolean values use the shared canonical scalar parser.
-- `optPresentation` accepts a mapping or null.
-- Ordinary aggregate decoding ignores unknown fields and leaves absent fields at the seeded/default target value.
-- Ordinary vector decoding skips an element that cannot decode and continues with later elements.
-- No codec-level limit exists for view count, preset count, string length, sort-term count, or field count.
-- The codec does not require a nonzero list id, a present library list, a known presentation id, unique custom ids, or internally consistent group/sort/presentation values.
+- The group uses strict recursive aggregate/vector decoding; every listed member is required.
+- Unknown members, missing members, wrong node kinds, malformed scalar values, and malformed vector elements reject the whole workspace document.
+- `presentationVersion` must be `1`.
+- View list ids must be nonzero; existence in the active library is checked while candidate views are created.
+- Closed field, sort, group, and direction tokens must resolve exactly and case-sensitively.
+- Duplicate sort fields and duplicate values within either field collection reject the document.
+- Presentation ids must be nonempty and decoded presentations must have at least one visible field.
+- Encoding requires every live view to supply an exact presentation and rejects invalid enum values, duplicate sort fields, invalid list ids, and empty ids as `InvalidState`.
+- Encoding normalizes permitted live defaults, deduplicates field collections, and supplies `title` for an empty visible set, so canonical output always has a nonempty `visibleFields` sequence.
+- Structural and semantic decode completes before `WorkspaceService` creates or installs candidate views.
 
-Semantic usability is decided during workspace and view restoration under the [workspace session specification](../../spec/workspace/session.md).
-Generic parse, node, scalar, and ordinary-decode behavior belongs to the [grouped configuration store specification](../../spec/persistence/config-store.md).
+There is no codec-level limit for view count, preset count, string length, sort-term count, or field count.
+Library binding, resource budgets, exact active-view identity, and complete candidate-set validation remain RFC 0017 concerns.
 
 ## Compatibility and versioning
 
-There is no workspace payload version, document-kind marker, migration registry, field alias, or compatibility window.
-Current serialization derives mapping keys from C++ aggregate member names and enums from their numeric definitions.
+Version 1 is the first supported stable presentation encoding.
+Unversioned reflected workspace state, numeric enums, unknown closed tokens, and unsupported presentation versions are rejected without migration or automatic rewrite.
 
-Consequently:
+Strict decoding fixes the current root member set, so changing those keys cannot remain an unnoticed version-1 edit.
+However, `presentationVersion` promises only the nested presentation vocabulary; it supplies no document kind, library binding, filter-expression dialect contract, exact active-view identity, collection budgets, or root migration policy.
+Those remaining compatibility limits are why this payload is not described as a complete version-1 workspace envelope.
 
-- renaming an aggregate member changes its emitted key, while reordering members changes emitted mapping order but not key-based decode meaning;
-- changing enum raw values changes persisted meaning;
-- missing newer fields fall back to current C++ defaults;
-- unknown older fields are ignored on load and are not retained when the `workspace` group is rewritten;
-- malformed vector elements can disappear during permissive load rather than rejecting the complete session;
-- a predicate change can reject or reinterpret retained `filterExpression` text because the expression has no nested language version and the workspace payload has no containing schema version;
-- `activeListId` cannot distinguish two restored views over the same base list beyond the current focus-selection heuristic.
+Changing a stable presentation token requires an explicit compatibility decision.
+Built-in and custom presentation ids remain opaque references, while the exact field/sort/group/direction vocabulary is closed for a given presentation version.
 
-[RFC 0010](../../rfc/0010-versioned-presentation-state.md) proposes a versioned presentation-state codec and migration boundary.
-The current grouped store uses a result-bearing one-shot candidate save, while `WorkspaceService` still classifies save failure through logging.
-[RFC 0015](../../rfc/0015-fail-closed-config-store.md) records why the larger generic transaction, recovery, and receipt system was rejected.
-[RFC 0017](../../rfc/0017-versioned-workspace-session.md) proposes a library-bound root envelope, exact session-local active-view identity, bounded strict validation, and integration with RFC 0010; neither proposal changes this current reference until implemented.
-
-## Examples
+## Example
 
 This example contains one filtered All Tracks view and one custom presentation:
 
 ```yaml
 workspace:
+  presentationVersion: 1
   openViews:
     - listId: 4294967295
       filterExpression: '$genre = "Classical"'
-      groupBy: 2
-      sortBy:
-        - field: 1
-          ascending: true
-        - field: 12
-          ascending: true
-      optPresentation:
+      presentation:
         id: albums
-        groupBy: 2
-        sortBy:
-          - field: 1
-            ascending: true
+        group: album
+        sort:
+          - field: album
+            direction: ascending
+          - field: title
+            direction: descending
         visibleFields:
-          - 0
-          - 1
-          - 2
+          - title
+          - artist
+          - duration
         redundantFields:
-          - 2
+          - album
   activeListId: 4294967295
   customPresets:
     - label: Works
       basePresetId: library
       spec:
         id: custom.works
-        groupBy: 8
-        sortBy:
-          - field: 7
-            ascending: true
+        group: work
+        sort:
+          - field: work
+            direction: ascending
         visibleFields:
-          - 0
-          - 4
-        redundantFields: []
+          - title
+          - movement
+        redundantFields:
+          - work
 ```
 
-Mapping order is not semantically significant even though current reflected emission follows declaration order.
-The example's numeric field, sort, and group values are interpreted through the runtime track-field catalog.
+Mapping order is not semantically significant, although canonical reflected emission follows DTO declaration order.
 
 ## Implementation authority
 
-- [`WorkspaceSessionState.h`](../../../app/include/ao/rt/WorkspaceSessionState.h) owns the root field set and defaults.
-- [`ViewState.h`](../../../app/include/ao/rt/ViewState.h) owns `TrackListViewConfig`.
-- [`TrackPresentation.h`](../../../app/include/ao/rt/TrackPresentation.h) owns presentation and custom-preset fields.
-- [`TrackField.h`](../../../app/include/ao/rt/TrackField.h) owns sort terms and enum definitions.
-- [`ConfigTraits.h`](../../../app/include/ao/yaml/ConfigTraits.h) owns reflected keys and scalar, optional, vector, enum, strong-id, and aggregate encodings.
-- [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) owns the literal group name and snapshot construction.
+- [`WorkspaceSessionCodec.h`](../../../app/runtime/WorkspaceSessionCodec.h) owns exact stored DTO members and the presentation-version constant.
+- [`WorkspaceSessionCodec.cpp`](../../../app/runtime/WorkspaceSessionCodec.cpp) owns stable conversion and semantic validation.
+- [`WorkspaceSessionState.h`](../../../app/include/ao/rt/WorkspaceSessionState.h) owns the decoded semantic candidate.
+- [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) owns group selection, capture, candidate preparation, and installation.
+- [`TrackField.h`](../../../app/include/ao/rt/TrackField.h) and [`TrackField.cpp`](../../../app/runtime/TrackField.cpp) own the stable vocabulary.
 
 ## Test authority
 
-- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) protects missing, malformed, fallback, and restoration outcomes.
-- [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects workspace group round trips and presentation reconstruction across runtime instances.
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects the common reflected aggregate, vector, optional, enum, and strong-id codec behavior.
-- [`WorkspacePresentationTest.cpp`](../../../test/unit/runtime/WorkspacePresentationTest.cpp) protects custom-preset runtime behavior after decoding.
-
-No focused fixture currently locks every workspace YAML key and numeric enum value as one complete schema snapshot.
-The C++ aggregate declarations and shared codec therefore remain the exact implementation authority.
+- [`WorkspaceSessionCodecTest.cpp`](../../../test/unit/runtime/WorkspaceSessionCodecTest.cpp) protects exact semantic conversion, canonical tokens, and invalid-object rejection.
+- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) protects missing, malformed, unsupported, strict-schema, fallback, and transactional restoration outcomes.
+- [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects canonical persisted text and presentation reconstruction across runtime instances.
+- [`TrackFieldTest.cpp`](../../../test/unit/runtime/TrackFieldTest.cpp) protects exhaustive stable token lookup.
 
 ## Related documents
 
 - [Workspace architecture](../../architecture/workspace.md)
 - [Workspace session specification](../../spec/workspace/session.md)
 - [Workspace navigation specification](../../spec/workspace/navigation.md)
+- [Persisted presentation state](../presentation/persisted-state.md)
 - [Application managed-state surface](../persistence/application-config.md)
-- [Managed file locations](../persistence/location.md)
 - [Grouped configuration store](../../spec/persistence/config-store.md)
-- [Predicate language](../query/predicate-language.md)
 - [Runtime track field catalog](../library/model/track-field.md)
 - [Track presentation presets](../presentation/track-preset.md)
+- [RFC 0017: versioned semantic workspace sessions](../../rfc/0017-versioned-workspace-session.md)

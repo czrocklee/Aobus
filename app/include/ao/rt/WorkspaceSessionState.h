@@ -13,8 +13,8 @@ namespace ao::rt
 {
   struct WorkspaceSessionState final
   {
-    std::vector<TrackListViewConfig> openViews;
+    std::vector<TrackListViewConfig> openViews{};
     ListId activeListId = kInvalidListId;
-    std::vector<CustomTrackPresentationPreset> customPresets;
+    std::vector<CustomTrackPresentationPreset> customPresets{};
   };
 } // namespace ao::rt

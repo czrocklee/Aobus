@@ -23,7 +23,7 @@ The adopted policy uses the compatibility version already owned by each containi
 - Smart List filter text is part of the host-local library database contract governed by `ao::library::kLibraryVersion`.
 - Library YAML `filter` text is part of the root YAML format version.
 - Playback quick-filter text is part of the playback state's `schemaVersion` contract.
-- Workspace filter text remains subject to the workspace payload's documented unversioned compatibility limit; RFC 0017 owns the proposal to introduce that schema boundary.
+- Workspace filter text is not governed by the current presentation-only version marker; RFC 0017 owns the proposed complete workspace schema boundary.
 - Predicate text accepted by CLI automation is command behavior governed by the CLI contract and, if RFC 0029 is implemented, by the selected protocol major.
 
 No retained expression carries a separate dialect id or version.
@@ -101,7 +101,7 @@ It multiplies serialization fields, API types, compatibility fixtures, completio
 | Smart List `filter` in LMDB | Library database version, `kLibraryVersion` |
 | Smart List `filter` in library YAML | YAML root `version` |
 | Playback `quickFilterExpression` | Playback `schemaVersion` |
-| Workspace `filterExpression` | Workspace schema policy; currently unversioned |
+| Workspace `filterExpression` | Workspace schema policy; currently outside the `presentationVersion` compatibility boundary |
 | CLI predicate input | CLI command/protocol compatibility policy |
 
 The owner covers more than byte layout.
@@ -130,7 +130,7 @@ No generic dialect registry is introduced in advance.
 The library YAML and playback-session versions independently govern predicate text they contain; neither derives its version from `kLibraryVersion`.
 Their version must change when a predicate change would reinterpret retained text; an importer may then provide an explicit tested path from the old version instead of rejecting it.
 
-The current workspace payload has no version or migration layer, so it cannot make the same compatibility promise.
+The current workspace payload versions only nested presentation vocabulary and has no root version or migration layer governing filter text, so it cannot make the same compatibility promise.
 That is an existing workspace-schema limitation rather than a reason to put a language version inside every expression.
 
 ## Alternatives

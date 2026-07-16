@@ -33,6 +33,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -53,6 +54,24 @@ namespace ao::rt::test
 {
   namespace
   {
+    constexpr auto kPlaybackSessionV3SortFieldOrdinals = std::to_array<std::pair<TrackSortField, std::int32_t>>({
+      {TrackSortField::Artist, 0},
+      {TrackSortField::Album, 1},
+      {TrackSortField::AlbumArtist, 2},
+      {TrackSortField::Genre, 3},
+      {TrackSortField::Composer, 4},
+      {TrackSortField::Conductor, 5},
+      {TrackSortField::Ensemble, 6},
+      {TrackSortField::Work, 7},
+      {TrackSortField::Movement, 8},
+      {TrackSortField::Soloist, 9},
+      {TrackSortField::Year, 10},
+      {TrackSortField::DiscNumber, 11},
+      {TrackSortField::TrackNumber, 12},
+      {TrackSortField::Title, 13},
+      {TrackSortField::Duration, 14},
+    });
+
     TrackId addPlayableTrack(AppRuntime& runtime,
                              std::string title,
                              std::uint16_t const year = 2020,
@@ -226,6 +245,17 @@ namespace ao::rt::test
       Status _status = makeReadyAudioStatus();
     };
   } // namespace
+
+  TEST_CASE("PlaybackSession - schema v3 freezes numeric sort-field ordinals", "[runtime][unit][playback-session]")
+  {
+    static_assert(kPlaybackSessionV3SortFieldOrdinals.size() == kTrackSortFieldCount);
+    CHECK(kPlaybackSessionSchemaVersion == 3);
+
+    for (auto const& [field, ordinal] : kPlaybackSessionV3SortFieldOrdinals)
+    {
+      CHECK(static_cast<std::int32_t>(field) == ordinal);
+    }
+  }
 
   TEST_CASE("PlaybackSession - cursor payload round-trips without autoplay", "[runtime][unit][playback-session]")
   {

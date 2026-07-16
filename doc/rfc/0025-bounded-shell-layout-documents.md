@@ -43,7 +43,7 @@ Layout budgets must account for template expansion and widget construction, conc
 - Conditional: None.
 - Integration: [RFC 0010](0010-versioned-presentation-state.md).
 
-RFC 0010 should align stable component/action/node identifiers and presentation-state migration with supported layout versions.
+RFC 0010 supplies the implemented stable presentation-state pattern; this RFC should align component, action, and node identifiers with its explicit-version and strict-candidate principles where the shell model shares those risks.
 The current [atomic replacement contract](../spec/persistence/atomic-replacement.md) provides complete private-file replacement for saved custom documents.
 The current [grouped configuration store](../spec/persistence/config-store.md) already isolates candidate encoding and reports whole-document replacement; this RFC must expose and classify that result at the shell workflow boundary.
 

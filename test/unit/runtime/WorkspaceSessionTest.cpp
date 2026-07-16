@@ -15,8 +15,43 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
+#include <initializer_list>
+#include <ios>
 #include <memory>
+#include <string_view>
+
+namespace
+{
+  void writeWorkspaceConfig(std::filesystem::path const& path,
+                            std::initializer_list<std::uint32_t> listIds,
+                            std::uint32_t activeListId,
+                            std::string_view group = "none",
+                            std::uint32_t presentationVersion = 1)
+  {
+    auto file = std::ofstream{path};
+    file << "workspace:\n";
+    file << "  presentationVersion: " << presentationVersion << "\n";
+    file << "  openViews:\n";
+
+    for (auto const listId : listIds)
+    {
+      file << "    - listId: " << listId << "\n";
+      file << "      filterExpression: \"\"\n";
+      file << "      presentation:\n";
+      file << "        id: library\n";
+      file << "        group: " << group << "\n";
+      file << "        sort: []\n";
+      file << "        visibleFields:\n";
+      file << "          - title\n";
+      file << "        redundantFields: []\n";
+    }
+
+    file << "  activeListId: " << activeListId << "\n";
+    file << "  customPresets: []\n";
+  }
+} // namespace
 
 namespace ao::rt::test
 {
@@ -33,6 +68,28 @@ namespace ao::rt::test
     REQUIRE(result);
     CHECK(runtime.workspace().snapshot().openViews.empty());
     CHECK(runtime.workspace().snapshot().activeViewId == kInvalidViewId);
+  }
+
+  TEST_CASE("WorkspaceService - missing workspace group preserves an existing workspace",
+            "[runtime][unit][workspace][session]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+    auto const listId =
+      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Existing"}));
+    REQUIRE(runtime.workspace().navigateTo(listId));
+    auto const before = runtime.workspace().snapshot();
+    auto const configPath = tempDir.path() / "other-group.yaml";
+    std::ofstream{configPath} << "other:\n"
+                                 "  value: 1\n";
+    auto store = ConfigStore{configPath, ConfigStore::OpenMode::ReadOnly};
+
+    auto const receipt = runtime.workspace().restoreSession(store);
+
+    REQUIRE(receipt);
+    CHECK(receipt->disposition == WorkspaceCommitDisposition::NoChange);
+    CHECK(runtime.workspace().snapshot() == before);
+    CHECK(runtime.views().listViews().size() == 1);
   }
 
   TEST_CASE("WorkspaceService - session restore recreates the initial navigation point",
@@ -156,13 +213,7 @@ namespace ao::rt::test
       ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A list"}));
     auto const configPath = tempDir.path() / "config.yaml";
 
-    {
-      auto file = std::ofstream{configPath};
-      file << "workspace:\n";
-      file << "  activeListId: 9999\n";
-      file << "  openViews:\n";
-      file << "    - listId: " << static_cast<std::uint32_t>(listId) << "\n";
-    }
+    writeWorkspaceConfig(configPath, {listId.raw()}, 9999);
 
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
     REQUIRE(runtime.workspace().restoreSession(*storePtr));
@@ -181,14 +232,7 @@ namespace ao::rt::test
       ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Valid"}));
     auto const configPath = tempDir.path() / "partial.yaml";
 
-    {
-      auto file = std::ofstream{configPath};
-      file << "workspace:\n";
-      file << "  activeListId: " << static_cast<std::uint32_t>(listId) << "\n";
-      file << "  openViews:\n";
-      file << "    - listId: " << static_cast<std::uint32_t>(listId) << "\n";
-      file << "    - listId: 999999\n";
-    }
+    writeWorkspaceConfig(configPath, {listId.raw(), 999999}, listId.raw());
 
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
     auto const result = runtime.workspace().restoreSession(*storePtr);
@@ -202,5 +246,58 @@ namespace ao::rt::test
     CHECK(runtime.views().listViews().empty());
     CHECK_FALSE(runtime.workspace().canGoBack());
     CHECK_FALSE(runtime.workspace().canGoForward());
+  }
+
+  TEST_CASE("WorkspaceService - restore rejects unsupported or unknown presentation vocabulary",
+            "[runtime][unit][workspace][session]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+    auto const listId =
+      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Valid"}));
+    auto const configPath = tempDir.path() / "versioned.yaml";
+
+    SECTION("Unsupported presentation version")
+    {
+      writeWorkspaceConfig(configPath, {listId.raw()}, listId.raw(), "none", 2);
+    }
+
+    SECTION("Unknown group id")
+    {
+      writeWorkspaceConfig(configPath, {listId.raw()}, listId.raw(), "future-group");
+    }
+
+    SECTION("Unknown root field")
+    {
+      writeWorkspaceConfig(configPath, {listId.raw()}, listId.raw());
+      std::ofstream{configPath, std::ios::app} << "  unexpected: true\n";
+    }
+
+    auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
+    auto const result = runtime.workspace().restoreSession(*storePtr);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::FormatRejected);
+    CHECK(runtime.workspace().snapshot().openViews.empty());
+    CHECK(runtime.views().listViews().empty());
+  }
+
+  TEST_CASE("WorkspaceService - restore rejects the unversioned numeric presentation format",
+            "[runtime][unit][workspace][session]")
+  {
+    auto tempDir = TempDir{};
+    auto runtime = makeRuntime(tempDir);
+    auto const configPath = tempDir.path() / "unversioned.yaml";
+    std::ofstream{configPath} << "workspace:\n"
+                                 "  openViews: []\n"
+                                 "  activeListId: 0\n"
+                                 "  customPresets: []\n";
+
+    auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
+    auto const result = runtime.workspace().restoreSession(*storePtr);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::FormatRejected);
+    CHECK(runtime.workspace().snapshot().revision == 0);
   }
 } // namespace ao::rt::test

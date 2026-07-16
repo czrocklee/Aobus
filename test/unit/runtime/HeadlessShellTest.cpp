@@ -4,7 +4,6 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -13,7 +12,6 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/WorkspaceSessionState.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -107,10 +105,10 @@ namespace ao::rt::test
         REQUIRE(runtime.workspace().navigateTo(secondListId));
         runtime.workspace().saveSession(runtime.workspaceConfigStore());
 
-        auto loaded = WorkspaceSessionState{};
-        auto verifyStore = ConfigStore{workspaceConfigPath};
-        REQUIRE(verifyStore.load("workspace", loaded));
-        CHECK(loaded.openViews.size() == 2);
+        auto const encoded = ao::test::readFile(workspaceConfigPath);
+        CHECK(encoded.contains("presentationVersion: 1"));
+        CHECK(encoded.contains("group: none"));
+        CHECK(encoded.contains("display-track-number"));
       }
 
       // Create new runtime with same persistence
@@ -140,12 +138,10 @@ namespace ao::rt::test
         CHECK_FALSE(savedState.sortBy.empty());
 
         runtime.workspace().saveSession(runtime.workspaceConfigStore());
-
-        auto loaded = WorkspaceSessionState{};
-        auto verifyStore = ConfigStore{workspaceConfigPath};
-        REQUIRE(verifyStore.load("workspace", loaded));
-        REQUIRE(loaded.openViews.size() == 1);
-        CHECK(loaded.openViews[0].groupBy == TrackGroupKey::AlbumArtist);
+        auto const encoded = ao::test::readFile(workspaceConfigPath);
+        CHECK(encoded.contains("group: album-artist"));
+        CHECK(encoded.contains("field: album-artist"));
+        CHECK(encoded.contains("direction: ascending"));
       }
 
       // Restore in new runtime

@@ -37,7 +37,14 @@ Exact decoding requires every aggregate field:
 | `muted` | Boolean | `false` | Mute intent. |
 
 `sortBy` contains at most `kTrackSortFieldCount` terms.
-Track sort field ids and directions use the runtime track-presentation values.
+Every term is an exact mapping:
+
+| Field | Serialized value | Meaning |
+|---|---|---|
+| `field` | Signed 32-bit enum scalar. | Raw `TrackSortField` value from the [runtime track-field catalog](../library/model/track-field.md#sort-fields). |
+| `ascending` | Boolean. | `true` for ascending and `false` for descending. |
+
+This playback schema deliberately remains separate from the stable textual presentation-state vocabulary.
 
 ## Transient exclusions
 
@@ -70,6 +77,9 @@ There is no migration or seeded missing-field fallback for another/malformed ver
 Version `3` includes the accepted predicate grammar, field binding, and evaluation meaning of `quickFilterExpression`.
 A predicate change that can emit quick-filter text an existing version-3 reader rejects, or can reject or reinterpret retained quick-filter text, requires a new playback schema version; the owner may then reject version `3` or provide an explicit tested migration.
 The expression carries no separate language version.
+
+Version `3` also includes the current numeric `TrackSortField` mapping.
+Changing a sort-field raw value requires a playback schema version or an explicit version-3 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
 
 List and track ids are scoped to one library, but version 3 stores no library UUID.
 The current GTK lifecycle prevents cross-library interpretation by discarding the group before replacement; RFC 0019 proposes a durable library binding.
@@ -111,4 +121,5 @@ Enum and strong-id scalar encoding follows the application YAML codec; semantic 
 - [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
 - [Application managed-state surface](../persistence/application-config.md)
 - [Predicate language](../query/predicate-language.md)
-- [Track presentation preset reference](../presentation/track-preset.md)
+- [Runtime track-field catalog](../library/model/track-field.md)
+- [Persisted presentation state](../presentation/persisted-state.md)

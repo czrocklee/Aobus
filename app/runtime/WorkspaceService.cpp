@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "WorkspaceSessionCodec.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
@@ -797,7 +798,15 @@ namespace ao::rt
       });
     }
 
-    if (auto const result = store.save("workspace", state); !result)
+    auto document = detail::encodeWorkspaceSession(state);
+
+    if (!document)
+    {
+      APP_LOG_ERROR("WorkspaceService: Failed to encode session - {}", document.error().message);
+      return;
+    }
+
+    if (auto const result = store.save("workspace", *document); !result)
     {
       APP_LOG_ERROR("WorkspaceService: Failed to save session - {}", result.error().message);
     }
@@ -806,17 +815,38 @@ namespace ao::rt
   Result<WorkspaceCommitReceipt> WorkspaceService::restoreSession(ConfigStore& store)
   {
     _implPtr->ensureOnExecutor();
-    auto state = WorkspaceSessionState{};
+    auto const containsWorkspace = store.contains("workspace");
 
-    if (auto const result = store.load("workspace", state); !result)
+    if (!containsWorkspace)
     {
-      if (result.error().code == Error::Code::NotFound)
+      if (containsWorkspace.error().code == Error::Code::NotFound)
       {
         return _implPtr->noChangeReceipt();
       }
 
+      return std::unexpected{containsWorkspace.error()};
+    }
+
+    if (!*containsWorkspace)
+    {
+      return _implPtr->noChangeReceipt();
+    }
+
+    auto document = detail::WorkspaceSessionDocument{};
+
+    if (auto const result = store.loadExact("workspace", document); !result)
+    {
       return std::unexpected{result.error()};
     }
+
+    auto stateResult = detail::decodeWorkspaceSession(document);
+
+    if (!stateResult)
+    {
+      return std::unexpected{stateResult.error()};
+    }
+
+    auto state = std::move(*stateResult);
 
     auto createdViewIds = std::vector<ViewId>{};
     createdViewIds.reserve(state.openViews.size());

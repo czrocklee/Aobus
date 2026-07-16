@@ -13,12 +13,17 @@ This specification owns the platform-neutral policy for track-table column sizin
 It defines fixed and flexible column roles, minimums, weighted allocation, canonical resize state, per-list GTK persistence, and terminal adaptation.
 
 It does not choose which fields are visible or their semantic order; those are part of the [track-list presentation specification](track-presentation.md).
-It also does not own the serialized GTK layout document, widget geometry, terminal hit testing, or library data.
+It also does not own the exact serialized GTK layout fields, widget geometry, terminal hit testing, or library data.
+The [persisted presentation-state reference](../../reference/presentation/persisted-state.md) owns the versioned document.
 
 ## Code boundary
 
+This contract spans the UIModel and frontend layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation architecture](../../architecture/presentation.md).
 Field sizing policy, the pure width solver, and the in-memory layout store live under `ao::uimodel` in `app/include/ao/uimodel/library/presentation/` and `app/uimodel/library/presentation/`.
 They use abstract integer units and cannot depend on GTK or FTXUI.
+
+`TrackColumnLayoutCodec` lives beside that UIModel state and converts between the semantic map and a strict versioned persistence document.
+It depends on runtime's stable track-field vocabulary but has no path or GTK dependency.
 
 GTK adapts the policy in `app/linux-gtk/track/TrackColumnController` and persists per-list state through `GtkLayoutStateStore`.
 TUI adapts the same solver in `app/tui/TrackTable` using terminal-column units and keeps manual overrides in the current TUI session.
@@ -82,12 +87,19 @@ Width operations are synchronous, deterministic value transformations and expose
 Size mismatches in conversion helpers preserve the prior solve specifications.
 Unknown resize fields are no-ops.
 
-Persistence failures belong to the [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md) and do not change solver behavior.
+Persistence decoding validates one complete layout group before replacing the caller's state.
+An unsupported version, unknown or duplicate field, duplicate or invalid list id, noncanonical dimensions, or structural mismatch rejects the group and preserves the seeded state.
+Persistence I/O failures belong to the [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md) and do not change solver behavior.
 
 ## Persistence and versioning
 
 GTK column state is UI-local per-library managed state in `gtk_layout.yaml`, keyed by list id.
-The exact containing document is owned by the [application managed-state reference](../../reference/persistence/application-config.md).
+The `trackView.columnLayouts` group carries required `version: 1` and stores fields by stable textual id.
+The exact group shape is owned by the [persisted presentation-state reference](../../reference/presentation/persisted-state.md), while its containing document is registered by the [application managed-state reference](../../reference/persistence/application-config.md).
+
+Loading uses strict recursive structure plus semantic validation and never installs a partial column vector.
+Unversioned numeric layouts and unsupported versions are rejected without an automatic rewrite.
+GTK suppresses layout/preference persistence callbacks while installing decoded startup candidates, so a valid sibling group cannot rewrite a rejected layout merely because bulk state changed.
 The solver owns no file format and accepts only decoded `TrackColumnState` values.
 
 TUI manual column-width overrides are session-local terminal-column values and are not written to the GTK document.
@@ -106,6 +118,7 @@ A manually overridden TUI column is treated as fixed for the current solve while
 - [`TrackFieldPresentationPolicy.cpp`](../../../app/uimodel/library/presentation/TrackFieldPresentationPolicy.cpp) classifies fields and supplies defaults and minimums.
 - [`TrackColumnWidthSolver.cpp`](../../../app/uimodel/library/presentation/TrackColumnWidthSolver.cpp) implements allocation, conversion, resize, and canonicalization.
 - [`TrackColumnLayoutStore.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutStore.cpp) owns per-list UI-local state and change signals.
+- [`TrackColumnLayoutCodec.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutCodec.cpp) owns the versioned persistence conversion and validation.
 - [`TrackColumnController.cpp`](../../../app/linux-gtk/track/TrackColumnController.cpp) adapts GTK viewport and drag events.
 - [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) adapts the solver to terminal geometry.
 
@@ -114,6 +127,7 @@ A manually overridden TUI column is treated as fixed for the current solve while
 - [`TrackFieldPresentationPolicyTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackFieldPresentationPolicyTest.cpp) protects field roles and default/minimum policy.
 - [`TrackColumnWidthSolverTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnWidthSolverTest.cpp) protects distribution, overflow, convergence, resize, and canonical state.
 - [`TrackColumnLayoutStoreTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutStoreTest.cpp) protects per-list state and notification behavior.
+- [`TrackColumnLayoutCodecTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutCodecTest.cpp) protects stable ids, canonical dimensions, and whole-object rejection.
 - [`TrackColumnControllerTest.cpp`](../../../test/unit/linux-gtk/track/TrackColumnControllerTest.cpp) protects the GTK adapter.
 - [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp) and [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protect terminal layout and resize gestures.
 
@@ -123,3 +137,4 @@ A manually overridden TUI column is treated as fixed for the current solve while
 - [Track-list presentation specification](track-presentation.md)
 - [List presentation preference specification](list-preference.md)
 - [Application managed-state reference](../../reference/persistence/application-config.md)
+- [Persisted presentation state](../../reference/presentation/persisted-state.md)

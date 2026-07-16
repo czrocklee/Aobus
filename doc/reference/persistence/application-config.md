@@ -55,9 +55,9 @@ It does not denote nested mappings.
 | Global GTK config | `session` | `ao::rt::AppSessionState` | Ordinary reflected aggregate. | None. | `AppConfigStore::saveAppSession`. |
 | Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | Ordinary string-keyed map of string vectors. | None. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
 | Injected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | `ConfigStore::loadExact` and result-returning save. | Required payload field `schemaVersion`; current value `3`. | `PlaybackSessionPersistence`. |
-| Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Ordinary reflected aggregate. | None. | `WorkspaceService`. |
-| GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutState` | Ordinary reflected aggregate. | None. | `GtkLayoutStateStore`. |
-| GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceState` | Ordinary reflected aggregate. | None. | `GtkLayoutStateStore`. |
+| Runtime workspace config | `workspace` | Private `ao::rt::detail::WorkspaceSessionDocument` converted to [`WorkspaceSessionState`](../workspace/session-state.md). | `ConfigStore::loadExact` plus runtime semantic codec. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
+| GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayoutState`. | `ConfigStore::loadExact` plus UIModel semantic codec. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
+| GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentationPreferenceState`. | `ConfigStore::loadExact` plus UIModel semantic codec. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
 | Shell layout preset | `layout` | `ao::uimodel::LayoutDocument` | Model-specific YAML codec through ordinary group load/save. | Required payload field `version`; current default is `1`, but the loader does not gate its value. | Shell-layout workflow through `ShellLayoutStore`. |
 | Shell component state | No group; standalone root. | `ao::uimodel::LayoutComponentStateDocument` | Model-specific direct YAML codec. | Root `version = 1`; each entry has `stateVersion = 1`. | Layout runtime and promotion workflow through `ShellLayoutComponentStateStore`. |
 
@@ -133,9 +133,9 @@ The registry fixes the group-to-type association, but these domain owners define
 | Payload | Current schema authority |
 |---|---|
 | `PlaybackSessionState` | [Playback session persistence specification](../../spec/playback/session-persistence.md), [state reference](../playback/session-state.md), and [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h). |
-| `WorkspaceSessionState` | [Workspace session state](../workspace/session-state.md). |
-| `TrackColumnLayoutState` | [`TrackColumnLayoutStore.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutStore.h). |
-| `ListPresentationPreferenceState` | [List presentation preference specification](../../spec/presentation/list-preference.md) and [`ListPresentationPreferenceStore.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceStore.h). |
+| `WorkspaceSessionDocument` / `WorkspaceSessionState` | [Workspace session state](../workspace/session-state.md). |
+| `TrackColumnLayoutDocument` / `TrackColumnLayoutState` | [Persisted presentation state](../presentation/persisted-state.md) and [`TrackColumnLayoutCodec.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutCodec.h). |
+| `ListPresentationPreferenceDocument` / `ListPresentationPreferenceState` | [Persisted presentation state](../presentation/persisted-state.md), [list presentation preference specification](../../spec/presentation/list-preference.md), and [`ListPresentationPreferenceCodec.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceCodec.h). |
 | `LayoutDocument` | [Shell layout document](../shell/layout-document.md) and its model-specific YAML codec. |
 | `LayoutComponentStateDocument` | [Shell layout component state](../shell/layout-state.md) and its model-specific YAML codec. |
 
@@ -147,6 +147,8 @@ The registry fixes the group-to-type association, but these domain owners define
 - The common reflected codec writes member names exactly as declared in the payload type and writes ordinary enums as signed 32-bit numeric values.
 - Ordinary group decoding, missing-field seeding, container tolerance, scalar bounds, and partial-mutation behavior belong to the [grouped configuration store specification](../../spec/persistence/config-store.md).
 - `playback-session` requires exact aggregate/vector decoding before its semantic validation and accepts only schema version `3`.
+- `workspace` requires exact aggregate/vector decoding, accepts only presentation version `1`, and validates its complete stable presentation vocabulary before view creation.
+- Both GTK presentation groups require exact aggregate/vector decoding, accept only version `1`, and validate complete semantic candidates before replacing seeded UIModel state.
 - Shell layout files require a readable `layout` group whose payload contains `version` and `root`; `templates` is optional.
 - Shell component-state roots require `version`, `preset`, and `components`; each component entry requires `type`, `stateVersion`, `baselineHash`, and `state`.
 - A component-state file name's preset id must equal the decoded root `preset` value before the store returns the document.
@@ -159,8 +161,8 @@ This registry does not convert schema membership into restore success.
 | Surface | Compatibility mechanism |
 |---|---|
 | `window`, `runtime`, `session`, and `shortcuts` | No explicit version or migration. Ordinary decode tolerates absent aggregate fields according to its seeded target. |
-| `workspace` | No explicit version or migration; the [workspace session state reference](../workspace/session-state.md) owns its compatibility limits. |
-| `trackView.columnLayouts` and `trackView.presentations` | No explicit version. Missing reflected fields can retain defaults; presentation ids are stable string identities interpreted by UIModel. |
+| `workspace` | Nested presentation vocabulary version `1`, strict decoding, stable textual ids, and no unversioned migration. The [workspace session state reference](../workspace/session-state.md) owns remaining root compatibility limits. |
+| `trackView.columnLayouts` and `trackView.presentations` | Independent payload version `1`, strict decoding, stable text identities, and no unversioned migration. |
 | `playback-session` | Explicit schema version `3`; other versions are rejected rather than migrated. |
 | `layout` | A `version` field is required and emitted with default `1`, but current load does not reject another numeric version. |
 | Shell component state | File version `1` and entry version `1`; mismatched versions are decoded structurally but ignored or pruned by component-state resolution. |
@@ -202,8 +204,9 @@ The example intentionally omits the domain-owned `playback-session` payload.
 - [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp), [`WindowState.h`](../../../app/linux-gtk/app/WindowState.h), and [`AppPrefsState.h`](../../../app/include/ao/rt/AppPrefsState.h) own the global GTK groups and reflected fields.
 - [`KeymapStore.h`](../../../app/include/ao/uimodel/input/KeymapStore.h) and [`KeymapModel.h`](../../../app/include/ao/uimodel/input/KeymapModel.h) own the shortcut group name and mapping payload.
 - [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h) and [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) own the playback group, payload marker, and injected-store use.
-- [`WorkspaceSessionState.h`](../../../app/include/ao/rt/WorkspaceSessionState.h) and [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) own the workspace group and payload.
+- [`WorkspaceSessionCodec.h`](../../../app/runtime/WorkspaceSessionCodec.h), [`WorkspaceSessionCodec.cpp`](../../../app/runtime/WorkspaceSessionCodec.cpp), and [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) own the workspace group and payload conversion.
 - [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) owns the two GTK library-presentation group names.
+- [`TrackColumnLayoutCodec.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutCodec.h) and [`ListPresentationPreferenceCodec.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceCodec.h) own their exact GTK presentation payloads.
 - [`ShellLayoutStore.cpp`](../../../app/linux-gtk/app/ShellLayoutStore.cpp) owns the layout-preset group and file boundary.
 - [`LayoutComponentState.h`](../../../app/include/ao/uimodel/layout/component/LayoutComponentState.h), [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp), and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) own the standalone component-state envelope and markers.
 - [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp), [`AppRuntime.cpp`](../../../app/runtime/AppRuntime.cpp), and [`app/tui/App.cpp`](../../../app/tui/App.cpp) own store selection and sharing.
@@ -214,7 +217,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 - [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects the `shortcuts` group, merge, and delta-only persistence.
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects the exact `playback-session` field set, schema version, and store use.
 - [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) and [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protect the `workspace` group and frontend-neutral round trip.
-- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protects both per-library GTK presentation groups and the current missing-field compatibility path.
+- [`TrackColumnLayoutCodecTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutCodecTest.cpp), [`ListPresentationPreferenceCodecTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceCodecTest.cpp), and [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect both per-library GTK presentation groups, version gates, and seeded-state fallback.
 - [`LayoutModelTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutModelTest.cpp) protects the layout payload's YAML fields and round trip; [`ShellLayoutStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp) protects its `layout` group and per-preset file boundary.
 - [`LayoutComponentStateTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutComponentStateTest.cpp) protects the standalone component-state envelope, versions, and codec; [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects preset matching, pruning, and the file boundary.
 
@@ -229,6 +232,7 @@ No single test currently enumerates every registered group across all logical do
 - [Workspace session state](../workspace/session-state.md)
 - [Workspace session specification](../../spec/workspace/session.md)
 - [List presentation preference specification](../../spec/presentation/list-preference.md)
+- [Persisted presentation state](../presentation/persisted-state.md)
 - [Application shell architecture](../../architecture/application-shell.md)
 - [Shell layout lifecycle specification](../../spec/shell/layout-lifecycle.md)
 - [Keyboard shortcut specification](../../spec/shell/keyboard-shortcut.md)

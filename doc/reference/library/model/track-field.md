@@ -3,7 +3,7 @@ id: library.track-field
 type: reference
 status: current
 domain: library
-summary: Enumerates runtime track fields, capabilities, sort and group mappings, query bridges, and persistence-facing enum values.
+summary: Enumerates runtime track fields, capabilities, sort and group mappings, query bridges, and stable persistence ids.
 ---
 # Runtime track field catalog
 
@@ -81,38 +81,38 @@ All three rows have category `Synthetic`, set the synthetic capability, and are 
 
 ### Sort fields
 
-| Raw | `TrackSortField` |
-|---:|---|
-| 0 | `Artist` |
-| 1 | `Album` |
-| 2 | `AlbumArtist` |
-| 3 | `Genre` |
-| 4 | `Composer` |
-| 5 | `Conductor` |
-| 6 | `Ensemble` |
-| 7 | `Work` |
-| 8 | `Movement` |
-| 9 | `Soloist` |
-| 10 | `Year` |
-| 11 | `DiscNumber` |
-| 12 | `TrackNumber` |
-| 13 | `Title` |
-| 14 | `Duration` |
+| Raw | `TrackSortField` | Stable id |
+|---:|---|---|
+| 0 | `Artist` | `artist` |
+| 1 | `Album` | `album` |
+| 2 | `AlbumArtist` | `album-artist` |
+| 3 | `Genre` | `genre` |
+| 4 | `Composer` | `composer` |
+| 5 | `Conductor` | `conductor` |
+| 6 | `Ensemble` | `ensemble` |
+| 7 | `Work` | `work` |
+| 8 | `Movement` | `movement` |
+| 9 | `Soloist` | `soloist` |
+| 10 | `Year` | `year` |
+| 11 | `DiscNumber` | `disc-number` |
+| 12 | `TrackNumber` | `track-number` |
+| 13 | `Title` | `title` |
+| 14 | `Duration` | `duration` |
 
 ### Group keys
 
-| Raw | `TrackGroupKey` |
-|---:|---|
-| 0 | `None` |
-| 1 | `Artist` |
-| 2 | `Album` |
-| 3 | `AlbumArtist` |
-| 4 | `Genre` |
-| 5 | `Composer` |
-| 6 | `Conductor` |
-| 7 | `Ensemble` |
-| 8 | `Work` |
-| 9 | `Year` |
+| Raw | `TrackGroupKey` | Stable id |
+|---:|---|---|
+| 0 | `None` | `none` |
+| 1 | `Artist` | `artist` |
+| 2 | `Album` | `album` |
+| 3 | `AlbumArtist` | `album-artist` |
+| 4 | `Genre` | `genre` |
+| 5 | `Composer` | `composer` |
+| 6 | `Conductor` | `conductor` |
+| 7 | `Ensemble` | `ensemble` |
+| 8 | `Work` | `work` |
+| 9 | `Year` | `year` |
 
 ## Validation rules
 
@@ -126,12 +126,15 @@ All three rows have category `Synthetic`, set the synthetic capability, and are 
 - Every canonical core `$` or `@` query field has one runtime bridge except `$coverArt`, whose resource identity has no application `TrackField` counterpart.
 - Canonical query-variable text is derived from the core descriptor rather than stored as a second string in the runtime catalog.
 - `trackFieldFromId` is case-sensitive and returns no value for unknown, empty, or differently cased ids.
+- Sort-field and group-key stable ids are exhaustive, unique, case-sensitive, and round-trip through their typed lookup helpers.
 - Invalid enum inputs to lookup helpers return empty or absent values rather than indexing the catalog.
 
 ## Compatibility and versioning
 
-Track-field ids appear in application-facing state and must not be renamed without updating persistence, transfer, presentation, and tests.
-Enum raw values are serialized by current configuration surfaces; reordering or inserting values requires an explicit compatibility migration.
+Track-field, sort-field, and group-key ids appear in versioned presentation state and must not be renamed or rebound without an explicit compatibility decision.
+Current presentation documents never serialize their enum raw values.
+The playback-session version-3 payload separately persists `TrackSortField` raw values through its generic enum codec; changing those raw values therefore requires a playback-schema compatibility decision even though presentation documents use stable ids.
+The raw `TrackField` and `TrackGroupKey` columns remain C++ lookup information rather than current presentation-format tokens.
 
 Query-variable text is owned by the predicate language.
 Changing a typed mapping requires both catalogs and their exhaustive tests to agree; it does not authorize a new query variable by itself.
@@ -158,7 +161,7 @@ Adding a field requires coordinated decisions about persistence source, projecti
 - [`TrackFieldTest.cpp`](../../../../test/unit/runtime/TrackFieldTest.cpp) locks catalog completeness, ids, labels, capabilities, exhaustive typed mappings, and invalid lookup behavior.
 - [`TrackFieldPresentationPolicyTest.cpp`](../../../../test/unit/uimodel/library/presentation/TrackFieldPresentationPolicyTest.cpp) ensures every presentable field has UIModel column policy.
 - [`CompletionServiceTest.cpp`](../../../../test/unit/runtime/completion/CompletionServiceTest.cpp) locks vocabulary support.
-- [`GtkLayoutStateStoreTest.cpp`](../../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protects persisted field enum compatibility at the GTK boundary.
+- [`WorkspaceSessionCodecTest.cpp`](../../../../test/unit/runtime/WorkspaceSessionCodecTest.cpp) and [`GtkLayoutStateStoreTest.cpp`](../../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect stable presentation tokens at persistence boundaries.
 
 ## Related documents
 
@@ -167,3 +170,4 @@ Adding a field requires coordinated decisions about persistence source, projecti
 - [Track-list presentation](../../../spec/presentation/track-presentation.md)
 - [Track-field value completion](../../../spec/presentation/field-completion.md)
 - [Track-list projection](../../../spec/library/projection/track-list.md)
+- [Persisted presentation state](../../presentation/persisted-state.md)

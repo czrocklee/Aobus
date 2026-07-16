@@ -7,10 +7,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::rt
 {
@@ -387,6 +389,69 @@ namespace ao::rt
 
     static_assert(kDefinitions.size() == kTrackFieldCount, "Track Field registry must match kTrackFieldCount");
 
+    constexpr auto kSortFieldIds = std::to_array<std::pair<TrackSortField, std::string_view>>({
+      {TrackSortField::Artist, "artist"},
+      {TrackSortField::Album, "album"},
+      {TrackSortField::AlbumArtist, "album-artist"},
+      {TrackSortField::Genre, "genre"},
+      {TrackSortField::Composer, "composer"},
+      {TrackSortField::Conductor, "conductor"},
+      {TrackSortField::Ensemble, "ensemble"},
+      {TrackSortField::Work, "work"},
+      {TrackSortField::Movement, "movement"},
+      {TrackSortField::Soloist, "soloist"},
+      {TrackSortField::Year, "year"},
+      {TrackSortField::DiscNumber, "disc-number"},
+      {TrackSortField::TrackNumber, "track-number"},
+      {TrackSortField::Title, "title"},
+      {TrackSortField::Duration, "duration"},
+    });
+
+    constexpr auto kGroupKeyIds = std::to_array<std::pair<TrackGroupKey, std::string_view>>({
+      {TrackGroupKey::None, "none"},
+      {TrackGroupKey::Artist, "artist"},
+      {TrackGroupKey::Album, "album"},
+      {TrackGroupKey::AlbumArtist, "album-artist"},
+      {TrackGroupKey::Genre, "genre"},
+      {TrackGroupKey::Composer, "composer"},
+      {TrackGroupKey::Conductor, "conductor"},
+      {TrackGroupKey::Ensemble, "ensemble"},
+      {TrackGroupKey::Work, "work"},
+      {TrackGroupKey::Year, "year"},
+    });
+
+    static_assert(kSortFieldIds.size() == kTrackSortFieldCount);
+    static_assert(kGroupKeyIds.size() == kTrackGroupKeyCount);
+
+    template<typename Enum, std::size_t Size>
+    std::optional<Enum> enumFromId(std::array<std::pair<Enum, std::string_view>, Size> const& definitions,
+                                   std::string_view id)
+    {
+      for (auto const& [value, stableId] : definitions)
+      {
+        if (stableId == id)
+        {
+          return value;
+        }
+      }
+
+      return std::nullopt;
+    }
+
+    template<typename Enum, std::size_t Size>
+    std::string_view enumId(std::array<std::pair<Enum, std::string_view>, Size> const& definitions, Enum value)
+    {
+      for (auto const& [candidate, stableId] : definitions)
+      {
+        if (candidate == value)
+        {
+          return stableId;
+        }
+      }
+
+      return {};
+    }
+
     query::QueryVariableDescriptor const* queryVariableDescriptor(TrackFieldDefinition const& definition)
     {
       if (!definition.optQueryField)
@@ -417,6 +482,16 @@ namespace ao::rt
     return it != kDefinitions.end() ? std::optional{it->field} : std::nullopt;
   }
 
+  std::optional<TrackSortField> trackSortFieldFromId(std::string_view id)
+  {
+    return enumFromId(kSortFieldIds, id);
+  }
+
+  std::optional<TrackGroupKey> trackGroupKeyFromId(std::string_view id)
+  {
+    return enumFromId(kGroupKeyIds, id);
+  }
+
   std::optional<TrackField> trackFieldFromQueryField(query::Field field)
   {
     // NOLINTNEXTLINE(readability-qualified-auto) -- std::array iterator representations differ across libraries.
@@ -434,6 +509,16 @@ namespace ao::rt
     }
 
     return {};
+  }
+
+  std::string_view trackSortFieldId(TrackSortField field)
+  {
+    return enumId(kSortFieldIds, field);
+  }
+
+  std::string_view trackGroupKeyId(TrackGroupKey key)
+  {
+    return enumId(kGroupKeyIds, key);
   }
 
   std::optional<query::Field> trackFieldQueryField(TrackField const field)

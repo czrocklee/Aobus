@@ -155,8 +155,12 @@ namespace ao::rt
   std::span<TrackFieldDefinition const> trackFieldDefinitions();
   TrackFieldDefinition const* trackFieldDefinition(TrackField field);
   std::optional<TrackField> trackFieldFromId(std::string_view id);
+  std::optional<TrackSortField> trackSortFieldFromId(std::string_view id);
+  std::optional<TrackGroupKey> trackGroupKeyFromId(std::string_view id);
   std::optional<TrackField> trackFieldFromQueryField(query::Field field);
   std::string_view trackFieldId(TrackField field);
+  std::string_view trackSortFieldId(TrackSortField field);
+  std::string_view trackGroupKeyId(TrackGroupKey key);
 
   std::optional<query::Field> trackFieldQueryField(TrackField field);
   std::string trackFieldFilterExpressionVariable(TrackField field);

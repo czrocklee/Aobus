@@ -18,7 +18,7 @@ Transient quick-filter behavior belongs to [track filtering](track-filter.md).
 ## Code boundary
 
 This contract spans the **application runtime**, **UIModel**, and GTK persistence adapter layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation](../../architecture/presentation.md), [workspace](../../architecture/workspace.md), and [persistence and managed-state](../../architecture/persistence-and-managed-state.md) architectures.
-Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map and recommendation policy; GTK owns the per-library persistence location and save boundary.
+Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map, recommendation policy, and versioned semantic codec; GTK owns the per-library persistence location and save boundary.
 
 ## Terminology
 
@@ -90,16 +90,21 @@ Back/forward restoration applies that snapshot as replay and must not reinterpre
 An unknown or removed presentation id is recoverable and selects the recommendation path.
 An empty built-in catalog may produce an empty fallback spec; ordinary application composition supplies the built-in catalog.
 
-UIModel preference operations and recommendation are synchronous and have no cancellation point.
-GTK load/save failures follow the frontend-owned preference fallback policy and do not mutate library list records.
+UIModel preference operations, recommendation, and persistence conversion are synchronous and have no cancellation point.
+An unsupported version, duplicate or invalid list id, empty id, or structural mismatch rejects the complete persisted preference group and preserves the caller's seeded state.
+An unknown nonempty presentation id remains a valid extensible reference and follows recommendation fallback.
+GTK load/save failures do not mutate library list records.
+Bulk installation during GTK restore suppresses persistence callbacks, so loading one valid sibling group cannot rewrite another rejected group.
 
 ## Persistence and versioning
 
 GTK persists the preference map with other per-library track-view layout state through `GtkLayoutStateStore` in the library-specific `gtk_layout.yaml` store.
-The exact configuration group and payload association belong to the [application managed-state surface](../../reference/persistence/application-config.md#group-registry).
+The `trackView.presentations` group carries required `version: 1` and represents the map as a sequence of `{listId, presentationId}` entries so duplicate identities can be rejected before map construction.
+The exact fields belong to the [persisted presentation-state reference](../../reference/presentation/persisted-state.md); group registration belongs to the [application managed-state surface](../../reference/persistence/application-config.md#group-registry).
 
 The persisted value is a presentation id, so changing or removing a built-in id requires a compatibility path.
 Unknown custom ids remain tolerated because custom presentations may be removed independently.
+Unversioned reflected preference maps and unsupported future versions are rejected without migration or automatic rewrite.
 
 TUI currently uses runtime presentation state but does not use the GTK per-library preference store.
 
@@ -113,6 +118,7 @@ Quick-filter controls and Smart List editors may display the current presentatio
 ## Implementation map
 
 - [`ListPresentationPreferenceStore`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceStore.h) owns the map and resolution order.
+- [`ListPresentationPreferenceCodec`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceCodec.h) owns the versioned document and semantic conversion.
 - [`TrackPresentationRecommender`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationRecommender.h) owns source-aware fallback policy.
 - [`TrackPresentationCatalog`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationCatalog.h) resolves built-in and custom ids.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns active presentation state.
@@ -122,6 +128,7 @@ Quick-filter controls and Smart List editors may display the current presentatio
 ## Test map
 
 - [`ListPresentationPreferenceStoreTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceStoreTest.cpp) proves map behavior, resolution, and fallbacks.
+- [`ListPresentationPreferenceCodecTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceCodecTest.cpp) proves version gates, opaque ids, and whole-group rejection.
 - [`TrackPresentationRecommenderTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackPresentationRecommenderTest.cpp) proves source-aware recommendations.
 - [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) proves per-library persistence.
 - Workspace history tests under [`test/unit/runtime/`](../../../test/unit/runtime/) prove snapshot replay semantics.
@@ -133,4 +140,5 @@ Quick-filter controls and Smart List editors may display the current presentatio
 - [Track-list presentation](track-presentation.md)
 - [Track filtering](track-filter.md)
 - [Track presentation presets](../../reference/presentation/track-preset.md)
+- [Persisted presentation state](../../reference/presentation/persisted-state.md)
 - [Workspace navigation](../workspace/navigation.md)

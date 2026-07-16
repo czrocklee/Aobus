@@ -79,6 +79,7 @@ namespace ao::gtk
 
   private:
     void saveColumnLayout();
+    void saveColumnLayoutIfNotRestoring();
 
     MainWindow& _window;
     rt::AppRuntime& _runtime;
@@ -87,6 +88,7 @@ namespace ao::gtk
     std::unique_ptr<Impl> _implPtr;
 
     std::optional<ThemeRegistrationToken> _optThemeToken;
+    bool _restoringLayoutState = false;
 
     rt::Subscription _tracksMutatedSubscription;
     rt::Subscription _libraryTaskCompletedSubscription;

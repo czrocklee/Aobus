@@ -32,11 +32,15 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -87,6 +91,61 @@ namespace ao::gtk::test
     auto loadedSession = rt::AppSessionState{};
     configStorePtr->loadAppSession(loadedSession);
     CHECK(loadedSession.lastLibraryPath == runtime.musicLibrary().rootPath().string());
+  }
+
+  TEST_CASE("MainWindowCoordinator - rejected workspace state is not overwritten during initialization",
+            "[gtk][unit][main-window][workspace]")
+  {
+    auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const workspacePath = std::filesystem::path{fixture.tempDir().path()} / "config.yaml";
+    auto const rejected = std::string{"workspace:\n"
+                                      "  presentationVersion: 2\n"
+                                      "  openViews: []\n"
+                                      "  activeListId: 0\n"
+                                      "  customPresets: []\n"};
+    std::ofstream{workspacePath} << rejected;
+    auto const appConfigPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(appConfigPath);
+    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
+
+    coordinator.initializeSession();
+
+    CHECK(ao::test::readFile(workspacePath) == rejected);
+    CHECK(runtime.workspace().snapshot().openViews.size() == 1);
+    CHECK(runtime.workspace().snapshot().activeViewId != rt::kInvalidViewId);
+  }
+
+  TEST_CASE("MainWindowCoordinator - loading a valid layout sibling does not overwrite a rejected group",
+            "[gtk][unit][main-window][config]")
+  {
+    auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const layoutPath = runtime.musicRoot() / ".aobus" / "gtk_layout.yaml";
+    std::filesystem::create_directories(layoutPath.parent_path());
+    auto const stored = std::string{"trackView.columnLayouts:\n"
+                                    "  version: 2\n"
+                                    "  layouts: []\n"
+                                    "trackView.presentations:\n"
+                                    "  version: 1\n"
+                                    "  preferences:\n"
+                                    "    - listId: 42\n"
+                                    "      presentationId: albums\n"};
+    std::ofstream{layoutPath} << stored;
+    auto const appConfigPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(appConfigPath);
+    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
+
+    coordinator.loadSession();
+
+    CHECK(ao::test::readFile(layoutPath) == stored);
+    auto const optPresentation = coordinator.trackPresentationPreferences()->presentationIdForList(ListId{42});
+    REQUIRE(optPresentation);
+    CHECK(*optPresentation == "albums");
   }
 
   TEST_CASE("MainWindowCoordinator - import mutation refreshes cached track rows", "[gtk][unit][main-window]")

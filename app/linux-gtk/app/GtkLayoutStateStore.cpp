@@ -5,11 +5,14 @@
 
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceCodec.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutCodec.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <filesystem>
 #include <memory>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -27,23 +30,78 @@ namespace ao::gtk
   void GtkLayoutStateStore::load(uimodel::TrackColumnLayoutState& layoutState,
                                  uimodel::ListPresentationPreferenceState& prefState) const
   {
-    if (auto const res = _storePtr->load("trackView.columnLayouts", layoutState);
-        !res && res.error().code != Error::Code::NotFound)
+    auto const containsLayouts = _storePtr->contains("trackView.columnLayouts");
+
+    if (!containsLayouts)
     {
-      APP_LOG_DEBUG("GtkLayoutStateStore: Failed to load column layouts: {}", res.error().message);
+      APP_LOG_DEBUG("GtkLayoutStateStore: Failed to inspect column layouts: {}", containsLayouts.error().message);
+    }
+    else if (*containsLayouts)
+    {
+      auto document = uimodel::TrackColumnLayoutDocument{};
+
+      if (auto const loaded = _storePtr->loadExact("trackView.columnLayouts", document); !loaded)
+      {
+        APP_LOG_DEBUG("GtkLayoutStateStore: Failed to load column layouts: {}", loaded.error().message);
+      }
+      else if (auto decoded = uimodel::decodeTrackColumnLayout(document); !decoded)
+      {
+        APP_LOG_DEBUG("GtkLayoutStateStore: Rejected column layouts: {}", decoded.error().message);
+      }
+      else
+      {
+        layoutState = std::move(*decoded);
+      }
     }
 
-    if (auto const res = _storePtr->load("trackView.presentations", prefState);
-        !res && res.error().code != Error::Code::NotFound)
+    auto const containsPreferences = _storePtr->contains("trackView.presentations");
+
+    if (!containsPreferences)
     {
-      APP_LOG_DEBUG("GtkLayoutStateStore: Failed to load presentations: {}", res.error().message);
+      APP_LOG_DEBUG(
+        "GtkLayoutStateStore: Failed to inspect presentation preferences: {}", containsPreferences.error().message);
+    }
+    else if (*containsPreferences)
+    {
+      auto document = uimodel::ListPresentationPreferenceDocument{};
+
+      if (auto const loaded = _storePtr->loadExact("trackView.presentations", document); !loaded)
+      {
+        APP_LOG_DEBUG("GtkLayoutStateStore: Failed to load presentation preferences: {}", loaded.error().message);
+      }
+      else if (auto decoded = uimodel::decodeListPresentationPreferences(document); !decoded)
+      {
+        APP_LOG_DEBUG("GtkLayoutStateStore: Rejected presentation preferences: {}", decoded.error().message);
+      }
+      else
+      {
+        prefState = std::move(*decoded);
+      }
     }
   }
 
   void GtkLayoutStateStore::save(uimodel::TrackColumnLayoutState const& layoutState,
                                  uimodel::ListPresentationPreferenceState const& prefState)
   {
-    if (auto const res = _storePtr->save("trackView.columnLayouts", layoutState, "trackView.presentations", prefState);
+    auto layoutDocument = uimodel::encodeTrackColumnLayout(layoutState);
+
+    if (!layoutDocument)
+    {
+      APP_LOG_ERROR("GtkLayoutStateStore: Failed to encode column layouts: {}", layoutDocument.error().message);
+      return;
+    }
+
+    auto preferenceDocument = uimodel::encodeListPresentationPreferences(prefState);
+
+    if (!preferenceDocument)
+    {
+      APP_LOG_ERROR(
+        "GtkLayoutStateStore: Failed to encode presentation preferences: {}", preferenceDocument.error().message);
+      return;
+    }
+
+    if (auto const res =
+          _storePtr->save("trackView.columnLayouts", *layoutDocument, "trackView.presentations", *preferenceDocument);
         !res)
     {
       APP_LOG_ERROR("GtkLayoutStateStore: Failed to save: {}", res.error().message);

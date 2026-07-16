@@ -102,7 +102,8 @@ Unrelated global preferences cannot retain such identities.
 This reflection-based codec is a convenience for the current representation; C++ member names and enum ordinals do not become durable compatibility policy merely because the codec can write them.
 
 A model that needs explicit field names, stable identifiers, version detection, strict decoding, migration, or object-level fallback owns a focused codec beside the model.
-The UIModel layout and component-state areas add model-specific YAML adapters, while playback-session restore selects strict aggregate decoding and performs semantic validation above it.
+Workspace owns a private document codec for stable nested presentation state; UIModel owns separate column-layout and list-preference document codecs; playback-session restore selects strict aggregate decoding and performs semantic validation above it.
+GTK presentation paths remain a frontend adapter over the UIModel documents rather than becoming their schema owner.
 
 The current authored shell-layout codec reads its numeric version without rejecting unsupported values and has no shell-level file/model/expansion budget.
 [RFC 0025](../rfc/0025-bounded-shell-layout-documents.md) proposes a strict candidate boundary owned by the shell format rather than by generic YAML or `ConfigStore`.
@@ -160,6 +161,7 @@ The semantic owner decides whether absence means first run, no customization, no
 
 The store specification defines ordinary and exact decode mechanics.
 Features that require all-or-nothing restore still prepare a candidate and install it only after the owning codec and semantic validation have succeeded.
+Current workspace and GTK presentation groups use exact recursive aggregate/vector decoding before their model codecs install semantic state.
 
 ### Save
 
@@ -229,9 +231,10 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`ConfigStore`](../../app/include/ao/rt/ConfigStore.h), [`ConfigStore.cpp`](../../app/runtime/ConfigStore.cpp), and [`ConfigTraits.h`](../../app/include/ao/yaml/ConfigTraits.h) implement the grouped runtime mechanism and common application codec.
 - [`AppRuntimeDependencies`](../../app/include/ao/rt/AppRuntime.h) injects workspace and playback-session stores.
 - [`WorkspaceService`](../../app/include/ao/rt/WorkspaceService.h) and [`WorkspaceService.cpp`](../../app/runtime/WorkspaceService.cpp) own workspace snapshot and restore coordination.
+- [`WorkspaceSessionCodec`](../../app/runtime/WorkspaceSessionCodec.h) owns the strict workspace persistence DTO and stable presentation conversion.
 - [`PlaybackSessionPersistence`](../../app/runtime/PlaybackSessionPersistence.h) owns playback-session validation, scheduling, revision acknowledgement, and store use.
 - [`AppConfigStore`](../../app/linux-gtk/app/AppConfigStore.h) owns the global GTK file boundary.
-- [`KeymapStore`](../../app/include/ao/uimodel/input/KeymapStore.h), [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), and UIModel presentation stores own platform-neutral state and encoding helpers.
+- [`KeymapStore`](../../app/include/ao/uimodel/input/KeymapStore.h), [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), and the UIModel presentation codecs own platform-neutral state and encoding helpers.
 - [`ShellLayoutStore`](../../app/linux-gtk/app/ShellLayoutStore.h), [`ShellLayoutComponentStateStore`](../../app/linux-gtk/app/ShellLayoutComponentStateStore.h), and [`GtkLayoutStateStore`](../../app/linux-gtk/app/GtkLayoutStateStore.h) are GTK file adapters.
 - [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp) and [`app/tui/Main.cpp`](../../app/tui/Main.cpp) select frontend paths and compose stores.
 
@@ -242,6 +245,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`AtomicFileTest.cpp`](../../test/unit/utility/AtomicFileTest.cpp) protects replacement, cross-platform private-file policy, opaque payloads, and deterministic pre-replacement failure and cleanup behavior below the stores.
 - [`RymlAdapterTest.cpp`](../../test/unit/utility/RymlAdapterTest.cpp) protects strict scalar parsing, recoverable helpers, and callback diagnostic lifetime.
 - [`WorkspaceSessionTest.cpp`](../../test/unit/runtime/WorkspaceSessionTest.cpp) protects workspace absence, restore rollback, and failure propagation.
+- [`WorkspaceSessionCodecTest.cpp`](../../test/unit/runtime/WorkspaceSessionCodecTest.cpp) protects stable workspace presentation conversion and strict semantic rejection.
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) and [`PlaybackSessionRevisionTest.cpp`](../../test/unit/runtime/playback/PlaybackSessionRevisionTest.cpp) protect exact decoding, semantic validation, dirty revisions, retry, discard, and store selection.
 - [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) and [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect global GTK groups and delta-from-default keymaps.
 - [`ShellLayoutStoreTest.cpp`](../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp), [`ShellLayoutComponentStateStoreTest.cpp`](../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp), and [`GtkLayoutStateStoreTest.cpp`](../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect the specialized GTK file boundaries.
@@ -266,7 +270,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [LMDB operation specification](../spec/storage/lmdb-operation.md)
 - [Library database reference](../reference/library/storage/database.md)
 - [RFC 0005: coherent playback application boundary](../rfc/0005-coherent-playback-boundary.md), including the proposed serialized configuration writer
-- [RFC 0010: versioned presentation state](../rfc/0010-versioned-presentation-state.md), including the proposed stable-id codec and migrations
+- [RFC 0010: versioned presentation state](../rfc/0010-versioned-presentation-state.md), implemented with layered strict codecs, stable ids, and no legacy numeric migration
 - [RFC 0014: observable atomic replacement](../rfc/0014-observable-atomic-replacement.md), rejected after narrower private-file, RAII-cleanup, and fault-test hardening was implemented
 - [RFC 0015: fail-closed grouped configuration transactions](../rfc/0015-fail-closed-config-store.md), rejected after a narrower candidate-save boundary removed the destructive split API without blocked-store recovery or commit receipts
 - [RFC 0025: bounded shell layout documents](../rfc/0025-bounded-shell-layout-documents.md), including strict version dispatch, resource budgets, and unsupported-file preservation

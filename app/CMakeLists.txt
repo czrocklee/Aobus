@@ -37,6 +37,7 @@ add_library(ao_app_runtime STATIC
     runtime/source/TrackSourceCache.cpp
     runtime/source/ManualListSource.cpp
     runtime/NavigationHistory.cpp
+    runtime/WorkspaceSessionCodec.cpp
     runtime/WorkspaceService.cpp
     runtime/NotificationService.cpp
     runtime/source/SmartListEvaluator.cpp
@@ -91,11 +92,13 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/list/SmartListPreview.cpp
     uimodel/library/list/SmartListTrackPresentationResolver.cpp
     uimodel/library/presentation/TrackColumnLayoutPolicy.cpp
+    uimodel/library/presentation/TrackColumnLayoutCodec.cpp
     uimodel/library/presentation/TrackColumnLayoutStore.cpp
     uimodel/library/presentation/TrackColumnWidthSolver.cpp
     uimodel/library/presentation/CustomPresentationEditorModel.cpp
     uimodel/library/presentation/TrackFieldPresentationPolicy.cpp
     uimodel/library/presentation/TrackPresentationCatalog.cpp
+    uimodel/library/presentation/ListPresentationPreferenceCodec.cpp
     uimodel/library/presentation/ListPresentationPreferenceStore.cpp
     uimodel/library/presentation/TrackPresentationRecommender.cpp
     uimodel/library/presentation/TrackPresentationPickerViewModel.cpp

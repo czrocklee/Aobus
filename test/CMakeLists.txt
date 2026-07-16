@@ -181,7 +181,9 @@ add_executable(ao_core_test
     unit/uimodel/library/list/SmartListPreviewTest.cpp
     unit/uimodel/library/list/SmartListTrackPresentationResolverTest.cpp
     unit/uimodel/library/presentation/CustomPresentationEditorModelTest.cpp
+    unit/uimodel/library/presentation/ListPresentationPreferenceCodecTest.cpp
     unit/uimodel/library/presentation/ListPresentationPreferenceStoreTest.cpp
+    unit/uimodel/library/presentation/TrackColumnLayoutCodecTest.cpp
     unit/uimodel/library/presentation/TrackColumnLayoutPolicyTest.cpp
     unit/uimodel/library/presentation/TrackColumnLayoutStoreTest.cpp
     unit/uimodel/library/presentation/TrackColumnWidthSolverTest.cpp
@@ -290,6 +292,7 @@ add_executable(ao_core_test
     unit/runtime/WorkspaceHistoryTest.cpp
     unit/runtime/WorkspaceNavigationTest.cpp
     unit/runtime/WorkspacePresentationTest.cpp
+    unit/runtime/WorkspaceSessionCodecTest.cpp
     unit/runtime/WorkspaceSessionTest.cpp
     unit/runtime/AppRuntimeTest.cpp
     unit/runtime/HeadlessShellTest.cpp
